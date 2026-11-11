@@ -159,7 +159,7 @@ test("the texts are read when text mode first needs them, not before", () => {
 });
 
 test("the keys hint mode takes besides label letters", () => {
-  assert.deepEqual(["/", "<Tab>", "<S-Tab>", "<Enter>", "<Space>", "<Escape>", "a"].map(is_text_key), [true, true, true, true, true, false, false]);
+  assert.deepEqual(["<Tab>", "<S-Tab>", "<Enter>", "<Space>", "<Escape>", "a"].map(is_text_key), [true, true, true, true, false, false]);
 });
 
 test("a new picker is in label mode, as a rapid rebuild needs", () => {

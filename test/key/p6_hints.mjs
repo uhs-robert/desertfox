@@ -650,6 +650,17 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
       await sleep(300);
     });
 
+    await run_case("screenshot of a label in the bottom right corner over the key line", async () => {
+      await open_page("hints", "p6_shot_corner", { new_tab: true });
+      await in_active_tab(`Object.assign(document.querySelector("a[href*=hint_]").style, { position: "fixed", right: "60px", bottom: "12px", display: "block" }); 0`);
+      await press_keys(";l");
+      await wait_for_labels(";l");
+      await sleep(400);
+      await take_shot(`${shot_dir}/p6_key_line_corner.png`);
+      await press_keys("-k", "Escape");
+      await sleep(300);
+    });
+
     await run_case("screenshot of the headings list", async () => {
       await open_page("headings", "p6_shot_headings", { new_tab: true });
       await send_keys("sh");

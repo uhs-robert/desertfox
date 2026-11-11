@@ -20,6 +20,10 @@ class FakeNode {
       this.children.push(node);
     }
   }
+  prepend(node: FakeNode) {
+    node.parent = this;
+    this.children.unshift(node);
+  }
   replaceChildren(...nodes: FakeNode[]) {
     this.children = [];
     this.append(...nodes);
@@ -370,7 +374,7 @@ test("rapid with text keeps filtering after each pick", async () => {
   page.escape();
 });
 
-test("Tab then text narrows the labels, and one match picks at once", async () => {
+test("/ then text narrows the labels, and one match picks at once", async () => {
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   await settle();
@@ -480,6 +484,9 @@ test("the key line shows in label mode, switches its words in text mode and goes
   await settle();
   const line = () => page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent);
   assert.deepEqual(line(), [KEY_LINE_LABELS]);
+  // First in the container, so the labels paint over it.
+  const [key_line] = page.nodes_with_class("desertfox-hint-keys");
+  assert.equal(key_line!.parent!.children[0], key_line);
   page.type("/");
   assert.deepEqual(line(), [KEY_LINE_TEXT]);
   page.type("<Backspace>");
@@ -545,13 +552,14 @@ test("a rapid rebuild after a text pick is back in label mode", async () => {
   assert.equal(page.links.length, 2);
   assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
   assert.equal(page.labels().length, 2);
+  assert.deepEqual(page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent), [KEY_LINE_LABELS]);
   page.type(page.labels()[0]!.toLowerCase());
   await settle();
   assert.equal(page.links.length, 1);
   page.escape();
 });
 
-test("Tab and text typed while the hints are found wait, then switch and filter", async () => {
+test("/ and text typed while the hints are found wait, then switch and filter", async () => {
   const page = await page_with(["Alpha one", "Alpha two", "Beta"]);
   page.run({ action: "delete" });
   for (const key of ["/", "b", "e", "t"]) assert.equal(page.type(key), "handled");

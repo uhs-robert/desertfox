@@ -12,7 +12,7 @@ import { settings_schema } from "../src/shared/config_build/schemas.ts";
 const EXPECTATIONS: Record<string, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
   which_key_border: '"square", "round" or "chamfer"',
-  hint_letters: "a string of 2 or more distinct letters",
+  hint_letters: "a string of 2 or more distinct letters, without /",
   hint_key_line: "true or false",
   site_rules: 'a list of tables with "site", an optional "pass" of key sequences and an optional "only" of key sequences',
   next_patterns: "a list of link texts",
@@ -115,7 +115,7 @@ const ACCEPTS: Record<string, unknown[]> = {
 const REFUSES: Record<string, unknown[]> = {
   which_key_delay_ms: [-1, Number.POSITIVE_INFINITY, Number.NaN, "300"],
   which_key_border: ["Square", "", 1],
-  hint_letters: ["a", "aa", "aba", 12],
+  hint_letters: ["a", "aa", "aba", "a/b", 12],
   hint_key_line: ["true", 1],
   site_rules: [
     "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }],

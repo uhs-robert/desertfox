@@ -38,7 +38,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a string of 2 or more distinct letters",
+    "expectation": "a string of 2 or more distinct letters, without /",
     "values": []
   },
   {
