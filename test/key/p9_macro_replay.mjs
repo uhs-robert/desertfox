@@ -19,6 +19,8 @@ export async function run_cases({ wait_cmdline, close_cmdline, run_case, open_pa
   const pending = new Set();
   const slow_server = createServer((request, response) => {
     if (request.url.startsWith("/hang")) return void pending.add(response);
+    // /tall holds a subresource that never answers, so the page never completes and the replay keeps waiting for it.
+    if (request.url.startsWith("/tall")) return void (response.writeHead(200, { "content-type": "text/html" }), response.end(`<!doctype html><title>tall</title><img src="/hang"><div style="height:5000px"></div>`));
     // The /chain pages hold real links, so a hint pick on one loads the next, and /chain2 answers late so its `loading` starts well after the pick's reply.
     const chain = /^\/chain(\d)/.exec(request.url);
     if (chain) {
@@ -253,5 +255,38 @@ export async function run_cases({ wait_cmdline, close_cmdline, run_case, open_pa
     await sleep(300);
     expect((await scroll_y()) === 0, "the macro's scroll ran after Escape closed the line");
     await close_tabs_with("mr_prompt_escape");
+  });
+
+  // The replay's hold reaches a new page only after its load completes. The page asks for its keymap first, and the reply waits for the hold.
+  await run_case("a key typed on a page the replay is still loading waits for the macro, though the page script is ready", async () => {
+    await open_page("aligned", "mr_arrival", { new_tab: true });
+    await store_macro("t", [{ id: "open.url", args: { url: slow_url("/tall"), where: "here" } }, { id: "scroll.to", args: { percent: 100 } }]);
+    const script_ready = () => in_active_tab(`document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false);
+    await press_keys("@", "t");
+    await poll_until("the tall page to be loading with its script ready", async () => (await active_tab_status()) === "loading" && (await in_active_tab(`location.pathname`).catch(() => "")) === "/tall" && (await script_ready()));
+    await sleep(300);
+    await press_keys("j");
+    await sleep(500);
+    expect((await scroll_y()) === 0, "j ran on the loading page before the replay's hold");
+    // An empty answer ends the image's load, where a dropped connection would be retried.
+    await poll_until("the macro's scroll to the bottom", async () => {
+      for (const response of pending) response.end();
+      pending.clear();
+      return (await scroll_y()) > 0;
+    });
+    await close_tabs_with("tall");
+  });
+
+  // The step lands on a page DesertFox does not run on. The macro goes on, and the next page step is refused with its number.
+  await run_case("a step after a page DesertFox does not run on is refused with its number", async () => {
+    await open_page("aligned", "mr_no_script", { new_tab: true });
+    await store_macro("n", [{ id: "open.url", args: { url: "about:blank", where: "here" } }, { id: "scroll.to", args: { percent: 100 } }]);
+    // about:blank has no content script, so the refusal goes out as a notification.
+    const notices = () => in_background(`browser.notifications.getAll().then((all) => JSON.stringify(all))`);
+    await in_background(`browser.notifications.getAll().then((all) => Promise.all(Object.keys(all).map((id) => browser.notifications.clear(id))))`);
+    await press_keys("@", "n");
+    await poll_until("the tab to show about:blank", async () => (await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.url)`)) === "about:blank");
+    await poll_until("the step-named refusal", async () => (await notices()).includes("Macro stopped at step 2: needs a page DesertFox runs on"));
+    await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => browser.tabs.remove(tab.id))`);
   });
 }
