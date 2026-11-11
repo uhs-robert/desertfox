@@ -222,14 +222,6 @@ Measured in Firefox 160 in the key-test session with a throwaway piece: an exten
 
 What it means for the `zoom` setting: setting the level writes Firefox's memory for the host, so DesertFox sets it only the first time a tab reaches the host in a browser session, keyed by host as Firefox keys it, with the private windows apart. A manual zoom after that sticks across reloads, pages of the site, new tabs and a round trip to another site. Because the memory is per host, a level for one path of a host acts on the whole host.
 
-## tabs.reload on a discarded tab
-
-Question: does `tabs.reload` on a discarded tab keep the scroll position and form data that session restore holds?
-
-Setup: Firefox headless, the key-test profile, a 150-paragraph page with a textarea and an input. Typed in both, scrolled to 2500 px, switched away, `tabs.discard`, then either `tabs.reload` or `tabs.update(active)`.
-
-Result: yes. Both paths ended with `scrollY` 2500 and both field values back. After `tabs.reload` the tab stayed inactive. One run each, so this is not a fuzz of timing. `node test/key/reload_restore_probe.mjs` repeats the check (it starts its own headless Firefox and needs `just build`), so run it after a Firefox update.
-
 ## content.js size (content-size)
 
 Measured in Firefox 160 on Linux, headless unless stated, at main fd5825ff (content.js 16366 B minified). The scripts are in `tools/measure/`, see its README. These numbers back the guard and the ceiling in [design.md](design.md), "Content script size".

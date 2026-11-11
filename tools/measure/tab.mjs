@@ -25,7 +25,7 @@ let rdp;
 for (let i = 0; i < 80; i++) { try { rdp = await connect_rdp(debug_port); break; } catch { await new Promise((r) => setTimeout(r, 250)); } }
 const bg = (code) => evaluate_in_background(rdp, ID, code);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const out = { loaded: [], discarded: [], preload: [], misc: {} };
+const out = { loaded: [], discarded: [], reloaded: [], misc: {} };
 try {
   await install_temporary_addon(rdp, `${repo}/dist`);
   await sleep(3000);
@@ -70,7 +70,7 @@ try {
       return { was, update_ms: t1 - t0, nav_start: page.origin - t0, page, events: __rec.filter((e) => e.tab === c).map((e) => [e.type, +(e.t - t0).toFixed(1)]) }; })()`));
   }
   for (let i = 0; i < 6; i++) {
-    out.preload.push(await bg(`(async () => { const [a, b, c] = __ids; await browser.tabs.update(a, { active: true }); await browser.tabs.discard(c); await new Promise((r) => setTimeout(r, 400));
+    out.reloaded.push(await bg(`(async () => { const [a, b, c] = __ids; await browser.tabs.update(a, { active: true }); await browser.tabs.discard(c); await new Promise((r) => setTimeout(r, 400));
       const was = (await browser.tabs.get(c)).discarded; __rec.length = 0;
       const done = __wait_complete(c);
       const t0 = __now(); await browser.tabs.reload(c); const t1 = __now();
@@ -88,5 +88,5 @@ writeFileSync(`${work}/tab/result.json`, JSON.stringify(out, null, 1));
 console.log(JSON.stringify(out.misc), out.error ?? "");
 for (const r of out.loaded) console.log("L", JSON.stringify(r));
 for (const r of out.discarded) console.log("D", JSON.stringify(r));
-for (const r of out.preload) console.log("P", JSON.stringify(r));
+for (const r of out.reloaded) console.log("P", JSON.stringify(r));
 setTimeout(() => process.exit(process.exitCode ?? 0), 1000);

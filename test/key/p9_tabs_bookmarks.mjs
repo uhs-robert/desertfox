@@ -380,25 +380,6 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     expect(after.active === false, "tu left the unloaded tab active");
   });
 
-  await run_case("J loads the unloaded tab after the one it lands on, and leaves it inactive", async () => {
-    await open_page("page", "p9pre_a", { new_tab: true });
-    const first = await background(`(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].id)()`);
-    await open_page("page", "p9pre_b", { new_tab: true });
-    await open_page("page", "p9pre_c", { new_tab: true });
-    const third = await background(`(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].id)()`);
-    const state_of = (id) => background(`browser.tabs.get(${id}).then((tab) => ({ discarded: tab.discarded, active: tab.active }))`);
-    try {
-      await background(`(async () => { await browser.tabs.update(${first}, { active: true }); await browser.tabs.discard(${third}); })()`);
-      await poll_until("the third tab to be unloaded", async () => (await state_of(third)).discarded === true);
-      await settle_focus();
-      await press_keys("J");
-      await poll_until("J to load the tab after the one it landed on", async () => (await state_of(third)).discarded === false);
-      expect((await state_of(third)).active === false, "the preload activated the tab");
-    } finally {
-      await background(`browser.tabs.remove([${first}, ${third}])`).catch(() => {});
-    }
-  });
-
   // Called straight on the browser, with the index tab.attach uses for a pinned tab: the end of the pinned tabs. Firefox ignores a move of a
   // pinned tab to index -1 and answers with no tab, so the pin must be kept by choosing an index inside the pinned area.
   await run_case("Firefox moves a pinned tab to the end of the pinned tabs of another window and keeps it pinned", async () => {
