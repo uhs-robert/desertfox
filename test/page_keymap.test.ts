@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hint_selectors_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
@@ -146,6 +146,24 @@ test("hint selectors answer read_hint_selectors for the frame's own address, and
   assert.deepEqual(await hint_selectors_reply(storage_of(undefined), "https://top.test/"), {});
   // An empty list is the default, so a fresh array of it stays out of the stored keymap.
   assert.equal("frame_site_globals" in compile_keymap(KEYMAP, { hint_add: [], hint_remove: [] }, resolve).compiled, false);
+});
+
+test("the media_quality rule is max by default, a site value overrides the global one, and off is a value", async () => {
+  const reply = (settings: Record<string, unknown>, address: string) => media_quality_reply(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled), address);
+  assert.equal(await reply({}, "https://a.test/"), "max");
+  assert.equal(await reply({ media_quality: "auto" }, "https://a.test/"), "auto");
+  const rows = { site_rules: [{ site: "https://a.test/*", media_quality: "auto" as const }, { site: "https://b.test/*", media_quality: 720 as const }, { site: "https://c.test/*", media_quality: "off" as const }] };
+  assert.equal(await reply(rows, "https://a.test/watch"), "auto");
+  assert.equal(await reply(rows, "https://b.test/"), "720");
+  assert.equal(await reply(rows, "https://c.test/"), "off");
+  assert.equal(await reply(rows, "https://other.test/"), "max");
+  // A site value beats a global off, and a row at the default (max) still beats it.
+  assert.equal(await reply({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: "max" }] }, "https://a.test/"), "max");
+  assert.equal(await reply({ media_quality: "off", site_rules: rows.site_rules }, "https://other.test/"), "off");
+  // A frame resolves against its own address, and a page with no compiled keymap keeps the default.
+  assert.equal(await media_quality_reply(storage_of(undefined), "https://a.test/"), "max");
+  assert.equal(await media_quality_reply(storage_of(compile_keymap(KEYMAP, rows, resolve).compiled), undefined), "max");
+  assert.equal((await ask(compile_keymap(KEYMAP, rows, resolve).compiled, "https://a.test/"))!.site_values, undefined);
 });
 
 test("a tab-wide value resolves against the top frame's address in every frame", () => {

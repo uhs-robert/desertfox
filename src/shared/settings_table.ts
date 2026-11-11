@@ -70,6 +70,8 @@ export const SETTINGS_TABLE = {
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
   // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
   zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
+  // The quality rule for site players (see `src/background/media_quality.ts`): `off` leaves the site alone, `auto` hands the choice to the site, `max` and `min` take an end, a height takes the highest level at or below it.
+  media_quality: { kind: "enum", values: ["off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160, 4320], default: "max", per_site: true },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name. `desktop` follows the palette the desktop pushed over the bridge.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: [DESKTOP_PALETTE, ...BUILT_IN_THEME_NAMES] }, default: "oasis_moonlight" },

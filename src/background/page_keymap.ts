@@ -2,7 +2,7 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
-import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
+import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS, QUALITY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
 import { is_default_value } from "../shared/keys/compiler.ts";
 import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, SiteBind, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
@@ -46,6 +46,14 @@ export async function hint_selectors_reply(storage: KeymapStorage, frame_address
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
   return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
+}
+
+// Answers the quality bundle's `read_media_quality` with the rule for the frame's own address: a `media quality` value (a height as text) or `off`. A page with no stored keymap (nothing compiled yet) keeps the global default.
+export async function media_quality_reply(storage: KeymapStorage, frame_address: string | undefined): Promise<string> {
+  const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
+  const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+  const value = (keymap && frame_site_values_for(keymap, frame_address, QUALITY_SITE_SETTINGS)?.media_quality) ?? DEFAULT_SETTINGS.media_quality;
+  return String(value);
 }
 
 // A bound key replaces whatever the tree holds at that key. A key under a leaf of the tree turns the leaf into a branch, and a bind that is a prefix of tree keys replaces the whole subtree. Copies the path and never mutates the input.

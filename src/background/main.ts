@@ -18,7 +18,7 @@ import { requirement_lookup, site_engine_for, with_site_engines } from "./availa
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
-import { hint_selectors_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
+import { hint_selectors_reply, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
@@ -40,7 +40,8 @@ import { reply_after_hold } from "./hold_on_arrival.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
-import { ask_quality_in_tab, quality_reports, quality_rows } from "./quality_levels.ts";
+import { create_media_quality } from "./media_quality.ts";
+import { ask_quality_in_tab, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
 import { media_reports } from "../commands/media.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
@@ -247,6 +248,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
   if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender.url);
+  if (request?.type === "read_media_quality") return read_disabled().then((is_disabled) => (is_disabled ? "off" : media_quality_reply(browser.storage.local, sender.url)));
   if (request?.type === "read_keymap") {
     const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => tab_insert.join(sender.tab!.id!, sender.frameId!)));
     return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
@@ -334,7 +336,14 @@ const site_zoom = create_site_zoom({
   set_zoom: (tab_id, level) => browser.tabs.setZoom(tab_id, level),
 });
 
+const media_quality = create_media_quality({
+  is_disabled: read_disabled,
+  inject_all: inject_quality_for_rule,
+  start: (tab_id, message) => browser.tabs.sendMessage(tab_id, message),
+});
+
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
+  void media_quality.tab_updated(tab_id, change, tab.url);
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);

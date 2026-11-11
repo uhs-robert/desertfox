@@ -82,6 +82,9 @@ export async function ask_quality(deps: QualityDeps, tab_id: number, request: Qu
 
 export const quality_reports = create_quality_reports();
 
+// The rule's injection (`media_quality.ts`) runs on every load, and leaves out `matchAboutBlank`. With it, a load-time injection made a frame under an all-off site rule leave ignore mode when the tab's insert hold ended (the p22 key test).
+export const inject_quality_for_rule = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, runAt: "document_start" });
+
 export const ask_quality_in_tab = (tab_id: number, request: QualityRequest): Promise<QualityAnswer | undefined> =>
   ask_quality(
     {

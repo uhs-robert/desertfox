@@ -11,6 +11,7 @@ type MoviePlayer = {
   getPlaybackQuality?: () => unknown;
   setPlaybackQualityRange?: (low: string, high: string) => void;
   setPlaybackQuality?: (quality: string) => void;
+  getVideoData?: () => unknown;
   nextVideo?: () => void;
   previousVideo?: () => void;
 };
@@ -59,6 +60,10 @@ export function youtube_driver(page: YouTubePage): Driver | undefined {
       if (all.length === 0) return false;
       set_range(code_of(all[0]!), code_of(all[all.length - 1]!));
       return true;
+    },
+    video_id: () => {
+      const id = (player.getVideoData?.() as { video_id?: unknown } | undefined)?.video_id;
+      return typeof id === "string" ? id : undefined;
     },
     skip: (forward) => {
       const go = forward ? player.nextVideo : player.previousVideo;

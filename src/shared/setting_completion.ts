@@ -133,6 +133,28 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "media_quality",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "\"off\", \"auto\", \"max\", \"min\", 144, 240, 360, 480, 720, 1080, 1440, 2160 or 4320",
+    "values": [
+      "off",
+      "auto",
+      "max",
+      "min",
+      "144",
+      "240",
+      "360",
+      "480",
+      "720",
+      "1080",
+      "1440",
+      "2160",
+      "4320"
+    ]
+  },
+  {
     "name": "mode_indicator",
     "settable": true,
     "is_toggle": false,
