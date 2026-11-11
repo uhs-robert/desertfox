@@ -108,6 +108,22 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
   let sends_held: (() => Promise<unknown>) | undefined;
+  let holds = 0;
+  // Keys and Escapes that arrived during a hold, in order.
+  const held_input: (string | (() => void))[] = [];
+  let hint_selectors: Record<string, unknown> | (() => Promise<unknown>) = {};
+  let selector_asks = 0;
+  const toasts: string[] = [];
+  const set_mode = (next: string) => win.desertfox_host.set_mode_(next);
+  const replay_held = () => {
+    const replayed: string[] = [];
+    for (const input of held_input.splice(0)) {
+      if (typeof input === "function") input();
+      else if (mode === "hint") sink!.on_token_(input);
+      else replayed.push(input);
+    }
+    if (replayed.length > 0) held_key_batches.push(replayed);
+  };
   // The text each `cmdline.open` was asked for. The line stays open until `close_line` answers it.
   const lines: string[] = [];
   let close_line: (outcome: Outcome) => void = () => {};
@@ -139,8 +155,16 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
         }
         return { ok: true };
       },
-      show_toast_: () => {},
-      hold_keys_until_: (handed_back: Promise<string[]>) => void handed_back.then((tokens) => held_key_batches.push(tokens)),
+      show_toast_: (message: string) => void toasts.push(message),
+      // As the real host: keys typed during a hold wait, and replay in the mode of the moment once no hold is left. An empty batch hands nothing back.
+      hold_keys_until_: (handed_back: Promise<string[]>) => {
+        holds++;
+        void handed_back.then((tokens) => {
+          holds--;
+          if (tokens.length > 0) held_key_batches.push(tokens);
+          if (holds === 0) replay_held();
+        });
+      },
     },
   };
   const doc = {
@@ -150,6 +174,8 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     addEventListener: () => {},
     elementFromPoint: () => null,
     querySelectorAll: () => [...links],
+    // Only an unclosed bracket fails to parse here.
+    createDocumentFragment: () => ({ querySelector: (selector: string) => { if (selector.includes("[") && !selector.includes("]")) throw new SyntaxError("bad selector"); } }),
   };
   const make_link = (text: string): Link => {
     const node = new FakeNode() as Link;
@@ -169,6 +195,8 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
       getClientRects: () => [{ left: 0, top: node.rect_top, right: 50, bottom: node.rect_top + 10 }],
       remove: () => void links.splice(links.indexOf(node), 1),
       focus: () => {},
+      // Each link is inside a `.text-<its text>` box, for `hint_remove`.
+      closest: (selector: string) => (selector.split(", ").includes(`.text-${text}`) ? node : null),
     });
     return node;
   };
@@ -194,6 +222,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   };
   globals.browser = { storage: { local: { get: async () => ({ desertfox_config_status: { settings } }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
+    if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
     return is_record ? undefined : sends_held?.();
@@ -231,8 +260,13 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
-    type: (token: string) => sink!.on_token_(token),
-    escape: () => win.desertfox_host.set_mode_("normal"),
+    type: (token: string) => (holds > 0 ? (held_input.push(token), "handled") : sink!.on_token_(token)),
+    escape: () => (holds > 0 ? void held_input.push(() => set_mode("normal")) : set_mode("normal")),
+    // What the background answers to `read_hint_selectors`.
+    // An object answers at once. A function gives the answer as a promise, so a test can reject it or leave it pending.
+    set_hint_selectors: (selectors: Record<string, unknown> | (() => Promise<unknown>)) => void (hint_selectors = selectors),
+    selector_asks: () => selector_asks,
+    toasts,
     // The focus event of a field that takes focus.
     enter_insert: () => win.desertfox_host.set_mode_("insert"),
     // The label text of each label that is not hidden by typing.
@@ -599,9 +633,7 @@ test("copy writes the address and copy_text writes the text, rapid keeps the lab
 
 test("an invalid custom selector shows a notice instead of throwing", async () => {
   const page = await page_with(["one"]);
-  let outcome: Outcome | Promise<Outcome> | undefined;
-  assert.doesNotThrow(() => (outcome = page.run({ filter: "custom", selector: "a[" })));
-  assert.deepEqual(outcome, { ok: false, message: "Invalid selector: a[" });
+  assert.deepEqual(await page.run({ filter: "custom", selector: "a[" }), { ok: false, message: "Invalid selector: a[" });
   assert.deepEqual(page.messages(), []);
   assert.deepEqual(page.modes, []);
 });
@@ -626,7 +658,7 @@ test("text keeps links only: a sole matching button is not clicked", async () =>
 
 test("text with no candidate at all shows the no-link notice", async () => {
   const page = await page_with([]);
-  assert.deepEqual(page.run({ text: "zzz" }), { ok: false, message: "No link matches zzz" });
+  assert.deepEqual(await page.run({ text: "zzz" }), { ok: false, message: "No link matches zzz" });
   assert.deepEqual(page.modes, []);
 });
 
@@ -1072,5 +1104,76 @@ test("rapid copy_text skips an empty pick, so the list has no blank line", async
     await settle();
   }
   assert.equal(page.copied.at(-1), "two");
+  page.escape();
+});
+
+test("hint_remove from the background drops its matches, and every run asks again, so an edit applies to the next run", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.set_hint_selectors({ hint_remove: [".text-two"] });
+  page.run({ filter: "links" });
+  await settle();
+  assert.equal(page.labels().length, 2);
+  page.escape();
+  page.set_hint_selectors({});
+  page.run({ filter: "links" });
+  await settle();
+  assert.equal(page.labels().length, 3);
+  assert.equal(page.selector_asks(), 2);
+  page.escape();
+});
+
+test("a rapid session asks for the selectors once, at its start", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.set_hint_selectors({ hint_remove: [".text-three"] });
+  page.run({ action: "background", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.labels().length, 2);
+  assert.equal(page.selector_asks(), 1);
+  page.escape();
+});
+
+test("a hint selector that does not parse is skipped with one notice, and the others still apply", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.set_hint_selectors({ hint_add: ["a["], hint_remove: ["div[", ".text-one"] });
+  page.run({ filter: "links" });
+  await settle();
+  assert.equal(page.labels().length, 2);
+  assert.deepEqual(page.toasts, ["Skipped hint selectors that do not parse: a[, div["]);
+  page.escape();
+});
+
+test("a second hint.run while the first waits for its selectors cancels the first, and one set of labels shows", async () => {
+  const page = await page_with(["one", "two"]);
+  const first = page.run({ action: "background" });
+  const second = page.run({ action: "background" });
+  assert.deepEqual(await first, { ok: true, cancelled: true });
+  await settle();
+  assert.equal(page.labels().length, 2);
+  assert.equal(await peek(second), undefined);
+  page.escape();
+  assert.deepEqual(await second, { ok: true, cancelled: true });
+});
+
+test("hints start with no site selectors when the ask fails", async () => {
+  const page = await page_with(["one", "two"]);
+  page.set_hint_selectors(() => Promise.reject(new Error("no background")));
+  page.run({ filter: "links" });
+  await settle();
+  assert.equal(page.labels().length, 2);
+  page.escape();
+});
+
+test("hints start with no site selectors when the background never answers, and keys typed meanwhile reach hint mode", async () => {
+  const page = await page_with(["one", "two"]);
+  page.set_hint_selectors(() => new Promise(() => {}));
+  page.run({ filter: "links" });
+  page.type("j");
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 2);
+  assert.deepEqual(page.held_key_batches, []);
   page.escape();
 });

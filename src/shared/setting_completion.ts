@@ -53,6 +53,22 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "hint_add",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "hint_remove",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
     "name": "blur_on_load",
     "settable": true,
     "is_toggle": true,

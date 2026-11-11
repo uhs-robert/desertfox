@@ -2,8 +2,9 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
-import { FRAME_SITE_SETTINGS } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteValues, PageFrees, PageKeymap, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
+import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
+import { is_default_value } from "../shared/keys/compiler.ts";
+import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { frees_of, is_empty_tree, prune_tree, type KeyRule } from "../shared/keys/prune_tree.ts";
 import type { PerSiteName, Settings } from "../shared/settings_table.ts";
@@ -29,16 +30,22 @@ export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: 
 export const site_value = <Name extends PerSiteName>(columns: PageSiteColumns, name: Name, global_value: Settings[Name]): Settings[Name] =>
   Object.hasOwn(columns.values, name) ? (columns.values[name] as Settings[Name]) : global_value;
 
-// The frame site settings for one frame, resolved against the frame's own address only: a tab-level row reaching a frame of another site would act on content that row never named.
-export function frame_site_values_for(keymap: CompiledKeymap, frame_address: string | undefined): FrameSiteValues | undefined {
+// The named frame site settings for one frame, resolved against the frame's own address only: a tab-level row reaching a frame of another site would act on content that row never named.
+export function frame_site_values_for<Name extends FrameSiteName>(keymap: CompiledKeymap, frame_address: string | undefined, names: readonly Name[]): FrameSiteValues<Name> | undefined {
   const columns = site_columns_for(keymap, [frame_address]);
   const values: Record<string, unknown> = {};
-  for (const name of FRAME_SITE_SETTINGS) {
+  for (const name of names) {
     const value = site_value(columns, name, keymap.frame_site_globals?.[name] ?? DEFAULT_SETTINGS[name]);
-    // Identity is enough for a boolean. A list setting needs a compare by value here and in the compiler.
-    if (value !== DEFAULT_SETTINGS[name]) values[name] = value;
+    if (!is_default_value(name, value)) values[name] = value;
   }
-  return Object.keys(values).length > 0 ? (values as FrameSiteValues) : undefined;
+  return Object.keys(values).length > 0 ? (values as FrameSiteValues<Name>) : undefined;
+}
+
+// Answers the hints bundle's `read_hint_selectors` with the frame's hint selectors, an empty object when none apply.
+export async function hint_selectors_reply(storage: KeymapStorage, frame_address: string | undefined): Promise<FrameSiteValues<(typeof HINT_SITE_SETTINGS)[number]>> {
+  const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
+  const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+  return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
 }
 
 // The normal tree under the page's columns. An off page, or one whose key rule leaves no normal binding, is all off and keeps the whole tree, so `,i` can leave ignore mode.
@@ -77,7 +84,7 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
   if (keymap === undefined) return undefined;
   const { site_rules: _, frame_site_globals: __, ...keymap_without_rules } = keymap;
   const page_tree = normal_tree_for(keymap.modes.normal, site_columns_for(keymap, addresses));
-  const site_values = frame_site_values_for(keymap, addresses[0]);
+  const site_values = frame_site_values_for(keymap, addresses[0], PAGE_REPLY_SITE_SETTINGS);
   const with_values = site_values ? { site_values } : {};
   if (!("frees" in page_tree)) return { keymap: keymap_without_rules, all_off: page_tree.all_off, ...with_values };
   return { keymap: { ...keymap_without_rules, modes: { ...keymap_without_rules.modes, normal: page_tree.tree } }, all_off: false, frees: page_tree.frees, ...with_values };

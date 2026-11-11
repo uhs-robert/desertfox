@@ -45,6 +45,9 @@ export const SETTINGS_TABLE = {
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   hint_key_line: { kind: "boolean", default: true },
+  // CSS selectors. Each frame resolves them against its own address. A selector that does not parse is skipped with a notice when hints start.
+  hint_add: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
+  hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.

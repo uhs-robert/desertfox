@@ -7,6 +7,8 @@ export const DEFAULT_WHICH_KEY_DELAY_MS: Settings["which_key_delay_ms"] = 300;
 export const DEFAULT_WHICH_KEY_BORDER: Settings["which_key_border"] = "square";
 export const DEFAULT_HINT_LETTERS: Settings["hint_letters"] = "asdfghjkl";
 export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
+export const DEFAULT_HINT_ADD: Settings["hint_add"] = [];
+export const DEFAULT_HINT_REMOVE: Settings["hint_remove"] = [];
 export const DEFAULT_BLUR_ON_LOAD: Settings["blur_on_load"] = false;
 export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
@@ -39,6 +41,8 @@ export const DEFAULT_SETTINGS: Settings = {
   which_key_border: DEFAULT_WHICH_KEY_BORDER,
   hint_letters: DEFAULT_HINT_LETTERS,
   hint_key_line: DEFAULT_HINT_KEY_LINE,
+  hint_add: DEFAULT_HINT_ADD,
+  hint_remove: DEFAULT_HINT_REMOVE,
   blur_on_load: DEFAULT_BLUR_ON_LOAD,
   site_rules: DEFAULT_SITE_RULES,
   next_patterns: DEFAULT_NEXT_PATTERNS,
