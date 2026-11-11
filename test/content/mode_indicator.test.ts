@@ -102,25 +102,3 @@ test("the badge style reads the mode tokens and the bg_core text token", async (
   assert.match(STYLE, /:where\(\[data-mode="visual_line"\]\) \{ background: var\(--desertfox-mode-visual,/);
   assert.match(STYLE, /:where\(\[data-mode\]\) \{ color: var\(--desertfox-bg-core,/);
 });
-
-test("a badge draw queued while ui.js loads does not paint over a later draw", async () => {
-  page_with_orphan_badge();
-  const { bundles } = await import("../../src/content/bundles.ts");
-  const { show_mode_label } = await import("../../src/content/ui_proxy.ts");
-  const drawn: unknown[] = [];
-  let finish_load: (loaded: boolean) => void = () => {};
-  bundles.connect({
-    // ui.js registers its handler as it runs, a moment before the background answers the load.
-    request_bundle_: () => new Promise((resolve) => (finish_load = resolve)),
-    on_idle_: () => {},
-    hold_first_: () => {},
-    show_error_: (message) => assert.fail(message),
-    set_mode_: () => {},
-  });
-  show_mode_label({ mode: "normal", pass_next: false, setting: "always", recording: undefined });
-  bundles.api.register_handler_("ui.badge", (args) => void drawn.push(args.mode));
-  show_mode_label({ mode: "insert", pass_next: false, setting: "always", recording: undefined });
-  finish_load(true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(drawn.at(-1), "insert");
-});

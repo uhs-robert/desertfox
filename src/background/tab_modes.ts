@@ -56,22 +56,30 @@ export function create_tab_modes(storage: ModeStorage) {
   const forget = (tab_id: number) => in_turn(() => storage.remove([key_of(tab_id), manual_insert_key_of(tab_id)]));
 
   return {
-    // Answers the mode the top frame draws in place of its own: the focused child frame's, or undefined when no child frame holds focus.
-    report: (tab_id: number, report: ModeReport): Promise<Mode | undefined> =>
+    // `child_mode` is the mode the top frame draws in place of its own: the focused child frame's, or undefined when no child frame holds the focus.
+    // `tell_top` says whether the top frame needs to hear it: the mode changed, or the top frame itself reported while a child frame holds the focus, since a top frame that just started knows nothing yet.
+    // A report that changes nothing writes nothing: every frame reports again on each focus and each pageshow.
+    report: (tab_id: number, report: ModeReport): Promise<{ child_mode: Mode | undefined; tell_top: boolean }> =>
       in_turn(async () => {
-        const record = apply_mode_report(await read(tab_id), report);
-        await storage.set({ [key_of(tab_id)]: record });
-        return record.focused_child?.mode;
+        const before = await read(tab_id);
+        const record = apply_mode_report(before, report);
+        const child_mode = record.focused_child?.mode;
+        if (JSON.stringify(record) !== JSON.stringify(before)) await storage.set({ [key_of(tab_id)]: record });
+        return { child_mode, tell_top: child_mode !== before.focused_child?.mode || (report.frame_id === TOP_FRAME && child_mode !== undefined) };
       }),
     recall: (tab_id: number): Promise<Mode> => in_turn(async () => mode_of_record(await read(tab_id))),
     forget,
     // A new page starts in normal mode and its content script reports again, so the old page's mode must not outlive it, also where the new page runs no content script.
     // Firefox sends `status: "loading"` with no `url` when a load starts, and a `url` each time the address changes. The old page can still report between the two, so the first address change after a start, which is the new page taking over, forgets again.
     // A later address change is the page's own (`history.replaceState` while it loads, as Google Docs does), and comes after its start report, so it forgets nothing.
+    // A load can end with no new page (a download, a 204 answer, a stopped load). `status: "complete"` then ends the wait, so a later address change of the page that stayed forgets nothing either.
     forget_on_navigation: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
         const load_started = change.status === "loading" && change.url === undefined;
-        const new_page_took_over = change.url !== undefined && (await read(tab_id)).awaiting_commit;
+        const { awaiting_commit, ...modes } = load_started ? {} : await read(tab_id);
+        const new_page_took_over = change.url !== undefined && awaiting_commit;
+        const load_ended_on_old_page = change.status === "complete" && awaiting_commit && !new_page_took_over;
+        if (load_ended_on_old_page) return storage.set({ [key_of(tab_id)]: modes });
         if (!load_started && !new_page_took_over) return;
         await storage.remove(manual_insert_key_of(tab_id));
         if (load_started) await storage.set({ [key_of(tab_id)]: { awaiting_commit: true } satisfies TabModeRecord });

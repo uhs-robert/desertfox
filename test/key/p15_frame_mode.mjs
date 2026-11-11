@@ -2,7 +2,7 @@
 // /hidden_input_frame stands in for Google Docs: on load it focuses a contenteditable in an offscreen same-origin frame.
 export const areas = ["ui", "keys"];
 
-export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_background, in_active_tab, wait_takes_keys }) {
+export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_background, in_active_tab, wait_takes_keys, events, wait_event }) {
   const page_id = "p15_hidden_input";
   const frame_page_id = `${page_id}_frame`;
   const active_tab = (read) => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => (${read})(tab))`);
@@ -30,6 +30,16 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
       await open_page("page", `p15_load_${load}`, { new_tab: load === 0 });
       expect((await stored_tab_mode()) === "normal", `the stored tab mode after load ${load} is ${await stored_tab_mode()}`);
     }
+  });
+
+  await run_case("a reloaded page keeps its stored tab mode through its next address change", async () => {
+    const mark = events.length;
+    await active_tab(`(tab) => browser.tabs.reload(tab.id)`);
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p15_load_4", "the reloaded page to start");
+    await poll_until("the reload to complete", async () => (await active_tab(`(tab) => tab.status`)) === "complete");
+    await in_active_tab(`history.replaceState(null, "", location.href + "&replaced=1")`);
+    await poll_until("the page to change its address", () => active_tab(`(tab) => tab.url.endsWith("replaced=1")`));
+    expect((await stored_tab_mode()) === "normal", `the stored tab mode after the address change is ${await stored_tab_mode()}`);
   });
 
   await run_case("a page that changes its own address while it loads keeps its stored tab mode", async () => {

@@ -217,11 +217,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
-    // The top frame leaving insert by any route ends the hold.
-    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
-    return tab_modes.report(tab_id, report).then((mode) => void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(mode === undefined ? {} : { mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined));
+    return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
+      if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
+    });
   }
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();

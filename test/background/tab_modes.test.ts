@@ -60,22 +60,22 @@ test("a clear queued at start never removes a report that arrives during it", as
 test("a child frame's mode stands for the tab only while its document holds the focus", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), undefined);
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false })).child_mode, undefined);
   assert.equal(await modes.recall(4), "normal", "an unfocused child frame set the tab's mode");
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), "insert");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "normal", focus: true }), "normal");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "normal", focus: true })).child_mode, "normal");
   assert.equal(await modes.recall(4), "normal", "the focused child's later change was dropped");
 });
 
 test("focus moving to the top frame and back hands the tab's mode over each time", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), "insert");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
-  assert.equal(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true }), undefined);
+  assert.equal((await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true })).child_mode, undefined);
   assert.equal(await modes.recall(4), "ignore");
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), "insert");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
 });
 
@@ -83,7 +83,7 @@ test("the top frame reporting without the focus leaves the focused child frame i
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
   // Showing the tab fires focus on the top window while the child frame holds the focus, and the toolbar can change the top frame's mode then.
-  assert.equal(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), "insert");
+  assert.equal((await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
   await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
   assert.equal(await modes.recall(4), "ignore", "the top frame's mode from the report without focus was lost");
@@ -93,7 +93,7 @@ test("a report from the frame that lost the focus can arrive after the claim of 
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
   await modes.report(4, { frame_id: OTHER_CHILD, mode: "caret", focus: true });
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "normal", focus: false }), "caret", "a late report of the old frame took the focus off the new one");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "normal", focus: false })).child_mode, "caret", "a late report of the old frame took the focus off the new one");
   assert.equal(await modes.recall(4), "caret");
 });
 
@@ -101,7 +101,7 @@ test("a focused child frame that reports without the focus gives the tab back to
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), undefined);
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false })).child_mode, undefined);
   assert.equal(await modes.recall(4), "normal");
 });
 
@@ -126,7 +126,7 @@ test("a top frame claim sent before the focus moved, and delivered after the chi
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: CHILD, mode: "normal", focus: true });
   await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), "insert");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
 });
 
@@ -134,7 +134,7 @@ test("a focused child frame that navigates hands the tab to the new page's start
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "normal", focus: false });
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
-  assert.equal(await modes.report(4, { frame_id: CHILD, mode: "normal", focus: true }), "normal");
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "normal", focus: true })).child_mode, "normal");
   assert.equal(await modes.recall(4), "normal");
 });
 
@@ -151,6 +151,25 @@ test("two tabs keep their own frames and modes", async () => {
   await modes.forget_on_navigation(5, { status: "loading" });
   assert.equal(await modes.recall(4), "ignore");
   assert.equal(await modes.recall(5), "normal");
+});
+
+test("a report that changes nothing writes nothing, and the top frame hears only what it does not know", async () => {
+  const storage = fake_storage();
+  let writes = 0;
+  const set = storage.set;
+  storage.set = (items) => (writes++, set(items));
+  const modes = create_tab_modes(storage);
+  assert.equal((await modes.report(4, { frame_id: TOP, mode: "normal", focus: true })).tell_top, false);
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).tell_top, true);
+  assert.equal(writes, 2);
+  // The same reports again, as each focus and pageshow sends them.
+  assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).tell_top, false);
+  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, mode: "normal", focus: false })).tell_top, false);
+  assert.equal(writes, 2);
+  // A top frame that just started has not heard of the focused child frame.
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true });
+  assert.equal(writes, 2);
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), { child_mode: undefined, tell_top: true });
 });
 
 // Navigation clearing the stored mode
@@ -192,6 +211,19 @@ test("an address change by the page itself while it loads keeps the mode it repo
   await modes.forget_on_navigation(4, { status: "loading", url: `${NEW_PAGE}?tab=1` });
   assert.equal(await modes.recall(4), "insert");
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false });
+  assert.equal(await modes.recall(4), "ignore");
+});
+
+test("a load that ends with no new page keeps the mode through the old page's next address change", async () => {
+  const storage = fake_storage();
+  const modes = create_tab_modes(storage);
+  // A download link or a stopped load: the load starts and completes, and the page stays.
+  await modes.forget_on_navigation(4, { status: "loading" });
+  await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
+  await modes.forget_on_navigation(4, { status: "complete" });
+  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "ignore" } });
+  await modes.forget_on_navigation(4, { status: "complete", url: "https://example.org/pushed" });
+  await modes.forget_on_navigation(4, { status: "loading", url: "https://example.org/pushed" });
   assert.equal(await modes.recall(4), "ignore");
 });
 
