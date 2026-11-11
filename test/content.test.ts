@@ -211,6 +211,18 @@ test("with escape_to_page, Escape in a field passes to the page and insert mode 
   assert.equal(state.get_mode_(), "normal");
 });
 
+test("with escape_to_page, Escape in a field cancels a pending insert sequence", () => {
+  const { state, flow } = make_flow(true, true);
+  const pending = { ...keymap, modes: { ...keymap.modes, insert: { kind: "branch" as const, children: { "<C-x>": { kind: "branch" as const, children: { j: leaf("insert_chord") } } } } } };
+  flow.set_matcher_(create_matcher(pending));
+  state.focus_entered_editable_();
+  assert.equal(flow.handle_token_("<C-x>"), "cancel");
+  assert.equal(flow.handle_token_("<Escape>"), "pass");
+  assert.equal(state.get_mode_(), "insert");
+  // The pending <C-x> is gone, so j is no longer its second key.
+  assert.equal(flow.handle_token_("j"), "pass");
+});
+
 test("with escape_to_page, Escape in a manual insert with no field still leaves", () => {
   const { state, flow } = make_flow(false, true);
   flow.set_matcher_(create_matcher(keymap));

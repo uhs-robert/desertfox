@@ -136,7 +136,7 @@ define("page.heading", {
   bundle: "hints",
 });
 
-// Meant for site rows: a row binds a key to this command to turn it into a key the site's own script reads.
+// Meant for site rows: a row binds a key to this command to turn it into a key the site's own script reads. The default `<A-Escape>` insert binding also uses it, to send Escape to the page on any site.
 define("page.send_key", {
   label: "Send key to page",
   intent: "Send a key press to the page. It sends a keydown and a keyup with the given key and key code, and the modifiers that are on. With keypress on, it sends a keypress between them, for a page that reads typed characters. The target is the element the CSS selector finds, or the focused element when there is no selector. It refuses when the selector matches nothing. A count prefix sends the key that many times, in order.",

@@ -137,5 +137,6 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("-M", "alt", "-k", "Escape", "-m", "alt");
     await wait_event(mark, (event) => event.type === "keydown" && event.key === "Escape" && event.page_id === page_id, "the page to get the sent Escape");
     await expect_badge("NORMAL");
+    expect((await in_active_tab(`document.getElementById("box").style.top`)) === "-10000px", "the sent Escape did not end the edit");
   });
 }
