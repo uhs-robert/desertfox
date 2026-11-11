@@ -147,8 +147,9 @@ def write_autoconfig(toml_text):
 # where this host is installed.
 RELEASE_URL_TEMPLATE = "https://github.com/uhs-robert/desertfox/releases/download/v{version}/{name}"
 # [0-9], not \d: \d also matches digits of other scripts, which would reach the URL. The length cap keeps the tuple
-# compare and the URL short.
-VERSION_PATTERN = re.compile(r"([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})(?:-beta\.([0-9]{1,6}))?")
+# compare and the URL short. Three numbers are a stable release. A fourth number, from 1, is a beta toward the next
+# release: AMO refuses letters in a version, so 0.1.23.2 is the second beta after 0.1.23.
+VERSION_PATTERN = re.compile(r"([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})(?:\.([1-9][0-9]{0,5}))?")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 UPDATE_SCRIPTS = ("desertfox-bridge", "desertfox-host", "desertfox")
 UPDATE_REQUEST_FIELDS = {"cmd", "version", "sha256"}
@@ -171,15 +172,14 @@ class UpdateError(HostError):
 
 
 def parse_version(text):
-    """The version as a tuple that sorts in release order: x.y.z-beta.N comes before x.y.z. None for anything else."""
+    """The version as a tuple that sorts in release order: x.y.z, then its betas x.y.z.1, x.y.z.2, then x.y.(z+1). None for anything else."""
     if not isinstance(text, str):
         return None
     match = VERSION_PATTERN.fullmatch(text)
     if match is None:
         return None
     major, minor, patch, beta = match.groups()
-    prerelease_rank = (1, 0) if beta is None else (0, int(beta))
-    return (int(major), int(minor), int(patch), *prerelease_rank)
+    return (int(major), int(minor), int(patch), int(beta or 0))
 
 
 class HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
@@ -266,7 +266,7 @@ def checked_request(request):
         raise UpdateError(f"self_update takes only version and sha256, not {', '.join(sorted(extra))}")
     version = request.get("version")
     if parse_version(version) is None:
-        raise UpdateError("self_update needs a version like 1.2.3 or 1.2.3-beta.4")
+        raise UpdateError("self_update needs a version like 1.2.3 or 1.2.3.4")
     expected = request.get("sha256")
     if not isinstance(expected, dict) or set(expected) != set(UPDATE_SCRIPTS):
         raise UpdateError(f"self_update needs sha256 with exactly {', '.join(UPDATE_SCRIPTS)}")

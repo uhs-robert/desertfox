@@ -2,11 +2,11 @@
 // Pure, so the background and the tests share it. The same pattern guards `self_update` in `host/desertfox-host`.
 
 // [0-9], not \d, and the length cap, match VERSION_PATTERN in the host, which refuses any other version.
-const RELEASE_VERSION_PATTERN = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})(?:-beta\.([0-9]{1,6}))?$/;
+const RELEASE_VERSION_PATTERN = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})(?:\.([1-9][0-9]{0,5}))?$/;
 
 export type ReleaseVersion = { major: number; minor: number; patch: number; beta: number | undefined };
 
-// "1.2.3" or "1.2.3-beta.4". Anything else, including the `dev` placeholder of a repo checkout, is undefined.
+// "1.2.3" is a stable release. "1.2.3.4" is the fourth beta after 1.2.3 (AMO refuses letters in a version), numbered from 1. Anything else, including the `dev` placeholder of a repo checkout, is undefined.
 export function parse_release_version(text: unknown): ReleaseVersion | undefined {
   if (typeof text !== "string") return undefined;
   const match = RELEASE_VERSION_PATTERN.exec(text);
@@ -14,14 +14,11 @@ export function parse_release_version(text: unknown): ReleaseVersion | undefined
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), beta: match[4] === undefined ? undefined : Number(match[4]) };
 }
 
-// Negative when `a` is older. A beta sorts before the release it leads up to, so 1.2.3-beta.9 is older than 1.2.3.
+// Negative when `a` is older. A beta counts up from the release before it, so 1.2.3 is older than 1.2.3.1 and 1.2.3.9 is older than 1.2.4.
 export function compare_release_versions(a: ReleaseVersion, b: ReleaseVersion): number {
   const numeric = a.major - b.major || a.minor - b.minor || a.patch - b.patch;
   if (numeric !== 0) return numeric;
-  if (a.beta === b.beta) return 0;
-  if (a.beta === undefined) return 1;
-  if (b.beta === undefined) return -1;
-  return a.beta - b.beta;
+  return (a.beta ?? 0) - (b.beta ?? 0);
 }
 
 export type UpdateChannel = "stable" | "beta" | "development";
