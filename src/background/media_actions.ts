@@ -31,7 +31,7 @@ export type MediaDeps = {
   // Runs the `media` bundle in every frame of the tab, each of which then pushes its scan to `reports`. Resolves with how many frames ran it. Rejects where scripts are refused: a privileged page.
   inject_all: (tab_id: number) => Promise<number>;
   ask: (tab_id: number, frame_id: number, request: MediaRequest) => Promise<unknown>;
-  // Runs the `quality` bundle in every frame of the tab and sends it the request. Resolves with the first frame that has a site player and answers, else undefined. Rejects where scripts are refused: a privileged page.
+  // Runs the `quality` bundle in every frame of the tab and sends the request to the one frame with a site player. Resolves with its answer, else undefined. The call holds its own deadline, so the caller adds no second timer. Rejects where scripts are refused: a privileged page.
   quality: (tab_id: number, request: QualityRequest) => Promise<QualityAnswer | undefined>;
   can_picture_in_picture: () => boolean;
   toast: (ctx: CommandContext, message: string) => Promise<void>;
@@ -155,10 +155,10 @@ export function refusal_for(action: MediaAction, error_name: string, error_messa
   return error_message;
 }
 
-// The quality bundle needs no scan: the player answers for itself, so one request reaches all frames and the first answer counts.
+// The quality bundle needs no scan: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
 async function run_quality(deps: MediaDeps, ctx: CommandContext, tab_id: number, args: MediaArgs): Promise<void> {
   const times = args.times ?? 1;
-  const ask = (request: Omit<QualityRequest, "type" | "times">) => within(deps.quality(tab_id, { type: "quality_apply", times, ...request }), deps.answer_timeout_ms);
+  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }).catch(() => undefined);
   if (args.action === "skip") {
     const direction = args.value === "previous" ? "previous" : "next";
     if (!(await ask({ op: "skip", value: direction }))?.skipped) throw new RuntimeRefusal(`No ${direction} video`);
@@ -189,6 +189,6 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   const acted = results.reduce((sum, result) => sum + result.acted, 0);
   const state = results.find((result) => result.state)?.state;
   if (acted === 0 || !state) throw no_media;
-  const quality = args.action === "info" ? (await within(deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }), deps.answer_timeout_ms))?.levels.find((level) => level.active)?.label : undefined;
+  const quality = args.action === "info" ? (await deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined))?.levels.find((level) => level.active)?.label : undefined;
   await deps.toast(ctx, describe_change(args.action, state, acted, quality));
 }

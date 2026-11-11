@@ -283,12 +283,6 @@ test("a page with no site player refuses quality in words, and so does a privile
   await assert.rejects(run_media(refused.deps, ctx, { action: "quality" }), { message: "No quality control on this page" });
 });
 
-test("a player that never answers refuses at the timeout, not never", async () => {
-  const tab = fake_tab({ 0: {} });
-  tab.deps.quality = () => new Promise(() => {});
-  await assert.rejects(run_media(tab.deps, ctx, { action: "quality" }), { message: "No quality control on this page" });
-});
-
 test("media skip goes next by default and refuses where the player has no skip", async () => {
   const tab = fake_tab({ 0: {} }, { quality: () => ({ levels: [], skipped: true }) });
   await run_media(tab.deps, ctx, { action: "skip" });

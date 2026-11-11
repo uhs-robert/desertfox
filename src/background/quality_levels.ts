@@ -30,7 +30,7 @@ export type QualityDeps = {
   // Runs the bundle in every frame and resolves with how many ran it. Rejects when any frame refuses, while the others still run it.
   inject_all: (tab_id: number) => Promise<number>;
   send: (tab_id: number, frame_id: number, request: QualityRequest) => Promise<unknown>;
-  // The whole request, from injection to answer. A request that is still waiting then sends nothing, so a refusal already shown never changes a player later.
+  // One deadline for the whole request, from injection to answer. Past it the request sends nothing, so a refusal already shown never changes a player later.
   timeout_ms: number;
   // How long to wait for the frames after an injection rejected, since the count of frames that ran it is then unknown.
   partial_wait_ms: number;
@@ -45,6 +45,7 @@ export function choose_player(frames: readonly { frame_id: number; report: Quali
 
 // Undefined when no frame has a player, when the page refuses scripts everywhere, or when the time ran out. A frame that refuses the script does not stop the others.
 export async function ask_quality(deps: QualityDeps, tab_id: number, request: QualityRequest): Promise<QualityAnswer | undefined> {
+  const deadline = Date.now() + deps.timeout_ms;
   const frames = new Map<number, QualityReport>();
   let expected: number | undefined;
   let expired = false;
@@ -68,10 +69,10 @@ export async function ask_quality(deps: QualityDeps, tab_id: number, request: Qu
     stop();
   }
   const frame_id = choose_player([...frames].map(([id, report]) => ({ frame_id: id, report })));
-  if (expired || frame_id === undefined) return undefined;
+  if (expired || Date.now() >= deadline || frame_id === undefined) return undefined;
   let stop_waiting!: (answer: undefined) => void;
   const late = new Promise<undefined>((resolve) => (stop_waiting = resolve));
-  const give_up = setTimeout(() => stop_waiting(undefined), deps.timeout_ms);
+  const give_up = setTimeout(() => stop_waiting(undefined), Math.max(0, deadline - Date.now()));
   try {
     return (await Promise.race([deps.send(tab_id, frame_id, request).catch(() => undefined), late])) as QualityAnswer | undefined;
   } finally {

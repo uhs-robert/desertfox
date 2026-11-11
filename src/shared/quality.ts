@@ -1,4 +1,4 @@
-// The messages between the background and the `quality` bundle. The background injects the bundle into every frame of the tab, then sends one request to all frames. A frame with no site player answers nothing.
+// The messages between the background and the `quality` bundle. The background injects the bundle into every frame of the tab, each frame reports whether it has a site player, and the background sends one request to the chosen frame alone.
 
 // `list` reads the levels, `set` picks one from a `media quality` value and `skip` goes to the next or previous video.
 export type QualityRequest = { type: "quality_apply"; op: "list" | "set" | "skip"; value: string | undefined; times: number };

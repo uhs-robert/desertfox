@@ -81,3 +81,11 @@ test("a frame that never answers cannot hold the list for ever", async () => {
   tab.deps.send = () => new Promise(() => {});
   assert.equal(await ask_quality(tab.deps, 1, list), undefined);
 });
+
+test("the whole request keeps one deadline, however the injection and the answer share it", async () => {
+  const tab = fake({ 0: report(true, true) }, { inject: (count) => new Promise((resolve) => setTimeout(() => resolve(count), 50)), timeout_ms: 100 });
+  tab.deps.send = () => new Promise(() => {});
+  const started = Date.now();
+  assert.equal(await ask_quality(tab.deps, 1, list), undefined);
+  assert.ok(Date.now() - started < 160, `took ${Date.now() - started} ms`);
+});
