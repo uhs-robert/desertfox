@@ -116,7 +116,6 @@ test("a badge draw queued while ui.js loads does not paint over a later draw", a
     hold_first_: () => {},
     show_error_: (message) => assert.fail(message),
     set_mode_: () => {},
-    on_sink_missing_: () => {},
   });
   show_mode_label({ mode: "normal", pass_next: false, setting: "always", recording: undefined });
   bundles.api.register_handler_("ui.badge", (args) => void drawn.push(args.mode));

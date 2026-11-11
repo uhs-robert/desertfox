@@ -274,7 +274,9 @@ function start(): void {
     bundles.enter_mode_(mode);
     report_mode();
   });
-  // Not in capture: a window's focus and blur do not bubble, so only the window's own reach these, and not those of the elements inside it. Showing a tab fires focus on the top window too while a child frame holds the focus, which is why the report reads the focus and does not assume it.
+  // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
+  // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
+  // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
   listen(window, "focus", report_mode, false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.

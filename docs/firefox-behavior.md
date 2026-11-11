@@ -167,3 +167,14 @@ Measured in the key test (`test/key/p23_media_keys.mjs`, Firefox 160), with the 
 - `"requestPictureInPicture" in HTMLVideoElement.prototype` is the feature check. Firefox 153 shipped the API on desktop. Before it, `aP` refuses with "Picture-in-picture needs Firefox 153 or newer". Not measured on a Firefox below 153.
 
 Not measured: a `play()` the page blocks. The key press itself activates the top page, so the key test cannot make one. The command maps `NotAllowedError` from `play()` to "The page blocked play until you click it".
+
+## Frame focus and the tab's mode (google-docs-focus)
+
+Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a public Google Doc in view mode, in headless Firefox 160.
+
+- Google Docs types into a hidden frame of its own origin, made with `src="javascript:undefined"` and filled with `document.open`. The content script starts in the written document, after the `document.open`, and its listeners stay.
+- A frame with no `src` gets its content script in the first `about:blank` document, at once when the frame is added. A `document.open` on that frame afterwards removes every listener the script put on the window, and Firefox does not inject the script again. The script still answers messages, but no key or focus event reaches it.
+- A window's `focus` event fires on the top window when the tab is shown, also while a child frame holds the focus. It fires there too when focus comes back from a child frame, and when a focused child frame is removed. Inside the `focus` event `document.hasFocus()` is true, and inside `blur` it is false.
+- A document whose child frame holds the focus still answers true to `document.hasFocus()`, and its `activeElement` is the frame element.
+- `tabs.onUpdated` sends `{ status: "loading" }` with no `url` when a load starts. It sends `{ status: "loading", url }` when the new page takes over, and again for each `history.replaceState` the page runs while it still loads. The second kind comes after the content script's first message. Google Docs does this on every load.
+- The page a load leaves keeps sending messages between the two events: its window gets a `focus` event when the load starts from the address bar.

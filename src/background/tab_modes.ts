@@ -1,5 +1,5 @@
 // The mode each tab is in, kept in storage so a restarted background still knows it.
-// A tab's mode is the mode of the child frame whose window holds focus, else the top frame's.
+// A tab's mode is the mode of the child frame whose document holds the keyboard focus, else the top frame's.
 // A page can type into a child frame (Google Docs types into a hidden one), so the badge and the shortcut gate follow the frame that gets the keys.
 
 import type { CommandDef, Mode } from "../shared/command.ts";
@@ -11,7 +11,7 @@ type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 const TOP_FRAME = 0;
 
 // Only two frames matter: the top frame, which draws the badge, and the child frame that holds the focus, if any.
-// `awaiting_commit` is set from the start of a navigation until its new page replaces the old one.
+// `awaiting_commit` is set from the start of a load until its new page replaces the old one. See `forget_on_navigation`.
 export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true };
 
 // `ModeChanged` in src/shared/messages.ts, with the frame that sent it.

@@ -420,6 +420,7 @@ export type SetMode = {
 };
 
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
+// The type string is short because content.js holds it.
 export type FocusedFrameMode = {
   type: "frame_mode";
   mode?: Mode;
