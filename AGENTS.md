@@ -77,6 +77,7 @@ just test-all    # `just test` and `just key-test` at once, about as long as key
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
 just release     # from a clean non-main branch: bump the patch version, sign and install, commit and push the bump, create the GitHub release that carries the native host (needs a logged-in gh), reading the AMO key from rbw when unset
+just release_beta # CI only: the beta in src/manifest.json (stamp it first with tools/stamp_beta_manifest.ts): hash the hosts, sign, create the prerelease with the xpi; never bumps or writes package.json; RELEASE_DRY_RUN=1 skips sign and release
 just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # lint the user config (writes nothing Firefox reads; apply an edit with `config.reload`, see tools/build-config/README.md)
 ```
