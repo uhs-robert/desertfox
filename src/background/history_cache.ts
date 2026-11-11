@@ -83,7 +83,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
     }
   };
 
-  // An address the cache has not seen waits for the search to list it. A search that fails leaves the page out until the next start.
+  // An address the cache has not seen waits for the search to list it. A search that fails leaves the page out until its next visit checks again.
   const needs_check = (change: Change) => change.kind === "visited" && !!change.visit.url && !by_url.has(change.visit.url);
 
   const drain = (): Promise<void> => {
@@ -125,9 +125,16 @@ export function create_history_cache(deps: HistoryCacheDeps) {
   };
 }
 
+// Firefox matches search text against only the first 255 characters of an address, so a longer text finds nothing. The prefix finds the page and the exact comparison picks it out of the newest matches.
+const SEARCH_PREFIX_LENGTH = 200;
+
+export async function listed_by_search(search: (text: string) => Promise<readonly Visit[]>, url: string): Promise<boolean> {
+  return (await search(url.slice(0, SEARCH_PREFIX_LENGTH))).some((item) => item.url === url);
+}
+
 // Marked pure so a bundle that never reads the cache (the new tab page) drops it.
 export const history_cache = /* @__PURE__ */ create_history_cache({
   search: (max) => browser.history.search({ text: "", startTime: 0, maxResults: max }),
   max: HISTORY_CACHE_MAX,
-  listed: async (url) => (await browser.history.search({ text: url, startTime: 0, maxResults: 20 })).some((item) => item.url === url),
+  listed: (url) => listed_by_search((text) => browser.history.search({ text, startTime: 0, maxResults: 20 }), url),
 });

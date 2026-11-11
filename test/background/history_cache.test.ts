@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_history_cache } from "../../src/background/history_cache.ts";
+import { create_history_cache, listed_by_search } from "../../src/background/history_cache.ts";
 
 type Visit = { url: string; title?: string; lastVisitTime: number; visitCount?: number };
 const visit = (n: number, extra: Partial<Visit> = {}): Visit => ({ url: `https://site${n}.test/`, title: `Site ${n}`, lastVisitTime: n, visitCount: 1, ...extra });
@@ -187,4 +187,12 @@ test("a hidden page seen during the fill stays out", async () => {
   state.release();
   await started;
   assert.deepEqual(urls(state.cache), ["1"]);
+});
+
+test("the hidden-page check finds an address longer than the 255 characters Firefox matches", async () => {
+  const long_url = `https://shop.test/search?q=${"a".repeat(300)}`;
+  const stored = [{ url: long_url }, { url: `${long_url}&page=2` }];
+  const search = async (text: string) => (text.length > 255 ? [] : stored.filter((item) => item.url.slice(0, 255).includes(text)));
+  assert.equal(await listed_by_search(search, long_url), true);
+  assert.equal(await listed_by_search(search, `${long_url}&other=1`), false);
 });
