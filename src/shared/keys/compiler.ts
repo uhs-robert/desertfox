@@ -5,7 +5,7 @@ import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, LeafStep, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, LeafStep, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BoundInvocation, KeyBinding, Prompt } from "../invocation.ts";
@@ -311,6 +311,9 @@ const key_sequences = (text: string, warnings: string[]): string[][] =>
   });
 
 // A rule whose pattern never matches is dropped.
+// By value, because a list setting is a new array after every load. Not in `prefix_tree.ts`, whose default settings import would reach content.js.
+export const is_default_value = (name: FrameSiteName, value: unknown): boolean => JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[name]);
+
 function compile_site_rules(rules: Settings["site_rules"], warnings: string[]): SiteRule[] {
   return rules.flatMap((row): SiteRule[] => {
     const regex = match_regex_source([row.site]);
@@ -336,7 +339,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
   const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, warnings);
-  const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || settings[name] === DEFAULT_SETTINGS[name] ? [] : [[name, settings[name]]])));
+  const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || is_default_value(name, settings[name]) ? [] : [[name, settings[name]]])));
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,

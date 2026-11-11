@@ -11,8 +11,8 @@ import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
-import { collect, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
-import type { Found, HintFilter } from "./candidates.ts";
+import { collect, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
+import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
 import type { KeyOutcome } from "./pick.ts";
@@ -58,6 +58,7 @@ type Session = {
   // Only the images filter takes a picture from a CSS background.
   with_background_: boolean;
   custom_selector_: string | undefined;
+  site_selectors_: SiteSelectors;
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
   text: string | undefined;
   lower_text_: string | undefined;
@@ -86,10 +87,10 @@ function windows_of(found: Found[]): Window[] {
 }
 
 // A double-click skips links. Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
-function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction): Found[] {
+function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  const found = collect(document, query_for(filter, custom_selector), weak_test_for(filter));
+  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector), weak_test_for(filter)), site_selectors);
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
@@ -125,6 +126,26 @@ async function read_setting(name: string): Promise<unknown> {
   const stored = await browser.storage.local.get(CONFIG_STATUS_STORAGE_KEY);
   const status = stored[CONFIG_STATUS_STORAGE_KEY] as { settings?: Record<string, unknown> } | undefined;
   return status?.settings?.[name];
+}
+
+const parses_as_selector = (selector: string): boolean => {
+  try {
+    document.createDocumentFragment().querySelector(selector);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Asked at every `hint.run`, so a settings edit or a new address applies from the next run on. A rapid session keeps what its run read.
+// A selector that does not parse drops out with one notice for the run, and the rest still apply.
+async function read_site_selectors(show_toast: (message: string) => void): Promise<SiteSelectors> {
+  const reply = (await browser.runtime.sendMessage({ type: "read_hint_selectors" }).catch(() => undefined)) as { hint_add?: string[]; hint_remove?: string[] } | undefined;
+  const bad: string[] = [];
+  const parsed = (selectors: string[] | undefined) => (selectors ?? []).filter((selector) => parses_as_selector(selector) || (bad.push(selector), false));
+  const site_selectors = { add: parsed(reply?.hint_add), remove: parsed(reply?.hint_remove) };
+  if (bad.length > 0) show_toast(`Skipped hint selectors that do not parse: ${bad.join(", ")}`);
+  return site_selectors;
 }
 
 async function read_letters(): Promise<string[]> {
@@ -308,7 +329,7 @@ function register(host: BundleHostApi): void {
     ready.view.clear_labels_();
     delete current.ready;
     performed(() => perform_pick(current, picked));
-    if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action), false);
+    if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_), false);
   }
 
   // The rest of a typed word still arrives after the key that made the match unique, and it would run as normal keys or as labels of the next round. So that pick waits, with hint mode still open, and the keys are dropped.
@@ -368,14 +389,20 @@ function register(host: BundleHostApi): void {
     exit: end_session,
   });
 
-  host.register_handler_("hint.run", (args): Outcome | Promise<Outcome> => {
+  // A run that starts while an earlier one still waits for its selectors cancels the earlier one.
+  let latest_run = 0;
+
+  // Answers when hint mode is on or the run ended without it. The pick's own answer comes later, through `picked`.
+  async function start_hints(args: Record<string, unknown>): Promise<Outcome | { picked: Promise<Outcome> }> {
+    const run = ++latest_run;
     const action = args.action as HintAction;
-    end_session();
     const filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
+    const site_selectors_ = await read_site_selectors(host.show_toast_);
+    if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
     try {
-      candidates = find_candidates(filter, custom_selector_, action);
+      candidates = find_candidates(filter, custom_selector_, action, site_selectors_);
     } catch {
       return { ok: false, message: `Invalid selector: ${custom_selector_}` };
     }
@@ -383,13 +410,22 @@ function register(host: BundleHostApi): void {
     const text = (args.text as string | undefined) || undefined;
     if (candidates.length === 0) return { ok: false, message: none_message(text) };
     // Pending until the user picks a label or leaves hint mode.
-    return new Promise<Outcome>((finish) => {
+    const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", filter, with_background_: filter === "images", custom_selector_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true);
     });
+    return { picked };
+  }
+
+  host.register_handler_("hint.run", (args): Promise<Outcome> => {
+    end_session();
+    const started = start_hints(args);
+    // Keys typed while the background answers wait, so they reach hint mode and not normal mode.
+    host.hold_keys_until_(started.then(() => []));
+    return started.then((outcome) => ("picked" in outcome ? outcome.picked : outcome));
   });
 }
 

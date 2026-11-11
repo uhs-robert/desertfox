@@ -279,6 +279,11 @@ export type InspectPick = {
   type: "inspect_pick";
 };
 
+// From the `hints` bundle when `hint.run` starts. The answer holds the frame's `hint_add` and `hint_remove`, each only when it is not empty, resolved against the frame's own address.
+export type ReadHintSelectors = {
+  type: "read_hint_selectors";
+};
+
 // From the devtools page, as the first message on its port: which tab its toolbox inspects.
 export type DevtoolsHello = {
   type: "devtools_hello";
@@ -387,7 +392,7 @@ export type MediaReport = {
   scan: MediaScan;
 };
 
-export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

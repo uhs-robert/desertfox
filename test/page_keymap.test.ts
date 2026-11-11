@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -118,6 +118,19 @@ test("the global blur_on_load reaches every page, and a site row turns it off th
   assert.equal("frame_site_globals" in (await ask(compiled, "https://a.test/"))!.keymap, false);
   // A value at its default stays out of the stored keymap and of the reply.
   assert.equal("frame_site_globals" in compile_keymap(KEYMAP, { blur_on_load: false }, resolve).compiled, false);
+});
+
+test("hint selectors answer read_hint_selectors for the frame's own address, and stay out of the page keymap reply", async () => {
+  const compiled = compile_keymap(KEYMAP, { hint_add: [".card"], site_rules: [{ site: "https://top.test/*", hint_remove: ["nav"] }, { site: "https://bare.test/*", hint_add: [] }] }, resolve).compiled;
+  assert.deepEqual(compiled.frame_site_globals, { hint_add: [".card"] });
+  assert.deepEqual(await hint_selectors_reply(storage_of(compiled), "https://top.test/"), { hint_add: [".card"], hint_remove: ["nav"] });
+  // A site row's empty list beats the global one.
+  assert.deepEqual(await hint_selectors_reply(storage_of(compiled), "https://bare.test/"), {});
+  assert.deepEqual(await hint_selectors_reply(storage_of(compiled), "https://embed.test/"), { hint_add: [".card"] });
+  assert.equal((await ask(compiled, "https://top.test/"))!.site_values, undefined);
+  assert.deepEqual(await hint_selectors_reply(storage_of(undefined), "https://top.test/"), {});
+  // An empty list is the default, so a fresh array of it stays out of the stored keymap.
+  assert.equal("frame_site_globals" in compile_keymap(KEYMAP, { hint_add: [], hint_remove: [] }, resolve).compiled, false);
 });
 
 test("a tab-wide value resolves against the top frame's address in every frame", () => {

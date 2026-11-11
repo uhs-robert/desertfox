@@ -78,11 +78,16 @@ export type PageFrees = { tokens: string[]; invert: boolean };
 export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean => tokens.includes(token) !== invert;
 // `insert` is set while a manual insert mode (`i`) holds the tab, so a frame that loads late joins it. `recording` is the register a macro is being recorded into. The tree then holds `macro.stop` where the record key was, and the badge says so.
 // The per-site settings that act inside one frame, so each frame resolves them against its own address.
-export const FRAME_SITE_SETTINGS = ["blur_on_load"] as const satisfies readonly PerSiteName[];
-export type FrameSiteValues = Partial<Pick<Settings, (typeof FRAME_SITE_SETTINGS)[number]>>;
+// The page keymap reply carries only the ones content.js needs. The hints bundle asks for the hint selectors itself (`read_hint_selectors`), so content.js does not grow.
+export const PAGE_REPLY_SITE_SETTINGS = ["blur_on_load"] as const satisfies readonly PerSiteName[];
+export const HINT_SITE_SETTINGS = ["hint_add", "hint_remove"] as const satisfies readonly PerSiteName[];
+// A literal, not a spread of the two lists: the bundler keeps an unused spread in content.js.
+export const FRAME_SITE_SETTINGS = ["blur_on_load", "hint_add", "hint_remove"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS];
+export type FrameSiteName = (typeof FRAME_SITE_SETTINGS)[number];
+export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partial<Pick<Settings, Name>>;
 
-// `site_values` holds the frame site settings resolved for the frame's own address, each only when it differs from its default.
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true; site_values?: FrameSiteValues };
+// `site_values` holds the page reply site settings resolved for the frame's own address, each only when it differs from its default.
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

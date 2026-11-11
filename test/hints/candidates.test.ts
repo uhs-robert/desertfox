@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -380,4 +380,52 @@ test("text_of uses textContent when innerText is missing, ignores a numeric valu
   assert.equal(text_of(text_fake({ local: "button", innerText: "", value: "form data" })), "");
   assert.equal(text_of(text_fake({ local: "input", type: "password", innerText: "", value: "hunter2" })), "");
   assert.equal(text_of(text_fake({ innerText: "x".repeat(1000) })).length, 400);
+});
+
+// Elements that match a selector list of `.class` entries by their classes, and find `closest` through their parents.
+type Classed = { name: string; classes: string[]; parent?: Classed };
+function classed_page(fakes: Classed[]): { root: ParentNode; element: (name: string) => Element } {
+  const elements = new Map<Classed, Element>();
+  const has_any = (fake: Classed, selector: string) => selector.split(", ").some((entry) => fake.classes.includes(entry.slice(1)));
+  for (const fake of fakes) {
+    elements.set(fake, {
+      name: fake.name,
+      localName: "div",
+      openOrClosedShadowRoot: null,
+      matches: (selector: string) => has_any(fake, selector),
+      closest: (selector: string) => {
+        for (let up: Classed | undefined = fake; up; up = up.parent) if (has_any(up, selector)) return elements.get(up)!;
+        return null;
+      },
+    } as unknown as Element);
+  }
+  return { root: { querySelectorAll: () => [...elements.values()] } as unknown as ParentNode, element: (name) => [...elements.entries()].find(([fake]) => fake.name === name)![1] };
+}
+
+test("hint_add labels its matches for all, clickable and every, once each, and not for a filter that promises an address", () => {
+  const nav = { name: "nav", classes: ["nav"] };
+  const { root, element } = classed_page([nav, { name: "tile", classes: ["tile"] }, { name: "link in nav", classes: ["tile"], parent: nav }]);
+  const base: Found[] = [strong(element("link in nav"))];
+  const selectors = { add: [".tile"], remove: [] };
+  assert.deepEqual(names(with_site_selectors(root, "all", base, selectors)), ["tile", "link in nav"]);
+  assert.equal(with_site_selectors(root, "every", base, selectors).length, 2);
+  assert.equal(with_site_selectors(root, "clickable", base, selectors).length, 2);
+  for (const filter of ["links", "images", "inputs", "buttons", "custom"] as const) assert.deepEqual(names(with_site_selectors(root, filter, base, selectors)), ["link in nav"], filter);
+});
+
+test("hint_remove drops a candidate inside a match for every filter but custom, an added one too", () => {
+  const nav = { name: "nav", classes: ["nav"] };
+  const { root, element } = classed_page([nav, { name: "tile", classes: ["tile"] }, { name: "link in nav", classes: ["tile"], parent: nav }]);
+  const base: Found[] = [strong(element("link in nav")), strong(element("nav"))];
+  const selectors = { add: [".tile"], remove: [".nav"] };
+  assert.deepEqual(names(with_site_selectors(root, "all", base, selectors)), ["tile"]);
+  assert.deepEqual(names(with_site_selectors(root, "links", base, selectors)), []);
+  assert.deepEqual(names(with_site_selectors(root, "custom", base, selectors)), ["link in nav", "nav"]);
+});
+
+test("an added element inside a pointer wrapper takes the hint from the wrapper", () => {
+  const wrapper = el({ name: "wrapper", local: "div", cursor: "pointer" });
+  const inner = el({ name: "added", local: "span", plain: true, parent: wrapper as unknown as Dom });
+  assert.deepEqual(names_of(drop_redundant_weak([weak(wrapper), { element: inner, frames: [], added: true }])), ["added"]);
+  assert.deepEqual(names_of(drop_redundant_weak([weak(wrapper), strong(inner)])), ["wrapper", "added"]);
 });

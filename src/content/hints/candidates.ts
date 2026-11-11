@@ -87,8 +87,8 @@ export const query_for = (filter: HintFilter, custom_selector: string | undefine
   filter === "custom" ? { selector: custom_selector ?? "" } : QUERIES[filter];
 
 // An element and the iframes that hold it, outermost first. The frames give its place on the top page.
-// `weak` marks an element that only looks clickable (a pointer cursor, a spot in a menu), see `drop_redundant_weak`.
-export type Found = { element: Element; frames: Element[]; weak?: true };
+// `weak` marks an element that only looks clickable (a pointer cursor, a spot in a menu), see `drop_redundant_weak`. `added` marks a match of a `hint_add` selector, which counts as clickable there.
+export type Found = { element: Element; frames: Element[]; weak?: true; added?: true };
 
 const MAX_FRAME_DEPTH = 4;
 
@@ -120,6 +120,22 @@ export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, fram
     }
   }
   return found;
+}
+
+// The frame's `hint_add` and `hint_remove` settings, each list already checked to parse.
+export type SiteSelectors = { add: string[]; remove: string[] };
+
+// Only the filters that mean "anything to click" take added elements: a `links` or `images` label promises an address.
+const TAKES_ADDED = new Set<HintFilter>(["all", "clickable", "every"]);
+
+// Added elements count as strong and skip the filter's test. A removed element is one inside a `hint_remove` match in its own tree: `closest` stops at a shadow root.
+export function with_site_selectors(root: ParentNode, filter: HintFilter, found: Found[], { add, remove }: SiteSelectors): Found[] {
+  const added = add.length > 0 && TAKES_ADDED.has(filter) ? collect(root, { selector: add.join(", ") }).map((item): Found => ({ ...item, added: true })) : [];
+  const added_elements = new Set(added.map((item) => item.element));
+  const merged = [...found.filter((item) => !added_elements.has(item.element)), ...added];
+  if (remove.length === 0 || filter === "custom") return merged;
+  const removed = remove.join(", ");
+  return merged.filter((item) => item.element.closest(removed) === null);
 }
 
 // Page reads behind the weak test, so tests run on fake elements.
@@ -155,9 +171,9 @@ type Climbable = { parentNode: unknown; host?: unknown };
 export function drop_redundant_weak(found: Found[]): Found[] {
   const weak = new Set<unknown>(found.filter((item) => item.weak).map((item) => item.element));
   if (weak.size === 0) return found;
-  const clickable = found.filter((item) => item.weak || item.element.matches(CLICKABLE));
+  const clickable = found.filter((item) => item.weak || item.added || item.element.matches(CLICKABLE));
   // A container that is only focusable (an ARIA menu with tabindex 0) must not hide the items in it, so as an ancestor it needs a click sign.
-  const strong = new Set<unknown>(clickable.filter((item) => !item.weak && item.element.matches(CLICKABLE_BY_ACTION)).map((item) => item.element));
+  const strong = new Set<unknown>(clickable.filter((item) => !item.weak && (item.added || item.element.matches(CLICKABLE_BY_ACTION))).map((item) => item.element));
   const dropped = new Set<unknown>();
   for (const item of clickable) {
     const own_weak = item.weak === true;
