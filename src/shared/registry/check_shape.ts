@@ -8,8 +8,10 @@ import {
   possible_defaults,
   find_param,
   is_context_source,
+  has_default_list,
   is_dynamic_values,
   join_alternatives,
+  pattern_arm_error,
   static_values,
   value_rule_error,
 } from "./params.ts";
@@ -72,11 +74,18 @@ export function check_args_shape(
   for (const param of params) {
     if (!param.when) continue;
     const explicit = args[param.name] !== undefined;
-    const value = explicit ? args[param.name] : default_of(param);
-    if (value === undefined) continue;
     const error = when_error(command, param, args);
     if (error && explicit) return fail(error);
-    if (!error) args[param.name] = value;
+    if (error) continue;
+    const value = explicit ? args[param.name] : default_of(param);
+    // A default list that gives nothing under a holding `when` leaves the param required.
+    if (value === undefined && has_default_list(param)) return { ok: false, error: `missing <${param.name}>`, missing_param: param.name };
+    if (value !== undefined) args[param.name] = value;
+  }
+  for (const param of params) {
+    const value = args[param.name];
+    const error = param.pattern_arms && typeof value === "string" && !(param.optional && value === "") ? pattern_arm_error(param, value, args) : null;
+    if (error) return fail(error);
   }
   for (const param of params) {
     const value = args[param.name];
@@ -114,7 +123,7 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
       if (typeof given !== "string" || (param.type === "key" && [...given].length !== 1)) return bad(param.type === "key" ? "one key" : "text");
       const allowed = param.strict ? static_values(param) : undefined;
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
-      if (param.pattern !== undefined && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
+      if (param.pattern !== undefined && !param.pattern_arms && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
       if (param.format === "url" && !URL.canParse(given)) return bad("an address");
       return { ok: true, value: given };
     }

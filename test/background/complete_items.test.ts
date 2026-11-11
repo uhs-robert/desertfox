@@ -66,6 +66,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       if (fail) throw new Error("no marks");
       return [{ name: is_private ? "p" : "m", description: String(url) }];
     },
+    quality_levels: async (tab_id) => (tab_id === NORMAL_LINE.tab_id ? [{ name: "max", description: "The highest level" }] : []),
     quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "g", description: "github.com" }]),
     saved_quickmarks: async (is_private) => (is_private ? [{ name: "p", description: "private.test" }] : [{ name: "s", description: "saved.test" }]),
     all_bookmarks: async () => {
@@ -166,6 +167,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     sessions: async () => [],
     registers: async () => [],
     marks: async () => [],
+    quality_levels: async () => [],
     quickmarks: async () => [],
     saved_quickmarks: async () => [],
     folders: async () => [],
@@ -321,6 +323,7 @@ test("the opener is checked before and after the history fetch", async () => {
     sessions: async () => [],
     registers: async () => [],
     marks: async () => [],
+    quality_levels: async () => [],
     quickmarks: async () => [],
     saved_quickmarks: async () => [],
     folders: async () => [],
@@ -354,6 +357,7 @@ test("a failed history read leaves the bookmarks, and a failed bookmark read lea
       sessions: async () => [],
       registers: async () => [],
       marks: async () => [],
+      quality_levels: async () => [],
       quickmarks: async () => [],
       saved_quickmarks: async () => [],
       folders: async () => [],
@@ -419,6 +423,7 @@ test("a history read that finishes after the line closed gives nothing", async (
     sessions: async () => [],
     registers: async () => [],
     marks: async () => [],
+    quality_levels: async () => [],
     quickmarks: async () => [],
     saved_quickmarks: async () => [],
     folders: async () => [],
@@ -976,4 +981,10 @@ test("the finder sends each tab its open-tab boost plus its page's use, and a pr
   assert.deepEqual(private_items.sites, []);
   const private_open = (await service.answer("open", PRIVATE_LINE))?.items as { sites: unknown[] };
   assert.deepEqual(private_open.sites, []);
+});
+
+test("the quality_levels kind asks for the tab of the line, and nothing for a stranger", async () => {
+  const { service } = make({});
+  assert.deepEqual(await service.answer("quality_levels", NORMAL_LINE), { items: [{ name: "max", description: "The highest level" }] });
+  assert.equal(await make({ openers: [] }).service.answer("quality_levels", NORMAL_LINE), undefined);
 });

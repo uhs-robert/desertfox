@@ -3,7 +3,7 @@
 
 export const areas = ["media", "keys"];
 
-export async function run_cases({ run_case, setup, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, events, expect, in_active_tab, poll_until, settle_focus }) {
+export async function run_cases({ run_case, setup, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, events, expect, in_active_tab, poll_until, settle_focus, close_cmdline }) {
   const top = "p23_media";
   const inner = "p23_media_inner";
   const report = (page_id, type, check = () => true) => (event) => event.page_id === page_id && event.type === `media_${type}` && check(event);
@@ -100,8 +100,14 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
 
   await run_case("media seek end and percent move the video, percent reading the count", async () => {
     let mark = events.length;
-    await run_line("seek percent");
+    // press_keys reads a leading "--" as one of its own options, so the count goes in as the args the validator checks.
+    await in_active_tab('browser.runtime.sendMessage({ type: "run", invocations: [{ id: "media.act", args: { action: "seek", value: "percent", times: 1 } }], mode: "normal" }); 0');
     await wait_event(mark, report(top, "seeked", (event) => event.time > 0.2 && event.time < 0.4), "the top video at 1 percent");
+    // A percent seek with no count is refused by the schema, so no video moves.
+    mark = events.length;
+    await in_active_tab('browser.runtime.sendMessage({ type: "run", invocations: [{ id: "media.act", args: { action: "seek", value: "percent" } }], mode: "normal" }); 0');
+    await poll_until("the refusal of a percent seek with no count", async () => (await read_toast()).includes("times"));
+    await expect_absent(mark, top, report(top, "seeked"), "a percent seek with no count moved the video");
     mark = events.length;
     await run_line("seek end");
     await wait_event(mark, report(top, "seeked", (event) => event.time > 29 || event.time < 1), "the top video at the end");
@@ -169,6 +175,93 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await press_keys("a", "f");
     const left = await wait_event(mark, on_frame, "fullscreen to end in the frame");
     expect(left.element === "", `the fullscreen element is "${left.element}"`);
+  });
+
+  // The fixture /quality defines a fake site player on the page's own objects, so the bundle crosses from the content-script world to the page world as it does on the real sites.
+  const on_quality = (page_id, check = () => true) => (event) => event.page_id === page_id && event.type === "quality_set" && check(event);
+
+  await run_case("media quality lists the levels of a YouTube-style player and the line completes them", async () => {
+    await open_page("quality", "p23_quality_yt", { new_tab: true });
+    await run_line("quality");
+    await poll_until("the level list", async () => (await read_toast()) === "Quality: 1080p60, 720p (now), 480p");
+    await press_keys("A");
+    await wait_cmdline((line) => line.open && line.value === "media ", 'the line to open with "media "');
+    const line = await type_in_line("quality ", { until: (state) => state.row_texts.some((text) => text.includes("1080p")), what: "the live levels in the list" });
+    // The row is named by the height the schema takes, with the site's label beside it.
+    expect(line.row_texts.some((text) => text.startsWith("max")) && line.row_texts.some((text) => text.startsWith("480p")) && line.row_texts.some((text) => text.startsWith("1080p") && text.includes("1080p60")), `the rows are ${JSON.stringify(line.row_texts)}`);
+    await close_cmdline();
+  });
+
+  await run_case("media quality max, a height, down and auto call the player's own range and name the level", async () => {
+    let mark = events.length;
+    await run_line("quality max");
+    await wait_event(mark, on_quality("p23_quality_yt", (event) => event.low === "hd1080" && event.high === "hd1080"), "the player at 1080p");
+    await wait_toast("Quality 1080p60");
+    mark = events.length;
+    await run_line("quality 480p");
+    await wait_event(mark, on_quality("p23_quality_yt", (event) => event.low === "large"), "the player at 480p");
+    mark = events.length;
+    await run_line("quality up");
+    await wait_event(mark, on_quality("p23_quality_yt", (event) => event.low === "hd720"), "the player one level up");
+    mark = events.length;
+    await run_line("quality auto");
+    await wait_event(mark, on_quality("p23_quality_yt", (event) => event.low === "large" && event.high === "hd1080"), "the player handed back to the site");
+    await wait_toast("Quality auto");
+  });
+
+  await run_case("media info names the playing level, and media skip calls the player's next and previous video", async () => {
+    await run_line("info");
+    await poll_until("the info line with the level", async () => /^0:\d\d of 0:30, 1x, \d+p, volume 100%/.test(await read_toast()));
+    let mark = events.length;
+    await run_line("skip");
+    await wait_event(mark, (event) => event.page_id === "p23_quality_yt" && event.type === "quality_skip" && event.to === "next", "the next video call");
+    await wait_toast("Next video");
+    mark = events.length;
+    await run_line("skip previous");
+    await wait_event(mark, (event) => event.page_id === "p23_quality_yt" && event.type === "quality_skip" && event.to === "previous", "the previous video call");
+  });
+
+  await run_case("a player that replaces itself in place is found again, with its own levels", async () => {
+    await in_active_tab('document.getElementById("replace").click(); 0');
+    const mark = events.length;
+    await run_line("quality max");
+    await wait_event(mark, on_quality("p23_quality_yt", (event) => event.low === "hd2160"), "the new player at 2160p");
+    await wait_toast("Quality 2160p");
+  });
+
+  await run_case("a player that is not ready refuses, and the same command works once it answers", async () => {
+    await open_page("quality", "p23_quality_slow", { new_tab: true });
+    await run_line("quality max");
+    await wait_toast("The player has no quality levels yet");
+    await poll_until("the player to be ready", async () => {
+      await run_line("quality");
+      return (await read_toast()).startsWith("Quality: ");
+    });
+    const mark = events.length;
+    await run_line("quality min");
+    await wait_event(mark, on_quality("p23_quality_slow", (event) => event.low === "large"), "the player at its lowest level");
+  });
+
+  await run_case("an hls.js player takes current and next level, auto is -1, and skip refuses", async () => {
+    await open_page("quality", "p23_quality_hls", { new_tab: true });
+    let mark = events.length;
+    await run_line("quality max");
+    await wait_event(mark, on_quality("p23_quality_hls", (event) => event.current === 2), "the current level set to 2");
+    await wait_event(mark, on_quality("p23_quality_hls", (event) => event.next === 2), "the next level set to 2");
+    await wait_toast("Quality 720p");
+    mark = events.length;
+    await run_line("quality auto");
+    await wait_event(mark, on_quality("p23_quality_hls", (event) => event.current === -1), "the current level back to auto");
+    await run_line("skip");
+    await wait_toast("No next video");
+  });
+
+  await run_case("a page with no site player refuses quality and skip in words", async () => {
+    await open_page("quality", "p23_quality_none", { new_tab: true });
+    await run_line("quality max");
+    await wait_toast("No quality control on this page");
+    await run_line("skip previous");
+    await wait_toast("No previous video");
   });
 
   await run_case("a page with no media refuses with a notice", async () => {

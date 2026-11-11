@@ -29,7 +29,7 @@ test("the line reads an action word and then a value, as the A prompt leaves the
 test("the schema refuses a value an action cannot take, an unknown action and a bad value", () => {
   assert.equal(typed("media pip 3").ok, false);
   assert.equal(typed("media play_pause up").ok, false);
-  assert.match((typed("media rewind") as { error: string }).error, /action expects one of play_pause, speed, volume, seek, pip, fullscreen, mute, loop, info/);
+  assert.match((typed("media rewind") as { error: string }).error, /action expects one of play_pause, speed, volume, seek, pip, fullscreen, mute, loop, info, quality, skip/);
   assert.match((typed("media speed fast") as { error: string }).error, /value expects text matching/);
   assert.equal((typed("media") as { missing_param?: string }).missing_param, "action");
 });
@@ -56,7 +56,7 @@ test("every key of the a group passes the schema, and A opens the line on the me
 
 test("seek end and percent pass the schema, percent reads the count, and the new actions take no value", () => {
   assert.deepEqual(typed("media seek end"), { ok: true, args: { action: "seek", value: "end" } });
-  assert.deepEqual(typed("media seek percent"), { ok: true, args: { action: "seek", value: "percent", times: 1 } });
+  assert.deepEqual(typed("media --times=40 seek percent"), { ok: true, args: { action: "seek", value: "percent", times: 40 } });
   const counted = check_args(media, apply_count(media, { id: "media.act", args: { action: "seek", value: "percent" }, count: 50 }).args);
   assert.deepEqual(counted, { ok: true, args: { action: "seek", value: "percent", times: 50 } });
   for (const action of ["fullscreen", "mute", "loop", "info"]) {
@@ -64,4 +64,32 @@ test("seek end and percent pass the schema, percent reads the count, and the new
     assert.equal(typed(`media ${action} up`).ok, false, action);
   }
   assert.deepEqual(DEFAULT_KEYMAP.normal?.af, { id: "media.act", args: { action: "fullscreen" }, label: "Toggle fullscreen" });
+});
+
+test("the schema refuses what each action cannot take: a percent seek with no count, speed end and volume percent", () => {
+  assert.equal((typed("media seek percent") as { missing_param?: string }).missing_param, "times");
+  assert.equal(typed("media speed end").ok, false);
+  assert.equal(typed("media speed percent").ok, false);
+  assert.equal(typed("media volume end").ok, false);
+  assert.equal(typed("media volume percent").ok, false);
+  assert.equal(typed("media seek max").ok, false);
+  assert.equal(typed("media seek 30").ok, true);
+  assert.equal(typed("media seek reset").ok, true);
+  assert.equal(typed("media seek +30").ok, true);
+  assert.equal(typed("media volume reset").ok, true);
+  assert.equal(typed("media speed up").ok, true);
+});
+
+test("quality takes max, min, auto, a height, up and down, and skip takes next and previous", () => {
+  assert.deepEqual(typed("media quality"), { ok: true, args: { action: "quality" } });
+  for (const word of ["max", "min", "auto", "1080", "1080p", "480p"]) assert.deepEqual(typed(`media quality ${word}`), { ok: true, args: { action: "quality", value: word } }, word);
+  assert.deepEqual(typed("media quality up"), { ok: true, args: { action: "quality", value: "up", times: 1 } });
+  assert.deepEqual(typed("media quality down"), { ok: true, args: { action: "quality", value: "down", times: 1 } });
+  for (const word of ["high", "1080x", "p", "reset", "end", "next"]) assert.equal(typed(`media quality ${word}`).ok, false, word);
+  assert.deepEqual(typed("media skip"), { ok: true, args: { action: "skip" } });
+  assert.deepEqual(typed("media skip next"), { ok: true, args: { action: "skip", value: "next" } });
+  assert.deepEqual(typed("media skip previous"), { ok: true, args: { action: "skip", value: "previous" } });
+  for (const word of ["up", "1080", "max"]) assert.equal(typed(`media skip ${word}`).ok, false, word);
+  const counted = check_args(media, apply_count(media, { id: "media.act", args: { action: "quality", value: "down" }, count: 2 }).args);
+  assert.deepEqual(counted, { ok: true, args: { action: "quality", value: "down", times: 2 } });
 });

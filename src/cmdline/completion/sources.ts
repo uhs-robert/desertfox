@@ -365,7 +365,8 @@ export function create_completer(
     const settings = context.kind === "subject" ? setting_rows(context, text, usage) : undefined;
     if (settings) return { ...span, usage, rows: rank(context.word, settings), listing: settings.length > 0 };
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;
-    const kind = live_kind_of(param);
+    // `media quality ` lists the levels of the page's player: the first word that is not a flag is the action, and the subject after it is the value.
+    const kind = context.kind === "subject" && context.command.id === "media.act" && context.position === 1 && (tokenize(text.slice(0, context.start)) as { text: string }[]).slice(1).find((token) => !token.text.startsWith("-"))?.text === "quality" ? "quality_levels" : live_kind_of(param);
     if (kind === "anything" && live) {
       const read = live.read("anything");
       const engines = live.read("engines");
@@ -395,7 +396,7 @@ export function create_completer(
               ? window_rows(read.items as WindowItem[], usage)
               : kind === "headings"
                 ? heading_rows(read.items as HeadingItem[], usage)
-                : kind === "sessions" || kind === "registers" || kind === "folders" || kind === "marks" || kind === "quickmarks" || kind === "saved_quickmarks"
+                : kind === "sessions" || kind === "registers" || kind === "folders" || kind === "marks" || kind === "quickmarks" || kind === "saved_quickmarks" || kind === "quality_levels"
                   ? name_rows(read.items as SessionItem[], usage)
                   : bookmark_folder_rows(read.items as BookmarkRows, context.kind === "subject" ? context.typed.folder : undefined, usage);
       const ranked = rank(context.word, rows);

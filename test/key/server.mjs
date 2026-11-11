@@ -332,6 +332,39 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       </script>`;
       return response.end(page(`media_inner ${id}`, build, MEDIA_REPORTER));
     }
+    if (url.pathname === "/quality") {
+      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" for its first two seconds. The #replace button swaps in a second player with other levels, as YouTube does on in-site navigation. Each call the extension makes reports back.
+      const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button>';
+      const script = `<script>
+const kind = ${JSON.stringify(id)};
+let ready = !kind.includes("slow");
+if (kind.includes("slow")) setTimeout(() => (ready = true), 2000);
+function make_movie_player(levels, start) {
+  let current = start;
+  const player = document.createElement("div");
+  player.id = "movie_player";
+  player.getAvailableQualityLevels = () => levels.map((entry) => entry[0]);
+  player.getAvailableQualityData = () => levels.map(([quality, qualityLabel]) => ({ quality, qualityLabel, isPlayable: true }));
+  player.getPlaybackQuality = () => (ready ? current : "unknown");
+  player.setPlaybackQualityRange = (low, high) => { current = low; send("quality_set", { low, high }); };
+  player.nextVideo = () => send("quality_skip", { to: "next" });
+  player.previousVideo = () => send("quality_skip", { to: "previous" });
+  return player;
+}
+if (kind.includes("yt") || kind.includes("slow")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+document.getElementById("replace").addEventListener("click", () => {
+  document.getElementById("movie_player")?.remove();
+  document.body.append(make_movie_player([["hd2160", "2160p"], ["hd1080", "1080p"]], "hd1080"));
+});
+if (kind.includes("hls")) {
+  const hls = { levels: [{ height: 240 }, { height: 480 }, { height: 720 }], level: 1 };
+  Object.defineProperty(hls, "currentLevel", { get: () => hls.level, set: (value) => { hls.level = value; send("quality_set", { current: value }); } });
+  Object.defineProperty(hls, "nextLevel", { get: () => hls.level, set: (value) => send("quality_set", { next: value }) });
+  window.html5player = { hlsobj: hls };
+}
+</script>`;
+      return response.end(page(`quality ${id}`, video + script, MEDIA_REPORTER));
+    }
     if (url.pathname === "/hoverbox") {
       // Plain divs with a mouseenter listener only, no click role and no CSS :hover rule. The page reports each enter and leave.
       const boxes = '<div id="card" style="width:200px;height:60px;background:#eee">card</div><div id="other" style="width:200px;height:60px;background:#ddd">other</div><div id="menu" style="width:200px;height:80px;background:#ccc">menu<div id="item" style="width:100px;height:30px;background:#bbb">item</div></div>';

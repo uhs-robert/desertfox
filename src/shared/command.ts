@@ -29,6 +29,9 @@ export type ParamWhen = Record<string, readonly ParamValue[]>;
 // One arm of a default list: its value is the default while every named sibling param has one of its listed values.
 export type DefaultArm = { value: ParamValue; when: ParamWhen };
 
+// A text pattern that holds while every named sibling param has one of its listed values.
+export type PatternArm = { pattern: string; when: ParamWhen };
+
 // A plain value, a context source, or an ordered list of arms with an optional plain value last. The first arm that holds wins, else the last value applies, else the param has no default and is required.
 export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | ParamValue)[];
 
@@ -55,7 +58,7 @@ export type ParamDef = {
   main?: boolean;
   // On the `main` param: it takes the raw typed text from its first word to the end of the line, end-trimmed, with quotes and backslashes kept. Flags must come before it, and a value that starts with `-` needs `--` first. For text the shell rules would mangle, such as a CSS selector.
   verbatim?: boolean;
-  // A param with no default that applies, no `optional` and no `when` is required.
+  // A param with no default that applies, no `optional` and no `when` is required. A param with `when` and a default list is required too once its `when` holds and no arm does: `media seek percent` needs its count, `media seek up` defaults to one.
   default?: ParamDefault;
   // A `string` or `enum` param that may be left out or empty: it then reads as "". Stands for `default: ""`.
   optional?: boolean;
@@ -65,6 +68,8 @@ export type ParamDef = {
   max?: number;
   // A `string` or `key` param whose text must match this regular expression (source text, so it travels in `commands.json`). An optional param may still be empty.
   pattern?: string;
+  // A `string` param whose text must match the pattern of the first arm whose `when` holds, so each value of a sibling (an action) takes its own value set. The final value is checked, explicit or default. With no arm holding, the plain `pattern` applies instead.
+  pattern_arms?: readonly PatternArm[];
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;
   // A `string` param whose text must be an absolute address, as `URL.canParse` reads it. An optional param may still be empty.

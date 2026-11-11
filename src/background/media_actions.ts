@@ -2,6 +2,7 @@
 
 import { RuntimeRefusal, type CommandContext } from "../shared/command.ts";
 import type { MediaAction, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../shared/media.ts";
+import type { QualityAnswer, QualityRequest } from "../shared/quality.ts";
 
 // The scans that frames push in answer to an injection. A command listens for its tab while it waits, so a report that arrives with no command waiting is dropped.
 export function create_media_reports() {
@@ -30,6 +31,8 @@ export type MediaDeps = {
   // Runs the `media` bundle in every frame of the tab, each of which then pushes its scan to `reports`. Resolves with how many frames ran it. Rejects where scripts are refused: a privileged page.
   inject_all: (tab_id: number) => Promise<number>;
   ask: (tab_id: number, frame_id: number, request: MediaRequest) => Promise<unknown>;
+  // Runs the `quality` bundle in every frame of the tab and sends the request to the one frame with a site player. Resolves with its answer, else undefined. The call holds its own deadline, so the caller adds no second timer. Rejects where scripts are refused: a privileged page.
+  quality: (tab_id: number, request: QualityRequest) => Promise<QualityAnswer | undefined>;
   can_picture_in_picture: () => boolean;
   toast: (ctx: CommandContext, message: string) => Promise<void>;
   // A frame that has not answered by then counts as one with no media, so a hung frame cannot hold the key.
@@ -122,10 +125,11 @@ export function clock(seconds: number): string {
   return hours > 0 ? `${hours}:${two(minutes)}:${two(rest)}` : `${minutes}:${two(rest)}`;
 }
 
-const info_line = (state: MediaState): string =>
-  [state.duration === null ? clock(state.position) : `${clock(state.position)} of ${clock(state.duration)}`, `${rounded(state.rate, 2)}x`, `volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`, ...(state.loop ? ["loop"] : []), ...(state.paused ? ["paused"] : [])].join(", ");
+const info_line = (state: MediaState, quality: string | undefined): string =>
+  [state.duration === null ? clock(state.position) : `${clock(state.position)} of ${clock(state.duration)}`, `${rounded(state.rate, 2)}x`, ...(quality ? [quality] : []), `volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`, ...(state.loop ? ["loop"] : []), ...(state.paused ? ["paused"] : [])].join(", ");
 
-export function describe_change(action: MediaAction, state: MediaState, acted: number): string {
+// `quality` is the active level that the site driver reports, for `info` only.
+export function describe_change(action: MediaAction, state: MediaState, acted: number, quality?: string): string {
   const text =
     action === "speed" ? `Speed ${rounded(state.rate, 2)}x`
     : action === "volume" ? `Volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`
@@ -133,7 +137,7 @@ export function describe_change(action: MediaAction, state: MediaState, acted: n
     : action === "mute" ? (state.muted ? "Muted" : "Unmuted")
     : action === "loop" ? `Loop ${state.loop ? "on" : "off"}`
     : action === "fullscreen" ? `Fullscreen ${state.fullscreen ? "on" : "off"}`
-    : action === "info" ? info_line(state)
+    : action === "info" ? info_line(state, quality)
     : action === "pip" ? `Picture-in-picture ${state.pip ? "on" : "off"}`
     : state.paused ? "Paused" : "Playing";
   return acted > 1 ? `${text}, ${acted} players` : text;
@@ -151,9 +155,26 @@ export function refusal_for(action: MediaAction, error_name: string, error_messa
   return error_message;
 }
 
+// The quality bundle needs no scan: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
+async function run_quality(deps: MediaDeps, ctx: CommandContext, tab_id: number, args: MediaArgs): Promise<void> {
+  const times = args.times ?? 1;
+  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }).catch(() => undefined);
+  if (args.action === "skip") {
+    const direction = args.value === "previous" ? "previous" : "next";
+    if (!(await ask({ op: "skip", value: direction }))?.skipped) throw new RuntimeRefusal(`No ${direction} video`);
+    return deps.toast(ctx, direction === "next" ? "Next video" : "Previous video");
+  }
+  const answer = await ask({ op: args.value === undefined ? "list" : "set", value: args.value });
+  if (!answer) throw new RuntimeRefusal("No quality control on this page");
+  if (answer.levels.length === 0 && answer.chosen !== "auto") throw new RuntimeRefusal("The player has no quality levels yet");
+  if (answer.chosen) return deps.toast(ctx, `Quality ${answer.chosen}`);
+  await deps.toast(ctx, `Quality: ${answer.levels.map(({ label, active }) => (active ? `${label} (now)` : label)).reverse().join(", ")}`);
+}
+
 export async function run_media(deps: MediaDeps, ctx: CommandContext, args: MediaArgs): Promise<void> {
   const tab_id = ctx.tab_id;
   if (tab_id === undefined) throw new RuntimeRefusal("Media needs a tab");
+  if (args.action === "quality" || args.action === "skip") return run_quality(deps, ctx, tab_id, args);
   if (args.action === "pip" && !deps.can_picture_in_picture()) throw new RuntimeRefusal("Picture-in-picture needs Firefox 153 or newer");
   const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" ? "No video on this page" : "No video or audio on this page");
   const plan = choose_frames(await scan_frames(deps, tab_id), args.action);
@@ -168,5 +189,6 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   const acted = results.reduce((sum, result) => sum + result.acted, 0);
   const state = results.find((result) => result.state)?.state;
   if (acted === 0 || !state) throw no_media;
-  await deps.toast(ctx, describe_change(args.action, state, acted));
+  const quality = args.action === "info" ? (await deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined))?.levels.find((level) => level.active)?.label : undefined;
+  await deps.toast(ctx, describe_change(args.action, state, acted, quality));
 }

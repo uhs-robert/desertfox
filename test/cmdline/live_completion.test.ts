@@ -37,6 +37,7 @@ const COMMANDS: CommandMeta[] = [
 COMMANDS.push({ id: "heading.go", name: "heading", label: "Go to heading", intent: "Go to a heading.", params: [{ name: "heading", type: "string", rest: true, main: true, values: { from: "headings" } }] });
 COMMANDS.push({ id: "session.open", name: "session.open", label: "Open tab session", intent: "Open a session.", params: [{ name: "name", type: "string", rest: true, main: true, values: { from: "sessions" } }] });
 COMMANDS.push({ id: "mark.list", name: "marks", label: "List marks", intent: "List marks.", params: [{ name: "mark", type: "string", rest: true, main: true, values: { from: "marks" } }] });
+COMMANDS.push({ id: "media.act", name: "media", label: "Control media", intent: "Control media.", params: [{ name: "action", type: "string", values: ["speed", "quality"], strict: true }, { name: "value", type: "string", main: true }] });
 COMMANDS.push({ id: "quickmark.list", name: "quickmarks", label: "List quickmarks", intent: "List quickmarks.", params: [{ name: "quickmark", type: "string", rest: true, main: true, values: { from: "quickmarks" } }] });
 COMMANDS.push({ id: "register.list", name: "registers", label: "List registers", intent: "List registers.", params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: { from: "registers" } }] });
 COMMANDS.push({ id: "bookmark.move", name: "bookmark.move", label: "Move bookmark", intent: "Move.", params: [{ name: "folder", type: "string", rest: true, main: true, values: { from: "folders" } }, { name: "bookmark", type: "string", optional: true, values: { from: "bookmarks" } }] });
@@ -1078,6 +1079,25 @@ test("the marks and quickmarks lists show the key with the same text as the whic
   asks.at(-1)!.answer([{ name: "g", description: "github.com" }]);
   await settle();
   assert.deepEqual(names(session), ["g"]);
+});
+
+test("media quality lists the levels the player offers behind the fixed words, and no other action asks", async () => {
+  const { session, asks, settle } = make();
+  session.edit("media speed ");
+  assert.equal(asks.length, 0);
+  session.edit("media quality ");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["quality_levels"]);
+  asks[0]!.answer([{ name: "max", description: "The highest level" }, { name: "1080p", description: "Playing now" }, { name: "720p", description: "" }]);
+  await settle();
+  assert.deepEqual(names(session), ["max", "1080p", "720p"]);
+  session.edit("media quality 10");
+  assert.deepEqual(names(session), ["1080p"]);
+  tab_key(session);
+  assert.equal(session.get_text(), "media quality 1080p ");
+  // The list lives as long as its line. The next line is a new session that asks again, so a list from an earlier video is never shown.
+  const next = make();
+  next.session.edit("media quality ");
+  assert.deepEqual(next.asks.map((ask) => ask.kind), ["quality_levels"]);
 });
 
 test("a folder pick quotes its path, in the main word and in a flag value", async () => {

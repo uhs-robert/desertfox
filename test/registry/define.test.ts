@@ -225,11 +225,11 @@ test("a default list checks its arms like a when", () => {
   assert.doesNotThrow(() => create_registry().define("a.b", with_default("", { where: ["b"] })));
 });
 
-test("a default list is rejected next to when and on an optional param", () => {
+test("a default list is allowed next to when, and rejected on an optional param", () => {
   const where = { name: "where", type: "enum", values: ["a", "b"], default: "a" };
   const text = (extra: object) => ({ name: "text", type: "string", default: [{ value: "", when: { where: ["b"] } }], ...extra });
   const with_params = (...params: object[]): CommandInput => ({ ...base, params: params as never });
-  rejects("a.b", with_params(where, text({ when: { where: ["b"] } })), /params\[1\]\.default: a default list cannot be combined with `when`/);
+  assert.doesNotThrow(() => create_registry().define("a.b", with_params(where, text({ when: { where: ["b"] } }))));
   rejects("a.b", with_params(where, text({ optional: true })), /params\[1\]\.optional: an optional param reads as an empty text/);
   assert.doesNotThrow(() => create_registry().define("a.b", with_params(where, text({}))));
 });
