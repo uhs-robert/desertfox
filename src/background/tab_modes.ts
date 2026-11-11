@@ -1,5 +1,5 @@
 // The mode each tab is in, kept in storage so a restarted background still knows it.
-// A tab's mode is the mode of the child frame whose document holds the keyboard focus, else the top frame's.
+// A tab's mode is the mode of the child frame whose document holds the keyboard focus, else the top frame's. Ignore mode in the top frame beats both.
 // A page can type into a child frame (Google Docs types into a hidden one), so the badge and the shortcut gate follow the frame that gets the keys.
 
 import type { CommandDef, Mode } from "../shared/command.ts";
@@ -42,7 +42,11 @@ export function apply_mode_report(record: TabModeRecord, { frame_id, mode, focus
 }
 
 // A tab that never reported a mode is in normal mode, for example an about: page where no content script runs.
-export const mode_of_record = (record: TabModeRecord): Mode => record.focused_child?.mode ?? record.top_mode ?? "normal";
+// Ignore mode in the top frame beats the focused child frame: a field in a frame must not hide that the user turned the page's keys off, from the badge or from the shortcut gate.
+// The top frame draws its own mode then, so it gets no child mode.
+const shown_child_mode = (record: TabModeRecord): Mode | undefined => (record.top_mode === "ignore" ? undefined : record.focused_child?.mode);
+
+export const mode_of_record = (record: TabModeRecord): Mode => shown_child_mode(record) ?? record.top_mode ?? "normal";
 
 export function create_tab_modes(storage: ModeStorage) {
   // One read-then-write at a time, so two frames reporting together do not drop each other's change.
@@ -56,16 +60,16 @@ export function create_tab_modes(storage: ModeStorage) {
   const forget = (tab_id: number) => in_turn(() => storage.remove([key_of(tab_id), manual_insert_key_of(tab_id)]));
 
   return {
-    // `child_mode` is the mode the top frame draws in place of its own: the focused child frame's, or undefined when no child frame holds the focus.
+    // `child_mode` is the mode the top frame draws in place of its own: the focused child frame's, or undefined when no child frame holds the focus or the top frame is in ignore mode.
     // `tell_top` says whether the top frame needs to hear it: the mode changed, or the top frame itself reported while a child frame holds the focus, since a top frame that just started knows nothing yet.
     // A report that changes nothing writes nothing: every frame reports again on each focus and each pageshow.
     report: (tab_id: number, report: ModeReport): Promise<{ child_mode: Mode | undefined; tell_top: boolean }> =>
       in_turn(async () => {
         const before = await read(tab_id);
         const record = apply_mode_report(before, report);
-        const child_mode = record.focused_child?.mode;
+        const child_mode = shown_child_mode(record);
         if (JSON.stringify(record) !== JSON.stringify(before)) await storage.set({ [key_of(tab_id)]: record });
-        return { child_mode, tell_top: child_mode !== before.focused_child?.mode || (report.frame_id === TOP_FRAME && child_mode !== undefined) };
+        return { child_mode, tell_top: child_mode !== shown_child_mode(before) || (report.frame_id === TOP_FRAME && child_mode !== undefined) };
       }),
     recall: (tab_id: number): Promise<Mode> => in_turn(async () => mode_of_record(await read(tab_id))),
     forget,

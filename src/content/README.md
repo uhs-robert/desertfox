@@ -12,7 +12,7 @@ A property name that ends in `_` is internal, and the build (`tools/build.mjs`, 
 - `replay_key.ts`: the synthetic keydown (and keyup) that hands a replayed key to its original element, and the `isTrusted` guards of the keypress and keyup listeners. Pure.
 - `cancelled_keys.ts`: the keys whose keydown was cancelled, so their keypress and keyup are cancelled too. Pure.
 - `mode_state.ts`, `page_mode.ts`: the modes and the pass-next flag. `page_mode` is the one shared instance.
-- `mode_report.ts`: each frame reports its mode to the background on every change, at start, when its window gains focus and when its page is shown. Each report says whether the frame's own document holds the keyboard focus (`holds_own_focus`). The background answers the top frame with the mode of the child frame that holds the focus (`frame_mode`), and the top frame's badge shows that mode in place of its own.
+- `mode_report.ts`: each frame reports its mode to the background on every change, at start, when its window gains focus and when its page is shown. Each report says whether the frame's own document holds the keyboard focus (`holds_own_focus`). The background answers the top frame with the mode of the child frame that holds the focus (`frame_mode`), and the top frame's badge shows that mode in place of its own. A top frame in ignore mode gets none and shows IGNORE, so a field in a frame does not hide ignore mode.
 - `invocation_args.ts`: applies a command's count rule. Pure.
 - `scroll_target.ts`, `editable.ts`: pure helpers for scroll choice and focus.
 - `scroll_box.ts`: whether an element is a box that scrolls (`candidate_of`), used by the scroll keys and the `scrollable` hint filter.

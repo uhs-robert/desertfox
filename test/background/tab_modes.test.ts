@@ -70,11 +70,11 @@ test("a child frame's mode stands for the tab only while its document holds the 
 
 test("focus moving to the top frame and back hands the tab's mode over each time", async () => {
   const modes = create_tab_modes(fake_storage());
-  await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
+  await modes.report(4, { frame_id: TOP, mode: "caret", focus: true });
   assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
-  assert.equal((await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true })).child_mode, undefined);
-  assert.equal(await modes.recall(4), "ignore");
+  assert.equal((await modes.report(4, { frame_id: TOP, mode: "caret", focus: true })).child_mode, undefined);
+  assert.equal(await modes.recall(4), "caret");
   assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
 });
@@ -83,10 +83,10 @@ test("the top frame reporting without the focus leaves the focused child frame i
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
   // Showing the tab fires focus on the top window while the child frame holds the focus, and the toolbar can change the top frame's mode then.
-  assert.equal((await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false })).child_mode, "insert");
+  assert.equal((await modes.report(4, { frame_id: TOP, mode: "caret", focus: false })).child_mode, "insert");
   assert.equal(await modes.recall(4), "insert");
-  await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
-  assert.equal(await modes.recall(4), "ignore", "the top frame's mode from the report without focus was lost");
+  await modes.report(4, { frame_id: TOP, mode: "caret", focus: true });
+  assert.equal(await modes.recall(4), "caret", "the top frame's mode from the report without focus was lost");
 });
 
 test("a report from the frame that lost the focus can arrive after the claim of the frame that took it", async () => {
@@ -105,14 +105,26 @@ test("a focused child frame that reports without the focus gives the tab back to
   assert.equal(await modes.recall(4), "normal");
 });
 
+test("ignore mode in the top frame beats a focused child frame, until the top frame leaves it", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), { child_mode: undefined, tell_top: false });
+  assert.equal(await modes.recall(4), "ignore", "a field in a child frame hid ignore mode");
+  // Leaving ignore mode hands the tab to the frame that still holds the focus.
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true });
+  assert.equal(await modes.recall(4), "insert");
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), { child_mode: undefined, tell_top: true });
+  assert.equal(await modes.recall(4), "ignore");
+});
+
 // Frames loading
 
 test("reports from two frames at once both land", async () => {
   const modes = create_tab_modes(fake_storage());
-  await Promise.all([modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })]);
+  await Promise.all([modes.report(4, { frame_id: TOP, mode: "caret", focus: false }), modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })]);
   assert.equal(await modes.recall(4), "insert");
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false });
-  assert.equal(await modes.recall(4), "ignore", "the top frame's report was overwritten");
+  assert.equal(await modes.recall(4), "caret", "the top frame's report was overwritten");
 });
 
 test("a child frame that starts before the top frame's start report keeps the tab when it holds the focus", async () => {
@@ -205,13 +217,13 @@ test("an address change by the page itself while it loads keeps the mode it repo
   const modes = create_tab_modes(fake_storage());
   await modes.forget_on_navigation(4, { status: "loading" });
   await modes.forget_on_navigation(4, { status: "loading", url: NEW_PAGE });
-  await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false });
+  await modes.report(4, { frame_id: TOP, mode: "caret", focus: false });
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
   // history.replaceState during the load: Firefox reports it as loading with a url, as it does the new page taking over.
   await modes.forget_on_navigation(4, { status: "loading", url: `${NEW_PAGE}?tab=1` });
   assert.equal(await modes.recall(4), "insert");
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false });
-  assert.equal(await modes.recall(4), "ignore");
+  assert.equal(await modes.recall(4), "caret");
 });
 
 test("a load that ends with no new page keeps the mode through the old page's next address change", async () => {
