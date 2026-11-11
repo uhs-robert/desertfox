@@ -6,6 +6,7 @@ import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { ModeIndicator, WhichKeyBorder } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
+import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
@@ -64,6 +65,8 @@ export type CompiledKeymap = {
   mode_indicator: ModeIndicator;
   // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.
   bridge?: true;
+  // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
+  frame_site_globals?: FrameSiteValues;
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;
@@ -74,7 +77,12 @@ export type CompiledKeymap = {
 export type PageFrees = { tokens: string[]; invert: boolean };
 export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean => tokens.includes(token) !== invert;
 // `insert` is set while a manual insert mode (`i`) holds the tab, so a frame that loads late joins it. `recording` is the register a macro is being recorded into. The tree then holds `macro.stop` where the record key was, and the badge says so.
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true };
+// The per-site settings that act inside one frame, so each frame resolves them against its own address.
+export const FRAME_SITE_SETTINGS = ["blur_on_load"] as const satisfies readonly PerSiteName[];
+export type FrameSiteValues = Partial<Pick<Settings, (typeof FRAME_SITE_SETTINGS)[number]>>;
+
+// `site_values` holds the frame site settings resolved for the frame's own address, each only when it differs from its default.
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true; site_values?: FrameSiteValues };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

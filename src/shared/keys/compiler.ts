@@ -4,7 +4,7 @@ import type { BundleName } from "../bundles.ts";
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { match_regex_source, site_row_columns } from "../match_pattern.ts";
-import { COMPILED_KEYMAP_VERSION } from "../prefix_tree.ts";
+import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
@@ -336,12 +336,14 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
   const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, warnings);
+  const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || settings[name] === DEFAULT_SETTINGS[name] ? [] : [[name, settings[name]]])));
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
     ...(site_rules.length > 0 ? { site_rules } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     ...(settings.bridge === true ? { bridge: true as const } : {}),
+    ...(Object.keys(frame_site_globals).length > 0 ? { frame_site_globals } : {}),
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
   };
