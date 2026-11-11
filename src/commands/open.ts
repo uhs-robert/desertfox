@@ -24,7 +24,7 @@ define("open.url", {
   label: "Open URL",
   intent: "Open a URL. It opens here, in a new tab, in a background tab or in a new window. With no URL, a new tab, background tab or window opens the new tab page, and opening here needs a URL.",
   params: [{ name: "url", type: "string", rest: true, main: true, default: [{ value: "", when: { where: ["tab", "window", "background"] } }], values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
-  bridge: false,
+  bridge: true,
   runs_in: "background",
   run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string), args.where as Where, container_of(args)),
 });

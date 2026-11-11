@@ -47,7 +47,7 @@ MAX_REQUEST_BYTES = 64 * 1024
 IDLE_TIMEOUT_S = 5
 MAX_CONNECTIONS = 16
 ACCEPT_RETRY_S = 0.1
-# Per connection, at most this many requests in any window. A looping script gets a refusal, not a flood on the extension.
+# For the whole host, at most this many run and list requests in any window. The CLI opens a connection per call, so a limit per connection would never stop a loop.
 RATE_LIMIT_REQUESTS = 10
 RATE_WINDOW_S = 1.0
 # Requests waiting on the extension, over all connections.
@@ -199,15 +199,17 @@ class RateLimiter:
         self.window_s = window_s
         self.clock = clock
         self.admitted = deque()
+        self.guard = threading.Lock()
 
     def admit(self):
-        now = self.clock()
-        while self.admitted and now - self.admitted[0] >= self.window_s:
-            self.admitted.popleft()
-        if len(self.admitted) >= self.limit:
-            return False
-        self.admitted.append(now)
-        return True
+        with self.guard:
+            now = self.clock()
+            while self.admitted and now - self.admitted[0] >= self.window_s:
+                self.admitted.popleft()
+            if len(self.admitted) >= self.limit:
+                return False
+            self.admitted.append(now)
+            return True
 
 
 class Waiting:
@@ -281,6 +283,9 @@ class ExtensionLink:
                 self.pending_guard.wait(deadline - time.monotonic())
 
 
+RATE_LIMITED = {"ok": False, "message": "rate limit: too many requests, slow down"}
+
+
 def run_result(reply):
     """Only success and a short message leave the host: whatever else the extension put in a run reply stops here."""
     message = reply.get("message")
@@ -297,7 +302,7 @@ def list_result(reply):
     return run_result(reply)
 
 
-def answer(request, state, link):
+def answer(request, state, link, limiter):
     verb = request.get("verb") if isinstance(request, dict) else None
     if verb == "ping":
         return {"ok": True}
@@ -307,19 +312,22 @@ def answer(request, state, link):
         command = request.get("command")
         if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
             return {"ok": False, "message": "run needs a command text"}
+        if not limiter.admit():
+            return RATE_LIMITED
         return run_result(link.ask("run", {"command": command}, REQUEST_TIMEOUT_S))
     if verb == "list":
+        if not limiter.admit():
+            return RATE_LIMITED
         return list_result(link.ask("list", {}, REQUEST_TIMEOUT_S))
     return {"ok": False, "message": "unknown verb"}
 
 
-def serve_connection(connection, state, link, release_slot):
+def serve_connection(connection, state, link, limiter, release_slot):
     try:
         if not peer_is_me(connection):
             return
         connection.settimeout(IDLE_TIMEOUT_S)
         pending = b""
-        limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_WINDOW_S)
         while True:
             while b"\n" not in pending:
                 if len(pending) > MAX_REQUEST_BYTES:
@@ -335,7 +343,7 @@ def serve_connection(connection, state, link, release_slot):
             except (ValueError, RecursionError):
                 reply(connection, {"ok": False, "message": "not JSON"})
                 continue
-            reply(connection, answer(request, state, link) if limiter.admit() else {"ok": False, "message": "rate limit: too many requests, slow down"})
+            reply(connection, answer(request, state, link, limiter))
     except OSError:
         pass
     finally:
@@ -349,6 +357,7 @@ def reply(connection, message):
 
 def accept_loop(listener, state, link):
     slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+    limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_WINDOW_S)
     while True:
         try:
             connection, _ = listener.accept()
@@ -362,7 +371,7 @@ def accept_loop(listener, state, link):
         if not slots.acquire(blocking=False):
             connection.close()
             continue
-        threading.Thread(target=serve_connection, args=(connection, state, link, slots.release), daemon=True).start()
+        threading.Thread(target=serve_connection, args=(connection, state, link, limiter, slots.release), daemon=True).start()
 
 
 def read_exactly(stream, count):

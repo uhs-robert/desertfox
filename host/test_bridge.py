@@ -532,9 +532,9 @@ class RunAndListTest(BridgeTestCase):
 
     def test_many_clients_against_the_cap_all_get_their_own_answer_and_the_host_lives(self):
         host = self.start()
-        clients = [Client(self.socket_path, {"verb": "run", "command": "cmd%d" % number}) for number in range(16)]
+        clients = [Client(self.socket_path, {"verb": "run", "command": "cmd%d" % number}) for number in range(10)]
         requests = [host.read_request() for _ in clients]
-        self.assertEqual(len({request["request_id"] for request in requests}), 16)
+        self.assertEqual(len({request["request_id"] for request in requests}), 10)
         for request in reversed(requests):
             host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "message": request["command"]})
         for number, client in enumerate(clients):
@@ -585,23 +585,23 @@ class RunAndListTest(BridgeTestCase):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client, self.assertRaises(OSError):
             client.connect(self.socket_path)
 
-    def test_the_rate_limit_answers_the_requests_over_it_and_serves_again_after_the_window(self):
-        self.start()
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
-            client.connect(self.socket_path)
-            client.sendall(b'{"verb":"ping"}\n' * 14)
-            data = b""
-            while data.count(b"\n") < 14:
-                data += client.recv(4096)
-            replies = [json.loads(line) for line in data.splitlines()]
-            self.assertEqual(replies[:10], [{"ok": True}] * 10)
-            self.assertEqual(replies[10:], [{"ok": False, "message": "rate limit: too many requests, slow down"}] * 4)
-            time.sleep(1.1)
-            client.sendall(b'{"verb":"ping"}\n')
-            self.assertEqual(json.loads(client.recv(4096)), {"ok": True})
-        # The limit belongs to the connection: a new one starts fresh.
+    def test_the_rate_limit_is_for_the_host_so_a_new_connection_per_call_is_limited_too(self):
+        host = self.start()
+        clients = []
+        for number in range(10):
+            clients.append(Client(self.socket_path, {"verb": "list"}))
+            host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True, "commands": []})
+        for client in clients:
+            self.assertEqual(client.result(), {"ok": True, "commands": []})
+        self.assertEqual(self.ask({"verb": "list"}), {"ok": False, "message": "rate limit: too many requests, slow down"})
+        self.assertEqual(self.ask({"verb": "run", "command": "tab.next"}), {"ok": False, "message": "rate limit: too many requests, slow down"})
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+        time.sleep(1.1)
+        again = Client(self.socket_path, {"verb": "list"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": True, "commands": []})
+        self.assertEqual(again.result(), {"ok": True, "commands": []})
 
     def test_a_refused_run_over_the_rate_limit_never_reaches_the_extension(self):
         host = self.start()

@@ -16,11 +16,13 @@ import type { RouterDeps } from "./router.ts";
 const as_bridge_window = (window: browser.windows.Window): BridgeWindow | undefined =>
   window.id === undefined ? undefined : { id: window.id, focused: window.focused === true, private: window.incognito === true };
 
-// The active tab of the last focused normal window. A popup or devtools window is not a target.
-async function focused_normal_target(): Promise<BridgeRunTarget | undefined> {
-  const window = await browser.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => undefined);
-  if (window?.id === undefined) return undefined;
-  const [tab] = await browser.tabs.query({ active: true, windowId: window.id });
+type TargetApi = { windows: { getLastFocused: () => Promise<{ id?: number | undefined; type?: string | undefined; incognito?: boolean | undefined }> }; tabs: { query: (query: { active: true; windowId: number }) => Promise<{ id?: number | undefined; url?: string | undefined }[]> } };
+
+// The active tab of the last focused window, when that window is a normal one. Firefox ignores `windowTypes` here, so the type is read from the window: a popup is never a target.
+export async function focused_normal_target(api: TargetApi = browser): Promise<BridgeRunTarget | undefined> {
+  const window = await api.windows.getLastFocused().catch(() => undefined);
+  if (window?.id === undefined || window.type !== "normal") return undefined;
+  const [tab] = await api.tabs.query({ active: true, windowId: window.id });
   return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: window.id, url: tab.url, incognito: window.incognito === true };
 }
 

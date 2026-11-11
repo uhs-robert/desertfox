@@ -13,7 +13,8 @@ export type BridgeAnswer = { ok: true } | { ok: false; message: string };
 // the clipboard (`copy`, `register`), debugging, the native hosts and permission grants.
 const NEVER_GROUPS: readonly string[] = ["config", "settings", "session", "copy", "register", "debug", "native", "permissions"];
 // Single commands that never run: `page.reload` can clear cookies and site data, `page.save_pdf` and the hint picker can download or copy.
-const NEVER_IDS: readonly string[] = ["page.reload", "page.save_pdf", "hint.run", "hint.key"];
+// `visual.act` copies the selection and `open.clipboard` reads the clipboard. `command.repeat` and `macro.play` replay stored steps through the main router, so they could run a never-listed command.
+const NEVER_IDS: readonly string[] = ["page.reload", "page.save_pdf", "hint.run", "hint.key", "visual.act", "open.clipboard", "command.repeat", "macro.play"];
 // Commands that open an address. A private window gets none of them from outside, because the page would join a private session without the user asking.
 const OPENS_URL_IDS: readonly string[] = [
   "open.url", "open.search", "open.anything", "open.clipboard", "tab.load", "bookmark.open", "bookmark.open_folder", "history.open", "quickmark.open", "tab.reopen_in_container", "window.new", "url.increment", "url.parent", "url.root",
@@ -36,7 +37,15 @@ export type BridgeRunDeps = {
 
 const refuse = (message: string): BridgeAnswer => ({ ok: false, message });
 
-const has_foreign_scheme = (text: string): boolean => /^[a-z][a-z0-9+.-]*:/i.test(text.trim()) && !/^https?:/i.test(text.trim());
+// The browser's own URL parser decides the scheme, so leading control characters and tabs or newlines inside it cannot hide `javascript:`. Text that does not parse has no scheme and opens as a search or a bare host.
+function has_foreign_scheme(text: string): boolean {
+  try {
+    const { protocol } = new URL(text);
+    return protocol !== "http:" && protocol !== "https:";
+  } catch {
+    return false;
+  }
+}
 
 // The rules that hold before any arg is read.
 function refusal_for(command: CommandDef, is_snippet: boolean): string | undefined {
@@ -69,7 +78,8 @@ export function create_bridge_run(deps: BridgeRunDeps) {
     if (!target) return refuse("no normal window is open");
     if (target.incognito && opens_url(command.id)) return refuse("the focused window is private, so nothing opens an address there from outside");
     const response = await deps.run(parsed.invocation, target);
-    return response.ok ? { ok: true } : refuse(response.refusal.message);
+    // A handler refusal can hold page data such as a tab title, so the caller gets fixed text. Only the parse, rule and validator refusals above echo the caller's own text.
+    return response.ok ? { ok: true } : refuse(`${command.id} failed`);
   }
 
   // The commands the bridge allows, with their params, for completion in the CLI.

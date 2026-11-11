@@ -463,7 +463,7 @@ define("tab.switch", {
   label: "Switch tab",
   intent: "Switch to an open tab by number, title or address. The number is its place in the tab bar.",
   params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }],
-  bridge: true,
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.switch(ctx, args as { tab: string }),
 });

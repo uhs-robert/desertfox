@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { create_bridge_run, never_listed, opens_url, type BridgeRunTarget } from "../../src/background/bridge_run.ts";
+import { focused_normal_target } from "../../src/background/bridge_browser.ts";
 import { create_router } from "../../src/background/router.ts";
 import { registry as built_in } from "../../src/shared/registry/builtin.ts";
 import type { Invocation } from "../../src/shared/invocation.ts";
@@ -83,7 +84,9 @@ test("an unknown command, an empty line, help and a broken quote are refusals", 
 
 test("open.url takes http and https only", async () => {
   const test_case = make();
-  for (const text of ["open file:///etc/passwd", "open javascript:alert(1)", "open about:config", "open data:text/html,x", "open MOZ-EXTENSION://abc/x", "open ext+x:y"]) {
+  const bypasses = ["file:///etc/passwd", "javascript:alert(1)", "about:config", "data:text/html,x", "MOZ-EXTENSION://abc/x", "ext+x:y", "java\tscript:alert(1)", "java\nscript:alert(1)", "\u0001javascript:alert(1)", "  javascript:alert(1)", "\tjavascript:alert(1)", "jav\rascript:alert(1)", "view-source:https://example.org/"];
+  for (const address of bypasses) {
+    const text = `open "${address}"`;
     const answer = await test_case.bridge_run.run(text);
     assert.deepEqual(answer, { ok: false, message: "open.url opens only http and https addresses through the bridge" }, text);
   }
@@ -91,6 +94,27 @@ test("open.url takes http and https only", async () => {
   assert.deepEqual(await test_case.bridge_run.run("open https://example.org/"), { ok: true });
   assert.deepEqual(await test_case.bridge_run.run("open HTTP://example.org/"), { ok: true });
   assert.deepEqual(test_case.ran, ["open.url", "open.url"]);
+});
+
+test("a handler refusal comes back as fixed text, never the handler's message", async () => {
+  const { deps, registry } = make_fake({
+    "tab.next": { label: "Next", intent: "x", bridge: true, runs_in: "background", run: () => { throw new Error('tab 1 exists in several windows: "Bank - statement"'); } },
+  });
+  const router = create_router({ ...deps, show_refusal: async () => undefined });
+  const bridge_run = create_bridge_run({ registry, is_snippet: () => false, get_enum_sources: deps.get_enum_sources, target: async () => NORMAL, run: (invocation) => router.run({ invocations: [invocation], mode: "normal", skip_repeat: true }) });
+  assert.deepEqual(await bridge_run.run("tab.next"), { ok: false, message: "tab.next failed" });
+});
+
+test("the run target is the last focused window only when it is a normal one", async () => {
+  const api = (type: string | undefined, incognito = false) => ({
+    windows: { getLastFocused: async () => ({ id: 4, type, incognito }) },
+    tabs: { query: async () => [{ id: 9, url: "https://example.org/" }] },
+  });
+  assert.deepEqual(await focused_normal_target(api("normal")), { tab_id: 9, window_id: 4, url: "https://example.org/", incognito: false });
+  assert.equal((await focused_normal_target(api("normal", true)))?.incognito, true);
+  for (const type of ["popup", "panel", "devtools", "app", undefined]) assert.equal(await focused_normal_target(api(type)), undefined, String(type));
+  const none = { windows: { getLastFocused: async () => { throw new Error("no window"); } }, tabs: { query: async () => [] } };
+  assert.equal(await focused_normal_target(none), undefined);
 });
 
 test("a private target refuses a command that opens an address and allows one that does not", async () => {
@@ -107,7 +131,7 @@ test("with no normal window the run is refused", async () => {
   assert.deepEqual(await test_case.bridge_run.run("tab.next"), { ok: false, message: "no normal window is open" });
 });
 
-test("a failure inside the command comes back as the refusal text", async () => {
+test("a failure inside the command comes back as fixed text", async () => {
   const { deps, registry } = make_fake({
     "tab.next": { label: "Next", intent: "x", bridge: true, runs_in: "background", run: () => { throw new Error("no next tab"); } },
   });
@@ -119,7 +143,7 @@ test("a failure inside the command comes back as the refusal text", async () => 
     target: async () => NORMAL,
     run: (invocation) => router.run({ invocations: [invocation], mode: "normal", skip_repeat: true }),
   });
-  assert.deepEqual(await bridge_run.run("tab.next"), { ok: false, message: "no next tab" });
+  assert.deepEqual(await bridge_run.run("tab.next"), { ok: false, message: "tab.next failed" });
 });
 
 test("list offers only the commands the bridge allows, with their params", () => {
@@ -143,15 +167,19 @@ test("a never-listed built-in command does not say yes", () => {
 
 test("the never-list and the open-address list name real commands", () => {
   const ids = new Set(built_in.list().map((command) => command.id));
-  const page_ids = ["page.reload", "page.save_pdf", "hint.run", "hint.key"];
+  const page_ids = ["page.reload", "page.save_pdf", "hint.run", "hint.key", "visual.act", "open.clipboard", "command.repeat", "macro.play"];
   for (const id of page_ids) assert.ok(ids.has(id), id);
   for (const group of ["config", "settings", "session", "copy", "register", "debug", "native", "permissions"]) assert.ok([...ids].some((id) => id.startsWith(`${group}.`)), group);
   const opens = [...ids].filter(opens_url);
   assert.ok(opens.includes("open.url") && opens.includes("tab.load") && opens.includes("window.new"));
 });
 
-test("a built-in command that opens an address and says yes is a command to look at twice", () => {
-  // Not a rule: it pins today's choice, so flipping `open.url` to yes is a visible edit in this test.
+test("the built-in commands that open an address and say yes are pinned", () => {
+  // Not a rule: a new address-opening command that says yes is a visible edit here.
   const yes = built_in.list().filter((command) => command.bridge === true).map((command) => command.id);
-  assert.deepEqual(yes.filter(opens_url), []);
+  assert.deepEqual(yes.filter(opens_url), ["open.url"]);
+});
+
+test("tab.switch says no, because its refusals name tab titles", () => {
+  assert.equal(built_in.get("tab.switch")?.bridge, false);
 });
