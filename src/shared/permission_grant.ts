@@ -5,10 +5,10 @@
 export const GRANTABLE_PERMISSIONS = ["nativeMessaging", "browsingData"] as const;
 export type GrantablePermission = (typeof GRANTABLE_PERMISSIONS)[number];
 
-// One grant can ask for several manifest permissions: the site clear needs `cookies` beside `browsingData` and shows no prompt line for it.
+// One grant can ask for several manifest permissions, so the table stays a list.
 export const PERMISSIONS_OF: Record<GrantablePermission, readonly string[]> = {
   nativeMessaging: ["nativeMessaging"],
-  browsingData: ["browsingData", "cookies"],
+  browsingData: ["browsingData"],
 };
 
 // The hash `permissions.grant` opens on the Help page. Help's router shows Home for it, and the grant panel reads it.

@@ -77,10 +77,13 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
   await run_case("without the site-clear permissions rc refuses and clears nothing, plain r reloads, and a grant makes rc work at once", async () => {
     try {
       await set_site_data();
-      await set_optional_permissions("remove", ["browsingData", "cookies"]);
+      await set_optional_permissions("remove", ["browsingData"]);
       const mark = events.length;
       await press_keys("r", "c");
-      await wait_event(mark, (event) => event.type === "toast" && event.page_id === "d_clear", "the grant hint toast");
+      await wait_event(mark, (event) => event.type === "toast" && event.page_id === "d_clear", "the refusal toast");
+      // The toast text sits in a closed shadow root, which the extension's own script reads through openOrClosedShadowRoot.
+      const toast_text = await in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.textContent ?? ""`);
+      expect(/:permissions\.grant browsingData/.test(toast_text), `the toast does not name the grant command: ${toast_text}`);
       const kept = await read_site_data();
       expect(!is_clear(kept) && kept.cookie.includes("kt_cookie"), `a refused rc cleared site data: ${JSON.stringify(kept)}`);
       expect((await in_active_tab(`document.documentElement.getAttribute("data-kt-before-reload")`)) === "1", "a refused rc reloaded the page");
@@ -88,7 +91,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
       const reload_mark = events.length;
       await press_keys("r", "r");
       await wait_event(reload_mark, (event) => event.type === "tree_read" && event.page_id === "d_clear", "d_clear to load after plain rr");
-      await set_optional_permissions("grant", ["browsingData", "cookies"]);
+      await set_optional_permissions("grant", ["browsingData"]);
       await settle_focus();
       await set_site_data();
       const grant_mark = events.length;
@@ -96,7 +99,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
       await wait_event(grant_mark, (event) => event.type === "tree_read" && event.page_id === "d_clear", "d_clear to load after the granted rc");
       await poll_until("the data to clear after the grant", async () => is_clear(await read_site_data()));
     } finally {
-      await set_optional_permissions("grant", ["browsingData", "cookies"]);
+      await set_optional_permissions("grant", ["browsingData"]);
       await clear_notices();
       await settle_focus();
     }

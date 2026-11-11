@@ -56,13 +56,14 @@ function deferred_builds() {
   const shown: number[] = [];
   const hidden: number[] = [];
   let wanted = true;
+  let wanted_key = "a";
   const controller = create_panel_controller<number>({
-    is_wanted: () => wanted,
+    wanted: () => (wanted ? wanted_key : undefined),
     build: () => new Promise((resolve) => { const id = ++count; resolvers.push(() => resolve(id)); }),
     show: (panel) => shown.push(panel),
     hide: (panel) => hidden.push(panel),
   });
-  return { controller, resolvers, shown, hidden, set_wanted: (value: boolean) => { wanted = value; } };
+  return { controller, resolvers, shown, hidden, set_wanted: (value: boolean) => { wanted = value; }, set_key: (value: string) => { wanted_key = value; } };
 }
 
 test("two quick route changes during the build show one panel", async () => {
@@ -108,5 +109,18 @@ test("after Close, a repeated open shows the panel again", async () => {
   const again = controller.sync();
   resolvers[1]!();
   await again;
+  assert.deepEqual(shown, [1, 2]);
+});
+
+test("a route change to another permission replaces the shown panel", async () => {
+  const { controller, resolvers, shown, hidden, set_key } = deferred_builds();
+  const first = controller.sync();
+  resolvers[0]!();
+  await first;
+  set_key("b");
+  const again = controller.sync();
+  resolvers[1]!();
+  await again;
+  assert.deepEqual(hidden, [1]);
   assert.deepEqual(shown, [1, 2]);
 });

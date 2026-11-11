@@ -26,7 +26,7 @@ export const area_rules = [
   // The schema validates the settings the help page edits and the config reads.
   { globs: shared_files, areas: area_names },
   // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
-  { globs: ["src/commands/{page,reload_clear}.ts"], areas: ["keys", "cmdline", "hints"] },
+  { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
@@ -44,7 +44,7 @@ export const area_rules = [
       "src/help/**",
       "src/commands/{help,help_tab,settings,native}.ts",
       "src/background/{open_help,native_client}.ts",
-      "src/shared/{settings_docs,settings_schema,settings_table,setting_list,table_constants,native_host}.ts",
+      "src/shared/{settings_docs,settings_schema,settings_table,setting_list,table_constants,native_host,permission_grant}.ts",
     ],
     areas: ["help"],
   },

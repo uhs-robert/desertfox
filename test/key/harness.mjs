@@ -462,13 +462,13 @@ export async function create_session({ name: session_name, timings, sweep = true
       await ExtensionSettingsStore.addSetting("${EXTENSION_ID}", "newTabNotification", "${EXTENSION_ID}", true, () => false);
     })()`);
     if (notice_confirmation?.error) throw new Error(`confirming the new tab notice failed: ${notice_confirmation.error}`);
-    // config.reload reads the files through the native host. Firefox grants an optional permission only from a click, so the test grants nativeMessaging and the site-clear permissions from chrome code.
+    // config.reload reads the files through the native host. Firefox grants an optional permission only from a click, so the test grants nativeMessaging and browsingData from chrome code.
     install_native_host(work_dir, readFileSync(join(work_dir, "session_home"), "utf8").trim());
     const permission_grant = await evaluate_in_chrome(rdp, `(async () => {
       const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
       // The third argument tells the running extension, as permissions.request does, so its background gains sendNativeMessage at once.
       const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
-      await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["nativeMessaging", "browsingData", "cookies"], origins: [] }, extension);
+      await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["nativeMessaging", "browsingData"], origins: [] }, extension);
     })()`);
     if (permission_grant?.error) throw new Error(`granting the optional permissions failed: ${permission_grant.error}`);
     // After the setup that uses three of the internals, so the add-on is loaded and a tab exists for the window path.
