@@ -140,6 +140,9 @@ test("the modes column accepts a mode table and refuses a bad one", () => {
   assert.equal(ok({ visual: { bind: { l: "tab.next" } } }), false);
   assert.equal(ok({ visual: { label: "X", bind: {} } }), false);
   assert.equal(ok({ visual: { label: "X", bind: { l: "tab.next" }, extra: 1 } }), false);
+  assert.equal(ok({ visual: { label: "   ", bind: { l: "tab.next" } } }), false);
+  assert.equal(ok({ visual: { label: "VIS\u0007", bind: { l: "tab.next" } } }), false);
+  assert.equal(ok({ visual: { label: "VIS\tUAL", bind: { l: "tab.next" } } }), false);
   assert.equal(ok({}), false);
   assert.match(String(spec.explain?.([{ site: SITE, modes: { visual: { label: "X", bind: { "": "tab.next" } } } }])), /mode "visual" with a "bind"/);
   assert.ok(SETTINGS_TABLE.site_rules.fields.modes);
@@ -173,4 +176,15 @@ test("compile keeps good mode binds, drops bad ones with a warning, and warns on
   assert.ok(warnings.some((text) => /mode "visual" skipped bind "m" of "https:\/\/a.test\/\*"/.test(text)), warnings.join("\n"));
   assert.ok(warnings.some((text) => /starts the site mode "ghost"/.test(text)));
   assert.equal(warnings.some((text) => /"visual", which no site row/.test(text)), false);
+});
+
+test("a keymap bind that starts a mode no site row defines warns, and one that names a defined mode or off does not", () => {
+  const { warnings } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { "gz": { id: "mode.site", args: { name: "ghost" } }, "gy": { id: "mode.site", args: { name: "visual" } }, "gx": { id: "mode.site", args: { name: "off" } } } }, settings: { site_rules: [{ site: SITE, modes: { visual: { label: "V", bind: { l: { id: "tab.next" } } } } }] } } as never,
+    default_keymap: DEFAULT_KEYMAP,
+    get_command: (command_id) => registry.get(command_id),
+    enum_sources: {},
+  });
+  assert.ok(warnings.some((text) => /^normal: bind "gz" starts the site mode "ghost"/.test(text)), warnings.join("\n"));
+  assert.equal(warnings.filter((text) => /starts the site mode/.test(text)).length, 1);
 });

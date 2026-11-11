@@ -7,7 +7,7 @@ import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, SiteBind, SiteRule, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, SiteBind, SiteRule, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -101,7 +101,7 @@ export function compile_config(input: CompileInput): CompileOutput {
     check_site_binds(rule.bind, "", site, input, warnings);
     for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, site, input, warnings);
   }
-  warn_unknown_modes(compiled.site_rules ?? [], warnings);
+  warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
   return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings: [...resolve_warnings, ...warnings] };
 }
 
@@ -118,16 +118,22 @@ function check_site_binds(binds: Record<string, SiteBind> | undefined, scope: st
   }
 }
 
-// A `mode.site` bind that names a mode no site row defines does nothing on any page. Rows merge by mode name across sites, so the check is over every row, and it only warns.
-function warn_unknown_modes(rules: readonly SiteRule[], warnings: string[]): void {
+// A `mode.site` bind that names a mode no site row defines does nothing on any page. Rows merge by mode name across sites, so the check is over every row, and it only warns. The keymap's normal mode is checked too, because a key there can start a mode as well.
+function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | undefined, warnings: string[]): void {
   const defined = new Set(rules.flatMap((rule) => Object.keys(rule.modes ?? {})));
-  for (const rule of rules) {
-    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) {
-      for (const { invocation } of leaf.steps) {
-        const name = invocation.id === "mode.site" ? invocation.args?.name : undefined;
-        if (typeof name === "string" && name !== "off" && !defined.has(name)) warnings.push(`site_rules: bind "${tokens.join("")}" starts the site mode "${name}", which no site row defines`);
-      }
+  const check = (owner: string, tokens: readonly string[], leaf: TreeLeaf) => {
+    for (const { invocation } of leaf.steps) {
+      const name = invocation.id === "mode.site" ? invocation.args?.name : undefined;
+      if (typeof name === "string" && name !== "off" && !defined.has(name)) warnings.push(`${owner}: bind "${tokens.join("")}" starts the site mode "${name}", which no site row defines`);
     }
+  };
+  const walk = (node: TreeNode, tokens: readonly string[]) => {
+    if (node.kind === "leaf") check("normal", tokens, node);
+    else for (const [token, child] of Object.entries(node.children)) walk(child, [...tokens, token]);
+  };
+  if (normal) walk(normal, []);
+  for (const rule of rules) {
+    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) check("site_rules", tokens, leaf);
   }
 }
 

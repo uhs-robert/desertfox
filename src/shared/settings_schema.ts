@@ -121,6 +121,9 @@ function bindings_problem(value: unknown): string | undefined {
   return undefined;
 }
 
+// The rule of the editor schema's ONE_LINE_TEXT: not blank, no control character.
+const is_one_line_text = (value: unknown): value is string => typeof value === "string" && /^(?!\s*$)[^\u0000-\u001F\u007F-\u009F]+$/.test(value);
+
 // A mode name goes in `mode.site <name>`, and `off` there ends the mode, so a mode cannot take it.
 const SITE_MODE_NAME = /^[a-z][a-z0-9_]*$/;
 
@@ -132,7 +135,7 @@ function site_modes_problem(value: unknown): string | undefined {
     if (!is_table(mode)) return `has the mode "${name}", which is not a table`;
     const unknown_field = Object.keys(mode).find((field) => field !== "label" && field !== "bind");
     if (unknown_field !== undefined) return `has the mode "${name}" with the unknown field "${unknown_field}"`;
-    if (!is_text(mode.label) || /[\r\n]/.test(mode.label)) return `has the mode "${name}" with no one-line "label"`;
+    if (!is_one_line_text(mode.label)) return `has the mode "${name}" with no one-line "label"`;
     const problem = bindings_problem(mode.bind);
     if (problem !== undefined) return `has the mode "${name}" with a "bind" that ${problem}`;
   }
