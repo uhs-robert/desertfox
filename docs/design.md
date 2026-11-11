@@ -389,7 +389,7 @@ Code goes in `content.js` only if one of these holds:
 - A. It runs before the first key or decides what happens to a key: the capture listeners, the matcher, modes, focus tracking, the blur-on-load window, held-key replay.
 - B. It serves a key that is pressed on most pages in most frames, so a lazy load saves nothing and adds a round trip to nearly every page: scrolling.
 - C. The bundles cannot load without it: the bundle host and the proxies that queue calls.
-- D. It must work while the page navigates, when Firefox can leave a bundle injection unanswered until the loader times out: `xp` (`page.stop`) and `<A-,>` (`focus_page`). Both matter most on a page that is still loading, so a bundle would fail them where they are needed.
+- D. It must work while the page navigates, when Firefox can leave a bundle injection unanswered until the loader times out: `xp` (`page.stop`) and `<A-,>` (`focus_page`). Both matter most on a page that is still loading, so a bundle would fail them where they are needed. A command that only needs a loaded page does not qualify.
 
 Everything else goes in an on-demand bundle. The price of a bundle is a first use that is 11 to 16 ms slower, once per frame. A second test for code admitted under A or B: keep only the part that must be instant. A rare branch of an instant feature goes behind the bundle host.
 
