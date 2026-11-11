@@ -181,6 +181,16 @@ class DowngradeTest(UpdateCase):
         self.assert_refused("refused to downgrade", self.request(version="0.1.21.4"))
         self.assert_refused("self_update needs a version", self.request(version="0.1.22-beta.4"))
 
+    def test_a_beta_of_the_running_version_is_accepted(self):
+        beta = "0.1.22.4"
+        self.new_scripts = {name: stamped(name, beta) for name in SCRIPTS}
+        self.release.publish(beta, self.new_scripts)
+        self.assertTrue(self.update(self.request(version=beta))["updated"])
+
+    def test_a_running_beta_refuses_its_stable_release_and_an_earlier_beta(self):
+        for older in ("0.1.23", "0.1.23.1"):
+            self.assert_refused("refused to downgrade", self.request(version=older), current="0.1.23.2")
+
     def test_a_development_host_never_updates(self):
         self.assert_refused("development install", current="dev")
 

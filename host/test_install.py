@@ -13,6 +13,7 @@ from unittest import mock
 from host_under_test import HOST_DIR, HOST_PATH, load_host
 
 BRIDGE_PATH = os.path.join(HOST_DIR, "desertfox-bridge")
+STABLE_PACKAGE_VERSION = "0.1.23"
 CLI_PATH = os.path.join(HOST_DIR, "desertfox")
 
 INSTALL = os.path.join(HOST_DIR, "install.sh")
@@ -435,7 +436,7 @@ class ReleaseStepTest(InstallCase):
         return self.just("release_publish", **extra_env)
 
     def package_version(self):
-        with open(os.path.join(os.path.dirname(HOST_DIR), "package.json")) as file:
+        with open(os.path.join(os.path.dirname(HOST_DIR), "src", "manifest.json")) as file:
             return json.load(file)["version"]
 
     def test_stamp_writes_the_version_into_both_hosts_before_hashing(self):
@@ -477,14 +478,20 @@ class ReleaseStepTest(InstallCase):
         repo_root = os.path.dirname(HOST_DIR)
         work = os.path.join(self.tmp.name, "work-" + version)
         os.makedirs(os.path.join(work, "host"))
+        os.makedirs(os.path.join(work, "src"))
         shutil.copy(os.path.join(repo_root, "justfile"), work)
         for name in ("desertfox-host", "desertfox-bridge", "desertfox", "install.sh"):
             shutil.copy(os.path.join(HOST_DIR, name), os.path.join(work, "host"))
         subprocess.run(["git", "init", "-q"], cwd=work, check=True)
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "base"], cwd=work, check=True, env=dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull))
         with open(os.path.join(work, "package.json"), "w") as file:
-            file.write(json.dumps({"version": version}))
+            file.write(json.dumps({"version": STABLE_PACKAGE_VERSION}))
+        self.write_manifest_version(work, version)
         return work
+
+    def write_manifest_version(self, work, version):
+        with open(os.path.join(work, "src", "manifest.json"), "w") as file:
+            file.write(json.dumps({"version": version}))
 
     def test_a_beta_version_publishes_a_prerelease_and_a_bad_version_stamps_nothing(self):
         work = self.release_work_dir("0.2.0.3")
@@ -495,8 +502,9 @@ class ReleaseStepTest(InstallCase):
             logged = file.read()
         self.assertTrue(logged.startswith("release create v0.2.0.3 "), logged)
         self.assertIn("--prerelease", logged)
-        with open(os.path.join(work, "package.json"), "w") as file:
-            file.write('{"version": "0.2.0-beta.3"}')
+        with open(os.path.join(work, "package.json")) as file:
+            self.assertEqual(json.load(file)["version"], STABLE_PACKAGE_VERSION, "a beta never lands in package.json")
+        self.write_manifest_version(work, "0.2.0-beta.3")
         done = self.just("release_stamp", cwd=work)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("not x.y.z or x.y.z.N", done.stderr)
