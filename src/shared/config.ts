@@ -31,7 +31,6 @@ export type SearchEngine = {
 
 export type WhichKeyBorder = Settings["which_key_border"];
 export type ModeIndicator = Settings["mode_indicator"];
-export type Ui = Settings["ui"];
 export type NewTabLink = Settings["newtab_links"][number];
 
 export { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME };

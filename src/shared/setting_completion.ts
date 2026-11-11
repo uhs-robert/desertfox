@@ -78,17 +78,6 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
-    "name": "ui",
-    "settable": true,
-    "is_toggle": false,
-    "is_list": false,
-    "expectation": "\"browser\" or \"quickshell\"",
-    "values": [
-      "browser",
-      "quickshell"
-    ]
-  },
-  {
     "name": "palette",
     "settable": true,
     "is_toggle": false,
@@ -167,6 +156,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "expectation": "\"desertfox\" or an http or https URL",
     "values": [
       "desertfox"
+    ]
+  },
+  {
+    "name": "bridge",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
     ]
   },
   {

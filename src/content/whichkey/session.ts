@@ -11,21 +11,15 @@ export function create_which_key_session(
   fetch_panel: (mode: Mode, typed: string[]) => Promise<WhichKeyPanel>,
   draw: (panel: WhichKeyPanel) => void,
   hide: () => void,
-  // An answer marked `external` was already published by the background, so dropping it must take the panel back down.
-  release_external: () => void = () => undefined,
 ) {
   // Every hide and every manual show moves this on, so an older manual answer finds itself stale.
   let manual_epoch = 0;
-  let asking = 0;
 
   async function show(prefix: PendingPrefix, is_current: () => boolean, drawn?: () => void): Promise<void> {
     if (!MODES_WITH_PANEL.includes(prefix.mode)) return;
-    asking++;
-    const panel = await fetch_panel(prefix.mode, prefix.typed).finally(() => asking--);
+    const panel = await fetch_panel(prefix.mode, prefix.typed);
     // The next key may have arrived while the background answered.
     if (is_current() && panel.rows.length > 0) (draw(panel), drawn?.());
-    // A later request is still out when asking > 0, and its own answer settles the panel.
-    else if (panel.external && asking === 0) release_external();
   }
 
   return {

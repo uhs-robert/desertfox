@@ -1,7 +1,10 @@
+import { check_args } from "../shared/registry/check_args.ts";
+import { apply_count } from "../background/count.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import { define } from "../shared/registry/builtin.ts";
-import { MACRO_REGISTER_PATTERN, storage_name } from "../shared/register_names.ts";
+import { define, registry } from "../shared/registry/builtin.ts";
+import { MACRO_PLAY_PATTERN, MACRO_REGISTER_PATTERN, storage_name } from "../shared/register_names.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_macro_recorder } from "../background/macro_recorder.ts";
 import type { MacroRecorder } from "../background/macro_recorder.ts";
@@ -37,10 +40,10 @@ export function make_macro_handlers(deps: MacroCommandDeps) {
       await deps.toast(ctx, "info", `Recorded ${count} into ${storage_name(register)}`);
     },
     // A failed step showed its own refusal, so the play ends quietly, as a cancelled pick does.
-    play: async (ctx: CommandContext, args: { reg: string }): Promise<Outcome | undefined> => {
+    play: async (ctx: CommandContext, args: { reg: string; count: number }): Promise<Outcome | undefined> => {
       const replay = deps.replay();
       if (!replay) throw new RuntimeRefusal("Macro replay is not ready yet");
-      const finished = await replay.play({ register: storage_name(args.reg), tab_id: ctx.tab_id, frame_id: ctx.frame_id, mode: ctx.mode, is_private: await deps.is_private(ctx) });
+      const finished = await replay.play({ register: storage_name(args.reg), count: args.count, tab_id: ctx.tab_id, frame_id: ctx.frame_id, mode: ctx.mode, is_private: await deps.is_private(ctx) });
       return finished ? undefined : { ok: true, cancelled: true };
     },
   };
@@ -71,12 +74,23 @@ define("macro.stop", {
   run: (ctx) => handlers.stop(ctx),
 });
 
-// PR 3's count belongs on this command as `count: { param: "count" }`, so one replay plays all its passes: the router's own repeat would start each pass as a replay of its own.
+// The count is a param, not the router's repeat: the router would start each pass as a replay of its own, and play refuses while a replay runs.
 define("macro.play", {
   label: "Play macro",
-  intent: "Play the macro in a register. Keys typed meanwhile wait and run after it. A failed step, a cancelled hint pick or Escape stops it and drops those keys.",
-  params: [{ name: "reg", type: "key", pattern: MACRO_REGISTER_PATTERN, description: "Play the macro in this register, a-z or A-Z." }],
+  intent: "Play the macro in a register, or the last one played with @. A count plays the whole macro that many times and stops at the first failure. Keys typed meanwhile wait and run after it. A failed step, a cancelled hint pick or Escape stops it and drops those keys.",
+  params: [
+    { name: "reg", type: "key", pattern: MACRO_PLAY_PATTERN, description: "Play this register, a-z or A-Z, or @ for the last." },
+    { name: "count", type: "int", min: 1, default: 1, description: "Play the whole macro this many times." },
+  ],
   runs_in: "background",
+  count: { param: "count" },
   repeatable: false,
-  run: (ctx, args) => handlers.play(ctx, args as { reg: string }),
+  run: (ctx, args) => handlers.play(ctx, args as { reg: string; count: number }),
 });
+
+// A recorded `macro.play` step through the same checks as a typed one: the register name, the count and the count's own limits.
+export function check_play_step(step: BoundInvocation): { ok: true; register: string; count: number } | { ok: false; error: string } {
+  const command = registry.get("macro.play")!;
+  const checked = check_args(command, apply_count(command, step).args);
+  return checked.ok ? { ok: true, register: storage_name(String(checked.args.reg)), count: Number(checked.args.count) } : { ok: false, error: checked.error };
+}

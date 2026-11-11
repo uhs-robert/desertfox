@@ -62,7 +62,7 @@ test("while off no shortcut runs, ignore-capable ones included", () => {
 
 test("a navigation ends the insert hold", async () => {
   const storage = fake_storage();
-  await write_insert_hold(storage, 4, [0]);
+  await write_insert_hold(storage, 4);
   await forget_mode_on_navigation(storage, 4, { status: "loading" });
-  assert.equal(await read_insert_hold(storage, 4), undefined);
+  assert.equal(await read_insert_hold(storage, 4), false);
 });

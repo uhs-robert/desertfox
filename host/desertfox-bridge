@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""Bridge host for the DesertFox Firefox extension.
+
+Firefox starts it over `connectNative` and keeps it alive while the extension holds the port. Frames are a 4-byte
+native-endian length and UTF-8 JSON, both ways. The host takes the lock first, then says {"ready": true,
+"host_version": 1} once. It takes one verb from the extension and no others:
+
+  {"verb": "mode", "id", "label", "private", "tab_id", "window_id", "fullscreen"}
+
+A private window sends no ids. The host drops them anyway, so a private window leaves only its mode and private:true.
+
+The host keeps the latest mode and writes one snapshot, $XDG_RUNTIME_DIR/desertfox/state.json, for a desktop shell to
+read (the shape is in host/README.md). Every write goes to a temp file in the same folder and is renamed over the state
+file, so a reader never sees a partial file.
+
+It also owns a Unix socket, $XDG_RUNTIME_DIR/desertfox/bridge.sock, mode 0600. Whoever holds the flock on bridge.lock
+owns the socket and the state file: the first host wins, and a second one waits LOCK_WAIT_S for the lock, then exits
+without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping` and
+`state` only. Stdout carries only protocol bytes. The host never runs anything it is sent.
+"""
+import fcntl
+import json
+import os
+import signal
+import socket
+import struct
+import sys
+import tempfile
+import threading
+import time
+
+HOST_VERSION = 1
+STATE_VERSION = 2
+# A message above this size is skipped, not parsed.
+MAX_MESSAGE_BYTES = 1024 * 1024
+# A frame that claims more than this cannot be skipped in reasonable time, so the host ends instead.
+MAX_SKIPPED_BYTES = 256 * 1024 * 1024
+MAX_TEXT_CHARS = 64
+LOCK_WAIT_S = 3
+MAX_REQUEST_BYTES = 64 * 1024
+IDLE_TIMEOUT_S = 5
+MAX_CONNECTIONS = 16
+
+
+class StopHost(Exception):
+    """Raised to end the main loop cleanly: EOF, SIGTERM or a frame the host cannot skip."""
+
+
+def log(text):
+    sys.stderr.write("desertfox-bridge: %s\n" % text)
+    sys.stderr.flush()
+
+
+def runtime_paths():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime_dir):
+        raise OSError("XDG_RUNTIME_DIR is not set to an absolute path")
+    folder = os.path.join(runtime_dir, "desertfox")
+    return {name: os.path.join(folder, name) for name in ("state.json", "bridge.sock", "bridge.lock")} | {"folder": folder}
+
+
+def process_start(pid):
+    """Field 22 of /proc/<pid>/stat as a string, the same probe the shell reader uses. The name field may hold spaces and
+    parentheses, so the fields count from the last closing parenthesis."""
+    with open("/proc/%d/stat" % pid, "rb") as stat_file:
+        text = stat_file.read().decode("utf-8", "replace")
+    return text[text.rindex(")") + 2 :].split()[19]
+
+
+def is_text(value, limit=MAX_TEXT_CHARS):
+    return isinstance(value, str) and len(value) <= limit
+
+
+def is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def checked_mode(message):
+    """(firefox, mode) for the snapshot, or None for a message that is not a well-formed mode."""
+    if not (is_text(message.get("id")) and is_text(message.get("label")) and isinstance(message.get("private"), bool)):
+        return None
+    mode = {"id": message["id"], "label": message["label"]}
+    if message["private"]:
+        return {"private": True}, mode
+    if not all(is_int(message.get(name)) for name in ("tab_id", "window_id")) or not isinstance(message.get("fullscreen"), bool):
+        return None
+    mode["tab_id"] = message["tab_id"]
+    return {"window_id": message["window_id"], "fullscreen": message["fullscreen"], "private": False}, mode
+
+
+class BridgeState:
+    """The latest mode, shared between the port thread that writes it and the socket threads that read it."""
+
+    def __init__(self, state_path, pid, start):
+        self.state_path = state_path
+        self.pid = pid
+        self.start = start
+        self.seq = 0
+        self.firefox = None
+        self.mode = None
+        self.guard = threading.Lock()
+
+    def apply(self, message):
+        """Takes one decoded message and writes the file when it changed the state."""
+        if not isinstance(message, dict) or message.get("verb") != "mode":
+            return
+        checked = checked_mode(message)
+        if checked is None:
+            return
+        with self.guard:
+            self.firefox, self.mode = checked
+            self.seq += 1
+            # Nothing is written before the first mode, because a reader needs `firefox` and `mode` to be objects.
+            write_atomically(self.state_path, self.snapshot_locked())
+
+    def snapshot_locked(self):
+        return {"version": STATE_VERSION, "seq": self.seq, "host": {"pid": self.pid, "start": self.start}, "firefox": self.firefox, "mode": self.mode}
+
+    def snapshot(self):
+        with self.guard:
+            return None if self.mode is None else self.snapshot_locked()
+
+
+def write_atomically(path, state):
+    directory = os.path.dirname(path)
+    descriptor, temp_path = tempfile.mkstemp(prefix=".state.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
+            json.dump(state, temp_file, separators=(",", ":"))
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def take_lock(path, wait_s):
+    """The open lock file descriptor, or None when another host held the lock for the whole wait. The kernel drops the
+    lock when its holder dies, so a crashed host never leaves a lock behind."""
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return descriptor
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                os.close(descriptor)
+                return None
+            time.sleep(0.05)
+
+
+def bind_socket(path):
+    """Only the lock holder calls this, so a socket file already there is a leftover of a dead host."""
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    # The mode is set at creation, so the socket is never open to other users, not even briefly.
+    old_umask = os.umask(0o177)
+    try:
+        listener.bind(path)
+    finally:
+        os.umask(old_umask)
+    listener.listen(MAX_CONNECTIONS)
+    return listener
+
+
+def peer_is_me(connection):
+    pid, uid, gid = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+    return uid == os.getuid()
+
+
+def answer(request, state):
+    verb = request.get("verb") if isinstance(request, dict) else None
+    if verb == "ping":
+        return {"ok": True}
+    if verb == "state":
+        return {"ok": True, "state": state.snapshot()}
+    return {"ok": False, "message": "unknown verb"}
+
+
+def serve_connection(connection, state, release_slot):
+    try:
+        if not peer_is_me(connection):
+            return
+        connection.settimeout(IDLE_TIMEOUT_S)
+        pending = b""
+        while True:
+            while b"\n" not in pending:
+                if len(pending) > MAX_REQUEST_BYTES:
+                    reply(connection, {"ok": False, "message": "request too large"})
+                    return
+                chunk = connection.recv(4096)
+                if not chunk:
+                    return
+                pending += chunk
+            line, _, pending = pending.partition(b"\n")
+            try:
+                request = json.loads(line.decode("utf-8"))
+            except (ValueError, RecursionError):
+                reply(connection, {"ok": False, "message": "not JSON"})
+                continue
+            reply(connection, answer(request, state))
+    except OSError:
+        pass
+    finally:
+        connection.close()
+        release_slot()
+
+
+def reply(connection, message):
+    connection.sendall(json.dumps(message, separators=(",", ":")).encode("utf-8") + b"\n")
+
+
+def accept_loop(listener, state):
+    slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+    while True:
+        try:
+            connection, _ = listener.accept()
+        except OSError:
+            return
+        if not slots.acquire(blocking=False):
+            connection.close()
+            continue
+        threading.Thread(target=serve_connection, args=(connection, state, slots.release), daemon=True).start()
+
+
+def read_exactly(stream, count):
+    data = b""
+    while len(data) < count:
+        chunk = stream.read(count - len(data))
+        if not chunk:
+            raise StopHost()
+        data += chunk
+    return data
+
+
+def skip(stream, count):
+    while count > 0:
+        chunk = stream.read(min(count, 65536))
+        if not chunk:
+            raise StopHost()
+        count -= len(chunk)
+
+
+def read_message(stream):
+    """The next decoded message, None for a frame that is too large or not JSON. Raises StopHost at end of input."""
+    (length,) = struct.unpack("=I", read_exactly(stream, 4))
+    if length > MAX_MESSAGE_BYTES:
+        if length > MAX_SKIPPED_BYTES:
+            raise StopHost()
+        skip(stream, length)
+        log("skipped a message of %d bytes" % length)
+        return None
+    try:
+        return json.loads(read_exactly(stream, length).decode("utf-8"))
+    except (ValueError, RecursionError):
+        log("skipped a message that is not JSON")
+        return None
+
+
+def send_message(stream, message):
+    payload = json.dumps(message, separators=(",", ":")).encode("utf-8")
+    stream.write(struct.pack("=I", len(payload)) + payload)
+    stream.flush()
+
+
+def serve(stdin, stdout, state):
+    send_message(stdout, {"ready": True, "host_version": HOST_VERSION})
+    while True:
+        message = read_message(stdin)
+        if message is None:
+            continue
+        try:
+            state.apply(message)
+        except OSError as error:
+            log("could not write the state file: %s" % error)
+
+
+def raise_stop(_signal_number, _frame):
+    raise StopHost()
+
+
+def remove_quietly(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def main():
+    try:
+        paths = runtime_paths()
+        pid = os.getpid()
+        start = process_start(pid)
+        os.makedirs(paths["folder"], mode=0o700, exist_ok=True)
+        os.chmod(paths["folder"], 0o700)
+    except (OSError, ValueError, IndexError) as error:
+        log("cannot start: %s" % error)
+        return 1
+    signal.signal(signal.SIGTERM, raise_stop)
+    signal.signal(signal.SIGINT, raise_stop)
+    lock = None
+    listener = None
+    try:
+        lock = take_lock(paths["bridge.lock"], LOCK_WAIT_S)
+        if lock is None:
+            log("another bridge host owns the socket")
+            return 1
+        # Whatever is in the folder now belongs to a host that died: this one holds the lock.
+        remove_quietly(paths["state.json"])
+        listener = bind_socket(paths["bridge.sock"])
+        state = BridgeState(paths["state.json"], pid, start)
+        threading.Thread(target=accept_loop, args=(listener, state), daemon=True).start()
+        serve(sys.stdin.buffer, sys.stdout.buffer, state)
+    except StopHost:
+        pass
+    except BrokenPipeError:
+        pass
+    except OSError as error:
+        log("cannot run: %s" % error)
+        return 1
+    finally:
+        # A second signal during cleanup must not skip the delete.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        if listener is not None:
+            listener.close()
+            remove_quietly(paths["bridge.sock"])
+            remove_quietly(paths["state.json"])
+        if lock is not None:
+            os.close(lock)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

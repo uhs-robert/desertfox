@@ -16,7 +16,7 @@ import { create_open_help } from "./open_help.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
-import { start_display_host } from "./display_host_browser.ts";
+import { start_bridge } from "./bridge_browser.ts";
 import { rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
 import { track_window_focus } from "./window_focus.ts";
@@ -33,9 +33,12 @@ import { create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
+import { browser_last_played } from "./macro_last_played.ts";
 import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
+import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { media_reports } from "../commands/media.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -62,9 +65,7 @@ const modes_cleared = forget_all_tab_modes(browser.storage.local);
 const tab_insert = create_tab_insert({
   storage: browser.storage.local,
   modes_cleared,
-  frames: async (tab_id) => ((await browser.webNavigation.getAllFrames({ tabId: tab_id })) ?? []).map(({ frameId, url }) => ({ frame_id: frameId, url })),
-  tab_url: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.url,
-  send_mode: (tab_id, frame_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }, frame_id),
+  send_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode, held: true }),
 });
 wire_tab_insert(tab_insert.enter);
 
@@ -94,6 +95,8 @@ const macro_replay = create_macro_replay({
   watch: watch_tab,
   hold_keys: (tab_id) => send_to_tab(tab_id, { type: "replay_hold" }),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "macro.play", message }),
+  last_played: browser_last_played,
+  check_play: check_play_step,
 });
 wire_macro_replay(macro_replay);
 const global_mark_jump = create_global_mark_jump({
@@ -184,7 +187,7 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
-const display = start_display_host();
+const bridge = start_bridge();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -215,10 +218,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
-    if (sender.frameId === 0) void display.mode_changed(sender.tab, request.mode);
+    if (sender.frameId === 0) void bridge.mode_changed(sender.tab, request.mode);
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
-  if (request?.type === "whichkey_hidden") return void display.whichkey_hidden();
+  if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
   if (request?.type === "replay_stop") return void macro_replay.stop();
   if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);
@@ -260,7 +263,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       marks: () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true),
       quickmarks: () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true),
       macros: () => browser_register_store.macro_items(tab?.incognito === true),
-    })).then((panel) => display.whichkey_panel(panel, tab));
+    }));
   }
   if ((message as SnippetCall)?.type === "snippet_run") {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
@@ -316,7 +319,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 

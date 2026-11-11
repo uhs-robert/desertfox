@@ -6,12 +6,12 @@
 # The extension passes its own version in the one-line command it shows. A version fetches the host from the GitHub
 # release of that version and checks its SHA-256. `main` fetches the host from the main branch with no checksum,
 # for beta and development builds. `--channel main` overrides a version.
-# Writes only $XDG_DATA_HOME/desertfox/desertfox-host (default ~/.local/share/desertfox) and
-# ~/.mozilla/native-messaging-hosts/desertfox_host.json.
+# Installs two hosts, the config host and the bridge host. Writes only $XDG_DATA_HOME/desertfox/desertfox-host and
+# desertfox-bridge (default ~/.local/share/desertfox) and ~/.mozilla/native-messaging-hosts/desertfox_host.json and
+# desertfox_bridge.json.
 set -eu
 
 repo="uhs-robert/desertfox"
-host_name="desertfox_host"
 extension_id="desertfox@uhs-robert"
 
 fail() {
@@ -60,53 +60,72 @@ main() {
         *) data_home="$HOME/.local/share" ;;
     esac
     data_dir="$data_home/desertfox"
-    host_path="$data_dir/desertfox-host"
     manifest_dir="$HOME/.mozilla/native-messaging-hosts"
-    manifest_path="$manifest_dir/$host_name.json"
 
     work_dir=$(mktemp -d)
     trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 
+    # Both hosts are fetched and checked before either is written, so a bad download installs nothing.
     if [ "$channel_arg" = "main" ]; then
         base_url="https://raw.githubusercontent.com/$repo/main/host"
-        curl -fsSL "$base_url/desertfox-host" -o "$work_dir/desertfox-host" || fail "could not download the host from $base_url/desertfox-host"
-        echo "Fetched the host from the main branch. No checksum applies."
     else
         base_url="https://github.com/$repo/releases/download/v$channel_arg"
-        curl -fsSL "$base_url/desertfox-host" -o "$work_dir/desertfox-host" || fail "could not download the host from $base_url/desertfox-host"
-        curl -fsSL "$base_url/desertfox-host.sha256" -o "$work_dir/desertfox-host.sha256" || fail "could not download the checksum from $base_url/desertfox-host.sha256"
-        expected=$(python3 -I -c 'import sys; print(open(sys.argv[1]).read().split()[0].lower())' "$work_dir/desertfox-host.sha256" 2>/dev/null) ||
-            fail "the checksum file is empty or unreadable. Nothing was installed."
-        actual=$(python3 -I -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$work_dir/desertfox-host")
-        if [ "$expected" != "$actual" ]; then
-            fail "checksum mismatch for the host of version $channel_arg (expected $expected, got $actual). Nothing was installed."
-        fi
-        echo "Checksum verified for version $channel_arg."
+    fi
+    for script in desertfox-host desertfox-bridge; do
+        fetch_host "$script"
+    done
+    if [ "$channel_arg" = "main" ]; then
+        echo "Fetched the hosts from the main branch. No checksum applies."
+    else
+        echo "Checksums verified for version $channel_arg."
     fi
 
-    head -n 1 "$work_dir/desertfox-host" | grep -q '^#!.*python3' || fail "the downloaded file is not the host script. Nothing was installed."
-
     mkdir -p "$data_dir" "$manifest_dir"
-    cp "$work_dir/desertfox-host" "$host_path.new"
+    install_host desertfox-host desertfox_host "DesertFox config files and saved edits"
+    install_host desertfox-bridge desertfox_bridge "DesertFox bridge to a desktop shell"
+    echo "Return to Firefox and press the permission button on the DesertFox page."
+}
+
+# Downloads one host script into $work_dir. A release also fetches its checksum and refuses a mismatch.
+fetch_host() {
+    script="$1"
+    curl -fsSL "$base_url/$script" -o "$work_dir/$script" || fail "could not download the host from $base_url/$script"
+    if [ "$channel_arg" != "main" ]; then
+        curl -fsSL "$base_url/$script.sha256" -o "$work_dir/$script.sha256" || fail "could not download the checksum from $base_url/$script.sha256"
+        expected=$(python3 -I -c 'import sys; print(open(sys.argv[1]).read().split()[0].lower())' "$work_dir/$script.sha256" 2>/dev/null) ||
+            fail "the checksum file is empty or unreadable. Nothing was installed."
+        actual=$(python3 -I -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$work_dir/$script")
+        if [ "$expected" != "$actual" ]; then
+            fail "checksum mismatch for $script of version $channel_arg (expected $expected, got $actual). Nothing was installed."
+        fi
+    fi
+    head -n 1 "$work_dir/$script" | grep -q '^#!.*python3' || fail "the downloaded $script is not a host script. Nothing was installed."
+}
+
+# Writes one fetched host and its native-messaging manifest.
+install_host() {
+    script="$1"
+    name="$2"
+    description="$3"
+    host_path="$data_dir/$script"
+    manifest_path="$manifest_dir/$name.json"
+    cp "$work_dir/$script" "$host_path.new"
     chmod 755 "$host_path.new"
     mv -f "$host_path.new" "$host_path"
-
     python3 -I -c '
 import json, sys
 manifest = {
     "name": sys.argv[1],
-    "description": "DesertFox config files and saved edits",
+    "description": sys.argv[4],
     "path": sys.argv[2],
     "type": "stdio",
     "allowed_extensions": [sys.argv[3]],
 }
 print(json.dumps(manifest, indent=2))
-    ' "$host_name" "$host_path" "$extension_id" >"$manifest_path.new"
+    ' "$name" "$host_path" "$extension_id" "$description" >"$manifest_path.new"
     mv -f "$manifest_path.new" "$manifest_path"
-
     echo "Installed the host at $host_path"
     echo "Installed the manifest at $manifest_path"
-    echo "Return to Firefox and press the permission button on the DesertFox page."
 }
 
 main "$@"

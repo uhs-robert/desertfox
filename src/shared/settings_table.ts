@@ -46,8 +46,6 @@ export const SETTINGS_TABLE = {
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
-  // `quickshell` hands the mode badge and the which-key panel to the display host while its port is up (the badge returns in a fullscreen window).
-  ui: { kind: "enum", values: ["browser", "quickshell"], default: "browser" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: BUILT_IN_THEME_NAMES }, default: "oasis_moonlight" },
   light_intensity: { kind: "enum", values: LIGHT_INTENSITIES, default: 3 },
@@ -58,6 +56,8 @@ export const SETTINGS_TABLE = {
   home_page: { kind: "text", expectation: "a non-empty URL string" },
   default_engine: { kind: "text", expectation: "the name of a search engine", default: FALLBACK_ENGINE_NAME },
   new_tab_page: { kind: "custom", schema: { type: "string", pattern: `^(${BUILT_IN_PAGE}|https?://\\S+)$` }, default: BUILT_IN_PAGE },
+  // Opens the native bridge port. Needs the optional `nativeMessaging` permission and the bridge host, see host/README.md.
+  bridge: { kind: "boolean", default: false },
   completion_all_windows: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },

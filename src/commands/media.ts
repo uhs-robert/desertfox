@@ -1,14 +1,15 @@
 import { define } from "../shared/registry/builtin.ts";
 import { MEDIA_ACTIONS, MEDIA_VALUE_PATTERN } from "../shared/media.ts";
-import { run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";
+import { create_media_reports, run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 
+// The background's message listener hands each frame's pushed scan to this.
+export const media_reports = create_media_reports();
+
 const browser_media_deps: MediaDeps = {
-  frame_ids: async (tab_id) => ((await browser.webNavigation.getAllFrames({ tabId: tab_id })) ?? []).map(({ frameId }) => frameId),
-  // Document start runs the script at once, so a frame that is still loading answers instead of holding the key until it is idle.
-  inject: async (tab_id, frame_id) => {
-    await browser.tabs.executeScript(tab_id, { file: "media.js", frameId: frame_id, matchAboutBlank: true, runAt: "document_start" });
-  },
+  reports: media_reports,
+  // Document start runs the script at once, so a frame that is still loading reports instead of holding the key until it is idle.
+  inject_all: async (tab_id) => (await browser.tabs.executeScript(tab_id, { file: "media.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" })).length,
   ask: (tab_id, frame_id, request) => browser.tabs.sendMessage(tab_id, request, { frameId: frame_id }),
   // Firefox 153 brought the standard API to desktop. The background page has the same engine as the pages, so it can ask for all of them. Node tools import this module too, where no HTMLVideoElement exists.
   can_picture_in_picture: () => "requestPictureInPicture" in (globalThis.HTMLVideoElement?.prototype ?? {}),

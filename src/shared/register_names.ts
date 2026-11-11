@@ -24,10 +24,13 @@ export function register_kind(name: string): RegisterKind | undefined {
 // The register a name reads and writes: `A` appends to `a`, so both are `a`.
 export const storage_name = (name: string): string => name.toLowerCase();
 
-// The only names a macro may record into or play from. The special registers are reserved, and so is `@`, which `@@` will use for the last macro played.
+// The only names a macro may record into. The special registers are reserved, and so is `@`, which only a play takes, for the last macro played.
 export const is_macro_register = (name: string): boolean => /^[a-zA-Z]$/.test(name);
 // The same set as a param pattern. `macro.record` takes it.
 export const MACRO_REGISTER_PATTERN = "^[a-zA-Z]$";
+// What `macro.play` takes: a register, or `@` for the last one played.
+export const MACRO_PLAY_PATTERN = "^[a-zA-Z@]$";
+export const LAST_PLAYED_REGISTER = "@";
 
 // For a param of the register commands, which check names in the schema.
 export const REGISTER_NAME_PATTERN = '^\\s*(?:[A-Za-z"+_/]|/:direction)\\s*$';

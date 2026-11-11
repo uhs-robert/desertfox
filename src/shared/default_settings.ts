@@ -10,13 +10,13 @@ export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
 export const DEFAULT_PREV_PATTERNS: Settings["prev_patterns"] = ["prev","previous","older","<","‹","←","«","≪","<<"];
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
-export const DEFAULT_UI: Settings["ui"] = "browser";
 export const DEFAULT_PALETTE: Settings["palette"] = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: Settings["light_intensity"] = 3;
 export const DEFAULT_SEARCH_PREFIXES: Settings["search_prefixes"] = {"here":"s","tab":"S"};
 export const DEFAULT_CONTAINER_PREFIXES: Settings["container_prefixes"] = {"reopen":"c","tab":"C"};
 export const DEFAULT_DEFAULT_ENGINE: Settings["default_engine"] = "duck";
 export const DEFAULT_NEW_TAB_PAGE: Settings["new_tab_page"] = "desertfox";
+export const DEFAULT_BRIDGE: Settings["bridge"] = false;
 export const DEFAULT_COMPLETION_ALL_WINDOWS: Settings["completion_all_windows"] = false;
 export const DEFAULT_CMDLINE_PROMPT: Settings["cmdline_prompt"] = "caret";
 export const DEFAULT_OPEN_COMPLETION: Settings["open_completion"] = ["bookmarks","history"];
@@ -40,13 +40,13 @@ export const DEFAULT_SETTINGS: Settings = {
   next_patterns: DEFAULT_NEXT_PATTERNS,
   prev_patterns: DEFAULT_PREV_PATTERNS,
   mode_indicator: DEFAULT_MODE_INDICATOR,
-  ui: DEFAULT_UI,
   palette: DEFAULT_PALETTE,
   light_intensity: DEFAULT_LIGHT_INTENSITY,
   search_prefixes: DEFAULT_SEARCH_PREFIXES,
   container_prefixes: DEFAULT_CONTAINER_PREFIXES,
   default_engine: DEFAULT_DEFAULT_ENGINE,
   new_tab_page: DEFAULT_NEW_TAB_PAGE,
+  bridge: DEFAULT_BRIDGE,
   completion_all_windows: DEFAULT_COMPLETION_ALL_WINDOWS,
   cmdline_prompt: DEFAULT_CMDLINE_PROMPT,
   open_completion: DEFAULT_OPEN_COMPLETION,
