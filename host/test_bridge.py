@@ -855,6 +855,56 @@ class ThemeKeeperTest(unittest.TestCase):
         self.assertEqual(os.listdir(self.temp.name), ["theme.json"])
         self.assertEqual(self.module.ThemeKeeper(self.path).palette, "oasis_dune")
 
+    def unknown_name_reply(self):
+        return {"ok": False, "request_id": 1, "message": self.module.UNKNOWN_PALETTE_MESSAGE}
+
+    def test_a_generic_failure_of_the_extension_keeps_the_name(self):
+        import io
+
+        keeper = self.module.ThemeKeeper(self.path)
+        keeper.push(self.module.ExtensionLink(io.BytesIO()), "oasis_dune")
+        keeper.drop_if_refused("oasis_dune", {"ok": False, "request_id": 1, "message": "the command failed"})
+        self.assertEqual(keeper.palette, "oasis_dune")
+        self.assertTrue(os.path.exists(self.path))
+
+    def test_a_push_right_after_the_replay_started_survives_the_refusal_of_the_replay(self):
+        import io
+
+        self.module.REQUEST_TIMEOUT_S = 0.5
+        link = self.module.ExtensionLink(io.BytesIO())
+        keeper = self.module.ThemeKeeper(self.path)
+        keeper.push(link, "oasis_dune")
+        outer = self
+
+        class GuardThatPushesOnRelease:
+            """Lets a push in right after the replay started, before say_ready returns."""
+
+            def __init__(self):
+                self.inner = threading.Lock()
+                self.fired = False
+
+            def __enter__(self):
+                self.inner.acquire()
+
+            def __exit__(self, *_exc):
+                self.inner.release()
+                if self.fired:
+                    return
+                self.fired = True
+                pusher = threading.Thread(target=lambda: keeper.push(link, "oasis_rose"))
+                pusher.start()
+                deadline = time.monotonic() + 5
+                while keeper.palette != "oasis_rose" and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                link.answered({"request_id": 1, "ok": False, "message": outer.module.UNKNOWN_PALETTE_MESSAGE})
+                time.sleep(0.1)
+                pusher.join(5)
+
+        keeper.guard = GuardThatPushesOnRelease()
+        link.say_ready()
+        keeper.say_ready(link)
+        self.assertEqual(keeper.palette, "oasis_rose")
+        self.assertTrue(os.path.exists(self.path))
 
     def test_an_unanswered_push_keeps_the_name(self):
         import io
@@ -872,9 +922,9 @@ class ThemeKeeperTest(unittest.TestCase):
 
         keeper = self.module.ThemeKeeper(self.path)
         keeper.push(self.module.ExtensionLink(io.BytesIO()), "oasis_rose")
-        keeper.drop_if_refused("oasis_dune", {"ok": False, "request_id": 1})
+        keeper.drop_if_refused("oasis_dune", self.unknown_name_reply())
         self.assertEqual(keeper.palette, "oasis_rose")
-        keeper.drop_if_refused("oasis_rose", {"ok": False, "request_id": 2})
+        keeper.drop_if_refused("oasis_rose", self.unknown_name_reply())
         self.assertIsNone(keeper.palette)
         self.assertFalse(os.path.exists(self.path))
 

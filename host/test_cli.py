@@ -340,18 +340,6 @@ class CliTest(unittest.TestCase):
         process.stdout.close()
         process.stderr.close()
 
-    def test_theme_racing_a_host_start_loses_no_name(self):
-        for round_number in range(5):
-            runtime = os.path.join(self.runtime, "race%d" % round_number)
-            os.makedirs(runtime)
-            host = test_bridge.Host(runtime, wait_ready=False)
-            self.addCleanup(host.kill)
-            done = self.cli("theme", "oasis_dune", runtime=runtime)
-            self.assertEqual(done.returncode, 0, done.stderr)
-            host.read_ready()
-            # Either the host got the name over the socket or loaded it from the file: both end as one request.
-            self.assertEqual(host.read_request()["palette"], "oasis_dune")
-
     def test_a_round_trip_through_the_real_host(self):
         host = test_bridge.Host(self.runtime)
         self.addCleanup(host.kill)

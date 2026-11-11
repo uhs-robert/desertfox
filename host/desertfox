@@ -23,11 +23,12 @@ keeps the space.
 
 It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock, one JSON line out and one line back, or for `events` the lines
 of the stream. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the
-bridge is not running (`theme` instead keeps the name in theme.json and exits 0). `-h` or `--help` after a verb prints the usage and sends nothing. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
+bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
+`-h` or `--help` after a verb prints the usage and sends nothing. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
 behind, so a caller that wants the stream for good runs it again.
 """
-import json
 import fcntl
+import json
 import os
 import re
 import shlex

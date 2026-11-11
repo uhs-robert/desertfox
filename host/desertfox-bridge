@@ -80,6 +80,8 @@ REQUEST_TIMEOUT_S = 10
 DRAIN_S = 1.0
 MAX_COMMAND_CHARS = 4096
 MAX_REPLY_MESSAGE_CHARS = 500
+# The text src/background/bridge.ts sends for a name that is no built-in theme.
+UNKNOWN_PALETTE_MESSAGE = "no built-in theme has that name"
 PALETTE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 PREFACE_PATTERN = re.compile(r"[A-Za-z0-9]{1,32}")
 # Rendering one tab, a background one included, takes longer than answering from the tab list.
@@ -206,8 +208,8 @@ class ThemeKeeper:
 
     def drop_if_refused(self, palette, reply):
         """Forgets `palette` when the extension itself refused it. The host cannot tell a built-in name from a typo, so the refusal is the check.
-        Only a reply that carries a request id came from the extension: a timeout or a closed link says nothing about the name."""
-        if reply.get("ok") is not False or "request_id" not in reply:
+        Only the extension's unknown-name refusal counts: a timeout, a closed link or a generic failure says nothing about the name."""
+        if reply.get("ok") is not False or "request_id" not in reply or reply.get("message") != UNKNOWN_PALETTE_MESSAGE:
             return
         with self.guard:
             if self.palette != palette:
@@ -221,8 +223,8 @@ class ThemeKeeper:
             link.say_ready()
             if self.palette is None:
                 return
-            waiting = link.start("theme", {"palette": self.palette})
-        palette = self.palette
+            palette = self.palette
+            waiting = link.start("theme", {"palette": palette})
         threading.Thread(target=lambda: self.drop_if_refused(palette, link.wait(waiting, REQUEST_TIMEOUT_S)), daemon=True).start()
 
 
