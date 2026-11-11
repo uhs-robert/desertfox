@@ -3,6 +3,8 @@ import { mock, test } from "node:test";
 import { RuntimeRefusal } from "../src/shared/command.ts";
 import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
+import { args_for_count } from "../src/content/invocation_args.ts";
+import { SEND_KEY_MAX_TIMES } from "../src/shared/send_key_limit.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
 import { KEY_PAIR_GAP_MS, send_key, send_key_queued } from "../src/content/site_actions/send_key.ts";
 
@@ -106,4 +108,14 @@ test("times accepts 99 and refuses 100 with a clear error", () => {
   const refused = check_args(command, { key: "a", key_code: 65, times: 100 }, {});
   assert.equal(refused.ok, false);
   assert.match(refused.ok ? "" : refused.error, /times/);
+});
+
+test("a count over the limit is refused by the handler after args_for_count fills times", async () => {
+  const checked = check_args(registry.get("page.send_key")!, { key: "a", key_code: 65 }, {});
+  assert.ok(checked.ok);
+  const page = fake_page({}, "focused");
+  const [args] = args_for_count(checked.args as never, 9999, { param: "times" });
+  await assert.rejects(send_key_queued(page.doc, args as never, page.make_event), /over the limit of 99 for page.send_key/);
+  assert.equal(page.log.length, 0);
+  assert.equal(SEND_KEY_MAX_TIMES, 99);
 });

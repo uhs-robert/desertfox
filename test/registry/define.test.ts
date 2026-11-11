@@ -238,6 +238,8 @@ test("the rule kinds are rejected on a param that cannot carry them", () => {
   const with_param = (param: object): CommandInput => ({ ...base, params: [param as never] });
   rejects("a.b", with_param({ name: "n", type: "string", min: 1 }), /params\[0\]\.min: only an int param takes a minimum/);
   rejects("a.b", with_param({ name: "n", type: "int", min: 1.5 }), /params\[0\]\.min: must be a whole number/);
+  rejects("a.b", with_param({ name: "n", type: "string", max: 1 }), /params\[0\]\.max: only an int param takes a maximum/);
+  rejects("a.b", with_param({ name: "n", type: "int", min: 5, max: 4 }), /params\[0\]\.max: must not be below the minimum/);
   rejects("a.b", with_param({ name: "n", type: "int", pattern: "x" }), /params\[0\]\.pattern: only a string or key param takes a pattern/);
   rejects("a.b", with_param({ name: "n", type: "int", format: "url" }), /params\[0\]\.format: only a string param/);
   rejects("a.b", with_param({ name: "n", type: "string", pattern: "(" }), /params\[0\]\.pattern: .* is not a regular expression/);

@@ -285,6 +285,7 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
   if (param.max !== undefined) {
     if (param.type !== "int") fail(`${at}.max`, "only an int param takes a maximum");
     else if (!Number.isInteger(param.max)) fail(`${at}.max`, "must be a whole number");
+    else if (param.min !== undefined && param.max < param.min) fail(`${at}.max`, "must not be below the minimum");
   }
   if (param.pattern !== undefined) {
     if (param.type !== "string" && param.type !== "key") fail(`${at}.pattern`, "only a string or key param takes a pattern");

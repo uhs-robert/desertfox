@@ -1,4 +1,5 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
+import { SEND_KEY_MAX_TIMES } from "../../shared/send_key_limit.ts";
 
 export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number };
 
@@ -37,8 +38,10 @@ let queue_tail: Promise<unknown> = Promise.resolve();
 let last_sent_at = Number.NEGATIVE_INFINITY;
 
 export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): Promise<void> {
+  const times = args.times ?? 1;
+  if (times > SEND_KEY_MAX_TIMES) return Promise.reject(new RuntimeRefusal(`A count of ${times} is over the limit of ${SEND_KEY_MAX_TIMES} for page.send_key`));
   const run = async () => {
-    for (let sent = 0; sent < (args.times ?? 1); sent++) {
+    for (let sent = 0; sent < times; sent++) {
       // Capped at one gap, so a clock that jumps back cannot stall the queue.
       const wait_ms = Math.min(last_sent_at + KEY_PAIR_GAP_MS - Date.now(), KEY_PAIR_GAP_MS);
       if (wait_ms > 0) await new Promise((resolve) => setTimeout(resolve, wait_ms));
