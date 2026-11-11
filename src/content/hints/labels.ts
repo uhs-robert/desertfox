@@ -32,3 +32,30 @@ export function narrow(labels: readonly string[], typed: string): Narrowed {
   });
   return { still_possible_, complete };
 }
+
+export type Box = { left: number; top: number; right: number; bottom: number };
+
+const overlaps = (a: Box, b: Box): boolean => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+// Sets of boxes that cover each other, directly or through a chain, as indexes in the order given. A box that covers nothing is in no set.
+export function overlap_groups(boxes: readonly Box[]): number[][] {
+  const seen = new Set<number>();
+  const groups: number[][] = [];
+  boxes.forEach((_, start) => {
+    if (seen.has(start)) return;
+    seen.add(start);
+    const group = [start];
+    for (let next = 0; next < group.length; next++) {
+      boxes.forEach((box, other) => {
+        if (seen.has(other) || !overlaps(boxes[group[next]!]!, box)) return;
+        seen.add(other);
+        group.push(other);
+      });
+    }
+    if (group.length > 1) groups.push(group.sort((a, b) => a - b));
+  });
+  return groups;
+}
+
+// Bottom to top in, bottom to top out: the label on top goes to the bottom, so the next one shows.
+export const rotate = <T>(stack: readonly T[]): T[] => (stack.length < 2 ? [...stack] : [stack[stack.length - 1]!, ...stack.slice(0, -1)]);

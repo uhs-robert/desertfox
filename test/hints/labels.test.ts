@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clean_letters, DEFAULT_HINT_LETTERS, make_labels, narrow } from "../../src/content/hints/labels.ts";
+import { clean_letters, DEFAULT_HINT_LETTERS, make_labels, narrow, overlap_groups, rotate } from "../../src/content/hints/labels.ts";
 
 const HOME_ROW = [...DEFAULT_HINT_LETTERS];
 
@@ -46,4 +46,24 @@ test("narrow lists labels that still fit and reports a complete one", () => {
   assert.deepEqual(narrow(labels, "s"), { still_possible_: [1, 2, 3], complete: undefined });
   assert.deepEqual(narrow(labels, "sd"), { still_possible_: [3], complete: 3 });
   assert.deepEqual(narrow(labels, "x"), { still_possible_: [], complete: undefined });
+});
+
+const box = (left: number, top: number, size = 10) => ({ left, top, right: left + size, bottom: top + size });
+
+test("overlap_groups joins boxes that cover each other, also through a chain, and ignores touching and lone boxes", () => {
+  const boxes = [box(0, 0), box(5, 5), box(10, 10), box(100, 100), box(110, 0)];
+  assert.deepEqual(overlap_groups(boxes), [[0, 1, 2]]);
+  assert.deepEqual(overlap_groups([box(0, 0), box(10, 0)]), []);
+  assert.deepEqual(overlap_groups([]), []);
+});
+
+test("overlap_groups lists each group in the order given", () => {
+  assert.deepEqual(overlap_groups([box(0, 0), box(50, 50), box(2, 2), box(52, 52)]), [[0, 2], [1, 3]]);
+});
+
+test("rotate sends the top to the bottom, and leaves short stacks alone", () => {
+  assert.deepEqual(rotate(["a", "b", "c"]), ["c", "a", "b"]);
+  assert.deepEqual(rotate(["a", "b"]), ["b", "a"]);
+  assert.deepEqual(rotate(["a"]), ["a"]);
+  assert.deepEqual(rotate([]), []);
 });

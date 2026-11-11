@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -349,4 +349,31 @@ test("the frames filter lists a frame of another site without entering it, a fra
     { name: "same", local: "iframe", frame: [{ name: "nested", local: "frame" }] },
   ]);
   assert.deepEqual(names(collect(page, query_for("frames", undefined))), ["embed", "same", "nested"]);
+});
+
+type TextFake = { innerText?: string; textContent?: string; attrs?: Record<string, string>; image_alt?: string; value?: unknown };
+const text_fake = (fake: TextFake) =>
+  ({
+    innerText: fake.innerText,
+    textContent: fake.textContent,
+    value: fake.value,
+    getAttribute: (name: string) => fake.attrs?.[name] ?? null,
+    querySelector: () => (fake.image_alt === undefined ? null : { getAttribute: () => fake.image_alt }),
+  }) as unknown as Element;
+
+test("text_of reads the visible text first, with whitespace squeezed", () => {
+  assert.equal(text_of(text_fake({ innerText: "  Read \n  more ", attrs: { "aria-label": "other" } })), "Read more");
+});
+
+test("text_of falls back to aria-label, title, a picture's alt, then an input value", () => {
+  assert.equal(text_of(text_fake({ innerText: "", attrs: { "aria-label": "Close", title: "t" } })), "Close");
+  assert.equal(text_of(text_fake({ innerText: " ", attrs: { title: "Tip" }, image_alt: "alt" })), "Tip");
+  assert.equal(text_of(text_fake({ innerText: "", image_alt: "Logo" })), "Logo");
+  assert.equal(text_of(text_fake({ innerText: "", value: "Send" })), "Send");
+});
+
+test("text_of uses textContent when innerText is missing, ignores a numeric value, and clips a long text", () => {
+  assert.equal(text_of(text_fake({ textContent: "plain" })), "plain");
+  assert.equal(text_of(text_fake({ innerText: "", value: 0 })), "");
+  assert.equal(text_of(text_fake({ innerText: "x".repeat(1000) })).length, 400);
 });

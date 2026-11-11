@@ -4,6 +4,7 @@ import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
 import type { Found } from "./candidates.ts";
 import { anchor_box } from "./visible.ts";
+import { overlap_groups, rotate } from "./labels.ts";
 
 const MESSAGE_MS = 1500;
 
@@ -20,6 +21,10 @@ export const STYLE = `
   background: var(--primary); color: var(--label-text); border: 1px solid var(--primary); box-shadow: 0 1px 3px #0008;
 }
 .desertfox-hint b { opacity: .6; font-weight: inherit; }
+.desertfox-hint-text {
+  position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre;
+  background: var(--primary); color: var(--label-text); font: inherit;
+}
 .desertfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
   background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
@@ -51,6 +56,12 @@ export function filter_label(style: LabelStyle, matches: boolean): void {
   style.display = matches ? "" : "none";
 }
 
+// The active hint swaps the label colors, so it stands out from the rest.
+export function mark_active(style: Pick<CSSStyleDeclaration, "background" | "color">, active: boolean): void {
+  style.background = active ? "var(--label-text)" : "";
+  style.color = active ? "var(--primary)" : "";
+}
+
 export function place_label(style: LabelStyle, position: { left: number; top: number } | undefined): void {
   style.visibility = position === undefined ? "hidden" : "";
   if (position === undefined) return;
@@ -66,6 +77,22 @@ export function create_view() {
   let message_timer: ReturnType<typeof setTimeout> | undefined;
 
   const mount = () => mount_surface(surface.host);
+
+  // The typed text, shown while text mode is on. Undefined means label mode and takes the box away.
+  let text_box: HTMLElement | undefined;
+  function show_text_mode(text: string | undefined): void {
+    if (text === undefined) {
+      text_box?.remove();
+      text_box = undefined;
+      return;
+    }
+    if (!text_box) {
+      text_box = document.createElement("div");
+      text_box.className = "desertfox-hint-text";
+      surface.text.append(text_box);
+    }
+    text_box.textContent = `text: ${text}`;
+  }
 
   // All reads first, then all writes, so the page lays out once.
   function reposition(): void {
@@ -90,12 +117,23 @@ export function create_view() {
     },
     reposition,
     // Labels that no longer start with the typed text hide. The typed part of the others dims.
-    show_progress_: (typed: string, still_possible: ReadonlySet<number>): void => {
+    show_progress_: (typed: string, still_possible: ReadonlySet<number>, text?: string, active?: number): void => {
       drawn.forEach((label, index) => {
         filter_label(label.node.style, still_possible.has(index));
         label.typed_part_.textContent = typed;
         label.rest_part_.textContent = label.text.slice(typed.length);
+        mark_active(label.node.style, index === active);
       });
+      show_text_mode(text);
+    },
+    // Turns the stacking order of every set of overlapping labels by one, so a covered label comes to the top. Overlaps are read again on each call, because scrolling changes them.
+    rotate_overlaps_: (): void => {
+      const shown = Array.from(surface.text.querySelectorAll<HTMLElement>(".desertfox-hint")).filter((node) => node.style.display !== "none" && node.style.visibility !== "hidden");
+      const boxes = shown.map((node) => node.getBoundingClientRect());
+      for (const group of overlap_groups(boxes)) {
+        const stack = group.map((index) => shown[index]!);
+        stack[0]!.before(rotate(stack)[0]!);
+      }
     },
     show_message_: (message: string): void => {
       const note = document.createElement("div");
@@ -110,6 +148,7 @@ export function create_view() {
     clear_labels_: (): void => {
       for (const label of drawn) label.node.remove();
       drawn = [];
+      show_text_mode(undefined);
       if (surface.text.childElementCount === 0) surface.host.remove();
     },
   };
