@@ -3,7 +3,7 @@
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { container_names, make_router_deps, snippet_deps } from "./browser_deps.ts";
+import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
@@ -31,9 +31,8 @@ import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_ke
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
 // The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
-export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request), () => native_host.probe()));
+export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request), () => native_host.probe().then(() => undefined)));
 const native_host = create_native_client(browser_native_deps(), host_update.watch);
-export const probe_host_version = (): Promise<void> => native_host.probe();
 const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
 
 // Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
@@ -220,6 +219,42 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
     const { warnings } = await apply_files(reply.files, reply.config_dir, "reload");
     return { config_dir: reply.config_dir, warnings };
   });
+}
+
+// Runs once per start. Edits made to the files while the browser was closed reach the stored build here, without a `config.reload`.
+// Quiet when nothing is wrong: no permission, no host or a missing config folder keep the stored config and only warn on the console, because most users have no host.
+// A broken file keeps the stored config too, and a toast names the problem so the user learns the edit failed.
+export async function reload_config_at_start(): Promise<void> {
+  let reply;
+  try {
+    reply = await native_host.probe();
+  } catch (error) {
+    console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  // An empty build here would replace the stored config with the defaults, as it would on a reload.
+  if (!reply.config_dir_exists) {
+    console.warn(`Config not reread at start: the native host found no config folder at ${reply.config_dir}.`);
+    return;
+  }
+  await in_change_queue(async () => {
+    await get_config();
+    const stored = await load_files_source();
+    if (stored.dir_label === reply.config_dir && same_files(stored.files, reply.files)) return;
+    try {
+      await apply_files(reply.files, reply.config_dir, "reload");
+    } catch (error) {
+      if (!(error instanceof ConfigRefusal)) throw error;
+      console.warn(error.message);
+      const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+      await show_toast_on_tab({ tab_id: tab?.id }, "config_start", error.message, "error");
+    }
+  }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
+}
+
+function same_files(left: Record<string, string>, right: Record<string, string>): boolean {
+  const names = Object.keys(left);
+  return names.length === Object.keys(right).length && names.every((name) => Object.hasOwn(right, name) && left[name] === right[name]);
 }
 
 // What an import would change, for the consent screen. It stores nothing and runs no snippet.

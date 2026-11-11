@@ -101,7 +101,8 @@ test("the startup probe sends one request and reports the version, and sends not
       },
       { seen: (release_version) => void seen.push(release_version), outdated_note: () => undefined },
     );
-    await client.probe().catch(() => undefined);
+    const reply = await client.probe().catch(() => undefined);
+    assert.deepEqual(reply, permitted ? { config_dir: "", config_dir_exists: true, files: {} } : undefined);
     assert.equal(sent.length, permitted ? 1 : 0);
     assert.deepEqual(seen, permitted ? ["0.1.22"] : []);
   }
