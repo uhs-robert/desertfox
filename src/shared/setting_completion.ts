@@ -92,8 +92,10 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": true,
-    "expectation": "a list of default site row names",
-    "values": []
+    "expectation": "a list of \"sheets\" with no repeat",
+    "values": [
+      "sheets"
+    ]
   },
   {
     "name": "next_patterns",

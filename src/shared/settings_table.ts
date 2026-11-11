@@ -4,7 +4,7 @@
 // Data only, so the bundles that check settings (the command line page among them) carry no prose: the editor
 // descriptions live in `settings_docs.ts`.
 
-import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
+import { BUILT_IN_PAGE, DEFAULT_SITE_ROW_NAMES, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { LIGHT_INTENSITIES } from "./theme/roles.ts";
 
@@ -58,8 +58,8 @@ export const SETTINGS_TABLE = {
   // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.
   // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.
   site_rules: { kind: "site_table", fields: { site: { value: "text" }, off: { value: "boolean", optional: true }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true }, bind: { value: "bindings", optional: true } }, exclusive: ["pass", "only"], default: [] },
-  // Names of the site rows that ship with DesertFox (`src/background/default_site_rows.ts`) to turn off. A name that matches no row does nothing.
-  default_site_rows_off: { kind: "text_list", expectation: "a list of default site row names", default: [] },
+  // Names of the site rows that ship with DesertFox (`src/background/default_site_rows.ts`) to turn off.
+  default_site_rows_off: { kind: "enum_list", values: DEFAULT_SITE_ROW_NAMES, default: [] },
   // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },

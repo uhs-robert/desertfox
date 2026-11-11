@@ -336,7 +336,25 @@ function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: P
   return binds;
 }
 
+// Rows of one site that bind a key and a longer key under it. The shorter bind wins and the longer is dropped when the binds are grafted, as in a keymap, where a complete binding hides the keys under it.
+function warn_prefix_binds(rules: readonly SiteRule[], warnings: string[]) {
+  const by_site = new Map<string, SiteBind[]>();
+  for (const rule of rules) by_site.set(rule.regex, [...(by_site.get(rule.regex) ?? []), ...Object.values(rule.bind ?? {})]);
+  for (const binds of by_site.values()) {
+    for (const longer of binds) {
+      const shorter = binds.find((other) => other.tokens.length < longer.tokens.length && other.tokens.every((token, index) => longer.tokens[index] === token));
+      if (shorter) warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}": "${shorter.tokens.join("")}" is already a complete bind for the same site`);
+    }
+  }
+}
+
 export function compile_site_rules(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): SiteRule[] {
+  const compiled = compile_rows(rules, resolve, settings, sources, warnings);
+  warn_prefix_binds(compiled, warnings);
+  return compiled;
+}
+
+function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): SiteRule[] {
   return rules.flatMap((row): SiteRule[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];

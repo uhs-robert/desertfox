@@ -5,6 +5,8 @@ import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
+import { DEFAULT_SITE_ROW_NAMES } from "../src/shared/table_constants.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
@@ -300,7 +302,7 @@ test("the reply crosses as a JSON string that parses back to the page's keymap",
 const SHEETS = "https://docs.google.com/spreadsheets/d/abc/edit";
 const SHEETS_DOMAIN = "https://docs.google.com/a/example.org/spreadsheets/d/abc/edit";
 function with_defaults(settings: Record<string, unknown>) {
-  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: {} });
+  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.deepEqual(warnings, []);
   return compiled;
 }
@@ -345,4 +347,8 @@ test("a user off row beats the shipped bind", async () => {
   const reply = (await ask(compiled, SHEETS))!;
   assert.equal(reply.all_off, true);
   assert.notEqual(await key_at(compiled, SHEETS, "j"), "ArrowDown");
+});
+
+test("the names constant lists exactly the names of the shipped rows", () => {
+  assert.deepEqual([...new Set(DEFAULT_SITE_ROWS.map(({ name }) => name))], [...DEFAULT_SITE_ROW_NAMES]);
 });

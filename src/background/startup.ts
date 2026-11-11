@@ -8,6 +8,7 @@ import { compile_config } from "./compile.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
+import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP } from "./toolbar.ts";
@@ -67,6 +68,7 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: M
   const { compiled, theme, warnings } = compile_config({
     config,
     default_keymap: DEFAULT_KEYMAP,
+    default_site_rows: DEFAULT_SITE_ROWS,
     get_command: (command_id) => registry.get(command_id),
     enum_sources: { search_engines: Object.keys(config.search_engines), containers: await container_names() },
   });

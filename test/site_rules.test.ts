@@ -251,5 +251,13 @@ test("compile_config checks bind args with the registry validator", () => {
   const { compiled, warnings } = compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.deepEqual(Object.keys(compiled.site_rules?.[0]?.bind ?? {}), ["h"]);
   assert.equal(warnings.length, 2);
+  assert.ok(warnings.some((warning) => warning.startsWith('site_rules: skipped bind "j" of "https://a.test/*": ')), warnings.join("\n"));
   assert.deepEqual(compiled.site_rules?.[0]?.bind?.h?.leaf.steps[0]?.bundle, "site_actions");
+});
+
+test("a bind under another bind of the same site warns, and only the shorter bind is grafted", () => {
+  const { compiled, warnings } = compile([{ site: "https://a.test/*", bind: { g: { id: "b.g" } } }, { site: "https://a.test/*", bind: { gx: { id: "b.gx" } } }]);
+  assert.deepEqual(warnings, ['site_rules: skipped bind "gx": "g" is already a complete bind for the same site']);
+  assert.equal(step_id(compiled, "https://a.test/", ["g"]), "b.g:{}");
+  assert.equal(step_id(compiled, "https://a.test/", ["g", "x"]), undefined);
 });

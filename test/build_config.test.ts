@@ -684,3 +684,11 @@ test("the editor schema rejects the same label and intent text as the build", ()
     for (const bad of [" ", "\t", "a\nb", "a\u007Fb", "a\u0085b"]) assert.equal(pattern.test(bad), false, `${field} ${JSON.stringify(bad)}`);
   }
 });
+
+test("a site row bind is checked like a keymap binding", () => {
+  const dir = config_dir_with({ "settings.toml": ['[[site_rules]]', 'site = "https://a.test/*"', 'bind = { j = { id = "tab.nope" }, k = { id = "tab.close", args = { depth = "x" } }, l = { id = "tab.next" } }', ""].join("\n") });
+  const problems = problems_of(dir);
+  assert.ok(problems.some((problem) => problem.includes('bind "j" of "https://a.test/*"') && problem.includes("tab.nope")), problems.join("\n"));
+  assert.ok(problems.some((problem) => problem.includes('bind "k"')), problems.join("\n"));
+  assert.equal(problems.some((problem) => problem.includes('bind "l"')), false);
+});

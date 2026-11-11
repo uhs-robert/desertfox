@@ -48,7 +48,7 @@ export async function hint_selectors_reply(storage: KeymapStorage, frame_address
   return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
 }
 
-// A bound key replaces whatever the tree holds at that key. A key under a leaf turns the leaf into a branch, and a bind that is a prefix of other keys replaces the whole subtree. Copies the path and never mutates the input.
+// A bound key replaces whatever the tree holds at that key. A key under a leaf of the tree turns the leaf into a branch, and a bind that is a prefix of tree keys replaces the whole subtree. Copies the path and never mutates the input.
 export function graft_binds(root: TreeBranch | undefined, binds: Readonly<Record<string, SiteBind>>): TreeBranch {
   const grafted: TreeBranch = root ?? { kind: "branch", children: {} };
   const put = (branch: TreeBranch, tokens: readonly string[], leaf: TreeLeaf): TreeBranch => {
@@ -57,8 +57,10 @@ export function graft_binds(root: TreeBranch | undefined, binds: Readonly<Record
     const child: TreeNode = rest.length === 0 ? leaf : put(below?.kind === "branch" ? below : { kind: "branch", children: {} }, rest, leaf);
     return { ...branch, children: { ...branch.children, [token]: child } };
   };
-  // Shorter sequences first, so a bind that is a prefix of another goes in before it and the longer one then replaces that leaf with a branch.
-  return Object.values(binds).sort((a, b) => a.tokens.length - b.tokens.length).reduce((tree, { tokens, leaf }) => put(tree, tokens, leaf), grafted);
+  // A bind that sits under another bind is dropped, as a complete binding hides the keys under it in a keymap. The compiler warns about the pair for rows of one site. Under a leaf of the tree itself a bind wins and the leaf becomes a branch.
+  const all = Object.values(binds);
+  const hidden = ({ tokens }: SiteBind) => all.some((other) => other.tokens.length < tokens.length && other.tokens.every((token, index) => tokens[index] === token));
+  return all.filter((bind) => !hidden(bind)).reduce((tree, { tokens, leaf }) => put(tree, tokens, leaf), grafted);
 }
 
 // The normal tree under the page's columns. `off` wins over all of it. Binds go onto the tree first, then the key rule prunes, so `pass` frees a bound key and `only` keeps it. A page whose key rule leaves no normal binding is all off and keeps the whole tree, so `,i` can leave ignore mode.
