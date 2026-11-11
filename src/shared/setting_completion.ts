@@ -53,11 +53,22 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "blur_on_load",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "site_rules",
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a list of tables with \"site\", an optional \"off\" of true or false, an optional \"pass\" of key sequences and an optional \"only\" of key sequences",
+    "expectation": "a list of tables with \"site\", an optional \"off\" of true or false, an optional \"pass\" of key sequences, an optional \"only\" of key sequences and any per-site setting",
     "values": []
   },
   {

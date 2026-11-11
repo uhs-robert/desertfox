@@ -99,6 +99,27 @@ test("a site value beats the global value, which holds :set, and only on its sit
   assert.equal(site_value(site_columns_for(falsy, ["https://a.test/"]), "flag" as never, true as never), false);
 });
 
+test("blur_on_load reaches a page as a site value, and a frame resolves it against its own address only", async () => {
+  const compiled = compile_keymap(KEYMAP, { site_rules: [{ site: "https://top.test/*", blur_on_load: true }] }, resolve).compiled;
+  const top = rule_addresses_of({ frameId: 0, url: "https://top.test/", tab: { url: "https://top.test/" } });
+  assert.deepEqual((await page_keymap_for(storage_of(compiled), top))!.site_values, { blur_on_load: true });
+  // The tab address would match the row, but a frame of another site follows its own rows.
+  const frame = rule_addresses_of({ frameId: 7, url: "https://embed.test/", tab: { url: "https://top.test/page" } });
+  assert.equal((await page_keymap_for(storage_of(compiled), frame))!.site_values, undefined);
+  // The site rows stay with the background: the page gets the resolved values only.
+  assert.equal("frame_site_globals" in (await page_keymap_for(storage_of(compiled), top))!.keymap, false);
+});
+
+test("the global blur_on_load reaches every page, and a site row turns it off there", async () => {
+  const compiled = compile_keymap(KEYMAP, { blur_on_load: true, site_rules: [{ site: "https://quiet.test/*", blur_on_load: false }] }, resolve).compiled;
+  assert.deepEqual(compiled.frame_site_globals, { blur_on_load: true });
+  assert.deepEqual((await ask(compiled, "https://a.test/"))!.site_values, { blur_on_load: true });
+  assert.equal((await ask(compiled, "https://quiet.test/"))!.site_values, undefined);
+  assert.equal("frame_site_globals" in (await ask(compiled, "https://a.test/"))!.keymap, false);
+  // A value at its default stays out of the stored keymap and of the reply.
+  assert.equal("frame_site_globals" in compile_keymap(KEYMAP, { blur_on_load: false }, resolve).compiled, false);
+});
+
 test("a tab-wide value resolves against the top frame's address in every frame", () => {
   assert.equal(top_frame_address_of({ frameId: 0, url: "https://top.test/", tab: { url: "https://old.test/" } }), "https://top.test/");
   assert.equal(top_frame_address_of({ frameId: 3, url: "https://embed.test/", tab: { url: "https://top.test/" } }), "https://top.test/");

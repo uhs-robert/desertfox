@@ -140,6 +140,7 @@ function cancel(event: Event): void {
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   if (!event.isTrusted || event.isComposing) return;
+  load_blur_ends_ms = -1;
   const token = event_to_token(event);
   if (token === null) return;
   // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
@@ -194,6 +195,7 @@ function on_visibility_change(): void {
 // A closed shadow root hides its inner field from the event path, which then ends at the host. The focus settles after the event, so the mode follows it a tick later.
 function follow_focus(entered: boolean, event: Event): void {
   const target = event.composedPath()[0] ?? null;
+  if (entered && blur_load_focus(target)) return;
   watch_roots_around_focus();
   if (target instanceof Element && shadow_root_of(target)) return void setTimeout(sync_mode_to_focus);
   if (is_editable_element(target)) bundles.in_mode_order_(entered ? page_mode.focus_entered_editable_ : page_mode.focus_left_editable_);
@@ -226,6 +228,12 @@ function follow_field_change(): void {
   field_at_last_key = field;
 }
 
+// `blur_on_load`: 0 until the first install opens the window of about 1 s, -1 once trusted input came, else the time the window ends.
+// Trusted input before the install keeps the window shut, so a field the user chose during the load keeps the focus.
+let load_blur_ends_ms = 0;
+const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && is_editable_element(target) && ((target as HTMLElement).blur(), 1);
+const end_load_blur = (event: Event) => event.isTrusted && (load_blur_ends_ms = -1);
+
 let matcher_installed = false;
 // Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `,i` or `<S-Escape>` survives an unrelated edit.
 let was_all_off = false;
@@ -240,6 +248,11 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
+  // A field the page focused before the reply came already put the frame in insert mode, and the blur's focusout takes it back.
+  if (first_install && reply?.site_values?.blur_on_load && !load_blur_ends_ms) {
+    load_blur_ends_ms = Date.now() + 1e3;
+    blur_load_focus(deepest_focused_element());
+  }
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") bundles.set_mode_("ignore");
@@ -269,6 +282,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 
 function start(): void {
   (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
+  listen(window, "pointerdown", end_load_blur);
   listen(window, "keydown", on_keydown);
   listen(window, "keypress", on_keypress);
   listen(window, "keyup", on_keyup);

@@ -45,6 +45,8 @@ export const SETTINGS_TABLE = {
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   hint_key_line: { kind: "boolean", default: true },
+  // Each frame resolves it against its own address, so a frame of another site follows its own rows.
+  blur_on_load: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
   // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.
   // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.

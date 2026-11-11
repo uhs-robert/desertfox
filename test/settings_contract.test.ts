@@ -14,7 +14,8 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_border: '"square", "round" or "chamfer"',
   hint_letters: "a string of 2 or more distinct letters, without /",
   hint_key_line: "true or false",
-  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences and an optional "only" of key sequences',
+  blur_on_load: "true or false",
+  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences and any per-site setting',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
   mode_indicator: '"always", "not_normal" or "off"',
@@ -57,6 +58,7 @@ test("every setting keeps its listed values", () => {
     light_intensity: ["1", "2", "3", "4", "5"],
     new_tab_page: ["desertfox"],
     hint_key_line: ["true", "false"],
+    blur_on_load: ["true", "false"],
     bridge: ["true", "false"],
     completion_all_windows: ["true", "false"],
     cmdline_prompt: ["caret", "colon"],
@@ -75,7 +77,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, bridge: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
+  assert.deepEqual(toggles, { hint_key_line: true, blur_on_load: false, bridge: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -83,7 +85,8 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_border: ["square", "round", "chamfer"],
   hint_letters: ["ab", "asdfghjkl", "12"],
   hint_key_line: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }]],
+  blur_on_load: [true, false],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", blur_on_load: true }]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
   mode_indicator: ["always", "not_normal", "off"],
@@ -117,8 +120,9 @@ const REFUSES: Record<string, unknown[]> = {
   which_key_border: ["Square", "", 1],
   hint_letters: ["a", "aa", "aba", "a/b", 12],
   hint_key_line: ["true", 1],
+  blur_on_load: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", zoom: 2 }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", zoom: 2 }], [{ site: "a", blur_on_load: "yes" }],
   ],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
@@ -200,6 +204,7 @@ test("the defaults stay the same", () => {
     which_key_border: "square",
     hint_letters: "asdfghjkl",
     hint_key_line: true,
+    blur_on_load: false,
     site_rules: [],
     next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
     prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
@@ -263,6 +268,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "hint_key_line"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "hint_key_line", "blur_on_load"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });
