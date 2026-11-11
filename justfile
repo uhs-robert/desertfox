@@ -298,7 +298,7 @@ release_publish:
     assets="$RELEASE_ASSETS_DIR"
     # Publish only the bytes the extension build hashed. Restamping here would upload files the signed build does not know.
     if [ "$(jq -r .version "$assets/host_sha256.json" 2>/dev/null)" != "$version" ]; then
-        echo "release_publish found no files stamped as $version in $assets. Run 'just release_stamp', then 'just sign' so the signed build carries the same hashes." >&2
+        echo "release_publish found no files stamped as $version in $assets. Run 'just release_stamp' on the commit that was signed, so the files match the hashes the signed build carries. Do not sign this version again: AMO refuses a second signing." >&2
         exit 1
     fi
     for script in desertfox-host desertfox-bridge; do
@@ -346,11 +346,13 @@ release:
     fi
     just release_bump
     just release_stamp
-    just sign
+    # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
+    just build
     if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
-        echo "The signed build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json, so its hosts could not update. Fix the build, then rerun 'just release_stamp' and 'just sign'." >&2
+        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json, so its hosts could not update. Nothing was signed. Fix the build, undo the bump with 'git checkout -- package.json package-lock.json src/manifest.json', then rerun 'just release'." >&2
         exit 1
     fi
+    just sign
     just install
     just release_commit_push
     just release_publish || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish'." >&2; exit 1; }

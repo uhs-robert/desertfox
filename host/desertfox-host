@@ -17,17 +17,19 @@ file there, autoconfig.toml. It never edits the user's own files, and it parses 
 `self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
 `self_update`). Stdout carries only protocol bytes.
 """
+import contextlib
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 import re
+import signal
 import ssl
 import struct
 import sys
 import tempfile
 import threading
-import time
 import urllib.error
 import urllib.request
 
@@ -190,12 +192,12 @@ class HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def https_opener():
+def https_opener(context=None):
     # Built by hand, not with build_opener: that one adds http, ftp, file and data handlers. Only https can open here.
     opener = urllib.request.OpenerDirector()
     for handler in (
         urllib.request.ProxyHandler(),
-        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+        urllib.request.HTTPSHandler(context=context or ssl.create_default_context()),
         HttpsOnlyRedirects(),
         urllib.request.HTTPErrorProcessor(),
         urllib.request.HTTPDefaultErrorHandler(),
@@ -205,20 +207,34 @@ def https_opener():
     return opener
 
 
-def fetch_release_file(url):
-    """The bytes at an https URL, or UpdateError. Caps the size and the total time, and refuses an http hop."""
+@contextlib.contextmanager
+def download_deadline(url):
+    """Raises UpdateError when the block runs past UPDATE_TIMEOUT_S, even inside a blocking connect or read."""
+    # The socket timeout bounds each recv only, so a server that drips a byte at a time never trips it. A timer signal
+    # bounds the whole download. It works because the host is one-shot and serves its request on the main thread.
+    def time_out(signum, frame):
+        raise UpdateError(f"timed out after {UPDATE_TIMEOUT_S} s downloading {url}")
+
+    previous = signal.signal(signal.SIGALRM, time_out)
+    signal.setitimer(signal.ITIMER_REAL, UPDATE_TIMEOUT_S)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def fetch_release_file(url, context=None):
+    """The bytes at an https URL, or UpdateError. Caps the size and the total time, and refuses an http hop. `context`
+    replaces the system TLS roots, for a test server."""
     if not url.startswith("https://"):
         raise UpdateError(f"refused a URL that is not https: {url}")
-    # The socket timeout bounds each read. The deadline bounds a server that sends a byte at a time.
-    deadline = time.monotonic() + UPDATE_TIMEOUT_S
     try:
-        with https_opener().open(url, timeout=UPDATE_TIMEOUT_S) as response:
+        with download_deadline(url), https_opener(context).open(url, timeout=UPDATE_TIMEOUT_S) as response:
             if not response.geturl().startswith("https://"):
                 raise UpdateError(f"refused {url}: it ended at a URL that is not https")
             data = b""
             while len(data) <= UPDATE_MAX_FILE_BYTES:
-                if time.monotonic() > deadline:
-                    raise UpdateError(f"timed out after {UPDATE_TIMEOUT_S} s downloading {url}")
                 chunk = response.read(64 * 1024)
                 if not chunk:
                     return data
@@ -228,7 +244,8 @@ def fetch_release_file(url):
         raise
     except urllib.error.HTTPError as error:
         raise UpdateError(f"could not download {url}: HTTP {error.code}") from error
-    except (urllib.error.URLError, OSError, ValueError) as error:
+    # HTTPException covers a response cut off mid-body (IncompleteRead), which is not an OSError.
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as error:
         reason = getattr(error, "reason", None) or error
         raise UpdateError(f"could not download {url}: {reason}") from error
 
@@ -395,16 +412,47 @@ def replace_files(writes):
             done = ", ".join(replaced) or "none"
             raise UpdateError(f"cannot replace {path}: {error.strerror or error}. Replaced before the failure: {done}. Run :native.install") from error
         replaced.append(path)
+    # A rename lives in its folder's entry, so a power cut can undo it until the folder itself is synced.
+    for folder in {os.path.dirname(path) for path in replaced}:
+        sync_folder(folder)
     return replaced
+
+
+def sync_folder(folder):
+    try:
+        descriptor = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def planned_writes(scripts, manifests, verified):
+    """(path, bytes, mode) in rename order. This host goes last: its stamped version is what it reports, so until that
+    rename lands the extension still sees the old version and asks again, and the next call finishes the rest."""
+    writes = [(scripts[name], verified[name], 0o755) for name in ("desertfox-bridge", "desertfox")]
+    writes += [(manifests[name], manifest_bytes(name, scripts[name]), 0o644) for name in ("desertfox-bridge", "desertfox-host")]
+    writes.append((scripts["desertfox-host"], verified["desertfox-host"], 0o755))
+    return writes
+
+
+def install_is_current(scripts, manifests, expected):
+    """True when every script matches its expected hash and every manifest holds the bytes the updater would write."""
+    scripts_current = all(file_sha256(scripts[name]) == expected[name] for name in UPDATE_SCRIPTS)
+    manifests_current = all(file_sha256(manifests[name]) == hashlib.sha256(manifest_bytes(name, scripts[name])).hexdigest() for name in MANIFESTS)
+    return scripts_current and manifests_current
 
 
 def self_update(request, fetch=fetch_release_file, host_file=None, current=RELEASE_VERSION):
     """Replaces the installed scripts and manifests with release `version` after every check passes.
 
     Checks, in order: the request shape, the version of this process, the lock, the version on disk, then each download
-    against both hashes. Only then does it write. Order of the renames: the bridge first (a running bridge keeps its old
-    inode, and the extension reconnects to start the new one), then this host, then the command line, then the manifests.
-    The bridge never replaces its own file.
+    against both hashes. Only then does it write, in the order of `planned_writes`. A running bridge keeps its old inode,
+    and the extension reconnects to start the new one. The bridge never replaces its own file.
 
     The host cannot see the extension's version, so it cannot refuse a version newer than the extension by itself. The
     hashes do it: they come from the extension's own build, so any other version fails the hash check."""
@@ -414,12 +462,10 @@ def self_update(request, fetch=fetch_release_file, host_file=None, current=RELEA
     lock = take_update_lock()
     try:
         refuse_downgrade(version, installed_version(scripts["desertfox-host"]))
-        if all(file_sha256(scripts[name]) == expected[name] for name in UPDATE_SCRIPTS):
+        if install_is_current(scripts, manifests, expected):
             return {"updated": False, "version": version, "replaced": []}
         verified = fetch_verified(version, expected, fetch)
-        writes = [(scripts[name], verified[name], 0o755) for name in UPDATE_SCRIPTS]
-        writes += [(manifests[name], manifest_bytes(name, scripts[name]), 0o644) for name in ("desertfox-bridge", "desertfox-host")]
-        replaced = replace_files(writes)
+        replaced = replace_files(planned_writes(scripts, manifests, verified))
     finally:
         os.close(lock)
     return {"updated": True, "version": version, "replaced": replaced}
@@ -465,7 +511,7 @@ class Channel:
         data = json.dumps(message, ensure_ascii=False).encode("utf-8")
         if len(data) > MAX_REPLY_BYTES:
             data = json.dumps(
-                {"ok": False, "error": f"the reply is {len(data)} bytes, over Firefox's {MAX_REPLY_BYTES} byte limit for a host reply. Shrink the snippets or CSS in {config_dir()}."}
+                {"ok": False, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, "error": f"the reply is {len(data)} bytes, over Firefox's {MAX_REPLY_BYTES} byte limit for a host reply. Shrink the snippets or CSS in {config_dir()}."}
             ).encode("utf-8")
         with self.write_lock:
             self.stdout.write(struct.pack("=I", len(data)) + data)

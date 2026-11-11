@@ -6,11 +6,14 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import socket
+import ssl
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -189,6 +192,8 @@ class DowngradeTest(UpdateCase):
     def test_the_installed_files_already_matching_is_a_no_op(self):
         for name in SCRIPTS:
             self.write(self.paths[name], self.new_scripts[name], 0o755)
+        for manifest, name in zip(self.manifests, ("desertfox-bridge", "desertfox-host")):
+            self.write(manifest, host.manifest_bytes(name, self.paths[name]), 0o644)
         before = self.snapshot()
         self.assertEqual(self.update(current=NEW), {"updated": False, "version": NEW, "replaced": []})
         self.assertEqual(self.snapshot(), before)
@@ -200,7 +205,7 @@ class UpdateTest(UpdateCase):
         before = self.snapshot()
         result = self.update()
         after = self.snapshot()
-        five = [self.paths["desertfox-bridge"], self.paths["desertfox-host"], self.paths["desertfox"], *self.manifests]
+        five = [self.paths["desertfox-bridge"], self.paths["desertfox"], *self.manifests, self.paths["desertfox-host"]]
         self.assertEqual(result, {"updated": True, "version": NEW, "replaced": five})
         self.assertEqual(set(after), set(before), "no file is added or left behind, no .new among them")
         self.assertEqual(sorted(path for path in after if after[path] != before[path]), sorted(five))
@@ -322,12 +327,38 @@ class ReplaceTest(UpdateCase):
             with self.assertRaises(host.UpdateError) as caught:
                 self.update()
         message = str(caught.exception)
-        self.assertIn(f"cannot replace {self.paths['desertfox-host']}", message)
+        self.assertIn(f"cannot replace {self.paths['desertfox']}", message)
         self.assertIn(f"Replaced before the failure: {self.paths['desertfox-bridge']}", message)
         self.assertEqual(self.read(self.paths["desertfox-host"]), stamped("desertfox-host", OLD))
         self.assertEqual(self.read(self.paths["desertfox"]), stamped("desertfox", OLD))
         leftovers = [name for base in (self.data_dir, self.manifest_dir) for name in os.listdir(base) if name.endswith(".new")]
         self.assertEqual(leftovers, [])
+
+    def test_a_crash_before_the_host_rename_keeps_the_old_version_and_the_retry_finishes(self):
+        real = os.replace
+
+        def crash_on_the_host(source, target):
+            if target == self.paths["desertfox-host"]:
+                raise OSError(5, "Input/output error")
+            return real(source, target)
+
+        with mock.patch.object(host.os, "replace", crash_on_the_host):
+            with self.assertRaises(host.UpdateError):
+                self.update()
+        self.assertEqual(host.installed_version(self.paths["desertfox-host"]), OLD, "the host still reports the old version, so the extension asks again")
+        self.assertEqual(self.read(self.paths["desertfox"]), self.new_scripts["desertfox"])
+        self.assertTrue(self.update()["updated"])
+        self.assertEqual(self.read(self.paths["desertfox-host"]), self.new_scripts["desertfox-host"])
+
+    def test_new_scripts_with_an_old_manifest_are_not_current_and_the_manifest_is_repaired(self):
+        for name in SCRIPTS:
+            self.write(self.paths[name], self.new_scripts[name], 0o755)
+        result = self.update(current=NEW)
+        self.assertTrue(result["updated"])
+        self.assertIn(self.manifests[0], result["replaced"])
+        with open(self.manifests[0]) as file:
+            self.assertEqual(json.load(file)["description"], "DesertFox bridge to a desktop shell")
+        self.assertEqual(self.update(current=NEW)["updated"], False, "now the install is current")
 
     def test_a_half_done_update_is_finished_by_the_next_one(self):
         self.write(self.paths["desertfox-bridge"], self.new_scripts["desertfox-bridge"], 0o755)
@@ -416,13 +447,6 @@ class FetchTest(unittest.TestCase):
         with self.fake_response([b"x" * (64 * 1024)] * 16):
             self.assertEqual(len(host.fetch_release_file("https://github.com/x")), host.UPDATE_MAX_FILE_BYTES)
 
-    def test_a_slow_drip_stops_at_the_deadline(self):
-        clock = iter([0, 5, 10, 15, 25])
-        with self.fake_response([b"x"] * 10), mock.patch.object(host.time, "monotonic", lambda: next(clock)):
-            with self.assertRaises(host.UpdateError) as caught:
-                host.fetch_release_file("https://github.com/x")
-        self.assertIn("timed out", str(caught.exception))
-
     def test_the_timeout_is_passed_to_the_connection(self):
         with self.fake_response([b"ok"]):
             host.fetch_release_file("https://github.com/x")
@@ -437,6 +461,100 @@ class FetchTest(unittest.TestCase):
         self.assertIn("no route", str(caught.exception))
 
 
+class LocalTlsServer:
+    """One HTTPS connection on 127.0.0.1 at a time, answered by `respond(tls_socket, stop_event)` after the request head."""
+
+    def __init__(self, cert_path, key_path, respond):
+        self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.context.load_cert_chain(cert_path, key_path)
+        self.respond = respond
+        self.stop = threading.Event()
+        self.listener = socket.create_server(("127.0.0.1", 0))
+        self.listener.settimeout(0.2)
+        self.port = self.listener.getsockname()[1]
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def serve(self):
+        while not self.stop.is_set():
+            try:
+                connection, _ = self.listener.accept()
+            except OSError:
+                continue
+            try:
+                with self.context.wrap_socket(connection, server_side=True) as tls:
+                    head = b""
+                    while b"\r\n\r\n" not in head:
+                        chunk = tls.recv(4096)
+                        if not chunk:
+                            break
+                        head += chunk
+                    self.respond(tls, self.stop)
+            except OSError:
+                pass
+
+    def close(self):
+        self.stop.set()
+        self.thread.join(5)
+        self.listener.close()
+
+
+class RealTlsFetchTest(unittest.TestCase):
+    """The real fetch against a real TLS server on 127.0.0.1, trusted through a throwaway certificate."""
+
+    @classmethod
+    def setUpClass(cls):
+        if shutil.which("openssl") is None:
+            raise unittest.SkipTest("openssl not found")
+        cls.cert_dir = tempfile.TemporaryDirectory()
+        cls.cert = os.path.join(cls.cert_dir.name, "cert.pem")
+        cls.key = os.path.join(cls.cert_dir.name, "key.pem")
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
+                        "-days", "1", "-keyout", cls.key, "-out", cls.cert], check=True, capture_output=True, timeout=60)
+        cls.client_context = ssl.create_default_context(cafile=cls.cert)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.cert_dir.cleanup()
+
+    def serve(self, respond):
+        server = LocalTlsServer(self.cert, self.key, respond)
+        self.addCleanup(server.close)
+        return f"https://127.0.0.1:{server.port}/desertfox-host"
+
+    def test_a_whole_response_is_returned(self):
+        def respond(tls, stop):
+            tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\n#!body")
+
+        self.assertEqual(host.fetch_release_file(self.serve(respond), context=self.client_context), b"#!body")
+
+    def test_a_server_that_drips_stops_at_the_total_deadline(self):
+        def drip(tls, stop):
+            tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n")
+            # The drip ends on its own, so a fetch with no total deadline fails this test instead of hanging the suite.
+            give_up = time.monotonic() + 6
+            while not stop.is_set() and time.monotonic() < give_up:
+                tls.sendall(b"x")
+                time.sleep(0.05)
+
+        url = self.serve(drip)
+        started = time.monotonic()
+        with mock.patch.object(host, "UPDATE_TIMEOUT_S", 1):
+            with self.assertRaises(host.UpdateError) as caught:
+                host.fetch_release_file(url, context=self.client_context)
+        self.assertIn("timed out after 1 s", str(caught.exception))
+        self.assertLess(time.monotonic() - started, 3)
+
+    def test_a_chunked_response_cut_off_mid_body_is_an_update_error(self):
+        def cut_off(tls, stop):
+            tls.sendall(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n10\r\nabc")
+            tls.unwrap()
+
+        with self.assertRaises(host.UpdateError) as caught:
+            host.fetch_release_file(self.serve(cut_off), context=self.client_context)
+        self.assertIn("IncompleteRead", str(caught.exception))
+
+
 class SourceTest(unittest.TestCase):
     def test_the_repo_hosts_carry_the_dev_placeholder(self):
         for name in ("desertfox-host", "desertfox-bridge"):
@@ -447,6 +565,15 @@ class SourceTest(unittest.TestCase):
         source = repo_bytes("desertfox-host").decode()
         for needle in ("subprocess", "os.system", "os.popen", "os.exec", "shell=", "eval(", "exec("):
             self.assertNotIn(needle, source)
+
+    def test_the_reply_too_large_for_firefox_carries_the_release_version(self):
+        data = json.dumps({"cmd": "read_config"}).encode()
+        out = io.BytesIO()
+        with mock.patch.object(host, "MAX_REPLY_BYTES", 10):
+            host.serve(host.Channel(io.BytesIO(len(data).to_bytes(4, sys.byteorder) + data), out))
+        reply = json.loads(out.getvalue()[4:])
+        self.assertIn("byte limit", reply["error"])
+        self.assertEqual((reply["host_version"], reply["release_version"]), (1, "dev"))
 
     def test_every_reply_carries_the_release_version(self):
         for request in ({"cmd": "read_config"}, {"cmd": "nope"}):
