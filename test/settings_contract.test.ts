@@ -284,6 +284,8 @@ test("the editor schema matches its output before #85, apart from the listed cha
   properties.newtab_links.default = [];
   // A setting added after the fixture.
   properties.history_list_max = (settings_schema().properties as Record<string, unknown>).history_list_max;
+  // `desktop` joined the palette examples and its description.
+  properties.palette = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).palette));
   // Settings that had no description.
   const described_now = settings_schema().properties as Record<string, { description: string }>;
   for (const name of ["which_key_delay_ms", "hint_letters", "search_prefixes", "container_prefixes"]) {

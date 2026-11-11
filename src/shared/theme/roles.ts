@@ -44,6 +44,9 @@ export type Theme = Record<Variant, RoleColors>;
 export type LocalTheme = { name: string; colors: Theme };
 
 // A built-in Oasis theme has one dark set and five light sets, one per light intensity. The `light_intensity` setting picks one.
+// The `palette` value that follows the theme the desktop pushed over the bridge.
+export const DESKTOP_PALETTE = "desktop";
+
 export const LIGHT_INTENSITIES = [1, 2, 3, 4, 5] as const;
 export type LightIntensity = (typeof LIGHT_INTENSITIES)[number];
 export type OasisTheme = { dark: RoleColors; light: Record<LightIntensity, RoleColors> };

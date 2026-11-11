@@ -33,8 +33,22 @@ class Host:
         env = dict(os.environ, XDG_RUNTIME_DIR=runtime_dir)
         # Never the real cache: a host that starts without one prunes whatever cache_home holds.
         env["XDG_CACHE_HOME"] = cache_home if cache_home is not None else os.path.join(runtime_dir, "cache")
-        self.process = subprocess.Popen([sys.executable, HOST_PATH], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        self.process = subprocess.Popen([sys.executable, HOST_PATH], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, bufsize=0)
         self.ready = self.read_ready() if wait_ready else None
+
+    def read_frame(self):
+        # Unbuffered, so a frame that follows another one stays visible to `select`.
+        (length,) = struct.unpack("=I", self.read_bytes(4))
+        return json.loads(self.read_bytes(length))
+
+    def read_bytes(self, count):
+        data = b""
+        while len(data) < count:
+            chunk = self.process.stdout.read(count - len(data))
+            if not chunk:
+                raise AssertionError("the host closed its output mid-frame")
+            data += chunk
+        return data
 
     def read_ready(self, timeout=10):
         # A host that never says ready fails the test instead of hanging the suite.
@@ -42,16 +56,14 @@ class Host:
         if not waiting:
             self.kill()
             raise AssertionError("the host did not say ready within %s s" % timeout)
-        (length,) = struct.unpack("=I", self.process.stdout.read(4))
-        return json.loads(self.process.stdout.read(length))
+        return self.read_frame()
 
     def read_request(self, timeout=5):
         """The next frame the host sends to the extension after ready: a run or list request."""
         waiting, _, _ = select.select([self.process.stdout], [], [], timeout)
         if not waiting:
             raise AssertionError("the host sent no request within %s s" % timeout)
-        (length,) = struct.unpack("=I", self.process.stdout.read(4))
-        return json.loads(self.process.stdout.read(length))
+        return self.read_frame()
 
     def send(self, message):
         self.process.stdin.write(frame(message))
@@ -623,6 +635,174 @@ class RunAndListTest(BridgeTestCase):
         self.assertEqual([reply["ok"] for reply in replies[10:]], [False, False])
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)
+
+
+class ThemeTest(BridgeTestCase):
+    def theme_path(self):
+        return os.path.join(self.state_dir, "theme.json")
+
+    def push(self, host, palette, answer=True):
+        """Pushes over the socket, answers the host's request like the extension does and returns (reply, the request)."""
+        client = Client(self.socket_path, {"verb": "theme", "palette": palette})
+        request = host.read_request()
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": answer})
+        return client.result(), request
+
+    def test_a_push_goes_to_the_extension_with_the_palette_and_nothing_else(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "theme", "palette": "oasis_dune", "setting": "bridge", "value": True, "command": "config.reload"})
+        request = host.read_request()
+        self.assertEqual(request, {"verb": "theme", "request_id": request["request_id"], "palette": "oasis_dune"})
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "message": "m" * 2000, "url": "https://x"})
+        reply = client.result()
+        self.assertEqual(set(reply), {"ok", "message"})
+        self.assertEqual(len(reply["message"]), 500)
+
+    def test_a_refusal_of_the_extension_comes_back_and_the_name_is_still_kept(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "theme", "palette": "no_such"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": False, "message": "no built-in theme has that name"})
+        self.assertEqual(client.result(), {"ok": False, "message": "no built-in theme has that name"})
+
+    def test_a_name_of_the_wrong_shape_never_reaches_the_extension_or_the_file(self):
+        host = self.start()
+        for palette in (None, 5, "", "a" * 65, "../x", "has space", "line\nbreak", ["oasis_dune"], {"a": 1}):
+            reply = self.ask({"verb": "theme", "palette": palette})
+            self.assertFalse(reply["ok"], palette)
+        self.assertFalse(self.ask({"verb": "theme"})["ok"])
+        self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+        self.assertFalse(os.path.exists(self.theme_path()))
+
+    def test_the_theme_verb_is_the_only_way_to_a_palette_and_sets_no_other_setting(self):
+        host = self.start()
+        for request in ({"verb": "settings.set", "name": "palette", "value": "x"}, {"verb": "set", "setting": "bridge", "value": False}):
+            self.assertEqual(self.ask(request), {"ok": False, "message": "unknown verb"})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_the_last_palette_is_written_to_its_own_file(self):
+        host = self.start()
+        self.push(host, "oasis_dune")
+        self.push(host, "oasis_rose")
+        with open(self.theme_path(), encoding="utf-8") as kept:
+            self.assertEqual(json.load(kept), {"palette": "oasis_rose"})
+
+    def test_every_connect_replays_the_kept_palette_once_right_after_ready(self):
+        first = self.start()
+        self.push(first, "oasis_dune")
+        first.close_stdin()
+        first.wait()
+        for _ in range(2):
+            host = self.start()
+            replay = host.read_request()
+            self.assertEqual(replay, {"verb": "theme", "request_id": replay["request_id"], "palette": "oasis_dune"})
+            with self.assertRaises(AssertionError):
+                host.read_request(timeout=0.3)
+            host.close_stdin()
+            host.wait()
+
+    def test_a_host_with_nothing_kept_replays_nothing(self):
+        host = self.start()
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_a_push_later_than_the_replay_is_sent_once_and_the_file_follows_it(self):
+        first = self.start()
+        self.push(first, "oasis_dune")
+        first.close_stdin()
+        first.wait()
+        host = self.start()
+        host.read_request()
+        reply, request = self.push(host, "oasis_rose")
+        self.assertEqual(request["palette"], "oasis_rose")
+        self.assertTrue(reply["ok"])
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_a_corrupt_theme_file_and_a_stale_temp_file_are_ignored_and_the_temp_file_is_removed(self):
+        os.makedirs(self.state_dir, mode=0o700)
+        for content in (b"", b"{", b"[1]", b'{"palette": 5}', b'{"palette": "../x"}'):
+            with open(self.theme_path(), "wb") as kept:
+                kept.write(content)
+            stale = os.path.join(self.state_dir, ".state.dead.tmp")
+            with open(stale, "w") as leftover:
+                leftover.write("half")
+            host = self.start()
+            with self.assertRaises(AssertionError):
+                host.read_request(timeout=0.3)
+            self.assertFalse(os.path.exists(stale))
+            host.close_stdin()
+            host.wait()
+
+
+class ThemeKeeperTest(unittest.TestCase):
+    """The keeper in process, with a link that writes into a buffer and a clock short enough to run fast."""
+
+    def setUp(self):
+        self.module = load_host("desertfox-bridge")
+        self.module.REQUEST_TIMEOUT_S = 0.05
+        self.temp = tempfile.TemporaryDirectory(prefix="dft")
+        self.addCleanup(self.temp.cleanup)
+        self.path = os.path.join(self.temp.name, "theme.json")
+
+    def frames(self, data):
+        found = []
+        while data:
+            (length,) = struct.unpack("=I", data[:4])
+            found.append(json.loads(data[4:4 + length]))
+            data = data[4 + length:]
+        return found
+
+    def test_a_push_before_ready_is_kept_and_replayed_once(self):
+        import io
+
+        out = io.BytesIO()
+        link = self.module.ExtensionLink(out)
+        keeper = self.module.ThemeKeeper(self.path)
+        self.assertEqual(keeper.push(link, "oasis_dune"), {"ok": True, "message": "kept for when the extension connects"})
+        self.assertEqual(out.getvalue(), b"")
+        keeper.say_ready(link)
+        self.assertEqual([frame["verb"] if "verb" in frame else "ready" for frame in self.frames(out.getvalue())], ["ready", "theme"])
+
+    def test_a_push_and_a_ready_at_the_same_time_send_the_name_exactly_once_after_ready(self):
+        import io
+
+        for _ in range(200):
+            out = io.BytesIO()
+            link = self.module.ExtensionLink(out)
+            keeper = self.module.ThemeKeeper(self.path)
+            pusher = threading.Thread(target=lambda: keeper.push(link, "oasis_rose"))
+            opener = threading.Thread(target=lambda: keeper.say_ready(link))
+            pusher.start()
+            opener.start()
+            pusher.join(5)
+            opener.join(5)
+            time.sleep(0.06)
+            sent = self.frames(out.getvalue())
+            self.assertTrue(sent[0].get("ready"), sent)
+            self.assertEqual([frame.get("palette") for frame in sent[1:]], ["oasis_rose"], sent)
+
+    def test_a_write_cut_short_leaves_the_old_file_and_no_temp_file(self):
+        import io
+
+        keeper = self.module.ThemeKeeper(self.path)
+        keeper.push(self.module.ExtensionLink(io.BytesIO()), "oasis_dune")
+        real_replace = os.replace
+
+        def stop_before_rename(*_args):
+            raise OSError("host stopped")
+
+        os.replace = stop_before_rename
+        try:
+            keeper.push(self.module.ExtensionLink(io.BytesIO()), "oasis_rose")
+        finally:
+            os.replace = real_replace
+        with open(self.path, encoding="utf-8") as kept:
+            self.assertEqual(json.load(kept), {"palette": "oasis_dune"})
+        self.assertEqual(os.listdir(self.temp.name), ["theme.json"])
+        self.assertEqual(self.module.ThemeKeeper(self.path).palette, "oasis_dune")
 
 
 class LinkTest(unittest.TestCase):

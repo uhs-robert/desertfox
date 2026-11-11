@@ -4,6 +4,7 @@ import type { CommandContext } from "../shared/command.ts";
 import { effective_settings } from "../shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides, Settings } from "../shared/config.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
+import { DESKTOP_PALETTE } from "../shared/theme/roles.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { parse_setting_text, SETTING_NAMES, SETTING_SPECS } from "../shared/settings_schema.ts";
 import type { ToastKind } from "../shared/messages.ts";
@@ -34,7 +35,7 @@ function edit_with(current: SettingEdits, layer: EditLayer, name: keyof Settings
 // The build tool only warns about these two, so a live change does the same.
 function naming_nothing(name: keyof Settings, value: unknown, config: MergedConfig): string | undefined {
   if (name === "default_engine" && typeof value === "string" && !Object.hasOwn(config.search_engines, value)) return `no search engine is named "${value}"`;
-  if (name === "palette" && typeof value === "string" && !built_in_theme_names().includes(value) && config.local_theme?.name !== value) return `no theme is named "${value}"`;
+  if (name === "palette" && typeof value === "string" && value !== DESKTOP_PALETTE && !built_in_theme_names().includes(value) && config.local_theme?.name !== value) return `no theme is named "${value}"`;
   return undefined;
 }
 

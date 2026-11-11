@@ -140,6 +140,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "is_list": false,
     "expectation": "a theme name",
     "values": [
+      "desktop",
       "oasis_abyss",
       "oasis_cactus",
       "oasis_canyon",

@@ -217,6 +217,24 @@ class CliTest(unittest.TestCase):
             self.assertIn("usage:", done.stderr)
         self.assertEqual(bridge.requests, [])
 
+    def test_theme_sends_the_palette_and_exits_zero_or_one_on_a_refusal(self):
+        bridge = self.serve({"ok": True}, {"ok": False, "message": "no built-in theme has that name"})
+        done = self.cli("theme", "oasis_dune")
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "", ""))
+        self.assertEqual(bridge.requests[0], {"verb": "theme", "palette": "oasis_dune"})
+        refused = self.cli("theme", "nothing")
+        self.assertEqual(refused.returncode, 1)
+        self.assertEqual(refused.stderr, "desertfox: no built-in theme has that name\n")
+
+    def test_theme_with_bad_usage_exits_two_and_without_a_bridge_three(self):
+        bridge = self.serve()
+        for args in (("theme",), ("theme", "a", "b")):
+            self.assertEqual(self.cli(*args).returncode, 2, args)
+        self.assertEqual(bridge.requests, [])
+        bridge.close()
+        os.unlink(self.socket_path)
+        self.assertEqual(self.cli("theme", "oasis_dune").returncode, 3)
+
     def test_a_round_trip_through_the_real_host(self):
         host = test_bridge.Host(self.runtime)
         self.addCleanup(host.kill)

@@ -7,6 +7,7 @@ import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
 import { parse_sequence } from "./keys/notation.ts";
 import { SETTINGS_TABLE, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
+import { DESKTOP_PALETTE } from "./theme/roles.ts";
 
 export type SettingSpec = {
   check: (value: unknown) => boolean;
@@ -175,7 +176,7 @@ type CustomName = { [K in SettingName]: (typeof SETTINGS_TABLE)[K] extends { kin
 
 const CUSTOM_RULES: Record<CustomName, Rule> = {
   hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2 && !value.includes("/"), expectation: "a string of 2 or more distinct letters, without /" },
-  palette: { check: is_text, expectation: "a theme name", listed_values: () => BUILT_IN_THEME_NAMES },
+  palette: { check: is_text, expectation: "a theme name", listed_values: () => [DESKTOP_PALETTE, ...BUILT_IN_THEME_NAMES] },
   new_tab_page: { check: (value) => is_text(value) && (value === BUILT_IN_PAGE || is_web_url(value)), expectation: `"${BUILT_IN_PAGE}" or an http or https URL`, listed_values: () => [BUILT_IN_PAGE] },
 };
 

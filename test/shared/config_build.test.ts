@@ -57,6 +57,10 @@ test("the old JSONC name gets a pointer to the TOML name", () => {
   assert.deepEqual(problems_of({ "keymap.jsonc": "" }), ["keymap.jsonc: JSONC is no longer read, use keymap.toml"]);
 });
 
+test("palette = \"desktop\" is accepted without a theme file", () => {
+  assert.equal(build_config({ "settings.toml": 'palette = "desktop"' }, commands, []).settings.palette, "desktop");
+});
+
 test("a palette that names no theme is a problem", () => {
   assert.match(problems_of({ "settings.toml": 'palette = "nope"' })[0]!, /^settings\.toml: palette: no theme named "nope"/);
 });

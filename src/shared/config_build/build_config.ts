@@ -6,7 +6,7 @@ import { CONFIG_FORMAT_VERSION, DEFAULT_PALETTE, type MergedConfig, type Snippet
 import type { Registry } from "../registry/index.ts";
 import { build_commands_file } from "../registry/index.ts";
 import { built_in_theme_names } from "../theme/load.ts";
-import type { LocalTheme, Theme } from "../theme/roles.ts";
+import { DESKTOP_PALETTE, type LocalTheme, type Theme } from "../theme/roles.ts";
 import { build_registry, check_config, resolve_bindings } from "./check.ts";
 import { ConfigErrors } from "./errors.ts";
 import { merge_layers, origin_key } from "./merge.ts";
@@ -24,7 +24,7 @@ export function commands_of_registry(registry: Registry): CommandMeta[] {
 function pick_local_theme(merged: MergedData, local_themes: Record<string, Theme>, built_in_names: readonly string[], problems: string[]): LocalTheme | undefined {
   const name = merged.settings.palette ?? DEFAULT_PALETTE;
   if (Object.hasOwn(local_themes, name)) return { name, colors: local_themes[name]! };
-  if (built_in_names.includes(name)) return undefined;
+  if (name === DESKTOP_PALETTE || built_in_names.includes(name)) return undefined;
   const file = merged.origins.get(origin_key("settings", "palette")) ?? "config";
   const known = new Set([...Object.keys(local_themes), ...built_in_names]);
   problems.push(`${file}: palette: no theme named "${name}" (known: ${[...known].join(", ")})`);

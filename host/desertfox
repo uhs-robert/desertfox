@@ -4,6 +4,7 @@
   desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
+  desertfox theme <palette>           tell DesertFox which palette the desktop uses
   desertfox events                    print each event of the bridge as one JSON line until the bridge ends
 
 The tab commands need `bridge_share_tabs` on in DesertFox, and never see a private window:
@@ -44,6 +45,7 @@ USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]
        desertfox state [--json]
        desertfox events
+       desertfox theme <palette>
        desertfox tabs [--current] [--json]
        desertfox activate <id> [--preface <nonce>]
        desertfox clear-preface <window id> [--preface <nonce>]
@@ -272,6 +274,12 @@ def do_capture(words):
     return EXIT_DONE if all(result.get("ok") for result in results) else EXIT_FAILED
 
 
+def do_theme(words):
+    if len(words) != 1:
+        raise Usage("theme takes one palette name")
+    return finished(ask({"verb": "theme", "palette": words[0]}))
+
+
 def do_state(flags):
     reply = ask({"verb": "state"})
     if reply.get("ok") is not True:
@@ -322,7 +330,7 @@ def main(argv):
             if rest not in ([], ["--json"]):
                 return fail("%s takes only --json\n%s" % (verb, USAGE), EXIT_USAGE)
             return {"list": do_list, "state": do_state}[verb](rest)
-        handler = {"tabs": do_tabs, "events": do_events, "activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture}.get(verb)
+        handler = {"tabs": do_tabs, "events": do_events, "theme": do_theme, "activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture}.get(verb)
         if handler:
             return handler(rest)
     except Usage as error:
