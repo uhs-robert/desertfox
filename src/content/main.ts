@@ -21,7 +21,6 @@ import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
-import { read_context_source } from "./context.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element } from "./handlers/page.ts";
@@ -289,7 +288,6 @@ function start(): void {
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
-    if (message.type === "get_selection") return Promise.resolve(read_context_source("selection"));
     if (message.type === "focus_page") {
       focus_page_content();
       return Promise.resolve(true);

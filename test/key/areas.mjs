@@ -13,7 +13,7 @@ const shared_files = [
   "src/manifest.json",
   "src/background/{availability,browser_deps,main,page_keymap,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
-  "src/content/{ask_keymap,cancelled_keys,context,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,site_rule}.ts",
+  "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,load_commands,messages}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
@@ -28,7 +28,9 @@ export const area_rules = [
   // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
   { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
-  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/page/**", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
+  // The page bundle answers the selection ask that the engine keys read.
+  { globs: ["src/background/selection_ask.ts", "src/content/page/**"], areas: ["engines", "bundles"] },
+  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },

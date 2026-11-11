@@ -37,11 +37,11 @@ test("a command with a bundle field loads its bundle and refuses with the reason
   assert.equal(bundles.is_loading_(), false);
 });
 
-test("the refusal names the missing bundle in words a user reads", async () => {
+test("the refusal names the bundle that registered no handler", async () => {
   const shown: string[] = [];
   connect([], shown);
-  assert.deepEqual(await run_content_invocation({ id: "cmdline.open", bundle: "cmdline" }, "ignore"), { ok: false, message: "needs the command line" });
-  assert.deepEqual(await run_content_invocation({ id: "help.whichkey", bundle: "whichkey" }, "ignore"), { ok: false, message: "needs the which-key panel" });
+  assert.deepEqual(await run_content_invocation({ id: "cmdline.open", bundle: "cmdline" }, "ignore"), { ok: false, message: "needs cmdline" });
+  assert.deepEqual(await run_content_invocation({ id: "help.whichkey", bundle: "whichkey" }, "ignore"), { ok: false, message: "needs whichkey" });
   assert.deepEqual(shown, []);
 });
 

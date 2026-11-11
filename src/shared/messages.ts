@@ -431,7 +431,7 @@ export type TreeUpdated = {
   type: "tree_updated";
 };
 
-// Asks for the page selection. The content script answers with a string.
+// Asks for the page selection. The `page` bundle answers with a string, and content.js does not answer.
 export type GetSelection = {
   type: "get_selection";
 };
