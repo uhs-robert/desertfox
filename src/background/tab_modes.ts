@@ -12,12 +12,12 @@ const key_of = (tab_id: number): string => TAB_MODE_STORAGE_PREFIX + tab_id;
 // Under the tab-mode prefix, so a restart clears it with the modes.
 const manual_insert_key_of = (tab_id: number): string => `${TAB_MODE_STORAGE_PREFIX}insert_${tab_id}`;
 
-// The frames that `i` switched to insert, or undefined when the tab is not held. The background owns this tab-wide state, and a frame that loads later joins it.
-export async function read_insert_hold(storage: ModeStorage, tab_id: number): Promise<number[] | undefined> {
-  return (await storage.get(manual_insert_key_of(tab_id)))[manual_insert_key_of(tab_id)] as number[] | undefined;
+// Whether `i` holds the tab in insert mode. The background owns this tab-wide state, and a frame that loads later joins it.
+export async function read_insert_hold(storage: ModeStorage, tab_id: number): Promise<boolean> {
+  return (await storage.get(manual_insert_key_of(tab_id)))[manual_insert_key_of(tab_id)] === true;
 }
 
-export const write_insert_hold = (storage: ModeStorage, tab_id: number, frame_ids: number[]): Promise<void> => storage.set({ [manual_insert_key_of(tab_id)]: frame_ids });
+export const write_insert_hold = (storage: ModeStorage, tab_id: number): Promise<void> => storage.set({ [manual_insert_key_of(tab_id)]: true });
 
 export const clear_insert_hold = (storage: ModeStorage, tab_id: number): Promise<void> => storage.remove(manual_insert_key_of(tab_id));
 

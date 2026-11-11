@@ -77,7 +77,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "tabs.duplicate": STUB_TAB,
   "tabs.move": [STUB_TAB],
   "tabs.getZoom": 1,
-  "tabs.executeScript": [null],
+  "tabs.executeScript": [],
   "cookies.getAll": [],
   "windows.getAll": STUB_WINDOWS,
   "windows.get": STUB_WINDOWS[0],

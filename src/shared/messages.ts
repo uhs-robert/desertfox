@@ -2,6 +2,7 @@
 // and `tabs.sendMessage`. The `type` field selects the shape.
 
 import type { BundleName } from "./bundles.ts";
+import type { MediaScan } from "./media.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
 import type { SettingTag } from "./setting_list.ts";
@@ -372,7 +373,13 @@ export type ImportSessions = { type: "import_sessions"; text: string };
 
 export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-export type ContentToBackground = RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+// From the `media` bundle in each frame the background injected it into, with that frame's media. The frame comes from the message sender.
+export type MediaReport = {
+  type: "media_report";
+  scan: MediaScan;
+};
+
+export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -406,6 +413,8 @@ export type ShowRefusal = {
 export type SetMode = {
   type: "set_mode";
   mode: Mode;
+  // Sent by the insert hold to every frame of the tab. A frame under an all-off rule ignores it.
+  held?: true;
 };
 
 // The compiled keymap in `storage.local` changed: read it again.

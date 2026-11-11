@@ -3,10 +3,32 @@
 import { RuntimeRefusal, type CommandContext } from "../shared/command.ts";
 import type { MediaAction, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../shared/media.ts";
 
+// The scans that frames push in answer to an injection. A command listens for its tab while it waits, so a report that arrives with no command waiting is dropped.
+export function create_media_reports() {
+  const listeners = new Map<number, Set<(scan: FrameScan) => void>>();
+  return {
+    listen(tab_id: number, on_scan: (scan: FrameScan) => void): () => void {
+      const set = listeners.get(tab_id) ?? new Set();
+      set.add(on_scan);
+      listeners.set(tab_id, set);
+      return () => {
+        set.delete(on_scan);
+        if (set.size === 0 && listeners.get(tab_id) === set) listeners.delete(tab_id);
+      };
+    },
+    receive(tab_id: number | undefined, frame_id: number | undefined, scan: MediaScan): void {
+      if (tab_id === undefined || frame_id === undefined || !is_scan(scan)) return;
+      for (const on_scan of listeners.get(tab_id) ?? []) on_scan({ ...scan, frame_id });
+    },
+  };
+}
+
+export type MediaReports = ReturnType<typeof create_media_reports>;
+
 export type MediaDeps = {
-  frame_ids: (tab_id: number) => Promise<number[]>;
-  // Rejects in a frame that refuses scripts: a privileged page, or a frame that went away.
-  inject: (tab_id: number, frame_id: number) => Promise<void>;
+  reports: MediaReports;
+  // Runs the `media` bundle in every frame of the tab, each of which then pushes its scan to `reports`. Resolves with how many frames ran it. Rejects where scripts are refused: a privileged page.
+  inject_all: (tab_id: number) => Promise<number>;
   ask: (tab_id: number, frame_id: number, request: MediaRequest) => Promise<unknown>;
   can_picture_in_picture: () => boolean;
   toast: (ctx: CommandContext, message: string) => Promise<void>;
@@ -33,15 +55,31 @@ function within<T>(pending: Promise<T>, timeout_ms: number): Promise<T | undefin
   });
 }
 
+// Waits until every frame that ran the bundle has reported, or until the timeout, whichever is first. A frame that never reports (it navigated or closed, or its page blocks messages) counts as one with no media, so a hung frame cannot hold the key beyond the timeout.
 async function scan_frames(deps: MediaDeps, tab_id: number): Promise<FrameScan[]> {
-  const frame_ids = (await deps.frame_ids(tab_id).catch(() => [0])).sort((a, b) => a - b);
-  const scan_one = async (frame_id: number): Promise<FrameScan | undefined> => {
-    await deps.inject(tab_id, frame_id);
-    const answer = await deps.ask(tab_id, frame_id, { type: "media_scan" });
-    return is_scan(answer) ? { ...answer, frame_id } : undefined;
-  };
-  const scans = await Promise.all(frame_ids.map((frame_id) => within(scan_one(frame_id), deps.answer_timeout_ms)));
-  return scans.filter((scan): scan is FrameScan => scan !== undefined);
+  const scans = new Map<number, FrameScan>();
+  let expected: number | undefined;
+  let finish!: () => void;
+  const complete = () => expected !== undefined && scans.size >= expected;
+  const done = new Promise<void>((resolve) => (finish = resolve));
+  // The listener comes first: a frame can report before the injection resolves.
+  const stop = deps.reports.listen(tab_id, (scan) => {
+    scans.set(scan.frame_id, scan);
+    if (complete()) finish();
+  });
+  const timer = setTimeout(finish, deps.answer_timeout_ms);
+  try {
+    deps.inject_all(tab_id).then(
+      (count) => ((expected = count), complete() && finish()),
+      // One frame that throws rejects the whole call while the other frames still report, so only the timer ends the wait.
+      () => undefined,
+    );
+    await done;
+  } finally {
+    clearTimeout(timer);
+    stop();
+  }
+  return [...scans.values()].sort((a, b) => a.frame_id - b.frame_id);
 }
 
 // The scan with the largest positive measure. Ties go to the first, the lowest frame id.

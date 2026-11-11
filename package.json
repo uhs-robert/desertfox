@@ -1,6 +1,6 @@
 {
   "name": "desertfox",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "description": "Keyboard-first Firefox extension built around one command registry.",
   "license": "MPL-2.0",

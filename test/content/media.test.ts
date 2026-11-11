@@ -220,21 +220,30 @@ test("the visible area clips the box to the viewport and counts a hidden element
   assert.equal(visible_area(element({ left: 0, top: 0, right: 100, bottom: 50 }, false), 800, 600), 0);
 });
 
-test("a second injection into the same frame adds no second listener", async () => {
+test("a second injection into the same frame adds no second listener but reports again", async () => {
   const listeners: unknown[] = [];
+  const reports: unknown[] = [];
   const globals = globalThis as unknown as Record<string, unknown>;
   globals.window = {};
-  globals.browser = { runtime: { onMessage: { addListener: (listener: unknown) => listeners.push(listener) } } };
+  globals.document = { querySelectorAll: () => [], pictureInPictureElement: null };
+  globals.innerWidth = 800;
+  globals.innerHeight = 600;
+  globals.browser = { runtime: { onMessage: { addListener: (listener: unknown) => listeners.push(listener) }, sendMessage: async (message: unknown) => void reports.push(message) } };
   try {
     // A query makes a fresh module instance, as a second executeScript runs the file again.
     const entry = new URL("../../src/content/media/main.ts", import.meta.url).href;
     await import(`${entry}?first`);
     await import(`${entry}?second`);
     assert.equal(listeners.length, 1);
+    assert.equal(reports.length, 2);
+    assert.equal((reports[0] as { type: string }).type, "media_report");
     const answer = (listeners[0] as (message: unknown) => unknown)({ type: "run_in_content" });
     assert.equal(answer, undefined);
   } finally {
     delete globals.window;
+    delete globals.document;
+    delete globals.innerWidth;
+    delete globals.innerHeight;
     delete globals.browser;
   }
 });
