@@ -78,10 +78,8 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
   }
 
   return {
-    // Raw text of every config file, keyed by path relative to the config folder. The extension's config build parses it.
+    // Raw text of every config file, keyed by path relative to the config folder. The extension's config build parses it. Sends nothing without the permission.
     read_config,
-    // The startup read: one `read_config` whose reply also carries `release_version`, so the watcher sees the host's version. Sends nothing without the permission.
-    probe: (): Promise<ConfigFilesReply> => read_config(),
     // Asks the config host to replace itself, the bridge and the command line with release `version`. The hashes come from the signed build.
     self_update: async (request: SelfUpdateRequest): Promise<SelfUpdateReply> => {
       const reply = await call({ cmd: "self_update", ...request }, false);
