@@ -36,7 +36,7 @@ test("a tag, xpi name or manifest that names another version is refused", () => 
 });
 
 test("a stable version or a bad tag is not a beta", () => {
-  for (const tag of ["v0.1.23", "v0.1.23-beta.1", "beta-channel", "v0.1.23.0"]) {
+  for (const tag of ["v0.1.23", "v0.1.23-beta.1", "beta-channel", "v0.1.23.0", "0.1.23.2"]) {
     assert.throws(() => build_updates({ ...input, tag }), /not v<x.y.z.N>/, tag);
   }
 });

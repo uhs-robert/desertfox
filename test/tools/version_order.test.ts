@@ -42,7 +42,7 @@ test("Firefox orders versions as the extension code does", () => {
   }
 });
 
-test("Firefox orders versions as the host does", { skip: spawnSync("python3", ["--version"]).error !== undefined }, () => {
+test("Firefox orders versions as the host does", { skip: !process.env.CI && spawnSync("python3", ["--version"]).error !== undefined }, () => {
   for (const [i, a] of ascending.entries()) {
     for (const [j, b] of ascending.entries()) assert.equal(host_order(a, b), Math.sign(i - j), `host ${a} vs ${b}`);
   }

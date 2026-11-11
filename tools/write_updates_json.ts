@@ -15,8 +15,8 @@ const ADDON_NAME = "desertfox";
 // Throws when the tag, the xpi name and the manifest do not name the same beta, because Firefox would then fetch a file that is not the one it was told about.
 export function build_updates(input: UpdatesInput) {
   const { tag, xpi_name, xpi_bytes, manifest, repo } = input;
-  const version = tag.startsWith("v") ? tag.slice(1) : tag;
-  if (parse_release_version(version)?.beta === undefined) throw new Error(`tag ${tag} is not v<x.y.z.N>, a beta version`);
+  const version = tag.slice(1);
+  if (!tag.startsWith("v") || parse_release_version(version)?.beta === undefined) throw new Error(`tag ${tag} is not v<x.y.z.N>, a beta version`);
   if (xpi_name !== `${ADDON_NAME}-${version}.xpi`) throw new Error(`xpi ${xpi_name} does not match tag ${tag}`);
   const parsed = (manifest as { version?: unknown; browser_specific_settings?: { gecko?: { id?: unknown; strict_min_version?: unknown } } }) ?? {};
   if (parsed.version !== version) throw new Error(`manifest version ${String(parsed.version)} does not match tag ${tag}`);
