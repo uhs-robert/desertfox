@@ -1,14 +1,15 @@
 # Manual test that AMO unlisted signing works from CI. It publishes and pushes nothing.
-# Each signed version burns its number on the add-on id, so use a version the real channel will not use.
+# AMO consumes every signed version for good. Only 0.0.x is accepted here, so a test never burns a number that a real release or beta can use.
+# The four-number form (0.0.1.1) tests the x.y.z.N fallback of the beta plan.
 name: signing-test
 
 on:
   workflow_dispatch:
     inputs:
       test_version:
-        description: Throwaway version to stamp and sign (x.y.z-beta.N)
+        description: Throwaway version to stamp and sign (0.0.x-beta.N or 0.0.x.N)
         required: true
-        default: 0.1.23-beta.1
+        default: 0.0.1-beta.1
 
 permissions:
   contents: read
@@ -19,8 +20,6 @@ jobs:
     environment: beta-signing
     timeout-minutes: 20
     env:
-      WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
-      WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
       TEST_VERSION: ${{ inputs.test_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,13 +31,17 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Stamp the test version in the runner's working copy
         run: |
-          if ! [[ "$TEST_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
-            echo "test_version must look like 0.1.23-beta.1, got: $TEST_VERSION" >&2
+          if ! [[ "$TEST_VERSION" =~ ^0\.0\.[0-9]+(-beta\.[0-9]+|\.[0-9]+)?$ ]]; then
+            echo "test_version must look like 0.0.1-beta.1 or 0.0.1.1, got: $TEST_VERSION" >&2
             exit 1
           fi
           jq --arg version "$TEST_VERSION" '.version = $version' src/manifest.json > manifest.tmp
           mv manifest.tmp src/manifest.json
       - name: Build and sign
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+        # No --verbose on the web-ext call in `just sign`: sign.log is uploaded as an artifact.
         run: |
           set -o pipefail
           mkdir -p signing-output
