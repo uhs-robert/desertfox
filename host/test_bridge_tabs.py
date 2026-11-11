@@ -31,7 +31,7 @@ class TabsTest(BridgeTestCase):
         extra = dict(MAIL, secret="x", cookies=["a"])
         self.serve_tabs(host, [extra])
         reply = client.result()
-        self.assertEqual(reply, {"ok": True, "tabs": [dict(MAIL, thumbnail="", thumbnail_at=0)]})
+        self.assertEqual(reply, {"ok": True, "tabs": [dict(MAIL, thumbnail="", thumbnail_at=0, fav_icon_path="")]})
 
     def test_a_tab_flagged_private_or_with_wrong_types_is_dropped_by_the_host(self):
         host = self.start()
@@ -241,7 +241,7 @@ class ThumbnailCleanupTest(BridgeTestCase):
 
     def test_only_the_newest_images_up_to_the_cap_stay(self):
         module = load_host("desertfox-bridge")
-        module.MAX_THUMBNAILS = 3
+        module.MAX_CACHE_FILES = 3
         old_cache = os.environ.get("XDG_CACHE_HOME")
         os.environ["XDG_CACHE_HOME"] = self.cache_home
         self.addCleanup(lambda: os.environ.pop("XDG_CACHE_HOME") if old_cache is None else os.environ.__setitem__("XDG_CACHE_HOME", old_cache))
@@ -258,6 +258,147 @@ class ThumbnailCleanupTest(BridgeTestCase):
             self.assertEqual(client.result(), OFF)
             self.assertFalse(os.path.exists(kept))
             self.assertFalse(os.path.exists(os.path.dirname(kept)))
+
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\n fake icon"
+PNG_URL = "data:image/png;base64," + base64.b64encode(PNG_BYTES).decode()
+SVG_URL = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E"
+
+
+def icon_key(data_url):
+    return hashlib.sha256(data_url.encode()).hexdigest()
+
+
+class CurrentTabTest(BridgeTestCase):
+    def test_current_is_forwarded_and_the_reply_is_cut_like_any_list(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "tabs", "current": True})
+        request = host.read_request()
+        self.assertEqual(request, {"verb": "tabs", "request_id": request["request_id"], "current": True})
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "tabs": [dict(MAIL, secret="x")]})
+        self.assertEqual(client.result(), {"ok": True, "tabs": [dict(MAIL, thumbnail="", thumbnail_at=0, fav_icon_path="")]})
+
+    def test_current_false_asks_for_every_tab(self):
+        host = self.start()
+        client = Client(self.socket_path, {"verb": "tabs", "current": False})
+        request = host.read_request()
+        self.assertEqual(request, {"verb": "tabs", "request_id": request["request_id"]})
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "tabs": []})
+        self.assertEqual(client.result(), {"ok": True, "tabs": []})
+
+    def test_a_current_that_is_not_a_bool_never_reaches_the_extension(self):
+        host = self.start()
+        for current in (1, "yes", None, [True]):
+            self.assertEqual(self.ask({"verb": "tabs", "current": current}), {"ok": False, "message": "current is true or false"})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+
+class FaviconTest(BridgeTestCase):
+    def icon_path(self, data_url, suffix):
+        return os.path.join(self.cache_home, "desertfox", "bridge-favicons", icon_key(data_url) + suffix)
+
+    def list_tabs(self, host, tabs, request=None):
+        client = Client(self.socket_path, request or {"verb": "tabs"})
+        asked = host.read_request()
+        host.send({"verb": "reply", "request_id": asked["request_id"], "ok": True, "tabs": tabs})
+        return client
+
+    def answer_icon(self, host, tab_id, data_url):
+        request = host.read_request()
+        self.assertEqual(request, {"verb": "favicon", "request_id": request["request_id"], "tab_id": tab_id})
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "data_url": data_url})
+
+    def test_a_missing_icon_is_asked_for_once_saved_by_key_and_named_in_the_list(self):
+        host = self.start()
+        client = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(PNG_URL)), dict(MUSIC, fav_icon_key=icon_key(PNG_URL))])
+        self.answer_icon(host, 10, PNG_URL)
+        reply = client.result()
+        path = self.icon_path(PNG_URL, ".png")
+        self.assertEqual([tab["fav_icon_path"] for tab in reply["tabs"]], [path, path])
+        self.assertNotIn("fav_icon_key", json.dumps(reply))
+        with open(path, "rb") as icon:
+            self.assertEqual(icon.read(), PNG_BYTES)
+        self.assertEqual(oct(os.stat(os.path.dirname(path)).st_mode & 0o777), "0o700")
+        # A stored icon is not asked for again.
+        again = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(PNG_URL))])
+        self.assertEqual(again.result()["tabs"][0]["fav_icon_path"], path)
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_a_percent_encoded_svg_is_decoded_and_keeps_its_suffix(self):
+        host = self.start()
+        client = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(SVG_URL))])
+        self.answer_icon(host, 10, SVG_URL)
+        path = self.icon_path(SVG_URL, ".svg")
+        self.assertEqual(client.result()["tabs"][0]["fav_icon_path"], path)
+        with open(path, "rb") as icon:
+            self.assertEqual(icon.read(), b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+
+    def test_an_icon_that_changed_since_the_list_is_stored_under_its_own_key_and_named_on_the_next_list(self):
+        host = self.start()
+        client = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(SVG_URL))])
+        self.answer_icon(host, 10, PNG_URL)
+        self.assertEqual(client.result()["tabs"][0]["fav_icon_path"], "")
+        again = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(PNG_URL))])
+        self.assertEqual(again.result()["tabs"][0]["fav_icon_path"], self.icon_path(PNG_URL, ".png"))
+
+    def test_bad_icons_and_bad_keys_store_nothing(self):
+        host = self.start()
+        too_big = "data:image/png;base64," + base64.b64encode(b"x" * (256 * 1024 + 1)).decode()
+        for data_url in ("data:text/html,<b>x</b>", "data:image/png;base64,***", "https://site.example/icon.png", too_big, 5):
+            client = self.list_tabs(host, [dict(MAIL, fav_icon_key="a" * 64)])
+            self.answer_icon(host, 10, data_url)
+            self.assertEqual(client.result()["tabs"][0]["fav_icon_path"], "")
+        for key in ("../etc", "A" * 64, "a" * 63):
+            client = self.list_tabs(host, [dict(MAIL, fav_icon_key=key)])
+            self.assertEqual(client.result()["tabs"][0]["fav_icon_path"], "")
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+        self.assertEqual(os.listdir(os.path.join(self.cache_home, "desertfox", "bridge-favicons")) if os.path.isdir(os.path.join(self.cache_home, "desertfox", "bridge-favicons")) else [], [])
+
+    def test_a_refused_icon_leaves_the_tab_without_a_path_and_the_list_still_comes(self):
+        host = self.start()
+        client = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(PNG_URL))])
+        request = host.read_request()
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": False, "message": "no such tab"})
+        self.assertEqual(client.result()["tabs"][0]["fav_icon_path"], "")
+
+    def test_a_full_list_prunes_old_unlisted_icons_and_a_current_list_prunes_none(self):
+        host = self.start()
+        folder = os.path.join(self.cache_home, "desertfox", "bridge-favicons")
+        os.makedirs(folder)
+        old_other = os.path.join(folder, "b" * 64 + ".png")
+        old_listed = self.icon_path(PNG_URL, ".png")
+        for path in (old_other, old_listed):
+            with open(path, "wb") as icon:
+                icon.write(PNG_BYTES)
+            os.utime(path, (1, 1))
+        current = self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(PNG_URL))], {"verb": "tabs", "current": True})
+        self.assertEqual(current.result()["tabs"][0]["fav_icon_path"], old_listed)
+        self.assertTrue(os.path.exists(old_other))
+        self.list_tabs(host, [dict(MAIL, fav_icon_key=icon_key(PNG_URL))]).result()
+        self.assertFalse(os.path.exists(old_other))
+        self.assertTrue(os.path.exists(old_listed))
+
+    def test_an_answer_that_sharing_is_off_deletes_the_icons_too(self):
+        host = self.start()
+        folder = os.path.join(self.cache_home, "desertfox", "bridge-favicons")
+        os.makedirs(folder)
+        open(os.path.join(folder, "c" * 64 + ".png"), "wb").close()
+        client = Client(self.socket_path, {"verb": "tabs"})
+        host.send({"verb": "reply", "request_id": host.read_request()["request_id"], **OFF, "sharing": "off"})
+        self.assertEqual(client.result(), OFF)
+        self.assertFalse(os.path.exists(folder))
+
+    def test_an_extension_that_stops_answering_costs_the_list_one_fill_budget(self):
+        host = self.start()
+        keys = ["%064x" % number for number in range(5)]
+        started = time.monotonic()
+        client = self.list_tabs(host, [dict(MAIL, tab_id=number, fav_icon_key=key) for number, key in enumerate(keys)])
+        reply = client.result()
+        self.assertLess(time.monotonic() - started, 6)
+        self.assertEqual([tab["fav_icon_path"] for tab in reply["tabs"]], [""] * 5)
 
 
 if __name__ == "__main__":

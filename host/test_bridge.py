@@ -717,7 +717,7 @@ class AcceptErrorTest(BridgeTestCase):
                 return real.fileno()
 
         state = module.BridgeState(self.state_path, os.getpid(), "1")
-        thread = threading.Thread(target=module.accept_loop, args=(Flaky(), state, module.ExtensionLink(None)), daemon=True)
+        thread = threading.Thread(target=module.accept_loop, args=(Flaky(), state, module.ExtensionLink(None), module.EventHub()), daemon=True)
         thread.start()
         self.addCleanup(real.close)
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})

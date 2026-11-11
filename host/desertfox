@@ -4,10 +4,13 @@
   desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
+  desertfox events                    print each event of the bridge as one JSON line until the bridge ends
 
 The tab commands need `bridge_share_tabs` on in DesertFox, and never see a private window:
 
-  desertfox tabs [--json]                      the open tabs: id, window id, flags, title and address
+  desertfox tabs [--current] [--json]          the open tabs: id, window id, flags, title and address. With
+                                               --current only the active tab of the last focused window, none
+                                               when that window is private or a popup
   desertfox activate <id> [--preface <nonce>]  select the tab and focus its window, and put the nonce in front of the window title
   desertfox clear-preface <window id> [--preface <nonce>]
   desertfox close <id>
@@ -17,8 +20,10 @@ The tab commands need `bridge_share_tabs` on in DesertFox, and never see a priva
 `desertfox run "scroll.lines 3"` works. Several arguments are quoted for the line, so `desertfox run tab.switch "my tab"`
 keeps the space.
 
-It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock, one JSON line out and one line back. It prints plain text,
-errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running.
+It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock, one JSON line out and one line back, or for `events` the lines
+of the stream. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the
+bridge is not running. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
+behind, so a caller that wants the stream for good runs it again.
 """
 import json
 import os
@@ -38,7 +43,8 @@ CAPTURE_TIMEOUT_S = 345
 USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]
        desertfox state [--json]
-       desertfox tabs [--json]
+       desertfox events
+       desertfox tabs [--current] [--json]
        desertfox activate <id> [--preface <nonce>]
        desertfox clear-preface <window id> [--preface <nonce>]
        desertfox close <id>
@@ -56,33 +62,54 @@ def socket_path():
     return os.path.join(runtime_dir, "desertfox", "bridge.sock")
 
 
-def ask(request, timeout_s=TIMEOUT_S):
-    """One request on a new connection and the decoded reply. Raises BridgeDown when nothing listens."""
+def connected(request, timeout_s):
+    """A new connection that has sent the request. Raises BridgeDown when nothing listens."""
     path = socket_path()
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.settimeout(timeout_s)
-            connection.connect(path)
-            connection.sendall(json.dumps(request).encode("utf-8") + b"\n")
-            data = b""
-            while not data.endswith(b"\n"):
-                chunk = connection.recv(65536)
-                if not chunk:
-                    break
-                data += chunk
+        connection.settimeout(timeout_s)
+        connection.connect(path)
+        connection.sendall(json.dumps(request).encode("utf-8") + b"\n")
+        return connection
     except (FileNotFoundError, ConnectionRefusedError):
+        connection.close()
         raise BridgeDown("the bridge is not running (no listener at %s). Turn on the bridge setting in DesertFox." % path)
-    except socket.timeout:
-        raise BridgeDown("the bridge did not answer in time")
     except OSError as error:
+        connection.close()
         raise BridgeDown("cannot talk to the bridge: %s" % error)
+
+
+def read_line(connection, data):
+    """(the next line, what follows it). The line is empty when the bridge closed the connection first."""
+    while b"\n" not in data:
+        chunk = connection.recv(65536)
+        if not chunk:
+            return b"", b""
+        data += chunk
+    line, _, rest = data.partition(b"\n")
+    return line, rest
+
+
+def decoded(line):
     try:
-        reply = json.loads(data)
+        reply = json.loads(line)
     except ValueError:
         raise BridgeDown("the bridge closed the connection without an answer")
     if not isinstance(reply, dict):
         raise BridgeDown("the bridge sent an answer that is not an object")
     return reply
+
+
+def ask(request, timeout_s=TIMEOUT_S):
+    """One request on a new connection and the decoded reply. Raises BridgeDown when nothing listens."""
+    with connected(request, timeout_s) as connection:
+        try:
+            line, _ = read_line(connection, b"")
+        except socket.timeout:
+            raise BridgeDown("the bridge did not answer in time")
+        except OSError as error:
+            raise BridgeDown("cannot talk to the bridge: %s" % error)
+    return decoded(line)
 
 
 def command_line(words):
@@ -180,11 +207,14 @@ def tab_line(tab):
 
 
 def do_tabs(flags):
-    reply = ask({"verb": "tabs"})
+    unknown = [flag for flag in flags if flag not in ("--json", "--current")]
+    if unknown or len(set(flags)) != len(flags):
+        raise Usage("tabs takes only --current and --json")
+    reply = ask({"verb": "tabs", **({"current": True} if "--current" in flags else {})})
     if reply.get("ok") is not True:
         return fail(reply.get("message") or "the bridge did not list the tabs")
     tabs = reply.get("tabs", [])
-    if flags == ["--json"]:
+    if "--json" in flags:
         print(json.dumps(tabs, indent=2))
     else:
         for tab in tabs:
@@ -250,6 +280,36 @@ def do_state(flags):
     return EXIT_DONE
 
 
+def do_events(words):
+    """Prints each event line as it comes, flushed, so a reader through a pipe sees it at once."""
+    if words:
+        raise Usage("events takes no arguments")
+    # Events can be minutes apart, so the stream waits with no timeout. The bridge ends it when the host stops.
+    with connected({"verb": "subscribe"}, TIMEOUT_S) as connection:
+        try:
+            line, data = read_line(connection, b"")
+            reply = decoded(line)
+            if reply.get("ok") is not True:
+                return fail(reply.get("message") or "the bridge refused the stream")
+            connection.settimeout(None)
+            while True:
+                line, data = read_line(connection, data)
+                if not line:
+                    return EXIT_DONE
+                sys.stdout.write(line.decode("utf-8") + "\n")
+                sys.stdout.flush()
+        except BrokenPipeError:
+            # The reader left, as `desertfox events | head -1` does. Stdout goes to /dev/null so the flush at exit stays quiet.
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            return EXIT_DONE
+        except KeyboardInterrupt:
+            return EXIT_DONE
+        except socket.timeout:
+            raise BridgeDown("the bridge did not answer in time")
+        except OSError as error:
+            raise BridgeDown("cannot talk to the bridge: %s" % error)
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
@@ -258,11 +318,11 @@ def main(argv):
     try:
         if verb == "run":
             return do_run(rest)
-        if verb in ("list", "state", "tabs"):
+        if verb in ("list", "state"):
             if rest not in ([], ["--json"]):
                 return fail("%s takes only --json\n%s" % (verb, USAGE), EXIT_USAGE)
-            return {"list": do_list, "state": do_state, "tabs": do_tabs}[verb](rest)
-        handler = {"activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture}.get(verb)
+            return {"list": do_list, "state": do_state}[verb](rest)
+        handler = {"tabs": do_tabs, "events": do_events, "activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture}.get(verb)
         if handler:
             return handler(rest)
     except Usage as error:

@@ -4,6 +4,7 @@ import { create_bridge, FIRST_RETRY_MS, MAX_RETRY_MS, STABLE_MS } from "../../sr
 import type { BridgeDeps, BridgePort, BridgeWindow } from "../../src/background/bridge.ts";
 import type { Mode } from "../../src/shared/command.ts";
 import type { BridgeAnswer } from "../../src/background/bridge_run.ts";
+import type { TabInfo } from "../../src/background/tab_switch.ts";
 
 function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean } = {}) {
   const settings = { bridge: options.bridge ?? true, share_tabs: options.share_tabs ?? false };
@@ -12,6 +13,8 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
   const windows = new Map<number, BridgeWindow>([[1, { id: 1, focused: true, private: false }], [2, { id: 2, focused: false, private: false }]]);
   const active_tab = new Map<number, number>([[1, 11], [2, 22]]);
   const modes = new Map<number, Mode>();
+  // The tabs `normal_tab` finds. Any other id stands for a private or popup tab.
+  const normal_tabs = new Map<number, TabInfo>([[11, { id: 11, windowId: 1, title: "Mail", url: "https://mail.example/" }], [22, { id: 22, windowId: 2, title: "Music", url: "https://music.example/" }]]);
   const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: () => void; hear: (message: unknown) => void; drop: () => void; throw_on_post: boolean })[] = [];
   const timers: { run: () => void; delay_ms: number; cancelled: boolean }[] = [];
   const counts = { connects: 0 };
@@ -63,12 +66,13 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
       tab_calls.push({ verb, request });
       return { ok: true, handled: verb };
     },
+    normal_tab: async (tab_id) => normal_tabs.get(tab_id),
   };
   const bridge = create_bridge(deps);
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
   const pending = () => timers.filter((timer) => !timer.cancelled);
   return {
-    bridge, settings, state, windows, active_tab, modes, ports, counts, settle, tab_calls,
+    bridge, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
     port: () => ports[ports.length - 1]!,
     advance: (ms: number) => void (now += ms),
     // Fires the newest pending timer, lets the connect it starts finish and returns its delay.
@@ -126,7 +130,7 @@ test("a private window sends its mode and the private flag and no id", async () 
   await test_case.bridge.window_focused(2);
   await test_case.bridge.mode_changed({ id: 22, windowId: 2, active: true }, "visual");
   test_case.active_tab.set(2, 23);
-  await test_case.bridge.tab_activated(2);
+  await test_case.bridge.tab_activated(2, 23);
   assert.deepEqual(port.posted, [
     { verb: "mode", id: "insert", label: "INSERT", private: true },
     { verb: "mode", id: "visual", label: "VISUAL", private: true },
@@ -161,7 +165,7 @@ test("publish points: mode change of the active tab, window focus, tab activatio
   assert.deepEqual(port.posted, [{ ...NORMAL_MESSAGE, id: "insert", label: "INSERT", tab_id: 22, window_id: 2 }]);
   port.posted.length = 0;
   test_case.active_tab.set(2, 23);
-  await test_case.bridge.tab_activated(2);
+  await test_case.bridge.tab_activated(2, 23);
   assert.deepEqual(port.posted, [{ ...NORMAL_MESSAGE, tab_id: 23, window_id: 2 }]);
 });
 
@@ -175,7 +179,7 @@ test("nothing is published for a background tab, an unfocused window or no windo
   await test_case.bridge.mode_changed({ id: undefined, windowId: 1, active: true }, "insert");
   await test_case.bridge.window_focused(-1);
   await test_case.bridge.window_focused(2);
-  await test_case.bridge.tab_activated(2);
+  await test_case.bridge.tab_activated(2, 22);
   assert.deepEqual(port.posted, []);
 });
 
@@ -451,4 +455,72 @@ test("a run whose tab id is not a whole number gets no answer, and the opt-in fo
   test_case.port().hear({ verb: "tabs", request_id: 2 });
   await test_case.settle();
   assert.equal(replies_of(test_case.port())[0]!.ok, false);
+});
+
+test("tab events go up the port only once the host is ready and while bridge_share_tabs is on", async () => {
+  const test_case = make({ share_tabs: true });
+  await test_case.bridge.start();
+  test_case.bridge.tab_updated(11, { audible: true });
+  await test_case.settle();
+  assert.deepEqual(test_case.port().posted, [], "nothing before ready");
+  test_case.port().say();
+  await test_case.settle();
+  test_case.port().posted.length = 0;
+  test_case.bridge.tab_updated(11, { audible: true });
+  await test_case.bridge.tab_activated(1, 11);
+  await test_case.settle();
+  // The mode and the tab events run in separate queues, so their order is not fixed.
+  assert.deepEqual(new Set(test_case.port().posted.map((message) => JSON.stringify(message))), new Set([
+    { verb: "event", event: "tab_audible", tab_id: 11, window_id: 1, audible: true, title: "Mail", url: "https://mail.example/" },
+    { verb: "event", event: "tab_activated", tab_id: 11, window_id: 1 },
+    NORMAL_MESSAGE,
+  ].map((message) => JSON.stringify(message))));
+  const off = make();
+  await off.connect_and_ready();
+  off.port().posted.length = 0;
+  off.bridge.tab_updated(11, { audible: true, title: "x" });
+  await off.bridge.tab_activated(1, 11);
+  off.bridge.tab_removed(11);
+  await off.settle();
+  assert.deepEqual(off.port().posted, [NORMAL_MESSAGE], "only the mode without sharing");
+  assert.deepEqual(off.timers.filter((timer) => timer.delay_ms === 250), []);
+});
+
+test("a tab outside a normal window sends no event", async () => {
+  const test_case = make({ share_tabs: true });
+  await test_case.connect_and_ready();
+  test_case.port().posted.length = 0;
+  test_case.bridge.tab_updated(50, { audible: true });
+  await test_case.bridge.tab_activated(1, 50);
+  test_case.bridge.tab_removed(50);
+  await test_case.settle();
+  assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "event"), []);
+});
+
+test("sharing turned off sends tabs_off at once, cancels a pending update and stops the tab events", async () => {
+  const test_case = make({ share_tabs: true });
+  await test_case.connect_and_ready();
+  test_case.port().posted.length = 0;
+  test_case.bridge.tab_updated(11, { title: "New" });
+  const pending = test_case.timers.find((timer) => timer.delay_ms === 250)!;
+  test_case.settings.share_tabs = false;
+  await test_case.bridge.settings_changed();
+  assert.deepEqual(test_case.port().posted, [{ verb: "event", event: "tabs_off" }]);
+  assert.equal(pending.cancelled, true);
+  test_case.bridge.tab_updated(11, { audible: false });
+  await test_case.bridge.tab_activated(1, 11);
+  await test_case.settle();
+  assert.deepEqual(test_case.port().posted.filter((message) => message.verb === "event"), [{ verb: "event", event: "tabs_off" }]);
+});
+
+test("turning the bridge off with sharing on says tabs_off before the port closes", async () => {
+  const test_case = make({ share_tabs: true });
+  await test_case.connect_and_ready();
+  const port = test_case.port();
+  port.posted.length = 0;
+  test_case.settings.bridge = false;
+  test_case.settings.share_tabs = false;
+  await test_case.bridge.settings_changed();
+  assert.deepEqual(port.posted, [{ verb: "event", event: "tabs_off" }]);
+  assert.equal(port.disconnected, true);
 });

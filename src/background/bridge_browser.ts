@@ -1,4 +1,4 @@
-// Connects `create_bridge` to the browser: the native port, the window and tab queries and the events that publish.
+// Connects `create_bridge` to the browser: the native port, the window and tab queries and the events that publish or stream.
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -71,6 +71,7 @@ export const browser_tab_switch = (): TabSwitch =>
   create_tab_switch({
     windows: () => browser.windows.getAll(),
     window: (window_id) => browser.windows.get(window_id),
+    last_focused_window: () => browser.windows.getLastFocused(),
     tabs: () => browser.tabs.query({}),
     tab: (tab_id) => browser.tabs.get(tab_id),
     select: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
@@ -106,6 +107,7 @@ export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mod
   run_command: bridge_run.run,
   list_commands: bridge_run.list,
   tab_verb: tab_switch.handle,
+  normal_tab: tab_switch.normal_tab,
 });
 
 // Registers its listeners in the first turn, like the other background listeners, then connects once the settings are read.
@@ -114,7 +116,10 @@ export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, rou
   const tab_switch = browser_tab_switch();
   const bridge = create_bridge(browser_bridge_deps(recall_mode, browser_bridge_run(router_deps, is_snippet, tab_switch), tab_switch));
   browser.windows.onFocusChanged.addListener((window_id) => void bridge.window_focused(window_id));
-  browser.tabs.onActivated.addListener(({ windowId }) => void bridge.tab_activated(windowId));
+  browser.tabs.onActivated.addListener(({ tabId, windowId }) => void bridge.tab_activated(windowId, tabId));
+  // Its own listener, filtered, so the other `onUpdated` work in main.ts stays apart from the stream.
+  browser.tabs.onUpdated.addListener((tab_id, change) => bridge.tab_updated(tab_id, change), { properties: ["title", "url", "audible"] });
+  browser.tabs.onRemoved.addListener((tab_id) => bridge.tab_removed(tab_id));
   browser.permissions.onAdded.addListener(() => bridge.permission_added());
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) void bridge.settings_changed().catch(() => undefined);

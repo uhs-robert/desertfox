@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
 import { create_tab_switch, PREFACE_LIFETIME_MS } from "../../src/background/tab_switch.ts";
 import type { TabInfo, TabSwitchDeps, WindowInfo } from "../../src/background/tab_switch.ts";
 
@@ -17,7 +18,7 @@ const TABS: TabInfo[] = [
   { id: 40, windowId: 1, title: "Odd", url: "https://odd.example/" },
 ];
 
-function make(options: { windows?: WindowInfo[]; tabs?: TabInfo[]; fail?: Set<string>; fail_once?: Set<string> } = {}) {
+function make(options: { windows?: WindowInfo[]; tabs?: TabInfo[]; fail?: Set<string>; fail_once?: Set<string>; focused?: number } = {}) {
   const calls: string[] = [];
   const timers: { run: () => void; delay_ms: number }[] = [];
   const windows = options.windows ?? WINDOWS;
@@ -33,6 +34,7 @@ function make(options: { windows?: WindowInfo[]; tabs?: TabInfo[]; fail?: Set<st
   const deps: TabSwitchDeps = {
     windows: async () => windows,
     window: async (id) => windows.find((window) => window.id === id),
+    last_focused_window: async () => windows.find((window) => window.id === (options.focused ?? 1)),
     tabs: async () => tabs,
     tab: async (id) => tabs.find((tab) => tab.id === id),
     select: async (id) => step(`select ${id}`),
@@ -54,7 +56,7 @@ const NO_SUCH_TAB = { ok: false, message: "no such tab" };
 test("tabs lists the tabs of normal windows with their flags and leaves out private, popup and unmarked tabs", async () => {
   const answer = (await make().tab_switch.handle("tabs", {})) as { ok: true; tabs: Record<string, unknown>[] };
   assert.deepEqual(answer.tabs.map((tab) => tab.tab_id), [10, 11, 12]);
-  assert.deepEqual(answer.tabs[0], { tab_id: 10, window_id: 1, title: "Mail", url: "https://mail.example/", active: true, audible: false, discarded: false, last_accessed: 5, pinned: false, hidden: false, fav_icon_url: "https://mail.example/i.png" });
+  assert.deepEqual(answer.tabs[0], { tab_id: 10, window_id: 1, title: "Mail", url: "https://mail.example/", active: true, audible: false, discarded: false, last_accessed: 5, pinned: false, hidden: false, fav_icon_url: "https://mail.example/i.png", fav_icon_key: "" });
   assert.equal(answer.tabs[1]!.audible, true);
   assert.equal(answer.tabs[1]!.fav_icon_url, "", "a data URL icon is dropped");
   assert.doesNotMatch(JSON.stringify(answer), /Secret|secret|Popup/);
@@ -191,4 +193,34 @@ test("a clear whose title write fails keeps the preface, so the timer clear stil
   await test_case.tab_switch.handle("activate", { tab_id: 10, preface: "aaa" });
   assert.deepEqual(await test_case.tab_switch.handle("clear_preface", { window_id: 1, preface: "aaa" }), { ok: false, message: "clear_preface failed" });
   assert.deepEqual(await test_case.tab_switch.handle("clear_preface", { window_id: 1, preface: "aaa" }), { ok: true, cleared: true });
+});
+
+const ICON_DATA_URL = "data:image/png;base64,AAAA";
+
+test("a data URL icon is named by the SHA-256 of its text and an address icon has no key", async () => {
+  const answer = (await make().tab_switch.handle("tabs", {})) as { ok: true; tabs: Record<string, unknown>[] };
+  assert.equal(answer.tabs[0]!.fav_icon_key, "");
+  assert.equal(answer.tabs[1]!.fav_icon_key, createHash("sha256").update(ICON_DATA_URL).digest("hex"));
+});
+
+test("tabs with current lists only the active tab of the last focused window, and none for a private or popup window", async () => {
+  const listed = async (focused: number) => ((await make({ focused }).tab_switch.handle("tabs", { current: true })) as { ok: true; tabs: Record<string, unknown>[] }).tabs.map((tab) => tab.tab_id);
+  assert.deepEqual(await listed(1), [10]);
+  assert.deepEqual(await listed(2), []);
+  assert.deepEqual(await listed(3), []);
+  assert.deepEqual(await listed(99), []);
+  assert.deepEqual(await listed(1), [10]);
+  const every = (await make({ focused: 2 }).tab_switch.handle("tabs", { current: false })) as { ok: true; tabs: unknown[] };
+  assert.equal(every.tabs.length, 3, "current false lists every tab");
+});
+
+test("favicon hands over a stored icon of a normal tab and refuses anything else", async () => {
+  const big = `data:image/png;base64,${"A".repeat(512 * 1024)}`;
+  const test_case = make({ tabs: [...TABS, { id: 13, windowId: 1, incognito: false, favIconUrl: big }, { id: 21, windowId: 2, incognito: true, favIconUrl: ICON_DATA_URL }] });
+  assert.deepEqual(await test_case.tab_switch.handle("favicon", { tab_id: 11 }), { ok: true, data_url: ICON_DATA_URL });
+  assert.deepEqual(await test_case.tab_switch.handle("favicon", { tab_id: 10 }), { ok: false, message: "the tab has no stored icon" });
+  assert.deepEqual(await test_case.tab_switch.handle("favicon", { tab_id: 13 }), { ok: false, message: "the tab has no stored icon" });
+  for (const tab_id of [21, 30, 999]) assert.deepEqual(await test_case.tab_switch.handle("favicon", { tab_id }), NO_SUCH_TAB);
+  const listed = (await test_case.tab_switch.handle("tabs", {})) as { ok: true; tabs: Record<string, unknown>[] };
+  assert.equal(listed.tabs.find((tab) => tab.tab_id === 13)!.fav_icon_key, "", "an icon too large to hand over gets no key");
 });
