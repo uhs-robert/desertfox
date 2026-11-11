@@ -130,6 +130,44 @@ test("the run target is the last focused window only when it is a normal one", a
   assert.equal(await focused_normal_target(none), undefined);
 });
 
+test("a source word is refused, and the same text in quotes is plain text", async () => {
+  const test_case = make();
+  for (const text of ["open @clipboard", "open @selection", "open @current_url", "open @bookmark_title", "scroll.lines @clipboard"]) {
+    const answer = await test_case.bridge_run.run(text);
+    assert.equal(answer.ok, false, text);
+  }
+  assert.deepEqual(await test_case.bridge_run.run("open @clipboard"), { ok: false, message: "open.url does not take @clipboard or @selection through the bridge" });
+  assert.deepEqual(test_case.ran, []);
+  assert.deepEqual(await test_case.bridge_run.run("open '@clipboard'"), { ok: true });
+  assert.deepEqual(test_case.ran, ["open.url"]);
+});
+
+test("the real media command refuses a source word and keeps its plain values", async () => {
+  const sources = { search_engines: [], containers: [] };
+  const run = async (text: string) => {
+    const ran: string[] = [];
+    const bridge_run = create_bridge_run({ registry: built_in, is_snippet: () => false, get_enum_sources: async () => sources, resolve_url, target: async () => NORMAL, run: async (invocation) => (ran.push(invocation.id), { ok: true }) });
+    return { answer: await bridge_run.run(text), ran };
+  };
+  for (const text of ["media volume @clipboard", "media @selection", "tab.goto @clipboard"]) {
+    const { answer, ran } = await run(text);
+    assert.equal(answer.ok, false, text);
+    assert.deepEqual(ran, [], text);
+  }
+  assert.deepEqual((await run("media volume 50")).ran, ["media.act"]);
+});
+
+test("an open whose default engine is missing still passes when the url is an address", async () => {
+  const no_engine = async (text: string) => url_target(text, "missing", {});
+  const { deps, registry } = make_fake({
+    "open.url": { label: "Open", intent: "x", name: "open", bridge: true, params: [{ name: "url", type: "string", main: true, rest: true }, { name: "where", type: "enum", values: ["here", "tab"], default: "here" }], runs_in: "background", run: () => undefined },
+  });
+  const router = create_router({ ...deps, show_refusal: async () => undefined });
+  const bridge_run = create_bridge_run({ registry, is_snippet: () => false, get_enum_sources: deps.get_enum_sources, resolve_url: no_engine, target: async () => NORMAL, run: (invocation) => router.run({ invocations: [invocation], mode: "normal", skip_repeat: true }) });
+  assert.deepEqual(await bridge_run.run("open --tab https://example.org/"), { ok: true });
+  assert.equal((await bridge_run.run("open some words")).ok, false, "text that needs an engine the config lacks is refused");
+});
+
 test("a private target refuses a command that opens an address and allows one that does not", async () => {
   const test_case = make({ target: { ...NORMAL, incognito: true } });
   const answer = await test_case.bridge_run.run("open https://example.org/");

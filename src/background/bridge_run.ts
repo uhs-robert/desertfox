@@ -5,6 +5,7 @@ import type { CommandDef, CommandMeta } from "../shared/command.ts";
 import type { Invocation } from "../shared/invocation.ts";
 import type { RunResponse } from "../shared/messages.ts";
 import { check_args, command_meta, parse_command_line } from "../shared/registry/index.ts";
+import { is_context_source } from "../shared/registry/params.ts";
 import type { EnumSources, Registry } from "../shared/registry/index.ts";
 
 export type BridgeAnswer = { ok: true } | { ok: false; message: string };
@@ -48,7 +49,7 @@ function refusal_for(command: CommandDef, is_snippet: boolean): string | undefin
 
 // The address the handler will open, found the way the handler finds it (trim, scheme, bare host, search), must be http or https. Checking the typed text instead would read it differently from the handler: `trim` strips Unicode spaces that the URL parser keeps. A blank address opens DesertFox's own new tab page, so it is left to the handler.
 async function foreign_address(command: CommandDef, args: Record<string, unknown>, resolve_url: (text: string) => Promise<string>): Promise<boolean> {
-  const url_params = (command.params ?? []).filter((param) => param.format === "url" || command.id === "open.url");
+  const url_params = (command.params ?? []).filter((param) => param.format === "url" || (command.id === "open.url" && param.name === "url"));
   for (const param of url_params) {
     const text = args[param.name];
     if (typeof text !== "string" || text.trim() === "") continue;
@@ -75,6 +76,8 @@ export function create_bridge_run(deps: BridgeRunDeps) {
     // No may_prompt below, so a missing value is this failure and never an open command line.
     const checked = check_args(command, parsed.invocation.args, sources);
     if (!checked.ok) return refuse(checked.error);
+    // An unquoted `@clipboard` or `@selection` is read by the router after this check, so a caller could open or probe text the bridge never saw. Quoted text stays plain text.
+    if (Object.values(checked.args).some(is_context_source)) return refuse(`${command.id} does not take @clipboard or @selection through the bridge`);
     if (await foreign_address(command, checked.args, deps.resolve_url)) return refuse(`${command.id} opens only http and https addresses through the bridge`);
     const target = await deps.target();
     if (!target) return refuse("no normal window is open");
