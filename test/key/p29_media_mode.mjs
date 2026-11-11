@@ -4,7 +4,7 @@
 
 export const areas = ["media", "keys", "hints"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
   const indicator = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const media = (page_id, type, video, check = () => true) => (event) => event.page_id === page_id && event.type === `media_${type}` && event.video === video && check(event);
   const read_toast = () =>
@@ -12,7 +12,12 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
       const host = [...document.documentElement.children].find((child) => child.style.zIndex === "2147483645");
       return host ? host.openOrClosedShadowRoot.querySelector(".desertfox-toast")?.textContent ?? "" : "";
     })()`);
-  const wait_toast = (pattern) => poll_until(`the notice ${pattern}`, async () => pattern.test(await read_toast()));
+  // The matched toast is removed, so the next wait cannot match it again.
+  const clear_toast = () => in_active_tab('[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.remove(); 0');
+  const wait_toast = async (pattern) => {
+    await poll_until(`the notice ${pattern}`, async () => pattern.test(await read_toast()));
+    await clear_toast();
+  };
   const hidden = (mark, page_id) => wait_event(mark, indicator(page_id, ""), `the badge of ${page_id} to hide`);
   const normal = (mark, page_id) => wait_event(mark, indicator(page_id, "NORMAL"), `the badge of ${page_id} to read NORMAL`);
   // j changes the volume of the main video in the media mode and scrolls the page in normal mode.
@@ -334,6 +339,9 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     mark = events.length;
     await in_active_tab('history.pushState({}, "", location.href + "&pushed=1"); 0');
     await expect_absent(mark, id, indicator(id, "NORMAL"), "the pushState ended the mode");
+    // The background drops the pin when it sees the address change, which can be after the key below.
+    const tab_id = await in_background("browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => tabs[0]?.id)");
+    await poll_until("the pin dropped", async () => !(await in_background(`browser.storage.session.get("desertfox_tab_media_${tab_id}").then((got) => Object.values(got)[0]?.pin_frame !== undefined)`)));
     mark = events.length;
     await press_keys("m");
     await wait_event(mark, media(id, "volumechange", "big", (event) => event.muted === true), "the main video muted after the address change");

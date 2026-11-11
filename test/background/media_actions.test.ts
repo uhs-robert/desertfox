@@ -334,6 +334,12 @@ test("the pinned video acts for every key, even beside a larger one that plays w
   assert.deepEqual(choose_frames(scans, "fullscreen", 2), [{ frame_id: 2, target: "pinned" }]);
 });
 
+test("an open picture-in-picture window is chosen before the pin, so the key closes it", () => {
+  const scans = [scan(0, { pip_open: true, count: 1, video_area: 400 }), scan(2, { pinned: true, video_area: 100 })];
+  assert.deepEqual(choose_frames(scans, "pip", 2), [{ frame_id: 0, target: "largest" }]);
+  assert.deepEqual(choose_frames(scans, "volume", 2), [{ frame_id: 2, target: "pinned" }]);
+});
+
 test("a pin whose video left the page falls back to the main video rule", () => {
   const scans = [scan(0, { playing: 1, playing_video_area: 400, video_area: 400 }), scan(2, { pinned: false })];
   assert.deepEqual(choose_frames(scans, "volume", 2), [{ frame_id: 0, target: "playing" }]);

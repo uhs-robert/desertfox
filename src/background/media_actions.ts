@@ -98,6 +98,9 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
 
 // Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible.
 export function choose_frames(scans: FrameScan[], action: MediaAction, pin_frame?: number): FramePlan[] {
+  // An open picture-in-picture window goes first, even from an unpinned video, so `p` closes it. Firefox has one window at a time.
+  const pip_window = action === "pip" ? scans.find((scan) => scan.pip_open) : undefined;
+  if (pip_window) return [{ frame_id: pip_window.frame_id, target: "largest" }];
   // The pinned video acts for every key of the mode, until it leaves the page. Then the rule below picks again.
   if (scans.some((scan) => scan.frame_id === pin_frame && scan.pinned)) return [{ frame_id: pin_frame!, target: "pinned" }];
   if (action === "pip" || action === "fullscreen") {
