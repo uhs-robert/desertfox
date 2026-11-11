@@ -12,7 +12,7 @@ function hashes_of(value: unknown): HostHashes | undefined {
   return entries.length > 0 && entries.every(([, digest]) => typeof digest === "string") ? { version, sha256: Object.fromEntries(entries) as Record<string, string> } : undefined;
 }
 
-export const browser_host_update_deps = (get_config: () => Promise<MergedConfig>, update: HostUpdateDeps["update"]): HostUpdateDeps => ({
+export const browser_host_update_deps = (get_config: () => Promise<MergedConfig>, update: HostUpdateDeps["update"], probe_host: HostUpdateDeps["probe_host"]): HostUpdateDeps => ({
   // A getter, because this module loads in tests with no `browser`.
   get extension_version() {
     return browser.runtime.getManifest().version;
@@ -28,6 +28,7 @@ export const browser_host_update_deps = (get_config: () => Promise<MergedConfig>
   },
   auto_update_consented: async () => (await get_config()).settings.host_auto_update === true,
   update,
+  probe_host,
   load_state: async () => ((await browser.storage.local.get(HOST_UPDATE_STORAGE_KEY))[HOST_UPDATE_STORAGE_KEY] as HostUpdateState | undefined) ?? {},
   save_state: (state) => browser.storage.local.set({ [HOST_UPDATE_STORAGE_KEY]: state }),
   now_ms: () => Date.now(),

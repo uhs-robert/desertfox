@@ -7,18 +7,19 @@ import type { SelfUpdateReply, SelfUpdateRequest } from "../../src/background/na
 const EXTENSION = "0.1.23";
 const HASHES: HostHashes = { version: EXTENSION, sha256: { "desertfox-host": "a".repeat(64), "desertfox-bridge": "b".repeat(64), desertfox: "c".repeat(64) } };
 
-function make(options: { consent?: boolean; development?: boolean; hashes?: HostHashes | undefined; update?: (request: SelfUpdateRequest) => Promise<SelfUpdateReply>; extension_version?: string } = {}) {
+function make(options: { probed_version?: unknown; consent?: boolean; development?: boolean; hashes?: HostHashes | undefined; update?: (request: SelfUpdateRequest) => Promise<SelfUpdateReply>; extension_version?: string } = {}) {
   const calls: SelfUpdateRequest[] = [];
   const toasts: { message: string; kind: string }[] = [];
   const warnings: string[] = [];
   const reconnects: number[] = [];
-  const state = { stored: {} as HostUpdateState, now: 1_000_000, consent: options.consent ?? true, toast_fails: false };
+  const state = { stored: {} as HostUpdateState, now: 1_000_000, consent: options.consent ?? true, toast_fails: false, probed: options.probed_version as unknown };
   const extension_version = options.extension_version ?? EXTENSION;
   const updater = create_host_update({
     extension_version,
     is_development: async () => options.development ?? false,
     read_hashes: async () => ("hashes" in options ? options.hashes : { ...HASHES, version: extension_version }),
     auto_update_consented: async () => state.consent,
+    probe_host: async () => updater.watch.seen("probed_version" in options ? state.probed : "0.1.22"),
     update: async (request) => {
       calls.push(request);
       return options.update ? options.update(request) : { updated: true, version: request.version };
@@ -339,18 +340,39 @@ test("a clock that moved back counts as an expired interval", async () => {
   assert.equal(test_case.calls.length, 2);
 });
 
-test("an old bridge with no version does not raise the install notice, the config host does", async () => {
+test("an old bridge with no version updates once the config host has reported its own version", async () => {
   const test_case = make();
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
   test_case.updater.bridge_ready(undefined);
   await test_case.settle();
   assert.equal(test_case.calls.length, 1);
   assert.deepEqual(test_case.toasts.map((toast) => toast.kind), ["success"]);
 });
 
-test("the manual command on a host with no release_version says to run :native.install and sends nothing", async () => {
+test("a bridge with no version that comes before the config host's reply gets the install notice and no self_update", async () => {
   const test_case = make();
+  test_case.updater.bridge_ready(undefined);
+  await test_case.settle();
   test_case.updater.watch.seen(undefined);
   await test_case.settle();
-  await assert.rejects(test_case.updater.update_now(), /:native\.install/);
   assert.deepEqual(test_case.calls, []);
+  assert.deepEqual(test_case.toasts.map((toast) => toast.kind), ["info"]);
+  assert.match(test_case.toasts[0]!.message, /:native\.install/);
+});
+
+test("the manual command on a host with no release_version refuses and sends nothing", async () => {
+  const test_case = make({ probed_version: undefined });
+  test_case.updater.watch.seen(undefined);
+  await test_case.settle();
+  await assert.rejects(test_case.updater.update_now(), /too old to update itself/);
+  assert.deepEqual(test_case.calls, []);
+});
+
+test("the manual command probes the host first, so a manual install since the last reply is seen", async () => {
+  const test_case = make({ probed_version: "0.1.22" });
+  test_case.updater.watch.seen(undefined);
+  await test_case.settle();
+  assert.deepEqual(await test_case.updater.update_now(), { updated: true, version: EXTENSION });
+  assert.equal(test_case.calls.length, 1);
 });

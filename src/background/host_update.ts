@@ -30,6 +30,8 @@ export type HostUpdateDeps = {
   read_hashes: () => Promise<HostHashes | undefined>;
   auto_update_consented: () => Promise<boolean>;
   update: (request: SelfUpdateRequest) => Promise<SelfUpdateReply>;
+  // One request to the config host, whose reply reports its version through `watch.seen`.
+  probe_host: () => Promise<void>;
   load_state: () => Promise<HostUpdateState>;
   save_state: (state: HostUpdateState) => Promise<void>;
   now_ms: () => number;
@@ -48,7 +50,8 @@ export function create_host_update(deps: HostUpdateDeps) {
   type Phase = { kind: "idle" } | { kind: "updating" } | { kind: "failed"; reason: string };
   let phase: Phase = { kind: "idle" };
   let config_standing: HostStanding = "current";
-  let config_predates_updater = false;
+  // What the config host said about its version: nothing yet, no field (it predates the updater), or a version.
+  let config_release: "unseen" | "missing" | "reported" = "unseen";
   let running: Promise<void> | undefined;
   const listeners: (() => void)[] = [];
 
@@ -98,8 +101,10 @@ export function create_host_update(deps: HostUpdateDeps) {
     if (reply.updated) await deps.toast(`Native host updated to ${reply.version}`, "success");
   }
 
-  // A host with no release_version predates the updater and has no `self_update` verb, so only a manual install can help it.
-  async function check(predates_updater: boolean): Promise<void> {
+  // A config host with no release_version predates the updater and has no `self_update` verb, so only a manual install can help it.
+  // A version-less bridge counts as such too until the config host has reported a version, because the two are installed together.
+  async function check(bridge_without_version: boolean): Promise<void> {
+    const predates_updater = config_release === "missing" || (config_release === "unseen" && bridge_without_version);
     if (await deps.is_development()) return;
     const hashes = await deps.read_hashes();
     if (!hashes || hashes.version !== deps.extension_version) return;
@@ -126,11 +131,10 @@ export function create_host_update(deps: HostUpdateDeps) {
     const standing = host_standing(release_version, deps.extension_version);
     if (source === "config") {
       config_standing = standing;
-      config_predates_updater = typeof release_version !== "string";
+      config_release = typeof release_version === "string" ? "reported" : "missing";
     }
     if (standing !== "outdated" || running) return;
-    // Only the config host can be too old to have the verb. An old bridge says nothing about the config host.
-    running = check(source === "config" && typeof release_version !== "string")
+    running = check(source === "bridge" && typeof release_version !== "string")
       .catch((error: unknown) => deps.warn(`desertfox: the native host update check failed: ${reason_of(error)}`))
       .finally(() => {
         running = undefined;
@@ -141,7 +145,7 @@ export function create_host_update(deps: HostUpdateDeps) {
     seen: (release_version) => seen_from(release_version, "config"),
     outdated_note: () => {
       if (config_standing !== "outdated") return undefined;
-      if (config_predates_updater) return "run :native.install to install the current host";
+      if (config_release === "missing") return "run :native.install to install the current host";
       if (phase.kind === "updating") return "updating";
       if (phase.kind === "failed") return `update failed: ${phase.reason}`;
       return "run :native.update to update it";
@@ -157,7 +161,6 @@ export function create_host_update(deps: HostUpdateDeps) {
     // `:native.update`. Skips consent, the daily limit and a checksum block, because the user asked. Throws with the reason on failure.
     update_now: (): Promise<ManualOutcome> => {
       if (running || phase.kind === "updating") return Promise.reject(new Error("An update is already running."));
-      if (config_predates_updater) return Promise.reject(new Error("The native host is too old to update itself, so run :native.install"));
       // Set before the first await, so an automatic check that starts meanwhile sees it and sends no second self_update.
       const work = manual_update();
       running = work.then(
@@ -174,6 +177,9 @@ export function create_host_update(deps: HostUpdateDeps) {
     if (await deps.is_development()) throw new Error("This is a development install of DesertFox, which never updates its host. Run :native.install instead.");
     const hashes = await deps.read_hashes();
     if (!hashes || hashes.version !== deps.extension_version) throw new Error(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
+    // The version seen earlier can be stale, for example after a manual install, so ask the host again. A failed probe leaves the update to report its own error.
+    await deps.probe_host().catch(() => undefined);
+    if (config_release === "missing") throw new Error("The native host is too old to update itself");
     const state = await deps.load_state();
     let reply: SelfUpdateReply;
     try {
