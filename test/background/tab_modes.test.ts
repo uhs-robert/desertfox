@@ -165,13 +165,14 @@ test("two tabs keep their own frames and modes", async () => {
   assert.equal(await modes.recall(5), "normal");
 });
 
-test("a report that changes nothing writes nothing, and the top frame hears only what it does not know", async () => {
+test("a report that changes nothing writes nothing, and the top frame hears the child mode on each of its own reports", async () => {
   const storage = fake_storage();
   let writes = 0;
   const set = storage.set;
   storage.set = (items) => (writes++, set(items));
   const modes = create_tab_modes(storage);
-  assert.equal((await modes.report(4, { frame_id: TOP, mode: "normal", focus: true })).tell_top, false);
+  // A top frame shown again from the back-forward cache still draws the child mode it had, so it hears that no child frame holds the focus.
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: true }), { child_mode: undefined, tell_top: true });
   assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).tell_top, true);
   assert.equal(writes, 2);
   // The same reports again, as each focus and pageshow sends them.

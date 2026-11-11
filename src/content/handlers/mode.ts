@@ -3,13 +3,18 @@ import type { LeaveTabInsert } from "../../shared/messages.ts";
 import { bundles } from "../bundles.ts";
 import { page_mode } from "../page_mode.ts";
 import type { ContentHandler } from "./types.ts";
-import { blur_focused_element } from "./page.ts";
+import { blur_focused_element, hand_focus_to_parent } from "./page.ts";
 
 export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line"] as const;
 
 // A caret mode answers once caret.js has set it.
 export const mode_set: ContentHandler = {
-  run: (args) => bundles.set_mode_(args.mode as Mode),
+  run: (args) => {
+    const set = bundles.set_mode_(args.mode as Mode);
+    // Normal mode set over a focused field never blurs it, so a hidden input frame hands off here.
+    hand_focus_to_parent(false);
+    return set;
+  },
 };
 
 export const mode_escape: ContentHandler = {

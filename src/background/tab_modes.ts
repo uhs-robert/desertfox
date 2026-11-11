@@ -61,7 +61,7 @@ export function create_tab_modes(storage: ModeStorage) {
 
   return {
     // `child_mode` is the mode the top frame draws in place of its own: the focused child frame's, or undefined when no child frame holds the focus or the top frame is in ignore mode.
-    // `tell_top` says whether the top frame needs to hear it: the mode changed, or the top frame itself reported while a child frame holds the focus, since a top frame that just started knows nothing yet.
+    // `tell_top` says whether the top frame needs to hear it: the mode changed, or the top frame itself reported. A top frame that just started knows nothing yet, and one shown again from the back-forward cache still draws the child mode it had when it was hidden.
     // A report that changes nothing writes nothing: every frame reports again on each focus and each pageshow.
     report: (tab_id: number, report: ModeReport): Promise<{ child_mode: Mode | undefined; tell_top: boolean }> =>
       in_turn(async () => {
@@ -69,7 +69,7 @@ export function create_tab_modes(storage: ModeStorage) {
         const record = apply_mode_report(before, report);
         const child_mode = shown_child_mode(record);
         if (JSON.stringify(record) !== JSON.stringify(before)) await storage.set({ [key_of(tab_id)]: record });
-        return { child_mode, tell_top: child_mode !== shown_child_mode(before) || (report.frame_id === TOP_FRAME && child_mode !== undefined) };
+        return { child_mode, tell_top: child_mode !== shown_child_mode(before) || report.frame_id === TOP_FRAME };
       }),
     recall: (tab_id: number): Promise<Mode> => in_turn(async () => mode_of_record(await read(tab_id))),
     forget,
