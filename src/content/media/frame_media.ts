@@ -26,7 +26,7 @@ export type FrameView = {
   pip_element: () => unknown;
   exit_pip: () => Promise<void>;
   fullscreen_element: () => unknown;
-  // Runs in the task of the key message, which is what keeps the key press as the user gesture that requestFullscreen needs.
+  // requestFullscreen needs a user gesture. Firefox keeps the key press as one for a short window, which the message from the background reaches in time.
   toggle_fullscreen: (player: Player) => Promise<unknown>;
 };
 

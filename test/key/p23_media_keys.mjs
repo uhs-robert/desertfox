@@ -158,6 +158,19 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     expect(left.element === "", `the fullscreen element is "${left.element}"`);
   });
 
+  await run_case("af on a video in a frame fullscreens it, and a second af leaves although the top page is fullscreen too", async () => {
+    await open_page("media_host", "p23_host", { new_tab: true });
+    const on_frame = (event) => event.page_id === "p23_host_inner" && event.type === "media_fullscreen";
+    let mark = events.length;
+    await press_keys("a", "f");
+    const entered = await wait_event(mark, on_frame, "fullscreen to start in the frame");
+    expect(entered.element === "player", `the fullscreen element is "${entered.element}"`);
+    mark = events.length;
+    await press_keys("a", "f");
+    const left = await wait_event(mark, on_frame, "fullscreen to end in the frame");
+    expect(left.element === "", `the fullscreen element is "${left.element}"`);
+  });
+
   await run_case("a page with no media refuses with a notice", async () => {
     await open_page("page", "p23_none", { new_tab: true });
     await press_keys("a", "s");

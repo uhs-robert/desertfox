@@ -308,6 +308,10 @@ video.addEventListener("volumechange", () => send("media_volume", { muted: video
 document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement ? document.fullscreenElement.id : "" }));</script>`;
       return response.end(page(`media ${id}`, player + hidden_audio + script));
     }
+    if (url.pathname === "/media_host") {
+      // A same-origin frame holds the media page, so the key's activation reaches its requestFullscreen.
+      return response.end(page(`media_host ${id}`, `<iframe src="/media?id=${id}_inner" style="width:340px;height:200px"></iframe>`));
+    }
     if (url.pathname === "/media_frames") {
       // A large paused video on top, and a frame from another origin (localhost is not 127.0.0.1) whose small muted video plays in a closed shadow root. Beside them a sandboxed frame and an about:blank frame, where a script may be refused.
       // "audible" or "clip" in the id leaves out the top video and makes the framed one paused, with sound or with a picture.

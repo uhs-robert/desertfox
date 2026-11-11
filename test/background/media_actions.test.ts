@@ -235,3 +235,8 @@ test("the notice names mute, loop, fullscreen and the info line", () => {
   assert.equal(describe_change("fullscreen", { ...state, fullscreen: true }, 1), "Fullscreen on");
   assert.equal(describe_change("info", { ...state, loop: true }, 1), "1:25 of 3:40, 1.25x, volume 60%, loop");
 });
+
+test("fullscreen asks the frame that holds the video when the top document is fullscreen too", () => {
+  const scans = [scan(0, { count: 0, fullscreen_open: true }), scan(3, { video_area: 900, fullscreen_open: true })];
+  assert.deepEqual(choose_frames(scans, "fullscreen"), [{ frame_id: 3, target: "largest" }]);
+});

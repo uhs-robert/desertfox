@@ -29,7 +29,7 @@ test("the line reads an action word and then a value, as the A prompt leaves the
 test("the schema refuses a value an action cannot take, an unknown action and a bad value", () => {
   assert.equal(typed("media pip 3").ok, false);
   assert.equal(typed("media play_pause up").ok, false);
-  assert.match((typed("media rewind") as { error: string }).error, /action expects one of play_pause, speed, volume, seek, fullscreen, mute, loop, info, pip/);
+  assert.match((typed("media rewind") as { error: string }).error, /action expects one of play_pause, speed, volume, seek, pip, fullscreen, mute, loop, info/);
   assert.match((typed("media speed fast") as { error: string }).error, /value expects text matching/);
   assert.equal((typed("media") as { missing_param?: string }).missing_param, "action");
 });

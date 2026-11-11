@@ -1,8 +1,9 @@
 // The messages between the background and the `media` bundle, and the step rules of the `media` command. The background injects the bundle into each frame itself, so these never pass through the content script.
 
-export const MEDIA_ACTIONS = ["play_pause", "speed", "volume", "seek", "fullscreen", "mute", "loop", "info", "pip"] as const;
+export const MEDIA_ACTIONS = ["play_pause", "speed", "volume", "seek", "pip", "fullscreen", "mute", "loop", "info"] as const;
 export type MediaAction = (typeof MEDIA_ACTIONS)[number];
 
+// Known gap until PR 2 gives each action its own value rules: the schema accepts `end` and `percent` on speed and volume too. They read the rule's range there (`speed end` is 4x, `volume percent` sets the count), and no key or doc offers them.
 // A value for speed, volume or seek: `up` and `down` move one step per count, `reset` goes back to the rule's reset, `end` to the rule's top (the media end for a seek), `percent` to the count as a percent of the rule's span, a signed number moves by it and a bare number sets it.
 export const MEDIA_VALUE_PATTERN = "^(up|down|reset|end|percent|[+-]?\\d+(\\.\\d+)?)$";
 

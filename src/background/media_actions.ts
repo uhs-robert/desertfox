@@ -92,7 +92,9 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
 // Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible.
 export function choose_frames(scans: FrameScan[], action: MediaAction): FramePlan[] {
   if (action === "pip" || action === "fullscreen") {
-    const open = scans.find((scan) => (action === "pip" ? scan.pip_open : scan.fullscreen_open));
+    const is_open = (scan: FrameScan) => (action === "pip" ? scan.pip_open : scan.fullscreen_open);
+    // A fullscreen video in a child frame leaves the top document fullscreen too, so the frame that holds media is the one to ask.
+    const open = scans.find((scan) => is_open(scan) && scan.count > 0) ?? scans.find(is_open);
     if (open) return [{ frame_id: open.frame_id, target: "largest" }];
     const audible = largest_by(scans, (scan) => scan.audible_video_area);
     if (audible) return [{ frame_id: audible.frame_id, target: "audible" }];
