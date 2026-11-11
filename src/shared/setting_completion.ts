@@ -88,6 +88,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "default_site_rows_off",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of default site row names",
+    "values": []
+  },
+  {
     "name": "next_patterns",
     "settable": true,
     "is_toggle": false,

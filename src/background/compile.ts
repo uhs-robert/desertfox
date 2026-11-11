@@ -11,11 +11,12 @@ import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE } from "../shared/config.ts";
+import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "../shared/config.ts";
 import { LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
+import { default_rows_left_on } from "./default_site_rows.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
@@ -29,7 +30,9 @@ export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warn
 
 export function compile_config(input: CompileInput): CompileOutput {
   const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
-  const { compiled, warnings } = compile_keymap(keymap, input.config.settings, (command_id) => {
+  // The shipped rows rank after the user's, so a user row decides each column first.
+  const settings = { ...input.config.settings, site_rules: [...(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules), ...default_rows_left_on(input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off, (id) => input.get_command(id) !== undefined)] };
+  const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
       // A captured key is filled when the key runs, so the rest of the args are checked without it.
