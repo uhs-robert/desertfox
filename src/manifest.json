@@ -39,7 +39,6 @@
   ],
   "permissions": [
     "tabs",
-    "webNavigation",
     "downloads",
     "storage",
     "notifications",

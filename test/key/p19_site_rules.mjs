@@ -85,7 +85,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       await poll_until("IGNORE after the rule is added", async () => badge_of("rule_live") === "IGNORE");
       const answer = await site_request("rule_live", "enable");
       expect(answer.ok, `enable answered ${JSON.stringify(answer)}`);
-      await poll_until("the rule to leave", async () => (await in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`)) === 4);
+      await poll_until("the rule to leave", async () => (await in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`)) === 5);
       await poll_until("NORMAL once the rule that turned the page off is gone", async () => badge_of("rule_live") === "NORMAL");
       expect((await scroll_delta_by_press("rule_live", ["j"])) > 0, "j did not scroll after the all-off rule left");
       await site_request("rule_live", "disable");

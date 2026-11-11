@@ -37,6 +37,7 @@ import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { media_reports } from "../commands/media.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -63,9 +64,7 @@ const modes_cleared = forget_all_tab_modes(browser.storage.local);
 const tab_insert = create_tab_insert({
   storage: browser.storage.local,
   modes_cleared,
-  frames: async (tab_id) => ((await browser.webNavigation.getAllFrames({ tabId: tab_id })) ?? []).map(({ frameId, url }) => ({ frame_id: frameId, url })),
-  tab_url: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.url,
-  send_mode: (tab_id, frame_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }, frame_id),
+  send_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode, held: true }),
 });
 wire_tab_insert(tab_insert.enter);
 
@@ -219,6 +218,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
   }
+  if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
   if (request?.type === "replay_stop") return void macro_replay.stop();
   if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);

@@ -16,7 +16,6 @@ export const SEEK_RULE: LevelRule = { step: 10, min: 0, max: Infinity, reset: 0 
 export type MediaTarget = "audible" | "playing" | "largest";
 
 export type MediaRequest =
-  | { type: "media_scan" }
   | { type: "media_apply"; target: MediaTarget; action: MediaAction; value: string | undefined; times: number };
 
 // One frame's media. The areas are in CSS pixels inside the frame's own viewport, videos only.

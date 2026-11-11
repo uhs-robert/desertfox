@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { choose_frames, clock, describe_change, run_media, type FrameScan, type MediaDeps } from "../../src/background/media_actions.ts";
+import { choose_frames, clock, create_media_reports, describe_change, run_media, type FrameScan, type MediaDeps } from "../../src/background/media_actions.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src/shared/media.ts";
 
@@ -57,43 +57,53 @@ test("the notice names the new value, the player count and a live stream's posit
   assert.equal(clock(3725), "1:02:05");
 });
 
-type Frame = { refuses_scripts?: boolean; scan?: unknown; apply?: (request: MediaRequest) => unknown; hangs?: boolean };
+// `scan` is what the frame pushes after it runs the bundle (nothing when undefined). `report_after_ms` delays the push, `reports_twice` pushes it again, and `hangs` swallows the apply.
+type Frame = { refuses_scripts?: boolean; scan?: unknown; report_after_ms?: number; reports_twice?: boolean; apply?: (request: MediaRequest) => unknown; hangs?: boolean };
 
-function fake_tab(frames: Record<number, Frame>, { pip = true } = {}) {
+function fake_tab(frames: Record<number, Frame>, { pip = true, inject_delay_ms = 0, answer_timeout_ms = 50 } = {}) {
   const injected: number[] = [];
   const applied: { frame_id: number; request: MediaRequest }[] = [];
   const toasts: string[] = [];
+  const reports = create_media_reports();
   const deps: MediaDeps = {
-    frame_ids: async () => Object.keys(frames).map(Number).reverse(),
-    inject: async (_tab_id, frame_id) => {
-      if (frames[frame_id]?.refuses_scripts) throw new Error("Missing host permission for the tab or frames");
-      injected.push(frame_id);
+    reports,
+    inject_all: async (tab_id) => {
+      const running = Object.keys(frames).map(Number).reverse().filter((frame_id) => !frames[frame_id]!.refuses_scripts);
+      if (running.length === 0) throw new Error("Missing host permission for the tab or frames");
+      for (const frame_id of running) {
+        injected.push(frame_id);
+        const frame = frames[frame_id]!;
+        const push = () => reports.receive(tab_id, frame_id, frame.scan as MediaScan);
+        if (frame.scan === undefined) continue;
+        setTimeout(() => (push(), frame.reports_twice && push()), frame.report_after_ms ?? 0);
+      }
+      await new Promise((resolve) => setTimeout(resolve, inject_delay_ms));
+      return running.length;
     },
     ask: async (_tab_id, frame_id, request) => {
       const frame = frames[frame_id]!;
       if (frame.hangs) return new Promise(() => {});
-      if (request.type === "media_scan") return frame.scan;
       applied.push({ frame_id, request });
       return frame.apply?.(request);
     },
     can_picture_in_picture: () => pip,
     toast: async (_ctx, message) => void toasts.push(message),
-    answer_timeout_ms: 50,
+    answer_timeout_ms,
   };
-  return { deps, injected, applied, toasts };
+  return { deps, injected, applied, toasts, reports };
 }
 
 const acted = (count: number, fields: Partial<MediaState> = {}): MediaResult => ({ acted: count, state: { ...state, ...fields } });
 
 test("a frame that refuses scripts or never answers counts as one without media", async () => {
-  const tab = fake_tab({ 0: { refuses_scripts: true }, 1: { hangs: true }, 2: { scan: scan(2, { video_area: 10 }), apply: () => acted(1) } });
+  const tab = fake_tab({ 0: { refuses_scripts: true }, 1: {}, 2: { scan: scan(2, { video_area: 10 }), apply: () => acted(1) } });
   await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
   assert.deepEqual(tab.injected.sort(), [1, 2]);
   assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [2]);
   assert.deepEqual(tab.toasts, ["Speed 1.25x"]);
 });
 
-test("a frame that answers with something else, such as a new page's content script, counts as no media", async () => {
+test("a frame that reports something else counts as no media", async () => {
   const tab = fake_tab({ 0: { scan: undefined }, 1: { scan: { type: "other" } } });
   await assert.rejects(run_media(tab.deps, ctx, { action: "play_pause" }), { name: "RuntimeRefusal", message: "No video or audio on this page" });
 });
@@ -136,4 +146,78 @@ test("picture-in-picture refuses before any frame is touched on a Firefox withou
 test("picture-in-picture on a page with only audio says there is no video", async () => {
   const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }) } });
   await assert.rejects(run_media(tab.deps, ctx, { action: "pip" }), { message: "No video on this page" });
+});
+
+test("the key waits for the last frame to report, not for the timeout", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}) }, 1: { scan: scan(1, { playing: 1 }), report_after_ms: 30, apply: () => acted(1) } }, { answer_timeout_ms: 5000 });
+  const started = Date.now();
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.ok(Date.now() - started < 1000);
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [1]);
+});
+
+test("a frame that never reports holds the key only until the timeout, and the others still rank", async () => {
+  const tab = fake_tab({ 0: {}, 1: { scan: scan(1, { playing: 1 }), apply: () => acted(1) } });
+  const started = Date.now();
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.ok(Date.now() - started >= 45);
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [1]);
+});
+
+test("a frame that reports after the timeout, or when no key waits, is dropped", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), report_after_ms: 150, apply: () => acted(1) } });
+  await assert.rejects(run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 }), { message: "No video or audio on this page" });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(tab.applied, []);
+  // The late report found no listener, so the next key starts with no leftover scan.
+  const next = fake_tab({ 0: {} });
+  next.reports.receive(4, 0, scan(0, { playing: 1 }));
+  await assert.rejects(run_media(next.deps, ctx, { action: "speed", value: "up", times: 1 }), { message: "No video or audio on this page" });
+});
+
+test("a frame that reports twice, as a second injection does, still leaves the other frame its turn", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}), reports_twice: true }, 3: { scan: scan(3, { playing: 1 }), report_after_ms: 25, apply: () => acted(1) } }, { answer_timeout_ms: 5000 });
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [3]);
+});
+
+test("reports that come before the injection resolves count", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), apply: () => acted(1) } }, { inject_delay_ms: 30, answer_timeout_ms: 5000 });
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [0]);
+});
+
+test("the frame id comes from the sender, and a report from another tab or with no sender frame is ignored", async () => {
+  const tab = fake_tab({ 5: { scan: scan(0, { playing: 1 }), apply: () => acted(1) } });
+  tab.deps.inject_all = async (tab_id) => {
+    tab.reports.receive(9, 2, scan(2, { playing: 1 }));
+    tab.reports.receive(tab_id, undefined, scan(0, { playing: 1 }));
+    tab.reports.receive(tab_id, 5, scan(0, { playing: 1 }));
+    return 1;
+  };
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [5]);
+});
+
+test("a call that rejects because one frame threw still takes the reports of the other frames", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), report_after_ms: 20, apply: () => acted(1) } });
+  tab.deps.inject_all = async (tab_id) => {
+    setTimeout(() => tab.reports.receive(tab_id, 0, scan(0, { playing: 1 })), 20);
+    throw new Error("a frame threw");
+  };
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [0]);
+});
+
+test("a chosen frame that hangs on the apply is cut off at the timeout and the others still act", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), hangs: true }, 1: { scan: scan(1, { playing: 1 }), apply: () => acted(1) } });
+  const started = Date.now();
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.ok(Date.now() - started >= 45);
+  assert.deepEqual(tab.toasts, ["Speed 1.25x"]);
+});
+
+test("a page that refuses the bundle, such as a privileged one, refuses with no media once the wait ends", async () => {
+  const tab = fake_tab({ 0: { refuses_scripts: true } });
+  await assert.rejects(run_media(tab.deps, ctx, { action: "play_pause" }), { message: "No video or audio on this page" });
 });

@@ -302,7 +302,7 @@ function start(): void {
       replaying = true;
       bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
-    else if (message.type === "set_mode") {
+    else if (message.type === "set_mode" && !(message.held && was_all_off)) {
       page_mode.set_mode_(message.mode);
       if (is_editable_element(deepest_focused_element())) page_mode.focus_entered_editable_();
     }
