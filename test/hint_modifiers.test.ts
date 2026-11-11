@@ -149,3 +149,18 @@ test("the default picture keys: ;d reaches images, links and media", () => {
   // `;a` labels every element, most of which have no address to save, and `;Ba` and `;Wa` likewise.
   for (const key of ["B", "i", "p", "f", "a"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
 });
+
+test("the ;: modifier derives a prompt variant for filters with an address and none for the others", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  assert.equal((node_at(compiled, ";", ":") as TreeBranch).label, "Edit in command line");
+  assert.equal(args_at(compiled, ";", ":", "l")?.action, "prompt");
+  assert.equal(args_at(compiled, ";", ":", "l")?.command, "open");
+  assert.equal(args_at(compiled, ";", ":", "I")?.action, "prompt");
+  for (const keys of [[":", "b"], [":", "i"], [":", "p"], [":", "s"], [":", ":"], [":", "r"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+});
+
+test(";Y copies link addresses in rapid mode", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(args_at(compiled, ";", "Y"), { action: "copy", filter: "links", text: "", rapid: true, register: "" });
+});

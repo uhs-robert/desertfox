@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 
 export const areas = ["keys", "hints", "tabs"];
 
-export async function run_cases({ run_case, open_page, poll_until, press_keys, hint_label_count, wait_event, events, in_active_tab, in_background, badge_is, settle_focus, wait_active_tab, close_tabs_with, barrier, on_teardown, sleep, expect }) {
+export async function run_cases({ wait_cmdline, close_cmdline, run_case, open_page, poll_until, press_keys, hint_label_count, wait_event, events, in_active_tab, in_background, badge_is, settle_focus, wait_active_tab, close_tabs_with, barrier, on_teardown, sleep, expect }) {
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
   const scroll_y = () => in_active_tab("Math.round(scrollY)");
   const bottom_y = () => in_active_tab("Math.round(document.documentElement.scrollHeight - innerHeight)");
@@ -218,5 +218,40 @@ export async function run_cases({ run_case, open_page, poll_until, press_keys, h
     await press_keys("a");
     await poll_until("the second pick to load the last page", async () => (await path_of_tab()) === "/chain3");
     await close_tabs_with("mr_chain");
+  });
+
+  // A prompt pick answers only when the line closes, so the replay waits on the user and must not give up on its own.
+  await run_case("a replayed prompt pick waits while the line is open, then goes on after Enter", async () => {
+    await open_page("hints", "mr_prompt", { new_tab: true });
+    await store_macro("p", [{ id: "hint.run", args: { action: "prompt", filter: "links", command: "open --background" } }, { id: "scroll.to", args: { percent: 100 } }]);
+    await to_top();
+    const tabs_before = await in_background(`browser.tabs.query({}).then((tabs) => tabs.length)`);
+    await press_keys("@", "p");
+    await poll_until("the replayed prompt pick to show its labels", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await wait_cmdline((line) => line.open && line.value.startsWith("open --background ") && line.value.endsWith("/page?id=hint_one"), "the line to hold the open command");
+    // Longer than the page-ready timeout of a step that navigates, so a wait on the line that counts as a load would have ended.
+    await sleep(3000);
+    await wait_cmdline((line) => line.open, "the line to stay open while the replay waits");
+    expect((await scroll_y()) === 0, "the macro went on while the line was open");
+    await press_keys("-k", "Return");
+    await poll_until("the macro's scroll after Enter", async () => (await scroll_y()) > 0 && (await scroll_y()) === (await bottom_y()));
+    expect((await in_background(`browser.tabs.query({}).then((tabs) => tabs.length)`)) === tabs_before + 1, "Enter did not open the address in a background tab");
+    await close_tabs_with("hint_one");
+    await close_tabs_with("mr_prompt");
+  });
+
+  await run_case("Escape in the line of a replayed prompt pick ends the macro", async () => {
+    await open_page("hints", "mr_prompt_escape", { new_tab: true });
+    await to_top();
+    await press_keys("@", "p");
+    await poll_until("the replayed prompt pick to show its labels", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await wait_cmdline((line) => line.open && line.value.endsWith("/page?id=hint_one"), "the line to hold the address");
+    await close_cmdline();
+    await barrier("mr_prompt_escape");
+    await sleep(300);
+    expect((await scroll_y()) === 0, "the macro's scroll ran after Escape closed the line");
+    await close_tabs_with("mr_prompt_escape");
   });
 }

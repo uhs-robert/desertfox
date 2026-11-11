@@ -61,6 +61,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";h": { action: "hover", label: "Hover" },
     ";x": { action: "delete", label: "Delete" },
     ";2": { action: "double_click", label: "Double-click" },
+    ";:": { action: "prompt", label: "Edit in command line" },
   },
   // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
   group_names: {
@@ -299,6 +300,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";yf": { id: "hint.run", args: { action: "copy", filter: "frames" }, label: "Copy frame URL" },
     ";yt": { id: "hint.run", args: { action: "copy_text", filter: "all" }, label: "Copy text" },
     ";yc": { id: "hint.run", args: { action: "copy_selector", filter: "every" }, label: "Copy CSS selector" },
+    ";Y": { id: "hint.run", args: { action: "copy", filter: "links", rapid: true }, label: "Copy several link URLs" },
     ";yh": { id: "hint.run", args: { action: "copy_html", filter: "every" }, label: "Copy outer HTML" },
     ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },

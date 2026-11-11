@@ -8,14 +8,15 @@ const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Prompt opens the command line with a command and the address of the element, to edit before Enter runs it. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Rapid with copy or copy text collects the picks into one deduplicated list on the clipboard. Prompt ignores rapid. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "prompt"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
+        prompt: { filter: HAS_ADDRESS },
         tab: { filter: HAS_ADDRESS },
         background: { filter: HAS_ADDRESS },
         window: { filter: HAS_ADDRESS },
@@ -28,7 +29,7 @@ define("hint.run", {
         fullscreen: { filter: ["media"] },
         double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
       },
-      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F" },
+      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F", prompt: "L" },
       value_labels: {
         here: "to click",
         tab: "in new tab",
@@ -50,6 +51,7 @@ define("hint.run", {
         play_pause: "to play or pause",
         mute: "to mute or unmute",
         fullscreen: "to toggle fullscreen",
+        prompt: "to edit in the command line",
       },
       description: {
         here: "Click the element.",
@@ -72,6 +74,7 @@ define("hint.run", {
         play_pause: "Play the media, or pause it when it plays.",
         mute: "Mute the media, or unmute it when it is muted.",
         fullscreen: "Show the player in fullscreen, or leave fullscreen.",
+        prompt: "Put the address of the element in the command line.",
       },
     },
     {
@@ -97,6 +100,7 @@ define("hint.run", {
     },
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
+    { name: "command", type: "string", default: "open", pattern: "^[a-z][a-z0-9_.-]*( --?[a-z][a-z0-9-]*)*$", when: { action: ["prompt"] }, description: "Type this command and its flags before the address." },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
     YANK_REGISTER_PARAM,
   ],
