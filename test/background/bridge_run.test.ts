@@ -294,6 +294,7 @@ function pinned_case(options: { tabs: TabInfo[]; windows: WindowInfo[]; count?: 
   const tab_switch = create_tab_switch({
     windows: async () => options.windows,
     window: async (id) => options.windows.find((window) => window.id === id),
+    last_focused_window: async () => undefined,
     tabs: async () => options.tabs,
     tab: async (id) => options.tabs.find((tab) => tab.id === id),
     select: async () => undefined, focus_window: async () => undefined, set_preface: async () => undefined, remove: async () => undefined, capture: async () => "", after: () => undefined,

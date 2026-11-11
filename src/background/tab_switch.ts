@@ -1,4 +1,4 @@
-// The tab verbs of the bridge: list, activate, close and capture the tabs of normal windows, for a picker or a script outside the browser.
+// The tab verbs of the bridge: list, activate, close and capture the tabs of normal windows, and hand over their stored icons, for a picker or a script outside the browser.
 // A private window never shows up here: every verb starts from `normal_tab`, and a tab it does not return is answered "no such tab",
 // the same text as for an id that never existed, so a caller cannot probe for private tabs. A failure carries fixed text, never a tab title.
 
@@ -24,6 +24,7 @@ export type WindowInfo = { id?: number | undefined; type?: string | undefined; i
 export type TabSwitchDeps = {
   windows: () => Promise<WindowInfo[]>;
   window: (window_id: number) => Promise<WindowInfo | undefined>;
+  last_focused_window: () => Promise<WindowInfo | undefined>;
   tabs: () => Promise<TabInfo[]>;
   tab: (tab_id: number) => Promise<TabInfo | undefined>;
   select: (tab_id: number) => Promise<void>;
@@ -35,7 +36,8 @@ export type TabSwitchDeps = {
   after: (run: () => void, delay_ms: number) => void;
 };
 
-export const TAB_VERBS = ["tabs", "activate", "clear_preface", "close", "capture"] as const;
+// `favicon` is asked by the host alone, to fill its icon cache. The socket does not offer it.
+export const TAB_VERBS = ["tabs", "activate", "clear_preface", "close", "capture", "favicon"] as const;
 export type TabVerb = (typeof TAB_VERBS)[number];
 
 export type TabAnswer = { ok: true; [field: string]: unknown } | { ok: false; message: string };
@@ -47,11 +49,20 @@ const PREFACE_PATTERN = /^[A-Za-z0-9]{1,32}$/;
 const THUMBNAIL_MAX_WIDTH = 1280;
 const THUMBNAIL_MAX_HEIGHT = 960;
 const THUMBNAIL_JPEG_QUALITY = 80;
+// A larger icon would outgrow the host's message cap, so it gets no key and the host never asks for it.
+const MAX_STORED_ICON_CHARS = 512 * 1024;
 
 const refuse = (message: string): TabAnswer => ({ ok: false, message });
 const NO_SUCH_TAB = refuse("no such tab");
 const is_whole = (value: unknown): value is number => Number.isInteger(value);
 const is_normal_window = (window: WindowInfo | undefined): boolean => window?.type === "normal" && window.incognito === false;
+// Firefox hands most icons over as data URLs. A list of them would outgrow one native message, so a row carries the hash and the host asks for the icons it lacks.
+const is_stored_icon = (url: string | undefined): url is string => url !== undefined && url.startsWith("data:image/") && url.length <= MAX_STORED_ICON_CHARS;
+
+async function sha256_hex(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export function create_tab_switch(deps: TabSwitchDeps) {
   // The nonce each window shows, so a late clear from an older activation leaves a newer one alone. It lives for 10 s at most, so a restart of the background loses nothing worth storing.
@@ -71,13 +82,16 @@ export function create_tab_switch(deps: TabSwitchDeps) {
     return is_normal_window(await deps.window(tab.windowId).catch(() => undefined)) ? tab : undefined;
   }
 
-  async function list(): Promise<TabAnswer> {
-    const windows = await deps.windows();
-    const normal_ids = new Set(windows.filter(is_normal_window).map((window) => window.id));
-    const tabs = (await deps.tabs()).filter((tab) => tab.id !== undefined && tab.windowId !== undefined && tab.incognito === false && normal_ids.has(tab.windowId));
+  // With `current`, only the active tab of the last focused window, and none when that window is private or a popup.
+  async function list(request: { current?: unknown }): Promise<TabAnswer> {
+    const current = request.current === true;
+    const windows = current ? [await deps.last_focused_window()] : await deps.windows();
+    const normal_ids = new Set(windows.filter(is_normal_window).map((window) => window?.id));
+    const tabs = (await deps.tabs()).filter((tab) => tab.id !== undefined && tab.windowId !== undefined && tab.incognito === false && normal_ids.has(tab.windowId) && (!current || tab.active === true));
+    const icon_keys = await Promise.all(tabs.map((tab) => (is_stored_icon(tab.favIconUrl) ? sha256_hex(tab.favIconUrl) : "")));
     return {
       ok: true,
-      tabs: tabs.map((tab) => ({
+      tabs: tabs.map((tab, index) => ({
         tab_id: tab.id,
         window_id: tab.windowId,
         title: tab.title ?? "",
@@ -88,8 +102,8 @@ export function create_tab_switch(deps: TabSwitchDeps) {
         last_accessed: tab.lastAccessed ?? 0,
         pinned: tab.pinned === true,
         hidden: tab.hidden === true,
-        // A data URL icon can be large, and a list of them would pass the size of one native message.
         fav_icon_url: tab.favIconUrl && !tab.favIconUrl.startsWith("data:") ? tab.favIconUrl : "",
+        fav_icon_key: icon_keys[index],
       })),
     };
   }
@@ -156,9 +170,16 @@ export function create_tab_switch(deps: TabSwitchDeps) {
     return { ok: true, tab_id: tab.id, url: tab.url ?? "", data_url: await deps.capture(tab.id as number, options) };
   }
 
+  async function favicon(request: { tab_id?: unknown }): Promise<TabAnswer> {
+    const tab = await normal_tab(request.tab_id);
+    if (!tab) return NO_SUCH_TAB;
+    return is_stored_icon(tab.favIconUrl) ? { ok: true, data_url: tab.favIconUrl } : refuse("the tab has no stored icon");
+  }
+
   async function handle(verb: TabVerb, request: Record<string, unknown>): Promise<TabAnswer> {
     try {
-      if (verb === "tabs") return await list();
+      if (verb === "tabs") return await list(request);
+      if (verb === "favicon") return await favicon(request);
       if (verb === "activate") return await activate(request);
       if (verb === "clear_preface") return await clear_preface(request);
       if (verb === "close") return await close(request);

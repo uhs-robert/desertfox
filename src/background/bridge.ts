@@ -1,11 +1,14 @@
-// Talks to the bridge host over one `connectNative` port. It publishes the mode so a desktop shell can draw it, and it answers the host's
-// `run` and `list` requests. The wire format is the hand-off contract with the host. The in-page badge stays on whatever the port does.
+// Talks to the bridge host over one `connectNative` port. It publishes the mode so a desktop shell can draw it, answers the host's
+// `run`, `list` and tab requests, and sends the tab events (`bridge_events.ts`) while tab sharing is on. The wire format is the hand-off
+// contract with the host. The in-page badge stays on whatever the port does.
 // A private window sends its mode and `private: true` and nothing else, so no id of it reaches the host.
 
 import type { CommandMeta, Mode } from "../shared/command.ts";
 import type { BridgeAnswer } from "./bridge_run.ts";
 import { TAB_VERBS } from "./tab_switch.ts";
-import type { TabAnswer, TabVerb } from "./tab_switch.ts";
+import type { TabAnswer, TabInfo, TabVerb } from "./tab_switch.ts";
+import { create_bridge_events, TABS_OFF_EVENT } from "./bridge_events.ts";
+import type { TabChange } from "./bridge_events.ts";
 import { mode_label } from "../content/ui/mode_label.ts";
 
 export const BRIDGE_HOST_NAME = "desertfox_bridge";
@@ -35,6 +38,8 @@ export type BridgeDeps = {
   run_command: (command_text: string, tab_id?: number) => Promise<BridgeAnswer>;
   list_commands: () => CommandMeta[];
   tab_verb: (verb: TabVerb, request: Record<string, unknown>) => Promise<TabAnswer>;
+  // The tab while it is in a normal window, else undefined: the privacy gate of every tab event.
+  normal_tab: (tab_id: number) => Promise<TabInfo | undefined>;
 };
 
 // A request over this is refused before it is parsed.
@@ -57,6 +62,9 @@ export function create_bridge(deps: BridgeDeps) {
   let port: BridgePort | undefined;
   // The host sends one message when it has the lock, and only then is the port trusted: a second host waits for the lock and a missing host drops the port at once.
   let ready = false;
+  // Goes up each time sharing goes off. A tab reply whose request started under an older count goes out as the refusal,
+  // so tab data asked for before the switch never leaves after it.
+  let sharing_turns_off = 0;
   let up_since_ms = 0;
   let failures = 0;
   let cancel_retry: (() => void) | undefined;
@@ -67,6 +75,8 @@ export function create_bridge(deps: BridgeDeps) {
     queue = queue.then(work).catch(() => undefined);
     return queue;
   };
+
+  const events = create_bridge_events({ sharing: () => share_tabs && ready, send: (event) => send(event), normal_tab: deps.normal_tab, after: deps.after });
 
   function send(message: object): void {
     if (port) send_on(port, message);
@@ -114,7 +124,11 @@ export function create_bridge(deps: BridgeDeps) {
     const request_id = request.request_id as number;
     const asked = asked_by(request);
     if (!asked) return;
-    void answer_of(asked).then((answer) => send_on(which, { ...answer, verb: "reply", request_id }));
+    const turns_off_at_ask = sharing_turns_off;
+    void answer_of(asked).then((answer) => {
+      const sharing_went_off = asked.verb !== "run" && asked.verb !== "list" && sharing_turns_off !== turns_off_at_ask;
+      send_on(which, { ...(sharing_went_off ? TABS_OFF : answer), verb: "reply", request_id });
+    });
   }
 
   async function snapshot_of(window: BridgeWindow | undefined): Promise<Snapshot | undefined> {
@@ -146,6 +160,8 @@ export function create_bridge(deps: BridgeDeps) {
 
   function became_ready(): void {
     ready = true;
+    // A tabs_off sent while the port was down never arrived, and a new host does not know the setting. Saying it on every ready lets the host delete its caches.
+    if (!share_tabs) send(TABS_OFF_EVENT);
     up_since_ms = deps.now_ms();
     // Every message sent while the port was down is gone, so the host gets the full state now.
     void enqueue(async () => {
@@ -209,8 +225,14 @@ export function create_bridge(deps: BridgeDeps) {
   async function settings_changed(): Promise<void> {
     const settings = await deps.read_settings();
     const bridge_before = bridge_on;
+    const sharing_before = share_tabs;
     share_tabs = settings.share_tabs;
     bridge_on = settings.bridge;
+    // Before a disconnect below, so the host still hears it and deletes its caches.
+    if (sharing_before && !share_tabs) {
+      sharing_turns_off++;
+      events.sharing_off();
+    }
     if (bridge_on === bridge_before) return;
     failures = 0;
     if (bridge_on) await connect();
@@ -235,6 +257,11 @@ export function create_bridge(deps: BridgeDeps) {
         if (window?.focused) send(mode_message({ mode, tab_id: tab.id, window }));
       }),
     window_focused: publish_focused,
-    tab_activated: publish_focused,
+    tab_activated: (window_id: number, tab_id: number) => {
+      void events.tab_activated(tab_id);
+      return publish_focused(window_id);
+    },
+    tab_updated: (tab_id: number, change: TabChange) => events.tab_updated(tab_id, change),
+    tab_removed: (tab_id: number) => events.tab_removed(tab_id),
   };
 }

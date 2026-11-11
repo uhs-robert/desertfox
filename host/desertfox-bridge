@@ -3,10 +3,11 @@
 
 Firefox starts it over `connectNative` and keeps it alive while the extension holds the port. Frames are a 4-byte
 native-endian length and UTF-8 JSON, both ways. The host takes the lock first, then says {"ready": true,
-"host_version": 1} once. It takes two verbs from the extension and no others:
+"host_version": 1} once. It takes three verbs from the extension and no others:
 
   {"verb": "mode", "id", "label", "private", "tab_id", "window_id"}
   {"verb": "reply", "request_id", "ok", "message"?, "commands"?}    the answer to a request the host sent
+  {"verb": "event", "event", ...fields}                             a tab event for subscribers (see EVENT_FIELDS)
 
 A private window sends no ids. The host drops them anyway, so a private window leaves only its mode and private:true.
 
@@ -22,8 +23,12 @@ extension as {"verb", "request_id", ...fields}, and the extension decides what r
 never-list, the argument validator, the bridge_share_tabs opt-in and the private-window filter. The host only
 forwards, limits the rate and routes each reply back to the connection that asked. A run reply is cut to `ok` and a
 short `message`, and a tab reply to its known fields, so no page data can pass through the host unchecked. The host
-keeps one cache of its own, the tab thumbnails (see `thumbnail_dir`), and writes an image only for a tab the extension
-just listed. Stdout carries only protocol bytes. The host never runs anything it is sent.
+keeps two caches of its own, the tab thumbnails and the tab icons (see `cache_dir`), and writes a file only for a tab
+the extension just listed. Stdout carries only protocol bytes. The host never runs anything it is sent.
+
+`subscribe` turns a connection into a one-way stream: one {"ok": true} line, then one line per event, each with a
+`seq`. The host makes a `mode` event of each mode it takes, and passes on the extension's tab events. A subscriber
+that falls behind or stops reading is dropped (see EventHub).
 """
 import base64
 import fcntl
@@ -31,6 +36,7 @@ import hashlib
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import socket
@@ -39,6 +45,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from collections import deque
 
 HOST_VERSION = 1
@@ -67,16 +74,43 @@ PREFACE_PATTERN = re.compile(r"[A-Za-z0-9]{1,32}")
 # Rendering one tab, a background one included, takes longer than answering from the tab list.
 CAPTURE_TIMEOUT_S = 5
 MAX_CAPTURE_IDS = 64
-# Only images of no open tab are pruned, and only once this old, so a tab closed by mistake and reopened keeps its image.
-THUMBNAIL_KEEP_S = 7 * 24 * 3600
-# At most this many images stay, the oldest going first, so a long run of changing addresses cannot fill the disk.
-MAX_THUMBNAILS = 500
+# Only files of no open tab are pruned, and only once this old, so a tab closed by mistake and reopened keeps its image and icon.
+CACHE_KEEP_S = 7 * 24 * 3600
+# At most this many images stay in each cache, the oldest going first, so a long run of changing addresses cannot fill the disk.
+MAX_CACHE_FILES = 500
 JPEG_DATA_URL_PREFIX = "data:image/jpeg;base64,"
 # The fields of a listed tab the host passes on, with the type each must have. Anything else, a private flag included, is dropped.
 TAB_FIELDS = {
     "tab_id": int, "window_id": int, "title": str, "url": str, "active": bool, "audible": bool, "discarded": bool,
-    "last_accessed": int, "pinned": bool, "hidden": bool, "fav_icon_url": str,
+    "last_accessed": int, "pinned": bool, "hidden": bool, "fav_icon_url": str, "fav_icon_key": str,
 }
+# The extension names a stored icon by the SHA-256 of its data URL. The file keeps the suffix of its image type, so an image viewer needs no sniffing.
+FAVICON_KEY_PATTERN = re.compile(r"[0-9a-f]{64}")
+FAVICON_SUFFIXES = {
+    "image/png": ".png", "image/svg+xml": ".svg", "image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico",
+    "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp",
+}
+MAX_FAVICON_BYTES = 256 * 1024
+# Filling missing icons makes a `tabs` call slower once, so the whole fill has one short budget and the next call fills the rest.
+FAVICON_FILL_BUDGET_S = 3
+# Subscribers to the event stream, inside MAX_CONNECTIONS, so a few stuck ones cannot starve the command line.
+MAX_SUBSCRIBERS = 4
+# Events waiting for one subscriber. A subscriber that falls this far behind is dropped and can reconnect.
+SUBSCRIBER_QUEUE_EVENTS = 64
+WRITE_TIMEOUT_S = 2
+# The tab ids each subscriber remembers for `tab_removed`. The one named longest ago is forgotten first.
+MAX_NAMED_TABS = 1024
+# How often an idle subscriber's socket is checked for a client that left.
+PEER_CHECK_S = 0.5
+# The fields of each event type the extension may send, with their types. A tab event needs bridge_share_tabs, which the extension checks.
+EVENT_FIELDS = {
+    "tab_activated": {"tab_id": int, "window_id": int},
+    "tab_updated": {"tab_id": int, "window_id": int, "title": str, "url": str},
+    "tab_audible": {"tab_id": int, "window_id": int, "audible": bool, "title": str, "url": str},
+    "tab_removed": {"tab_id": int},
+    "tabs_off": {},
+}
+EVENT_TEXT_CHARS = {"title": 512, "url": 2048}
 
 
 class StopHost(Exception):
@@ -137,13 +171,8 @@ class BridgeState:
         self.mode = None
         self.guard = threading.Lock()
 
-    def apply(self, message):
-        """Takes one decoded message and writes the file when it changed the state."""
-        if not isinstance(message, dict) or message.get("verb") != "mode":
-            return
-        checked = checked_mode(message)
-        if checked is None:
-            return
+    def apply(self, checked):
+        """Takes one checked mode and writes the file."""
         with self.guard:
             self.firefox, self.mode = checked
             self.seq += 1
@@ -156,6 +185,165 @@ class BridgeState:
     def snapshot(self):
         with self.guard:
             return None if self.mode is None else self.snapshot_locked()
+
+
+def mode_event(firefox, mode):
+    """The stream's copy of a mode: what the snapshot holds, so a private window again gives only its mode and private:true."""
+    event = {"event": "mode", **mode, "private": firefox["private"]}
+    if "window_id" in firefox:
+        event["window_id"] = firefox["window_id"]
+    return event
+
+
+def checked_event(message):
+    """A tab event from the extension cut to the fields of its type, or None. An event of an unknown type, with a wrong
+    field or flagged private is dropped, a second line behind the extension's own filter."""
+    kind = message.get("event")
+    fields = EVENT_FIELDS.get(kind) if isinstance(kind, str) else None
+    if fields is None or message.get("private") is True or message.get("incognito") is True:
+        return None
+    if not all(type(message.get(name)) is field_type for name, field_type in fields.items()):
+        return None
+    event = {"event": kind}
+    for name in fields:
+        value = message[name]
+        event[name] = value[: EVENT_TEXT_CHARS[name]] if name in EVENT_TEXT_CHARS else value
+    return event
+
+
+class Subscriber:
+    """One connection that streams events. Its queue is filled by the port thread and emptied by the connection's own
+    thread, so a slow reader never holds up the port, the requests or the other subscribers."""
+
+    def __init__(self, connection):
+        self.connection = connection
+        self.queue = deque()
+        self.wake = threading.Condition()
+        self.ended = False
+        # The tab ids this subscriber was told about, oldest first. A `tab_removed` reaches it only for one of these.
+        self.named_tabs = {}
+
+    def offer(self, line):
+        """False when the subscriber has ended or its queue is full. A line it has no use for counts as taken."""
+        with self.wake:
+            if self.ended:
+                return False
+            if not self.wants(line):
+                return True
+            if len(self.queue) >= SUBSCRIBER_QUEUE_EVENTS:
+                return False
+            self.queue.append(line)
+            self.wake.notify()
+            return True
+
+    def wants(self, line):
+        """Keeps `named_tabs` up to date and says whether the line goes to this subscriber."""
+        event = line.get("event")
+        tab_id = line.get("tab_id")
+        if event == "tabs_off":
+            self.named_tabs.clear()
+        elif event == "tab_removed":
+            return self.named_tabs.pop(tab_id, None) is not None
+        elif tab_id is not None:
+            self.named_tabs.pop(tab_id, None)
+            self.named_tabs[tab_id] = True
+            if len(self.named_tabs) > MAX_NAMED_TABS:
+                del self.named_tabs[next(iter(self.named_tabs))]
+        return True
+
+    def end(self):
+        """Callable from any thread. Shutdown, not close, wakes a write blocked on a full socket without freeing a descriptor the connection thread still uses."""
+        with self.wake:
+            self.ended = True
+            self.wake.notify()
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    def next_batch(self):
+        """The queued lines, an empty list when PEER_CHECK_S passed with none, or None once the subscriber has ended."""
+        with self.wake:
+            if not self.queue and not self.ended:
+                self.wake.wait(PEER_CHECK_S)
+            if self.ended:
+                return None
+            batch = list(self.queue)
+            self.queue.clear()
+            return batch
+
+
+def peer_left(connection):
+    """True when the client closed its end. The stream is one-way, so anything the client sends now is read and dropped."""
+    readable, _, _ = select.select([connection], [], [], 0)
+    return bool(readable) and connection.recv(4096) == b""
+
+
+class EventHub:
+    """Hands each event to every subscriber. Every event gets the next `seq`, so a client can tell it missed one."""
+
+    def __init__(self):
+        self.guard = threading.Lock()
+        self.subscribers = set()
+        self.seq = 0
+        self.last_mode = None
+        self.closed = False
+
+    def publish(self, event):
+        with self.guard:
+            self.seq += 1
+            line = dict(event, seq=self.seq)
+            if line["event"] == "mode":
+                self.last_mode = line
+            for subscriber in list(self.subscribers):
+                if not subscriber.offer(line):
+                    self.subscribers.discard(subscriber)
+                    subscriber.end()
+
+    def add(self, connection):
+        """A new subscriber whose queue starts with the acknowledgement and the current mode, or None when the hub is full or closed.
+        Both are queued under the guard, so no event can reach the client ahead of them."""
+        with self.guard:
+            if self.closed or len(self.subscribers) >= MAX_SUBSCRIBERS:
+                return None
+            subscriber = Subscriber(connection)
+            subscriber.offer({"ok": True})
+            if self.last_mode is not None:
+                subscriber.offer(self.last_mode)
+            self.subscribers.add(subscriber)
+            return subscriber
+
+    def remove(self, subscriber):
+        with self.guard:
+            self.subscribers.discard(subscriber)
+        subscriber.end()
+
+    def close(self):
+        # Under the guard: a writer that finishes now waits in `remove` and has not closed its socket, so `end` never shuts down a reused descriptor.
+        with self.guard:
+            self.closed = True
+            for subscriber in self.subscribers:
+                subscriber.end()
+            self.subscribers.clear()
+
+    def stream(self, subscriber):
+        """Runs on the subscriber's connection thread until the client leaves, falls behind, stops reading or the host ends."""
+        connection = subscriber.connection
+        connection.settimeout(WRITE_TIMEOUT_S)
+        try:
+            while True:
+                batch = subscriber.next_batch()
+                if batch is None:
+                    return
+                if batch:
+                    connection.sendall(b"".join(json_line(line) for line in batch))
+                elif peer_left(connection):
+                    return
+        except OSError:
+            # A socket full for WRITE_TIMEOUT_S raises socket.timeout, an OSError, as does a client gone mid-write.
+            pass
+        finally:
+            self.remove(subscriber)
 
 
 def write_atomically(path, state):
@@ -291,7 +479,7 @@ class ExtensionLink:
                 return {"ok": False, "message": "the extension is not connected"}
             if not waiting.done.wait(timeout_s):
                 return {"ok": False, "message": "the extension did not answer in time"}
-            forget_thumbnails_if_sharing_off(waiting.reply)
+            forget_caches_if_sharing_off(waiting.reply)
             return waiting.reply
         finally:
             with self.pending_guard:
@@ -342,12 +530,20 @@ def list_result(reply):
     return run_result(reply)
 
 
-def thumbnail_dir():
+def cache_dir(name):
     # A relative XDG_CACHE_HOME is invalid by the XDG spec and ignored.
     cache_home = os.environ.get("XDG_CACHE_HOME", "")
     if not os.path.isabs(cache_home):
         cache_home = os.path.join(os.path.expanduser("~"), ".cache")
-    return os.path.join(cache_home, "desertfox", "bridge-thumbs")
+    return os.path.join(cache_home, "desertfox", name)
+
+
+def thumbnail_dir():
+    return cache_dir("bridge-thumbs")
+
+
+def favicon_dir():
+    return cache_dir("bridge-favicons")
 
 
 def thumbnail_path(url):
@@ -362,55 +558,147 @@ def thumbnail_fields(url):
         return {"thumbnail": "", "thumbnail_at": 0}
 
 
-def write_thumbnail(url, data_url):
-    """Writes the image under a temporary name and renames it, so a reader never sees half of one."""
+class CacheGate:
+    """Orders the cache writes against the deletes. A connection thread can wait on the extension for an image while the
+    port thread deletes the caches because sharing went off. Each delete bumps `generation` under the same lock as the
+    writes, and a write that started under an older generation is dropped, so a deleted cache cannot come back."""
+
+    def __init__(self):
+        self.guard = threading.Lock()
+        self.generation = 0
+
+    def forget(self):
+        with self.guard:
+            self.generation += 1
+            shutil.rmtree(thumbnail_dir(), ignore_errors=True)
+            shutil.rmtree(favicon_dir(), ignore_errors=True)
+
+    def write(self, path, data, generation):
+        """False, and nothing written, when the caches were deleted since `generation` was read."""
+        with self.guard:
+            if generation != self.generation:
+                return False
+            write_cache_file(path, data)
+            return True
+
+
+TAB_CACHES = CacheGate()
+
+
+def write_cache_file(path, data):
+    """Writes under a temporary name and renames, so a reader never sees half of a file."""
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    descriptor, temp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "wb") as temp_file:
+            temp_file.write(data)
+        os.replace(temp_path, path)
+    except BaseException:
+        os.unlink(temp_path)
+        raise
+
+
+def write_thumbnail(url, data_url, generation):
     if not isinstance(data_url, str) or not data_url.startswith(JPEG_DATA_URL_PREFIX):
         raise ValueError("the extension sent no JPEG")
     image = base64.b64decode(data_url[len(JPEG_DATA_URL_PREFIX):], validate=True)
     if not image.startswith(b"\xff\xd8"):
         raise ValueError("the extension sent no JPEG")
-    path = thumbnail_path(url)
-    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-    descriptor, temp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".", suffix=".tmp")
-    try:
-        with os.fdopen(descriptor, "wb") as temp_file:
-            temp_file.write(image)
-        os.replace(temp_path, path)
-    except BaseException:
-        os.unlink(temp_path)
-        raise
+    if not TAB_CACHES.write(thumbnail_path(url), image, generation):
+        raise ValueError("tab sharing went off")
     return thumbnail_fields(url)
 
 
-def prune_thumbnails(open_urls):
-    keep = {os.path.basename(thumbnail_path(url)) for url in open_urls}
-    cutoff = time.time() - THUMBNAIL_KEEP_S
+def prune_cache(folder, keep_stems):
+    """Deletes the files of no open tab once they are CACHE_KEEP_S old, then the oldest over MAX_CACHE_FILES."""
+    cutoff = time.time() - CACHE_KEEP_S
     try:
-        names = os.listdir(thumbnail_dir())
+        names = os.listdir(folder)
     except OSError:
         return
     left = []
     for name in names:
-        path = os.path.join(thumbnail_dir(), name)
+        path = os.path.join(folder, name)
         try:
             modified = os.stat(path).st_mtime
-            if name not in keep and modified < cutoff:
+            if name.split(".")[0] not in keep_stems and modified < cutoff:
                 os.unlink(path)
             else:
                 left.append((modified, path))
         except OSError:
             pass
-    for _, path in sorted(left)[: max(0, len(left) - MAX_THUMBNAILS)]:
+    for _, path in sorted(left)[: max(0, len(left) - MAX_CACHE_FILES)]:
         try:
             os.unlink(path)
         except OSError:
             pass
 
 
-def forget_thumbnails_if_sharing_off(reply):
-    """The extension says `sharing: off` when `bridge_share_tabs` is off. The images are page content the owner no longer shares, so they go now."""
+def prune_thumbnails(open_urls):
+    prune_cache(thumbnail_dir(), {hashlib.sha256(url.encode("utf-8")).hexdigest() for url in open_urls})
+
+
+def favicon_files():
+    """Stored icon paths by key, from one listing of the folder."""
+    try:
+        names = os.listdir(favicon_dir())
+    except OSError:
+        return {}
+    return {name.split(".")[0]: os.path.join(favicon_dir(), name) for name in names if not name.startswith(".")}
+
+
+def favicon_image(data_url):
+    """(suffix, bytes) of an icon data URL, base64 or percent-encoded. Raises ValueError for any other text."""
+    if not isinstance(data_url, str) or not data_url.startswith("data:"):
+        raise ValueError("not a data URL")
+    header, comma, payload = data_url[len("data:"):].partition(",")
+    media_type, *parameters = header.split(";")
+    suffix = FAVICON_SUFFIXES.get(media_type.lower())
+    if not comma or suffix is None:
+        raise ValueError("not an icon")
+    image = base64.b64decode(payload, validate=True) if "base64" in parameters else urllib.parse.unquote_to_bytes(payload)
+    if not image or len(image) > MAX_FAVICON_BYTES:
+        raise ValueError("the icon is empty or too large")
+    return suffix, image
+
+
+def fill_favicons(link, tabs, stored_icons):
+    """Asks the extension for each listed icon the cache lacks, one per key, and stores it under the key of the data it
+    sent. An icon that changed since the list keeps no path until the next call lists its new key."""
+    deadline = time.monotonic() + FAVICON_FILL_BUDGET_S
+    asked = set()
+    for tab in tabs:
+        key = tab.get("fav_icon_key")
+        if key in stored_icons or key in asked or not FAVICON_KEY_PATTERN.fullmatch(key or ""):
+            continue
+        asked.add(key)
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 0:
+            return
+        generation = TAB_CACHES.generation
+        reply = link.ask("favicon", {"tab_id": tab["tab_id"]}, remaining_s)
+        if reply.get("ok") is not True:
+            continue
+        data_url = reply.get("data_url")
+        try:
+            suffix, image = favicon_image(data_url)
+            written_key = hashlib.sha256(data_url.encode("utf-8")).hexdigest()
+            path = os.path.join(favicon_dir(), written_key + suffix)
+            if TAB_CACHES.write(path, image, generation):
+                stored_icons[written_key] = path
+        except (ValueError, OSError):
+            pass
+
+
+def forget_tab_caches():
+    """The images are page content the owner no longer shares, so they go at once."""
+    TAB_CACHES.forget()
+
+
+def forget_caches_if_sharing_off(reply):
+    """The extension says `sharing: off` in a reply when `bridge_share_tabs` is off."""
     if reply.get("sharing") == "off":
-        shutil.rmtree(thumbnail_dir(), ignore_errors=True)
+        forget_tab_caches()
 
 
 def listed_tabs(reply):
@@ -426,12 +714,20 @@ def listed_tabs(reply):
     return tabs
 
 
-def tabs_result(reply):
+def tabs_result(reply, link, every_tab):
+    """The tab list with each tab's cached thumbnail and icon. The key that names an icon stays in the host. Only a list
+    of every tab prunes the icons, because a shorter one would count the icons of the other tabs as unused."""
     if reply.get("ok") is not True:
         return run_result(reply)
     tabs = listed_tabs(reply)
+    stored_icons = favicon_files()
+    fill_favicons(link, tabs, stored_icons)
+    listed_keys = {tab["fav_icon_key"] for tab in tabs if "fav_icon_key" in tab}
     for tab in tabs:
         tab.update(thumbnail_fields(tab.get("url", "")) if "url" in tab else {"thumbnail": "", "thumbnail_at": 0})
+        tab["fav_icon_path"] = stored_icons.get(tab.pop("fav_icon_key", None), "")
+    if every_tab:
+        prune_cache(favicon_dir(), listed_keys)
     return {"ok": True, "tabs": tabs}
 
 
@@ -450,6 +746,7 @@ def capture_failure(tab_id, error):
 
 
 def capture_one(link, tab_id):
+    generation = TAB_CACHES.generation
     reply = link.ask("capture", {"tab_id": tab_id}, CAPTURE_TIMEOUT_S)
     if reply.get("ok") is not True:
         return capture_failure(tab_id, run_result(reply).get("message", "the capture failed"))
@@ -457,7 +754,7 @@ def capture_one(link, tab_id):
     if not isinstance(url, str) or not url:
         return capture_failure(tab_id, "the extension sent no address")
     try:
-        return {"tab_id": tab_id, "ok": True, **write_thumbnail(url, reply.get("data_url"))}
+        return {"tab_id": tab_id, "ok": True, **write_thumbnail(url, reply.get("data_url"), generation)}
     except (ValueError, OSError):
         return {**capture_failure(tab_id, "the image could not be saved"), **thumbnail_fields(url)}
 
@@ -488,6 +785,8 @@ def tab_request_problem(verb, request):
         return "clear_preface needs a whole window_id"
     if verb in ("activate", "clear_preface") and preface is not None and not (isinstance(preface, str) and PREFACE_PATTERN.fullmatch(preface)):
         return "preface is letters and digits only"
+    if verb == "tabs" and "current" in request and not isinstance(request["current"], bool):
+        return "current is true or false"
     if verb == "capture" and tab_ids is not None and not (isinstance(tab_ids, list) and len(tab_ids) <= MAX_CAPTURE_IDS and all(is_int(tab_id) for tab_id in tab_ids)):
         return "tab_ids is a list of at most %d whole tab ids" % MAX_CAPTURE_IDS
     return None
@@ -497,7 +796,8 @@ def answer_tab_verb(verb, request, link):
     preface = request.get("preface")
     fields = {} if preface is None else {"preface": preface}
     if verb == "tabs":
-        return tabs_result(link.ask("tabs", {}, REQUEST_TIMEOUT_S))
+        current = request.get("current") is True
+        return tabs_result(link.ask("tabs", {"current": True} if current else {}, REQUEST_TIMEOUT_S), link, not current)
     if verb == "capture":
         return capture(link, request)
     if verb == "activate":
@@ -541,7 +841,21 @@ def answer(request, state, link, limiter):
     return {"ok": False, "message": "unknown verb"}
 
 
-def serve_connection(connection, state, link, limiter, release_slot):
+def subscribe(connection, hub, limiter):
+    """Turns the connection into a one-way event stream until it ends. A subscription counts once against the rate
+    limit, and the events it gets do not count. It waits on no extension reply, so it stays out of `link.working()`,
+    which host shutdown waits for, and out of the idle timeout."""
+    if not limiter.admit():
+        reply(connection, RATE_LIMITED)
+        return
+    subscriber = hub.add(connection)
+    if subscriber is None:
+        reply(connection, {"ok": False, "message": "too many subscribers"})
+        return
+    hub.stream(subscriber)
+
+
+def serve_connection(connection, state, link, hub, limiter, release_slot):
     try:
         if not peer_is_me(connection):
             return
@@ -562,6 +876,9 @@ def serve_connection(connection, state, link, limiter, release_slot):
             except (ValueError, RecursionError):
                 reply(connection, {"ok": False, "message": "not JSON"})
                 continue
+            if isinstance(request, dict) and request.get("verb") == "subscribe":
+                subscribe(connection, hub, limiter)
+                return
             with link.working():
                 reply(connection, answer(request, state, link, limiter))
     except OSError:
@@ -571,11 +888,15 @@ def serve_connection(connection, state, link, limiter, release_slot):
         release_slot()
 
 
+def json_line(message):
+    return json.dumps(message, separators=(",", ":")).encode("utf-8") + b"\n"
+
+
 def reply(connection, message):
-    connection.sendall(json.dumps(message, separators=(",", ":")).encode("utf-8") + b"\n")
+    connection.sendall(json_line(message))
 
 
-def accept_loop(listener, state, link):
+def accept_loop(listener, state, link, hub):
     slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
     limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_WINDOW_S)
     while True:
@@ -591,7 +912,7 @@ def accept_loop(listener, state, link):
         if not slots.acquire(blocking=False):
             connection.close()
             continue
-        threading.Thread(target=serve_connection, args=(connection, state, link, limiter, slots.release), daemon=True).start()
+        threading.Thread(target=serve_connection, args=(connection, state, link, hub, limiter, slots.release), daemon=True).start()
 
 
 def read_exactly(stream, count):
@@ -634,19 +955,37 @@ def send_message(stream, message):
     stream.flush()
 
 
-def serve(stdin, link, state):
+def take_event(message, hub):
+    event = checked_event(message)
+    if event is None:
+        return
+    if event["event"] == "tabs_off":
+        forget_tab_caches()
+    hub.publish(event)
+
+
+def take_mode(message, state, hub):
+    checked = checked_mode(message)
+    if checked is None:
+        return
+    hub.publish(mode_event(*checked))
+    try:
+        state.apply(checked)
+    except OSError as error:
+        log("could not write the state file: %s" % error)
+
+
+def serve(stdin, link, state, hub):
     link.say_ready()
     while True:
         message = read_message(stdin)
-        if message is None:
-            continue
-        if isinstance(message, dict) and message.get("verb") == "reply":
+        verb = message.get("verb") if isinstance(message, dict) else None
+        if verb == "reply":
             link.answered(message)
-            continue
-        try:
-            state.apply(message)
-        except OSError as error:
-            log("could not write the state file: %s" % error)
+        elif verb == "event":
+            take_event(message, hub)
+        elif verb == "mode":
+            take_mode(message, state, hub)
 
 
 def raise_stop(_signal_number, _frame):
@@ -675,6 +1014,7 @@ def main():
     lock = None
     listener = None
     link = None
+    hub = None
     try:
         lock = take_lock(paths["bridge.lock"], LOCK_WAIT_S)
         if lock is None:
@@ -683,11 +1023,13 @@ def main():
         # Whatever is in the folder now belongs to a host that died: this one holds the lock.
         remove_quietly(paths["state.json"])
         prune_thumbnails(())
+        prune_cache(favicon_dir(), ())
         listener = bind_socket(paths["bridge.sock"])
         state = BridgeState(paths["state.json"], pid, start)
         link = ExtensionLink(sys.stdout.buffer)
-        threading.Thread(target=accept_loop, args=(listener, state, link), daemon=True).start()
-        serve(sys.stdin.buffer, link, state)
+        hub = EventHub()
+        threading.Thread(target=accept_loop, args=(listener, state, link, hub), daemon=True).start()
+        serve(sys.stdin.buffer, link, state, hub)
     except StopHost:
         pass
     except BrokenPipeError:
@@ -698,6 +1040,8 @@ def main():
     finally:
         # A second signal during cleanup must not skip the delete.
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        if hub is not None:
+            hub.close()
         if link is not None:
             link.close()
         if listener is not None:

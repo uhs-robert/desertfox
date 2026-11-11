@@ -1,11 +1,13 @@
 """Tests of the `desertfox` command line script: against a fake socket server for the protocol and exit codes, and against the real bridge host for one round trip."""
 import json
 import os
+import select
 import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 import test_bridge
@@ -146,6 +148,41 @@ class CliTest(unittest.TestCase):
         self.assertIn("bridge_share_tabs", off.stderr)
         self.assertEqual({request["verb"] for request in bridge.requests}, {"tabs"})
 
+    def test_tabs_current_asks_for_the_current_tab_only(self):
+        tab = {"tab_id": 10, "window_id": 1, "title": "Mail", "url": "https://mail.example/", "active": True}
+        bridge = self.serve({"ok": True, "tabs": [tab]}, {"ok": True, "tabs": []})
+        self.assertEqual(json.loads(self.cli("tabs", "--current", "--json").stdout), [tab])
+        empty = self.cli("tabs", "--current")
+        self.assertEqual((empty.returncode, empty.stdout), (0, ""))
+        self.assertEqual(bridge.requests, [{"verb": "tabs", "current": True}] * 2)
+
+    def test_events_prints_each_event_line_and_exits_zero_when_the_host_ends(self):
+        host = test_bridge.Host(self.runtime)
+        self.addCleanup(host.kill)
+        env = dict(os.environ, XDG_RUNTIME_DIR=self.runtime)
+        events = subprocess.Popen([sys.executable, CLI_PATH, "events"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        self.addCleanup(lambda: events.poll() is None and events.kill())
+        host.send({"verb": "event", "event": "tab_activated", "tab_id": 4, "window_id": 1})
+        # The CLI may subscribe after that event, so the test sends events until one arrives.
+        line = ""
+        deadline = time.monotonic() + 10
+        while not line and time.monotonic() < deadline:
+            host.send({"verb": "event", "event": "tab_activated", "tab_id": 5, "window_id": 1})
+            if select.select([events.stdout], [], [], 0.2)[0]:
+                line = events.stdout.readline()
+        self.assertEqual({name: value for name, value in json.loads(line).items() if name != "seq"}, {"event": "tab_activated", "tab_id": 5, "window_id": 1})
+        host.close_stdin()
+        self.assertEqual(events.wait(10), 0)
+        events.stdout.close()
+        self.assertEqual(events.stderr.read(), "")
+        events.stderr.close()
+
+    def test_events_refused_by_the_bridge_exits_one_and_without_a_bridge_three(self):
+        self.serve({"ok": False, "message": "too many subscribers"})
+        refused = self.cli("events")
+        self.assertEqual((refused.returncode, refused.stderr), (1, "desertfox: too many subscribers\n"))
+        self.assertEqual(self.cli("events", runtime=os.path.join(self.runtime, "none")).returncode, 3)
+
     def test_activate_clear_preface_and_close_send_their_fields(self):
         bridge = self.serve({"ok": True, "window_id": 1, "focused": True, "preface_set": True, "extra": 1}, {"ok": True, "window_id": 1, "focused": True, "preface_set": False}, {"ok": True, "cleared": True}, {"ok": True}, {"ok": False, "message": "no such tab"})
         done = self.cli("activate", "10", "--preface", "abc123")
@@ -174,7 +211,7 @@ class CliTest(unittest.TestCase):
 
     def test_tab_commands_with_bad_usage_exit_two_and_send_nothing(self):
         bridge = self.serve()
-        for args in (["activate"], ["activate", "x"], ["activate", "1", "2"], ["close"], ["close", "a"], ["clear-preface"], ["clear-preface", "1", "--preface"], ["run", "--tab"], ["run", "--tab", "x", "tab.next"], ["run", "--tab", "5"], ["capture", "z"], ["tabs", "--wide"]):
+        for args in (["activate"], ["activate", "x"], ["activate", "1", "2"], ["close"], ["close", "a"], ["clear-preface"], ["clear-preface", "1", "--preface"], ["run", "--tab"], ["run", "--tab", "x", "tab.next"], ["run", "--tab", "5"], ["capture", "z"], ["tabs", "--wide"], ["tabs", "--current", "--current"], ["events", "x"]):
             done = self.cli(*args)
             self.assertEqual(done.returncode, 2, args)
             self.assertIn("usage:", done.stderr)
