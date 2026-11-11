@@ -115,12 +115,15 @@ test("a site with no level leaves the zoom alone, and a level added later applie
   assert.deepEqual(calls, [[1, 1.2]]);
 });
 
-test("a closed tab leaves the host's record, so the next tab keeps the remembered zoom", async () => {
-  const { go, calls, addresses } = make();
-  await go(1, "https://a.test/");
-  addresses.delete(1);
-  await go(1, "https://a.test/");
-  assert.deepEqual(calls, [[1, 1.5]]);
+test("two tabs loading one host at once set its zoom once and share one record", async () => {
+  const { zoom, addresses, calls, session, levels } = make();
+  levels["b.test"] = 2;
+  addresses.set(1, "https://a.test/one");
+  addresses.set(2, "https://a.test/two");
+  addresses.set(3, "https://b.test/");
+  await Promise.all([zoom.navigated(1, "https://a.test/one", false), zoom.navigated(2, "https://a.test/two", false), zoom.navigated(3, "https://b.test/", false)]);
+  assert.deepEqual(calls, [[1, 1.5], [3, 2]]);
+  assert.deepEqual([...session.data.values()], [{ "a.test": 1.5, "b.test": 2 }]);
 });
 
 test("a background that restarts with storage.session kept does not set the level again", async () => {
