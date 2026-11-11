@@ -169,10 +169,10 @@ function open_link_(url: string, place: Place): Promise<unknown> {
   return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
 }
 
-// The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry.
-function start_caret_(target: Element, mode: CaretMode): void {
+// The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry. A failed load fails the pick.
+function start_caret_(target: Element, mode: CaretMode): Promise<Outcome> {
   page.desertfox_caret_target = target;
-  page.desertfox_host.set_mode_(mode);
+  return page.desertfox_host.run_command_("caret.mode", "caret", { mode });
 }
 
 const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout, (message) => create_view().show_message_(message));

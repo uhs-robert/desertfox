@@ -22,7 +22,6 @@ function connect(asked: string[], shown: string[], on_idle_ = () => {}, load: ()
     hold_first_: () => {},
     set_mode_: () => {},
     show_error_: (message) => shown.push(message),
-    on_sink_missing_: () => {},
   });
 }
 

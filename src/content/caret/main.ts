@@ -437,6 +437,8 @@ if (!page.desertfox_caret_ready) {
   page.desertfox_host.register_sink_("caret", sink_for("caret"));
   page.desertfox_host.register_sink_("visual", sink_for("visual"));
   page.desertfox_host.register_sink_("visual_line", sink_for("visual_line"));
+  // The one way into a caret mode from outside, so the mode is set only once its sink is in.
+  page.desertfox_host.register_handler_("caret.mode", (args) => page.desertfox_host.set_mode_(args.mode as CaretMode));
   page.desertfox_host.register_handler_("caret.move", handle_move);
   page.desertfox_host.register_handler_("visual.act", handle_act);
   page.desertfox_host.register_handler_("find.open", (args) => {

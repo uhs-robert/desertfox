@@ -7,8 +7,9 @@ import { blur_focused_element } from "./page.ts";
 
 export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line"] as const;
 
+// A caret mode answers once caret.js has set it.
 export const mode_set: ContentHandler = {
-  run: (args) => page_mode.set_mode_(args.mode as Mode),
+  run: (args) => bundles.set_mode_(args.mode as Mode),
 };
 
 export const mode_escape: ContentHandler = {

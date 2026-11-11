@@ -90,7 +90,6 @@ function make_page() {
     set_mode_: state.set_mode_,
     show_error_: () => {},
     show_toast_: () => {},
-    on_sink_missing_: () => state.set_mode_("normal"),
   });
   flow.set_matcher_(create_matcher(keymap));
   host.api.register_sink_("caret", {
