@@ -5,9 +5,9 @@ import type { CommandContext } from "../../src/shared/command.ts";
 import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src/shared/media.ts";
 
 const ctx: CommandContext = { tab_id: 4, window_id: 1, frame_id: 0, mode: "normal" };
-const empty: MediaScan = { count: 0, playing: 0, audible: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false };
+const empty: MediaScan = { count: 0, playing: 0, audible: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false, fullscreen_open: false };
 const scan = (frame_id: number, fields: Partial<MediaScan>): FrameScan => ({ ...empty, count: 1, ...fields, frame_id });
-const state: MediaState = { rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false };
+const state: MediaState = { rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false, loop: false, fullscreen: false };
 
 test("every frame with playing media acts, even beside a larger idle video", () => {
   const scans = [scan(0, { video_area: 90_000 }), scan(3, { playing: 1, video_area: 100 }), scan(5, { playing: 2 })];
@@ -220,4 +220,23 @@ test("a chosen frame that hangs on the apply is cut off at the timeout and the o
 test("a page that refuses the bundle, such as a privileged one, refuses with no media once the wait ends", async () => {
   const tab = fake_tab({ 0: { refuses_scripts: true } });
   await assert.rejects(run_media(tab.deps, ctx, { action: "play_pause" }), { message: "No video or audio on this page" });
+});
+
+test("fullscreen takes one video like picture-in-picture, and an open one first", () => {
+  const scans = [scan(0, { playing: 1, audible: 1, audible_video_area: 400, playing_video_area: 400, video_area: 400 }), scan(2, { video_area: 900, fullscreen_open: true })];
+  assert.deepEqual(choose_frames(scans, "fullscreen"), [{ frame_id: 2, target: "largest" }]);
+  assert.deepEqual(choose_frames([scans[0]!], "fullscreen"), [{ frame_id: 0, target: "audible" }]);
+});
+
+test("the notice names mute, loop, fullscreen and the info line", () => {
+  assert.equal(describe_change("mute", { ...state, muted: true }, 1), "Muted");
+  assert.equal(describe_change("mute", state, 1), "Unmuted");
+  assert.equal(describe_change("loop", { ...state, loop: true }, 1), "Loop on");
+  assert.equal(describe_change("fullscreen", { ...state, fullscreen: true }, 1), "Fullscreen on");
+  assert.equal(describe_change("info", { ...state, loop: true }, 1), "1:25 of 3:40, 1.25x, volume 60%, loop");
+});
+
+test("fullscreen asks the frame that holds the video when the top document is fullscreen too", () => {
+  const scans = [scan(0, { count: 0, fullscreen_open: true }), scan(3, { video_area: 900, fullscreen_open: true })];
+  assert.deepEqual(choose_frames(scans, "fullscreen"), [{ frame_id: 3, target: "largest" }]);
 });

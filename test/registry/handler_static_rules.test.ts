@@ -53,7 +53,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "quickmark.delete": [/is not saved/],
   "mark.list": [/No marks?/],
   "mark.delete": [/No mark/],
-  "media.act": [/No video or audio on this page/, /needs Firefox 153 or newer/],
+  "media.act": [/No video or audio on this page/, /needs Firefox 153 or newer/, /No video on this page/],
 };
 
 const SOURCES: EnumSources = { search_engines: ["stub_engine"], containers: ["stub_container"] };
@@ -122,7 +122,7 @@ function candidates(param: ParamDef): readonly unknown[] {
       // A named register is empty on the stub, which is a runtime refusal of its own and would hide what the other params do.
       if (param.name === "register") return [""];
       // An address param refuses the other texts in the schema, so it needs one address to reach the handler.
-      return ["", " ", "1", "x", "1 x", ...(param.format === "url" ? ["https://example.org/m"] : []), ...(static_values(param) ?? []).slice(0, 2), ...(static_values(param) ?? []).slice(-1)];
+      return ["", " ", "1", "x", "1 x", ...(param.format === "url" ? ["https://example.org/m"] : []), ...(static_values(param) ?? [])];
   }
 }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { word_range_at, element_address, has_usable_address, is_inside_link, is_media, perform, player_box, takes_typing } from "../../src/content/hints/actions.ts";
+import { player_box } from "../../src/content/player_box.ts";
+import { word_range_at, element_address, has_usable_address, is_inside_link, is_media, perform, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.

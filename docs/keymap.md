@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 356 (normal 202, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 357 (normal 203, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 2, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -92,6 +92,7 @@ bound: 356 (normal 202, hint 7, cmdline 19, caret 35, visual 43, visual_line 44,
 | `al` | bound | `media seek up` | Seek forward |  |
 | `ah` | bound | `media seek down` | Seek back |  |
 | `aP` | bound | `media pip` | Toggle picture-in-picture |  |
+| `af` | bound | `media fullscreen` | Toggle fullscreen |  |
 | `A` | bound | `cmdline.open --text='media '` | Media command |  |
 | `tt` | bound | `open --tab` (prompts) | Open URL |  |
 | `tT` | bound | `tab` (prompts) | Switch tab |  |
