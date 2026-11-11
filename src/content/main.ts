@@ -336,17 +336,14 @@ function start(): void {
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen("pageshow", report_mode, false);
 
+  // A fullscreen change in this frame and the media mode of another frame take the same step.
+  const media_step = (on: boolean) => {
+    const next = fullscreen_step(page_mode.get_mode_(), on);
+    if (!on) page_mode.back_to_normal_();
+    if (next) bundles.set_mode_(next);
+  };
   // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
-  listen(
-    "fullscreenchange",
-    () => {
-      const next = fullscreen_step(page_mode.get_mode_(), !!document.fullscreenElement);
-      if (!document.fullscreenElement) page_mode.back_to_normal_();
-      if (next) bundles.set_mode_(next);
-    },
-    false,
-    document,
-  );
+  listen("fullscreenchange", () => media_step(!!document.fullscreenElement), false, document);
 
   page_mode.listen_display_(refresh_mode_indicator);
 
@@ -369,6 +366,7 @@ function start(): void {
       replaying = true;
       bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
+    else if (message.type === "media") media_step(message.on);
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
       bundles.set_mode_(message.mode);
       sync_mode_to_focus();

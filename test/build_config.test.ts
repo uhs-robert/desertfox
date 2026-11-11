@@ -705,3 +705,28 @@ test("a site row bind that waits for a key press is refused", () => {
   assert.ok(problems.some((problem) => problem.includes('bind "j"') && problem.includes("cannot wait for a key press")), problems.join("\n"));
   assert.equal(problems.some((problem) => problem.includes('bind "k"')), false, problems.join("\n"));
 });
+
+test("a binding may leave out the count param in a mode with counts, and a Firefox shortcut may not", () => {
+  const registry = create_registry();
+  registry.define("demo.jump", {
+    label: "Jump",
+    intent: "Jump to the percent the count gives.",
+    params: [{ name: "times", type: "int", min: 1 }],
+    count: { param: "times" },
+    runs_in: "background",
+    run: () => {},
+  });
+  const dir = mkdtempSync(join(tmpdir(), "desertfox-count-"));
+  const commands_path = join(dir, "commands.json");
+  writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
+  const config_dir = config_dir_with({ "keymap.toml": '[normal]\n"%" = "demo.jump"\n[browser]\n"<A-j>" = "demo.jump"' });
+  let problems: string[] = [];
+  try {
+    build_config(config_dir, read_commands_file(commands_path));
+  } catch (error) {
+    if (!(error instanceof ConfigErrors)) throw error;
+    problems = error.problems;
+  }
+  assert.equal(problems.length, 1, problems.join("\n"));
+  assert.match(problems[0]!, /keymap browser "<A-j>": missing <times>/);
+});

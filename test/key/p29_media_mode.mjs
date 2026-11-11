@@ -264,17 +264,18 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await j_scrolls(id);
   });
 
-  await run_case("Escape in the top frame ends the mode in a frame that took aa too", async () => {
+  await run_case("aa in the top frame starts the mode in a frame that runs DesertFox, j there acts on its video, and Escape in the top frame ends it there", async () => {
     const id = "p29_host_escape";
     await open_page("media_mode_host", id, { new_tab: true });
+    // The frame starts its content script on its first focus.
     await focus_frame(id);
+    await focus_top(id);
     let mark = events.length;
     await press_keys("a", "a");
     await hidden(mark, id);
+    await focus_frame(id);
+    await j_is_media(`${id}_inner`, 0.9);
     await focus_top(id);
-    mark = events.length;
-    await press_keys("a", "a");
-    await hidden(mark, id);
     mark = events.length;
     await press_keys("-k", "Escape");
     await normal(mark, id);
@@ -284,6 +285,18 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await press_keys("j");
     await wait_event(mark, scroll_of(`${id}_inner`), "j to scroll the frame, which the mode left");
     await expect_absent(mark, `${id}_inner`, (event) => event.page_id === `${id}_inner` && event.type === "media_volumechange", "the frame still took media keys");
+  });
+
+  await run_case("a frame first focused after aa starts in normal mode and leaves the mode of the top frame on", async () => {
+    const id = "p29_host_late";
+    await open_page("media_mode_host", id, { new_tab: true });
+    const mark = events.length;
+    await press_keys("a", "a");
+    await hidden(mark, id);
+    await focus_frame(id);
+    await j_scrolls(`${id}_inner`);
+    await focus_top(id);
+    await j_is_media(`${id}_inner`, 0.9);
   });
 
   await run_case("F in the top frame fullscreens a video in a frame, and the end of the fullscreen returns every frame to normal", async () => {

@@ -233,7 +233,8 @@ function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Targ
 export type PinWindow = { desertfox_pin?: WeakRef<Element> };
 
 function pin_media(target: Target): void | Refusal {
-  if (!is_media(target)) return { ok: false, message: "Not a media element" };
+  // The media mode is for video, and the `media` hint filter offers audio too.
+  if (target.localName !== "video") return { ok: false, message: "Not a video" };
   // The pin lives in the frame of the video, and only that frame's own `;M` can set it.
   if (target.ownerDocument !== document) return { ok: false, message: "Start media mode in that frame first" };
   (window as unknown as PinWindow).desertfox_pin = new WeakRef(target as unknown as Element);

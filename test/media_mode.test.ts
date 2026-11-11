@@ -114,9 +114,12 @@ test("a percent key with no count is refused when it runs, since the count fills
   assert.deepEqual(check_args(command, { action: "seek", value: "percent", times: 50 }), { ok: true, args: { action: "seek", value: "percent", times: 50 } });
 });
 
+const LOAD_START = { status: "loading" };
+
 function fake_tab_media() {
   const store = new Map<string, unknown>();
-  const sent: [number, number, string][] = [];
+  // `set_mode` media as the mode, and a `MediaStep` as "on" or "off", with "all" for no frame.
+  const sent: [number, number | "all", string][] = [];
   const media = create_tab_media({
     storage: {
       get: async (key: string) => (typeof key === "string" && store.has(key) ? { [key]: store.get(key) } : {}),
@@ -124,6 +127,7 @@ function fake_tab_media() {
       remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
     } as never,
     send_mode: async (tab_id, frame_id, mode) => void sent.push([tab_id, frame_id, mode]),
+    send_step: async (tab_id, on, frame_id) => void sent.push([tab_id, frame_id ?? "all", on ? "on" : "off"]),
   });
   return { media, sent, store };
 }
@@ -133,13 +137,22 @@ test("the frame that sees the end reports it, and every other frame of the hold 
   await media.enter(7, 0);
   await media.reported(7, 0, "media");
   await media.reported(7, 5, "media");
-  assert.deepEqual(sent, [[7, 0, "media"]]);
+  assert.deepEqual(sent, [[7, 0, "media"], [7, "all", "on"]]);
   await media.reported(7, 5, "normal");
-  assert.deepEqual(sent.slice(1), [[7, 0, "normal"]]);
+  assert.deepEqual(sent.slice(2), [[7, 0, "off"]]);
   assert.equal(store.size, 0);
   // A later report of normal from the same frames ends nothing and sends nothing.
   await media.reported(7, 0, "normal");
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
+});
+
+test("the first frame to report media starts the mode in every frame of the tab, and a frame that joins later sends nothing", async () => {
+  const { media, sent } = fake_tab_media();
+  await media.reported(4, 3, "media");
+  assert.deepEqual(sent, [[4, "all", "on"]]);
+  await media.reported(4, 0, "media");
+  await media.enter(4, 0);
+  assert.deepEqual(sent, [[4, "all", "on"], [4, 0, "media"]]);
 });
 
 test("a hint or the command line opened from media keeps the hold, and leaving through insert ends it", async () => {
@@ -147,9 +160,9 @@ test("a hint or the command line opened from media keeps the hold, and leaving t
   await media.reported(3, 0, "media");
   await media.reported(3, 4, "media");
   for (const mode of ["hint", "cmdline", "media"] as const) await media.reported(3, 0, mode);
-  assert.deepEqual(sent, []);
+  assert.deepEqual(sent, [[3, "all", "on"]]);
   await media.reported(3, 0, "insert");
-  assert.deepEqual(sent, [[3, 4, "normal"]]);
+  assert.deepEqual(sent.slice(1), [[3, 4, "off"]]);
 });
 
 test("a frame outside the hold, such as a frame that just started, ends nothing", async () => {
@@ -157,7 +170,7 @@ test("a frame outside the hold, such as a frame that just started, ends nothing"
   await media.reported(3, 0, "media");
   await media.reported(3, 9, "normal");
   await media.reported(3, 9, "insert");
-  assert.deepEqual(sent, []);
+  assert.deepEqual(sent, [[3, "all", "on"]]);
   assert.equal(store.size, 1);
 });
 
@@ -167,19 +180,19 @@ test("a report of normal that left before aa's mode arrived does not end the hol
   await media.reported(2, 3, "media");
   await media.enter(2, 3);
   await media.reported(2, 3, "normal");
-  assert.deepEqual(sent.filter(([, , mode]) => mode === "normal"), [[2, 0, "normal"]]);
+  assert.deepEqual(sent.filter(([, , mode]) => mode === "off"), [[2, 0, "off"]]);
 });
 
 test("a navigation ends the hold in every frame, and a tab with no hold sends nothing", async () => {
   const { media, sent } = fake_tab_media();
-  await media.navigated(5, true);
+  await media.navigated(5, LOAD_START);
   assert.deepEqual(sent, []);
   await media.reported(5, 0, "media");
   await media.reported(5, 2, "media");
-  await media.navigated(5, true);
-  assert.deepEqual(sent.sort(), [[5, 0, "normal"], [5, 2, "normal"]]);
-  await media.navigated(5, true);
-  assert.equal(sent.length, 2);
+  await media.navigated(5, LOAD_START);
+  assert.deepEqual(sent.slice(1).sort(), [[5, 0, "off"], [5, 2, "off"]]);
+  await media.navigated(5, LOAD_START);
+  assert.equal(sent.length, 3);
 });
 
 test("the pin counts only while a frame is in the mode, is dropped by a new start and by the end", async () => {
@@ -202,9 +215,9 @@ test("the holds of two tabs are apart", async () => {
   await media.reported(1, 2, "media");
   await media.reported(2, 0, "media");
   await media.reported(2, 0, "normal");
-  assert.deepEqual(sent, []);
+  assert.deepEqual(sent, [[1, "all", "on"], [2, "all", "on"]]);
   await media.reported(1, 0, "normal");
-  assert.deepEqual(sent, [[1, 2, "normal"]]);
+  assert.deepEqual(sent.slice(2), [[1, 2, "off"]]);
 });
 
 test("an address change the page makes keeps the hold and drops the pin, and a new document ends it", async () => {
@@ -213,12 +226,14 @@ test("an address change the page makes keeps the hold and drops the pin, and a n
   await media.reported(6, 2, "media");
   await media.pin(6, 2);
   assert.equal(await media.pin_of(6), 2);
-  await media.navigated(6, false);
+  await media.navigated(6, { url: "https://example.com/next" });
   assert.equal(await media.pin_of(6), undefined);
-  assert.deepEqual(sent, []);
+  // A `replaceState` before the load event comes with the status of the load still under way.
+  await media.navigated(6, { status: "loading", url: "https://example.com/again" });
+  assert.deepEqual(sent, [[6, "all", "on"]]);
   await media.reported(6, 2, "hint");
-  await media.navigated(6, true);
-  assert.deepEqual(sent.sort(), [[6, 0, "normal"], [6, 2, "normal"]]);
+  await media.navigated(6, LOAD_START);
+  assert.deepEqual(sent.slice(1).sort(), [[6, 0, "off"], [6, 2, "off"]]);
 });
 
 test("a fullscreen that ends while hint or the line is open sends the escape to normal", () => {
@@ -234,4 +249,10 @@ test("a % binding that gets a wrong other arg is still skipped, while the count 
   const bad = { ...DEFAULT_KEYMAP, media: { "%": { id: "media.act", args: { action: "seek", value: "up", times: 0 } }, X: { id: "media.act", args: { action: "seek", value: "percent", bogus: 1 } } } };
   const { warnings } = compile_config({ config: empty_config(), default_keymap: bad, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
   assert.ok(warnings.some((warning) => warning.includes('skipped "X"')), JSON.stringify(warnings));
+});
+
+test("a Firefox shortcut that leaves out the count param is skipped, since a shortcut takes no count", () => {
+  const with_shortcut = { ...DEFAULT_KEYMAP, browser: { "<A-5>": { id: "media.act", args: { action: "seek", value: "percent" } } } };
+  const { warnings } = compile_config({ config: empty_config(), default_keymap: with_shortcut, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
+  assert.ok(warnings.some((warning) => warning.startsWith('browser: skipped "<A-5>"')), JSON.stringify(warnings));
 });

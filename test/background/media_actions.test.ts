@@ -358,3 +358,10 @@ test("quality and skip ask for the player in the pinned frame", async () => {
   await run_media(tab.deps, ctx, { action: "skip" }).catch(() => undefined);
   assert.deepEqual(tab.preferred, [2, 2]);
 });
+
+test("quality and skip prefer no frame once the pinned video left the page", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}) }, 2: { scan: scan(2, { pinned: false }) } }, { pin_frame: 2, quality: () => ({ levels: [], chosen: "auto" }) });
+  await run_media(tab.deps, ctx, { action: "quality", value: "max" });
+  await run_media(tab.deps, ctx, { action: "skip" }).catch(() => undefined);
+  assert.deepEqual(tab.preferred, [undefined, undefined]);
+});

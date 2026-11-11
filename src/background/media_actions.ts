@@ -161,10 +161,12 @@ export function refusal_for(action: MediaAction, error_name: string, error_messa
   return error_message;
 }
 
-// The quality bundle needs no scan: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
+// The quality bundle needs no scan unless a video is pinned: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
 async function run_quality(deps: MediaDeps, ctx: CommandContext, tab_id: number, args: MediaArgs): Promise<void> {
   const times = args.times ?? 1;
-  const pin_frame = await deps.tab_media.pin_of(tab_id);
+  const pinned_frame = await deps.tab_media.pin_of(tab_id);
+  // As for the other keys, a pinned video that left the page no longer counts. Only a pin costs the scan.
+  const pin_frame = pinned_frame !== undefined && (await scan_frames(deps, tab_id)).some((scan) => scan.frame_id === pinned_frame && scan.pinned) ? pinned_frame : undefined;
   const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }, pin_frame).catch(() => undefined);
   if (args.action === "skip") {
     const direction = args.value === "previous" ? "previous" : "next";

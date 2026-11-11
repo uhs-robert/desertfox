@@ -12,7 +12,9 @@ export type MediaHold = { frames: number[]; pin_frame?: number };
 export type TabMediaDeps = {
   storage: SessionStorage;
   // Rejects for a frame that is gone, which the caller ignores.
-  send_mode: (tab_id: number, frame_id: number, mode: "media" | "normal") => Promise<unknown>;
+  send_mode: (tab_id: number, frame_id: number, mode: "media") => Promise<unknown>;
+  // The `MediaStep` message, to one frame or, with no frame, to every frame of the tab that runs the content script.
+  send_step: (tab_id: number, on: boolean, frame_id?: number) => Promise<unknown>;
 };
 
 const key_of = (tab_id: number): string => TAB_MEDIA_STORAGE_PREFIX + tab_id;
@@ -29,12 +31,10 @@ export function create_tab_media(deps: TabMediaDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
-  const send_normal = (tab_id: number, frames: readonly number[]) => Promise.all(frames.map((frame_id) => deps.send_mode(tab_id, frame_id, "normal").catch(() => undefined)));
-
-  // Every frame of the hold returns to normal, the one that ended it excepted.
+  // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
   const end = async (tab_id: number, hold: MediaHold, except?: number) => {
     await deps.storage.remove(key_of(tab_id));
-    await send_normal(tab_id, hold.frames.filter((frame_id) => frame_id !== except));
+    await Promise.all(hold.frames.filter((frame_id) => frame_id !== except).map((frame_id) => deps.send_step(tab_id, false, frame_id).catch(() => undefined)));
   };
 
   return {
@@ -53,21 +53,23 @@ export function create_tab_media(deps: TabMediaDeps) {
         const hold = await read(tab_id);
         return hold && hold.frames.length > 0 ? hold.pin_frame : undefined;
       }),
-    // The mode a frame reports. Any frame can start the hold (fullscreen starts it in the frame that sees it). A frame of the hold that reports a mode that is not media ends it for every frame.
+    // The mode a frame reports. Any frame can start the hold (fullscreen starts it in the frame that sees it), and the first report of media starts the mode in every other frame in normal mode, which then report and join. A frame of the hold that reports a mode that is not media ends it for every frame.
     reported: (tab_id: number, frame_id: number, mode: Mode): Promise<void> =>
       in_turn(async () => {
         const hold = await read(tab_id);
         if (mode === "media") {
           if (hold?.frames.includes(frame_id)) return;
           await deps.storage.set({ [key_of(tab_id)]: { ...hold, frames: [...(hold?.frames ?? []), frame_id] } satisfies MediaHold });
+          // No list of frames reaches the background, so the step goes to every frame, the reporter too, which is in media already and stays.
+          if (!hold?.frames.length) await deps.send_step(tab_id, true).catch(() => undefined);
         } else if (hold?.frames.includes(frame_id) && !KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
       }),
-    // A new document ends the hold in every frame. An address change the page makes itself (`pushState`, as YouTube does for the next video) keeps it and drops the pin, so the keys act on the new main video.
-    navigated: (tab_id: number, new_document: boolean): Promise<void> =>
+    // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps the hold and drops the pin, so the keys act on the new main video: a `pushState` (YouTube's next video) sends a bare `url`, and a `replaceState` before the load event sends `status: "loading"` with the `url`.
+    navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
         const hold = await read(tab_id);
         if (!hold) return;
-        if (new_document) await end(tab_id, hold);
+        if (change.status === "loading" && change.url === undefined) await end(tab_id, hold);
         else if (hold.pin_frame !== undefined) await deps.storage.set({ [key_of(tab_id)]: { frames: hold.frames } satisfies MediaHold });
       }),
     forget: (tab_id: number): Promise<void> => in_turn(() => deps.storage.remove(key_of(tab_id))),

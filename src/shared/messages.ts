@@ -439,6 +439,13 @@ export type SetMode = {
   held?: true;
 };
 
+// The tab's media mode started or ended in another frame. The frame takes the step a fullscreen change takes (`fullscreen_step`), so a frame in another mode keeps it, and an open hint or line only changes where it returns to.
+// The type string is short because content.js holds it.
+export type MediaStep = {
+  type: "media";
+  on: boolean;
+};
+
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
 // The type string is short because content.js holds it.
 export type FocusedFrameMode = {
@@ -466,7 +473,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

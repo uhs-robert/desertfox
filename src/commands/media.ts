@@ -1,5 +1,5 @@
 import { define } from "../shared/registry/builtin.ts";
-import type { SetMode } from "../shared/messages.ts";
+import type { MediaStep, SetMode } from "../shared/messages.ts";
 import { MEDIA_ACTIONS } from "../shared/media.ts";
 import { MEDIA_VALUE_PATTERNS } from "../shared/media_values.ts";
 import { create_media_reports, run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";
@@ -15,6 +15,7 @@ export const tab_media = create_tab_media({
   // Read at call time: Node tools import this module, where there is no `browser`.
   storage: { get: (keys) => browser.storage.session.get(keys), set: (items) => browser.storage.session.set(items), remove: (keys) => browser.storage.session.remove(keys) },
   send_mode: (tab_id, frame_id, mode) => browser.tabs.sendMessage(tab_id, { type: "set_mode", mode, held: true } satisfies SetMode, { frameId: frame_id }),
+  send_step: (tab_id, on, frame_id) => browser.tabs.sendMessage(tab_id, { type: "media", on } satisfies MediaStep, frame_id === undefined ? {} : { frameId: frame_id }),
 });
 
 const browser_media_deps: MediaDeps = {

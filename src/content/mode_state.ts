@@ -2,8 +2,8 @@
 
 import type { Mode } from "../shared/index.ts";
 import { is_caret_mode } from "../shared/command.ts";
-
-// The mode a fullscreen change brings, or undefined when the mode stays. Only normal mode starts the media mode, so insert, ignore, hint and the reading modes win, and only the media mode ends with the fullscreen.
+// The mode a fullscreen change brings, or a start or end of the media mode in another frame, else undefined when the mode stays. Only normal mode starts the media mode, so insert, ignore, hint and the reading modes win, and only the media mode ends with it.
+// The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Only normal mode starts the media mode, so insert, ignore, hint and the reading modes win, and only the media mode ends with the fullscreen.
 export const fullscreen_step = (mode: Mode, has_fullscreen_element: boolean): Mode | undefined => (has_fullscreen_element ? (mode === "normal" ? "media" : undefined) : mode === "media" ? "normal" : undefined);
 
 export function create_mode_state(initial: Mode = "normal") {
@@ -30,7 +30,7 @@ export function create_mode_state(initial: Mode = "normal") {
   };
 
   return {
-    // The fullscreen ended while hint or command line mode was open, so closing it lands in normal mode.
+    // The media mode ended (the fullscreen, or in another frame) while hint or command line mode was open, so closing it lands in normal mode.
     back_to_normal_: () => void (back_mode = "normal"),
     is_manual_insert_: () => manual_insert,
     get_mode_: () => mode,
