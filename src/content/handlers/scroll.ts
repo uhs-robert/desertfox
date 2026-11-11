@@ -51,10 +51,21 @@ export const end_flight = () => {
 export const tapped_end = (flight_end: number | undefined, top: number, distance: number, max_top: number): number =>
   Math.min(Math.max((flight_end ?? top) + distance, 0), max_top);
 
+// A scroll pressed while the body is still on its way finds no height and would be lost. It waits for DOMContentLoaded and runs once. Presses during the wait are dropped, so a burst makes one step instead of a jump.
+let waiting_for_layout = false;
+
 const scroll_by = (dx: number, dy: number) => {
   end_flight();
   const axis = dy !== 0 ? "y" : "x";
-  scroll_target(axis).scrollBy({ left: dx, top: dy, behavior: "instant" });
+  const target = scroll_target(axis);
+  const no_room = axis === "y" ? target.scrollHeight <= target.clientHeight : target.scrollWidth <= target.clientWidth;
+  if (no_room && document.readyState === "loading") {
+    if (waiting_for_layout) return;
+    waiting_for_layout = true;
+    document.addEventListener("DOMContentLoaded", () => ((waiting_for_layout = false), scroll_by(dx, dy)), { once: true });
+    return;
+  }
+  target.scrollBy({ left: dx, top: dy, behavior: "instant" });
 };
 
 const smooth_page_tap = (target: Element, distance: number) => {

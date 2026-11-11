@@ -24,6 +24,6 @@ KEY_TEST_PIECES=p99_first_press just key-test
 rm test/key/p99_first_press.mjs
 ```
 
-`p99_first_press.mjs` also needs a `/slow_body` route in `test/key/server.mjs`, which does not exist yet. The slow-body key test PR (PR B) adds it. Until then its early-j case does not delay the body, so only the bundle rows are valid.
+`p99_first_press.mjs` also uses the `/slow_body` route in `test/key/server.mjs`, which sends the head at once and holds the body for the `ms` query param.
 
 `p99_profile.mjs` reads `window.__df_prof`, which no committed build sets. It needs a content.js instrumented to record `start()` and per-key times, about 500 B larger. That instrumentation was a throwaway patch and is not kept.
