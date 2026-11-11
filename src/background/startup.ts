@@ -106,10 +106,9 @@ async function pushed_palette(): Promise<string | undefined> {
   return typeof pushed === "string" ? pushed : undefined;
 }
 
-// The bridge stores the palette the desktop pushed. It republishes only while `palette` follows the desktop, so a push never moves a theme the user chose by name.
+// The bridge stores the palette the desktop pushed. It republishes only while `palette` follows the desktop, so a push never moves a theme the user chose by name. A repeat of the stored name still republishes, so a retry after a failed publish applies it.
 export function set_desktop_palette(name: string): Promise<void> {
   return in_change_queue(async () => {
-    if ((await pushed_palette()) === name) return;
     await browser.storage.local.set({ [DESKTOP_PALETTE_STORAGE_KEY]: name });
     const config = await get_config();
     if (config.settings.palette === DESKTOP_PALETTE) await publish(await (load_step as Promise<LoadStep>), await load_edits());

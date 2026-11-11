@@ -682,6 +682,15 @@ class ThemeTest(BridgeTestCase):
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)
 
+    def test_theme_pushes_are_not_rate_limited(self):
+        host = self.start()
+        for _ in range(self.module_limit() + 5):
+            reply, _request = self.push(host, "oasis_dune")
+            self.assertTrue(reply["ok"], reply)
+
+    def module_limit(self):
+        return load_host("desertfox-bridge").RATE_LIMIT_REQUESTS
+
     def test_the_last_palette_is_written_to_its_own_file(self):
         host = self.start()
         self.push(host, "oasis_dune")
@@ -772,6 +781,9 @@ class ThemeKeeperTest(unittest.TestCase):
         for _ in range(200):
             out = io.BytesIO()
             link = self.module.ExtensionLink(out)
+            # No stored palette from the last round, or the replay would send a second name.
+            if os.path.exists(self.path):
+                os.unlink(self.path)
             keeper = self.module.ThemeKeeper(self.path)
             pusher = threading.Thread(target=lambda: keeper.push(link, "oasis_rose"))
             opener = threading.Thread(target=lambda: keeper.say_ready(link))
@@ -783,6 +795,24 @@ class ThemeKeeperTest(unittest.TestCase):
             sent = self.frames(out.getvalue())
             self.assertTrue(sent[0].get("ready"), sent)
             self.assertEqual([frame.get("palette") for frame in sent[1:]], ["oasis_rose"], sent)
+
+    def test_a_failed_write_is_a_failed_reply_and_keeps_and_sends_nothing(self):
+        import io
+
+        out = io.BytesIO()
+        link = self.module.ExtensionLink(out)
+        link.say_ready()
+        keeper = self.module.ThemeKeeper(self.path)
+        sent_before = out.getvalue()
+        real_replace = os.replace
+        os.replace = lambda *_args: (_ for _ in ()).throw(OSError("disk full"))
+        try:
+            reply = keeper.push(link, "oasis_rose")
+        finally:
+            os.replace = real_replace
+        self.assertEqual(reply, {"ok": False, "message": "could not keep the palette"})
+        self.assertIsNone(keeper.palette)
+        self.assertEqual(out.getvalue(), sent_before)
 
     def test_a_write_cut_short_leaves_the_old_file_and_no_temp_file(self):
         import io

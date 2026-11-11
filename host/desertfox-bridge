@@ -187,11 +187,12 @@ class ThemeKeeper:
     def push(self, link, palette):
         """The reply for a client that pushed `palette`. The name is kept first, so a failed send or an extension that is not up yet loses nothing."""
         with self.guard:
-            self.palette = palette
             try:
                 write_atomically(self.path, {"palette": palette})
             except OSError as error:
                 log("could not write the theme file: %s" % error)
+                return {"ok": False, "message": "could not keep the palette"}
+            self.palette = palette
             if not link.open:
                 return {"ok": True, "message": "kept for when the extension connects"}
             waiting = link.start("theme", {"palette": palette})
@@ -904,8 +905,7 @@ def answer(request, state, link, limiter):
         palette = request.get("palette")
         if not (isinstance(palette, str) and PALETTE_PATTERN.fullmatch(palette)):
             return {"ok": False, "message": "theme needs a palette name of letters, digits, _ and -, at most 64 characters"}
-        if not limiter.admit():
-            return RATE_LIMITED
+        # Not rate limited: a name is checked for shape and one write, and the other verbs do not share the limit with a desktop that pushes on every reload.
         return state.theme.push(link, palette)
     if verb == "list":
         if not limiter.admit():

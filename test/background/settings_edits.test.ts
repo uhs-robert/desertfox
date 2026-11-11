@@ -5,7 +5,9 @@ import { build_config_status, checked_edit_layer, empty_config, with_edits } fro
 import { apply_edits, CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import type { SettingOverrides } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
-import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
+import { load_theme } from "../../src/shared/theme/load.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
 test("an edit wins over the config, a temp edit wins over a saved one, and the rest of the config stays", () => {
   const settings = apply_edits({ which_key_delay_ms: 100, hint_letters: "ab" }, { saved: { which_key_delay_ms: 500, light_intensity: 2 }, temp: { which_key_delay_ms: 900 } });
@@ -253,4 +255,51 @@ test("a saved site rule list survives the load, since the popup saves it", () =>
   const rules = [{ site: "*://*.a.test/*" }, { site: "*://b.test/*", pass: "j" }];
   assert.deepEqual(checked_edit_layer({ site_rules: rules }), { site_rules: rules });
   assert.deepEqual(checked_edit_layer({ site_rules: [{ site: "*://b.test/*", pass: "j", only: "k" }] }), {});
+});
+
+const dark_of = (name: string) => load_theme(name, 3)!.dark;
+
+test("a pushed palette is stored always and republishes only while palette is desktop", async () => {
+  const { local } = install_fake_browser({ value: files_config({}) });
+  const startup = await fresh_startup("push_follow");
+  await startup.get_config();
+  const before = local[THEME_STORAGE_KEY];
+  await startup.set_desktop_palette("oasis_dune");
+  assert.equal(local[DESKTOP_PALETTE_STORAGE_KEY], "oasis_dune");
+  assert.deepEqual(local[THEME_STORAGE_KEY], before);
+  await change_temp(startup, (current) => ({ ...current, palette: "desktop" }));
+  assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_dune"));
+  await startup.set_desktop_palette("oasis_rose");
+  assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_rose"));
+  await change_temp(startup, (current) => ({ ...current, palette: "oasis_abyss" }));
+  await startup.set_desktop_palette("oasis_dune");
+  assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_abyss"));
+  assert.equal(local[DESKTOP_PALETTE_STORAGE_KEY], "oasis_dune");
+});
+
+test("palette desktop with nothing pushed shows oasis_moonlight", async () => {
+  const { local } = install_fake_browser({ value: files_config({ palette: "desktop" }) });
+  const startup = await fresh_startup("push_none");
+  await startup.get_config();
+  assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_moonlight"));
+});
+
+test("a repeat of the stored name republishes, so a retry after a failed publish applies the theme", async () => {
+  const { local } = install_fake_browser({ value: files_config({ palette: "desktop" }) });
+  const startup = await fresh_startup("push_retry");
+  await startup.get_config();
+  const storage = (globalThis as unknown as { browser: { storage: { local: { set: (values: Record<string, unknown>) => Promise<void> } } } }).browser.storage.local;
+  const real_set = storage.set;
+  let fail_theme_once = true;
+  storage.set = async (values) => {
+    if (THEME_STORAGE_KEY in values && fail_theme_once) {
+      fail_theme_once = false;
+      throw new Error("storage failed");
+    }
+    return real_set(values);
+  };
+  await assert.rejects(startup.set_desktop_palette("oasis_dune"), /storage failed/);
+  assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_moonlight"));
+  await startup.set_desktop_palette("oasis_dune");
+  assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_dune"));
 });
