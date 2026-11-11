@@ -25,7 +25,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 
 - Define each command once, in the registry. Keymaps, the command line, help and which-key reference commands and never define behavior.
 - Check args only in the one validator. Keys, the command line, the native host and snippets all pass through it.
-- Keep the content script under 17 KB minified, with no runtime dependency. Load anything bigger on first use.
+- Keep the content script within the size guard and admission rule in "Content script size", with no runtime dependency. Load anything else on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Put no test hooks in `src/`. Tests drive the extension through its public surface. The one exception is the `data-desertfox-tree-read-ms` attribute on the document element, which the key test reads as the signal that the content script is ready.

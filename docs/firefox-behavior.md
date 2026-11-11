@@ -263,7 +263,7 @@ Compile and run, in the parent process with `ChromeUtils.compileScript` and `exe
 
 Compile costs about 0.05 to 0.1 ms per KB, once per content process per 5 minutes, off the main thread. Instantiate and run costs about 0.01 ms per KB per frame.
 
-Heap per sandbox, 300 live sandboxes each running the script, after a forced GC (JS GC heap plus malloc heap):
+Heap per sandbox, 300 live sandboxes each running the script (`micro.mjs`; `bench.mjs` runs the same with 200), after a forced GC (JS GC heap plus malloc heap):
 
 | Script | Bytes per sandbox |
 |---|---|

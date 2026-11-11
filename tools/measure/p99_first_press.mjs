@@ -1,4 +1,5 @@
 // Key-test piece: first-press timing of lazy bundles and the early-j case. See README.md for how to run it.
+// The slow_body case needs a /slow_body route in test/key/server.mjs that this repo does not have yet. The slow-body key test PR (PR B) adds it. Until then the page loads at once and the early-j case does not delay the body.
 import { appendFileSync, mkdirSync } from "node:fs";
 const repo = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 const work = process.env.MEASURE_DIR ?? "/tmp/desertfox-measure";

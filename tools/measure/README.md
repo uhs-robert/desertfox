@@ -9,12 +9,10 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 | `bench.mjs` | `node tools/measure/bench.mjs` | Compile time, per-sandbox heap and time to the key listener for padded copies of `dist/content.js` | `$MEASURE_DIR/bench/result.json` |
 | `micro.mjs` | `node tools/measure/micro.mjs` | The compile and run table only. Needs the profile and files that `bench.mjs` left in `$MEASURE_DIR/bench/run`, so run `bench.mjs` first | `$MEASURE_DIR/bench/micro.json` |
 | `frames.mjs` | `node tools/measure/frames.mjs` | Load time and resident memory on pages with 200 subframes, with and without the extension | `$MEASURE_DIR/frames/result.json` |
-| `heap.mjs` | `node tools/measure/heap.mjs` | Extension heap per subframe, from memory reports | `$MEASURE_DIR/frames/result.json` |
+| `heap.mjs` | `node tools/measure/heap.mjs` | Extension heap per subframe, from memory reports | `$MEASURE_DIR/frames/heap.json` |
 | `tab.mjs` | `node tools/measure/tab.mjs` | The timeline of a switch to a loaded and a discarded tab, and `tabs.reload` and `tabs.warmup` on the neighbor | `$MEASURE_DIR/tab/result.json` |
 | `p99_first_press.mjs` | see below | First and second press of `f` and `g`, and the early j on a slow-body page | `$MEASURE_DIR/fp/out.jsonl` |
 | `p99_profile.mjs` | see below | `start()` and per-key time with real keys | `$MEASURE_DIR/fp/prof.jsonl` |
-
-`frames.mjs` and `heap.mjs` write the same result file, so keep one run's output before starting the other.
 
 ## Key-test pieces
 
@@ -25,5 +23,7 @@ cp tools/measure/p99_first_press.mjs test/key/
 KEY_TEST_PIECES=p99_first_press just key-test
 rm test/key/p99_first_press.mjs
 ```
+
+`p99_first_press.mjs` also needs a `/slow_body` route in `test/key/server.mjs`, which does not exist yet. The slow-body key test PR (PR B) adds it. Until then its early-j case does not delay the body, so only the bundle rows are valid.
 
 `p99_profile.mjs` reads `window.__df_prof`, which no committed build sets. It needs a content.js instrumented to record `start()` and per-key times, about 500 B larger. That instrumentation was a throwaway patch and is not kept.

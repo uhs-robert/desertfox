@@ -51,7 +51,7 @@ try {
       console.log(JSON.stringify(out.at(-1)));
     }
   }
-} catch (error) { console.log("ERR", String(error.stack ?? error)); }
+} catch (error) { console.log("ERR", String(error.stack ?? error)); process.exitCode = 1; }
 finally { try { rdp.close(); } catch {} ff.kill("SIGTERM"); server.close(); }
 writeFileSync(`${work}/frames/result.json`, JSON.stringify(out, null, 1));
-setTimeout(() => process.exit(0), 1000);
+setTimeout(() => process.exit(process.exitCode ?? 0), 1000);

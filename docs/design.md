@@ -397,7 +397,7 @@ Everything else goes in an on-demand bundle. The price of a bundle is a first us
 - Guard: 17 KB (17408 bytes). It is low on purpose and sits just above the current size, so every growth step fails the build and someone has to decide.
 - Ceiling: 32 KB (32768 bytes). The guard never passes it, and the build fails when the guard is set above it. Passing it needs an owner decision and a fresh run of the measurements in `tools/measure/` on the Firefox of that day.
 
-The reason for 32 KB: size does not delay the first key below about 64 KB. Probe runs at 0, 4, 16, 32 and 64 KB all put the key listener 5 to 7 ms after the response starts. What size costs below 64 KB is memory, about 2.4 KB of heap per KB of script in every frame, including frames that never start DesertFox. At 32 KB that is about 8 MB for a typical session (100 frames) and 31 MB for a heavy one (400 frames). The ceiling sits at half the point where timing starts to count, and it keeps the memory cost bounded.
+The reason for 32 KB: size does not delay the first key below about 64 KB. Probe runs at 0, 4, 16, 32 and 64 KB mostly put the key listener 5 to 7 ms after the response starts. A few runs were slower (54.5, 17.3 and 11.8 ms) and did not repeat in the second pass. What size costs below 64 KB is memory, about 2.4 KB of heap per KB of script in every frame, including frames that never start DesertFox. At 32 KB that is about 8 MB for a typical session (about 100 frames) and 31 MB for a heavy one (about 400 frames). The frame counts are estimates, not measurements. The ceiling sits at half the point where timing starts to count, and it keeps the memory cost bounded.
 
 #### When the guard may rise
 

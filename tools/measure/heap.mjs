@@ -46,9 +46,10 @@ try {
     await sleep(2000);
     await chrome(`(Services.obs.notifyObservers(null, "child-mmu-request"), 1)`); await sleep(2500);
     const heap = await ext_heap();
-    console.log(JSON.stringify({ kind, heap_kb: Math.round(heap.total / 1024), reports: heap.n, top: heap.top.map(([k, v]) => k + "=" + Math.round(v / 1024)) }));
+    out.push({ kind, heap_kb: Math.round(heap.total / 1024), reports: heap.n, top: heap.top.map(([k, v]) => k + "=" + Math.round(v / 1024)) });
+    console.log(JSON.stringify(out.at(-1)));
   }
-} catch (error) { console.log("ERR", String(error.stack ?? error)); }
+} catch (error) { console.log("ERR", String(error.stack ?? error)); process.exitCode = 1; }
 finally { try { rdp.close(); } catch {} ff.kill("SIGTERM"); server.close(); }
-writeFileSync(`${work}/frames/result.json`, JSON.stringify(out, null, 1));
-setTimeout(() => process.exit(0), 1000);
+writeFileSync(`${work}/frames/heap.json`, JSON.stringify(out, null, 1));
+setTimeout(() => process.exit(process.exitCode ?? 0), 1000);
