@@ -222,21 +222,27 @@ export function history_items(nodes: readonly HistoryNode[], now = Date.now()): 
     .map((node) => ({ title: one_line(node.title || node.url), url: node.url, ...boosted(usage_boost(node.visit_count ?? 0, node.last_visit ?? 0, now)) }));
 }
 
-const WEB_ORIGIN = /^https?:\/\/[^/?#]+/i;
+const WEB_ADDRESS = /^(https?):\/\/([^/?#]+)/i;
 
-// The home page of every visited web host, with the visits of all its pages, the busiest first. The scheme is the newest page's. A host whose home page is already in `listed` is left out: that row stands for it.
+// The home page of every visited web host, with the visits of all its pages, the busiest first. http and https pages of a host count as one, at the scheme of its newest page.
+// A host whose home page is already in `listed`, at either scheme, is left out: that row stands for it.
 export function site_items(nodes: readonly HistoryNode[], listed: ReadonlySet<string>, now = Date.now()): SiteItem[] {
-  const hosts = new Map<string, { visit_count: number; last_visit: number }>();
+  const hosts = new Map<string, { scheme: string; visit_count: number; last_visit: number }>();
   for (const node of nodes) {
-    const origin = node.url?.match(WEB_ORIGIN)?.[0];
-    if (!origin) continue;
-    const url = `${origin}/`;
-    const host = hosts.get(url) ?? { visit_count: 0, last_visit: 0 };
-    hosts.set(url, { visit_count: host.visit_count + (node.visit_count ?? 1), last_visit: Math.max(host.last_visit, node.last_visit ?? 0) });
+    const [, scheme, host] = node.url?.match(WEB_ADDRESS) ?? [];
+    if (!scheme || !host) continue;
+    const key = host.toLowerCase();
+    const last_visit = node.last_visit ?? 0;
+    const known = hosts.get(key) ?? { scheme: scheme.toLowerCase(), visit_count: 0, last_visit };
+    hosts.set(key, {
+      scheme: last_visit > known.last_visit ? scheme.toLowerCase() : known.scheme,
+      visit_count: known.visit_count + (node.visit_count ?? 1),
+      last_visit: Math.max(known.last_visit, last_visit),
+    });
   }
   return [...hosts]
-    .filter(([url]) => !listed.has(url))
-    .map(([url, host]) => ({ url, boost: usage_boost(host.visit_count, host.last_visit, now) }))
+    .filter(([host]) => !listed.has(`https://${host}/`) && !listed.has(`http://${host}/`))
+    .map(([host, site]) => ({ url: `${site.scheme}://${host}/`, boost: usage_boost(site.visit_count, site.last_visit, now) }))
     .sort((left, right) => right.boost - left.boost);
 }
 
@@ -303,9 +309,9 @@ export const browser_complete_items_deps = {
   query_windows: (async () => browser.windows.getAll({ populate: true })) as () => Promise<WindowLike[]>,
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
   folders: async (): Promise<FolderNode[]> => folder_nodes(await browser.bookmarks.getTree()),
-  // The `bookmark` command ranks by use on a private line too, so the list and Enter read the same rows.
-  bookmark_view: async (): Promise<BookmarkView> => {
-    const [roots, history] = await Promise.all([browser.bookmarks.getTree(), search_history().catch(() => [])]);
+  // A private line reads no history, so its rows rank by text alone. The `bookmark` command passes the privacy of its tab, so its Enter ranks as the list does.
+  bookmark_view: async (is_private: boolean): Promise<BookmarkView> => {
+    const [roots, history] = await Promise.all([browser.bookmarks.getTree(), is_private ? [] : search_history().catch(() => [])]);
     return bookmark_view(roots, usage_by_url(history_items(history)));
   },
   search_history,
@@ -405,7 +411,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "saved_quickmarks") return deps.saved_quickmarks(asker.incognito);
     if (kind === "folders") return folder_items(await deps.folders());
     if (kind === "windows") return listed_windows(await deps.query_windows(), asker).map(({ number, title }) => ({ number, title }));
-    return (await deps.bookmark_view()).rows;
+    return (await deps.bookmark_view(asker.incognito)).rows;
   };
 
   return {

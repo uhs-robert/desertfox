@@ -34,6 +34,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
 function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20, closed = [] as { session_id: string; title: string; url: string }[], quickmark_urls = {} as Record<string, string> } = {}) {
+  const view_privacy: boolean[] = [];
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -52,7 +53,8 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return sessions;
     },
     folders: async () => folders,
-    bookmark_view: async () => {
+    bookmark_view: async (is_private) => {
+      view_privacy.push(is_private);
       if (fail) throw new Error("no bookmarks");
       return { rows: bookmark_rows(bookmarks, folders), folders };
     },
@@ -91,7 +93,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     closed_tabs: async () => closed,
     quickmark_table: async () => quickmark_urls,
   });
-  return { service, asked, opened, history_reads };
+  return { service, asked, opened, history_reads, view_privacy };
 }
 
 const titles = (answer: Awaited<ReturnType<ReturnType<typeof make>["service"]["answer"]>>) => (answer?.items as { title: string }[]).map((item) => item.title);
@@ -913,6 +915,39 @@ test("site rows sum the visits of each web host, keep the newest page's scheme, 
     { url: "https://github.com/", boost: usage_boost(33, NOW, NOW) },
     { url: "http://old.test/", boost: usage_boost(1, NOW - 90 * DAY, NOW) },
   ]);
+});
+
+test("the http and https pages of one host give one site row, at the newest page's scheme, and a listed home page at either scheme hides it", () => {
+  const nodes = [
+    { url: "http://moved.test/old", visit_count: 4, last_visit: NOW - 10 * DAY },
+    { url: "https://Moved.test/new", visit_count: 2, last_visit: NOW },
+    { url: "http://plain.test/a", visit_count: 1, last_visit: NOW },
+    { url: "http://hidden.test/a", visit_count: 1, last_visit: NOW },
+  ];
+  assert.deepEqual(site_items(nodes, new Set(["https://hidden.test/"]), NOW), [
+    { url: "https://moved.test/", boost: usage_boost(6, NOW, NOW) },
+    { url: "http://plain.test/", boost: usage_boost(1, NOW, NOW) },
+  ]);
+});
+
+test("the bookmark list ranks by use on a normal line only, and its reader is told the line's privacy", async () => {
+  const { service, view_privacy } = make();
+  await service.answer("bookmarks", NORMAL_LINE);
+  await service.answer("bookmarks", PRIVATE_LINE);
+  assert.deepEqual(view_privacy, [false, true]);
+  const history_searches: unknown[] = [];
+  (globalThis as { browser?: unknown }).browser = {
+    bookmarks: { getTree: async () => [{ children: [{ type: "bookmark", title: "Daily", url: "https://daily.test/" }] }] },
+    history: { search: async (query: unknown) => (history_searches.push(query), [{ url: "https://daily.test/", title: "Daily", visitCount: 40, lastVisitTime: Date.now() }]) },
+  };
+  const { browser_complete_items_deps } = await import("../../src/background/complete_items.ts");
+  try {
+    // A private read asks no history, so the row has no boost. A normal read goes through the module's history cache, which other tests share, so it is not checked here.
+    assert.equal((await browser_complete_items_deps.bookmark_view(true)).rows.rows[0]?.boost, undefined);
+    assert.deepEqual(history_searches, []);
+  } finally {
+    delete (globalThis as { browser?: unknown }).browser;
+  }
 });
 
 test("a bookmark takes the boost of its address's history, in open, the finder and the bookmark list", async () => {

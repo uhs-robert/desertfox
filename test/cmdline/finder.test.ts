@@ -95,14 +95,14 @@ test("empty query: quickmarks, tabs by last use without the current one, history
 test("typed query: one ranked list, an equal score keeps the group order, and an address shows once, as the first group that holds it", async () => {
   const { session, type } = make();
   await type("notes");
-  // The `n` quickmark matches on its address only, so it falls below the title hits. The equal title hits keep the old order: tabs, bookmarks, history, closed tabs.
+  // The `n` quickmark hides the "Notes bookmark" row and matches by its title. The equal title hits keep the old order: tabs, quickmarks, bookmarks, history, closed tabs.
   assert.deepEqual(names(session.get_rows()), [
     "tab:3: Beta notes",
     "tab:2: Alpha notes",
+    "qm:n",
     "bm:Other notes",
     "hist:History notes",
     "closed:Closed notes",
-    "qm:n",
     "search:Search: notes",
   ]);
 });

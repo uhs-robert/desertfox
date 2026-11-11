@@ -16,7 +16,8 @@ export type BookmarkDeps = {
   create: (bookmark: { url: string; title: string; parent_id?: string }) => Promise<void>;
   // Newest first, the same list the completion shows.
   // One read of the tree, so the rows and the folder ids a command filters by cannot disagree.
-  bookmarks: () => Promise<BookmarkView>;
+  // The rows rank by use only outside a private window, as the list of the same line does.
+  bookmarks: (ctx: CommandContext) => Promise<BookmarkView>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
   // The nodes Firefox finds for `url`. It ignores case and a trailing slash, so the handler checks the address again.
   nodes_for_url: (url: string) => Promise<{ id: string; parentId?: string | undefined; url?: string | undefined; type?: string | undefined; unmodifiable?: string | undefined }[]>;
@@ -46,8 +47,8 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
   };
 
   // The rows a command picks from and, with a `folder` text, the folder it names. An unknown or tied folder is refused here. Rows keep to that folder and its subfolders.
-  async function scoped_view(folder_text: string) {
-    const view = await deps.bookmarks();
+  async function scoped_view(ctx: CommandContext, folder_text: string) {
+    const view = await deps.bookmarks(ctx);
     const folder = folder_text.trim() === "" ? undefined : pick_filter_folder(view.folders, folder_text);
     return { view, folder, rows: folder ? rows_in_folder(view.rows, folder.path) : view.rows.rows };
   }
@@ -55,7 +56,7 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
   // The unmanaged bookmarks a command acts on. An empty `bookmark` means the current page. Completion lists one row per address, so a picked row stands for every bookmark with that address.
   // With a `folder`, only the copies filed in it or below it count, so a bookmark kept in two folders loses just the copy there.
   async function editable_bookmarks(ctx: CommandContext, bookmark: string, verb: string, folder_text = ""): Promise<{ id: string }[]> {
-    const { view, folder, rows } = folder_text.trim() === "" && bookmark.trim() === "" ? { view: undefined, folder: undefined, rows: [] } : await scoped_view(folder_text);
+    const { view, folder, rows } = folder_text.trim() === "" && bookmark.trim() === "" ? { view: undefined, folder: undefined, rows: [] } : await scoped_view(ctx, folder_text);
     const url = bookmark.trim() === "" ? await deps.tab_url(ctx.tab_id) : pick_bookmark(rows, bookmark).url;
     const copies = await bookmarks_at(url);
     const inside = folder && view ? new Set(view.folders.filter((candidate) => in_folder(candidate.path, folder.path)).map((candidate) => candidate.id)) : undefined;
@@ -106,7 +107,7 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       await deps.open_many(ctx, urls, args.where, report);
     },
     open: async (ctx: CommandContext, args: { bookmark: string; folder: string; where: Where }) => {
-      const picked = pick_bookmark((await scoped_view(args.folder)).rows, args.bookmark);
+      const picked = pick_bookmark((await scoped_view(ctx, args.folder)).rows, args.bookmark);
       await deps.open(ctx, picked.url, args.where);
     },
     remove: async (ctx: CommandContext, args: { bookmark: string; folder: string }) => {
@@ -137,7 +138,7 @@ export const browser_bookmark_deps: BookmarkDeps = {
     return tab.url === url ? tab.title : undefined;
   },
   create: async ({ url, title, parent_id }) => void (await browser.bookmarks.create({ url, title, ...(parent_id === undefined ? {} : { parentId: parent_id }) })),
-  bookmarks: browser_complete_items_deps.bookmark_view,
+  bookmarks: async (ctx) => browser_complete_items_deps.bookmark_view(ctx.tab_id !== undefined && (await browser.tabs.get(ctx.tab_id)).incognito),
   open: (ctx, url, where) => open_in(ctx, url, where),
   nodes_for_url: (url) => browser.bookmarks.search({ url }),
   tab_url: async (tab_id) => (tab_id === undefined ? undefined : (await browser.tabs.get(tab_id)).url),

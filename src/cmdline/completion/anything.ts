@@ -64,6 +64,21 @@ const closed_row = (entry: AnythingItems["closed"][number], usage: string) => ur
 const history_row = (entry: AnythingItems["history"][number], usage: string) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage, entry.boost);
 const quickmark_row = (mark: AnythingItems["quickmarks"][number], usage: string) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage, mark.boost);
 
+// Built once per fetch, as the page ranks on every key and history holds up to 8000 rows.
+const quickmark_titles = new WeakMap<AnythingItems, Map<string, string>>();
+
+const page_title = (items: AnythingItems, url: string): string | undefined => {
+  let titles = quickmark_titles.get(items);
+  if (!titles) {
+    const marked = new Set(items.quickmarks.map((mark) => mark.url));
+    titles = new Map();
+    // Bookmarks first, so a bookmark's own title wins over the history title.
+    for (const entry of [...items.bookmarks, ...items.history]) if (marked.has(entry.url) && !titles.has(entry.url)) titles.set(entry.url, entry.title);
+    quickmark_titles.set(items, titles);
+  }
+  return titles.get(url);
+};
+
 // Only the rows the list shows claim an address, so a page that a hidden group also holds still shows. The line's own tab claims its address, so its page is not offered again.
 // A closed tab claims its address before history, so it wins over the history row.
 function recent_rows({ usage, tabs, items }: Omit<FinderInput, "word" | "engines">): Row[] {
@@ -93,7 +108,11 @@ export function anything_ranked({ word, usage, tabs, items, engines }: FinderInp
   // An address shows once, in the first group that holds it. A closed tab wins over the history row of its address, because Enter restores the tab with its state.
   const seen = new Set(tabs.map((tab) => tab.url));
   const fresh = <Entry extends { url: string }>(entries: readonly Entry[]): Entry[] => entries.filter((entry) => !seen.has(entry.url) && seen.add(entry.url));
-  const quickmarks = fresh(items.quickmarks).map((mark) => quickmark_row(mark, usage));
+  // A quickmark's name is its key, so it takes the title of the bookmark or history row its address hides. Else a quickmarked page would match only by its address and sink below every title hit.
+  const quickmarks = fresh(items.quickmarks).map((mark) => {
+    const title = page_title(items, mark.url);
+    return { ...quickmark_row(mark, usage), ...(title === undefined ? {} : { also_named: [title] }) };
+  });
   const bookmarks = fresh(items.bookmarks).map((bookmark) => url_row(bookmark.title, bookmark.url, "bm", { kind: "page", url: bookmark.url }, usage, bookmark.boost));
   const closed = fresh(items.closed).map((entry) => closed_row(entry, usage));
   const history = fresh(items.history).map((entry) => history_row(entry, usage));
