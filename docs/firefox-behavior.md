@@ -320,8 +320,10 @@ Extension heap in a content process, from Firefox memory reports, on pages with 
 | Page | Extension heap | Per frame | Messages to the background |
 |---|---|---|---|
 | No subframes | 0.8 to 1.0 MB | the top frame, with ui.js | 5 |
-| 200 about:blank frames (started) | 48.5 MB | about 240 KB | 403 `mode_changed`, 201 `read_keymap` |
-| 200 same-origin frames (started) | 48.5 MB | about 240 KB | the same |
+| 200 about:blank frames (before PR C, started at load) | 48.5 MB | about 240 KB | 403 `mode_changed`, 201 `read_keymap` |
+| 200 same-origin frames (before PR C, started at load) | 54.6 MB | about 273 KB | the same |
+| 200 about:blank frames (inert until focused) | 19.4 MB | about 97 KB | none at load |
+| 200 same-origin frames (inert until focused) | 31.3 MB | about 156 KB | none at load |
 | 200 sandboxed frames (inert, as a frame from another site) | 20.0 to 21.7 MB | about 100 KB | 5 |
 
 Every subframe, same-origin or not, waits for its first focus before it starts the content script. A started frame costs about 140 KB more than an inert one, mostly the parsed keymap (the reply is 91,701 characters) and the mode and focus state. The frames are synthetic (200 empty frames). The resident-memory run (`frames.mjs`) had about 30 MB of noise on a 200 MB process and could not confirm the size.

@@ -153,6 +153,10 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
 
   await run_case("i leaves a frame under an all-off rule in ignore mode, and Escape keeps it there", async () => {
     await open_page("frames", "p22_off", { new_tab: true });
+    // The frame holds the focus once so it has started when i reaches the tab, which then reaches it by the set_mode broadcast.
+    await focus_frame(0, "p22_off_same", "same");
+    await in_active_tab(`document.getElementById("same").blur(); window.focus(); 0`);
+    await wait_takes_keys("p22_off");
     let mark = events.length;
     await press_keys("i");
     await wait_badge(mark, "p22_off", "INSERT");

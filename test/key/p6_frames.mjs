@@ -18,19 +18,23 @@ export async function run_cases({ wait_cmdline, close_cmdline, run_case, press_k
     await wait_event(mark, on_page(page_id, "window_focus"), "the top page to take the focus after gF");
   };
 
+  const frame_loaded = (id, name) => poll_until(`the ${name} frame to load`, async () => await in_active_tab(`document.getElementById("same").contentDocument.URL.endsWith("id=${id}_same") && document.getElementById("same").contentDocument.readyState === "complete"`));
   await run_case("an unfocused same-origin frame has no script", async () => {
-    await open_page("frames", page_id, { new_tab: true });
+    await open_page("frames", "p6_frames_idle", { new_tab: true });
+    await frame_loaded("p6_frames_idle", "same-origin");
     // The barrier reaches the top page, which starts at load, so a same-origin frame that starts at load has started by now.
-    await barrier(page_id);
-    expect(script_starts(`${page_id}_same`) === 0, `the unfocused same-origin frame started ${script_starts(`${page_id}_same`)} times`);
+    await barrier("p6_frames_idle");
+    expect(script_starts("p6_frames_idle_same") === 0, `the unfocused same-origin frame started ${script_starts("p6_frames_idle_same")} times`);
   });
 
   await run_case(";f a focuses the same-origin frame, and j then scrolls that frame", async () => {
+    await open_page("frames", page_id, { new_tab: true });
     const before_top = last_scroll_y(page_id);
     const mark = events.length;
     await press_hint_start(";f");
     await press_keys("a");
     await wait_event(mark, on_page(`${page_id}_same`, "window_focus"), "the frame to take the focus");
+    await wait_takes_keys(`${page_id}_same`);
     await press_keys("j");
     await wait_event(mark, scroll_of(`${page_id}_same`), "j to scroll the frame");
     expect(last_scroll_y(page_id) === before_top, "j scrolled the top page");
@@ -113,6 +117,7 @@ export async function run_cases({ wait_cmdline, close_cmdline, run_case, press_k
 
   await run_case("f follows a link inside a same-origin frame that has not started", async () => {
     await open_page("frames", "p6_frames_link", { new_tab: true });
+    await frame_loaded("p6_frames_link", "same-origin");
     await in_active_tab(`document.getElementById("same").contentDocument.body.insertAdjacentHTML("afterbegin", '<a href="/frame_inner?id=p6_frames_link_followed">framed link</a>'); 0`);
     await barrier("p6_frames_link");
     expect(script_starts("p6_frames_link_same") === 0, "the same-origin frame started before the pick");
@@ -133,6 +138,7 @@ export async function run_cases({ wait_cmdline, close_cmdline, run_case, press_k
 
   await run_case(";:l inside a focused same-origin frame opens the line there with the address of its link", async () => {
     await open_page("frames", "p6_frames_prompt_in", { new_tab: true });
+    await frame_loaded("p6_frames_prompt_in", "same-origin");
     await in_active_tab(`document.getElementById("same").contentDocument.body.insertAdjacentHTML("afterbegin", '<a href="/page?id=framed_link">framed link</a>'); 0`);
     const mark = events.length;
     await press_hint_start(";f");

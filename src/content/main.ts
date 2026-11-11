@@ -222,7 +222,7 @@ function follow_field_change(): void {
 }
 
 // `blur_on_load`: the time the window of about 1 s ends, opened at the first install.
-// A key or click gives the page user activation, which ends the window. It also counts input from before this script started, as in a frame from another site that starts on its first focus.
+// A key or click gives the page user activation, which ends the window. It also counts input from before this script started, as in any subframe, which starts on its first focus.
 let load_blur_ends_ms = 0;
 // True when it blurred. `blur()` returns undefined, so `!` of it is true: the shortest form for the byte cap.
 const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && !navigator.userActivation.isActive && is_editable_element(target) && !((target as HTMLElement).blur() as unknown);
