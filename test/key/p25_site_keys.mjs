@@ -22,7 +22,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
         `bind = { j = ${PAGE_DOWN} }`,
         "[[site_rules]]",
         'site = "*://127.0.0.1/*?id=sheets_*"',
-        `bind = { ${ARROWS}, gg = ${ctrl_key("Home", 36)} }`,
+        `bind = { ${ARROWS}, gg = ${ctrl_key("Home", 36)}, G = { run = ["page.send_key --key=End --key_code=35 --ctrl --target=#waffle-rich-text-editor", "page.send_key --key=ArrowLeft --key_code=37 --ctrl --target=#waffle-rich-text-editor"], label = "bottom of column A" } }`,
         "",
       ].join("\n"),
     );
@@ -63,6 +63,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await add_editor("sheets_ctrl");
     await press_keys("gg");
     await expect_keys("36c,");
+  });
+
+  await run_case("a chain bind runs both steps in order, each with ctrl set", async () => {
+    await open_page("controls", "sheets_chain", { new_tab: true });
+    await add_editor("sheets_chain");
+    await press_keys("G");
+    await expect_keys("35c,37c,");
   });
 
   await run_case("a count sends the key that many times", async () => {

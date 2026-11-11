@@ -7,3 +7,6 @@ export const FALLBACK_ENGINE_NAME = "duck";
 
 // The names of the site rows that ship with DesertFox. `default_site_rows.ts` types each row's name from this list, and a test keeps both in step.
 export const DEFAULT_SITE_ROW_NAMES = ["sheets"] as const;
+
+// The most steps one site bind may chain. A bind runs every step in a burst, so the cap keeps a typo from sending hundreds.
+export const MAX_BIND_STEPS = 20;

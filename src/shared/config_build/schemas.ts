@@ -5,6 +5,7 @@ import type { CommandMeta } from "../command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { SETTING_DOCS } from "../settings_docs.ts";
 import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
+import { MAX_BIND_STEPS } from "../table_constants.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
 import { ENGINE_KEYWORD } from "../engines/resolve.ts";
 import { KEYMAP_MODES } from "./merge.ts";
@@ -67,10 +68,18 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
+// The formats of a keymap binding, plus the invocation table `{ id, args }` that the build stores and a saved edit exports.
+const BIND_STEP: Schema = {
+  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT }, required: ["id"], additionalProperties: false }],
+};
+const BIND_STEPS: Schema = { type: "array", minItems: 1, maxItems: MAX_BIND_STEPS, items: BIND_STEP };
+
 const BINDINGS_SCHEMA: Schema = {
   type: "object",
   minProperties: 1,
-  additionalProperties: { type: "object", properties: { id: non_empty_text, args: { type: "object" } }, required: ["id"], additionalProperties: false },
+  additionalProperties: {
+    anyOf: [BIND_STEP, BIND_STEPS, { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT }, required: ["run"], additionalProperties: false }],
+  },
 };
 
 type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];
