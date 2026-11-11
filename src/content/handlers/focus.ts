@@ -18,7 +18,7 @@ export function start_content_once(start: () => void, win: Pick<Window, "addEven
   );
 }
 
-// A frame from another site starts its content script on its first focus, so the many ad and tracking frames the user never enters stay inert. A frame that is already focused when its script loads (it navigated while focused) starts at once, because no focus event follows.
+// A subframe starts its content script on its first focus, so the many ad and tracking frames the user never enters stay inert. A frame that is already focused when its script loads (it navigated while focused) starts at once, because no focus event follows.
 export function start_on_first_focus(start: () => void, win: Pick<Window, "addEventListener">, already_focused: boolean): void {
   if (already_focused) start();
   else win.addEventListener("focus", start, { once: true });

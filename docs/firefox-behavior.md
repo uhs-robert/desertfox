@@ -324,7 +324,7 @@ Extension heap in a content process, from Firefox memory reports, on pages with 
 | 200 same-origin frames (started) | 48.5 MB | about 240 KB | the same |
 | 200 sandboxed frames (inert, as a frame from another site) | 20.0 to 21.7 MB | about 100 KB | 5 |
 
-Every same-origin and about:blank subframe starts the whole content script at once. A frame from another site waits for its first focus. A started frame costs about 140 KB more than an inert one, mostly the parsed keymap (the reply is 91,701 characters) and the mode and focus state. The frames are synthetic (200 empty frames). The resident-memory run (`frames.mjs`) had about 30 MB of noise on a 200 MB process and could not confirm the size.
+Every subframe, same-origin or not, waits for its first focus before it starts the content script. A started frame costs about 140 KB more than an inert one, mostly the parsed keymap (the reply is 91,701 characters) and the mode and focus state. The frames are synthetic (200 empty frames). The resident-memory run (`frames.mjs`) had about 30 MB of noise on a 200 MB process and could not confirm the size.
 
 ### Work per key and at startup
 
