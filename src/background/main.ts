@@ -365,6 +365,8 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   return tab_modes.forget(tab_id);
 });
 
+// A tracked tab that navigates on its own is a different page now, and no longer ours to unload.
+browser.tabs.onUpdated.addListener((tab_id) => void browser_tab_preload.removed(tab_id).catch(() => undefined), { properties: ["url"] });
 browser.alarms.onAlarm.addListener(({ name }) => {
   if (name.startsWith(PRELOAD_ALARM_PREFIX)) void browser_tab_preload.alarm(Number(name.slice(PRELOAD_ALARM_PREFIX.length))).catch(() => undefined);
 });

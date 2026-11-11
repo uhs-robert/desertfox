@@ -14,10 +14,14 @@ function make(tabs: Partial<DiscardTab>[], settings: Partial<PreloadSettings> = 
   const stored: { entries: Record<string, Preloaded> } = { entries: {} };
   let hold_reload: Promise<void> | undefined;
   let hold_read: Promise<void> | undefined;
+  // Only the read with this number (counted from 1 after `hold("read", n)`) waits. Without it every read waits.
+  let hold_nth: number | undefined;
+  let reads = 0;
   const deps: PreloadDeps = {
     discard: {
       read_tab: async (id) => {
-        await hold_read;
+        reads += 1;
+        if (hold_nth === undefined || hold_nth === reads) await hold_read;
         return state.find((tab) => tab.id === id);
       },
       tabs_in_window: async (window_id) => state.filter((tab) => tab.window_id === window_id),
@@ -54,7 +58,9 @@ function make(tabs: Partial<DiscardTab>[], settings: Partial<PreloadSettings> = 
       return real.after_switch(window_id, landed_id, direction);
     },
   };
-  const hold = (which: "reload" | "read") => {
+  const hold = (which: "reload" | "read", nth?: number) => {
+    hold_nth = nth;
+    reads = 0;
     let release!: () => void;
     const promise = new Promise<void>((resolve) => (release = resolve));
     if (which === "reload") hold_reload = promise;
@@ -119,13 +125,17 @@ test("moving next to the tab again cancels the countdown, and a stale alarm does
   assert.equal(state[2]!.discarded, false);
 });
 
-test("an alarm before the deadline does nothing", async () => {
-  const { log, alarms, preload, visit, clock } = make([{}, {}, { discarded: true }, {}]);
+test("an alarm a moment early unloads nothing and arms the alarm again for the deadline", async () => {
+  const { log, alarms, preload, visit, clock, stored } = make([{}, {}, { discarded: true }, {}]);
   await preload.after_switch(1, 2, 1);
   await visit(1);
-  clock.now = alarms.get(3)! - 1;
+  const deadline = alarms.get(3)!;
+  clock.now = deadline - 1;
+  alarms.delete(3);
   await preload.alarm(3);
   assert.deepEqual(log, ["reload 3"]);
+  assert.equal(alarms.get(3), deadline);
+  assert.equal(stored.entries[3]!.deadline, deadline);
 });
 
 test("a long read on the adjacent tab never unloads the preloaded tab", async () => {
@@ -293,4 +303,69 @@ test("a restart of the background keeps the countdown: the stored entry re-arms 
   assert.deepEqual(log, ["reload 3", "discard 3"]);
   assert.equal(state[2]!.discarded, true);
   void preload;
+});
+
+test("a preloaded tab that moved to another window and was visited there is not unloaded by a later switch in the old window", async () => {
+  const { state, log, alarms, stored, preload, visit, deps } = make([{}, {}, { discarded: true }, {}]);
+  await preload.after_switch(1, 2, 1);
+  // The user drags the tab into window 2 and activates it there.
+  state[2]!.window_id = 2;
+  await deps.discard.activate(3);
+  await preload.activated(2, 3);
+  assert.deepEqual(stored.entries, {});
+  await visit(1);
+  assert.equal(alarms.size, 0);
+  assert.deepEqual(log, ["reload 3"]);
+});
+
+test("a visit during the read that comes just before the discard still stops it", async () => {
+  const { state, log, preload, visit, hold, alarms, clock, tick } = make([{}, {}, { discarded: true }, {}]);
+  await preload.after_switch(1, 2, 1);
+  await visit(1);
+  clock.now = alarms.get(3)!;
+  // Reads: the alarm's own check is the first, the one inside `set_unloaded` the second.
+  const release = hold("read", 2);
+  const unloading = preload.alarm(3);
+  await tick();
+  await tick();
+  state[2]!.active = true;
+  const visiting = preload.activated(1, 3);
+  state[2]!.active = false;
+  release();
+  await Promise.all([unloading, visiting]);
+  assert.deepEqual(log, ["reload 3"]);
+  assert.equal(state[2]!.discarded, false);
+});
+
+test("an alarm that fires while the user is next to the tab again does not unload it", async () => {
+  const { state, log, alarms, stored, clock, preload, visit } = make([{}, {}, { discarded: true }, {}]);
+  await preload.after_switch(1, 2, 1);
+  await visit(1);
+  clock.now = alarms.get(3)!;
+  // The switch back next to the tab has happened, but its event has not been handled yet.
+  state[0]!.active = false;
+  state[1]!.active = true;
+  await preload.alarm(3);
+  assert.deepEqual(log, ["reload 3"]);
+  assert.deepEqual(stored.entries, { 3: { window_id: 1, direction: 1 } });
+});
+
+test("a tracked tab that navigates on its own is no longer unloaded", async () => {
+  const { log, alarms, preload, visit, fire_alarm } = make([{}, {}, { discarded: true }, {}]);
+  await preload.after_switch(1, 2, 1);
+  await visit(1);
+  // `main.ts` sends the url change of a tab to `removed`.
+  await preload.removed(3);
+  await fire_alarm(3);
+  assert.equal(alarms.size, 0);
+  assert.deepEqual(log, ["reload 3"]);
+});
+
+test("a tracked tab the user unloaded is loaded again by the next switch", async () => {
+  const { state, log, preload } = make([{}, {}, { discarded: true }, {}]);
+  await preload.after_switch(1, 2, 1);
+  state[2]!.discarded = true;
+  await preload.after_switch(1, 2, 1);
+  assert.deepEqual(log, ["reload 3", "reload 3"]);
+  assert.equal(state[2]!.discarded, false);
 });

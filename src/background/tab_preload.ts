@@ -83,7 +83,9 @@ export function create_tab_preload(deps: PreloadDeps) {
     const target = tabs[(landed.index + direction + tabs.length) % tabs.length];
     if (!target || target.id === landed.id || target.active || in_flight.has(target.id)) return;
     const known = (await deps.read())[target.id];
-    if (known) return void (await in_turn(() => keep_next_to(target.id, direction)));
+    if (known && !target.discarded) return void (await in_turn(() => keep_next_to(target.id, direction)));
+    // The user unloaded a tracked tab: the old entry goes and the tab loads again.
+    if (known) await in_turn(() => forget(target.id));
     if (target.discarded) await load(window_id, target.id, direction);
     else await deps.warmup(target.id).catch(() => undefined);
   }
@@ -101,9 +103,14 @@ export function create_tab_preload(deps: PreloadDeps) {
   // The user switched to `tab_id`. Every tab this module loaded in that window is either the one visited, next to it (no countdown) or left behind (countdown).
   async function settle(window_id: number, tab_id: number): Promise<void> {
     const entries = await deps.read();
+    // The visited tab is the user's, whichever window it was loaded for: it may have moved windows since.
+    const visited = Boolean(entries[tab_id]);
+    if (visited) drop(entries, tab_id);
     const in_window = Object.entries(entries).filter(([, entry]) => entry.window_id === window_id);
-    if (in_window.length === 0) return;
-    if (entries[tab_id]) drop(entries, tab_id);
+    if (in_window.length === 0) {
+      if (visited) await deps.write(entries);
+      return;
+    }
     const tabs = await deps.discard.tabs_in_window(window_id);
     const active = tabs.find((tab) => tab.id === tab_id);
     const { tab_preload_unload_ms } = await deps.settings();
@@ -132,12 +139,23 @@ export function create_tab_preload(deps: PreloadDeps) {
       const entries = await deps.read();
       const entry = entries[tab_id];
       // A stale alarm, or one for a countdown that stopped.
-      if (!entry || entry.deadline === undefined || deps.now_ms() < entry.deadline) return;
+      if (!entry || entry.deadline === undefined) return;
+      // An alarm can fire a few milliseconds early. The entry would then wait for an alarm that never comes.
+      if (deps.now_ms() < entry.deadline) return void deps.set_alarm(tab_id, entry.deadline);
+      // The user may have come back next to the tab while the alarm waited for its turn.
+      const tabs = await deps.discard.tabs_in_window(entry.window_id);
+      const active = tabs.find((tab) => tab.active);
+      if (active && tabs[(active.index + entry.direction + tabs.length) % tabs.length]?.id === tab_id) {
+        entries[tab_id] = { window_id: entry.window_id, direction: entry.direction };
+        return void (await deps.write(entries));
+      }
       drop(entries, tab_id);
       await deps.write(entries);
       const tab = await deps.discard.read_tab(tab_id);
       if (!tab || tab.discarded || tab.active || tab.pinned || tab.audible || work.touched) return;
-      await set_unloaded(deps.discard, [tab_id], true);
+      // `set_unloaded` reads the tab again before it discards. The flag is checked at the last step, so a visit during that read still stops the discard.
+      const unless_touched: DiscardDeps = { ...deps.discard, discard: async (id) => void (!work.touched && (await deps.discard.discard(id))) };
+      await set_unloaded(unless_touched, [tab_id], true);
     } finally {
       in_flight.delete(tab_id);
     }
