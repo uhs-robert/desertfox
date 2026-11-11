@@ -409,9 +409,10 @@ class ReleaseStepTest(InstallCase):
         self.assertIn("no longer matches its checksum", done.stderr)
         self.assertFalse(os.path.exists(self.gh_log))
 
-    def test_a_beta_version_publishes_a_prerelease_and_a_bad_version_stamps_nothing(self):
+    def release_work_dir(self, version):
+        """A throwaway repo with the justfile, the host scripts and package.json at `version`."""
         repo_root = os.path.dirname(HOST_DIR)
-        work = os.path.join(self.tmp.name, "beta")
+        work = os.path.join(self.tmp.name, "work-" + version)
         os.makedirs(os.path.join(work, "host"))
         shutil.copy(os.path.join(repo_root, "justfile"), work)
         for name in ("desertfox-host", "desertfox-bridge", "desertfox", "install.sh"):
@@ -419,7 +420,11 @@ class ReleaseStepTest(InstallCase):
         subprocess.run(["git", "init", "-q"], cwd=work, check=True)
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "base"], cwd=work, check=True, env=dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull))
         with open(os.path.join(work, "package.json"), "w") as file:
-            file.write('{"version": "0.2.0-beta.3"}')
+            file.write(json.dumps({"version": version}))
+        return work
+
+    def test_a_beta_version_publishes_a_prerelease_and_a_bad_version_stamps_nothing(self):
+        work = self.release_work_dir("0.2.0-beta.3")
         self.assertEqual(self.just("release_stamp", cwd=work).returncode, 0)
         done = self.just("release_publish", cwd=work)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -434,9 +439,28 @@ class ReleaseStepTest(InstallCase):
         self.assertIn("not x.y.z or x.y.z-beta.N", done.stderr)
 
     def test_a_stable_version_is_not_a_prerelease(self):
-        self.assertEqual(self.publish().returncode, 0)
+        work = self.release_work_dir("0.2.0")
+        self.assertEqual(self.just("release_stamp", cwd=work).returncode, 0)
+        done = self.just("release_publish", cwd=work)
+        self.assertEqual(done.returncode, 0, done.stderr)
         with open(self.gh_log) as file:
-            self.assertNotIn("--prerelease", file.read())
+            logged = file.read()
+        self.assertTrue(logged.startswith("release create v0.2.0 "), logged)
+        self.assertNotIn("--prerelease", logged)
+
+    def test_publish_refuses_a_file_that_matches_its_sha256_but_not_the_hashes_the_build_carries(self):
+        self.assertEqual(self.just("release_stamp").returncode, 0)
+        cli = os.path.join(self.assets, "desertfox")
+        with open(cli, "ab") as file:
+            file.write(b"\n# edited after the stamp\n")
+        with open(cli, "rb") as file:
+            digest = hashlib.sha256(file.read()).hexdigest()
+        with open(cli + ".sha256", "w") as file:
+            file.write(f"{digest}  desertfox\n")
+        done = self.just("release_publish")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("does not match its hash in host_sha256.json", done.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
 
     def test_publish_uploads_the_hosts_the_command_line_checksums_and_script_for_the_package_version(self):
         done = self.publish()

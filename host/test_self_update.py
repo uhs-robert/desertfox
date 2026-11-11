@@ -313,6 +313,10 @@ class ReplaceTest(UpdateCase):
             error = self.assert_refused("Nothing was replaced")
         self.assertIn("No space left", str(error))
 
+    def test_a_failure_after_a_staged_file_is_created_leaves_no_new_file(self):
+        with mock.patch.object(host.os, "fsync", side_effect=OSError(5, "Input/output error")):
+            self.assert_refused("Nothing was replaced")
+
     def test_a_failed_rename_leaves_the_old_file_and_names_what_changed(self):
         real = os.replace
         calls = []
@@ -462,7 +466,8 @@ class FetchTest(unittest.TestCase):
 
 
 class LocalTlsServer:
-    """One HTTPS connection on 127.0.0.1 at a time, answered by `respond(tls_socket, stop_event)` after the request head."""
+    """HTTPS on 127.0.0.1. Each connection gets its own thread and is answered by `respond(tls_socket, stop_event, head)`
+    after the request head."""
 
     def __init__(self, cert_path, key_path, respond):
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -481,17 +486,21 @@ class LocalTlsServer:
                 connection, _ = self.listener.accept()
             except OSError:
                 continue
-            try:
-                with self.context.wrap_socket(connection, server_side=True) as tls:
-                    head = b""
-                    while b"\r\n\r\n" not in head:
-                        chunk = tls.recv(4096)
-                        if not chunk:
-                            break
-                        head += chunk
-                    self.respond(tls, self.stop)
-            except OSError:
-                pass
+            threading.Thread(target=self.answer, args=(connection,), daemon=True).start()
+
+    def answer(self, connection):
+        try:
+            connection.settimeout(10)
+            with self.context.wrap_socket(connection, server_side=True) as tls:
+                head = b""
+                while b"\r\n\r\n" not in head:
+                    chunk = tls.recv(4096)
+                    if not chunk:
+                        break
+                    head += chunk
+                self.respond(tls, self.stop, head)
+        except OSError:
+            pass
 
     def close(self):
         self.stop.set()
@@ -517,19 +526,25 @@ class RealTlsFetchTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.cert_dir.cleanup()
 
+    def setUp(self):
+        # A proxy from the environment would take the loopback requests away from the test server.
+        no_proxy = mock.patch.dict(os.environ, {"no_proxy": "*", "NO_PROXY": "*"})
+        no_proxy.start()
+        self.addCleanup(no_proxy.stop)
+
     def serve(self, respond):
         server = LocalTlsServer(self.cert, self.key, respond)
         self.addCleanup(server.close)
         return f"https://127.0.0.1:{server.port}/desertfox-host"
 
     def test_a_whole_response_is_returned(self):
-        def respond(tls, stop):
+        def respond(tls, stop, head):
             tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\n#!body")
 
         self.assertEqual(host.fetch_release_file(self.serve(respond), context=self.client_context), b"#!body")
 
     def test_a_server_that_drips_stops_at_the_total_deadline(self):
-        def drip(tls, stop):
+        def drip(tls, stop, head):
             tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n")
             # The drip ends on its own, so a fetch with no total deadline fails this test instead of hanging the suite.
             give_up = time.monotonic() + 6
@@ -545,8 +560,22 @@ class RealTlsFetchTest(unittest.TestCase):
         self.assertIn("timed out after 1 s", str(caught.exception))
         self.assertLess(time.monotonic() - started, 3)
 
+    def test_a_redirect_body_is_never_read(self):
+        def respond(tls, stop, head):
+            if head.startswith(b"GET /next "):
+                tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\n#!ok")
+                return
+            # A redirect that promises a huge body and never sends it: reading it would block until the deadline.
+            port = tls.getsockname()[1]
+            tls.sendall(f"HTTP/1.1 302 Found\r\nLocation: https://127.0.0.1:{port}/next\r\nContent-Length: 100000000\r\n\r\n".encode() + b"x" * 1024)
+            stop.wait(10)
+
+        url = self.serve(respond)
+        with mock.patch.object(host, "UPDATE_TIMEOUT_S", 3):
+            self.assertEqual(host.fetch_release_file(url, context=self.client_context), b"#!ok")
+
     def test_a_chunked_response_cut_off_mid_body_is_an_update_error(self):
-        def cut_off(tls, stop):
+        def cut_off(tls, stop, head):
             tls.sendall(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n10\r\nabc")
             tls.unwrap()
 

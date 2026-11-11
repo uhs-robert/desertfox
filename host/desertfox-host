@@ -21,6 +21,7 @@ import contextlib
 import fcntl
 import hashlib
 import http.client
+import io
 import json
 import os
 import re
@@ -190,6 +191,14 @@ class HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
         if not newurl.lower().startswith("https://"):
             raise UpdateError(f"refused a redirect to a URL that is not https: {newurl[:200]}")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    def http_error_302(self, req, fp, code, msg, headers):
+        # The base class reads the whole redirect body before it follows, with no size cap. Close the response unread
+        # and hand the base class an empty body instead.
+        fp.close()
+        return super().http_error_302(req, io.BytesIO(), code, msg, headers)
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = http_error_302
 
 
 def https_opener(context=None):
@@ -377,11 +386,19 @@ def write_new_file(path, data, mode):
     except FileNotFoundError:
         pass
     descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, mode)
-    with os.fdopen(descriptor, "wb") as file:
-        file.write(data)
-        file.flush()
-        os.fsync(file.fileno())
-    os.chmod(staged, mode)
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(data)
+            file.flush()
+            os.fsync(file.fileno())
+        os.chmod(staged, mode)
+    except BaseException:
+        # The caller cleans up only the files staged in full, so a half-written one goes here.
+        try:
+            os.unlink(staged)
+        except OSError:
+            pass
+        raise
     return staged
 
 

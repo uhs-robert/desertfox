@@ -305,6 +305,13 @@ release_publish:
         grep -qx "RELEASE_VERSION = \"$version\"" "$assets/$script" || { echo "release_publish: $assets/$script is not stamped as $version." >&2; exit 1; }
     done
     (cd "$assets" && sha256sum --quiet -c desertfox-host.sha256 desertfox-bridge.sha256 desertfox.sha256) || { echo "release_publish: a file in $assets no longer matches its checksum." >&2; exit 1; }
+    # The signed build carries host_sha256.json, so a file that matches only its own .sha256 would fail every update.
+    for script in desertfox-host desertfox-bridge desertfox; do
+        if [ "$(jq -r --arg name "$script" '.sha256[$name]' "$assets/host_sha256.json")" != "$(cut -d ' ' -f 1 "$assets/$script.sha256")" ]; then
+            echo "release_publish: $assets/$script does not match its hash in host_sha256.json, which the signed build carries. Run 'just release_stamp' on the commit that was signed." >&2
+            exit 1
+        fi
+    done
     gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
     if [[ "$version" == *-beta.* ]]; then
         gh_command+=(--prerelease)
