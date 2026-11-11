@@ -440,5 +440,36 @@ class SocketTest(BridgeTestCase):
                 time.sleep(0.05)
 
 
+class AcceptErrorTest(BridgeTestCase):
+    def test_a_transient_accept_error_does_not_end_the_server(self):
+        import errno
+
+        module = load_host("desertfox-bridge")
+        module.ACCEPT_RETRY_S = 0.01
+        os.makedirs(self.state_dir)
+        real = module.bind_socket(self.socket_path)
+
+        class Flaky:
+            """Fails the first accept like a full descriptor table, then serves."""
+
+            failures = 1
+
+            def accept(self):
+                if Flaky.failures:
+                    Flaky.failures -= 1
+                    raise OSError(errno.EMFILE, "too many open files")
+                return real.accept()
+
+            def fileno(self):
+                return real.fileno()
+
+        state = module.BridgeState(self.state_path, os.getpid(), "1")
+        thread = threading.Thread(target=module.accept_loop, args=(Flaky(), state), daemon=True)
+        thread.start()
+        self.addCleanup(real.close)
+        self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
+        self.assertTrue(thread.is_alive())
+
+
 if __name__ == "__main__":
     unittest.main()

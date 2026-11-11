@@ -40,6 +40,7 @@ LOCK_WAIT_S = 3
 MAX_REQUEST_BYTES = 64 * 1024
 IDLE_TIMEOUT_S = 5
 MAX_CONNECTIONS = 16
+ACCEPT_RETRY_S = 0.1
 
 
 class StopHost(Exception):
@@ -221,8 +222,13 @@ def accept_loop(listener, state):
     while True:
         try:
             connection, _ = listener.accept()
-        except OSError:
-            return
+        except OSError as error:
+            # Shutdown closes the listener. Any other error (EMFILE, ECONNABORTED) is transient, and ending here would leave a host that holds the lock and the socket but serves nobody.
+            if listener.fileno() == -1:
+                return
+            log("accept failed, retrying: %s" % error)
+            time.sleep(ACCEPT_RETRY_S)
+            continue
         if not slots.acquire(blocking=False):
             connection.close()
             continue
