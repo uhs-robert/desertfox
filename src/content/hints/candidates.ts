@@ -181,6 +181,17 @@ export const keep_text_matches = (found: Found[], lower_needle: string): Found[]
 export const has_text = (element: Element, lower_needle: string): boolean =>
   ((element as HTMLElement).innerText ?? element.textContent ?? "").toLowerCase().includes(lower_needle);
 
+const TEXT_CHARS = 400;
+const squeezed = (text: unknown): string => (typeof text === "string" ? text : "").replace(/\s+/g, " ").trim();
+
+// What a person would call the element, for matching typed text: its visible text, else aria-label, title, the alt of a picture in it, or an input's value.
+// A wrapper can hold a whole page of text, so only the start counts.
+export function text_of(element: Element): string {
+  const own = squeezed((element as HTMLElement).innerText ?? element.textContent);
+  const text = own || squeezed(element.getAttribute("aria-label")) || squeezed(element.getAttribute("title")) || squeezed(element.querySelector("img[alt]")?.getAttribute("alt") ?? element.getAttribute("alt")) || squeezed((element as HTMLInputElement).value);
+  return text.slice(0, TEXT_CHARS);
+}
+
 export const window_of = (element: Element): Window => element.ownerDocument.defaultView ?? window;
 
 const parent_of = (element: Element): Element | null => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null;

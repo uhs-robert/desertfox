@@ -11,10 +11,11 @@ import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
-import { collect, keep_text_matches, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
+import { collect, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of } from "./candidates.ts";
 import type { Found, HintFilter } from "./candidates.ts";
 import { clean_letters, make_labels } from "./labels.ts";
-import { create_picker } from "./pick.ts";
+import { create_picker, is_text_key } from "./pick.ts";
+import type { KeyOutcome } from "./pick.ts";
 import { is_hint_char } from "./hint_keys.ts";
 import { insert_into_focused_field } from "./insert_text.ts";
 import { mark_text_entry } from "../text/entry.ts";
@@ -62,7 +63,8 @@ type Session = {
   lower_text_: string | undefined;
   // What a rapid copy has picked so far, in order. The clipboard holds all of it after every pick.
   collected_: string[];
-  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; stop_following_: () => void };
+  // `text_of_found_` reads the text of every hint. It runs when text mode first needs it and keeps its answer.
+  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; text_of_found_: () => string[]; stop_following_: () => void };
 };
 
 function observe_intersecting(elements: Element[]): Promise<Set<Element>> {
@@ -276,16 +278,28 @@ function register(host: BundleHostApi): void {
     const view = create_view();
     const labels = make_labels(found.length, letters);
     view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
-    current.ready = { picker: create_picker(labels), found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
+    let texts: string[] | undefined;
+    const text_of_found_ = () => (texts ??= found.map((item) => text_of(item.element)));
+    // Every build starts in label mode. `text` only filters the hints, it does not start text mode, so the labels stay typable.
+    const picker = create_picker(labels, text_of_found_);
+    current.ready = { picker, found, view, text_of_found_, stop_following_: follow_windows(windows_of(found), view.reposition) };
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
     while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
+  }
+
+  function show_outcome(view: HintView, outcome: KeyOutcome): void {
+    if (outcome.kind === "handled") view.show_progress_(outcome.typed, new Set(outcome.still_possible_), outcome.text, outcome.active);
   }
 
   function handle_token(current: Session, token: string): "handled" | "pass" {
     const ready = current.ready!;
     const outcome = ready.picker.on_token_(token);
     if (outcome.kind === "pass") return "pass";
-    ready.view.show_progress_(outcome.typed, new Set(outcome.still_possible_));
+    if (outcome.kind === "rotate") {
+      ready.view.rotate_overlaps_();
+      return "handled";
+    }
+    show_outcome(ready.view, outcome);
     if (outcome.picked !== undefined) {
       const { element } = ready.found[outcome.picked]!;
       const picked = element as HTMLElement;
@@ -327,7 +341,7 @@ function register(host: BundleHostApi): void {
     on_token_: (token) => {
       if (!session) return "pass";
       if (session.ready) return handle_token(session, token);
-      if (!is_hint_char(token)) return "pass";
+      if (!is_hint_char(token) && !is_text_key(token)) return "pass";
       session.waiting_tokens_.push(token);
       return "handled";
     },

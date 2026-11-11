@@ -245,6 +245,74 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_no_match", ["j"])) > 0, "keys did not work after a text with no match");
   });
 
+  // Tab inside hint mode switches from typing a label to typing the link text. The fixture links are "one" (label a) and "two" (label s).
+  const hint_labels_in_order = () => in_active_tab(`[...document.documentElement.children].map((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => node.textContent).join(",")).join("")`);
+  const text_box_shown = () => in_active_tab(`[...document.documentElement.children].some((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint-text"))`);
+
+  await run_case("Tab then text then Enter picks the best match", async () => {
+    await open_page("hints", "p6_text_enter", { new_tab: true });
+    const mark = events.length;
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await press_keys("-k", "Tab", "o");
+    // "o" is a word start in "one" and only inside "two", so "one" ranks first.
+    await poll_until("the text box", text_box_shown);
+    await press_keys("-k", "Return");
+    await wait_event(mark, loaded("hint_one"), "the best match to load");
+  });
+
+  await run_case("Tab then text that matches one link picks it at once", async () => {
+    await open_page("hints", "p6_text_unique", { new_tab: true });
+    const mark = events.length;
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await press_keys("-k", "Tab", "t", "w");
+    await wait_event(mark, loaded("hint_two"), "the only match to load");
+  });
+
+  await run_case("Backspace on empty text returns to label mode with the labels intact", async () => {
+    await open_page("hints", "p6_text_back", { new_tab: true });
+    const mark = events.length;
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await press_keys("-k", "Tab", "o", "-k", "BackSpace", "-k", "BackSpace");
+    await poll_until("the text box to go", async () => !(await text_box_shown()));
+    expect((await hint_label_count()) === 2, "the labels are not both shown");
+    await press_keys("s");
+    await wait_event(mark, loaded("hint_two"), "label s to pick the second link");
+  });
+
+  await run_case("Space turns overlapping labels, and keeps hint mode", async () => {
+    await open_page("hints", "p6_space_rotate", { new_tab: true });
+    await in_active_tab(`for (const link of document.querySelectorAll("a[href*=hint_]")) Object.assign(link.style, { position: "fixed", left: "50px", top: "50px", display: "block" }); 0`);
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    const before = await hint_labels_in_order();
+    await press_keys("-k", "space");
+    await poll_until("the label order to change", async () => (await hint_labels_in_order()) !== before);
+    expect((await hint_label_count()) === 2, "Space left hint mode or changed the labels");
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+  });
+
+  await run_case("rapid mode starts each round in label mode", async () => {
+    await open_page("hints", "p6_text_rapid", { new_tab: true });
+    const tabs_before = await tab_count();
+    const mark = events.length;
+    await run_hint({ action: "background", filter: "links", rapid: true });
+    await wait_for_labels("rapid");
+    await press_keys("-k", "Tab", "t", "w");
+    await wait_event(mark, loaded("hint_two"), "the text pick to load");
+    await wait_for_labels("the first pick");
+    expect(!(await text_box_shown()), "the next round is still in text mode");
+    await press_keys("a");
+    await wait_event(mark, loaded("hint_one"), "label a to pick the first link in the next round");
+    await wait_for_tab_count(tabs_before + 2, "two picks to open two tabs");
+    await press_keys("-k", "Escape");
+    await close_tabs_with("hint_one");
+    await close_tabs_with("hint_two");
+  });
+
   // `sh` opens the command line with `heading ` typed. The list lives in the extension's frame, which the page cannot read, so these cases check what a pick does to the page.
   const toast_layer = 2147483647 - 2;
   const toast_text = async () => await in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`);
