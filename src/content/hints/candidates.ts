@@ -184,13 +184,16 @@ export const has_text = (element: Element, lower_needle: string): boolean =>
 const TEXT_CHARS = 400;
 const squeezed = (text: unknown): string => (typeof text === "string" ? text : "").replace(/\s+/g, " ").trim();
 
-// What a person would call the element, for matching typed text: its visible text, else aria-label, title, the alt of a picture in it, or an input's value.
-// A wrapper can hold a whole page of text, so only the start counts.
-export function text_of(element: Element): string {
-  const own = squeezed((element as HTMLElement).innerText ?? element.textContent);
-  const text = own || squeezed(element.getAttribute("aria-label")) || squeezed(element.getAttribute("title")) || squeezed(element.querySelector("img[alt]")?.getAttribute("alt") ?? element.getAttribute("alt")) || squeezed((element as HTMLInputElement).value);
-  return text.slice(0, TEXT_CHARS);
+// What names an element, best first: its own text (the caller says which reading of it), else aria-label, title, the alt of a picture in it, or the value of an input. A button's `value` is the form data it sends, not a name, and a password is a secret, so only other inputs offer a value.
+export function name_candidates(element: Element, own_text: unknown): string[] {
+  const is_named_input = element.localName === "input" && (element as HTMLInputElement).type !== "password";
+  const alt = element.querySelector("img[alt]")?.getAttribute("alt") ?? element.getAttribute("alt");
+  const texts = [own_text, element.getAttribute("aria-label"), element.getAttribute("title"), alt, is_named_input ? (element as HTMLInputElement).value : ""];
+  return texts.map(squeezed).filter((text) => text !== "");
 }
+
+// The text that typed hint text is matched against. A wrapper can hold a whole page of text, so only the start counts.
+export const text_of = (element: Element): string => (name_candidates(element, (element as HTMLElement).innerText ?? element.textContent)[0] ?? "").slice(0, TEXT_CHARS);
 
 export const window_of = (element: Element): Window => element.ownerDocument.defaultView ?? window;
 

@@ -351,9 +351,11 @@ test("the frames filter lists a frame of another site without entering it, a fra
   assert.deepEqual(names(collect(page, query_for("frames", undefined))), ["embed", "same", "nested"]);
 });
 
-type TextFake = { innerText?: string; textContent?: string; attrs?: Record<string, string>; image_alt?: string; value?: unknown };
+type TextFake = { local?: string; type?: string; innerText?: string; textContent?: string; attrs?: Record<string, string>; image_alt?: string; value?: unknown };
 const text_fake = (fake: TextFake) =>
   ({
+    localName: fake.local ?? "a",
+    type: fake.type,
     innerText: fake.innerText,
     textContent: fake.textContent,
     value: fake.value,
@@ -369,11 +371,13 @@ test("text_of falls back to aria-label, title, a picture's alt, then an input va
   assert.equal(text_of(text_fake({ innerText: "", attrs: { "aria-label": "Close", title: "t" } })), "Close");
   assert.equal(text_of(text_fake({ innerText: " ", attrs: { title: "Tip" }, image_alt: "alt" })), "Tip");
   assert.equal(text_of(text_fake({ innerText: "", image_alt: "Logo" })), "Logo");
-  assert.equal(text_of(text_fake({ innerText: "", value: "Send" })), "Send");
+  assert.equal(text_of(text_fake({ local: "input", innerText: "", value: "Send" })), "Send");
 });
 
 test("text_of uses textContent when innerText is missing, ignores a numeric value, and clips a long text", () => {
   assert.equal(text_of(text_fake({ textContent: "plain" })), "plain");
   assert.equal(text_of(text_fake({ innerText: "", value: 0 })), "");
+  assert.equal(text_of(text_fake({ local: "button", innerText: "", value: "form data" })), "");
+  assert.equal(text_of(text_fake({ local: "input", type: "password", innerText: "", value: "hunter2" })), "");
   assert.equal(text_of(text_fake({ innerText: "x".repeat(1000) })).length, 400);
 });
