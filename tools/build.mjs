@@ -15,8 +15,8 @@ const MAX_BYTES = {
   "page.js": 4 * 1024,
   "text.js": 4 * 1024,
   "media.js": 4 * 1024,
-  // 52 KB: the verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
-  "cmdline_page.js": 52 * 1024,
+  // 53 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
+  "cmdline_page.js": 53 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,
 };

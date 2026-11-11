@@ -5,8 +5,9 @@ import type { BridgeDeps, BridgePort, BridgeWindow } from "../../src/background/
 import type { Mode } from "../../src/shared/command.ts";
 import type { BridgeAnswer } from "../../src/background/bridge_run.ts";
 
-function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string) => Promise<BridgeAnswer> } = {}) {
-  const settings = { bridge: options.bridge ?? true };
+function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean } = {}) {
+  const settings = { bridge: options.bridge ?? true, share_tabs: options.share_tabs ?? false };
+  const tab_calls: { verb: string; request: Record<string, unknown> }[] = [];
   const state = { permission: options.permission ?? true, gate: undefined as Promise<void> | undefined };
   const windows = new Map<number, BridgeWindow>([[1, { id: 1, focused: true, private: false }], [2, { id: 2, focused: false, private: false }]]);
   const active_tab = new Map<number, number>([[1, 11], [2, 22]]);
@@ -58,12 +59,16 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
     now_ms: () => now,
     run_command: options.run_command ?? (async () => ({ ok: true })),
     list_commands: () => [{ id: "tab.next", label: "Next tab", intent: "Go to the next tab." }],
+    tab_verb: async (verb, request) => {
+      tab_calls.push({ verb, request });
+      return { ok: true, handled: verb };
+    },
   };
   const bridge = create_bridge(deps);
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
   const pending = () => timers.filter((timer) => !timer.cancelled);
   return {
-    bridge, settings, state, windows, active_tab, modes, ports, counts, settle,
+    bridge, settings, state, windows, active_tab, modes, ports, counts, settle, tab_calls,
     port: () => ports[ports.length - 1]!,
     advance: (ms: number) => void (now += ms),
     // Fires the newest pending timer, lets the connect it starts finish and returns its delay.
@@ -408,4 +413,42 @@ test("a run that finishes after the port dropped is not sent, not even to the ne
   await test_case.settle();
   assert.deepEqual(replies_of(first), []);
   assert.deepEqual(replies_of(second), []);
+});
+
+test("the tab verbs and a run with a tab id answer that sharing is off until bridge_share_tabs is on", async () => {
+  const test_case = make({ run_command: async () => assert.fail("must not run") });
+  await test_case.connect_and_ready();
+  for (const [index, verb] of ["tabs", "activate", "clear_preface", "close", "capture"].entries()) test_case.port().hear({ verb, request_id: index + 1, tab_id: 5 });
+  test_case.port().hear({ verb: "run", request_id: 9, command: "tab.next", tab_id: 5 });
+  await test_case.settle();
+  const replies = replies_of(test_case.port());
+  assert.equal(replies.length, 6);
+  for (const reply of replies) assert.deepEqual({ ok: reply.ok, message: reply.message }, { ok: false, message: "tab sharing is off, set bridge_share_tabs to true" });
+  assert.deepEqual(test_case.tab_calls, []);
+});
+
+test("with bridge_share_tabs on the tab verbs reach the tab handler and a run carries its tab id", async () => {
+  const runs: [string, number | undefined][] = [];
+  const test_case = make({ share_tabs: true, run_command: async (text, tab_id) => (runs.push([text, tab_id]), { ok: true }) });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "activate", request_id: 1, tab_id: 5, preface: "abc" });
+  test_case.port().hear({ verb: "run", request_id: 2, command: "tab.next", tab_id: 5 });
+  test_case.port().hear({ verb: "run", request_id: 3, command: "tab.next" });
+  await test_case.settle();
+  assert.deepEqual(test_case.tab_calls.map((call) => [call.verb, call.request.tab_id, call.request.preface]), [["activate", 5, "abc"]]);
+  assert.deepEqual(runs, [["tab.next", 5], ["tab.next", undefined]]);
+  assert.deepEqual(replies_of(test_case.port()).map((reply) => reply.ok), [true, true, true]);
+});
+
+test("a run whose tab id is not a whole number gets no answer, and the opt-in follows a settings change", async () => {
+  const test_case = make({ share_tabs: true });
+  await test_case.connect_and_ready();
+  test_case.port().hear({ verb: "run", request_id: 1, command: "tab.next", tab_id: "5" });
+  await test_case.settle();
+  assert.deepEqual(replies_of(test_case.port()), []);
+  test_case.settings.share_tabs = false;
+  await test_case.bridge.settings_changed();
+  test_case.port().hear({ verb: "tabs", request_id: 2 });
+  await test_case.settle();
+  assert.equal(replies_of(test_case.port())[0]!.ok, false);
 });

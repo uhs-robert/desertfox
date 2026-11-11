@@ -117,6 +117,13 @@ test("the compiled keymap carries bridge only when the setting is on", () => {
   assert.equal(compile({}, { bridge: true }).compiled.bridge, true);
 });
 
+test("the compiled keymap carries bridge_share_tabs only when the bridge is on as well", () => {
+  assert.equal("bridge_share_tabs" in compile({}).compiled, false);
+  assert.equal("bridge_share_tabs" in compile({}, { bridge_share_tabs: true }).compiled, false);
+  assert.equal("bridge_share_tabs" in compile({}, { bridge: true }).compiled, false);
+  assert.equal(compile({}, { bridge: true, bridge_share_tabs: true }).compiled.bridge_share_tabs, true);
+});
+
 test("compiler skips the longer entry when a shorter binding is its prefix", () => {
   const { compiled, warnings } = compile({ normal: { gg: { id: "a.b" }, g: { id: "c.d" }, gz: { id: "e.f" } } });
   assert.equal(warnings.length, 2);

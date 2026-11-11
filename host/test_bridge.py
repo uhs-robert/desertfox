@@ -29,8 +29,10 @@ def frame(message):
 class Host:
     """A bridge host process. With wait_ready False the constructor returns at once, for a host that is meant to wait for the lock."""
 
-    def __init__(self, runtime_dir, wait_ready=True):
+    def __init__(self, runtime_dir, wait_ready=True, cache_home=None):
         env = dict(os.environ, XDG_RUNTIME_DIR=runtime_dir)
+        # Never the real cache: a host that starts without one prunes whatever cache_home holds.
+        env["XDG_CACHE_HOME"] = cache_home if cache_home is not None else os.path.join(runtime_dir, "cache")
         self.process = subprocess.Popen([sys.executable, HOST_PATH], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         self.ready = self.read_ready() if wait_ready else None
 
@@ -87,11 +89,13 @@ class BridgeTestCase(unittest.TestCase):
         self.state_path = os.path.join(self.state_dir, "state.json")
         self.socket_path = os.path.join(self.state_dir, "bridge.sock")
         self.lock_path = os.path.join(self.state_dir, "bridge.lock")
+        # Thumbnails go under the cache home, so no test writes into the real one.
+        self.cache_home = os.path.join(self.runtime, "cache")
         self.hosts = []
         self.addCleanup(lambda: [host.kill() for host in self.hosts])
 
     def start(self, wait_ready=True):
-        host = Host(self.runtime, wait_ready)
+        host = Host(self.runtime, wait_ready, self.cache_home)
         self.hosts.append(host)
         return host
 
@@ -393,7 +397,7 @@ class SocketTest(BridgeTestCase):
 
     def test_other_verbs_and_bad_requests_are_refused_and_the_host_lives(self):
         host = self.start()
-        for verb in ("tabs", "activate", "whichkey_show", "shell", "eval", None, 5):
+        for verb in ("whichkey_show", "shell", "eval", "capture_tab", None, 5):
             self.assertEqual(self.ask({"verb": verb, "command": "touch /tmp/x"}), {"ok": False, "message": "unknown verb"})
         self.assertEqual(self.ask([1, 2]), {"ok": False, "message": "unknown verb"})
         self.assertEqual(self.ask(None, raw=b"not json\n"), {"ok": False, "message": "not JSON"})

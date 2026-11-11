@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { create_bridge_run, never_listed, opens_url, type BridgeRunTarget } from "../../src/background/bridge_run.ts";
-import { focused_normal_target } from "../../src/background/bridge_browser.ts";
+import { focused_normal_target, pinned_active_tab } from "../../src/background/bridge_browser.ts";
+import { create_tab_switch } from "../../src/background/tab_switch.ts";
+import type { TabInfo, WindowInfo } from "../../src/background/tab_switch.ts";
 import { create_router } from "../../src/background/router.ts";
 import { registry as built_in } from "../../src/shared/registry/builtin.ts";
 import type { Invocation } from "../../src/shared/invocation.ts";
@@ -14,7 +16,7 @@ const resolve_url = async (text: string) => url_target(text, "arch", { arch: { u
 const NORMAL: BridgeRunTarget = { tab_id: 7, window_id: 1, url: "https://example.org/", incognito: false };
 
 // A registry of fake commands that count their runs, so a refusal is visible as a run that never happened.
-function make(options: { target?: BridgeRunTarget | undefined; snippets?: string[] } = {}) {
+function make(options: { target?: BridgeRunTarget | undefined; snippets?: string[]; tabs?: Record<number, BridgeRunTarget> } = {}) {
   const ran: string[] = [];
   const note = (id: string) => () => void ran.push(id);
   const { deps, registry } = make_fake({
@@ -28,16 +30,17 @@ function make(options: { target?: BridgeRunTarget | undefined; snippets?: string
     "snip.hello": { label: "Hello", intent: "x", bridge: true, runs_in: "background", run: note("snip.hello") },
   });
   const calls: Invocation[] = [];
+  const run_tabs: number[] = [];
   const router = create_router({ ...deps, show_refusal: async () => undefined });
   const bridge_run = create_bridge_run({
     registry,
     is_snippet: (id) => (options.snippets ?? ["snip.hello"]).includes(id),
     get_enum_sources: deps.get_enum_sources,
     resolve_url,
-    target: async () => ("target" in options ? options.target : NORMAL),
-    run: (invocation, target) => (calls.push(invocation), router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true })),
+    target: async (tab_id) => (tab_id === undefined ? ("target" in options ? options.target : NORMAL) : options.tabs?.[tab_id]),
+    run: (invocation, target) => (calls.push(invocation), run_tabs.push(target.tab_id), router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true })),
   });
-  return { bridge_run, ran, calls };
+  return { bridge_run, ran, calls, run_tabs };
 }
 
 test("a command with bridge true runs through the router", async () => {
@@ -232,6 +235,100 @@ test("the built-in commands that open an address and say yes are pinned", () => 
   assert.deepEqual(yes.filter(opens_url), ["open.url"]);
 });
 
-test("tab.switch says no, because its refusals name tab titles", () => {
+test("tab.switch and tab.close say no, because the id-addressed tab verbs behind bridge_share_tabs replace them", () => {
+  // tab.switch matches a title or address, so a caller could probe which tabs exist from the answer. tab.close closes whole sides of the tab bar and needs no opt-in.
   assert.equal(built_in.get("tab.switch")?.bridge, false);
+  assert.equal(built_in.get("tab.close")?.bridge, false);
+});
+
+// `--tab`: the same rules as a run in the focused window, then the named tab.
+
+const THIRD: BridgeRunTarget = { tab_id: 42, window_id: 2, url: "https://example.net/", incognito: false };
+
+test("a run with a tab id runs in that tab and not in the focused one", async () => {
+  const test_case = make({ tabs: { 42: THIRD } });
+  assert.deepEqual(await test_case.bridge_run.run("tab.next", 42), { ok: true });
+  assert.deepEqual(await test_case.bridge_run.run("tab.next"), { ok: true });
+  assert.deepEqual(test_case.run_tabs, [42, 7]);
+});
+
+test("a tab id that is stale, private or not a normal tab is refused with the same text, and nothing runs", async () => {
+  // The target lookup answers undefined for a private tab, a popup tab and a missing one alike.
+  const test_case = make({ tabs: { 42: THIRD } });
+  for (const tab_id of [5, 43, -1]) assert.deepEqual(await test_case.bridge_run.run("tab.next", tab_id), { ok: false, message: "no such tab" });
+  assert.deepEqual(test_case.ran, []);
+});
+
+test("every refusal of a plain run holds with a tab id, with the same text, and the tab is not looked up for a refused command", async () => {
+  const test_case = make({ tabs: { 42: THIRD } });
+  const texts = ["tab.close", "config.reload", "set", "copy.url", "snip.hello", "nothing", "", "next --help", "scroll.lines 0", "scroll.lines", "open @clipboard", "open @selection", "open \"vscode://x\"", "open \"file:///etc/passwd\""];
+  for (const text of texts) assert.deepEqual(await test_case.bridge_run.run(text, 42), await test_case.bridge_run.run(text), JSON.stringify(text));
+  assert.deepEqual(test_case.ran, []);
+  assert.deepEqual(test_case.run_tabs, []);
+});
+
+test("a tab id keeps the address rules: an http address opens in the named tab, and a private window is not a tab target", async () => {
+  const test_case = make({ tabs: { 42: THIRD } });
+  assert.deepEqual(await test_case.bridge_run.run("open https://example.org/", 42), { ok: true });
+  assert.deepEqual(test_case.run_tabs, [42]);
+  const private_case = make({ target: { ...NORMAL, incognito: true }, tabs: {} });
+  assert.deepEqual(await private_case.bridge_run.run("open https://example.org/", 99), { ok: false, message: "no such tab" });
+});
+
+test("a handler failure in a named tab comes back as fixed text", async () => {
+  const { deps, registry } = make_fake({
+    "tab.next": { label: "Next", intent: "x", bridge: true, runs_in: "background", run: () => { throw new Error('"Bank - statement" is gone'); } },
+  });
+  const router = create_router({ ...deps, show_refusal: async () => undefined });
+  const bridge_run = create_bridge_run({ registry, is_snippet: () => false, get_enum_sources: deps.get_enum_sources, resolve_url, target: async () => THIRD, run: (invocation, target) => router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true }) });
+  assert.deepEqual(await bridge_run.run("tab.next", 42), { ok: false, message: "tab.next failed" });
+});
+
+// The router of a named run reads its tab at every step. These use the real pinned reader with a fake browser: a private window is focused, tab 42 is normal and then goes away, and tab 50 is private.
+function pinned_case(options: { tabs: TabInfo[]; windows: WindowInfo[]; count?: number }) {
+  const { deps, registry } = make_fake({
+    "open.url": { label: "Open", intent: "x", name: "open", bridge: true, params: [{ name: "url", type: "string", main: true, rest: true }], runs_in: "background", run: () => void ran.push("open.url") },
+    "tab.next": { label: "Next", intent: "x", name: "next", bridge: true, runs_in: "background", count: "repeat", run: (ctx) => void ran.push(`tab.next in ${ctx.tab_id}`) },
+  });
+  const ran: unknown[] = [];
+  const tab_switch = create_tab_switch({
+    windows: async () => options.windows,
+    window: async (id) => options.windows.find((window) => window.id === id),
+    tabs: async () => options.tabs,
+    tab: async (id) => options.tabs.find((tab) => tab.id === id),
+    select: async () => undefined, focus_window: async () => undefined, set_preface: async () => undefined, remove: async () => undefined, capture: async () => "", after: () => undefined,
+  });
+  const focused_private: BridgeRunTarget = { tab_id: 99, window_id: 2, url: "https://private.example/", incognito: true };
+  const bridge_run = create_bridge_run({
+    registry, is_snippet: () => false, get_enum_sources: deps.get_enum_sources, resolve_url,
+    // The lookup passes, then `get_tab` fails and the router reads its active tab: the race.
+    target: async (tab_id) => (tab_id === undefined ? focused_private : { tab_id, window_id: 1, url: "https://example.org/", incognito: false }),
+    run: (invocation, target, named) => {
+      const router = create_router({ ...deps, get_tab: async () => undefined, active_tab: named ? pinned_active_tab(tab_switch, target) : async () => focused_private, show_refusal: async () => undefined });
+      return router.run({ invocations: [options.count === undefined ? invocation : { ...invocation, count: options.count }], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true });
+    },
+  });
+  return { bridge_run, ran };
+}
+
+const NORMAL_WINDOW: WindowInfo = { id: 1, type: "normal", incognito: false };
+const PRIVATE_WINDOW: WindowInfo = { id: 2, type: "normal", incognito: true };
+
+test("a named run whose tab is gone when the router reads it is refused and never runs in the focused private window", async () => {
+  const test_case = pinned_case({ tabs: [], windows: [NORMAL_WINDOW, PRIVATE_WINDOW] });
+  assert.deepEqual(await test_case.bridge_run.run("open https://example.org/", 42), { ok: false, message: "no such tab" });
+  assert.deepEqual(test_case.ran, []);
+});
+
+test("a named run whose id is a private window's tab is refused even though the id exists", async () => {
+  const test_case = pinned_case({ tabs: [{ id: 50, windowId: 2, incognito: true, url: "https://private.example/" }], windows: [NORMAL_WINDOW, PRIVATE_WINDOW] });
+  assert.deepEqual(await test_case.bridge_run.run("open https://example.org/", 50), { ok: false, message: "no such tab" });
+  assert.deepEqual(test_case.ran, []);
+});
+
+test("every repeat of a named run reads the named tab, not the focused window", async () => {
+  const tab: TabInfo = { id: 42, windowId: 1, incognito: false, url: "https://example.org/" };
+  const test_case = pinned_case({ tabs: [tab], windows: [NORMAL_WINDOW, PRIVATE_WINDOW], count: 3 });
+  assert.deepEqual(await test_case.bridge_run.run("next", 42), { ok: true });
+  assert.deepEqual(test_case.ran, ["tab.next in 42", "tab.next in 42", "tab.next in 42"]);
 });

@@ -24,6 +24,9 @@ const OPENS_URL_IDS: readonly string[] = [
 export const never_listed = (id: string): boolean => NEVER_GROUPS.includes(id.split(".")[0] ?? "") || NEVER_IDS.includes(id);
 export const opens_url = (id: string): boolean => OPENS_URL_IDS.includes(id);
 
+// Thrown by a router that is pinned to a named tab when the tab is gone or private by the time a step reads it. It never falls back to the focused window.
+export class NoSuchTab extends Error {}
+
 export type BridgeRunTarget = { tab_id: number; window_id: number; url: string | undefined; incognito: boolean };
 
 export type BridgeRunDeps = {
@@ -33,9 +36,10 @@ export type BridgeRunDeps = {
   get_enum_sources: () => Promise<EnumSources>;
   // Turns typed address text into the address the open command opens, as that command does (`typed_url_target`). It throws when the text opens nothing.
   resolve_url: (text: string) => Promise<string>;
-  // The active tab of the focused normal window, undefined when there is none.
-  target: () => Promise<BridgeRunTarget | undefined>;
-  run: (invocation: Invocation, target: BridgeRunTarget) => Promise<RunResponse>;
+  // The tab the command runs in: the one `--tab` names, which must be a normal-window tab, or else the active tab of the focused normal window. Undefined when there is none.
+  target: (tab_id: number | undefined) => Promise<BridgeRunTarget | undefined>;
+  // `named` is true for a `--tab` run: every step then runs in that tab or not at all.
+  run: (invocation: Invocation, target: BridgeRunTarget, named: boolean) => Promise<RunResponse>;
 };
 
 const refuse = (message: string): BridgeAnswer => ({ ok: false, message });
@@ -64,7 +68,7 @@ async function foreign_address(command: CommandDef, args: Record<string, unknown
 }
 
 export function create_bridge_run(deps: BridgeRunDeps) {
-  async function run(command_text: string): Promise<BridgeAnswer> {
+  async function run(command_text: string, tab_id?: number): Promise<BridgeAnswer> {
     const sources = await deps.get_enum_sources();
     const parsed = parse_command_line(deps.registry, command_text, sources);
     if (parsed.kind === "error") return refuse(parsed.error);
@@ -79,10 +83,16 @@ export function create_bridge_run(deps: BridgeRunDeps) {
     // An unquoted `@clipboard` or `@selection` is read by the router after this check, so a caller could open or probe text the bridge never saw. Quoted text stays plain text.
     if (Object.values(checked.args).some(is_context_source)) return refuse(`${command.id} does not take @clipboard or @selection through the bridge`);
     if (await foreign_address(command, checked.args, deps.resolve_url)) return refuse(`${command.id} opens only http and https addresses through the bridge`);
-    const target = await deps.target();
-    if (!target) return refuse("no normal window is open");
+    const target = await deps.target(tab_id);
+    if (!target) return refuse(tab_id === undefined ? "no normal window is open" : "no such tab");
     if (target.incognito && opens_url(command.id)) return refuse("the focused window is private, so nothing opens an address there from outside");
-    const response = await deps.run(parsed.invocation, target);
+    let response: RunResponse;
+    try {
+      response = await deps.run(parsed.invocation, target, tab_id !== undefined);
+    } catch (error) {
+      if (error instanceof NoSuchTab) return refuse("no such tab");
+      throw error;
+    }
     // A handler refusal can hold page data such as a tab title, so the caller gets fixed text. Only the parse, rule and validator refusals above echo the caller's own text.
     return response.ok ? { ok: true } : refuse(`${command.id} failed`);
   }

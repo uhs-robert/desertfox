@@ -4,6 +4,8 @@
 
 import type { CommandMeta, Mode } from "../shared/command.ts";
 import type { BridgeAnswer } from "./bridge_run.ts";
+import { TAB_VERBS } from "./tab_switch.ts";
+import type { TabAnswer, TabVerb } from "./tab_switch.ts";
 import { mode_label } from "../content/ui/mode_label.ts";
 
 export const BRIDGE_HOST_NAME = "desertfox_bridge";
@@ -19,7 +21,7 @@ export type BridgeWindow = { id: number; focused: boolean; private: boolean };
 
 export type BridgeDeps = {
   connect: () => BridgePort;
-  read_settings: () => Promise<{ bridge: boolean }>;
+  read_settings: () => Promise<{ bridge: boolean; share_tabs: boolean }>;
   // The optional `nativeMessaging` permission, which Firefox grants only from a click.
   permission_granted: () => Promise<boolean>;
   window_of: (window_id: number) => Promise<BridgeWindow | undefined>;
@@ -29,9 +31,10 @@ export type BridgeDeps = {
   // Runs `run` once after `delay_ms` and returns a cancel function.
   after: (run: () => void, delay_ms: number) => () => void;
   now_ms: () => number;
-  // The two things the host may ask for. Both check their own rules and answer with a refusal text, so a throw here is a bug.
-  run_command: (command_text: string) => Promise<BridgeAnswer>;
+  // What the host may ask for. Each checks its own rules and answers with a refusal text, so a throw here is a bug.
+  run_command: (command_text: string, tab_id?: number) => Promise<BridgeAnswer>;
   list_commands: () => CommandMeta[];
+  tab_verb: (verb: TabVerb, request: Record<string, unknown>) => Promise<TabAnswer>;
 };
 
 // A request over this is refused before it is parsed.
@@ -42,10 +45,15 @@ export const MAX_RETRY_MS = 60_000;
 // A port that stayed up this long was healthy, so its drop starts the backoff over.
 export const STABLE_MS = 10_000;
 
+// The answer to a tab verb or a `--tab` run while `bridge_share_tabs` is off. It names the setting, which is no secret.
+// `sharing: "off"` tells the host to delete its thumbnails. The host drops the field before the reply reaches a client.
+const TABS_OFF = { ok: false, message: "tab sharing is off, set bridge_share_tabs to true", sharing: "off" } as const;
+
 type Snapshot = { mode: Mode; tab_id: number; window: BridgeWindow };
 
 export function create_bridge(deps: BridgeDeps) {
   let bridge_on = false;
+  let share_tabs = false;
   let port: BridgePort | undefined;
   // The host sends one message when it has the lock, and only then is the port trusted: a second host waits for the lock and a missing host drops the port at once.
   let ready = false;
@@ -74,25 +82,39 @@ export function create_bridge(deps: BridgeDeps) {
     }
   }
 
-  async function answer_of(request: { verb: "run"; command: string } | { verb: "list" }): Promise<object> {
+  type Asked = { verb: "run"; command: string; tab_id?: number } | { verb: "list" } | { verb: TabVerb; fields: Record<string, unknown> };
+
+  async function answer_of(request: Asked): Promise<object> {
     try {
       if (request.verb === "list") return { ok: true, commands: deps.list_commands() };
+      if (request.verb !== "run") return share_tabs ? await deps.tab_verb(request.verb, request.fields) : TABS_OFF;
       if (request.command.length > MAX_COMMAND_CHARS) return { ok: false, message: "the command text is too long" };
-      return await deps.run_command(request.command);
+      if (request.tab_id !== undefined && !share_tabs) return TABS_OFF;
+      return await deps.run_command(request.command, request.tab_id);
     } catch {
       // Fixed text: an unexpected throw can carry a tab title from a browser call.
       return { ok: false, message: "the command failed" };
     }
   }
 
-  // The host sends only these two verbs. Anything else is dropped, and a request without an integer id has nobody to answer.
+  function asked_by(request: { verb?: unknown; command?: unknown; tab_id?: unknown }): Asked | undefined {
+    if (request.verb === "list") return { verb: "list" };
+    if (request.verb === "run" && typeof request.command === "string") {
+      if (request.tab_id === undefined) return { verb: "run", command: request.command };
+      return Number.isInteger(request.tab_id) ? { verb: "run", command: request.command, tab_id: request.tab_id as number } : undefined;
+    }
+    const tab_verb = TAB_VERBS.find((verb) => verb === request.verb);
+    return tab_verb && { verb: tab_verb, fields: request as Record<string, unknown> };
+  }
+
+  // The host sends only the fixed verbs. Anything else is dropped, and a request without an integer id has nobody to answer.
   function request_from_host(which: BridgePort, message: unknown): void {
-    const request = message as { verb?: unknown; request_id?: unknown; command?: unknown } | null;
+    const request = message as { verb?: unknown; request_id?: unknown; command?: unknown; tab_id?: unknown } | null;
     if (typeof request !== "object" || request === null || !Number.isInteger(request.request_id)) return;
     const request_id = request.request_id as number;
-    const asked = request.verb === "list" ? ({ verb: "list" } as const) : request.verb === "run" && typeof request.command === "string" ? ({ verb: "run", command: request.command } as const) : undefined;
+    const asked = asked_by(request);
     if (!asked) return;
-    void answer_of(asked).then((answer) => send_on(which, { verb: "reply", request_id, ...answer }));
+    void answer_of(asked).then((answer) => send_on(which, { ...answer, verb: "reply", request_id }));
   }
 
   async function snapshot_of(window: BridgeWindow | undefined): Promise<Snapshot | undefined> {
@@ -187,6 +209,7 @@ export function create_bridge(deps: BridgeDeps) {
   async function settings_changed(): Promise<void> {
     const settings = await deps.read_settings();
     const bridge_before = bridge_on;
+    share_tabs = settings.share_tabs;
     bridge_on = settings.bridge;
     if (bridge_on === bridge_before) return;
     failures = 0;

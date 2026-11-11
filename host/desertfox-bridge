@@ -17,15 +17,21 @@ file, so a reader never sees a partial file.
 It also owns a Unix socket, $XDG_RUNTIME_DIR/desertfox/bridge.sock, mode 0600. Whoever holds the flock on bridge.lock
 owns the socket and the state file: the first host wins, and a second one waits LOCK_WAIT_S for the lock, then exits
 without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping`,
-`state`, `run` and `list`. A `run` or `list` goes to the extension as {"verb": "run", "request_id", "command"} or
-{"verb": "list", "request_id"}, and the extension decides what runs: it holds the bridge field, the never-list and the
-argument validator. The host only forwards, limits the rate and routes each reply back to the connection that asked.
-A run reply is cut to `ok` and a short `message`, so no page data can pass through the host. Stdout carries only
-protocol bytes. The host never runs anything it is sent.
+`state`, `run`, `list` and the tab verbs `tabs`, `activate`, `clear_preface`, `close` and `capture`. Each goes to the
+extension as {"verb", "request_id", ...fields}, and the extension decides what runs: it holds the bridge field, the
+never-list, the argument validator, the bridge_share_tabs opt-in and the private-window filter. The host only
+forwards, limits the rate and routes each reply back to the connection that asked. A run reply is cut to `ok` and a
+short `message`, and a tab reply to its known fields, so no page data can pass through the host unchecked. The host
+keeps one cache of its own, the tab thumbnails (see `thumbnail_dir`), and writes an image only for a tab the extension
+just listed. Stdout carries only protocol bytes. The host never runs anything it is sent.
 """
+import base64
 import fcntl
+import hashlib
 import json
 import os
+import re
+import shutil
 import signal
 import socket
 import struct
@@ -57,6 +63,20 @@ REQUEST_TIMEOUT_S = 10
 DRAIN_S = 1.0
 MAX_COMMAND_CHARS = 4096
 MAX_REPLY_MESSAGE_CHARS = 500
+PREFACE_PATTERN = re.compile(r"[A-Za-z0-9]{1,32}")
+# Rendering one tab, a background one included, takes longer than answering from the tab list.
+CAPTURE_TIMEOUT_S = 5
+MAX_CAPTURE_IDS = 64
+# Only images of no open tab are pruned, and only once this old, so a tab closed by mistake and reopened keeps its image.
+THUMBNAIL_KEEP_S = 7 * 24 * 3600
+# At most this many images stay, the oldest going first, so a long run of changing addresses cannot fill the disk.
+MAX_THUMBNAILS = 500
+JPEG_DATA_URL_PREFIX = "data:image/jpeg;base64,"
+# The fields of a listed tab the host passes on, with the type each must have. Anything else, a private flag included, is dropped.
+TAB_FIELDS = {
+    "tab_id": int, "window_id": int, "title": str, "url": str, "active": bool, "audible": bool, "discarded": bool,
+    "last_accessed": int, "pinned": bool, "hidden": bool, "fav_icon_url": str,
+}
 
 
 class StopHost(Exception):
@@ -218,6 +238,20 @@ class Waiting:
         self.reply = None
 
 
+class Working:
+    def __init__(self, link):
+        self.link = link
+
+    def __enter__(self):
+        with self.link.pending_guard:
+            self.link.busy += 1
+
+    def __exit__(self, *_exc):
+        with self.link.pending_guard:
+            self.link.busy -= 1
+            self.link.pending_guard.notify_all()
+
+
 class ExtensionLink:
     """The host's way to ask the extension something. Each request gets an id, and the reply that carries the id wakes the
     one connection thread that is waiting for it, so two clients never see each other's answers."""
@@ -227,6 +261,8 @@ class ExtensionLink:
         self.write_guard = threading.Lock()
         self.pending_guard = threading.Condition()
         self.pending = {}
+        # Requests being answered, from the start of the answer to the end of the write to the client. Shutdown waits for these, not for `pending`, which empties before the write.
+        self.busy = 0
         self.next_id = 1
         # False until the ready frame is out, so a request can never reach the extension before it.
         self.open = False
@@ -255,6 +291,7 @@ class ExtensionLink:
                 return {"ok": False, "message": "the extension is not connected"}
             if not waiting.done.wait(timeout_s):
                 return {"ok": False, "message": "the extension did not answer in time"}
+            forget_thumbnails_if_sharing_off(waiting.reply)
             return waiting.reply
         finally:
             with self.pending_guard:
@@ -270,6 +307,9 @@ class ExtensionLink:
             waiting.reply = message
             waiting.done.set()
 
+    def working(self):
+        return Working(self)
+
     def close(self):
         """The port is gone: every waiting client gets a failure now, and shutdown waits a moment for them to be told."""
         with self.pending_guard:
@@ -279,7 +319,7 @@ class ExtensionLink:
                     waiting.reply = {"ok": False, "message": "the extension disconnected"}
                     waiting.done.set()
             deadline = time.monotonic() + DRAIN_S
-            while self.pending and time.monotonic() < deadline:
+            while self.busy and time.monotonic() < deadline:
                 self.pending_guard.wait(deadline - time.monotonic())
 
 
@@ -302,6 +342,174 @@ def list_result(reply):
     return run_result(reply)
 
 
+def thumbnail_dir():
+    # A relative XDG_CACHE_HOME is invalid by the XDG spec and ignored.
+    cache_home = os.environ.get("XDG_CACHE_HOME", "")
+    if not os.path.isabs(cache_home):
+        cache_home = os.path.join(os.path.expanduser("~"), ".cache")
+    return os.path.join(cache_home, "desertfox", "bridge-thumbs")
+
+
+def thumbnail_path(url):
+    return os.path.join(thumbnail_dir(), hashlib.sha256(url.encode("utf-8")).hexdigest() + ".jpg")
+
+
+def thumbnail_fields(url):
+    path = thumbnail_path(url)
+    try:
+        return {"thumbnail": path, "thumbnail_at": os.stat(path).st_mtime_ns // 1_000_000}
+    except OSError:
+        return {"thumbnail": "", "thumbnail_at": 0}
+
+
+def write_thumbnail(url, data_url):
+    """Writes the image under a temporary name and renames it, so a reader never sees half of one."""
+    if not isinstance(data_url, str) or not data_url.startswith(JPEG_DATA_URL_PREFIX):
+        raise ValueError("the extension sent no JPEG")
+    image = base64.b64decode(data_url[len(JPEG_DATA_URL_PREFIX):], validate=True)
+    if not image.startswith(b"\xff\xd8"):
+        raise ValueError("the extension sent no JPEG")
+    path = thumbnail_path(url)
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    descriptor, temp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "wb") as temp_file:
+            temp_file.write(image)
+        os.replace(temp_path, path)
+    except BaseException:
+        os.unlink(temp_path)
+        raise
+    return thumbnail_fields(url)
+
+
+def prune_thumbnails(open_urls):
+    keep = {os.path.basename(thumbnail_path(url)) for url in open_urls}
+    cutoff = time.time() - THUMBNAIL_KEEP_S
+    try:
+        names = os.listdir(thumbnail_dir())
+    except OSError:
+        return
+    left = []
+    for name in names:
+        path = os.path.join(thumbnail_dir(), name)
+        try:
+            modified = os.stat(path).st_mtime
+            if name not in keep and modified < cutoff:
+                os.unlink(path)
+            else:
+                left.append((modified, path))
+        except OSError:
+            pass
+    for _, path in sorted(left)[: max(0, len(left) - MAX_THUMBNAILS)]:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def forget_thumbnails_if_sharing_off(reply):
+    """The extension says `sharing: off` when `bridge_share_tabs` is off. The images are page content the owner no longer shares, so they go now."""
+    if reply.get("sharing") == "off":
+        shutil.rmtree(thumbnail_dir(), ignore_errors=True)
+
+
+def listed_tabs(reply):
+    """The tabs of an extension `tabs` reply, cut to the known fields with the right types. A tab the extension flagged
+    private is dropped as a second line behind the extension's own filter, which never sends one."""
+    tabs = []
+    for entry in reply.get("tabs") if isinstance(reply.get("tabs"), list) else []:
+        if not isinstance(entry, dict) or entry.get("incognito") is True or entry.get("private") is True:
+            continue
+        tab = {name: entry[name] for name, kind in TAB_FIELDS.items() if type(entry.get(name)) is kind}
+        if "tab_id" in tab and "window_id" in tab:
+            tabs.append(tab)
+    return tabs
+
+
+def tabs_result(reply):
+    if reply.get("ok") is not True:
+        return run_result(reply)
+    tabs = listed_tabs(reply)
+    for tab in tabs:
+        tab.update(thumbnail_fields(tab.get("url", "")) if "url" in tab else {"thumbnail": "", "thumbnail_at": 0})
+    return {"ok": True, "tabs": tabs}
+
+
+def flags_result(reply, names):
+    """A run-style result plus the named bool and int fields of the reply, so an activate or clear reply carries no more than it should."""
+    result = run_result(reply)
+    for name in names:
+        value = reply.get(name)
+        if isinstance(value, (bool, int)):
+            result[name] = value
+    return result
+
+
+def capture_failure(tab_id, error):
+    return {"tab_id": tab_id, "ok": False, "thumbnail": "", "thumbnail_at": 0, "error": error}
+
+
+def capture_one(link, tab_id):
+    reply = link.ask("capture", {"tab_id": tab_id}, CAPTURE_TIMEOUT_S)
+    if reply.get("ok") is not True:
+        return capture_failure(tab_id, run_result(reply).get("message", "the capture failed"))
+    url = reply.get("url")
+    if not isinstance(url, str) or not url:
+        return capture_failure(tab_id, "the extension sent no address")
+    try:
+        return {"tab_id": tab_id, "ok": True, **write_thumbnail(url, reply.get("data_url"))}
+    except (ValueError, OSError):
+        return {**capture_failure(tab_id, "the image could not be saved"), **thumbnail_fields(url)}
+
+
+def capture(link, request):
+    """Captures the asked tabs, or every loaded one, one at a time. Only an id from the extension's own fresh tab list is
+    asked for, so the cache never holds an image of a tab the extension did not list as a normal one."""
+    tab_ids = request.get("tab_ids")
+    listed = link.ask("tabs", {}, REQUEST_TIMEOUT_S)
+    if listed.get("ok") is not True:
+        return run_result(listed)
+    tabs = listed_tabs(listed)
+    known = {tab["tab_id"] for tab in tabs}
+    if tab_ids is None:
+        tab_ids = [tab["tab_id"] for tab in tabs if not tab.get("discarded")][:MAX_CAPTURE_IDS]
+    results = [capture_one(link, tab_id) if tab_id in known else capture_failure(tab_id, "no such tab") for tab_id in tab_ids]
+    prune_thumbnails(tab["url"] for tab in tabs if "url" in tab)
+    return {"ok": True, "results": results}
+
+
+def tab_request_problem(verb, request):
+    """The refusal for a tab request whose fields are wrong, or None. It is checked before the rate limit, as a run's text is, so a malformed request never reaches the extension."""
+    tab_ids = request.get("tab_ids")
+    preface = request.get("preface")
+    if verb in ("activate", "close") and not is_int(request.get("tab_id")):
+        return "%s needs a whole tab_id" % verb
+    if verb == "clear_preface" and not is_int(request.get("window_id")):
+        return "clear_preface needs a whole window_id"
+    if verb in ("activate", "clear_preface") and preface is not None and not (isinstance(preface, str) and PREFACE_PATTERN.fullmatch(preface)):
+        return "preface is letters and digits only"
+    if verb == "capture" and tab_ids is not None and not (isinstance(tab_ids, list) and len(tab_ids) <= MAX_CAPTURE_IDS and all(is_int(tab_id) for tab_id in tab_ids)):
+        return "tab_ids is a list of at most %d whole tab ids" % MAX_CAPTURE_IDS
+    return None
+
+
+def answer_tab_verb(verb, request, link):
+    preface = request.get("preface")
+    fields = {} if preface is None else {"preface": preface}
+    if verb == "tabs":
+        return tabs_result(link.ask("tabs", {}, REQUEST_TIMEOUT_S))
+    if verb == "capture":
+        return capture(link, request)
+    if verb == "activate":
+        return flags_result(link.ask("activate", dict(fields, tab_id=request["tab_id"]), REQUEST_TIMEOUT_S), ("window_id", "focused", "preface_set"))
+    if verb == "close":
+        return run_result(link.ask("close", {"tab_id": request["tab_id"]}, REQUEST_TIMEOUT_S))
+    return flags_result(link.ask("clear_preface", dict(fields, window_id=request["window_id"]), REQUEST_TIMEOUT_S), ("cleared",))
+
+
+TAB_VERBS = ("tabs", "activate", "clear_preface", "close", "capture")
+
+
 def answer(request, state, link, limiter):
     verb = request.get("verb") if isinstance(request, dict) else None
     if verb == "ping":
@@ -312,13 +520,24 @@ def answer(request, state, link, limiter):
         command = request.get("command")
         if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
             return {"ok": False, "message": "run needs a command text"}
+        tab_id = request.get("tab_id")
+        if "tab_id" in request and not is_int(tab_id):
+            return {"ok": False, "message": "tab_id is a whole number"}
         if not limiter.admit():
             return RATE_LIMITED
-        return run_result(link.ask("run", {"command": command}, REQUEST_TIMEOUT_S))
+        fields = {"command": command, "tab_id": tab_id} if "tab_id" in request else {"command": command}
+        return run_result(link.ask("run", fields, REQUEST_TIMEOUT_S))
     if verb == "list":
         if not limiter.admit():
             return RATE_LIMITED
         return list_result(link.ask("list", {}, REQUEST_TIMEOUT_S))
+    if verb in TAB_VERBS:
+        problem = tab_request_problem(verb, request)
+        if problem:
+            return {"ok": False, "message": problem}
+        if not limiter.admit():
+            return RATE_LIMITED
+        return answer_tab_verb(verb, request, link)
     return {"ok": False, "message": "unknown verb"}
 
 
@@ -343,7 +562,8 @@ def serve_connection(connection, state, link, limiter, release_slot):
             except (ValueError, RecursionError):
                 reply(connection, {"ok": False, "message": "not JSON"})
                 continue
-            reply(connection, answer(request, state, link, limiter))
+            with link.working():
+                reply(connection, answer(request, state, link, limiter))
     except OSError:
         pass
     finally:
@@ -462,6 +682,7 @@ def main():
             return 1
         # Whatever is in the folder now belongs to a host that died: this one holds the lock.
         remove_quietly(paths["state.json"])
+        prune_thumbnails(())
         listener = bind_socket(paths["bridge.sock"])
         state = BridgeState(paths["state.json"], pid, start)
         link = ExtensionLink(sys.stdout.buffer)

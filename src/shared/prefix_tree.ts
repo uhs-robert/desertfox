@@ -65,6 +65,8 @@ export type CompiledKeymap = {
   mode_indicator: ModeIndicator;
   // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.
   bridge?: true;
+  // Set when `bridge_share_tabs` is on as well. The bridge then answers the tab verbs. Pages ignore it.
+  bridge_share_tabs?: true;
   // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
   frame_site_globals?: FrameSiteValues;
   which_key_delay_ms: number;
