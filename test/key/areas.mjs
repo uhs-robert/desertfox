@@ -31,7 +31,7 @@ export const area_rules = [
   { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
-  { globs: ["src/background/selection_ask.ts", "src/content/page/**"], areas: ["engines", "bundles"] },
+  { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**"], areas: ["engines", "bundles"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },

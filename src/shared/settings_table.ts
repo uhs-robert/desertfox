@@ -10,7 +10,10 @@ import { LIGHT_INTENSITIES } from "./theme/roles.ts";
 
 type EnumValue = string | number | boolean;
 
-type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean"; optional?: true }>>;
+// A table from a key sequence to a command, in the shape of a keymap entry. The compiler checks the command and its args with the registry validator.
+export type BindingTable = Readonly<Record<string, { id: string; args?: Readonly<Record<string, unknown>> }>>;
+
+type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean" | "bindings"; optional?: true }>>;
 
 export type SettingRow = (
   | { kind: "boolean"; default: boolean }
@@ -26,7 +29,7 @@ export type SettingRow = (
   | { kind: "enum_list"; values: readonly string[]; default: readonly string[] }
   // A table of exactly these keys, each a non-empty string.
   | { kind: "text_table"; keys: readonly string[]; default: Readonly<Record<string, string>> }
-  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces.
+  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces. A `bindings` field takes a table from a key sequence to `{ id, args }`.
   // The fields in `exclusive` refuse to appear together in one table.
   | { kind: "table_list"; fields: TableFields; exclusive?: readonly string[]; default: readonly [] }
   // A table_list whose rows also take every `per_site` setting as an optional column.
@@ -51,9 +54,10 @@ export const SETTINGS_TABLE = {
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
+  // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. It binds normal-mode keys and runs before `pass` and `only` prune the tree.
   // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.
   // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.
-  site_rules: { kind: "site_table", fields: { site: { value: "text" }, off: { value: "boolean", optional: true }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true } }, exclusive: ["pass", "only"], default: [] },
+  site_rules: { kind: "site_table", fields: { site: { value: "text" }, off: { value: "boolean", optional: true }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true }, bind: { value: "bindings", optional: true } }, exclusive: ["pass", "only"], default: [] },
   // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
@@ -99,7 +103,7 @@ export type SettingName = keyof Table;
 
 type Simplify<T> = { [K in keyof T]: T[K] };
 
-type FieldValue<F> = F extends { value: "boolean" } ? boolean : F extends { value: "text" | "web_url" | "keys" } ? string : never;
+type FieldValue<F> = F extends { value: "boolean" } ? boolean : F extends { value: "bindings" } ? BindingTable : F extends { value: "text" | "web_url" | "keys" } ? string : never;
 type TableOf<Fields> = Simplify<
   { -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? never : K]: FieldValue<Fields[K]> } & {
     -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? K : never]?: FieldValue<Fields[K]>;

@@ -4,7 +4,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tr
 import { ANY_KEY } from "../shared/prefix_tree.ts";
 import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
 import { is_default_value } from "../shared/keys/compiler.ts";
-import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, SiteBind, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { frees_of, is_empty_tree, prune_tree, type KeyRule } from "../shared/keys/prune_tree.ts";
 import type { PerSiteName, Settings } from "../shared/settings_table.ts";
@@ -20,7 +20,7 @@ export const rule_addresses_of = (sender: { frameId?: number | undefined; url?: 
 export const top_frame_address_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): string | undefined =>
   sender.frameId === 0 ? sender.url : sender.tab?.url;
 
-export type PageSiteColumns = ResolvedSiteColumns<KeyRule>;
+export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 
 // The page's columns of the site table, for the page's key handling and for which-key alike.
 export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns =>
@@ -48,10 +48,25 @@ export async function hint_selectors_reply(storage: KeymapStorage, frame_address
   return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
 }
 
-// The normal tree under the page's columns. An off page, or one whose key rule leaves no normal binding, is all off and keeps the whole tree, so `,i` can leave ignore mode.
+// A bound key replaces whatever the tree holds at that key. A key under a leaf turns the leaf into a branch, and a bind that is a prefix of other keys replaces the whole subtree. Copies the path and never mutates the input.
+export function graft_binds(root: TreeBranch | undefined, binds: Readonly<Record<string, SiteBind>>): TreeBranch {
+  const grafted: TreeBranch = root ?? { kind: "branch", children: {} };
+  const put = (branch: TreeBranch, tokens: readonly string[], leaf: TreeLeaf): TreeBranch => {
+    const [token, ...rest] = tokens as [string, ...string[]];
+    const below = branch.children[token];
+    const child: TreeNode = rest.length === 0 ? leaf : put(below?.kind === "branch" ? below : { kind: "branch", children: {} }, rest, leaf);
+    return { ...branch, children: { ...branch.children, [token]: child } };
+  };
+  // Shorter sequences first, so a bind that is a prefix of another goes in before it and the longer one then replaces that leaf with a branch.
+  return Object.values(binds).sort((a, b) => a.tokens.length - b.tokens.length).reduce((tree, { tokens, leaf }) => put(tree, tokens, leaf), grafted);
+}
+
+// The normal tree under the page's columns. `off` wins over all of it. Binds go onto the tree first, then the key rule prunes, so `pass` frees a bound key and `only` keeps it. A page whose key rule leaves no normal binding is all off and keeps the whole tree, so `,i` can leave ignore mode.
 export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSiteColumns): { tree: TreeBranch | undefined; all_off: boolean } | { tree: TreeBranch; all_off: false; frees: PageFrees } {
-  if (columns.off === true || columns.keys === undefined) return { tree: normal, all_off: columns.off === true };
-  const pruned = prune_tree(normal, columns.keys);
+  if (columns.off === true) return { tree: normal, all_off: true };
+  const bound = columns.bind === undefined ? normal : graft_binds(normal, columns.bind);
+  if (columns.keys === undefined) return { tree: bound, all_off: false };
+  const pruned = prune_tree(bound, columns.keys);
   return is_empty_tree(pruned) ? { tree: normal, all_off: true } : { tree: pruned, all_off: false, frees: frees_of(columns.keys) };
 }
 
@@ -86,8 +101,9 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
   const page_tree = normal_tree_for(keymap.modes.normal, site_columns_for(keymap, addresses));
   const site_values = frame_site_values_for(keymap, addresses[0], PAGE_REPLY_SITE_SETTINGS);
   const with_values = site_values ? { site_values } : {};
-  if (!("frees" in page_tree)) return { keymap: keymap_without_rules, all_off: page_tree.all_off, ...with_values };
-  return { keymap: { ...keymap_without_rules, modes: { ...keymap_without_rules.modes, normal: page_tree.tree } }, all_off: false, frees: page_tree.frees, ...with_values };
+  const { tree } = page_tree;
+  const modes = tree === undefined || tree === keymap.modes.normal ? keymap_without_rules.modes : { ...keymap_without_rules.modes, normal: tree };
+  return { keymap: { ...keymap_without_rules, modes }, all_off: page_tree.all_off, ..."frees" in page_tree && { frees: page_tree.frees }, ...with_values };
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.

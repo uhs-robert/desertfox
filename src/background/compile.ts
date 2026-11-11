@@ -57,6 +57,13 @@ export function compile_config(input: CompileInput): CompileOutput {
     check_branch(root, [], mode, input, warnings);
     if (Object.keys(root.children).length === 0) delete compiled.modes[mode as keyof CompiledKeymap["modes"]];
   }
+  for (const rule of compiled.site_rules ?? []) {
+    for (const [key, { tokens, leaf }] of Object.entries(rule.bind ?? {})) {
+      const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
+      if (waits_for_key) warnings.push(`site_rules: skipped bind "${tokens.join("")}": a bind cannot wait for a key press`);
+      if (waits_for_key || !keep_node(leaf, tokens, "normal", input, warnings)) delete rule.bind![key];
+    }
+  }
   return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings };
 }
 

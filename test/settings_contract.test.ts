@@ -17,7 +17,7 @@ const EXPECTATIONS: Record<string, string> = {
   hint_add: "a list of CSS selectors",
   hint_remove: "a list of CSS selectors",
   blur_on_load: "true or false",
-  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences and any per-site setting',
+  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands and any per-site setting',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
   zoom: "a number, from 0.3 to 5",
@@ -93,7 +93,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   hint_add: [[], [".card", "div[role=row]"]],
   hint_remove: [[], ["nav"]],
   blur_on_load: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
   zoom: [0.3, 1, 1.25, 5],
@@ -134,7 +134,7 @@ const REFUSES: Record<string, unknown[]> = {
   hint_remove: ["nav", [""], [1]],
   blur_on_load: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "x" } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", label: "y" } } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }],
   ],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
@@ -209,6 +209,8 @@ test("a bad site rule names its item and its fault", () => {
   assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a field "only" that has "<j>", which /);
   assert.equal(explain([{ pass: "j" }]), 'item 1 needs a non-empty "site"');
   assert.equal(explain([{ site: "*://a.test/*", off: "yes" }]), 'item 1 has a field "off" that is not true or false');
+  assert.equal(explain([{ site: "*://a.test/*", bind: { h: {} } }]), 'item 1 has a field "bind" that binds "h" to something that is not a table with an "id"');
+  assert.match(explain([{ site: "*://a.test/*", bind: { "<a>": { id: "x" } } }])!, /^item 1 has a field "bind" that binds "<a>", which /);
 });
 
 // The first ten were the defaults before #85. The rest were written at each reader, or were what an absent value read as.

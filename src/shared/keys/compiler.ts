@@ -5,9 +5,10 @@ import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteName, LeafStep, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
+import type { BindingTable } from "../settings_table.ts";
 import type { BoundInvocation, KeyBinding, Prompt } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
@@ -314,13 +315,36 @@ const key_sequences = (text: string, warnings: string[]): string[][] =>
 // By value, because a list setting is a new array after every load. Not in `prefix_tree.ts`, whose default settings import would reach content.js.
 export const is_default_value = (name: FrameSiteName, value: unknown): boolean => JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[name]);
 
-function compile_site_rules(rules: Settings["site_rules"], warnings: string[]): SiteRule[] {
+// A bind with a bad key or an unknown command is skipped with a warning, and the row's other binds stay. The label comes from the command, as for a keymap entry. The args are checked later, in `compile.ts`, where the registry validator is.
+function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): Record<string, SiteBind> {
+  const binds: Record<string, SiteBind> = {};
+  for (const [sequence, { id, args }] of Object.entries(table)) {
+    const parsed = parse_sequence(sequence);
+    if (parsed.error !== undefined) {
+      warnings.push(`site_rules: skipped bind "${sequence}": ${parsed.error}`);
+      continue;
+    }
+    const binding: BoundInvocation = args === undefined ? { id } : { id, args: { ...args } };
+    const step_warnings: string[] = [];
+    const resolved = to_steps("normal", { sequence, tokens: parsed.tokens, binding, source_index: 0, layer: "user" }, resolve, settings, sources, [], step_warnings);
+    if (resolved === undefined) {
+      warnings.push(...step_warnings.map((warning) => `site_rules: bind ${warning.replace(/^normal: /, "")}`));
+      continue;
+    }
+    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps } };
+  }
+  return binds;
+}
+
+export function compile_site_rules(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): SiteRule[] {
   return rules.flatMap((row): SiteRule[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];
-    const { keys, ...columns } = site_row_columns(row);
-    if (keys === undefined) return [{ regex, ...columns }];
-    return [{ regex, ...columns, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } }];
+    const { keys, bind, ...columns } = site_row_columns(row);
+    const compiled_bind = bind === undefined ? {} : { bind: compile_binds(bind as BindingTable, resolve, settings, sources, warnings) };
+    const rule = { regex, ...columns, ...compiled_bind };
+    if (keys === undefined) return [rule];
+    return [{ ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } }];
   });
 }
 
@@ -338,7 +362,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
-  const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, warnings);
+  const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, resolve, settings, label_sources, warnings);
   const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || is_default_value(name, settings[name]) ? [] : [[name, settings[name]]])));
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,

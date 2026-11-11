@@ -65,6 +65,11 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
       if (key_problem !== undefined) return `has a field "${field}" that ${key_problem}`;
       continue;
     }
+    if (rule.value === "bindings") {
+      const binding_problem = bindings_problem(field_value);
+      if (binding_problem === undefined) continue;
+      return `has a field "${field}" that ${binding_problem}`;
+    }
     if (is_text(field_value) && (rule.value !== "web_url" || is_web_url(field_value))) continue;
     if (rule.optional) return `has an empty or non-text "${field}"`;
     return rule.value === "web_url" ? `needs an http or https "${field}"` : `needs a non-empty "${field}"`;
@@ -74,6 +79,20 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
   }
   const present = exclusive.filter((field) => value[field] !== undefined);
   return present.length > 1 ? `sets both ${join_words(present.map((field) => `"${field}"`), "and")}, and only one may be set` : undefined;
+}
+
+// Whether each key is valid notation and each value holds a command id and optional args. Whether the command exists and takes the args is the compiler's check, with the registry validator.
+function bindings_problem(value: unknown): string | undefined {
+  if (!is_table(value) || Object.keys(value).length === 0) return "is not a table of keys to commands";
+  for (const [key, binding] of Object.entries(value)) {
+    const { error } = parse_sequence(key);
+    if (error !== undefined) return `binds "${key}", which ${error}`;
+    if (!is_table(binding) || !is_text(binding.id)) return `binds "${key}" to something that is not a table with an "id"`;
+    const unknown_field = Object.keys(binding).find((name) => name !== "id" && name !== "args");
+    if (unknown_field !== undefined) return `binds "${key}" with the unknown field "${unknown_field}"`;
+    if (binding.args !== undefined && !is_table(binding.args)) return `binds "${key}" with "args" that is not a table`;
+  }
+  return undefined;
 }
 
 // Key sequences split by spaces, each in keymap notation.
@@ -99,7 +118,7 @@ export function table_list_rule(fields: TableFields, exclusive: readonly string[
     }
     return undefined;
   };
-  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "boolean" ? " of true or false" : "");
+  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "boolean" ? " of true or false" : "");
   const field_words = Object.entries(fields).map(([field, rule]) => {
     const kind = rule.value === "web_url" ? "an http or https " : rule.value === "keys" ? "key sequences in " : "";
     return rule.optional ? `an optional "${field}"${optional_kind(rule.value)}` : `${kind}"${field}"`;
