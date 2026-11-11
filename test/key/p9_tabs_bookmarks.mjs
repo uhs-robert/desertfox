@@ -433,4 +433,29 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
     }
   });
+
+  await run_case("open -w from a container tab opens the window in that container", async () => {
+    const made = await background(`(async () => {
+      const fox = await browser.contextualIdentities.create({ name: "P9wWork", color: "blue", icon: "briefcase" });
+      return { container: fox.cookieStoreId };
+    })()`);
+    const mark = events.length;
+    made.tab = await background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "p9w_source"))}, cookieStoreId: ${JSON.stringify(made.container)} }).then((tab) => tab.id)`);
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p9w_source", "the content script in the container tab");
+    const windows_before = await background(`browser.windows.getAll().then((windows) => windows.map((window) => window.id))`);
+    try {
+      await open_line();
+      await type_in_line(`open -w ${url_of("page", "p9w_target")}`);
+      await press_keys("-k", "Return");
+      await poll_until("a window to open in the container", async () => (await background(`browser.tabs.query({ cookieStoreId: ${JSON.stringify(made.container)} }).then((tabs) => tabs.filter((tab) => /p9w_target/.test(tab.url)).length)`)) === 1, { timeout_ms: 8000 });
+    } finally {
+      await background(`(async () => {
+        const windows = await browser.windows.getAll();
+        for (const window of windows) if (!${JSON.stringify(windows_before)}.includes(window.id)) await browser.windows.remove(window.id).catch(() => {});
+        await browser.tabs.remove(${JSON.stringify(made.tab)}).catch(() => {});
+        await browser.contextualIdentities.remove(${JSON.stringify(made.container)});
+      })()`);
+      await close_cmdline().catch((error) => console.log(`cleanup: the command line stayed open: ${error.message}`));
+    }
+  });
 }
