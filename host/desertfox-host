@@ -2,26 +2,42 @@
 """Native-messaging host for the DesertFox Firefox extension.
 
 Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
-in the same framing to stdout and exits. It has two verbs and no others:
+in the same framing to stdout and exits. It has three verbs and no others:
 
   {"cmd": "read_config"}
-      -> {"ok": true, "host_version": 1, "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
   {"cmd": "write_autoconfig", "toml": "<text>"}
-      -> {"ok": true, "host_version": 1, "path": "..."}
-  Any failure -> {"ok": false, "error": "..."}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "..."}
+  {"cmd": "self_update", "version": "0.1.23", "sha256": {"desertfox-host": "<hex>", "desertfox-bridge": "<hex>", "desertfox": "<hex>"}}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "updated": true, "version": "0.1.23", "replaced": ["<path>", ...]}
+  Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
 file there, autoconfig.toml. It never edits the user's own files, and it parses nothing: the extension owns the TOML.
-Stdout carries only protocol bytes.
+`self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
+`self_update`). Stdout carries only protocol bytes.
 """
+import contextlib
+import fcntl
+import hashlib
+import http.client
+import io
 import json
 import os
+import re
+import signal
+import ssl
 import struct
 import sys
 import tempfile
 import threading
+import urllib.error
+import urllib.request
 
 HOST_VERSION = 1
+# `just release_stamp` replaces "dev" with the release version in the shipped copy only. A host that says "dev" runs from a
+# checkout or the main branch, so it never updates itself.
+RELEASE_VERSION = "dev"
 # Firefox drops a host reply above 1 MiB, so the host refuses to send one and says why.
 MAX_REPLY_BYTES = 1024 * 1024
 # The request size is not limited by Firefox. The host stops reading a request this large, which only a bug would send.
@@ -126,6 +142,352 @@ def write_autoconfig(toml_text):
     return {"path": path}
 
 
+# The updater. The caller (the extension, over Firefox's native port) names a version and the hashes its signed build
+# carries, nothing else: no URL, channel or path. Every URL comes from RELEASE_URL_TEMPLATE, every written path from
+# where this host is installed.
+RELEASE_URL_TEMPLATE = "https://github.com/uhs-robert/desertfox/releases/download/v{version}/{name}"
+# [0-9], not \d: \d also matches digits of other scripts, which would reach the URL. The length cap keeps the tuple
+# compare and the URL short.
+VERSION_PATTERN = re.compile(r"([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})(?:-beta\.([0-9]{1,6}))?")
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+UPDATE_SCRIPTS = ("desertfox-bridge", "desertfox-host", "desertfox")
+UPDATE_REQUEST_FIELDS = {"cmd", "version", "sha256"}
+UPDATE_MAX_FILE_BYTES = 1024 * 1024
+UPDATE_TIMEOUT_S = 20
+# GitHub sends a release download through one redirect to its asset storage. A few more leave room for a change there.
+UPDATE_MAX_REDIRECTS = 5
+SCRIPT_SHEBANG = b"#!/usr/bin/env python3\n"
+STAMP_PATTERN = re.compile(rb'^RELEASE_VERSION = "([^"\n]*)"$', re.MULTILINE)
+EXTENSION_ID = "desertfox@uhs-robert"
+# The manifests install.sh writes, by host script. The updater writes the same content.
+MANIFESTS = {
+    "desertfox-host": ("desertfox_host", "DesertFox config files and saved edits"),
+    "desertfox-bridge": ("desertfox_bridge", "DesertFox bridge to a desktop shell"),
+}
+
+
+class UpdateError(HostError):
+    """A refused or failed update. Nothing was written unless the message says which files changed."""
+
+
+def parse_version(text):
+    """The version as a tuple that sorts in release order: x.y.z-beta.N comes before x.y.z. None for anything else."""
+    if not isinstance(text, str):
+        return None
+    match = VERSION_PATTERN.fullmatch(text)
+    if match is None:
+        return None
+    major, minor, patch, beta = match.groups()
+    prerelease_rank = (1, 0) if beta is None else (0, int(beta))
+    return (int(major), int(minor), int(patch), *prerelease_rank)
+
+
+class HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows at most UPDATE_MAX_REDIRECTS hops and refuses any hop that leaves https."""
+
+    max_redirections = UPDATE_MAX_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.lower().startswith("https://"):
+            raise UpdateError(f"refused a redirect to a URL that is not https: {newurl[:200]}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    def http_error_302(self, req, fp, code, msg, headers):
+        # The base class reads the whole redirect body before it follows, with no size cap. Close the response unread
+        # and hand the base class an empty body instead.
+        fp.close()
+        return super().http_error_302(req, io.BytesIO(), code, msg, headers)
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = http_error_302
+
+
+def https_opener(context=None):
+    # Built by hand, not with build_opener: that one adds http, ftp, file and data handlers. Only https can open here.
+    opener = urllib.request.OpenerDirector()
+    for handler in (
+        urllib.request.ProxyHandler(),
+        urllib.request.HTTPSHandler(context=context or ssl.create_default_context()),
+        HttpsOnlyRedirects(),
+        urllib.request.HTTPErrorProcessor(),
+        urllib.request.HTTPDefaultErrorHandler(),
+        urllib.request.UnknownHandler(),
+    ):
+        opener.add_handler(handler)
+    return opener
+
+
+@contextlib.contextmanager
+def download_deadline(url):
+    """Raises UpdateError when the block runs past UPDATE_TIMEOUT_S, even inside a blocking connect or read."""
+    # The socket timeout bounds each recv only, so a server that drips a byte at a time never trips it. A timer signal
+    # bounds the whole download. It works because the host is one-shot and serves its request on the main thread.
+    def time_out(signum, frame):
+        raise UpdateError(f"timed out after {UPDATE_TIMEOUT_S} s downloading {url}")
+
+    previous = signal.signal(signal.SIGALRM, time_out)
+    signal.setitimer(signal.ITIMER_REAL, UPDATE_TIMEOUT_S)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def fetch_release_file(url, context=None):
+    """The bytes at an https URL, or UpdateError. Caps the size and the total time, and refuses an http hop. `context`
+    replaces the system TLS roots, for a test server."""
+    if not url.startswith("https://"):
+        raise UpdateError(f"refused a URL that is not https: {url}")
+    try:
+        with download_deadline(url), https_opener(context).open(url, timeout=UPDATE_TIMEOUT_S) as response:
+            if not response.geturl().startswith("https://"):
+                raise UpdateError(f"refused {url}: it ended at a URL that is not https")
+            data = b""
+            while len(data) <= UPDATE_MAX_FILE_BYTES:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    return data
+                data += chunk
+            raise UpdateError(f"{url} is over the {UPDATE_MAX_FILE_BYTES} byte limit")
+    except UpdateError:
+        raise
+    except urllib.error.HTTPError as error:
+        raise UpdateError(f"could not download {url}: HTTP {error.code}") from error
+    # HTTPException covers a response cut off mid-body (IncompleteRead), which is not an OSError.
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as error:
+        reason = getattr(error, "reason", None) or error
+        raise UpdateError(f"could not download {url}: {reason}") from error
+
+
+def checked_request(request):
+    """The version and expected hashes of a self_update request. Refuses any other field, so no URL or path gets in."""
+    extra = set(request) - UPDATE_REQUEST_FIELDS
+    if extra:
+        raise UpdateError(f"self_update takes only version and sha256, not {', '.join(sorted(extra))}")
+    version = request.get("version")
+    if parse_version(version) is None:
+        raise UpdateError("self_update needs a version like 1.2.3 or 1.2.3-beta.4")
+    expected = request.get("sha256")
+    if not isinstance(expected, dict) or set(expected) != set(UPDATE_SCRIPTS):
+        raise UpdateError(f"self_update needs sha256 with exactly {', '.join(UPDATE_SCRIPTS)}")
+    for name, digest in expected.items():
+        if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
+            raise UpdateError(f"the sha256 of {name} is not 64 lowercase hex digits")
+    return version, expected
+
+
+def install_paths(host_file=None):
+    """The five paths install.sh writes, found from where this host runs: the two hosts and the command line beside it,
+    the two manifests in ~/.mozilla/native-messaging-hosts. The link ~/.local/bin/desertfox points at the command line
+    by path, so it needs no rewrite."""
+    data_dir = os.path.dirname(os.path.abspath(host_file or __file__))
+    manifest_dir = os.path.join(os.path.expanduser("~"), ".mozilla", "native-messaging-hosts")
+    scripts = {name: os.path.join(data_dir, name) for name in UPDATE_SCRIPTS}
+    manifests = {name: os.path.join(manifest_dir, f"{manifest_name}.json") for name, (manifest_name, _) in MANIFESTS.items()}
+    return scripts, manifests
+
+
+def update_lock_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime_dir):
+        raise UpdateError("XDG_RUNTIME_DIR is not set to an absolute path, so the update lock has no place")
+    return os.path.join(runtime_dir, "desertfox", "update.lock")
+
+
+def take_update_lock():
+    """The open lock file, held until it is closed. A second updater, from another profile, gets "update running"."""
+    path = update_lock_path()
+    try:
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    except OSError as error:
+        raise UpdateError(f"cannot open the update lock {path}: {error.strerror or error}") from error
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        os.close(descriptor)
+        raise UpdateError("update running: another DesertFox host is updating now") from error
+    return descriptor
+
+
+def stamped_version(script_bytes):
+    match = STAMP_PATTERN.search(script_bytes)
+    return match.group(1).decode("utf-8", "replace") if match else None
+
+
+def installed_version(host_path):
+    """The release version of the host file on disk now. Another profile's update may have moved it past this process."""
+    try:
+        with open(host_path, "rb") as file:
+            return stamped_version(file.read(UPDATE_MAX_FILE_BYTES))
+    except OSError:
+        return None
+
+
+def file_sha256(path):
+    try:
+        with open(path, "rb") as file:
+            return hashlib.sha256(file.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def refuse_downgrade(version, current):
+    if current == "dev" or current is None:
+        raise UpdateError("this host is a development install, which never updates itself. Run :native.install instead")
+    current_key = parse_version(current)
+    if current_key is None:
+        raise UpdateError(f"the installed host has the unknown version {current!r}. Run :native.install instead")
+    if parse_version(version) < current_key:
+        raise UpdateError(f"refused to downgrade the host from {current} to {version}")
+
+
+def checksum_line_digest(text, name):
+    """The digest of a release .sha256 file, which holds one `sha256sum` line for exactly this file."""
+    match = re.fullmatch(rf"([0-9a-f]{{64}})  {re.escape(name)}\n?", text)
+    if match is None:
+        raise UpdateError(f"the release checksum file of {name} is malformed")
+    return match.group(1)
+
+
+def fetch_verified(version, expected, fetch):
+    """Every script of the release, in memory, each checked against the release .sha256 and the extension's hash."""
+    verified = {}
+    for name in UPDATE_SCRIPTS:
+        url = RELEASE_URL_TEMPLATE.format(version=version, name=name)
+        script = fetch(url)
+        checksum_text = fetch(url + ".sha256").decode("ascii", "replace")
+        actual = hashlib.sha256(script).hexdigest()
+        if actual != checksum_line_digest(checksum_text, name):
+            raise UpdateError(f"checksum mismatch for {name} of version {version}: the download does not match the release .sha256")
+        # The release .sha256 sits beside the file, so it only catches a broken download. The extension's hash comes from
+        # its signed build, so a replaced release asset fails here.
+        if actual != expected[name]:
+            raise UpdateError(f"checksum mismatch for {name} of version {version}: the release does not match the hash the extension carries")
+        if not script.startswith(SCRIPT_SHEBANG):
+            raise UpdateError(f"the downloaded {name} is not a host script")
+        if name in MANIFESTS and stamped_version(script) != version:
+            raise UpdateError(f"the downloaded {name} says version {stamped_version(script)!r}, not {version}")
+        verified[name] = script
+    return verified
+
+
+def manifest_bytes(script_name, host_path):
+    manifest_name, description = MANIFESTS[script_name]
+    manifest = {"name": manifest_name, "description": description, "path": host_path, "type": "stdio", "allowed_extensions": [EXTENSION_ID]}
+    return (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+
+
+def write_new_file(path, data, mode):
+    """Writes `<path>.new` with a fresh inode. A stale one from a crash is removed first."""
+    staged = path + ".new"
+    try:
+        os.unlink(staged)
+    except FileNotFoundError:
+        pass
+    descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, mode)
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(data)
+            file.flush()
+            os.fsync(file.fileno())
+        os.chmod(staged, mode)
+    except BaseException:
+        # The caller cleans up only the files staged in full, so a half-written one goes here.
+        try:
+            os.unlink(staged)
+        except OSError:
+            pass
+        raise
+    return staged
+
+
+def replace_files(writes):
+    """Stages every file as `<path>.new`, then renames each over its path in order. A rename keeps the old inode alive,
+    so a running bridge keeps its code. Returns the replaced paths. A failure while staging leaves every path as it was."""
+    staged = []
+    try:
+        for path, data, mode in writes:
+            staged.append((write_new_file(path, data, mode), path))
+    except OSError as error:
+        for staged_path, _ in staged:
+            try:
+                os.unlink(staged_path)
+            except OSError:
+                pass
+        raise UpdateError(f"cannot write {error.filename}: {error.strerror or error}. Nothing was replaced") from error
+    replaced = []
+    for index, (staged_path, path) in enumerate(staged):
+        try:
+            os.replace(staged_path, path)
+        except OSError as error:
+            for left_path, _ in staged[index:]:
+                try:
+                    os.unlink(left_path)
+                except OSError:
+                    pass
+            done = ", ".join(replaced) or "none"
+            raise UpdateError(f"cannot replace {path}: {error.strerror or error}. Replaced before the failure: {done}. Run :native.install") from error
+        replaced.append(path)
+    # A rename lives in its folder's entry, so a power cut can undo it until the folder itself is synced.
+    for folder in {os.path.dirname(path) for path in replaced}:
+        sync_folder(folder)
+    return replaced
+
+
+def sync_folder(folder):
+    try:
+        descriptor = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def planned_writes(scripts, manifests, verified):
+    """(path, bytes, mode) in rename order. This host goes last: its stamped version is what it reports, so until that
+    rename lands the extension still sees the old version and asks again, and the next call finishes the rest."""
+    writes = [(scripts[name], verified[name], 0o755) for name in ("desertfox-bridge", "desertfox")]
+    writes += [(manifests[name], manifest_bytes(name, scripts[name]), 0o644) for name in ("desertfox-bridge", "desertfox-host")]
+    writes.append((scripts["desertfox-host"], verified["desertfox-host"], 0o755))
+    return writes
+
+
+def install_is_current(scripts, manifests, expected):
+    """True when every script matches its expected hash and every manifest holds the bytes the updater would write."""
+    scripts_current = all(file_sha256(scripts[name]) == expected[name] for name in UPDATE_SCRIPTS)
+    manifests_current = all(file_sha256(manifests[name]) == hashlib.sha256(manifest_bytes(name, scripts[name])).hexdigest() for name in MANIFESTS)
+    return scripts_current and manifests_current
+
+
+def self_update(request, fetch=fetch_release_file, host_file=None, current=RELEASE_VERSION):
+    """Replaces the installed scripts and manifests with release `version` after every check passes.
+
+    Checks, in order: the request shape, the version of this process, the lock, the version on disk, then each download
+    against both hashes. Only then does it write, in the order of `planned_writes`. A running bridge keeps its old inode,
+    and the extension reconnects to start the new one. The bridge never replaces its own file.
+
+    The host cannot see the extension's version, so it cannot refuse a version newer than the extension by itself. The
+    hashes do it: they come from the extension's own build, so any other version fails the hash check."""
+    version, expected = checked_request(request)
+    refuse_downgrade(version, current)
+    scripts, manifests = install_paths(host_file)
+    lock = take_update_lock()
+    try:
+        refuse_downgrade(version, installed_version(scripts["desertfox-host"]))
+        if install_is_current(scripts, manifests, expected):
+            return {"updated": False, "version": version, "replaced": []}
+        verified = fetch_verified(version, expected, fetch)
+        replaced = replace_files(planned_writes(scripts, manifests, verified))
+    finally:
+        os.close(lock)
+    return {"updated": True, "version": version, "replaced": replaced}
+
+
 def handle(request):
     if not isinstance(request, dict):
         raise HostError("the request must be a JSON object")
@@ -134,6 +496,8 @@ def handle(request):
         return read_config()
     if cmd == "write_autoconfig":
         return write_autoconfig(request.get("toml"))
+    if cmd == "self_update":
+        return self_update(request)
     raise HostError(f"unknown cmd: {cmd!r}")
 
 
@@ -164,7 +528,7 @@ class Channel:
         data = json.dumps(message, ensure_ascii=False).encode("utf-8")
         if len(data) > MAX_REPLY_BYTES:
             data = json.dumps(
-                {"ok": False, "error": f"the reply is {len(data)} bytes, over Firefox's {MAX_REPLY_BYTES} byte limit for a host reply. Shrink the snippets or CSS in {config_dir()}."}
+                {"ok": False, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, "error": f"the reply is {len(data)} bytes, over Firefox's {MAX_REPLY_BYTES} byte limit for a host reply. Shrink the snippets or CSS in {config_dir()}."}
             ).encode("utf-8")
         with self.write_lock:
             self.stdout.write(struct.pack("=I", len(data)) + data)
@@ -177,9 +541,9 @@ def serve(channel):
         request = channel.read_message()
         if request is None:
             return 1
-        reply = {"ok": True, "host_version": HOST_VERSION, **handle(request)}
+        reply = {"ok": True, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, **handle(request)}
     except HostError as error:
-        reply = {"ok": False, "host_version": HOST_VERSION, "error": str(error)}
+        reply = {"ok": False, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, "error": str(error)}
     channel.send(reply)
     return 0
 

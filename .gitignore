@@ -4,3 +4,4 @@ node_modules/
 dist/
 web-ext-artifacts/
 __pycache__/
+/release-assets/

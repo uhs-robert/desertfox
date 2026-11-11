@@ -3,7 +3,7 @@
 
 Firefox starts it over `connectNative` and keeps it alive while the extension holds the port. Frames are a 4-byte
 native-endian length and UTF-8 JSON, both ways. The host takes the lock first, then says {"ready": true,
-"host_version": 1} once. It takes three verbs from the extension and no others:
+"host_version": 1, "release_version": "0.1.22"} once. It takes three verbs from the extension and no others:
 
   {"verb": "mode", "id", "label", "private", "tab_id", "window_id"}
   {"verb": "reply", "request_id", "ok", "message"?, "commands"?}    the answer to a request the host sent
@@ -55,6 +55,9 @@ import urllib.parse
 from collections import deque
 
 HOST_VERSION = 1
+# `just release_stamp` replaces "dev" with the release version in the shipped copy only. The config host updates this
+# file. The bridge never replaces its own file.
+RELEASE_VERSION = "dev"
 STATE_VERSION = 2
 # A message above this size is skipped, not parsed.
 MAX_MESSAGE_BYTES = 1024 * 1024
@@ -517,7 +520,7 @@ class ExtensionLink:
 
     def say_ready(self):
         with self.write_guard:
-            send_message(self.stdout, {"ready": True, "host_version": HOST_VERSION})
+            send_message(self.stdout, {"ready": True, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION})
             self.open = True
 
     def start(self, verb, fields):
