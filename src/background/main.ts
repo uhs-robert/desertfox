@@ -7,6 +7,7 @@ import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { history_cache } from "./history_cache.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
@@ -317,6 +318,12 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
 wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played], browser.windows);
+
+// Top level, so an event-page wake delivers the events. The fill reads the browser history again after each wake.
+browser.history.onVisited.addListener(history_cache.visited);
+browser.history.onTitleChanged.addListener(history_cache.title_changed);
+browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
+void history_cache.start();
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 
