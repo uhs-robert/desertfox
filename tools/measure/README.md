@@ -7,7 +7,7 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 | Script | Run | Measures | Output |
 |---|---|---|---|
 | `bench.mjs` | `node tools/measure/bench.mjs` | Compile time, per-sandbox heap and time to the key listener for padded copies of `dist/content.js` | `$MEASURE_DIR/bench/result.json` |
-| `micro.mjs` | `node tools/measure/micro.mjs` | The compile and run table only. Needs the profile and files that `bench.mjs` left in `$MEASURE_DIR/bench/run`, so run `bench.mjs` first | `$MEASURE_DIR/bench/micro.json` |
+| `micro.mjs` | `node tools/measure/micro.mjs` | The compile-and-run table and the heap-per-sandbox table (300 sandboxes). Needs the profile and files that `bench.mjs` left in `$MEASURE_DIR/bench/run`, so run `bench.mjs` first | `$MEASURE_DIR/bench/micro.json` |
 | `frames.mjs` | `node tools/measure/frames.mjs` | Load time and resident memory on pages with 200 subframes, with and without the extension | `$MEASURE_DIR/frames/result.json` |
 | `heap.mjs` | `node tools/measure/heap.mjs` | Extension heap per subframe, from memory reports | `$MEASURE_DIR/frames/heap.json` |
 | `tab.mjs` | `node tools/measure/tab.mjs` | The timeline of a switch to a loaded and a discarded tab, and `tabs.reload` and `tabs.warmup` on the neighbor | `$MEASURE_DIR/tab/result.json` |
