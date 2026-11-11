@@ -29,6 +29,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   new_tab_page: `What a new tab shows: an http or https URL that the new tab redirects to, or "${BUILT_IN_PAGE}" for the built-in page. Unset means the built-in page`,
   completion_all_windows: "Whether the tab completion lists the tabs of every window, not only the line's window",
   bridge: "Whether the extension opens the native bridge (a host program that publishes the mode to a desktop shell). Needs the nativeMessaging permission and the bridge host",
+  host_auto_update: "Whether DesertFox may replace its native hosts with the release that matches the extension when a host is older. Each update is checked against SHA-256 hashes in the signed extension. A toast announces it. Off, :native.update does the same on request",
   bridge_share_tabs: "Whether bridge programs may list the open tabs (titles and addresses, never private windows), activate, close and capture them, and run a command on a chosen tab. Needs the bridge setting",
   cmdline_prompt: 'Before the command line input: "caret" for a bold > , "colon" for a primary-colored :, or your own text (include the trailing space you want)',
   open_completion: "Groups that open completes from, in list order. A source left out is not read. Default is both",

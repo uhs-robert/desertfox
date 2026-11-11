@@ -21,6 +21,8 @@ export function install_fake_browser(host: { files: Files; reply?: () => Promise
   const fake = {
     runtime: {
       id: "test@desertfox",
+      // Not a release version, so the host updater has nothing to match a host to.
+      getManifest: () => ({ version: "test" }),
       sendNativeMessage: async (_name: string, message: { cmd: string; toml?: string }) => {
         sent.push(message);
         if (host.reply) return host.reply();

@@ -18,6 +18,8 @@ import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
 import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
+import { create_host_update } from "./host_update.ts";
+import { browser_host_update_deps } from "./host_update_browser.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
 import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, read_import_source } from "./config_import.ts";
@@ -28,7 +30,9 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
-const native_host = create_native_client(browser_native_deps());
+// The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
+export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request)));
+const native_host = create_native_client(browser_native_deps(), host_update.watch);
 const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
 
 // Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
