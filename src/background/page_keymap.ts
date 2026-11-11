@@ -48,7 +48,7 @@ export async function hint_selectors_reply(storage: KeymapStorage, frame_address
   return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
 }
 
-// Answers the quality bundle's `read_media_quality` with the rule for the frame's own address: a `media quality` value or `off`. A page with no stored keymap (nothing compiled yet) keeps the global default.
+// Answers the quality bundle's `read_media_quality` with the rule for the frame's own address: a `media quality` value (a height as text) or `off`. A page with no stored keymap (nothing compiled yet) keeps the global default.
 export async function media_quality_reply(storage: KeymapStorage, frame_address: string | undefined): Promise<string> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);

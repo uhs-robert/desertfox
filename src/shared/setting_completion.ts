@@ -126,12 +126,21 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "off, auto, max, min or a height such as \"1080\"",
+    "expectation": "\"off\", \"auto\", \"max\", \"min\", 144, 240, 360, 480, 720, 1080, 1440, 2160 or 4320",
     "values": [
       "off",
       "auto",
       "max",
-      "min"
+      "min",
+      "144",
+      "240",
+      "360",
+      "480",
+      "720",
+      "1080",
+      "1440",
+      "2160",
+      "4320"
     ]
   },
   {

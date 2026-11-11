@@ -12,7 +12,7 @@ media_quality = "min"
 
 [[site_rules]]
 site = "*://127.0.0.1/quality?id=p26_yt_height*"
-media_quality = "480"
+media_quality = 480
 
 [[site_rules]]
 site = "*://127.0.0.1/quality?id=p26_yt_off*"

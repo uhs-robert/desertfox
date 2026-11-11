@@ -144,7 +144,7 @@ test("the media_quality rule is max by default, a site value overrides the globa
   const reply = (settings: Record<string, unknown>, address: string) => media_quality_reply(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled), address);
   assert.equal(await reply({}, "https://a.test/"), "max");
   assert.equal(await reply({ media_quality: "auto" }, "https://a.test/"), "auto");
-  const rows = { site_rules: [{ site: "https://a.test/*", media_quality: "auto" }, { site: "https://b.test/*", media_quality: "720" }, { site: "https://c.test/*", media_quality: "off" }] };
+  const rows = { site_rules: [{ site: "https://a.test/*", media_quality: "auto" as const }, { site: "https://b.test/*", media_quality: 720 as const }, { site: "https://c.test/*", media_quality: "off" as const }] };
   assert.equal(await reply(rows, "https://a.test/watch"), "auto");
   assert.equal(await reply(rows, "https://b.test/"), "720");
   assert.equal(await reply(rows, "https://c.test/"), "off");

@@ -285,7 +285,7 @@ export type ReadHintSelectors = {
   type: "read_hint_selectors";
 };
 
-// From the `quality` bundle when it starts the `media_quality` rule in a frame. The answer is the rule for the frame's own address: a `media quality` value (`max`, `min`, `auto` or a height) or `off`.
+// From the `quality` bundle when it starts the `media_quality` rule in a frame. The answer is the rule for the frame's own address: a `media quality` value (`max`, `min`, `auto` or a height as text) or `off`.
 export type ReadMediaQuality = {
   type: "read_media_quality";
 };
