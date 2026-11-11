@@ -142,6 +142,8 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
+  // A page can start or end typing in the focused element with no focus event (see `is_editable_element`), so the mode is read again before this key is decided. The keyup read shows a change this key made itself.
+  sync_mode_to_focus();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
   const press: HeldPress = { keyup_seen: false };
@@ -155,6 +157,7 @@ function on_keypress(event: KeyboardEvent): void {
 }
 
 function on_keyup(event: KeyboardEvent): void {
+  sync_mode_to_focus();
   if (cancels_keyup(event, cancelled_keys)) cancel(event);
 }
 
