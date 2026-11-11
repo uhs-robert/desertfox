@@ -58,7 +58,7 @@ test("queued sends keep the gap between pairs and the order of calls, a count an
     const sent_at: { key: string | undefined; time: number }[] = [];
     const make_event = (type: string, init: KeyboardEventInit) => (type === "keydown" && sent_at.push({ key: init.key, time: Date.now() }), page.make_event(type, init));
     const call = (key: string) => send_key_queued(page.doc, { key, key_code: 1, target: "#e" }, make_event);
-    // A count of 3 runs the handler three times in a row, and a second command follows at once.
+    // One call with times 3 and a second call that follows at once.
     const done = Promise.all([send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e", times: 3 }, make_event), call("b")]);
     for (let step = 0; step < 20; step++) {
       mock.timers.tick(KEY_PAIR_GAP_MS / 2);
@@ -98,4 +98,12 @@ test("a backward clock jump does not stall the queue", async () => {
   } finally {
     mock.timers.reset();
   }
+});
+
+test("times accepts 99 and refuses 100 with a clear error", () => {
+  const command = registry.get("page.send_key")!;
+  assert.ok(check_args(command, { key: "a", key_code: 65, times: 99 }, {}).ok);
+  const refused = check_args(command, { key: "a", key_code: 65, times: 100 }, {});
+  assert.equal(refused.ok, false);
+  assert.match(refused.ok ? "" : refused.error, /times/);
 });

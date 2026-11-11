@@ -143,7 +143,7 @@ define("page.send_key", {
     { name: "key", type: "string", description: "Send this key name, for example ArrowDown." },
     { name: "key_code", type: "int", min: 0, description: "Send this legacy key code, such as 40." },
     { name: "target", type: "string", optional: true, description: "Send to the element this CSS selector finds." },
-    { name: "times", type: "int", default: 1, min: 1, description: "Send the key this many times." },
+    { name: "times", type: "int", default: 1, min: 1, max: 99, description: "Send the key this many times." },
   ],
   bridge: false,
   runs_in: "content",

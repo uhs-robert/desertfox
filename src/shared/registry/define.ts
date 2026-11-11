@@ -282,6 +282,10 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
     if (param.type !== "int") fail(`${at}.min`, "only an int param takes a minimum");
     else if (!Number.isInteger(param.min)) fail(`${at}.min`, "must be a whole number");
   }
+  if (param.max !== undefined) {
+    if (param.type !== "int") fail(`${at}.max`, "only an int param takes a maximum");
+    else if (!Number.isInteger(param.max)) fail(`${at}.max`, "must be a whole number");
+  }
   if (param.pattern !== undefined) {
     if (param.type !== "string" && param.type !== "key") fail(`${at}.pattern`, "only a string or key param takes a pattern");
     try {
@@ -342,6 +346,7 @@ function value_problem(param: ParamDef, value: unknown): string | null {
     return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   }
   if (param.type === "int" && param.min !== undefined && (value as number) < param.min) return `${JSON.stringify(value)} is below the minimum ${param.min}`;
+  if (param.type === "int" && param.max !== undefined && (value as number) > param.max) return `${JSON.stringify(value)} is above the maximum ${param.max}`;
   if ((param.type === "string" || param.type === "key") && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
   if (param.type === "string" && param.format === "url" && !URL.canParse(value as string)) return `${JSON.stringify(value)} is not an address`;
   if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;

@@ -122,6 +122,7 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
       const number = typeof given === "string" && /^-?\d+$/.test(given) ? Number(given) : given;
       if (!Number.isInteger(number)) return bad("a whole number");
       if (param.min !== undefined && (number as number) < param.min) return bad(`a whole number, ${param.min} or more`);
+      if (param.max !== undefined && (number as number) > param.max) return bad(`a whole number, ${param.max} or less`);
       return { ok: true, value: number };
     }
     case "float": {
