@@ -218,6 +218,36 @@ export function start_server() {
       })</script>`;
       return response.end(page(`hidden_input_frame ${id}`, tall_filler, script));
     }
+    // A frame whose whole document is the editor, as an iframe rich-text editor makes it: the body is contenteditable, or the document is in designMode. The body takes the focus and cannot be blurred.
+    if (url.pathname === "/body_editor_frame" || url.pathname === "/design_mode_frame") {
+      const turn_on = url.pathname === "/design_mode_frame" ? 'document.designMode = "on"' : 'document.body.contentEditable = "true"';
+      const frame = `<iframe id="inner" src="/body_editor?id=${id}_frame&turn_on=${encodeURIComponent(turn_on)}" style="width:300px;height:200px"></iframe>`;
+      const focus_body = "<script>addEventListener('load', () => { const inner = document.getElementById('inner'); inner.contentWindow.focus(); inner.contentDocument.body.focus(); })</script>";
+      return response.end(page(`body_editor_frame ${id}`, frame + focus_body));
+    }
+    if (url.pathname === "/body_editor") return response.end(page(`body_editor ${id}`, `${tall_filler}<script>${url.searchParams.get("turn_on")}</script>`));
+    if (url.pathname === "/cell_editor") {
+      // A stand-in for the Google Sheets cell editor: one contenteditable that holds the focus from load on. While a cell is only selected it is parked off screen, empty and with no width.
+      // Enter starts an edit, which moves the box over a cell and gives it a width, and Enter again ends it. A double-click on the cell starts an edit with no key, and a click on it ends one.
+      const editor = '<div id="cell" style="position:fixed;top:100px;left:100px;width:114px;height:20px"></div><div id="box" style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div>';
+      const script = `<script>
+        const box = document.getElementById("box");
+        const editor = document.getElementById("waffle-rich-text-editor");
+        let editing = false;
+        function start_edit() { editing = true; box.style.cssText = "position:fixed;top:100px;left:100px;min-width:114px;background:#fff"; }
+        function end_edit() { editing = false; box.style.cssText = "position:absolute;top:-10000px;left:0"; editor.textContent = ""; }
+        addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          if (editing) end_edit(); else start_edit();
+        });
+        const cell = document.getElementById("cell");
+        cell.addEventListener("dblclick", start_edit);
+        cell.addEventListener("click", end_edit);
+        editor.focus();
+      </script>`;
+      return response.end(page(`cell_editor ${id}`, editor + tall_filler + script));
+    }
     // Answers after `ms`, so a page that embeds it stays in its load that long.
     if (url.pathname === "/slow_pixel") return void setTimeout(() => response.end(), Number(url.searchParams.get("ms")));
     if (url.pathname === "/replaces_address") {
