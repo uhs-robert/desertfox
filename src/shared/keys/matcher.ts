@@ -12,7 +12,7 @@ export type MatchResult =
 
 const MAX_COUNT_DIGITS = 6;
 
-// Only the modes that move through the page have counts and registers. In the others a digit or `"` is just a key.
+// Only the modes that move through the page have counts, and all of them but media have registers. In the others a digit or `"` is just a key. Media captures only its listed keys, so an unbound `"` reaches the page.
 export const COUNT_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line", "media"];
 
 // `frees` names the keys a site rule hands to the page. While no sequence is under way, such a key matches nothing and is no count digit.
@@ -48,7 +48,7 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
     const progress = () => ({ ...(count_digits && { count: Number(count_digits) }), ...(register_keys && { register_keys }), keys });
     // `"` and a register name go before a command, and a count may stand on either side of them.
     const awaiting_name = register_keys === '"';
-    if (awaiting_name || (token === '"' && !register_keys && COUNT_MODES.includes(mode) && typed.length === 0 && !root.children[token])) {
+    if (awaiting_name || (token === '"' && !register_keys && mode !== "media" && COUNT_MODES.includes(mode) && typed.length === 0 && !root.children[token])) {
       if (awaiting_name && !REGISTER_KEY.test(token)) return reset(), { kind: "no_match" };
       register_keys += token;
       return { kind: "pending", node: root, typed, ...progress() };
