@@ -36,3 +36,8 @@ site = "*://127.0.0.1/page?id=rule_keep*"
 [[site_rules]]
 site = "*://127.0.0.1/page?id=zoom_site*"
 zoom = 1.5
+
+# p23_media_keys reads the quality of fake players it expects to start at their own level, so the default max rule stays off there. p26_media_quality_rule tests the rule on its own pages.
+[[site_rules]]
+site = "*://127.0.0.1/quality?id=p23_quality*"
+media_quality = "off"

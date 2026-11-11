@@ -285,6 +285,11 @@ export type ReadHintSelectors = {
   type: "read_hint_selectors";
 };
 
+// From the `quality` bundle when it starts the `media_quality` rule in a frame. The answer is the rule for the frame's own address: a `media quality` value (`max`, `min`, `auto` or a height) or `off`.
+export type ReadMediaQuality = {
+  type: "read_media_quality";
+};
+
 // From the devtools page, as the first message on its port: which tab its toolbox inspects.
 export type DevtoolsHello = {
   type: "devtools_hello";
@@ -393,7 +398,7 @@ export type MediaReport = {
   scan: MediaScan;
 };
 
-export type ContentToBackground = MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | RegisterRequest | MarkRequest;
+export type ContentToBackground = MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

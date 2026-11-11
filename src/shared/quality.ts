@@ -11,3 +11,6 @@ export type QualityAnswer = { levels: QualityLevel[]; chosen?: string; skipped?:
 
 // What each frame pushes to the background when the bundle runs in it, so the background picks one player to act on. `ready` means the player lists its levels.
 export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean };
+
+// From the background to every frame of a tab after it injected the bundle, to start the `media_quality` rule. `navigated` is set when the address changed, which ends a manual `media quality` choice in the frame. A finished load alone leaves that choice standing.
+export type QualityRuleStart = { type: "quality_rule"; navigated: boolean };

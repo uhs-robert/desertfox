@@ -76,7 +76,7 @@ export const area_rules = [
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{default_keymap,default_site_rows,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
-  { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },
+  { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },
   { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];
 
