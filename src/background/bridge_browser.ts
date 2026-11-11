@@ -7,6 +7,7 @@ import { BRIDGE_HOST_NAME, create_bridge } from "./bridge.ts";
 import type { BridgeDeps, BridgeWindow } from "./bridge.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { create_bridge_run } from "./bridge_run.ts";
+import { NoSuchTab } from "./bridge_run.ts";
 import type { BridgeRunTarget } from "./bridge_run.ts";
 import { typed_url_target } from "../commands/open_target.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
@@ -28,19 +29,30 @@ export async function focused_normal_target(api: TargetApi = browser): Promise<B
   return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: window.id, url: tab.url, incognito: window.incognito === true };
 }
 
+// The active tab a `--tab` router reads, at every step and repeat: the named tab while it is a normal-window tab, else a refusal. Never the focused window, which can be private.
+export const pinned_active_tab = (tab_switch: Pick<TabSwitch, "normal_tab">, named: BridgeRunTarget) => async () => {
+  const tab = await tab_switch.normal_tab(named.tab_id);
+  if (!tab) throw new NoSuchTab();
+  return { tab_id: named.tab_id, window_id: tab.windowId as number, url: tab.url, incognito: false };
+};
+
 // A run from outside has its own router: it targets the focused normal window instead of `currentWindow`, shows no toast (the answer carries the refusal),
 // and leaves `.` and the macro recorder alone, so a script cannot rewrite what the user repeats.
 export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command_id: string) => boolean, tab_switch: TabSwitch) {
   const { record_step: _recorded, ...shared_deps } = router_deps;
-  const router = create_router({
-    ...shared_deps,
-    active_tab: async () => {
-      const target = await focused_normal_target();
-      return target && { tab_id: target.tab_id, window_id: target.window_id, url: target.url, incognito: target.incognito };
-    },
-    show_refusal: async () => undefined,
-    repeat_memory: no_repeat_memory,
-  });
+  // One router per request, because a named run pins its tab for the whole request.
+  const router_for = (named: BridgeRunTarget | undefined) =>
+    create_router({
+      ...shared_deps,
+      active_tab: named
+        ? pinned_active_tab(tab_switch, named)
+        : async () => {
+            const target = await focused_normal_target();
+            return target && { tab_id: target.tab_id, window_id: target.window_id, url: target.url, incognito: target.incognito };
+          },
+      show_refusal: async () => undefined,
+      repeat_memory: no_repeat_memory,
+    });
   return create_bridge_run({
     registry,
     is_snippet,
@@ -51,7 +63,7 @@ export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command
       const tab = await tab_switch.normal_tab(tab_id);
       return tab && { tab_id, window_id: tab.windowId as number, url: tab.url, incognito: false };
     },
-    run: (invocation, target) => router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true }),
+    run: (invocation, target, named) => router_for(named ? target : undefined).run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true }),
   });
 }
 

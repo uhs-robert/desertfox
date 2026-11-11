@@ -545,7 +545,7 @@ A `run` targets the active tab of the last focused normal window, not the window
 
 The host limits all connections together to 10 `run` and `list` requests per second, because the CLI opens a connection per call (an excess request gets an error line and does not reach the extension), keeps the cap of 16 connections, and keeps at most 16 requests waiting on the extension. A request the extension does not answer in 10 s fails, and so do all waiting requests when the port closes, so a client never hangs on a reconnect. Each request carries an id and the reply that carries the id goes to the connection that asked.
 
-The extension is the trust boundary. It drops everything from a private window before it reaches the host, so a host bug cannot leak it. The host writes only the socket, its lock and the state file, all on tmpfs.
+The extension is the trust boundary. It drops everything from a private window before it reaches the host, so a host bug cannot leak it. The host writes only the socket, its lock and the state file, all on tmpfs, and the thumbnail cache in `$XDG_CACHE_HOME`. It prunes that cache at start (images over 7 days old, then the oldest beyond 500) and deletes it when the extension says `bridge_share_tabs` is off.
 
 `host/desertfox` is the command line for the socket, a stdlib Python script: `desertfox run [--tab <id>] <command> [args]`, `desertfox list`, `desertfox state`, `desertfox tabs`, `desertfox activate <id> [--preface <nonce>]`, `desertfox clear-preface <window id>`, `desertfox close <id>` and `desertfox capture [id...]`. It prints plain text and exits 0 when done, 1 when refused or failed, 2 for bad usage and 3 when the bridge is not running. The installer puts it beside the hosts and links it into `~/.local/bin`.
 

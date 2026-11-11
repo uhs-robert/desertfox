@@ -24,6 +24,9 @@ const OPENS_URL_IDS: readonly string[] = [
 export const never_listed = (id: string): boolean => NEVER_GROUPS.includes(id.split(".")[0] ?? "") || NEVER_IDS.includes(id);
 export const opens_url = (id: string): boolean => OPENS_URL_IDS.includes(id);
 
+// Thrown by a router that is pinned to a named tab when the tab is gone or private by the time a step reads it. It never falls back to the focused window.
+export class NoSuchTab extends Error {}
+
 export type BridgeRunTarget = { tab_id: number; window_id: number; url: string | undefined; incognito: boolean };
 
 export type BridgeRunDeps = {
@@ -35,7 +38,8 @@ export type BridgeRunDeps = {
   resolve_url: (text: string) => Promise<string>;
   // The tab the command runs in: the one `--tab` names, which must be a normal-window tab, or else the active tab of the focused normal window. Undefined when there is none.
   target: (tab_id: number | undefined) => Promise<BridgeRunTarget | undefined>;
-  run: (invocation: Invocation, target: BridgeRunTarget) => Promise<RunResponse>;
+  // `named` is true for a `--tab` run: every step then runs in that tab or not at all.
+  run: (invocation: Invocation, target: BridgeRunTarget, named: boolean) => Promise<RunResponse>;
 };
 
 const refuse = (message: string): BridgeAnswer => ({ ok: false, message });
@@ -82,7 +86,13 @@ export function create_bridge_run(deps: BridgeRunDeps) {
     const target = await deps.target(tab_id);
     if (!target) return refuse(tab_id === undefined ? "no normal window is open" : "no such tab");
     if (target.incognito && opens_url(command.id)) return refuse("the focused window is private, so nothing opens an address there from outside");
-    const response = await deps.run(parsed.invocation, target);
+    let response: RunResponse;
+    try {
+      response = await deps.run(parsed.invocation, target, tab_id !== undefined);
+    } catch (error) {
+      if (error instanceof NoSuchTab) return refuse("no such tab");
+      throw error;
+    }
     // A handler refusal can hold page data such as a tab title, so the caller gets fixed text. Only the parse, rule and validator refusals above echo the caller's own text.
     return response.ok ? { ok: true } : refuse(`${command.id} failed`);
   }

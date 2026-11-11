@@ -6,6 +6,7 @@ import os
 import time
 import unittest
 
+from host_under_test import load_host
 from test_bridge import BridgeTestCase, Client
 
 JPEG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0 fake image").decode()
@@ -195,6 +196,8 @@ class CaptureTest(BridgeTestCase):
         self.assertFalse(os.path.exists(thumbnail_file(self.cache_home, MAIL["url"])))
 
     def test_an_old_image_of_a_closed_tab_is_pruned_and_one_of_an_open_tab_stays(self):
+        # The host prunes at start too, so it starts first and the old images appear after.
+        host = self.start()
         old_path = thumbnail_file(self.cache_home, "https://closed.example/")
         kept_path = thumbnail_file(self.cache_home, MAIL["url"])
         os.makedirs(os.path.dirname(old_path))
@@ -202,7 +205,6 @@ class CaptureTest(BridgeTestCase):
             with open(path, "wb") as image:
                 image.write(b"\xff\xd8")
             os.utime(path, (1, 1))
-        host = self.start()
         client = Client(self.socket_path, {"verb": "capture", "tab_ids": []})
         self.listed(host, [MAIL])
         self.assertEqual(client.result(), {"ok": True, "results": []})
@@ -218,6 +220,44 @@ class CaptureTest(BridgeTestCase):
         results = client.result()["results"]
         self.assertEqual([result["ok"] for result in results], [False, False])
         self.assertEqual(host.wait(), 0)
+
+
+class ThumbnailCleanupTest(BridgeTestCase):
+    def seed(self, url, age_s):
+        path = thumbnail_file(self.cache_home, url)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as image:
+            image.write(b"\xff\xd8")
+        stamp = time.time() - age_s
+        os.utime(path, (stamp, stamp))
+        return path
+
+    def test_the_host_prunes_old_images_at_start_and_keeps_recent_ones(self):
+        old = self.seed("https://old.example/", 8 * 24 * 3600)
+        recent = self.seed("https://recent.example/", 3600)
+        self.start()
+        self.wait_path_gone(old)
+        self.assertTrue(os.path.exists(recent))
+
+    def test_only_the_newest_images_up_to_the_cap_stay(self):
+        module = load_host("desertfox-bridge")
+        module.MAX_THUMBNAILS = 3
+        old_cache = os.environ.get("XDG_CACHE_HOME")
+        os.environ["XDG_CACHE_HOME"] = self.cache_home
+        self.addCleanup(lambda: os.environ.pop("XDG_CACHE_HOME") if old_cache is None else os.environ.__setitem__("XDG_CACHE_HOME", old_cache))
+        paths = [self.seed("https://site%d.example/" % number, 1000 - number * 10) for number in range(6)]
+        module.prune_thumbnails([])
+        self.assertEqual([os.path.exists(path) for path in paths], [False, False, False, True, True, True])
+
+    def test_an_answer_that_sharing_is_off_deletes_the_thumbnails_and_the_client_sees_no_extra_field(self):
+        host = self.start()
+        for request in ({"verb": "tabs"}, {"verb": "capture"}):
+            kept = self.seed("https://kept.example/", 60)
+            client = Client(self.socket_path, request)
+            host.send({"verb": "reply", "request_id": host.read_request()["request_id"], **OFF, "sharing": "off"})
+            self.assertEqual(client.result(), OFF)
+            self.assertFalse(os.path.exists(kept))
+            self.assertFalse(os.path.exists(os.path.dirname(kept)))
 
 
 if __name__ == "__main__":

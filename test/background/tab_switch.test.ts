@@ -168,3 +168,18 @@ test("capture renders a loaded tab at a scale that fits the box, refuses an unlo
   assert.deepEqual(await test_case.tab_switch.handle("capture", { tab_id: 12 }), { ok: false, message: "the tab is not loaded" });
   assert.equal(test_case.calls.length, 1);
 });
+
+test("a clear that arrives while a newer activation is still writing its title waits and then leaves the newer preface alone", async () => {
+  const test_case = make();
+  await test_case.tab_switch.handle("activate", { tab_id: 10, preface: "aaa" });
+  // The no-op entry turns the hold on: the next title write waits until its resolver in `gates` is called.
+  test_case.gates.push(() => undefined);
+  const second = test_case.tab_switch.handle("activate", { tab_id: 11, preface: "bbb" });
+  const clear = test_case.tab_switch.handle("clear_preface", { window_id: 1, preface: "aaa" });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(test_case.calls.filter((call) => call === 'preface 1 ""').length, 0, "the clear waits for the activation");
+  test_case.gates[1]!();
+  assert.deepEqual(await clear, { ok: true, cleared: false });
+  assert.equal((await second).ok, true);
+  assert.equal(test_case.calls.filter((call) => call === 'preface 1 ""').length, 0);
+});

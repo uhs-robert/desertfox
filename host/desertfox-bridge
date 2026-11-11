@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import struct
@@ -68,6 +69,8 @@ CAPTURE_TIMEOUT_S = 5
 MAX_CAPTURE_IDS = 64
 # Only images of no open tab are pruned, and only once this old, so a tab closed by mistake and reopened keeps its image.
 THUMBNAIL_KEEP_S = 7 * 24 * 3600
+# At most this many images stay, the oldest going first, so a long run of changing addresses cannot fill the disk.
+MAX_THUMBNAILS = 500
 JPEG_DATA_URL_PREFIX = "data:image/jpeg;base64,"
 # The fields of a listed tab the host passes on, with the type each must have. Anything else, a private flag included, is dropped.
 TAB_FIELDS = {
@@ -385,13 +388,28 @@ def prune_thumbnails(open_urls):
         names = os.listdir(thumbnail_dir())
     except OSError:
         return
+    left = []
     for name in names:
         path = os.path.join(thumbnail_dir(), name)
         try:
-            if name not in keep and os.stat(path).st_mtime < cutoff:
+            modified = os.stat(path).st_mtime
+            if name not in keep and modified < cutoff:
                 os.unlink(path)
+            else:
+                left.append((modified, path))
         except OSError:
             pass
+    for _, path in sorted(left)[: max(0, len(left) - MAX_THUMBNAILS)]:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def forget_thumbnails_if_sharing_off(reply):
+    """The extension says `sharing: off` when `bridge_share_tabs` is off. The images are page content the owner no longer shares, so they go now."""
+    if reply.get("sharing") == "off":
+        shutil.rmtree(thumbnail_dir(), ignore_errors=True)
 
 
 def listed_tabs(reply):
@@ -408,6 +426,7 @@ def listed_tabs(reply):
 
 
 def tabs_result(reply):
+    forget_thumbnails_if_sharing_off(reply)
     if reply.get("ok") is not True:
         return run_result(reply)
     tabs = listed_tabs(reply)
@@ -448,6 +467,7 @@ def capture(link, request):
     asked for, so the cache never holds an image of a tab the extension did not list as a normal one."""
     tab_ids = request.get("tab_ids")
     listed = link.ask("tabs", {}, REQUEST_TIMEOUT_S)
+    forget_thumbnails_if_sharing_off(listed)
     if listed.get("ok") is not True:
         return run_result(listed)
     tabs = listed_tabs(listed)
@@ -663,6 +683,7 @@ def main():
             return 1
         # Whatever is in the folder now belongs to a host that died: this one holds the lock.
         remove_quietly(paths["state.json"])
+        prune_thumbnails(())
         listener = bind_socket(paths["bridge.sock"])
         state = BridgeState(paths["state.json"], pid, start)
         link = ExtensionLink(sys.stdout.buffer)

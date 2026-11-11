@@ -56,8 +56,13 @@ const is_normal_window = (window: WindowInfo | undefined): boolean => window?.ty
 export function create_tab_switch(deps: TabSwitchDeps) {
   // The nonce each window shows, so a late clear from an older activation leaves a newer one alone. It lives for 10 s at most, so a restart of the background loses nothing worth storing.
   const prefaces = new Map<number, string>();
-  // Activations run one after another: two at once would race on the window title, and the preface that wins must be the one the map holds.
-  let activations: Promise<unknown> = Promise.resolve();
+  // Activations and clears run one after another: two at once would race on the window title, and a clear must not read the map between an activation's title write and its map write.
+  let title_turns: Promise<unknown> = Promise.resolve();
+  function in_turn<T>(work: () => Promise<T>): Promise<T> {
+    const turn = title_turns.then(work);
+    title_turns = turn.catch(() => undefined);
+    return turn;
+  }
 
   async function normal_tab(tab_id: unknown): Promise<TabInfo | undefined> {
     if (!is_whole(tab_id)) return undefined;
@@ -121,13 +126,7 @@ export function create_tab_switch(deps: TabSwitchDeps) {
     return result;
   }
 
-  function activate(request: { tab_id?: unknown; preface?: unknown }): Promise<TabAnswer> {
-    const turn = activations.then(() => activate_now(request));
-    activations = turn.catch(() => undefined);
-    return turn;
-  }
-
-  async function clear_preface(request: { window_id?: unknown; preface?: unknown }): Promise<TabAnswer> {
+  async function clear_preface_now(request: { window_id?: unknown; preface?: unknown }): Promise<TabAnswer> {
     const { window_id, preface } = request;
     if (!is_whole(window_id) || (preface !== undefined && !(typeof preface === "string" && PREFACE_PATTERN.test(preface)))) return refuse("clear_preface needs a window_id and, optionally, the preface");
     if (!is_normal_window(await deps.window(window_id).catch(() => undefined))) return refuse("no such window");
@@ -136,6 +135,9 @@ export function create_tab_switch(deps: TabSwitchDeps) {
     await deps.set_preface(window_id, "");
     return { ok: true, cleared: true };
   }
+
+  const activate = (request: { tab_id?: unknown; preface?: unknown }) => in_turn(() => activate_now(request));
+  const clear_preface = (request: { window_id?: unknown; preface?: unknown }) => in_turn(() => clear_preface_now(request));
 
   async function close(request: { tab_id?: unknown }): Promise<TabAnswer> {
     const tab = await normal_tab(request.tab_id);

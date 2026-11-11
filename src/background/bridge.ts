@@ -46,7 +46,8 @@ export const MAX_RETRY_MS = 60_000;
 export const STABLE_MS = 10_000;
 
 // The answer to a tab verb or a `--tab` run while `bridge_share_tabs` is off. It names the setting, which is no secret.
-const TABS_OFF: BridgeAnswer = { ok: false, message: "tab sharing is off, set bridge_share_tabs to true" };
+// `sharing: "off"` tells the host to delete its thumbnails. The host drops the field before the reply reaches a client.
+const TABS_OFF = { ok: false, message: "tab sharing is off, set bridge_share_tabs to true", sharing: "off" } as const;
 
 type Snapshot = { mode: Mode; tab_id: number; window: BridgeWindow };
 
