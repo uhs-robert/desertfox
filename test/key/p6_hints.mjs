@@ -278,9 +278,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("Tab typed right after the hint key on a fresh page switches to text and never reaches the page", async () => {
     await open_page("hints", "p6_text_first", { new_tab: true });
     const mark = events.length;
-    await press_keys(";l", "-k", "Tab", "t", "w");
+    // F opens the pick in a background tab, so this page stays to report what it saw.
+    await press_keys("F", "-k", "Tab", "t", "w");
     await wait_event(mark, loaded("hint_two"), "the only match to load");
     await expect_absent(mark, "p6_text_first", (event) => event.type === "keydown" && event.key === "Tab", "Tab reached the page while the hints bundle loaded", { report_delay_ms: scroll_report_wait_ms });
+    await close_tabs_with("hint_two");
   });
 
   await run_case("Backspace on empty text returns to label mode with the labels intact", async () => {
