@@ -111,14 +111,14 @@ test("the default modifiers give the owner's keys and no stacked or refused ones
   assert.equal(args_at(compiled, ";", "2", "a")?.action, "double_click");
   assert.equal(node_at(compiled, ";", "2", "l"), undefined);
   // Keys that set their own action, the cmdline keys and stacked modifiers do not exist.
-  for (const keys of [["B", "b"], ["B", "t"], ["h", "s"], ["r", "v"], ["r", "V"], ["B", ";"], ["r", "B"], ["t"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["B", "b"], ["B", "p"], ["h", "s"], ["r", "v"], ["r", "V"], ["B", ";"], ["r", "B"], ["p"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.equal((node_at(compiled, ";", "o") as TreeBranch).label, "Inspect");
-  for (const [key, filter] of [["a", "every"], ["l", "links"], ["p", "prose"], ["I", "images"], ["i", "inputs"], ["b", "buttons"]] as const) {
+  for (const [key, filter] of [["a", "every"], ["l", "links"], ["t", "prose"], ["I", "images"], ["i", "inputs"], ["b", "buttons"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "o", key)?.action, args_at(compiled, ";", "o", key)?.filter], ["inspect", filter], key);
   }
   for (const keys of [["B", "a"], ["W", "a"], ["d", "a"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
@@ -147,7 +147,7 @@ test("the default picture keys: ;d reaches images, links and media", () => {
     assert.deepEqual([args_at(compiled, ";", "d", key)?.action, args_at(compiled, ";", "d", key)?.filter], ["download", filter], key);
   }
   // `;a` labels every element, most of which have no address to save, and `;Ba` and `;Wa` likewise.
-  for (const key of ["B", "i", "p", "f", "a"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
+  for (const key of ["B", "i", "t", "f", "a"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
 });
 
 test("the ;: modifier derives a prompt variant for filters with an address and none for the others", () => {
@@ -157,7 +157,7 @@ test("the ;: modifier derives a prompt variant for filters with an address and n
   assert.equal(args_at(compiled, ";", ":", "l")?.action, "prompt");
   assert.equal(args_at(compiled, ";", ":", "l")?.command, "open");
   assert.equal(args_at(compiled, ";", ":", "I")?.action, "prompt");
-  for (const keys of [[":", "b"], [":", "i"], [":", "p"], [":", "s"], [":", ":"], [":", "r"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [[":", "b"], [":", "i"], [":", "t"], [":", "s"], [":", ":"], [":", "r"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
 test(";Y copies link addresses in rapid mode", () => {

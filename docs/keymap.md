@@ -207,7 +207,7 @@ bound: 356 (normal 202, hint 7, cmdline 19, caret 35, visual 43, visual_line 44,
 | `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
 | `;b` | bound | `hint --buttons` | Click button |  |
 | `;a` | bound | `hint --every` | Click every element |  |
-| `;p` | bound | `hint --prose` | Click text |  |
+| `;t` | bound | `hint --prose` | Click text |  |
 | `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
 | `;i` | bound | `hint --inputs` | Click input |  |
 | `;l` | bound | `hint --links` | Click link |  |

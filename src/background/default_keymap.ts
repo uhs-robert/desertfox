@@ -294,7 +294,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";;": { id: "cmdline.open", args: { text: "hint " }, label: "Open the command line with hint" },
     ";b": { id: "hint.run", args: { filter: "buttons" }, label: "Click button", variant_label: "Button" },
     ";a": { id: "hint.run", args: { filter: "every" }, label: "Click every element", variant_label: "Every element" },
-    ";p": { id: "hint.run", args: { filter: "prose" }, label: "Click text", variant_label: "Text" },
+    ";t": { id: "hint.run", args: { filter: "prose" }, label: "Click text", variant_label: "Text" },
     ";s": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input", variant_label: "Input" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link", variant_label: "Link" },
