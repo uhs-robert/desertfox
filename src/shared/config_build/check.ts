@@ -228,6 +228,11 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
   for (const row of merged.settings.site_rules ?? []) {
     for (const [sequence, binding] of Object.entries(row.bind ?? {})) {
       if (typeof binding?.id !== "string") continue;
+      const command = registry.get(binding.id);
+      if (command && captured_key_param(command, binding.args)) {
+        problems.push(`${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}": a bind cannot wait for a key press`);
+        continue;
+      }
       for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}": ${message}`);
     }
   }

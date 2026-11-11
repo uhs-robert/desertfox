@@ -59,7 +59,7 @@ test("queued sends keep the gap between pairs and the order of calls, a count an
     const make_event = (type: string, init: KeyboardEventInit) => (type === "keydown" && sent_at.push({ key: init.key, time: Date.now() }), page.make_event(type, init));
     const call = (key: string) => send_key_queued(page.doc, { key, key_code: 1, target: "#e" }, make_event);
     // A count of 3 runs the handler three times in a row, and a second command follows at once.
-    const done = Promise.all([call("a"), call("a"), call("a"), call("b")]);
+    const done = Promise.all([send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e", times: 3 }, make_event), call("b")]);
     for (let step = 0; step < 20; step++) {
       mock.timers.tick(KEY_PAIR_GAP_MS / 2);
       await new Promise((resolve) => setImmediate(resolve));
@@ -78,4 +78,24 @@ test("a refused queued call rejects alone and the next call still sends", async 
   await assert.rejects(send_key_queued(page.doc, { key: "a", key_code: 1, target: "#gone" }, page.make_event), RuntimeRefusal);
   await send_key_queued(page.doc, { key: "a", key_code: 1 }, page.make_event);
   assert.equal(page.log.length, 2);
+});
+
+test("a backward clock jump does not stall the queue", async () => {
+  mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000_000 });
+  try {
+    const page = fake_page({ "#e": "editor" }, null);
+    const call = () => send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e" }, page.make_event);
+    // The queue state is shared with earlier tests, so every call may wait one gap.
+    const finish = async (pending: Promise<void>) => {
+      await new Promise((resolve) => setImmediate(resolve));
+      mock.timers.tick(KEY_PAIR_GAP_MS);
+      await pending;
+    };
+    await finish(call());
+    mock.timers.setTime(0);
+    await finish(call());
+    assert.equal(page.log.length, 4);
+  } finally {
+    mock.timers.reset();
+  }
 });

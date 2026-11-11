@@ -1,6 +1,6 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
 
-export type SendKeyArgs = { key: string; key_code: number; target?: string };
+export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number };
 
 // What the handler needs from the page, so a test can pass a fake.
 export type KeyTargetDocument = { querySelector(selector: string): EventTarget | null; activeElement: EventTarget | null };
@@ -32,16 +32,19 @@ export function send_key(doc: KeyTargetDocument, args: SendKeyArgs, make_event: 
 // Sheets applies only the first of several key pairs that arrive in the same millisecond. Pairs 4 ms apart all land, and 10 ms leaves margin.
 export const KEY_PAIR_GAP_MS = 10;
 
-// One queue per page, so a count and two quick separate calls all keep their order and their gap. A refusal rejects its own call and leaves the queue running.
+// One queue per page. A call is one entry, so all its pairs go out before the next call starts: a count never has another key land between its steps. A refusal rejects its own call and leaves the queue running.
 let queue_tail: Promise<unknown> = Promise.resolve();
 let last_sent_at = Number.NEGATIVE_INFINITY;
 
 export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): Promise<void> {
   const run = async () => {
-    const wait_ms = last_sent_at + KEY_PAIR_GAP_MS - Date.now();
-    if (wait_ms > 0) await new Promise((resolve) => setTimeout(resolve, wait_ms));
-    last_sent_at = Date.now();
-    send_key(doc, args, make_event);
+    for (let sent = 0; sent < (args.times ?? 1); sent++) {
+      // Capped at one gap, so a clock that jumps back cannot stall the queue.
+      const wait_ms = Math.min(last_sent_at + KEY_PAIR_GAP_MS - Date.now(), KEY_PAIR_GAP_MS);
+      if (wait_ms > 0) await new Promise((resolve) => setTimeout(resolve, wait_ms));
+      last_sent_at = Date.now();
+      send_key(doc, args, make_event);
+    }
   };
   const result = queue_tail.then(run);
   queue_tail = result.catch(() => undefined);

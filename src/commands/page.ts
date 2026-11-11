@@ -138,14 +138,16 @@ define("page.heading", {
 // Meant for site rows: a row binds a key to this command to turn it into a key the site's own script reads. Modifiers and keypress are not sent yet.
 define("page.send_key", {
   label: "Send key to page",
-  intent: "Send a key press to the page. It sends a keydown and a keyup with the given key and key code. The target is the element the CSS selector finds, or the focused element when there is no selector. It refuses when the selector matches nothing. A count prefix sends the key that many times.",
+  intent: "Send a key press to the page. It sends a keydown and a keyup with the given key and key code. The target is the element the CSS selector finds, or the focused element when there is no selector. It refuses when the selector matches nothing. A count prefix sends the key that many times, in order.",
   params: [
     { name: "key", type: "string", description: "Send this key name, for example ArrowDown." },
     { name: "key_code", type: "int", min: 0, description: "Send this legacy key code, such as 40." },
     { name: "target", type: "string", optional: true, description: "Send to the element this CSS selector finds." },
+    { name: "times", type: "int", default: 1, min: 1, description: "Send the key this many times." },
   ],
   bridge: false,
   runs_in: "content",
-  count: "repeat",
+  // The handler sends the repeats itself, so a quick second key cannot land between them.
+  count: { param: "times" },
   bundle: "site_actions",
 });

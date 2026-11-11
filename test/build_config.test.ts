@@ -692,3 +692,16 @@ test("a site row bind is checked like a keymap binding", () => {
   assert.ok(problems.some((problem) => problem.includes('bind "k"')), problems.join("\n"));
   assert.equal(problems.some((problem) => problem.includes('bind "l"')), false);
 });
+
+test("a site row bind that waits for a key press is refused", () => {
+  const key_command = { id: "mark.add", label: "Add mark", intent: "Save a mark under the next key.", params: [{ name: "slot", type: "key" }], runs_in: "content" };
+  const dir = config_dir_with({ "settings.toml": ['[[site_rules]]', 'site = "https://a.test/*"', 'bind = { j = { id = "mark.add" }, k = { id = "mark.add", args = { slot = "a" } } }', ""].join("\n") });
+  let problems: string[] = [];
+  try {
+    build_config(dir, [...commands, key_command] as never);
+  } catch (error) {
+    problems = (error as ConfigErrors).problems;
+  }
+  assert.ok(problems.some((problem) => problem.includes('bind "j"') && problem.includes("cannot wait for a key press")), problems.join("\n"));
+  assert.equal(problems.some((problem) => problem.includes('bind "k"')), false, problems.join("\n"));
+});
