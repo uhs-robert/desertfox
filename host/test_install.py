@@ -55,8 +55,6 @@ class InstallCase(unittest.TestCase):
         self.served = os.path.join(root, "served")
         for directory in (self.home, self.bin, self.served):
             os.makedirs(directory)
-        self.runtime_dir = os.path.join(root, "run")
-        os.makedirs(self.runtime_dir)
         self.log = os.path.join(root, "curl.log")
         self.routes = os.path.join(root, "routes")
         open(self.log, "w").close()
@@ -107,7 +105,7 @@ class InstallCase(unittest.TestCase):
         self.serve(f"{MAIN_BASE}/desertfox", self.cli_bytes)
 
     def run_install(self, *args):
-        env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name, "XDG_RUNTIME_DIR": self.runtime_dir}
+        env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name}
         return subprocess.run([os.path.join(self.bin, "sh"), INSTALL, *args], env=env, capture_output=True, text=True, timeout=60)
 
     def curl_urls(self):
@@ -133,7 +131,7 @@ class InstallCase(unittest.TestCase):
     def home_files(self):
         found = []
         for base, _, names in os.walk(self.home):
-            found.extend(os.path.join(base, name) for name in names)
+            found.extend(os.path.join(base, name) for name in names if name != "update.lock")
         return found
 
     def assert_nothing_installed(self):
@@ -346,11 +344,11 @@ exit 0
 
 
 class UpdateLockTest(InstallCase):
-    """install.sh and the host's self_update share $XDG_RUNTIME_DIR/desertfox/update.lock, so only one stages .new files."""
+    """install.sh and the host's self_update share update.lock in the data folder (XDG_RUNTIME_DIR is unset here), so only one stages .new files."""
 
     @property
     def lock_path(self):
-        return os.path.join(self.runtime_dir, "desertfox", "update.lock")
+        return os.path.join(self.home, ".local", "share", "desertfox", "update.lock")
 
     def hold_lock(self):
         os.makedirs(os.path.dirname(self.lock_path), exist_ok=True)

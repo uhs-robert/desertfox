@@ -48,6 +48,7 @@ export function create_host_update(deps: HostUpdateDeps) {
   type Phase = { kind: "idle" } | { kind: "updating" } | { kind: "failed"; reason: string };
   let phase: Phase = { kind: "idle" };
   let config_standing: HostStanding = "current";
+  let config_predates_updater = false;
   let running: Promise<void> | undefined;
   const listeners: (() => void)[] = [];
 
@@ -85,23 +86,28 @@ export function create_host_update(deps: HostUpdateDeps) {
       deps.warn(`desertfox: the native host update to ${hashes.version} failed: ${reason}`);
       const next: HostUpdateState = { ...state };
       if (is_checksum_refusal(reason)) next.blocked = hashes.version;
-      if (state.failure_toasted !== hashes.version) {
-        next.failure_toasted = hashes.version;
-        await deps.toast(`Host update failed: ${reason}. ${MANUAL_HINT}`, "error");
-      }
       await deps.save_state(next);
+      if (state.failure_toasted !== hashes.version) {
+        await deps.toast(`Host update failed: ${reason}. ${MANUAL_HINT}`, "error");
+        // After the toast, so one that found no tab or notification shows again on the next failure.
+        await deps.save_state({ ...next, failure_toasted: hashes.version });
+      }
     }
   }
 
-  async function check(): Promise<void> {
+  // A host with no release_version predates the updater and has no `self_update` verb, so only a manual install can help it.
+  async function check(predates_updater: boolean): Promise<void> {
     if (await deps.is_development()) return;
     const hashes = await deps.read_hashes();
     if (!hashes || hashes.version !== deps.extension_version) return;
     const state = await deps.load_state();
-    if (!(await deps.auto_update_consented())) {
+    if (predates_updater || !(await deps.auto_update_consented())) {
       if (state.noticed === hashes.version) return;
+      await deps.toast(
+        predates_updater ? "The native host is too old to update itself. Run :native.install to install the current one." : "The native host is older than this extension. Run :native.update to update it.",
+        "info",
+      );
       await deps.save_state({ ...state, noticed: hashes.version });
-      await deps.toast("The native host is older than this extension. Run :native.update to update it.", "info");
       return;
     }
     if (state.blocked === hashes.version) return;
@@ -113,9 +119,12 @@ export function create_host_update(deps: HostUpdateDeps) {
   // `watch.seen` is called for every reply, so it must return at once: the check runs on its own.
   function seen_from(release_version: unknown, source: "config" | "bridge"): void {
     const standing = host_standing(release_version, deps.extension_version);
-    if (source === "config") config_standing = standing;
+    if (source === "config") {
+      config_standing = standing;
+      config_predates_updater = typeof release_version !== "string";
+    }
     if (standing !== "outdated" || running) return;
-    running = check()
+    running = check(typeof release_version !== "string")
       .catch((error: unknown) => deps.warn(`desertfox: the native host update check failed: ${reason_of(error)}`))
       .finally(() => {
         running = undefined;
@@ -126,6 +135,7 @@ export function create_host_update(deps: HostUpdateDeps) {
     seen: (release_version) => seen_from(release_version, "config"),
     outdated_note: () => {
       if (config_standing !== "outdated") return undefined;
+      if (config_predates_updater) return "run :native.install to install the current host";
       if (phase.kind === "updating") return "updating";
       if (phase.kind === "failed") return `update failed: ${phase.reason}`;
       return "run :native.update to update it";
@@ -139,23 +149,35 @@ export function create_host_update(deps: HostUpdateDeps) {
     // Called after an ok update, so the bridge can start the new file.
     on_updated: (listener: () => void) => void listeners.push(listener),
     // `:native.update`. Skips consent, the daily limit and a checksum block, because the user asked. Throws with the reason on failure.
-    update_now: async (): Promise<ManualOutcome> => {
-      if (running || phase.kind === "updating") throw new Error("An update is already running.");
-      if (await deps.is_development()) throw new Error("This is a development install of DesertFox, which never updates its host. Run :native.install instead.");
-      const hashes = await deps.read_hashes();
-      if (!hashes || hashes.version !== deps.extension_version) throw new Error(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
-      const state = await deps.load_state();
-      let reply: SelfUpdateReply;
-      try {
-        reply = await send(hashes);
-      } catch (error) {
-        deps.warn(`desertfox: the native host update to ${hashes.version} failed: ${reason_of(error)}`);
-        throw error;
-      }
-      const { blocked: _lifted, ...rest } = state;
-      await deps.save_state(rest);
-      updated();
-      return { updated: reply.updated, version: reply.version };
+    update_now: (): Promise<ManualOutcome> => {
+      if (running || phase.kind === "updating") return Promise.reject(new Error("An update is already running."));
+      // Set before the first await, so an automatic check that starts meanwhile sees it and sends no second self_update.
+      const work = manual_update();
+      running = work.then(
+        () => undefined,
+        () => undefined,
+      ).finally(() => {
+        running = undefined;
+      });
+      return work;
     },
   };
+
+  async function manual_update(): Promise<ManualOutcome> {
+    if (await deps.is_development()) throw new Error("This is a development install of DesertFox, which never updates its host. Run :native.install instead.");
+    const hashes = await deps.read_hashes();
+    if (!hashes || hashes.version !== deps.extension_version) throw new Error(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
+    const state = await deps.load_state();
+    let reply: SelfUpdateReply;
+    try {
+      reply = await send(hashes);
+    } catch (error) {
+      deps.warn(`desertfox: the native host update to ${hashes.version} failed: ${reason_of(error)}`);
+      throw error;
+    }
+    const { blocked: _lifted, ...rest } = state;
+    await deps.save_state(rest);
+    updated();
+    return { updated: reply.updated, version: reply.version };
+  }
 }

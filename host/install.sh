@@ -9,7 +9,7 @@
 # Installs two hosts, the config host and the bridge host, and the `desertfox` command line for the bridge. Writes only
 # $XDG_DATA_HOME/desertfox/desertfox-host, desertfox-bridge and desertfox (default ~/.local/share/desertfox),
 # ~/.mozilla/native-messaging-hosts/desertfox_host.json and desertfox_bridge.json, and the symlink ~/.local/bin/desertfox.
-# While it writes, it holds the lock the host's self_update takes, $XDG_RUNTIME_DIR/desertfox/update.lock, so an install
+# While it writes, it holds the lock the host's self_update takes, update.lock in the data folder, so an install
 # and an update never stage the same .new files at once. A second one fails with "update running".
 set -eu
 
@@ -54,7 +54,6 @@ main() {
     python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' ||
         fail "python3 3.9 or newer is required, found $(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')."
     command -v curl >/dev/null 2>&1 || fail "curl is required."
-    command -v flock >/dev/null 2>&1 || fail "flock (util-linux) is required."
 
     [ -n "${HOME:-}" ] || fail "HOME is not set."
     # A relative XDG_DATA_HOME is invalid by the XDG spec and ignored.
@@ -83,23 +82,20 @@ main() {
         echo "Checksums verified for version $channel_arg."
     fi
 
-    take_update_lock
     mkdir -p "$data_dir" "$manifest_dir"
+    take_update_lock
     install_host desertfox-host desertfox_host "DesertFox config files and saved edits"
     install_host desertfox-bridge desertfox_bridge "DesertFox bridge to a desktop shell"
     install_cli
     echo "Return to Firefox and press the permission button on the DesertFox page."
 }
 
-# Holds the lock on file descriptor 9 until this script exits, so the lock spans the staging and the renames. Without an
-# absolute XDG_RUNTIME_DIR the host's updater has no lock path and refuses to run, so no updater can overlap this install.
+# Holds the lock on file descriptor 9 until this script exits, so the lock spans the staging and the renames. The file
+# sits in the data folder, which the host updater also writes, so both compute the same path.
 take_update_lock() {
-    case "${XDG_RUNTIME_DIR:-}" in
-        /*) ;;
-        *) return ;;
-    esac
-    lock_path="$XDG_RUNTIME_DIR/desertfox/update.lock"
-    (umask 077 && mkdir -p "$XDG_RUNTIME_DIR/desertfox" && : >>"$lock_path") 2>/dev/null || fail "cannot open the update lock $lock_path"
+    command -v flock >/dev/null 2>&1 || fail "flock (util-linux) is required."
+    lock_path="$data_dir/update.lock"
+    : >>"$lock_path" 2>/dev/null || fail "cannot open the update lock $lock_path"
     exec 9>>"$lock_path"
     flock -n 9 || fail "update running: a DesertFox host is updating now. Run this again in a minute."
 }

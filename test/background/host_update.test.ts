@@ -81,11 +81,18 @@ test("a build with no hashes, or hashes for another version, sends nothing", asy
   }
 });
 
-test("a host with no release_version, as before the updater, counts as older", async () => {
-  const test_case = make();
-  test_case.updater.watch.seen(undefined);
-  await test_case.settle();
-  assert.equal(test_case.calls.length, 1);
+test("a host with no release_version predates the updater, so the line points to :native.install and nothing is sent", async () => {
+  for (const consent of [true, false]) {
+    const test_case = make({ consent });
+    test_case.updater.watch.seen(undefined);
+    await test_case.settle();
+    test_case.updater.watch.seen(undefined);
+    await test_case.settle();
+    assert.deepEqual(test_case.calls, []);
+    assert.equal(test_case.toasts.length, 1);
+    assert.match(test_case.toasts[0]!.message, /:native\.install/);
+    assert.match(test_case.updater.watch.outdated_note()!, /:native\.install/);
+  }
 });
 
 test("without consent nothing is sent and one line names the manual command, once per version", async () => {
@@ -253,4 +260,95 @@ test("the manual command on a build with no hashes says so", async () => {
   const test_case = make({ hashes: undefined });
   await assert.rejects(test_case.updater.update_now(), /no host hashes/);
   assert.deepEqual(test_case.calls, []);
+});
+
+test("an automatic check during :native.update sends no second self_update", async () => {
+  let release: (() => void) | undefined;
+  const test_case = make({ update: (request) => new Promise<SelfUpdateReply>((resolve) => void (release = () => resolve({ updated: true, version: request.version }))) });
+  const manual = test_case.updater.update_now();
+  // Before the manual call reached the host, and while it waits for the reply.
+  test_case.updater.watch.seen("0.1.22");
+  await test_case.settle();
+  test_case.updater.bridge_ready("0.1.22");
+  await test_case.settle();
+  assert.equal(test_case.calls.length, 1);
+  release?.();
+  await manual;
+  assert.equal(test_case.calls.length, 1);
+});
+
+test("a second :native.update while one runs is refused", async () => {
+  let release: (() => void) | undefined;
+  const test_case = make({ update: (request) => new Promise<SelfUpdateReply>((resolve) => void (release = () => resolve({ updated: true, version: request.version }))) });
+  const first = test_case.updater.update_now();
+  await test_case.settle();
+  await assert.rejects(test_case.updater.update_now(), /already running/);
+  release?.();
+  await first;
+});
+
+test("a toast that could not be shown is not recorded, so it shows again", async () => {
+  let shown = false;
+  const toast_deps = { fail: true };
+  // A notice that throws leaves no `noticed` mark.
+  const test_case = (() => {
+    const calls: string[] = [];
+    const state = { stored: {} as HostUpdateState };
+    const updater = create_host_update({
+      extension_version: EXTENSION,
+      is_development: async () => false,
+      read_hashes: async () => HASHES,
+      auto_update_consented: async () => false,
+      update: async (request) => ({ updated: true, version: request.version }),
+      load_state: async () => structuredClone(state.stored),
+      save_state: async (next) => void (state.stored = structuredClone(next)),
+      now_ms: () => 0,
+      toast: async (message) => {
+        if (toast_deps.fail) throw new Error("no tab");
+        calls.push(message);
+        shown = true;
+      },
+      warn: () => undefined,
+    });
+    return { updater, state, calls };
+  })();
+  test_case.updater.watch.seen("0.1.22");
+  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  assert.equal(test_case.state.stored.noticed, undefined);
+  toast_deps.fail = false;
+  test_case.updater.watch.seen("0.1.22");
+  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  assert.equal(shown, true);
+  assert.equal(test_case.state.stored.noticed, EXTENSION);
+});
+
+test("a failure toast that could not be shown is not recorded, so the next failure shows it", async () => {
+  const toast_deps = { fail: true, shown: 0 };
+  const state = { stored: {} as HostUpdateState, now: 0 };
+  const updater = create_host_update({
+    extension_version: EXTENSION,
+    is_development: async () => false,
+    read_hashes: async () => HASHES,
+    auto_update_consented: async () => true,
+    update: refusing("offline"),
+    load_state: async () => structuredClone(state.stored),
+    save_state: async (next) => void (state.stored = structuredClone(next)),
+    now_ms: () => state.now,
+    toast: async () => {
+      if (toast_deps.fail) throw new Error("no tab");
+      toast_deps.shown++;
+    },
+    warn: () => undefined,
+  });
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+  updater.watch.seen("0.1.22");
+  await settle();
+  assert.equal(state.stored.failure_toasted, undefined);
+  assert.equal(state.stored.attempted?.version, EXTENSION);
+  toast_deps.fail = false;
+  state.now += RETRY_AFTER_MS;
+  updater.watch.seen("0.1.22");
+  await settle();
+  assert.equal(toast_deps.shown, 1);
+  assert.equal(state.stored.failure_toasted, EXTENSION);
 });
