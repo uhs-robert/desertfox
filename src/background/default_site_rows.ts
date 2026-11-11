@@ -24,7 +24,7 @@ const SHEETS_BIND: BindingTable = {
   x: { id: "page.clipboard", args: { action: "cut", target: SHEETS_TARGET } },
   p: { id: "page.clipboard", args: { action: "paste", target: SHEETS_TARGET } },
 };
-// Select all, Cut and Paste are Sheets' own, so url.increment must not take <C-a> and <C-x> and mode.pass_next must not take <C-v> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list all three keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave all three keys out.
+// Select all, Cut and Paste are Sheets' own, so url.increment must not take <C-a> and <C-x> and mode.pass_next must not take <C-v> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list all three keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave `<C-a>` and `<C-x>` out. `only` always keeps `<C-v>` for the one-shot pass, so an `only` row cannot free it.
 const SHEETS_PASS = "<C-a> <C-x> <C-v>";
 
 // Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.

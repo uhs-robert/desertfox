@@ -6,7 +6,8 @@ export const areas = ["keys", "config", "bundles"];
 
 const clip = (action) => `{ id = "page.clipboard", args = { action = "${action}", target = "#waffle-rich-text-editor" } }`;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, in_background, poll_until, expect, sleep }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, in_background, poll_until, events, expect, sleep }) {
+  const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   await setup("load a config with a clipboard row", async () => {
     const dir = config_copy();
     appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=clip_*"', `bind = { x = ${clip("cut")}, p = ${clip("paste")}, y = ${clip("copy")} }`, 'pass = "<C-v>"', ""].join("\n"));
@@ -25,6 +26,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_page("clipboard", "clip_cut", { new_tab: true });
     await press_keys("x");
     await expect_events("cut:true:,");
+    expect(badge_of("clip_cut") === "NORMAL", `the badge is ${badge_of("clip_cut")}, not NORMAL`);
   });
 
   await run_case("y fires a trusted copy event on the editor", async () => {
@@ -45,5 +47,19 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await seed_clipboard("real paste");
     await press_keys("-M", "ctrl", "-k", "v", "-m", "ctrl");
     await expect_events("paste:true:real paste,");
+  });
+
+  await run_case("a page that cancels the paste, as Sheets does, is pasted into once", async () => {
+    await open_page("clipboard", "clip_cancel", { new_tab: true });
+    await seed_clipboard("once");
+    await press_keys("p");
+    await expect_events("paste:true:once,");
+  });
+
+  await run_case("a page that stops the paste event from propagating is pasted into once", async () => {
+    await open_page("clipboard", "clip_stop", { new_tab: true });
+    await seed_clipboard("once");
+    await press_keys("p");
+    await expect_events("paste:true:once,");
   });
 }
