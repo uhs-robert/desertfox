@@ -1,5 +1,5 @@
 // Content script entry: a capture listener on keydown, the keymap from
-// the background, and the modes. Runs in every frame. A frame of another site starts on its first focus.
+// the background, and the modes. Runs in every frame. A subframe starts on its first focus.
 
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
@@ -40,16 +40,6 @@ function refresh_mode_indicator(): void {
 }
 
 const script_started_ms = performance.now();
-
-// A cross-origin frame cannot reach the top document. The manifest injects into all frames, and such a frame starts on its first focus.
-function can_reach_top_document(): boolean {
-  try {
-    return Boolean(window.top?.document);
-  } catch {
-    return false;
-  }
-}
-
 
 async function send_to_background(message: ContentToBackground): Promise<RunResponse> {
   try {
@@ -352,4 +342,4 @@ function start(): void {
   void ask_keymap();
 }
 
-start_content_once(start, window, can_reach_top_document() || document.hasFocus());
+start_content_once(start, window, window === window.top || document.hasFocus());

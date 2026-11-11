@@ -39,6 +39,7 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await poll_until("the top document to hold the focus", top_document_has_focus, { timeout_ms: 3000, expected_timeout: true }).catch(() => expect(false, "the hidden frame kept the focus"));
     await expect_top_frame_holds_the_tab(label);
   }
+  const frame_page_id_of = (id) => `${id}_frame`;
   const frame_scroll_y = () => in_active_tab(`document.getElementById("input_frame").contentWindow.scrollY`);
   const frame_focus_count = () => in_active_tab(`Number(document.body.dataset.frameFocuses ?? 0)`);
   // Focusing the editor scrolls the frame's own document and pulls the top page back to its start, so both are read just before the keys.
@@ -333,5 +334,26 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await expect_badge_and_mode("INSERT");
     await in_active_tab(blur_frame);
     await expect_badge_and_mode("NORMAL");
+  });
+
+  // A frame that Docs focuses in a background tab gets no focus event until the tab is shown. Its script starts on that event, and the hand-off needs it.
+  await run_case("a hidden input frame focused in a background tab starts when the tab is shown, and keys then reach it and hand off", async () => {
+    const id = "p15_background_frame";
+    const origin = await in_active_tab(`location.origin`);
+    const mark = events.length;
+    const background_tab_id = await in_background(`browser.tabs.create({ url: ${JSON.stringify(`${origin}/hidden_input_frame?id=${id}`)}, active: false }).then((tab) => tab.id)`);
+    await wait_event(mark, (event) => event.page_id === id && event.type === "tree_read", "the background tab's top page to start");
+    await wait_event(mark, (event) => event.page_id === id && event.type === "visibility", "the background tab to report that it is hidden");
+    // The written frame reports no page id of its own, so its start shows in the attribute the content script sets on its document element.
+    const frame_started = () => in_background(`browser.tabs.executeScript(${background_tab_id}, { code: 'document.getElementById("input_frame").contentDocument.documentElement.hasAttribute("data-desertfox-tree-read-ms")' }).then((results) => results[0])`);
+    expect((await frame_started()) === false, "the hidden frame started while its tab was in the background");
+    await in_background(`browser.tabs.update(${background_tab_id}, { active: true })`);
+    await poll_until("the hidden frame to start when the tab is shown", async () => (await frame_started()) === true);
+    await wait_takes_keys(frame_page_id_of(id));
+    await expect_badge_and_mode("INSERT");
+    await expect_key_reaches_frame("j", id);
+    await press_keys("-k", "Escape");
+    await expect_handed_off();
+    await expect_key_scrolls_top_page(["j"], id);
   });
 }
