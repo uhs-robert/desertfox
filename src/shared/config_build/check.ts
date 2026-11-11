@@ -58,7 +58,11 @@ function check_invocation(invocation: BoundInvocation, registry: Registry, engin
   const captured = captured_key_param(command, invocation.args);
   const result = check_args(captured ? without_param(command, captured.name) : command, invocation.args, { search_engines: engine_names });
   // With a prompt, the prompted param may be left out.
-  if (!result.ok && !(invocation.prompt !== undefined && result.missing_param !== undefined)) errors.push(result.error);
+  // The typed count fills the count param when the key runs, so a binding may leave it out. A stand-in count lets every other arg get its check.
+  const count_param = typeof command.count === "object" ? command.count.param : undefined;
+  const typed_count = !result.ok && result.missing_param !== undefined && result.missing_param === count_param;
+  const checked = typed_count ? check_args(command, { ...invocation.args, [count_param!]: 1 }, { search_engines: engine_names }) : result;
+  if (!checked.ok && !(invocation.prompt !== undefined && checked.missing_param !== undefined)) errors.push(checked.error);
   if (invocation.prompt !== undefined) errors.push(...check_prompt(invocation.prompt, command));
   return errors;
 }

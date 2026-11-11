@@ -106,7 +106,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await open_media_page(id);
     let mark = events.length;
     await press_keys("%");
-    await wait_toast(/times/);
+    await wait_toast(/^Type a number first$/);
     await expect_absent(mark, id, (event) => event.type === "media_seeked", "a percent seek with no count moved the video");
     mark = events.length;
     // G scrolls to the bottom in normal mode.
@@ -308,20 +308,38 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, scroll_of(`${id}_inner`), "j to scroll the frame, which the mode left");
   });
 
-  await run_case("a pushState ends the mode, and so does a load of another page", async () => {
+  await run_case("a pushState keeps the mode and drops the pin so the keys act on the main video, and a load of another page ends it", async () => {
     const id = "p29_nav";
-    await open_media_page(id);
+    await open_page("media_mode", id, { new_tab: true });
+    await press_keys(";M");
+    await poll_until("the hint labels", async () => (await hint_label_count()) === 2);
+    await press_keys("s");
+    await poll_until("the labels gone", async () => (await hint_label_count()) === 0);
     let mark = events.length;
+    await press_keys("m");
+    await wait_event(mark, media(id, "volumechange", "small", (event) => event.muted === true), "the pinned small video muted");
+    mark = events.length;
     await in_active_tab('history.pushState({}, "", location.href + "&pushed=1"); 0');
-    await normal(mark, id);
-    await j_scrolls(id);
-    await press_keys("a", "a");
-    await hidden(mark, id);
+    await expect_absent(mark, id, indicator(id, "NORMAL"), "the pushState ended the mode");
+    mark = events.length;
+    await press_keys("m");
+    await wait_event(mark, media(id, "volumechange", "big", (event) => event.muted === true), "the main video muted after the address change");
+    await expect_absent(mark, id, media(id, "volumechange", "small"), "the dropped pin still acted");
     const next = "p29_nav_next";
     mark = events.length;
     await in_active_tab(`location.href = "/media_mode?id=${next}"; 0`);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === next, "the next page to load");
     await wait_takes_keys(next);
     await j_scrolls(next);
+  });
+
+  await run_case(";M on a video in a frame refuses in words and starts no mode", async () => {
+    const id = "p29_host_pin";
+    await open_page("media_mode_host", id, { new_tab: true });
+    await press_keys(";M");
+    await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await wait_toast(/^Start media mode in that frame first$/);
+    await j_scrolls(id);
   });
 }

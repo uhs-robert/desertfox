@@ -30,6 +30,8 @@ export function create_mode_state(initial: Mode = "normal") {
   };
 
   return {
+    // The fullscreen ended while hint or command line mode was open, so closing it lands in normal mode.
+    back_to_normal_: () => void (back_mode = "normal"),
     is_manual_insert_: () => manual_insert,
     get_mode_: () => mode,
     set_mode_,

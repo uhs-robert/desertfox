@@ -230,11 +230,13 @@ function act_on_media(action: "play_pause" | "mute" | "fullscreen", target: Targ
 }
 
 // The pin is a weak reference, so a video the page drops is not held. `media.js` of this frame reads it, and the background learns which frame holds it. The mode is the caller's to start.
-export type PinWindow = { desertfox_media_pin?: WeakRef<Element> };
+export type PinWindow = { desertfox_pin?: WeakRef<Element> };
 
 function pin_media(target: Target): void | Refusal {
   if (!is_media(target)) return { ok: false, message: "Not a media element" };
-  (window as unknown as PinWindow).desertfox_media_pin = new WeakRef(target as unknown as Element);
+  // The pin lives in the frame of the video, and only that frame's own `;M` can set it.
+  if (target.ownerDocument !== document) return { ok: false, message: "Start media mode in that frame first" };
+  (window as unknown as PinWindow).desertfox_pin = new WeakRef(target as unknown as Element);
   void browser.runtime.sendMessage({ type: "media_pin" } satisfies MediaPin).catch(() => undefined);
 }
 

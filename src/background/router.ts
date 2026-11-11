@@ -157,7 +157,8 @@ export function create_router(deps: RouterDeps): Router {
     const counted = apply_count(command, invocation);
     const checked = check_args(command, counted.args, sources);
     if (!checked.ok) {
-      return refuse(checked.error);
+      // A key that takes its number from the count (`50%`) was pressed with none.
+      return refuse(typeof command.count === "object" && checked.missing_param === command.count.param ? "Type a number first" : checked.error);
     }
 
     const filled = await fill_context_sources(command.id, checked.args, context, active);

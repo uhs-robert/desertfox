@@ -6,11 +6,11 @@ import { player_box } from "../player_box.ts";
 import { apply_in_frame, media_in, scan_frame, visible_area } from "./frame_media.ts";
 import type { FrameView, Player } from "./frame_media.ts";
 
-type MediaWindow = { desertfox_media_ready?: true; desertfox_media_pin?: WeakRef<Element> };
+type MediaWindow = { desertfox_media_ready?: true; desertfox_pin?: WeakRef<Element> };
 const media_window = window as unknown as MediaWindow;
 
 const view: FrameView = {
-  players: () => media_in(document).map((element) => ({ player: element as unknown as Player, area: element.localName === "video" ? visible_area(element, innerWidth, innerHeight) : 0, pinned_: element === media_window.desertfox_media_pin?.deref() })),
+  players: () => media_in(document).map((element) => ({ player: element as unknown as Player, area: element.localName === "video" ? visible_area(element, innerWidth, innerHeight) : 0, pinned_: element === media_window.desertfox_pin?.deref() })),
   pip_element: () => document.pictureInPictureElement,
   exit_pip: () => document.exitPictureInPicture(),
   fullscreen_element: () => document.fullscreenElement,

@@ -62,11 +62,13 @@ export function create_tab_media(deps: TabMediaDeps) {
           await deps.storage.set({ [key_of(tab_id)]: { ...hold, frames: [...(hold?.frames ?? []), frame_id] } satisfies MediaHold });
         } else if (hold?.frames.includes(frame_id) && !KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
       }),
-    // The page changed under the mode: a new document, or an address change a script made. Every frame of the hold goes back to normal.
-    navigated: (tab_id: number): Promise<void> =>
+    // A new document ends the hold in every frame. An address change the page makes itself (`pushState`, as YouTube does for the next video) keeps it and drops the pin, so the keys act on the new main video.
+    navigated: (tab_id: number, new_document: boolean): Promise<void> =>
       in_turn(async () => {
         const hold = await read(tab_id);
-        if (hold) await end(tab_id, hold);
+        if (!hold) return;
+        if (new_document) await end(tab_id, hold);
+        else if (hold.pin_frame !== undefined) await deps.storage.set({ [key_of(tab_id)]: { frames: hold.frames } satisfies MediaHold });
       }),
     forget: (tab_id: number): Promise<void> => in_turn(() => deps.storage.remove(key_of(tab_id))),
   };

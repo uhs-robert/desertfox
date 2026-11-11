@@ -172,13 +172,13 @@ test("a report of normal that left before aa's mode arrived does not end the hol
 
 test("a navigation ends the hold in every frame, and a tab with no hold sends nothing", async () => {
   const { media, sent } = fake_tab_media();
-  await media.navigated(5);
+  await media.navigated(5, true);
   assert.deepEqual(sent, []);
   await media.reported(5, 0, "media");
   await media.reported(5, 2, "media");
-  await media.navigated(5);
+  await media.navigated(5, true);
   assert.deepEqual(sent.sort(), [[5, 0, "normal"], [5, 2, "normal"]]);
-  await media.navigated(5);
+  await media.navigated(5, true);
   assert.equal(sent.length, 2);
 });
 
@@ -205,4 +205,33 @@ test("the holds of two tabs are apart", async () => {
   assert.deepEqual(sent, []);
   await media.reported(1, 0, "normal");
   assert.deepEqual(sent, [[1, 2, "normal"]]);
+});
+
+test("an address change the page makes keeps the hold and drops the pin, and a new document ends it", async () => {
+  const { media, sent } = fake_tab_media();
+  await media.reported(6, 0, "media");
+  await media.reported(6, 2, "media");
+  await media.pin(6, 2);
+  assert.equal(await media.pin_of(6), 2);
+  await media.navigated(6, false);
+  assert.equal(await media.pin_of(6), undefined);
+  assert.deepEqual(sent, []);
+  await media.reported(6, 2, "hint");
+  await media.navigated(6, true);
+  assert.deepEqual(sent.sort(), [[6, 0, "normal"], [6, 2, "normal"]]);
+});
+
+test("a fullscreen that ends while hint or the line is open sends the escape to normal", () => {
+  const state = create_mode_state();
+  state.set_mode_("media");
+  state.set_mode_("cmdline");
+  state.back_to_normal_();
+  state.escape();
+  assert.equal(state.get_mode_(), "normal");
+});
+
+test("a % binding that gets a wrong other arg is still skipped, while the count stays out of the check", () => {
+  const bad = { ...DEFAULT_KEYMAP, media: { "%": { id: "media.act", args: { action: "seek", value: "up", times: 0 } }, X: { id: "media.act", args: { action: "seek", value: "percent", bogus: 1 } } } };
+  const { warnings } = compile_config({ config: empty_config(), default_keymap: bad, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
+  assert.ok(warnings.some((warning) => warning.includes('skipped "X"')), JSON.stringify(warnings));
 });

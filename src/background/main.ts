@@ -346,8 +346,8 @@ const media_quality = create_media_quality({
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   void media_quality.tab_updated(tab_id, change, tab.url);
-  // A load or an address change, `pushState` included, ends the media mode of the page it started on.
-  if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id).catch(() => undefined);
+  // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
+  if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change.status === "loading").catch(() => undefined);
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
@@ -370,7 +370,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
-  void tab_media.forget(tab_id);
+  void tab_media.forget(tab_id).catch(() => undefined);
   return tab_modes.forget(tab_id);
 });
 

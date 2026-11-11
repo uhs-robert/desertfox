@@ -315,6 +315,7 @@ function start(): void {
     "fullscreenchange",
     () => {
       const next = fullscreen_step(page_mode.get_mode_(), !!document.fullscreenElement);
+      if (!document.fullscreenElement) page_mode.back_to_normal_();
       if (next) bundles.set_mode_(next);
     },
     false,

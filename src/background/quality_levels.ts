@@ -37,14 +37,16 @@ export type QualityDeps = {
 };
 
 // One player acts, so a page with several embeds never changes or skips more than one. A player that lists its levels beats one that does not (an embed that has not played), then the top frame, then the lowest frame id.
-export function choose_player(frames: readonly { frame_id: number; report: QualityReport }[]): number | undefined {
+// The preferred frame, the one holding a pinned video, wins when it has a player.
+export function choose_player(frames: readonly { frame_id: number; report: QualityReport }[], prefer_frame?: number): number | undefined {
   const players = frames.filter(({ report }) => report.player);
+  if (players.some(({ frame_id }) => frame_id === prefer_frame)) return prefer_frame;
   const rank = ({ frame_id, report }: (typeof players)[number]) => (report.ready ? 0 : 2) + (frame_id === 0 ? 0 : 1);
   return [...players].sort((a, b) => rank(a) - rank(b) || a.frame_id - b.frame_id)[0]?.frame_id;
 }
 
 // Undefined when no frame has a player, when the page refuses scripts everywhere, or when the time ran out. A frame that refuses the script does not stop the others.
-export async function ask_quality(deps: QualityDeps, tab_id: number, request: QualityRequest): Promise<QualityAnswer | undefined> {
+export async function ask_quality(deps: QualityDeps, tab_id: number, request: QualityRequest, prefer_frame?: number): Promise<QualityAnswer | undefined> {
   const deadline = Date.now() + deps.timeout_ms;
   const frames = new Map<number, QualityReport>();
   let expected: number | undefined;
@@ -68,7 +70,7 @@ export async function ask_quality(deps: QualityDeps, tab_id: number, request: Qu
     clearTimeout(timer);
     stop();
   }
-  const frame_id = choose_player([...frames].map(([id, report]) => ({ frame_id: id, report })));
+  const frame_id = choose_player([...frames].map(([id, report]) => ({ frame_id: id, report })), prefer_frame);
   if (expired || Date.now() >= deadline || frame_id === undefined) return undefined;
   let stop_waiting!: (answer: undefined) => void;
   const late = new Promise<undefined>((resolve) => (stop_waiting = resolve));
@@ -85,7 +87,7 @@ export const quality_reports = create_quality_reports();
 // The rule's injection (`media_quality.ts`) runs on every load, and leaves out `matchAboutBlank`. With it, a load-time injection made a frame under an all-off site rule leave ignore mode when the tab's insert hold ended (the p22 key test).
 export const inject_quality_for_rule = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, runAt: "document_start" });
 
-export const ask_quality_in_tab = (tab_id: number, request: QualityRequest): Promise<QualityAnswer | undefined> =>
+export const ask_quality_in_tab = (tab_id: number, request: QualityRequest, prefer_frame?: number): Promise<QualityAnswer | undefined> =>
   ask_quality(
     {
       reports: quality_reports,
@@ -97,6 +99,7 @@ export const ask_quality_in_tab = (tab_id: number, request: QualityRequest): Pro
     },
     tab_id,
     request,
+    prefer_frame,
   );
 
 const WORDS: readonly RegisterItem[] = [

@@ -74,18 +74,20 @@ export function visible_area(element: Element, width: number, height: number): n
 
 export function scan_frame(view: FrameView): MediaScan {
   const found = view.players();
-  const video_areas = (list: typeof found) => Math.max(0, ...list.filter(({ player }) => is_video(player)).map(({ area }) => area));
+  // An audio element has area 0, so the largest area is the largest video.
+  const video_areas = (list: typeof found) => Math.max(0, ...list.map(({ area }) => area));
   const playing = found.filter(({ player }) => is_playing(player));
   const audible = found.filter(({ player }) => is_audible(player));
   return {
     count: found.length,
+    has_video: found.some(({ player }) => is_video(player)),
     playing: playing.length,
     audible: audible.length,
     video_area: video_areas(found),
     playing_video_area: video_areas(playing),
     audible_video_area: video_areas(audible),
-    pip_open: Boolean(view.pip_element()),
-    fullscreen_open: Boolean(view.fullscreen_element()),
+    pip_open: !!view.pip_element(),
+    fullscreen_open: !!view.fullscreen_element(),
     pinned: found.some(({ pinned_ }) => pinned_),
   };
 }
@@ -126,9 +128,9 @@ function state_of(player: Player, view: FrameView): MediaState {
     duration: Number.isFinite(player.duration) ? player.duration : null,
     paused: player.paused,
     // The document retargets the open element to the shadow host of a video inside a shadow root, so a comparison with the player fails there.
-    pip: Boolean(view.pip_element()),
+    pip: !!view.pip_element(),
     loop: player.loop,
-    fullscreen: Boolean(view.fullscreen_element()),
+    fullscreen: !!view.fullscreen_element(),
   };
 }
 

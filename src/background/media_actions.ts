@@ -33,7 +33,8 @@ export type MediaDeps = {
   inject_all: (tab_id: number) => Promise<number>;
   ask: (tab_id: number, frame_id: number, request: MediaRequest) => Promise<unknown>;
   // Runs the `quality` bundle in every frame of the tab and sends the request to the one frame with a site player. Resolves with its answer, else undefined. The call holds its own deadline, so the caller adds no second timer. Rejects where scripts are refused: a privileged page.
-  quality: (tab_id: number, request: QualityRequest) => Promise<QualityAnswer | undefined>;
+  // `prefer_frame` is the frame of the pinned video, whose player acts when it has one.
+  quality: (tab_id: number, request: QualityRequest, prefer_frame?: number) => Promise<QualityAnswer | undefined>;
   can_picture_in_picture: () => boolean;
   // The media mode of the tab: `enter` starts it on a frame, `pin_of` is the frame whose video `;M` pinned while the mode holds.
   tab_media: Pick<TabMedia, "enter" | "pin_of">;
@@ -163,7 +164,8 @@ export function refusal_for(action: MediaAction, error_name: string, error_messa
 // The quality bundle needs no scan: each frame reports its player, and the request goes to the one chosen frame. `deps.quality` holds the only deadline, so a skip that was sent is never reported as refused by a second timer.
 async function run_quality(deps: MediaDeps, ctx: CommandContext, tab_id: number, args: MediaArgs): Promise<void> {
   const times = args.times ?? 1;
-  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }).catch(() => undefined);
+  const pin_frame = await deps.tab_media.pin_of(tab_id);
+  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }, pin_frame).catch(() => undefined);
   if (args.action === "skip") {
     const direction = args.value === "previous" ? "previous" : "next";
     if (!(await ask({ op: "skip", value: direction }))?.skipped) throw new RuntimeRefusal(`No ${direction} video`);
@@ -183,6 +185,8 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   if (args.action === "pip" && !deps.can_picture_in_picture()) throw new RuntimeRefusal("Picture-in-picture needs Firefox 153 or newer");
   const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" || args.action === "enter" ? "No video on this page" : "No video or audio on this page");
   const scans = await scan_frames(deps, tab_id);
+  // Audio alone has no picture to watch, so the mode needs a video.
+  if (args.action === "enter" && !scans.some((scan) => scan.has_video)) throw no_media;
   const plan = choose_frames(scans, args.action, args.action === "enter" ? undefined : await deps.tab_media.pin_of(tab_id));
   if (plan.length === 0) throw no_media;
   if (args.action === "enter") return deps.tab_media.enter(tab_id, ctx.frame_id);

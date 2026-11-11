@@ -106,7 +106,7 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     // A percent seek with no count is refused by the schema, so no video moves.
     mark = events.length;
     await in_active_tab('browser.runtime.sendMessage({ type: "run", invocations: [{ id: "media.act", args: { action: "seek", value: "percent" } }], mode: "normal" }); 0');
-    await poll_until("the refusal of a percent seek with no count", async () => (await read_toast()).includes("times"));
+    await poll_until("the refusal of a percent seek with no count", async () => (await read_toast()) === "Type a number first");
     await expect_absent(mark, top, report(top, "seeked"), "a percent seek with no count moved the video");
     mark = events.length;
     await run_line("seek end");
