@@ -7,8 +7,9 @@ import stat
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
-from host_under_test import HOST_DIR, HOST_PATH
+from host_under_test import HOST_DIR, HOST_PATH, load_host
 
 BRIDGE_PATH = os.path.join(HOST_DIR, "desertfox-bridge")
 CLI_PATH = os.path.join(HOST_DIR, "desertfox")
@@ -346,7 +347,7 @@ class ReleaseStepTest(InstallCase):
 
     def setUp(self):
         super().setUp()
-        for tool in ("just", "jq", "sha256sum", "bash", "cat", "cp", "mktemp", "rm"):
+        for tool in ("just", "jq", "sha256sum", "bash", "cat", "cp", "sed", "grep", "cut"):
             if shutil.which(tool) is None:
                 self.skipTest(f"{tool} not found")
         self.gh_out = os.path.join(self.tmp.name, "gh_out")
@@ -359,15 +360,88 @@ class ReleaseStepTest(InstallCase):
             file.write(GH_STUB)
         os.chmod(gh, 0o755)
 
+        self.assets = os.path.join(self.tmp.name, "release-assets")
+
+    def just(self, recipe, cwd=None, **extra_env):
+        env = dict(os.environ, PATH=self.stub_bin + os.pathsep + os.environ["PATH"], GH_LOG=self.gh_log, GH_OUT=self.gh_out, RELEASE_ASSETS_DIR=self.assets, **extra_env)
+        return subprocess.run(["just", recipe], cwd=cwd or os.path.dirname(HOST_DIR), env=env, capture_output=True, text=True, timeout=60)
+
     def publish(self, **extra_env):
-        env = dict(os.environ, PATH=self.stub_bin + os.pathsep + os.environ["PATH"], GH_LOG=self.gh_log, GH_OUT=self.gh_out, **extra_env)
-        return subprocess.run(["just", "release_publish"], cwd=os.path.dirname(HOST_DIR), env=env, capture_output=True, text=True, timeout=60)
+        stamp = self.just("release_stamp")
+        self.assertEqual(stamp.returncode, 0, stamp.stderr)
+        return self.just("release_publish", **extra_env)
+
+    def package_version(self):
+        with open(os.path.join(os.path.dirname(HOST_DIR), "package.json")) as file:
+            return json.load(file)["version"]
+
+    def test_stamp_writes_the_version_into_both_hosts_before_hashing(self):
+        self.assertEqual(self.just("release_stamp").returncode, 0)
+        version = self.package_version()
+        with open(os.path.join(self.assets, "host_sha256.json")) as file:
+            hashes = json.load(file)
+        self.assertEqual(hashes["version"], version)
+        self.assertEqual(sorted(hashes["sha256"]), ["desertfox", "desertfox-bridge", "desertfox-host"])
+        for name, expected in hashes["sha256"].items():
+            with open(os.path.join(self.assets, name), "rb") as file:
+                data = file.read()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), expected, name)
+            with open(os.path.join(self.assets, name + ".sha256")) as file:
+                self.assertEqual(file.read(), f"{expected}  {name}\n")
+            if name != "desertfox":
+                self.assertIn(f'\nRELEASE_VERSION = "{version}"\n'.encode(), data)
+                self.assertNotIn(b'RELEASE_VERSION = "dev"', data)
+        with open(HOST_PATH, "rb") as file:
+            self.assertIn(b'\nRELEASE_VERSION = "dev"\n', file.read(), "the repo copy keeps the placeholder")
+
+    def test_publish_refuses_without_a_stamp_of_this_version(self):
+        done = self.just("release_publish")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("just release_stamp", done.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_publish_refuses_a_stamped_file_changed_after_hashing(self):
+        self.assertEqual(self.just("release_stamp").returncode, 0)
+        with open(os.path.join(self.assets, "desertfox"), "ab") as file:
+            file.write(b"\n# changed\n")
+        done = self.just("release_publish")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("no longer matches its checksum", done.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_a_beta_version_publishes_a_prerelease_and_a_bad_version_stamps_nothing(self):
+        repo_root = os.path.dirname(HOST_DIR)
+        work = os.path.join(self.tmp.name, "beta")
+        os.makedirs(os.path.join(work, "host"))
+        shutil.copy(os.path.join(repo_root, "justfile"), work)
+        for name in ("desertfox-host", "desertfox-bridge", "desertfox", "install.sh"):
+            shutil.copy(os.path.join(HOST_DIR, name), os.path.join(work, "host"))
+        subprocess.run(["git", "init", "-q"], cwd=work, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "base"], cwd=work, check=True, env=dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull))
+        with open(os.path.join(work, "package.json"), "w") as file:
+            file.write('{"version": "0.2.0-beta.3"}')
+        self.assertEqual(self.just("release_stamp", cwd=work).returncode, 0)
+        done = self.just("release_publish", cwd=work)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(self.gh_log) as file:
+            logged = file.read()
+        self.assertTrue(logged.startswith("release create v0.2.0-beta.3 "), logged)
+        self.assertIn("--prerelease", logged)
+        with open(os.path.join(work, "package.json"), "w") as file:
+            file.write('{"version": "0.2.0-rc1"}')
+        done = self.just("release_stamp", cwd=work)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("not x.y.z or x.y.z-beta.N", done.stderr)
+
+    def test_a_stable_version_is_not_a_prerelease(self):
+        self.assertEqual(self.publish().returncode, 0)
+        with open(self.gh_log) as file:
+            self.assertNotIn("--prerelease", file.read())
 
     def test_publish_uploads_the_hosts_the_command_line_checksums_and_script_for_the_package_version(self):
         done = self.publish()
         self.assertEqual(done.returncode, 0, done.stderr)
-        with open(os.path.join(os.path.dirname(HOST_DIR), "package.json")) as file:
-            version = json.load(file)["version"]
+        version = self.package_version()
         with open(self.gh_log) as file:
             logged = file.read()
         self.assertTrue(logged.startswith(f"release create v{version} "), logged)
@@ -381,6 +455,31 @@ class ReleaseStepTest(InstallCase):
                 self.serve(f"{base}/{name}", file.read())
         done = self.run_install("0.1.5")
         self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_uploaded_assets_pass_the_updater_with_the_hashes_the_build_embeds(self):
+        self.assertEqual(self.publish().returncode, 0)
+        version = self.package_version()
+        with open(os.path.join(self.assets, "host_sha256.json")) as file:
+            hashes = json.load(file)["sha256"]
+        data_dir = os.path.join(self.home, ".local", "share", "desertfox")
+        os.makedirs(data_dir)
+        os.makedirs(os.path.join(self.home, ".mozilla", "native-messaging-hosts"))
+        installed = os.path.join(data_dir, "desertfox-host")
+        with open(installed, "wb") as file:
+            file.write(self.host_bytes.replace(b'RELEASE_VERSION = "dev"', b'RELEASE_VERSION = "0.0.1"'))
+        base = f"https://github.com/uhs-robert/desertfox/releases/download/v{version}/"
+
+        def fetch(url):
+            self.assertTrue(url.startswith(base), url)
+            with open(os.path.join(self.gh_out, url[len(base):]), "rb") as file:
+                return file.read()
+
+        updater = load_host()
+        with mock.patch.dict(os.environ, {"HOME": self.home, "XDG_RUNTIME_DIR": self.tmp.name}):
+            result = updater.self_update({"cmd": "self_update", "version": version, "sha256": hashes}, fetch=fetch, host_file=installed, current="0.0.1")
+        self.assertTrue(result["updated"])
+        with open(installed, "rb") as file:
+            self.assertIn(f'RELEASE_VERSION = "{version}"'.encode(), file.read())
 
     def test_release_targets_the_head_commit(self):
         done = self.publish()
