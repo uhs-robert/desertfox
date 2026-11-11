@@ -111,6 +111,8 @@ type CommandCommon = {
   needs?: readonly Need[];
   // Absent means "ignore". The registry applies this default.
   count?: CountBehavior;
+  // The router refuses a count prefix above this, for a command whose repeats are hard to undo. Needs a `count` rule other than ignore. A typed param count is not a prefix and is not limited.
+  repeat_limit?: number;
   // Modes where a key can run the command. Default when omitted: ["normal"].
   modes?: readonly Mode[];
   // Where the command line list offers the command. Absent means always. "hidden" means never, for a command that
@@ -136,7 +138,7 @@ export type CommandDef = BackgroundCommandDef | ContentCommandDef;
 // A `commands.json` entry: the definition without the handler and the router fields.
 export type CommandMeta = Pick<
   CommandDef,
-  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "modes" | "completion"
+  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "repeat_limit" | "modes" | "completion"
 >;
 
 export type CommandsFile = {

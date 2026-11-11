@@ -72,6 +72,13 @@ function outcome_of_reply(reply: unknown): Outcome {
   return is_outcome ? outcome : done;
 }
 
+// The refusal text when the count prefix is over the command's `repeat_limit`.
+function over_repeat_limit(command: CommandDef | undefined, invocation: BoundInvocation): string | undefined {
+  const limit = command?.repeat_limit;
+  if (limit === undefined || invocation.count === undefined || invocation.count <= limit) return undefined;
+  return `A count of ${invocation.count} is over the limit of ${limit} for ${invocation.id}`;
+}
+
 export function create_router(deps: RouterDeps): Router {
   const record_step = deps.record_step ?? create_step_recorder(deps);
 
@@ -94,6 +101,18 @@ export function create_router(deps: RouterDeps): Router {
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
     const is_private = (await read_now(request, true)).active?.incognito === true;
     const prompted = new Set<BoundInvocation>();
+    const fail_at = async (index: number, message: string): Promise<RunResponse> => {
+      await record_step(request.invocations, { ok: false, message, failed_step: index }, { is_private });
+      const refusal: Refusal = { id: request.invocations[index]!.id, message };
+      const { context } = await read_now(request, index === 0);
+      await deps.show_refusal(context.tab_id, refusal, context.frame_id);
+      return { ok: false, refusal };
+    };
+    // Over every step before the first runs, so a sequence never runs half.
+    for (const [index, invocation] of request.invocations.entries()) {
+      const over = over_repeat_limit(deps.get_command(invocation.id), invocation);
+      if (over) return fail_at(index, over);
+    }
     for (const [index, invocation] of request.invocations.entries()) {
       const is_first = index === 0;
       const outcome = await run_one(invocation, request, prompted, is_first).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
@@ -103,11 +122,7 @@ export function create_router(deps: RouterDeps): Router {
         return { ok: true, cancelled: true };
       }
       if (outcome.ok) continue;
-      await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
-      const refusal: Refusal = { id: invocation.id, message: outcome.message };
-      const { context } = await read_now(request, is_first);
-      await deps.show_refusal(context.tab_id, refusal, context.frame_id);
-      return { ok: false, refusal };
+      return fail_at(index, outcome.message);
     }
     // Before the reply, so a `.` typed next finds the slot written.
     await record_step(request.invocations, done, { is_private, prompted: prompted.size > 0, skip_repeat: request.skip_repeat === true });
