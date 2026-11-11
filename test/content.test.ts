@@ -6,7 +6,7 @@ import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "../src/content/replay_key.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { match_regex_source, matches_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
-import { wire_mode_reports } from "../src/content/mode_report.ts";
+import { holds_own_focus, wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
@@ -577,6 +577,15 @@ test("the mode is reported at start and on every change", () => {
   wire_mode_reports(state, (mode) => reports.push(mode));
   state.set_mode_("ignore");
   assert.deepEqual(reports, ["normal", "ignore"]);
+});
+
+test("a document holds its own focus unless a child frame has it", () => {
+  const doc = (has_focus: boolean, active: object | null) => ({ hasFocus: () => has_focus, activeElement: active }) as unknown as Document;
+  assert.equal(holds_own_focus(doc(true, { localName: "body" })), true);
+  assert.equal(holds_own_focus(doc(true, { localName: "div" })), true);
+  assert.equal(holds_own_focus(doc(true, null)), true);
+  assert.equal(holds_own_focus(doc(true, { localName: "iframe", contentWindow: {} })), false);
+  assert.equal(holds_own_focus(doc(false, { localName: "body" })), false);
 });
 
 test("a key repeat reaches run_leaf_ as true, and a first press, a replayed key and a browser chord as false", () => {

@@ -1,5 +1,5 @@
 import "./command_modules.ts";
-import type { ContentToBackground, DevtoolsHello, PageToBackground } from "../shared/messages.ts";
+import type { ContentToBackground, DevtoolsHello, FocusedFrameMode, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
 import { bundle_loader_deps, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
@@ -57,12 +57,13 @@ import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { forget_all_tab_modes, forget_mode_on_navigation, forget_tab_mode, recall_tab_mode, remember_reported_mode, shortcut_allowed } from "./tab_modes.ts";
+import { create_tab_modes, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
 
-// Mode reports wait for this, so the clear never removes a fresh report.
-const modes_cleared = forget_all_tab_modes(browser.storage.local);
+const tab_modes = create_tab_modes(browser.storage.local);
+// Queued first, so the clear never removes a fresh report.
+const modes_cleared = tab_modes.forget_all();
 const tab_insert = create_tab_insert({
   storage: browser.storage.local,
   modes_cleared,
@@ -188,7 +189,7 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
-const bridge = start_bridge();
+const bridge = start_bridge(tab_modes.recall);
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -215,12 +216,18 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
     return answer_toolbar_request(page_request, { toolbar, change_edits, read_file_site_rules: async () => (await load_effective_config()).config_settings.site_rules ?? [], reload_config });
   }
-  if (request?.type === "mode_changed" && sender.tab?.id !== undefined) {
+  if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
+    const tab = sender.tab;
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
-    if (sender.frameId === 0) void bridge.mode_changed(sender.tab, request.mode);
-    return modes_cleared.then(() => remember_reported_mode(browser.storage.local, tab_id, sender.frameId, request.mode));
+    const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
+    // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
+    return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
+      // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
+      if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
+      if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
+    });
   }
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
@@ -309,14 +316,14 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   const invocations: BoundInvocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
   if (!invocations) return;
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
-  const mode = active?.id === undefined ? "normal" : await recall_tab_mode(browser.storage.local, active.id);
+  const mode = active?.id === undefined ? "normal" : await tab_modes.recall(active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
-  return forget_mode_on_navigation(browser.storage.local, tab_id, change);
+  return tab_modes.forget_on_navigation(tab_id, change);
 });
 
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
@@ -334,7 +341,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
-  return forget_tab_mode(browser.storage.local, tab_id);
+  return tab_modes.forget(tab_id);
 });
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));

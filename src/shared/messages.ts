@@ -27,9 +27,11 @@ export type RunRequest = {
   from_hints?: true;
 };
 
+// `focus` says whether the frame's own document holds the keyboard focus. The tab shows the mode of the frame that does.
 export type ModeChanged = {
   type: "mode_changed";
   mode: Mode;
+  focus: boolean;
 };
 
 // Escape in a frame that holds insert mode from `i`: the background returns the tab's switched frames to normal.
@@ -417,6 +419,13 @@ export type SetMode = {
   held?: true;
 };
 
+// To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
+// The type string is short because content.js holds it.
+export type FocusedFrameMode = {
+  type: "frame_mode";
+  mode?: Mode;
+};
+
 // The compiled keymap in `storage.local` changed: read it again.
 export type TreeUpdated = {
   type: "tree_updated";
@@ -437,7 +446,7 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

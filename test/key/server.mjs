@@ -194,6 +194,37 @@ export function start_server() {
       const frames = `<iframe id="same" src="/frame_inner?id=${id}_same" style="display:block;width:300px;height:200px"></iframe><iframe id="cross" src="http://localhost:${port}/frame_inner?id=${id}_cross" style="display:block;width:300px;height:200px"></iframe><iframe id="tiny" src="http://localhost:${port}/frame_inner?id=${id}_tiny" style="display:block;width:10px;height:10px"></iframe>`;
       return response.end(page(`frames ${id}`, frames + tall_filler));
     }
+    if (url.pathname === "/hidden_input_frame") {
+      // A stand-in for the Google Docs editor: on load the page writes a contenteditable into an offscreen same-origin frame and focuses it.
+      // The frame is made the way Docs makes it, with `src="javascript:undefined"`, so its content script starts in the written document.
+      // A frame with no src gets its script in the first about:blank document, and `document.open` then removes that script's listeners.
+      const script = `<script>addEventListener("load", () => {
+        const frame = document.createElement("iframe");
+        frame.id = "input_frame";
+        frame.tabIndex = -1;
+        frame.src = "javascript:undefined";
+        frame.style.cssText = "position:absolute;top:-10000px;left:0;width:1px;height:1px;border:0";
+        document.body.append(frame);
+        const inner = frame.contentDocument;
+        inner.open();
+        inner.write('<!doctype html><body><div id="editor" contenteditable="true"></div></body>');
+        inner.close();
+        // The frame reports its keys under its own id, so the key probe can tell that the frame takes them.
+        inner.defaultView.addEventListener("keydown", (event) => fetch("/report", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ page_id: page_id + "_frame", type: "keydown", key: event.key, code: event.code }),
+        }));
+        inner.getElementById("editor").focus();
+      })</script>`;
+      return response.end(page(`hidden_input_frame ${id}`, tall_filler, script));
+    }
+    // Answers after `ms`, so a page that embeds it stays in its load that long.
+    if (url.pathname === "/slow_pixel") return void setTimeout(() => response.end(), Number(url.searchParams.get("ms")));
+    if (url.pathname === "/replaces_address") {
+      // Changes its own address while it still loads, as Google Docs does. Firefox reports that to the extension like the start of a new page.
+      const script = `<script>setTimeout(() => history.replaceState(null, "", location.href + "&replaced=1"), 300)</script>`;
+      return response.end(page(`replaces_address ${id}`, '<img src="/slow_pixel?ms=2500">' + tall_filler, script));
+    }
     if (url.pathname === "/hints") {
       const covered = '<div style="position:relative;width:200px"><a href="/page?id=hint_covered">covered</a><div style="position:absolute;inset:0;background:#fff"></div></div>';
       const links = `<a href="/page?id=hint_hidden" style="display:none">hidden</a>${covered}<p><a href="/page?id=hint_one">one</a></p><p><a href="/page?id=hint_two">two</a></p>`;

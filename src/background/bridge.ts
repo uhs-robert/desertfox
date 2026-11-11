@@ -166,7 +166,7 @@ export function create_bridge(deps: BridgeDeps) {
       failures = 0;
       void connect();
     },
-    // A page reported its top frame's mode. Only the active tab of a focused window is shown.
+    // A tab's mode changed, or its top frame reported. Only the active tab of a focused window is shown.
     mode_changed: (tab: { id?: number | undefined; windowId?: number | undefined; active?: boolean | undefined }, mode: Mode) =>
       enqueue(async () => {
         if (!ready || tab.id === undefined || tab.windowId === undefined || tab.active !== true) return;
