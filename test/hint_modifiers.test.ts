@@ -111,7 +111,7 @@ test("the default modifiers give the owner's keys and no stacked or refused ones
   assert.equal(args_at(compiled, ";", "2", "a")?.action, "double_click");
   assert.equal(node_at(compiled, ";", "2", "l"), undefined);
   // Keys that set their own action, the cmdline keys and stacked modifiers do not exist.
-  for (const keys of [["B", "b"], ["B", "p"], ["h", "s"], ["r", "v"], ["r", "V"], ["B", ";"], ["r", "B"], ["p"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["B", "b"], ["B", "t"], ["B", "p"], ["h", "s"], ["r", "v"], ["r", "V"], ["B", ";"], ["r", "B"], ["p"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
