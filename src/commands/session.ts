@@ -217,6 +217,7 @@ define("session.save", {
   label: "Save tab session",
   intent: "Save the tabs of this window under a name. An existing name is updated.",
   params: [{ ...NAME_PARAM, pattern: NEW_NAME_PATTERN }],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.save(ctx, args as { name: string }),
 });
@@ -236,6 +237,7 @@ define("session.open", {
       description: { tab: "Add the tabs to this window." },
     },
   ],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.open(ctx, args as { name: string; into: SessionInto }),
 });
@@ -244,6 +246,7 @@ define("session.delete", {
   label: "Delete tab session",
   intent: "Delete a saved tab session.",
   params: [NAME_PARAM],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.remove(ctx, args as { name: string }),
 });
@@ -252,6 +255,7 @@ define("session.rename", {
   label: "Rename tab session",
   intent: "Rename a saved tab session to the name given by to.",
   params: [NAME_PARAM, { name: "to", type: "string", pattern: NEW_NAME_PATTERN, description: "Give the session this name." }],
+  bridge: false,
   runs_in: "background",
   run: (ctx, args) => handlers.rename(ctx, args as { name: string; to: string }),
 });

@@ -6,9 +6,9 @@
 # The extension passes its own version in the one-line command it shows. A version fetches the host from the GitHub
 # release of that version and checks its SHA-256. `main` fetches the host from the main branch with no checksum,
 # for beta and development builds. `--channel main` overrides a version.
-# Installs two hosts, the config host and the bridge host. Writes only $XDG_DATA_HOME/desertfox/desertfox-host and
-# desertfox-bridge (default ~/.local/share/desertfox) and ~/.mozilla/native-messaging-hosts/desertfox_host.json and
-# desertfox_bridge.json.
+# Installs two hosts, the config host and the bridge host, and the `desertfox` command line for the bridge. Writes only
+# $XDG_DATA_HOME/desertfox/desertfox-host, desertfox-bridge and desertfox (default ~/.local/share/desertfox),
+# ~/.mozilla/native-messaging-hosts/desertfox_host.json and desertfox_bridge.json, and the symlink ~/.local/bin/desertfox.
 set -eu
 
 repo="uhs-robert/desertfox"
@@ -65,17 +65,17 @@ main() {
     work_dir=$(mktemp -d)
     trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 
-    # Both hosts are fetched and checked before either is written, so a bad download installs nothing.
+    # Every script is fetched and checked before any is written, so a bad download installs nothing.
     if [ "$channel_arg" = "main" ]; then
         base_url="https://raw.githubusercontent.com/$repo/main/host"
     else
         base_url="https://github.com/$repo/releases/download/v$channel_arg"
     fi
-    for script in desertfox-host desertfox-bridge; do
+    for script in desertfox-host desertfox-bridge desertfox; do
         fetch_host "$script"
     done
     if [ "$channel_arg" = "main" ]; then
-        echo "Fetched the hosts from the main branch. No checksum applies."
+        echo "Fetched the scripts from the main branch. No checksum applies."
     else
         echo "Checksums verified for version $channel_arg."
     fi
@@ -83,6 +83,7 @@ main() {
     mkdir -p "$data_dir" "$manifest_dir"
     install_host desertfox-host desertfox_host "DesertFox config files and saved edits"
     install_host desertfox-bridge desertfox_bridge "DesertFox bridge to a desktop shell"
+    install_cli
     echo "Return to Firefox and press the permission button on the DesertFox page."
 }
 
@@ -126,6 +127,25 @@ print(json.dumps(manifest, indent=2))
     mv -f "$manifest_path.new" "$manifest_path"
     echo "Installed the host at $host_path"
     echo "Installed the manifest at $manifest_path"
+}
+
+# Writes the command line next to the hosts and links it into ~/.local/bin. A file that is not a link already sits at the
+# link path, so it is left alone and the user is told.
+install_cli() {
+    cli_path="$data_dir/desertfox"
+    cp "$work_dir/desertfox" "$cli_path.new"
+    chmod 755 "$cli_path.new"
+    mv -f "$cli_path.new" "$cli_path"
+    echo "Installed the command line at $cli_path"
+    link_dir="$HOME/.local/bin"
+    link_path="$link_dir/desertfox"
+    if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+        echo "Left $link_path alone, because it is not a link. Run $cli_path instead."
+        return
+    fi
+    mkdir -p "$link_dir"
+    ln -sfn "$cli_path" "$link_path"
+    echo "Linked $link_path to it"
 }
 
 main "$@"

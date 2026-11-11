@@ -7,6 +7,7 @@ define("text.insert", {
   label: "Insert text",
   intent: "Type text into a text field. It uses the focused field, else the one Escape left. A count types the text that many times.",
   params: [{ name: "text", type: "string", main: true, description: "Type this text." }],
+  bridge: false,
   runs_in: "content",
   count: "repeat",
   bundle: "text",
@@ -18,6 +19,7 @@ define("register.paste", {
   label: "Paste register",
   intent: "Type the text of a register into a text field. It uses the focused field, else the one Escape left. A register that holds a macro has no text.",
   params: [{ name: "name", type: "key", pattern: REGISTER_KEY.source, description: "Paste this register." }],
+  bridge: false,
   runs_in: "content",
   modes: ["insert"],
   // The pasted text is part of the insert session, so `text.insert` is what `.` repeats.

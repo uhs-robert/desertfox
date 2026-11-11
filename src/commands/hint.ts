@@ -104,6 +104,7 @@ define("hint.run", {
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
     YANK_REGISTER_PARAM,
   ],
+  bridge: false,
   runs_in: "content",
   bundle: "hints",
 });

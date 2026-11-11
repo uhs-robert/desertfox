@@ -34,6 +34,7 @@ define("command.repeat", {
   intent: "Run the last repeatable command again. A count replaces the one it had, and 0 keeps it. A hint pick starts a new pick of the same kind.",
   params: [{ name: "count", type: "int", min: 0, default: 0, description: "Replace the saved count with this one. 0 keeps it." }],
   count: { param: "count" },
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => handler(ctx, args),

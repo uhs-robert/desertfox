@@ -257,7 +257,7 @@ release_commit_push:
     fi
     git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push' and 'just release_publish'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
 
-# Create the GitHub release v<package.json version> with the host, its checksum and the install script, so a release build installs the host of its own version. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
+# Create the GitHub release v<package.json version> with the hosts, the command line, their checksums and the install script, so a release build installs the host of its own version. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
 [private]
 release_publish:
     #!/usr/bin/env bash
@@ -265,12 +265,12 @@ release_publish:
     version=$(jq -r .version package.json)
     assets=$(mktemp -d)
     trap 'rm -rf "$assets"' EXIT
-    cp host/desertfox-host host/desertfox-bridge host/install.sh "$assets/"
-    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256 && sha256sum desertfox-bridge > desertfox-bridge.sha256)
-    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
+    cp host/desertfox-host host/desertfox-bridge host/desertfox host/install.sh "$assets/"
+    (cd "$assets" && sha256sum desertfox-host > desertfox-host.sha256 && sha256sum desertfox-bridge > desertfox-bridge.sha256 && sha256sum desertfox > desertfox.sha256)
+    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
     if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
         echo "dry run: ${gh_command[*]}"
-        cat "$assets/desertfox-host.sha256" "$assets/desertfox-bridge.sha256"
+        cat "$assets/desertfox-host.sha256" "$assets/desertfox-bridge.sha256" "$assets/desertfox.sha256"
         exit 0
     fi
     "${gh_command[@]}"

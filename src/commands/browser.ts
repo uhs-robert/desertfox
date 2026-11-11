@@ -55,6 +55,7 @@ define("browser.focus_page", {
   completion: "hidden",
   label: "Focus page",
   intent: "Move focus from the address bar to the page. Firefox has no direct call, so this is a best effort.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx) => handlers.focus_page(ctx),
@@ -63,6 +64,7 @@ define("browser.focus_page", {
 define("frame.exit", {
   label: "Focus top page",
   intent: "Return the keys from a frame to the top page. Focus a frame with the frames hint filter or a click.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: (ctx) => handlers.exit_frame(ctx),
@@ -71,6 +73,7 @@ define("frame.exit", {
 define("browser.close_all", {
   label: "Close all windows",
   intent: "Close every browser window, which quits Firefox.",
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: () => handlers.close_all(),

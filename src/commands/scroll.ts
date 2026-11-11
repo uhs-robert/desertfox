@@ -6,6 +6,7 @@ define("scroll.lines", {
   label: "Scroll lines",
   intent: "Scroll the page by lines. A positive number scrolls down and a negative one scrolls up. A count prefix repeats the scroll.",
   params: [{ name: "count", type: "int", default: 1 }],
+  bridge: true,
   runs_in: "content",
   count: "repeat",
 });
@@ -17,6 +18,7 @@ define("scroll.pixels", {
     { name: "dx", type: "int", default: 0, description: "Scroll right by this many pixels." },
     { name: "dy", type: "int", default: 0, description: "Scroll down by this many pixels." },
   ],
+  bridge: true,
   runs_in: "content",
   count: "repeat",
 });
@@ -28,6 +30,7 @@ define("scroll.pages", {
     { name: "fraction", type: "float", default: 1, description: "Scroll this share of the view height." },
     { name: "count", type: "int", default: 1, description: "Scroll this many fractions in one move." },
   ],
+  bridge: true,
   runs_in: "content",
   count: { param: "count" },
 });
@@ -39,6 +42,7 @@ define("scroll.to", {
     { name: "percent", type: "float" },
     { name: "axis", type: "enum", values: ["x", "y"], default: SCROLL_TO_DEFAULT_AXIS, short: { x: "x" }, value_labels: { x: "horizontally" }, description: { x: "Jump along the horizontal axis." } },
   ],
+  bridge: true,
   runs_in: "content",
 });
 
@@ -46,6 +50,7 @@ define("scroll.align", {
   label: "Align focus",
   intent: "Align the focused element in the view. It scrolls the focus to the top, center or bottom. The focus is the focused element, or else the selection.",
   params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" }, description: { top: "Align the focus to the top.", bottom: "Align the focus to the bottom." } }],
+  bridge: true,
   runs_in: "content",
   bundle: "page",
 });

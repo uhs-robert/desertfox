@@ -6,6 +6,7 @@ import { define, registry } from "../shared/registry/builtin.ts";
 define("help.whichkey", {
   label: "Which key",
   intent: "List the keys at the top of the keymap.",
+  bridge: false,
   runs_in: "content",
   repeatable: false,
   modes: ["normal", "caret", "visual", "visual_line"],
@@ -20,6 +21,7 @@ define("help.open", {
   label: "Help",
   intent: "Open the help page. On the help page itself, it goes there in place instead of a new tab. Name a command to open its card, or a page such as commands or quick_start. It lists every command, its keys and the config warnings.",
   params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: help_name_choices(command_ids), strict: true }],
+  bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async (ctx, args) => {
