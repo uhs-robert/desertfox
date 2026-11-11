@@ -273,7 +273,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
 // The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.
 function publish_timing(): void {
   const root = document.documentElement;
-  root?.setAttribute("data-desertfox-tree-read-ms", (performance.now() - script_started_ms).toFixed(2));
+  root?.setAttribute("data-desertfox-tree-read-ms", String(performance.now() - script_started_ms));
 }
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {
