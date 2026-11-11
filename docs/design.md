@@ -372,11 +372,40 @@ The content script must have the keymap before the first key. At start it sends 
 ## Bundles and loading
 
 - `background.js`: the registry, the handlers, keymap validation and the shortcut slots.
-- `content.js`: the key listener, the prefix tree, the modes and scrolling. Target: under 17 KB minified.
+- `content.js`: the key listener, the prefix tree, the modes and scrolling. Kept under a guard of 17 KB minified (see "Content script size" below).
 - Hints, which-key, caret and visual mode are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
 - `site_actions.js` holds the handler of `page.send_key`, which site rows bind to keys. The content script loads it on the first press, with the other bundles.
 - `media.js` and `quality.js` are the bundles the content script does not load. The background injects them into every frame of the tab for each `media` command (see the `a` group below).
 - `cmdline.html`: an extension page in an iframe. It has its own bundle with completion and fuzzy matching.
+
+### Content script size
+
+`content.js` loads in every frame of every page, so its size has two numbers and one admission rule. The measurements behind them are in [firefox-behavior.md](firefox-behavior.md), "content.js size".
+
+#### Admission rule
+
+Code goes in `content.js` only if one of these holds:
+
+- A. It runs before the first key or decides what happens to a key: the capture listeners, the matcher, modes, focus tracking, the blur-on-load window, held-key replay.
+- B. It serves a key that is pressed on most pages in most frames, so a lazy load saves nothing and adds a round trip to nearly every page: scrolling.
+- C. The bundles cannot load without it: the bundle host and the proxies that queue calls.
+
+Everything else goes in an on-demand bundle. The price of a bundle is a first use that is 11 to 16 ms slower, once per frame. A second test for code admitted under A or B: keep only the part that must be instant. A rare branch of an instant feature goes behind the bundle host.
+
+#### Two numbers
+
+- Guard: 17 KB (17408 bytes). It is low on purpose and sits just above the current size, so every growth step fails the build and someone has to decide.
+- Ceiling: 32 KB (32768 bytes). The guard never passes it, and the build fails when the guard is set above it. Passing it needs an owner decision and a fresh run of the measurements in `tools/measure/` on the Firefox of that day.
+
+The reason for 32 KB: size does not delay the first key below about 64 KB. Probe runs at 0, 4, 16, 32 and 64 KB all put the key listener 5 to 7 ms after the response starts. What size costs below 64 KB is memory, about 2.4 KB of heap per KB of script in every frame, including frames that never start DesertFox. At 32 KB that is about 8 MB for a typical session (100 frames) and 31 MB for a heavy one (400 frames). The ceiling sits at half the point where timing starts to count, and it keeps the memory cost bounded.
+
+#### When the guard may rise
+
+1. The new code passes the admission rule, and the commit says which clause.
+2. Code that fails the rule has been moved out first. A raise is the last step, not the first.
+3. The raise is the smallest step of 512 bytes that fits the feature.
+4. The commit that raises it names the feature that needs the room.
+5. The guard never passes the ceiling.
 
 ## Interfaces
 

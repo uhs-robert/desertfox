@@ -228,3 +228,142 @@ Question: does `tabs.reload` on a discarded tab keep the scroll position and for
 Setup: Firefox headless, the key-test profile, a 150-paragraph page with a textarea and an input. Typed in both, scrolled to 2500 px, switched away, `tabs.discard`, then either `tabs.reload` or `tabs.update(active)`.
 
 Result: yes. Both paths ended with `scrollY` 2500 and both field values back. After `tabs.reload` the tab stayed inactive. One run each, so this is not a fuzz of timing. `node test/key/reload_restore_probe.mjs` repeats the check (it starts its own headless Firefox and needs `just build`), so run it after a Firefox update.
+
+## content.js size (content-size)
+
+Measured in Firefox 160 on Linux, headless unless stated, at main fd5825ff (content.js 16366 B minified). The scripts are in `tools/measure/`, see its README. These numbers back the guard and the ceiling in [design.md](design.md), "Content script size".
+
+### How Firefox loads a manifest content script
+
+Read from Firefox source, not measured.
+
+- Compile starts at request time, before the document exists, and the script is injected at `initial-document-element-inserted`.
+- The compiled script is cached per extension per content process for 5 minutes after its last use. Every frame and tab in that process shares it, and each frame's sandbox gets its own instance.
+- A script of 5000 characters or more compiles off the main thread.
+- Manifest scripts get a full parse, not a lazy one, so code that never runs still costs compile time and memory.
+- No disk bytecode cache applies to content scripts.
+
+### Cost of size
+
+Compile and run, in the parent process with `ChromeUtils.compileScript` and `executeInGlobal` in a new sandbox. Median of 9. "eager" is synthetic code where every function runs. "lazy" is real content.js text in functions that never run.
+
+| Script | Bytes | Compile ms (median, min) | Instantiate and run ms per sandbox |
+|---|---|---|---|
+| eager 4 KB | 4200 | 0.48, 0.20 | 0.10 |
+| eager 8 KB | 8196 | 0.66, 0.41 | 0.13 |
+| eager 16 KB | 16440 | 1.67, 0.83 | 0.22 |
+| eager 32 KB | 32856 | 3.38, 2.44 | 0.26 |
+| eager 64 KB | 65574 | 5.16, 2.60 | 0.63 |
+| eager 128 KB | 131115 | 9.38, 6.72 | 1.80 |
+| eager 256 KB | 262155 | 13.4, 11.2 | 2.11 |
+| eager 1 MB | 1048629 | 56.4, 53.4 | 12.0 |
+| lazy 16 KB | 16384 | 2.61, 1.35 | 0.12 |
+| lazy 64 KB | 65536 | 4.46, 3.83 | 0.35 |
+| lazy 256 KB | 262150 | 17.1, 14.5 | 1.09 |
+
+Compile costs about 0.05 to 0.1 ms per KB, once per content process per 5 minutes, off the main thread. Instantiate and run costs about 0.01 ms per KB per frame.
+
+Heap per sandbox, 300 live sandboxes each running the script, after a forced GC (JS GC heap plus malloc heap):
+
+| Script | Bytes per sandbox |
+|---|---|
+| empty | 3 to 8 KB |
+| eager 4 KB | 11 KB |
+| eager 16 KB | 40 to 42 KB |
+| eager 32 KB | 80 KB |
+| eager 64 KB | 148 KB |
+| eager 256 KB | 644 KB |
+
+That is about 2.4 bytes of heap per source byte, in every frame. A real frame's sandbox has a window prototype and Xray wrappers, so its fixed cost is higher than the empty row, and that part does not depend on script size.
+
+Time to the key listener, with a probe add-on (`document_start`, `all_frames`, `<all_urls>`) on a local page, 25 reloads per size, from response start to the listener attached:
+
+| Padding | Warm median ms, pass 1 | Warm median ms, pass 2 | First load after install ms, pass 1 / pass 2 |
+|---|---|---|---|
+| none | 4.7 | 5.6 | 61 / 11 |
+| eager 4 KB | 5.1 | 17.3 | 8 / 6 |
+| eager 16 KB | 54.5 | 7.4 | 39 / 5 |
+| eager 32 KB | 5.2 | 5.7 | 13 / 11 |
+| eager 64 KB | 11.8 | 5.7 | 45 / 7 |
+| eager 256 KB | 9.8 | 7.5 | 100 / 14 |
+| eager 1 MB | 29.0 | 12.3 | 591 / 57 |
+| lazy 64 KB | 5.5 | 6.4 | 16 / 7 |
+| lazy 256 KB | 8.0 | 6.8 | 46 / 19 |
+| lazy 1 MB | 8.8 | 10.1 | 348 / 63 |
+
+- Up to 64 KB the warm numbers sit at 5 to 7 ms. The run-to-run noise is larger than any size effect (the 54.5 and 17.3 outliers did not repeat in the other pass).
+- A size effect shows from 256 KB (about 2 ms warm and a slower first load) and is clear at 1 MB.
+- What delays the first key is not size: Firefox's document setup (the listener is ready 11 to 58 ms after the first byte, median 27) and the `read_keymap` round trip (median 9.5 to 10 ms, during which keys are held, not lost).
+
+Limits: headless, one machine, one run of each table, and the end-to-end table is noisy. The compile and memory runs used the parent process and a bare sandbox, not a content process with a window.
+
+### Heap in a heavy session
+
+Heap at each size, from the 2.4 KB per KB figure.
+
+| Session | Loaded tabs | Frames per tab | Frames | At 17 KB | At 32 KB | At 64 KB |
+|---|---|---|---|---|---|---|
+| Light | 10 | 3 | 30 | 1.2 MB | 2.3 MB | 4.6 MB |
+| Typical | 20 | 5 | 100 | 4.1 MB | 7.7 MB | 15 MB |
+| Heavy | 50 | 8 | 400 | 16 MB | 31 MB | 61 MB |
+
+The tab and frame counts are estimates, not measurements. 1 KB of content.js costs about 1 MB in a heavy session and 0.25 MB in a typical one.
+
+### Cost of a bundle on first use
+
+Headed key test, real key presses, 4 fresh pages each.
+
+| Key | First press | Second press | Bundle |
+|---|---|---|---|
+| `f` to hint labels in the DOM | 18 ms (16 to 42) | 7 ms (5 to 27) | hints.js, 40 KB |
+| `g` to the which-key panel (includes the 100 ms test delay) | 127 ms (115 to 135) | 111 ms (106 to 115) | whichkey.js, 6.6 KB |
+
+The background's injection call took 1 to 3 ms. A bundle costs 11 to 16 ms on its first use in a frame.
+
+### Subframes
+
+Extension heap in a content process, from Firefox memory reports, on pages with 200 subframes (two runs, same numbers).
+
+| Page | Extension heap | Per frame | Messages to the background |
+|---|---|---|---|
+| No subframes | 0.8 to 1.0 MB | the top frame, with ui.js | 5 |
+| 200 about:blank frames (started) | 48.5 MB | about 240 KB | 403 `mode_changed`, 201 `read_keymap` |
+| 200 same-origin frames (started) | 48.5 MB | about 240 KB | the same |
+| 200 sandboxed frames (inert, as a frame from another site) | 20.0 to 21.7 MB | about 100 KB | 5 |
+
+Every same-origin and about:blank subframe starts the whole content script at once. A frame from another site waits for its first focus. A started frame costs about 140 KB more than an inert one, mostly the parsed keymap (the reply is 91,701 characters) and the mode and focus state. The frames are synthetic (200 empty frames). The resident-memory run (`frames.mjs`) had about 30 MB of noise on a 200 MB process and could not confirm the size.
+
+### Work per key and at startup
+
+Instrumented build, real key presses.
+
+| Step | Time |
+|---|---|
+| `start()`: 9 listeners, mode wiring, the message listener, the keymap ask | 0.9 to 1.0 ms warm, 4.4 to 5.7 ms on the first pages of a run |
+| `JSON.parse` of the keymap reply (91,701 characters) | 0.4 to 1.4 ms |
+| `install_matcher` | 0.16 to 0.34 ms |
+| keydown, unbound key | 0.2 ms median (0.10 to 0.42) |
+| keydown, `j` (scroll) | 0.34 ms median (0.20 to 0.52) |
+| keydown, Escape | 0.37 ms median |
+| keydown, a letter typed in a field | 0.2 ms median |
+| keyup | 0.02 ms |
+
+### Switching to a discarded tab
+
+Times in ms from the background's `tabs.update` call, median (min to max). Local server that answers in a few ms, a 12,000 px tall text page, 10 runs each.
+
+| Step | Loaded tab | Discarded tab |
+|---|---|---|
+| `tabs.update` resolves | 4.9 (2.7 to 6.8) | 8.7 (7.7 to 13.3) |
+| Navigation starts | not applicable | 7.4 (6.1 to 11.5) |
+| First byte of the response | not applicable | 17.6 (16.5 to 25.5) |
+| Content script starts, listener attached, `read_keymap` sent | already running | 45.7 (41.4 to 81.8) |
+| Keys work (loaded: `mode_changed` from the new tab) | 9.8 (5.7 to 18.8) | 61.3 (55.3 to 96.9), keymap installed |
+| First contentful paint | not measurable headless | 73.6 (53.7 to 107.0) |
+
+- On a discarded tab no listener exists from 0 to about 46 ms, and a key pressed there is lost. From 46 to 61 ms key_flow holds every key and runs it when the keymap lands.
+- The `read_keymap` wait was 16.1 ms (14.4 to 18.1) in the foreground and 10.4 (9.2 to 13.6) in a tab loaded in the background. The keymap lands before the first paint.
+- `JSON.parse` of the compiled keymap (87,947 characters) takes 0.23 ms and the background's `storage.local.get` takes 1.7 ms. Most of the wait is message hops and main-thread contention.
+- `tabs.reload` on a discarded tab loads it and leaves it inactive. The call returns in 5.3 ms, the content script starts at 59.7 ms (53.4 to 67.6) and has its keymap at 68.7 (62.4 to 80.2). A later switch costs 4.1 ms (3.4 to 4.6). `tabs.warmup` takes 4.6 ms in the background.
+- Early j, in the headed key test with the body delayed 3 s and j pressed at 445 ms: 6 of 6 runs showed no scroll, the page saw no keydown, and a second j after the body arrived scrolled 50 px. A held scroll that finds no height is used up.
+- On Linux, discarded tabs come from session restore (`browser.sessionstore.restore_on_demand`, default true) and explicit unloads. `browser.tabs.unloadOnLowMemory` is false on Linux.
