@@ -371,7 +371,7 @@ The content script must have the keymap before the first key. At start it sends 
 ## Bundles and loading
 
 - `background.js`: the registry, the handlers, keymap validation and the shortcut slots.
-- `content.js`: the key listener, the prefix tree, the modes and scrolling. Target: under 16 KB minified.
+- `content.js`: the key listener, the prefix tree, the modes and scrolling. Target: under 17 KB minified.
 - Hints, which-key, caret and visual mode are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
 - `site_actions.js` holds the handler of `page.send_key`, which site rows bind to keys. The content script loads it on the first press, with the other bundles.
 - `media.js` is the one bundle the content script does not load. The background injects it into every frame of the tab for each `media` command (see the `a` group below).

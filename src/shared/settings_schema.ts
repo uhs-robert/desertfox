@@ -1,7 +1,7 @@
 // What each setting accepts, derived from its row in `settings_table.ts`: the build tool checks settings.toml with
 // it, `:set` checks a typed value with it and the generator of `setting_completion.ts` reads names and values from it. Background
 // and build tools import this module. The content script and the command line page must not: the first has a
-// 16 KB budget and neither needs it.
+// 17 KB budget and neither needs it.
 
 import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
 import { parse_sequence } from "./keys/notation.ts";
