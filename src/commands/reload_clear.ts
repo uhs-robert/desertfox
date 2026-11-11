@@ -7,7 +7,7 @@ export type ClearScope = "site" | "all";
 export type PageCookie = { name: string; domain: string; path: string; secure: boolean; store_id: string; first_party_domain: string; partition_key: unknown };
 
 export type ReloadClearDeps = {
-  // Both permissions the clear needs, which the user grants together.
+  // The optional permission the clear needs. `cookies` is required, so only `browsingData` can be missing.
   has_clear_permissions: () => Promise<boolean>;
   tab_of: (tab_id: number) => Promise<{ url: string; cookie_store_id: string }>;
   // The cookies the page sends, which include the ones a parent domain set.
