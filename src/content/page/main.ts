@@ -1,4 +1,4 @@
-// The `page` bundle: registers `scroll.align`, `copy.url`, `page.focus_input`, `mark.add` and `mark.jump`, which are rare enough to stay out of content.js.
+// The `page` bundle: registers `scroll.align`, `copy.url`, `page.focus_input`, `mark.add` and `mark.jump`, which are rare enough to stay out of content.js. It also answers the background's `get_selection`.
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { AlignPosition } from "../align_target.ts";
@@ -7,8 +7,9 @@ import { focus_first_input } from "../handlers/focus_input.ts";
 import { mark_text_entry } from "../text/entry.ts";
 import { copy_page_url } from "../handlers/copy.ts";
 import type { CopyFormat } from "../handlers/copy.ts";
+import { selected_text } from "./selection.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { MarkAnswer, MarkRequest } from "../../shared/messages.ts";
+import type { BackgroundToContent, MarkAnswer, MarkRequest } from "../../shared/messages.ts";
 
 type PageWindow = { desertfox_host: BundleHostApi; desertfox_page_ready?: true };
 const page = window as unknown as PageWindow;
@@ -33,4 +34,6 @@ if (!page.desertfox_page_ready) {
   host.register_handler_("mark.add", (args) => mark_at_scroll(host, "mark_set", args.key));
   host.register_handler_("mark.jump", (args) => mark_at_scroll(host, "mark_jump", args.key));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
+  // Returns nothing for every other message, so the listener in content.js answers those.
+  browser.runtime.onMessage.addListener((message: BackgroundToContent) => (message.type === "get_selection" ? Promise.resolve(selected_text()) : undefined));
 }

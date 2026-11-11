@@ -1,8 +1,8 @@
 # handlers
 
-The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object: a `run(args, repeat)` function and an optional `fill_from_page_` map. `repeat` is true when an auto-repeat keydown started the run and false for every other source. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
+The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object with a `run(args, repeat)` function. `repeat` is true when an auto-repeat keydown started the run and false for every other source. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
 
-- `types.ts`: the `ContentHandler` type. `fill_from_page_` names the params that the handler reads from the page when the invocation leaves them out.
+- `types.ts`: the `ContentHandler` type.
 - `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`).
 - `page.ts`: `page.blur`. It holds `blur_focused_element` and remembers the last blurred field, which the bundles read through the host.
 - `mode.ts`, `stop.ts`: the mode and stop commands.
@@ -12,10 +12,10 @@ The content-side code of each command that runs in the page. One file per comman
 How a handler is found and called:
 
 - `../handler_map.ts` maps a command id such as `scroll.lines` to its handler. It is the only id-to-code link in the content bundle.
-- `../run_content.ts` looks the id up. An id with no handler but with a `bundle` on the invocation runs through the bundle host, which loads the bundle first. Any other id fails. It fills each missing param named in `fill_from_page_`, then calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
+- `../run_content.ts` looks the id up. An id with no handler but with a `bundle` on the invocation runs through the bundle host, which loads the bundle first. Any other id fails. It calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
 - The args are already checked, with defaults filled in, by the background compiler.
 
-The definitions in `src/commands` import the same handler objects, so the count rule and `fill_from_page_` live in one place.
+The definitions in `src/commands` import the same handler objects, so the count rule lives in one place.
 
 To add a handler:
 
