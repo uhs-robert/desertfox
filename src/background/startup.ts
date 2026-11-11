@@ -225,8 +225,8 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
 }
 
 // Runs once per start. Edits made to the files while the browser was closed reach the stored build here, without a `config.reload`.
-// No permission, no host or a host error keep the stored config and only warn on the console, because most users have no host.
-// A missing config folder or a broken file keeps it too, and a toast names the problem so the user learns the edit failed.
+// No permission, no host, a host error or a missing config folder keep the stored config and only warn on the console. Most users have no host, and the installer never creates the folder.
+// A broken file keeps it too, and a toast names the problem so the user learns the edit failed.
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
   const swaps_before = swap_count;
@@ -241,7 +241,7 @@ export async function reload_config_at_start(): Promise<void> {
     await get_config();
     if (swap_count !== swaps_before) return;
     // An empty build here would replace the stored config with the defaults, as it would on a reload.
-    if (!reply.config_dir_exists) return toast_start_refusal(missing_folder_message(reply.config_dir));
+    if (!reply.config_dir_exists) return console.warn(missing_folder_message(reply.config_dir));
     const stored = await load_files_source();
     if (stored.dir_label === reply.config_dir && same_files(stored.files, reply.files)) return;
     try {

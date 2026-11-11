@@ -163,7 +163,7 @@ test("no host or no permission keeps the stored config and stays silent", async 
   }
 });
 
-test("a missing config folder keeps the stored config and a toast names the folder", async () => {
+test("a missing config folder keeps the stored config and stays silent", async () => {
   const host: { files: Files; reply?: () => Promise<unknown> } = { files: settings_file('hint_letters = "ab"\n') };
   const { fake } = install_fake_browser(host);
   await stored_run("no_dir");
@@ -172,8 +172,7 @@ test("a missing config folder keeps the stored config and a toast names the fold
   const restarted = await fresh_startup("no_dir_restart");
   await restarted.reload_config_at_start();
   assert.equal((await restarted.get_config()).settings.hint_letters, "ab");
-  assert.equal(toasts.length, 1);
-  assert.match(toasts[0]!, /no config folder at \/home\/u\/\.config\/desertfox/);
+  assert.deepEqual(toasts, []);
 });
 
 test("a broken settings.toml keeps the stored config and a toast names the error, on every start", async () => {
