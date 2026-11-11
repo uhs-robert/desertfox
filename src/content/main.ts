@@ -139,6 +139,7 @@ function cancel(event: Event): void {
 
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
+  cancelled_keys.saw_keydown_(event.code);
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
