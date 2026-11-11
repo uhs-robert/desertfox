@@ -12,6 +12,7 @@ import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./t
 import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
+import { history_cache } from "./history_cache.ts";
 import { browser_register_store } from "./register_store.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 
@@ -244,14 +245,16 @@ export async function read_containers(query: IdentityQuery): Promise<ContainerMa
   return new Map([...(await read_container_identities(query))].map(([id, { color, icon }]) => [id, { color, icon }]));
 }
 
+const FALLBACK_HISTORY_ROWS = 1000;
+
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
   query_windows: (async () => browser.windows.getAll({ populate: true })) as () => Promise<WindowLike[]>,
   all_bookmarks: async (): Promise<BookmarkNode[]> => flatten_bookmarks(await browser.bookmarks.getTree()),
   folders: async (): Promise<FolderNode[]> => folder_nodes(await browser.bookmarks.getTree()),
   bookmark_view: async (): Promise<BookmarkView> => bookmark_view(await browser.bookmarks.getTree()),
-  // `startTime: 0` reaches all history, since the default is the last day. The page ranks, so it needs more than it shows.
-  search_history: async (): Promise<HistoryNode[]> => browser.history.search({ text: "", startTime: 0, maxResults: 1000 }),
+  // The cache holds up to 8,000 rows. Before its fill ends the newest 1,000 come from the browser, so a line never waits. `startTime: 0` reaches all history, since the default is the last day.
+  search_history: async (): Promise<readonly HistoryNode[]> => history_cache.read() ?? browser.history.search({ text: "", startTime: 0, maxResults: FALLBACK_HISTORY_ROWS }),
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
   sessions: (): Promise<SessionItem[]> => make_session_store(browser_session_storage).items(),
   registers: (is_private: boolean): Promise<RegisterItem[]> => browser_register_store.items(is_private),
