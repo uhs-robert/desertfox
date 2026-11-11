@@ -23,7 +23,7 @@ import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
-import { blur_focused_element } from "./handlers/page.ts";
+import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
@@ -142,6 +142,8 @@ function on_keydown(event: KeyboardEvent): void {
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
+  // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
+  follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
   const press: HeldPress = { keyup_seen: false };
@@ -155,6 +157,7 @@ function on_keypress(event: KeyboardEvent): void {
 }
 
 function on_keyup(event: KeyboardEvent): void {
+  follow_field_change();
   if (cancels_keyup(event, cancelled_keys)) cancel(event);
 }
 
@@ -177,7 +180,7 @@ function extension_context_alive(): boolean {
 const page_listeners = new AbortController();
 
 // Listens until `stop_listening`. Capture is the default because the key and focus listeners must run before the page's own.
-const listen = (target: EventTarget, type: string, handler: (event: never) => void, capture = true) =>
+const listen = (type: string, handler: (event: never) => void, capture = true, target: EventTarget = window) =>
   target.addEventListener(type, handler as EventListener, { capture, signal: page_listeners.signal });
 
 function stop_listening(): void {
@@ -191,6 +194,7 @@ function on_visibility_change(): void {
 // A closed shadow root hides its inner field from the event path, which then ends at the host. The focus settles after the event, so the mode follows it a tick later.
 function follow_focus(entered: boolean, event: Event): void {
   const target = event.composedPath()[0] ?? null;
+  if (entered && blur_load_focus(target)) return;
   watch_roots_around_focus();
   if (target instanceof Element && shadow_root_of(target)) return void setTimeout(sync_mode_to_focus);
   if (is_editable_element(target)) bundles.in_mode_order_(entered ? page_mode.focus_entered_editable_ : page_mode.focus_left_editable_);
@@ -200,8 +204,8 @@ function follow_focus(entered: boolean, event: Event): void {
 function watch_roots_around_focus(): void {
   let element = document.activeElement;
   for (let root = element && shadow_root_of(element); root; root = element && shadow_root_of(element)) {
-    listen(root, "focusin", on_focusin);
-    listen(root, "focusout", on_focusout);
+    listen("focusin", on_focusin, true, root);
+    listen("focusout", on_focusout, true, root);
     element = root.activeElement;
   }
 }
@@ -210,6 +214,24 @@ function sync_mode_to_focus(): void {
   watch_roots_around_focus();
   bundles.in_mode_order_(is_editable_element(deepest_focused_element()) ? page_mode.focus_entered_editable_ : page_mode.focus_left_editable_);
 }
+
+// The field that held the focus at the last key, or null when the focused element took no typing.
+let field_at_last_key: Element | null | undefined;
+
+// A page can start or end typing in the focused element with no focus event (see `is_editable_element`), so each key looks again.
+// The mode follows only a change, as it does for a focus event. A frame whose body is the editor keeps that body focused after Escape, and a key that forced the mode to match the focus would undo the Escape.
+function follow_field_change(): void {
+  const focused = deepest_focused_element();
+  const field = is_editable_element(focused) ? focused : null;
+  if (field !== field_at_last_key) sync_mode_to_focus();
+  field_at_last_key = field;
+}
+
+// `blur_on_load`: the time the window of about 1 s ends, opened at the first install.
+// A key or click gives the page user activation, which ends the window. It also counts input from before this script started, as in a frame from another site that starts on its first focus.
+let load_blur_ends_ms = 0;
+// True when it blurred. `blur()` returns undefined, so `!` of it is true: the shortest form for the byte cap.
+const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && !navigator.userActivation.isActive && is_editable_element(target) && !((target as HTMLElement).blur() as unknown);
 
 let matcher_installed = false;
 // Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `,i` or `<S-Escape>` survives an unrelated edit.
@@ -225,6 +247,11 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
+  // A field the page focused before the reply came already put the frame in insert mode, and the blur's focusout takes it back.
+  if (first_install && reply?.site_values?.blur_on_load) {
+    load_blur_ends_ms = Date.now() + 1e3;
+    blur_load_focus(deepest_focused_element());
+  }
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") bundles.set_mode_("ignore");
@@ -254,18 +281,23 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 
 function start(): void {
   (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
-  listen(window, "keydown", on_keydown);
-  listen(window, "keypress", on_keypress);
-  listen(window, "keyup", on_keyup);
-  listen(window, "beforeinput", on_beforeinput);
-  listen(window, "focusin", on_focusin);
-  listen(window, "focusout", on_focusout);
+  listen("keydown", on_keydown);
+  listen("keypress", on_keypress);
+  listen("keyup", on_keyup);
+  listen("beforeinput", on_beforeinput);
+  listen("focusin", on_focusin);
+  listen("focusout", on_focusout);
   watch_roots_around_focus();
-  listen(window, "pagehide", bundles.page_hidden_, false);
-  listen(document, "visibilitychange", on_visibility_change, false);
+  listen("pagehide", bundles.page_hidden_, false);
+  listen("visibilitychange", on_visibility_change, false, document);
 
   // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
-  const report_mode = () => void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+  // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
+  // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
+  const report_mode = () => {
+    setTimeout(hand_focus_to_parent);
+    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+  };
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
@@ -276,10 +308,10 @@ function start(): void {
   // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
   // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
   // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
-  listen(window, "focus", report_mode, false);
+  listen("focus", report_mode, false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
-  listen(window, "pageshow", report_mode, false);
+  listen("pageshow", report_mode, false);
 
   page_mode.listen_display_(refresh_mode_indicator);
 
@@ -293,6 +325,8 @@ function start(): void {
       return Promise.resolve(true);
     }
     if (message.type === "run_in_content") {
+      // A command's own focus, such as `gi` in a macro replay right after the load, is no page focus.
+      load_blur_ends_ms = 0;
       // The router already applied the count, so each invocation runs once. The router shows a failure.
       return run_in_order(message.invocations, message.repeat);
     } else if (message.type === "replay_hold") {

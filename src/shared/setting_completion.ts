@@ -38,15 +38,53 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a string of 2 or more distinct letters",
+    "expectation": "a string of 2 or more distinct letters, without /",
     "values": []
+  },
+  {
+    "name": "hint_key_line",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "hint_add",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "hint_remove",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "blur_on_load",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
   },
   {
     "name": "site_rules",
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a list of tables with \"site\", an optional \"pass\" of key sequences and an optional \"only\" of key sequences",
+    "expectation": "a list of tables with \"site\", an optional \"off\" of true or false, an optional \"pass\" of key sequences, an optional \"only\" of key sequences and any per-site setting",
     "values": []
   },
   {
@@ -63,6 +101,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "is_toggle": false,
     "is_list": true,
     "expectation": "a list of link texts",
+    "values": []
+  },
+  {
+    "name": "zoom",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a number, from 0.3 to 5",
     "values": []
   },
   {

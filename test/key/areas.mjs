@@ -27,6 +27,8 @@ export const area_rules = [
   { globs: shared_files, areas: area_names },
   // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
   { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
+  // The hand-off of a hidden input frame, which p15_frame_mode tests, and the `gi` search that returns into it.
+  { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**"], areas: ["engines", "bundles"] },
@@ -61,7 +63,7 @@ export const area_rules = [
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },
   { globs: ["src/background/macro_recorder.ts", "src/background/macro_last_played.ts", "src/commands/macro.ts"], areas: ["keys", "whichkey"] },
   { globs: ["src/background/macro_replay.ts", "src/background/hold_on_arrival.ts"], areas: ["keys", "hints", "tabs"] },
-  { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts"], areas: ["scroll"] },
+  { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts", "src/background/site_zoom.ts"], areas: ["scroll"] },
   {
     globs: [
       "src/background/{config_*,autoconfig_mirror,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",

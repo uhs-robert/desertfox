@@ -4,6 +4,7 @@
 import type { CommandMeta } from "../command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { SETTING_DOCS } from "../settings_docs.ts";
+import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
 import { ENGINE_KEYWORD } from "../engines/resolve.ts";
 import { KEYMAP_MODES } from "./merge.ts";
@@ -66,6 +67,25 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
+type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];
+
+// `columns` holds the schema of each extra column a row may set: the per-site settings of a site table.
+function table_list_schema(fields: TableFields, exclusive: readonly string[] | undefined, columns: Record<string, Schema>): Schema {
+  // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
+  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : non_empty_text);
+  return {
+    type: "array",
+    items: {
+      type: "object",
+      properties: { ...Object.fromEntries(Object.entries(fields).map(([field, rule]) => [field, field_schema(rule.value)])), ...columns },
+      required: Object.entries(fields).filter(([, rule]) => !rule.optional).map(([field]) => field),
+      additionalProperties: false,
+      // Exactly two exclusive fields: `not` with `required` refuses a table that sets both.
+      ...(exclusive?.length === 2 ? { not: { required: [...exclusive] } } : {}),
+    },
+  };
+}
+
 function value_schema(row: SettingRow): Schema {
   switch (row.kind) {
     case "boolean":
@@ -73,7 +93,7 @@ function value_schema(row: SettingRow): Schema {
     case "enum":
       return { enum: [...row.values] };
     case "number":
-      return { type: row.whole ? "integer" : "number", minimum: row.min };
+      return { type: row.whole ? "integer" : "number", minimum: row.min, ...(row.max === undefined ? {} : { maximum: row.max }) };
     case "text":
       return non_empty_text;
     case "line":
@@ -84,21 +104,10 @@ function value_schema(row: SettingRow): Schema {
       return { type: "array", items: { enum: [...row.values] }, uniqueItems: true };
     case "text_table":
       return { type: "object", properties: Object.fromEntries(row.keys.map((key) => [key, non_empty_text])), required: [...row.keys], additionalProperties: false };
-    case "table_list": {
-      // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
-      const field_schema = (value: "text" | "web_url" | "keys"): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : non_empty_text);
-      return {
-        type: "array",
-        items: {
-          type: "object",
-          properties: Object.fromEntries(Object.entries(row.fields).map(([field, rule]) => [field, field_schema(rule.value)])),
-          required: Object.entries(row.fields).filter(([, rule]) => !rule.optional).map(([field]) => field),
-          additionalProperties: false,
-          // Exactly two exclusive fields: `not` with `required` refuses a table that sets both.
-          ...(row.exclusive?.length === 2 ? { not: { required: [...row.exclusive] } } : {}),
-        },
-      };
-    }
+    case "table_list":
+      return table_list_schema(row.fields, row.exclusive, {});
+    case "site_table":
+      return table_list_schema(row.fields, row.exclusive, Object.fromEntries(PER_SITE_SETTING_NAMES.map((name) => [name, value_schema(SETTINGS_TABLE[name])])));
     case "custom":
       return row.schema;
   }

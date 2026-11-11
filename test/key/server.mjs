@@ -198,25 +198,67 @@ export function start_server() {
       // A stand-in for the Google Docs editor: on load the page writes a contenteditable into an offscreen same-origin frame and focuses it.
       // The frame is made the way Docs makes it, with `src="javascript:undefined"`, so its content script starts in the written document.
       // A frame with no src gets its script in the first about:blank document, and `document.open` then removes that script's listeners.
+      // The frame's box is the one measured on Docs (625 by 1 at top -10000), and its document is taller than the frame, so a scroll key that lands in the frame shows as a scroll of it.
+      // With refocus_field in the id, the page puts the focus back in the editor whenever the frame loses it, as an editor that insists on the focus does. With refocus_frame it focuses the frame element, which leaves the frame in normal mode.
       const script = `<script>addEventListener("load", () => {
         const frame = document.createElement("iframe");
         frame.id = "input_frame";
         frame.tabIndex = -1;
         frame.src = "javascript:undefined";
-        frame.style.cssText = "position:absolute;top:-10000px;left:0;width:1px;height:1px;border:0";
+        frame.style.cssText = "position:absolute;top:-10000px;left:0;width:625px;height:1px;border:0;opacity:0";
         document.body.append(frame);
         const inner = frame.contentDocument;
         inner.open();
-        inner.write('<!doctype html><body><div id="editor" contenteditable="true"></div></body>');
+        inner.write('<!doctype html><body><div id="editor" contenteditable="true"></div><div style="height:400px"></div></body>');
         inner.close();
+        const editor = inner.getElementById("editor");
         // The frame reports its keys under its own id, so the key probe can tell that the frame takes them.
         inner.defaultView.addEventListener("keydown", (event) => fetch("/report", {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ page_id: page_id + "_frame", type: "keydown", key: event.key, code: event.code }),
         }));
-        inner.getElementById("editor").focus();
+        // How often the frame's window took the focus, on the body so an extension script can read it. A hand-off loop shows as a count that keeps growing.
+        let frame_focuses = 0;
+        inner.defaultView.addEventListener("focus", () => (document.body.dataset.frameFocuses = ++frame_focuses));
+        // Docs focuses its editor on a mouse press anywhere in the document.
+        addEventListener("mousedown", () => editor.focus());
+        if (page_id.includes("refocus_field")) inner.defaultView.addEventListener("blur", () => setTimeout(() => editor.focus()));
+        if (page_id.includes("refocus_frame")) inner.defaultView.addEventListener("blur", () => setTimeout(() => frame.focus()));
+        editor.focus();
       })</script>`;
-      return response.end(page(`hidden_input_frame ${id}`, tall_filler, script));
+      // With title_input in the id, the page shows a field of its own above the document, as Docs does with its title.
+      const title_input = id.includes("title_input") ? '<input id="title">' : "";
+      return response.end(page(`hidden_input_frame ${id}`, title_input + tall_filler, script));
+    }
+    // A frame whose whole document is the editor, as an iframe rich-text editor makes it: the body is contenteditable, or the document is in designMode. The body takes the focus and cannot be blurred.
+    if (url.pathname === "/body_editor_frame" || url.pathname === "/design_mode_frame") {
+      const turn_on = url.pathname === "/design_mode_frame" ? 'document.designMode = "on"' : 'document.body.contentEditable = "true"';
+      const frame = `<iframe id="inner" src="/body_editor?id=${id}_frame&turn_on=${encodeURIComponent(turn_on)}" style="width:300px;height:200px"></iframe>`;
+      const focus_body = "<script>addEventListener('load', () => { const inner = document.getElementById('inner'); inner.contentWindow.focus(); inner.contentDocument.body.focus(); })</script>";
+      return response.end(page(`body_editor_frame ${id}`, frame + focus_body));
+    }
+    if (url.pathname === "/body_editor") return response.end(page(`body_editor ${id}`, `${tall_filler}<script>${url.searchParams.get("turn_on")}</script>`));
+    if (url.pathname === "/cell_editor") {
+      // A stand-in for the Google Sheets cell editor: one contenteditable that holds the focus from load on. While a cell is only selected it is parked off screen, empty and with no width.
+      // Enter starts an edit, which moves the box over a cell and gives it a width, and Enter again ends it. A double-click on the cell starts an edit with no key, and a click on it ends one.
+      const editor = '<div id="cell" style="position:fixed;top:100px;left:100px;width:114px;height:20px"></div><div id="box" style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div>';
+      const script = `<script>
+        const box = document.getElementById("box");
+        const editor = document.getElementById("waffle-rich-text-editor");
+        let editing = false;
+        function start_edit() { editing = true; box.style.cssText = "position:fixed;top:100px;left:100px;min-width:114px;background:#fff"; }
+        function end_edit() { editing = false; box.style.cssText = "position:absolute;top:-10000px;left:0"; editor.textContent = ""; }
+        addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          if (editing) end_edit(); else start_edit();
+        });
+        const cell = document.getElementById("cell");
+        cell.addEventListener("dblclick", start_edit);
+        cell.addEventListener("click", end_edit);
+        editor.focus();
+      </script>`;
+      return response.end(page(`cell_editor ${id}`, editor + tall_filler + script));
     }
     // Answers after `ms`, so a page that embeds it stays in its load that long.
     if (url.pathname === "/slow_pixel") return void setTimeout(() => response.end(), Number(url.searchParams.get("ms")));

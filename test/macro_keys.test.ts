@@ -46,7 +46,7 @@ test("the stop key follows a user binding of macro.record", async () => {
 });
 
 test("a site rule that passes q leaves the page to the key, and the badge still shows", async () => {
-  const keymap = { ...compiled(), site_rules: [{ regex: "^https://a\\.test/", pass: [["q"]] }] } as CompiledKeymap;
+  const keymap = { ...compiled(), site_rules: [{ regex: "^https://a\\.test/", keys: { pass: [["q"]] } }] } as CompiledKeymap;
   const reply = (await page_keymap_for(storage_of(keymap), ["https://a.test/"], "a"))!;
   assert.equal(reply.keymap.modes.normal?.children["q"], undefined);
   assert.equal(reply.recording, "a");

@@ -6,10 +6,11 @@ import type { CountBehavior, RunsIn } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { ModeIndicator, WhichKeyBorder } from "./config.ts";
 import type { KeymapMode } from "./keymap.ts";
+import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 5;
+export const COMPILED_KEYMAP_VERSION = 6;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -50,22 +51,24 @@ export type TreeBranch = {
 
 export type TreeNode = TreeLeaf | TreeBranch;
 
-// `pass` and `only` hold parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
-// `all_off` is a rule with no keys, or whose keys leave no normal binding: every normal key goes to the page.
-export type SiteRule = { regex: string } & ({ pass: string[][] } | { only: string[][] } | { all_off: true });
+// One `site_rules` row with its columns (see `SiteColumns` in `match_pattern.ts`). `keys` holds parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
+// `off` is set from `off` or a row with nothing but `site`. The background also treats a page as all off when its key rule leaves no normal binding.
+export type SiteRule = { regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; values?: Readonly<Record<string, unknown>> };
 
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
   // Root branch per mode. A mode without bindings is absent.
   modes: Partial<Record<KeymapMode, TreeBranch>>;
   // Settings the content script needs before it can handle a key.
-  // In list order. The first rule whose regex fits the page or the tab wins. Absent when no rule exists.
+  // In list order. Each column takes the first rule that fits the page and sets it. Absent when no rule exists.
   site_rules?: SiteRule[];
   mode_indicator: ModeIndicator;
   // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.
   bridge?: true;
   // Set when `bridge_share_tabs` is on as well. The bridge then answers the tab verbs. Pages ignore it.
   bridge_share_tabs?: true;
+  // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
+  frame_site_globals?: FrameSiteValues;
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;
@@ -76,7 +79,17 @@ export type CompiledKeymap = {
 export type PageFrees = { tokens: string[]; invert: boolean };
 export const is_freed = ({ tokens, invert }: PageFrees, token: string): boolean => tokens.includes(token) !== invert;
 // `insert` is set while a manual insert mode (`i`) holds the tab, so a frame that loads late joins it. `recording` is the register a macro is being recorded into. The tree then holds `macro.stop` where the record key was, and the badge says so.
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true };
+// The per-site settings that act inside one frame, so each frame resolves them against its own address.
+// The page keymap reply carries only the ones content.js needs. The hints bundle asks for the hint selectors itself (`read_hint_selectors`), so content.js does not grow.
+export const PAGE_REPLY_SITE_SETTINGS = ["blur_on_load"] as const satisfies readonly PerSiteName[];
+export const HINT_SITE_SETTINGS = ["hint_add", "hint_remove"] as const satisfies readonly PerSiteName[];
+// A literal, not a spread of the two lists: the bundler keeps an unused spread in content.js.
+export const FRAME_SITE_SETTINGS = ["blur_on_load", "hint_add", "hint_remove"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS];
+export type FrameSiteName = (typeof FRAME_SITE_SETTINGS)[number];
+export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partial<Pick<Settings, Name>>;
+
+// `site_values` holds the page reply site settings resolved for the frame's own address, each only when it differs from its default.
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; frees?: PageFrees; recording?: string; insert?: true; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

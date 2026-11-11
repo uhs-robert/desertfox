@@ -1,5 +1,5 @@
 // The `caret` bundle: caret mode, both visual modes, and page search. Loaded on the first entry into one of these modes or the first search, it registers a sink for each mode and
-// the handlers of `caret.move`, `visual.act` and the `find.*` commands.
+// the handlers of `caret.move`, `visual.act`, `visual.object`, `visual.open` and the `find.*` commands.
 
 import type { Outcome, RunResponse } from "../../shared/messages.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
@@ -12,6 +12,7 @@ import { CHAR_FIND_NAMES, create_painter } from "./find_paint.ts";
 import type { FindColors } from "./find_paint.ts";
 import type { FindView } from "./find_mode.ts";
 import { create_find, read_find_colors } from "./find_session.ts";
+import { select_object } from "./text_object.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
 
@@ -325,6 +326,13 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   paint(open);
 };
 
+// The router shows a refusal of its own, so the answer only decides whether a sequence goes on. Visual mode ends as the command goes out.
+function run_in_background(id: string, args: Record<string, unknown>): Promise<Outcome> {
+  const sent = browser.runtime.sendMessage({ type: "run", invocations: [{ id, args }], mode: "visual" }) as Promise<RunResponse>;
+  page.desertfox_host.set_mode_("caret");
+  return sent.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "DesertFox background did not answer" }));
+}
+
 const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> | undefined => {
   const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
   if (typeof open === "string") return { ok: false, message: open };
@@ -335,12 +343,7 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
     return;
   }
   const text = selected_text(open.model_.text, open.painted_span_);
-  if (action === "search") {
-    // The router shows a refusal of its own, so the answer only decides whether a sequence goes on.
-    const searched = browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.search", args: { query: text } }], mode: "visual" }) as Promise<RunResponse>;
-    page.desertfox_host.set_mode_("caret");
-    return searched.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "DesertFox background did not answer" }));
-  }
+  if (action === "search") return run_in_background("open.search", { query: text });
   const run = visual_runs;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
   return yank_text(navigator.clipboard, text, args.register as string | undefined, {
@@ -348,6 +351,27 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
     toast: page.desertfox_host.show_toast_,
     leave_visual_: () => page.desertfox_host.set_mode_("caret"),
   });
+};
+
+// A refused object leaves the selection as it was. Line visual mode widens every selection to whole lines, so an object leaves it for character visual mode, as in vim.
+const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
+  if (session?.mode === "visual_line") page.desertfox_host.set_mode_("visual");
+  const open = ensure_session("visual");
+  if (typeof open === "string") return { ok: false, message: open };
+  const cursor = select_object(open.model_.text, open.cursor, args as Parameters<typeof select_object>[2]);
+  if (!cursor) return { ok: false, message: `No ${args.object} here` };
+  open.cursor = cursor;
+  open.goal_x_ = undefined;
+  paint(open);
+};
+
+// Line breaks inside the selection are spaces, so a URL or a search sees one line. A blank selection stays selected.
+const handle_open = (args: Record<string, unknown>): Outcome | Promise<Outcome> => {
+  const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
+  if (typeof open === "string") return { ok: false, message: open };
+  const text = selected_text(open.model_.text, open.painted_span_).replace(/\s+/g, " ").trim();
+  if (text === "") return { ok: false, message: "Nothing to open in the selection" };
+  return run_in_background("open.url", { url: text, where: args.where });
 };
 
 const WORD_CHARACTER = /^[\p{L}\p{N}_]$/u;
@@ -441,6 +465,8 @@ if (!page.desertfox_caret_ready) {
   page.desertfox_host.register_handler_("caret.mode", (args) => page.desertfox_host.set_mode_(args.mode as CaretMode));
   page.desertfox_host.register_handler_("caret.move", handle_move);
   page.desertfox_host.register_handler_("visual.act", handle_act);
+  page.desertfox_host.register_handler_("visual.object", handle_object);
+  page.desertfox_host.register_handler_("visual.open", handle_open);
   page.desertfox_host.register_handler_("find.open", (args) => {
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);

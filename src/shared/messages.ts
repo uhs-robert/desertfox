@@ -152,8 +152,11 @@ export type TabItem = {
   discarded?: true;
 };
 
+// How much use raises a row's match score, see `Candidate.boost` in `shared/score.ts`. The background sends it, absent when 0.
+export type Boosted = { boost?: number };
+
 // Newest first.
-export type BookmarkItem = { title: string; url: string };
+export type BookmarkItem = { title: string; url: string } & Boosted;
 
 // A bookmark row of the `bookmark` list. `folders` indexes `BookmarkRows.folders`, the newest copy's folder first.
 export type BookmarkRow = BookmarkItem & { folders: number[] };
@@ -165,15 +168,18 @@ export type BookmarkRows = { rows: BookmarkRow[]; folders: string[] };
 export type EngineItem = { name: string; label: string; available: boolean; keyword?: string };
 
 // A history entry as the background reads it. It never goes to the page on its own: `open` answers with `OpenRow`.
-export type HistoryItem = { title: string; url: string };
+export type HistoryItem = { title: string; url: string } & Boosted;
 
 // Where an `open` row came from: `bm` is a bookmark, `hist` is history.
 export type OpenTag = "bm" | "hist";
 
-export type OpenRow = { title: string; url: string; tag: OpenTag };
+export type OpenRow = { title: string; url: string; tag: OpenTag } & Boosted;
+
+// The home page of a visited host, offered as its own row when the typed word starts a label of the host. The boost sums the use of every page of the host.
+export type SiteItem = { url: string; boost: number };
 
 // Every row, in the group order of the `open_completion` setting and without a duplicate address. The page caps an empty word: 20 bookmarks and `history_max` history rows.
-export type OpenItems = { rows: OpenRow[]; history_max: number };
+export type OpenItems = { rows: OpenRow[]; history_max: number; sites: SiteItem[] };
 
 // The `history` command's rows, newest first and with no dedup against bookmarks. `max` is the `history_list_max` cap that the page applies to an empty word, so a typed word still ranks every row.
 export type HistoryItems = { rows: HistoryItem[]; max: number };
@@ -195,9 +201,9 @@ export type FolderItem = SessionItem;
 
 // What the finder lists besides the open tabs, which come from the tab model. `quickmarks` hold the full address, in key order. Bookmarks, history and closed tabs are newest first.
 // A private line gets quickmarks and bookmarks only: the history and the closed tabs of a normal window stay out of it.
-export type ClosedTabRow = { session_id: string; title: string; url: string };
-// `tab_used` maps a tab id to its `lastAccessed` (ms), read once when the line opens, for the empty-query order. The tab model's rows hold no such time.
-export type AnythingItems = { tab_used: Record<number, number>; quickmarks: { key: string; url: string }[]; bookmarks: BookmarkItem[]; history: HistoryItem[]; closed: ClosedTabRow[]; history_max: number };
+export type ClosedTabRow = { session_id: string; title: string; url: string } & Boosted;
+// `tab_used` maps a tab id to its `lastAccessed` (ms), read once when the line opens, for the empty-query order. The tab model's rows hold no such time. `tab_boost` maps a tab id to its boost.
+export type AnythingItems = { tab_used: Record<number, number>; tab_boost: Record<number, number>; sites: SiteItem[]; quickmarks: ({ key: string; url: string } & Boosted)[]; bookmarks: BookmarkItem[]; history: HistoryItem[]; closed: ClosedTabRow[]; history_max: number };
 
 export type CompleteItemsAnswer = { items: AnythingItems | BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
 
@@ -271,6 +277,11 @@ export type ImageAction = {
 // From the `hints` bundle once it has set `window.__desertfox_pick` to the picked element. The background hands the pick to the devtools page of the sender's tab, which selects it in the Inspector. The answer is an `InspectAnswer`: ok once a devtools page took it, ok with `waiting` when the pick waits for DevTools to open.
 export type InspectPick = {
   type: "inspect_pick";
+};
+
+// From the `hints` bundle when `hint.run` starts. The answer holds the frame's `hint_add` and `hint_remove`, each only when it is not empty, resolved against the frame's own address.
+export type ReadHintSelectors = {
+  type: "read_hint_selectors";
 };
 
 // From the devtools page, as the first message on its port: which tab its toolbox inspects.
@@ -381,7 +392,7 @@ export type MediaReport = {
   scan: MediaScan;
 };
 
-export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | RegisterRequest | MarkRequest;
+export type ContentToBackground = MediaReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | RegisterRequest | MarkRequest;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

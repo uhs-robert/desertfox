@@ -44,6 +44,12 @@ const VISUAL_KEYS: ModeBindings = {
   y: { id: "visual.act", args: { action: "yank" } },
   o: { id: "visual.act", args: { action: "swap" } },
   s: { id: "visual.act", args: { action: "search" } },
+  aw: { id: "visual.object", args: { object: "word" } },
+  iw: { id: "visual.object", args: { object: "word", scope: "inner" } },
+  as: { id: "visual.object", args: { object: "sentence" } },
+  is: { id: "visual.object", args: { object: "sentence", scope: "inner" } },
+  p: { id: "visual.open" },
+  P: { id: "visual.open", args: { where: "tab" } },
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
 };
@@ -317,7 +323,8 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   hint: {
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
-    "<Tab>": { id: "hint.key", args: { key: "tab" }, label: "Type link text, or next match" },
+    "/": { id: "hint.key", args: { key: "slash" }, label: "Type link text" },
+    "<Tab>": { id: "hint.key", args: { key: "tab" }, label: "Next match" },
     "<S-Tab>": { id: "hint.key", args: { key: "shift_tab" }, label: "Previous match" },
     "<Enter>": { id: "hint.key", args: { key: "enter" }, label: "Pick the active match" },
     "<Space>": { id: "hint.key", args: { key: "space" }, label: "Turn overlapping labels" },

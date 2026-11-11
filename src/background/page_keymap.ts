@@ -1,20 +1,59 @@
-// Answers a page's `read_keymap`: the stored keymap trimmed for the page's site rule, so the content script holds no rule logic.
+// Answers a page's `read_keymap`: the stored keymap trimmed for the page's site table columns, so the content script holds no rule logic.
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, PageKeymap, SiteRule, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
-import { frees_of, prune_tree } from "../shared/keys/prune_tree.ts";
-import { matches_any_address } from "../shared/match_pattern.ts";
+import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
+import { is_default_value } from "../shared/keys/compiler.ts";
+import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
+import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
+import { frees_of, is_empty_tree, prune_tree, type KeyRule } from "../shared/keys/prune_tree.ts";
+import type { PerSiteName, Settings } from "../shared/settings_table.ts";
+import { matches_any_address, resolve_site_columns, type ResolvedSiteColumns } from "../shared/match_pattern.ts";
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
-// The top frame matches on its own address only. `sender.tab.url` can still hold the previous page while the tab navigates, so only a subframe adds it: a frame of another site cannot read the tab's address itself.
+// The frame's own address comes first, so `frame_site_values_for` can take it alone. The top frame matches on its own address only. `sender.tab.url` can still hold the previous page while the tab navigates, so only a subframe adds it: a frame of another site cannot read the tab's address itself.
 export const rule_addresses_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): (string | undefined)[] =>
   sender.frameId === 0 ? [sender.url] : [sender.url, sender.tab?.url];
 
-// The first rule whose regex fits wins, for the page's key handling and for which-key alike.
-export const site_rule_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule | undefined =>
-  keymap?.site_rules?.find(({ regex }) => matches_any_address(regex, addresses));
+// A value about the whole tab, such as its zoom, follows the top page, so every frame resolves it against the top frame's address. A value about one frame's own content resolves against `[sender.url]`.
+export const top_frame_address_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): string | undefined =>
+  sender.frameId === 0 ? sender.url : sender.tab?.url;
+
+export type PageSiteColumns = ResolvedSiteColumns<KeyRule>;
+
+// The page's columns of the site table, for the page's key handling and for which-key alike.
+export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns =>
+  resolve_site_columns((keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses)));
+
+// A per-site setting on a page. The cast holds because the setting's own check accepted the value when the config loaded. The site's value beats the global value, which already holds `:set` and `:set --temp`: the row names the site and `:set` does not.
+export const site_value = <Name extends PerSiteName>(columns: PageSiteColumns, name: Name, global_value: Settings[Name]): Settings[Name] =>
+  Object.hasOwn(columns.values, name) ? (columns.values[name] as Settings[Name]) : global_value;
+
+// The named frame site settings for one frame, resolved against the frame's own address only: a tab-level row reaching a frame of another site would act on content that row never named.
+export function frame_site_values_for<Name extends FrameSiteName>(keymap: CompiledKeymap, frame_address: string | undefined, names: readonly Name[]): FrameSiteValues<Name> | undefined {
+  const columns = site_columns_for(keymap, [frame_address]);
+  const values: Record<string, unknown> = {};
+  for (const name of names) {
+    const value = site_value(columns, name, keymap.frame_site_globals?.[name] ?? DEFAULT_SETTINGS[name]);
+    if (!is_default_value(name, value)) values[name] = value;
+  }
+  return Object.keys(values).length > 0 ? (values as FrameSiteValues<Name>) : undefined;
+}
+
+// Answers the hints bundle's `read_hint_selectors` with the frame's hint selectors, an empty object when none apply.
+export async function hint_selectors_reply(storage: KeymapStorage, frame_address: string | undefined): Promise<FrameSiteValues<(typeof HINT_SITE_SETTINGS)[number]>> {
+  const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
+  const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+  return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
+}
+
+// The normal tree under the page's columns. An off page, or one whose key rule leaves no normal binding, is all off and keeps the whole tree, so `,i` can leave ignore mode.
+export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSiteColumns): { tree: TreeBranch | undefined; all_off: boolean } | { tree: TreeBranch; all_off: false; frees: PageFrees } {
+  if (columns.off === true || columns.keys === undefined) return { tree: normal, all_off: columns.off === true };
+  const pruned = prune_tree(normal, columns.keys);
+  return is_empty_tree(pruned) ? { tree: normal, all_off: true } : { tree: pruned, all_off: false, frees: frees_of(columns.keys) };
+}
 
 const STOP_LEAF: TreeLeaf = { kind: "leaf", label: "Stop recording", steps: [{ invocation: { id: "macro.stop" }, runs_in: "background", count_rule: "ignore" }] };
 
@@ -43,11 +82,12 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
   if (keymap === undefined) return undefined;
-  const { site_rules: _, ...keymap_without_rules } = keymap;
-  const rule = site_rule_for(keymap, addresses);
-  if (rule === undefined) return { keymap: keymap_without_rules, all_off: false };
-  if ("all_off" in rule) return { keymap: keymap_without_rules, all_off: true };
-  return { keymap: { ...keymap_without_rules, modes: { ...keymap_without_rules.modes, normal: prune_tree(keymap_without_rules.modes.normal, rule) } }, all_off: false, frees: frees_of(rule) };
+  const { site_rules: _, frame_site_globals: __, ...keymap_without_rules } = keymap;
+  const page_tree = normal_tree_for(keymap.modes.normal, site_columns_for(keymap, addresses));
+  const site_values = frame_site_values_for(keymap, addresses[0], PAGE_REPLY_SITE_SETTINGS);
+  const with_values = site_values ? { site_values } : {};
+  if (!("frees" in page_tree)) return { keymap: keymap_without_rules, all_off: page_tree.all_off, ...with_values };
+  return { keymap: { ...keymap_without_rules, modes: { ...keymap_without_rules.modes, normal: page_tree.tree } }, all_off: false, frees: page_tree.frees, ...with_values };
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.

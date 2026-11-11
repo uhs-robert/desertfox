@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
-import { is_setting_name, parse_setting_words, SETTING_NAMES, SETTING_SPECS } from "../src/shared/settings_schema.ts";
+import { is_setting_name, parse_setting_words, PER_SITE_SETTING_NAMES, SETTING_NAMES, SETTING_SPECS, table_list_rule } from "../src/shared/settings_schema.ts";
+import { SETTINGS_TABLE, type SettingRow } from "../src/shared/settings_table.ts";
 import { settings_schema } from "../src/shared/config_build/schemas.ts";
 
 test("the editor schema names exactly the settings the checks know", () => {
@@ -47,5 +48,23 @@ test("listed values pass their own check", () => {
       const parsed = parse_setting_words(name, [value]);
       assert.ok("value" in parsed, `${name} ${value}`);
     }
+  }
+});
+
+// No setting opts in yet, so the site table's rule is built here with a stand-in column: what a real `per_site` row gets.
+test("a site table checks each per-site column with that setting's own check", () => {
+  const { fields, exclusive } = SETTINGS_TABLE.site_rules;
+  const rule = table_list_rule(fields, exclusive, { which_key_delay_ms: SETTING_SPECS.which_key_delay_ms });
+  assert.equal(rule.check([{ site: "*://a.test/*", which_key_delay_ms: 50 }]), true);
+  assert.equal(rule.check([{ site: "*://a.test/*", which_key_delay_ms: 50, off: false, pass: "j" }]), true);
+  assert.equal(rule.explain!([{ site: "*://a.test/*", which_key_delay_ms: -1 }]), `item 1 has a field "which_key_delay_ms" that is not ${SETTING_SPECS.which_key_delay_ms.expectation}`);
+  assert.equal(rule.explain!([{ site: "*://a.test/*", hint_letters: "ab" }]), 'item 1 has the unknown field "hint_letters"');
+  assert.match(rule.expectation, /and any per-site setting$/);
+});
+
+test("no per-site setting shares a name with a site table field, and none is a table", () => {
+  for (const name of PER_SITE_SETTING_NAMES) {
+    assert.equal(Object.hasOwn(SETTINGS_TABLE.site_rules.fields, name), false, name);
+    assert.notEqual((SETTINGS_TABLE[name] as SettingRow).kind, "site_table", name);
   }
 });

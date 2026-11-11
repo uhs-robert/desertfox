@@ -30,6 +30,10 @@ test("the site row flips with the state and greys out while off or where a file 
 
 test("a rule on the page shows its summary and links to the settings page", () => {
   assert.ok(!ids(base).includes("rule"));
+  // A key rule leaves the site row live and still shows.
+  const keys = { ...base, site: { kind: "enabled", pattern: "p", rule: "pass 1 key" } } as const;
+  assert.equal(row(keys, "rule").detail, "pass 1 key");
+  assert.equal(row(keys, "site").enabled, true);
   const config = { ...base, site: { kind: "config", pattern: "p", rule: "pass 3 keys" } } as const;
   assert.deepEqual(row(config, "rule"), { id: "rule", kind: "link", label: "Rule on this page", detail: "pass 3 keys", enabled: true });
 });

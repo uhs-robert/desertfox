@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { bundles } from "../../src/content/bundles.ts";
 import { mode_escape } from "../../src/content/handlers/mode.ts";
 
-Object.assign(globalThis, { document: { activeElement: null }, HTMLElement: class {} });
+// `window.frameElement` is null in a top frame, which never hands its focus off.
+Object.assign(globalThis, { document: { activeElement: null }, HTMLElement: class {}, window: { frameElement: null } });
 
 test("Escape with no hints bundle loaded asks nothing and does not throw", () => {
   assert.equal(bundles.has_handler_("hint.unhover"), false);

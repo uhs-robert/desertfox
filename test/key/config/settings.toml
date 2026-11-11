@@ -19,3 +19,20 @@ only = "G"
 
 [[site_rules]]
 site = "*://127.0.0.1/page?id=rule_off*"  # also covers rule_off_switch
+
+# Each column resolves on its own: off = false keeps rule_keep on under the bare row below, and the pass row between them still applies.
+[[site_rules]]
+site = "*://127.0.0.1/page?id=rule_keep*"
+off = false
+
+[[site_rules]]
+site = "*://127.0.0.1/page?id=rule_keep*"
+pass = "j"
+
+[[site_rules]]
+site = "*://127.0.0.1/page?id=rule_keep*"
+
+# p24_site_zoom: a site row sets the zoom once per host and browser session. Firefox remembers zoom per host, so the piece puts 127.0.0.1 back to 100 percent when it ends.
+[[site_rules]]
+site = "*://127.0.0.1/page?id=zoom_site*"
+zoom = 1.5

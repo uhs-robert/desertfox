@@ -23,6 +23,6 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
   assert.deepEqual(modes, []);
   assert.equal(sinks.get("hint")!.on_token_("a"), "pass");
   // With no session the keys go on to the page and the keymap, whatever they mean in hint mode.
-  for (const token of ["<Tab>", "<S-Tab>", "<Enter>", "<Space>"]) assert.equal(sinks.get("hint")!.on_token_(token), "pass", token);
+  for (const token of ["/", "<Tab>", "<S-Tab>", "<Enter>", "<Space>"]) assert.equal(sinks.get("hint")!.on_token_(token), "pass", token);
   sinks.get("hint")!.exit();
 });

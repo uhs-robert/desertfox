@@ -54,7 +54,7 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
     site_row(inputs.site, inputs.disabled),
   ];
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
-  if (inputs.site.kind === "disabled" || inputs.site.kind === "config") rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: inputs.site.rule, enabled: true });
+  if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: inputs.site.rule, enabled: true });
   rows.push(
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }

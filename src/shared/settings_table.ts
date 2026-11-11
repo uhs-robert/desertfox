@@ -10,11 +10,13 @@ import { LIGHT_INTENSITIES } from "./theme/roles.ts";
 
 type EnumValue = string | number | boolean;
 
+type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean"; optional?: true }>>;
+
 export type SettingRow = (
   | { kind: "boolean"; default: boolean }
   | { kind: "enum"; values: readonly EnumValue[]; default: EnumValue }
-  // `whole` refuses a fraction. `unit` names what the number counts, for the expectation text.
-  | { kind: "number"; whole?: true; min: number; unit?: string; default: number }
+  // `whole` refuses a fraction. `unit` names what the number counts, for the expectation text. No default means an absent setting stays absent.
+  | { kind: "number"; whole?: true; min: number; max?: number; unit?: string; default?: number }
   // A non-empty string. `expectation` says what it names. No default means an absent setting stays absent.
   | { kind: "text"; expectation: string; default?: string }
   // Text on one line, its length counted in code points. `suggestions` are what the command line offers, not a limit.
@@ -26,25 +28,38 @@ export type SettingRow = (
   | { kind: "text_table"; keys: readonly string[]; default: Readonly<Record<string, string>> }
   // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces.
   // The fields in `exclusive` refuse to appear together in one table.
-  | { kind: "table_list"; fields: Readonly<Record<string, { value: "text" | "web_url" | "keys"; optional?: true }>>; exclusive?: readonly string[]; default: readonly [] }
+  | { kind: "table_list"; fields: TableFields; exclusive?: readonly string[]; default: readonly [] }
+  // A table_list whose rows also take every `per_site` setting as an optional column.
+  | { kind: "site_table"; fields: TableFields; exclusive?: readonly string[]; default: readonly [] }
   // A string whose check and expectation sit in `settings_schema.ts`, with the editor schema fragment here.
   | { kind: "custom"; schema: Readonly<Record<string, unknown>>; default: string }
 ) & {
   // `:set` refuses it. The row says why.
   settable?: false;
+  // A `site_rules` row may set it, checked by this setting's own check. On the sites the row names, its value beats every global layer, `:set --temp` included.
+  per_site?: true;
 };
 
 export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
-  // The first row whose `site` matches the page wins. `pass` lists keys that go to the page, `only` lists the only keys that stay on, and a row with neither turns every normal-mode key off.
+  hint_key_line: { kind: "boolean", default: true },
+  // CSS selectors. Each frame resolves them against its own address. A selector that does not parse is skipped with a notice when hints start.
+  hint_add: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
+  hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
+  // Each frame resolves it against its own address, so a frame of another site follows its own rows.
+  blur_on_load: { kind: "boolean", default: false, per_site: true },
+  // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
+  // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.
   // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.
-  site_rules: { kind: "table_list", fields: { site: { value: "text" }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true } }, exclusive: ["pass", "only"], default: [] },
+  site_rules: { kind: "site_table", fields: { site: { value: "text" }, off: { value: "boolean", optional: true }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true } }, exclusive: ["pass", "only"], default: [] },
   // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
+  // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
+  zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: BUILT_IN_THEME_NAMES }, default: "oasis_moonlight" },
@@ -84,7 +99,7 @@ export type SettingName = keyof Table;
 
 type Simplify<T> = { [K in keyof T]: T[K] };
 
-type FieldValue<F> = F extends { value: "text" | "web_url" | "keys" } ? string : never;
+type FieldValue<F> = F extends { value: "boolean" } ? boolean : F extends { value: "text" | "web_url" | "keys" } ? string : never;
 type TableOf<Fields> = Simplify<
   { -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? never : K]: FieldValue<Fields[K]> } & {
     -readonly [K in keyof Fields as Fields[K] extends { optional: true } ? K : never]?: FieldValue<Fields[K]>;
@@ -107,7 +122,12 @@ type ValueOf<Row> = Row extends { kind: "boolean" }
               ? { [K in Key]: string }
               : Row extends { kind: "table_list"; fields: infer Fields }
                 ? TableOf<Fields>[]
-                : never;
+                : Row extends { kind: "site_table"; fields: infer Fields }
+                  ? Simplify<TableOf<Fields> & PerSiteValues>[]
+                  : never;
+
+export type PerSiteName = { [K in SettingName]: Table[K] extends { per_site: true } ? K : never }[SettingName];
+type PerSiteValues = { -readonly [K in PerSiteName]?: ValueOf<Table[K]> };
 
 type HasDefault<Row> = Row extends { default: unknown } ? true : false;
 

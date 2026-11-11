@@ -8,6 +8,10 @@ import { overlap_groups, rotate } from "./labels.ts";
 
 const MESSAGE_MS = 1500;
 
+// Hard-coded: the hints bundle does not see the keymap, and these keys are read as literals in pick.ts.
+export const KEY_LINE_LABELS = "/: type text \u00b7 Space: turn labels";
+export const KEY_LINE_TEXT = "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels";
+
 // A filled label in the brand color. The 1px border keeps the box size of the older outlined label. Typed letters fade to half the text color.
 // Defaults are var() fallbacks, never declarations: a declaration here would shadow a value the page or host sets.
 export const STYLE = `
@@ -24,6 +28,10 @@ export const STYLE = `
 .desertfox-hint-text {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre;
   background: var(--primary); color: var(--label-text); font: inherit;
+}
+.desertfox-hint-keys {
+  position: fixed; right: 16px; bottom: 8px; padding: 4px 8px; pointer-events: none; white-space: pre;
+  background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
 }
 .desertfox-hint-message {
   position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
@@ -94,6 +102,13 @@ export function create_view() {
     text_box.textContent = `text: ${text}`;
   }
 
+  // The key line sits where the mode badge is, which is hidden in hint mode. It outlives text mode, so it is not part of the text box. It goes first in the container so labels paint over it.
+  let key_line: HTMLElement | undefined;
+  function show_key_line(text: string | undefined): void {
+    if (key_line === undefined) return;
+    key_line.textContent = text === undefined ? KEY_LINE_LABELS : KEY_LINE_TEXT;
+  }
+
   // All reads first, then all writes, so the page lays out once.
   function reposition(): void {
     const positions = drawn.map((label) => top_page_position(label.found));
@@ -116,6 +131,12 @@ export function create_view() {
       reposition();
     },
     reposition,
+    add_key_line_: (): void => {
+      key_line = document.createElement("div");
+      key_line.className = "desertfox-hint-keys";
+      surface.text.prepend(key_line);
+      show_key_line(undefined);
+    },
     // Labels that no longer start with the typed text hide. The typed part of the others dims.
     show_progress_: (typed: string, still_possible: ReadonlySet<number>, text?: string, active?: number): void => {
       drawn.forEach((label, index) => {
@@ -125,6 +146,7 @@ export function create_view() {
         mark_active(label.node.style, index === active);
       });
       show_text_mode(text);
+      show_key_line(text);
     },
     // Turns the stacking order of every set of overlapping labels by one, so a covered label comes to the top. Overlaps are read again on each call, because scrolling changes them.
     rotate_overlaps_: (): void => {
@@ -149,6 +171,8 @@ export function create_view() {
       for (const label of drawn) label.node.remove();
       drawn = [];
       show_text_mode(undefined);
+      key_line?.remove();
+      key_line = undefined;
       if (surface.text.childElementCount === 0) surface.host.remove();
     },
   };

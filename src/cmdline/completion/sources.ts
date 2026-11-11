@@ -15,6 +15,7 @@ import type { Ranked } from "../../shared/score.ts";
 import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { anything_ranked } from "./anything.ts";
+import { host_of, matching_sites } from "./sites.ts";
 import { cursor_context, quote_word } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
 
@@ -41,8 +42,10 @@ export type Row = {
   usage: string;
   // An engine the line's page cannot fill. The list dims the row.
   unavailable?: boolean;
-  // Where an `open` row came from, drawn as a dim cell: `bm` or `hist`.
+  // Where an `open` row came from, drawn as a dim cell: `bm`, `hist` or `site`.
   tag?: string;
+  // How much use raises the row's score, see `Candidate.boost`.
+  boost?: number;
   // Set on a tab row only. The list draws the cells before the name from it.
   tab?: TabMarks;
   // Set on a finder row only: the reference the `anything` command acts on, see `shared/anything_ref.ts`.
@@ -196,14 +199,18 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
 const RECENT_BOOKMARKS = 20;
 
 function open_rows(rows: readonly OpenRow[], usage: string): Row[] {
-  return rows.map((row) => ({ name: row.title, insert: `${quote_word(row.url)} `, description: row.url, args: "", also_named: [], keywords: [], usage, tag: row.tag }));
+  return rows.map((row) => ({ name: row.title, insert: `${quote_word(row.url)} `, description: row.url, args: "", also_named: [], keywords: [], usage, tag: row.tag, ...(row.boost ? { boost: row.boost } : {}) }));
 }
 
 // With no word, each group keeps its newest rows: 20 bookmarks and the history cap that came with the rows.
-// The background sends the groups in setting order. A typed word ranks by score, so a stable sort on the group puts the groups back in that order.
-function open_ranked(word: string, rows: Row[], items: OpenItems): Ranked<Row>[] {
-  const group_order = [...new Set(rows.map((row) => row.tag))];
-  if (word.trim() !== "") return rank(word, rows).sort((left, right) => group_order.indexOf(left.tag) - group_order.indexOf(right.tag));
+// A typed word ranks every row in one list. The background sends the groups in setting order, and an equal score keeps that order, with the site rows last.
+function open_ranked(word: string, rows: Row[], items: OpenItems, usage: string): Ranked<Row>[] {
+  if (word.trim() !== "") {
+    // The background already left out a site whose home page is a row.
+    const sites = matching_sites(word, items.sites, () => false).map((site): Row => ({ name: host_of(site), insert: `${quote_word(site.url)} `, description: site.url, args: "", also_named: [], keywords: [], usage, tag: "site", boost: site.boost }));
+    const group_order = [...new Set(rows.map((row) => row.tag)), "site"];
+    return rank(word, [...rows, ...sites], (row) => group_order.indexOf(row.tag));
+  }
   const caps: Record<string, number> = { bm: RECENT_BOOKMARKS, hist: items.history_max };
   const shown: Record<string, number> = {};
   return rank(word, rows).filter((row) => (shown[row.tag as string] = (shown[row.tag as string] ?? 0) + 1) <= (caps[row.tag as string] ?? Infinity));
@@ -280,7 +287,7 @@ function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
   }));
 }
 
-const bookmark_row = (bookmark: BookmarkItem, usage: string): Row => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage });
+const bookmark_row = (bookmark: BookmarkItem, usage: string): Row => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage, ...(bookmark.boost ? { boost: bookmark.boost } : {}) });
 
 const bookmark_rows = (bookmarks: readonly BookmarkItem[], usage: string): Row[] => bookmarks.map((bookmark) => bookmark_row(bookmark, usage));
 
@@ -372,7 +379,7 @@ export function create_completer(
       if (read.loading) return { ...span, usage, rows: [], listing: true, loading: true };
       if (kind === "open") {
         const items = read.items as OpenItems;
-        return { ...span, usage, rows: open_ranked(context.word, open_rows(items.rows, usage), items), listing: true };
+        return { ...span, usage, rows: open_ranked(context.word, open_rows(items.rows, usage), items, usage), listing: true };
       }
       if (kind === "history") {
         const items = read.items as HistoryItems;

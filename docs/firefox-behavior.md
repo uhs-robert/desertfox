@@ -178,6 +178,23 @@ Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a p
 - A document whose child frame holds the focus still answers true to `document.hasFocus()`, and its `activeElement` is the frame element.
 - `tabs.onUpdated` sends `{ status: "loading" }` with no `url` when a load starts. It sends `{ status: "loading", url }` when the new page takes over, and again for each `history.replaceState` the page runs while it still loads. The second kind comes after the content script's first message. Google Docs does this on every load.
 - The page a load leaves keeps sending messages between the two events: its window gets a `focus` event when the load starts from the address bar.
+- The Docs text frame's box is left 0, top -10000, 625 by 1 CSS pixels, with opacity 0. `window.frameElement` reads the same box from inside the frame.
+- `frameElement.blur()` from the frame moves the focus to the top document in one tick. It also blurs the frame's focused field, and the frame's `activeElement` becomes its body. Focusing the frame element afterwards focuses the frame's window with no field. Focusing the field itself from the top document works.
+- Docs does not take the focus back after that blur, on its own or on a key. A mouse press in the document, its grey margin or the outline focuses the field again within 30 ms.
+- A page that focuses a field in a child frame fires `focus` on the frame's window first. Inside that event the frame's `activeElement` is not the field yet.
+- When the focus moves from a field in a child frame to a field of the top document, the frame's field fires `focusout` first, with the frame's body as its `activeElement`. `frameElement.blur()` inside that event cancels the move: the top document's `activeElement` ends as its body.
+- A window that loses the focus (a hidden tab) fires `blur` and `focusout` on its focused field, which stays the `activeElement`.
+- `element instanceof HTMLElement` is false in a content script for an element of a same-origin child frame's document.
+
+## The Google Sheets cell editor (sheets-cell-editor)
+
+Measured on Google's public sample sheet in view mode, in headless Firefox 160, and in the key test (`test/key/p15_cell_editor.mjs`) on a stand-in page. Not measured on a sheet with edit rights.
+
+- Sheets keeps one contenteditable focused in the top document from load on: `div#waffle-rich-text-editor.cell-input`, inside `div.input-box`.
+- While a cell is only selected, the box sits at `top: -10000px` from the stylesheet, and the editor is empty with an `offsetWidth` of 0. Arrow keys move the selection and change none of this.
+- Enter or F2 starts an edit. Sheets then sets `left`, `top` and `min-width` inline on the box, so the editor sits over the cell with the cell's width. The key that ends the edit clears the inline style and the text.
+- No focus event fires at either end of an edit.
+- The class `editable` is no signal: Sheets adds it at the first edit and never removes it. In view mode `contenteditable` turns `false` at the first edit and stays so.
 
 ## Permissions (optional-permissions)
 
@@ -189,3 +206,17 @@ Read from the Firefox 160 sources (`omni.ja`), plus the key test for the grant a
 - A grant persists across restarts. The running background sees it at once (`permissions.contains` is true with no reload). The key test grants and removes with `ExtensionPermissions.add` and `remove`, passing the extension as the third argument so the background learns of the change.
 - `browsingData` shows "Clear recent browsing history, cookies, and related data" at install. Moving it to `optional_permissions` removes that line.
 - `cookies` shows no install prompt line, but it stays required. Without it Firefox 160 throws "No permission for cookieStoreId" in `tabs.create`, `windows.create` and `downloads.download` when they carry a container.
+
+## Per-site zoom memory and `tabs.setZoom` (per-site-settings)
+
+Measured in Firefox 160 in the key-test session with a throwaway piece: an extension background calling `tabs.setZoom`, `getZoom` and `getZoomSettings`, `FullZoom.enlarge` from chrome code, a real Ctrl+minus, and test hosts from `network.dns.localDomains`. `browser.zoom.siteSpecific` is true, the default.
+
+- Firefox remembers one zoom level per host. Ports share it (`127.0.0.1:A` and `127.0.0.1:B`). Subdomains do not: `a.example.test`, `b.example.test` and `example.test` each keep their own.
+- `tabs.setZoom` writes that memory, like a manual zoom does. A new tab on the host opens at the level, and so does the same tab after a reload or after it leaves the host and comes back. `setZoom(tab, 1)` stores 1. `setZoom(tab, 0)` resets to the default.
+- A level set in one tab did not change another open background tab of the same host: its `getZoom` kept the old level.
+- `getZoomSettings` reports `{ mode: "automatic", scope: "per-origin", defaultZoomFactor: 1 }`. `setZoomSettings` refuses `scope: "per-tab"` and `mode: "manual"` ("Unsupported zoom settings"), so an extension cannot keep its level out of the site's memory.
+- A `setZoom` from `tabs.onUpdated` at the update that carries the new address (status `loading`) stays after the load completes. Firefox does not put the old level back.
+- A new tab created with an address reports `{ status: "loading" }` with no `url` in the change, the address already on the tab. A navigation in an open tab reports the `url` change with `status: "loading"`. `pushState` and a hash change report the `url` change with `status: "complete"`.
+- A private window starts from the normal memory, then keeps its own: a level set there did not reach a normal tab of the host, and a level set in a normal tab did not reach the private one. A second private tab of the host opened at the private level.
+
+What it means for the `zoom` setting: setting the level writes Firefox's memory for the host, so DesertFox sets it only the first time a tab reaches the host in a browser session, keyed by host as Firefox keys it, with the private windows apart. A manual zoom after that sticks across reloads, pages of the site, new tabs and a round trip to another site. Because the memory is per host, a level for one path of a host acts on the whole host.
