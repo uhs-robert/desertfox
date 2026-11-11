@@ -33,8 +33,6 @@ const EXPECTATIONS: Record<string, string> = {
   new_tab_page: '"desertfox" or an http or https URL',
   bridge: "true or false",
   bridge_share_tabs: "true or false",
-  tab_preload: "true or false",
-  tab_preload_unload_ms: "a whole number of milliseconds, from 0 to 86400000",
   completion_all_windows: "true or false",
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
@@ -70,7 +68,6 @@ test("every setting keeps its listed values", () => {
     escape_to_page: ["true", "false"],
     bridge: ["true", "false"],
     bridge_share_tabs: ["true", "false"],
-    tab_preload: ["true", "false"],
     completion_all_windows: ["true", "false"],
     cmdline_prompt: ["caret", "colon"],
     open_completion: ["bookmarks", "history"],
@@ -89,7 +86,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, blur_on_load: false, escape_to_page: false, bridge: false, bridge_share_tabs: false, tab_preload: true, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
+  assert.deepEqual(toggles, { hint_key_line: true, blur_on_load: false, escape_to_page: false, bridge: false, bridge_share_tabs: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -101,7 +98,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   hint_remove: [[], ["nav"]],
   blur_on_load: [true, false],
   escape_to_page: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }]],
   default_site_rows_off: [[], ["sheets"]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
@@ -116,8 +113,6 @@ const ACCEPTS: Record<string, unknown[]> = {
   new_tab_page: ["desertfox", "https://a.example/", "HTTP://A.EXAMPLE"],
   bridge: [true, false],
   bridge_share_tabs: [true, false],
-  tab_preload: [true, false],
-  tab_preload_unload_ms: [0, 60000, 86400000],
   completion_all_windows: [true, false],
   // Code points, not UTF-16 units: eight emoji are sixteen units.
   cmdline_prompt: ["c", "> ", "12345678", "\u{1F600}".repeat(8), "\t"],
@@ -146,7 +141,7 @@ const REFUSES: Record<string, unknown[]> = {
   blur_on_load: ["true", 1],
   escape_to_page: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "x" } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", label: "y" } } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }],
   ],
   default_site_rows_off: ["sheets", ["other"], ["sheets", "sheets"], [1]],
   next_patterns: ["next", [""], [1]],
@@ -162,8 +157,6 @@ const REFUSES: Record<string, unknown[]> = {
   new_tab_page: ["", "javascript:alert(1)", "ftp://a.example", "https://", "https://a.example:99999/", "about:blank"],
   bridge: ["true", 1],
   bridge_share_tabs: ["true", 1],
-  tab_preload: ["true", 1],
-  tab_preload_unload_ms: [-1, 1.5, "60000", 86400001, 4294967296],
   completion_all_windows: ["true", 1],
   cmdline_prompt: ["", "123456789", "\u{1F600}".repeat(9), "a\nb", "a\rb", 1, true],
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
@@ -224,7 +217,8 @@ test("a bad site rule names its item and its fault", () => {
   assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a field "only" that has "<j>", which /);
   assert.equal(explain([{ pass: "j" }]), 'item 1 needs a non-empty "site"');
   assert.equal(explain([{ site: "*://a.test/*", off: "yes" }]), 'item 1 has a field "off" that is not true or false');
-  assert.equal(explain([{ site: "*://a.test/*", bind: { h: {} } }]), 'item 1 has a field "bind" that binds "h" to something that is not a table with an "id"');
+  assert.equal(explain([{ site: "*://a.test/*", bind: { h: {} } }]), 'item 1 has a field "bind" that binds "h" to something that has a step that is neither a command string nor a table with an "id"');
+  assert.match(explain([{ site: "*://a.test/*", bind: { h: Array(21).fill("x") } }])!, /binds "h" to something that has more than 20 steps$/);
   assert.match(explain([{ site: "*://a.test/*", bind: { "<a>": { id: "x" } } }])!, /^item 1 has a field "bind" that binds "<a>", which /);
 });
 
@@ -252,8 +246,6 @@ test("the defaults stay the same", () => {
     new_tab_page: "desertfox",
     bridge: false,
     bridge_share_tabs: false,
-    tab_preload: true,
-    tab_preload_unload_ms: 60000,
     completion_all_windows: false,
     cmdline_prompt: "caret",
     open_completion: ["bookmarks", "history"],
@@ -309,6 +301,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "hint_key_line", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "tab_preload", "tab_preload_unload_ms"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "hint_key_line", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

@@ -5,6 +5,7 @@
 
 import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
 import { parse_sequence } from "./keys/notation.ts";
+import { MAX_BIND_STEPS } from "./table_constants.ts";
 import { SETTINGS_TABLE, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { DESKTOP_PALETTE } from "./theme/roles.ts";
@@ -82,16 +83,35 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
   return present.length > 1 ? `sets both ${join_words(present.map((field) => `"${field}"`), "and")}, and only one may be set` : undefined;
 }
 
-// Whether each key is valid notation and each value holds a command id and optional args. Whether the command exists and takes the args is the compiler's check, with the registry validator.
+// What one step of a bind may be: command text, or an invocation as the build resolves it. `run` and a step list hold either.
+function bind_steps_problem(steps: unknown): string | undefined {
+  const list = Array.isArray(steps) ? steps : [steps];
+  if (list.length === 0 || list.length > MAX_BIND_STEPS) return `has ${list.length === 0 ? "no step" : `more than ${MAX_BIND_STEPS} steps`}`;
+  for (const step of list) {
+    if (is_text(step)) continue;
+    if (!is_table(step) || !is_text(step.id)) return 'has a step that is neither a command string nor a table with an "id"';
+    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", "label", "intent"].includes(name));
+    if (unknown_field !== undefined) return `has a step with the unknown field "${unknown_field}"`;
+    if ((step.args !== undefined && !is_table(step.args)) || (step.prompt !== undefined && !is_table(step.prompt))) return 'has a step with "args" or "prompt" that is not a table';
+    if ([step.label, step.intent].some((text) => text !== undefined && typeof text !== "string")) return 'has a step with a "label" or "intent" that is not text';
+  }
+  return undefined;
+}
+
+// Whether each key is valid notation and each value is a binding as the keymap writes it: a command string, a list of steps, a `{ run, label, intent }` table, or an invocation table `{ id, args }`, which is what the build stores. Whether the command exists and takes the args is the compiler's check, with the registry validator.
 function bindings_problem(value: unknown): string | undefined {
   if (!is_table(value) || Object.keys(value).length === 0) return "is not a table of keys to commands";
   for (const [key, binding] of Object.entries(value)) {
     const { error } = parse_sequence(key);
     if (error !== undefined) return `binds "${key}", which ${error}`;
-    if (!is_table(binding) || !is_text(binding.id)) return `binds "${key}" to something that is not a table with an "id"`;
-    const unknown_field = Object.keys(binding).find((name) => name !== "id" && name !== "args");
-    if (unknown_field !== undefined) return `binds "${key}" with the unknown field "${unknown_field}"`;
-    if (binding.args !== undefined && !is_table(binding.args)) return `binds "${key}" with "args" that is not a table`;
+    const labeled = is_table(binding) && "run" in binding;
+    if (labeled) {
+      const unknown_field = Object.keys(binding).find((name) => !["run", "label", "intent"].includes(name));
+      if (unknown_field !== undefined) return `binds "${key}" with the unknown field "${unknown_field}"`;
+      if ([binding.label, binding.intent].some((text) => text !== undefined && typeof text !== "string")) return `binds "${key}" with a "label" or "intent" that is not text`;
+    }
+    const problem = bind_steps_problem(labeled ? binding.run : binding);
+    if (problem !== undefined) return `binds "${key}" to something that ${problem}`;
   }
   return undefined;
 }

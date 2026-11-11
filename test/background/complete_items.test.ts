@@ -543,7 +543,7 @@ function discardable(initial: TabLike) {
   let current: TabLike = { ...initial };
   const log: string[] = [];
   const deps: DiscardDeps = {
-    read_tab: async () => ({ id: 1, window_id: 10, index: 0, active: !!current.active, audible: !!current.audible, discarded: !!current.discarded, pinned: false }),
+    read_tab: async () => ({ id: 1, window_id: 10, index: 0, active: !!current.active, audible: !!current.audible, discarded: !!current.discarded }),
     tabs_in_window: async () => [],
     alternate_of: async () => undefined,
     activate: async () => {},

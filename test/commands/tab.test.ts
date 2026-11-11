@@ -4,7 +4,6 @@ import {
   focus_index_after_close,
   goto_target_index,
   make_tab_handlers,
-  NEXT_TAB_INDEX,
   pick_tab,
   next_audible_index,
   side_tab_ids,
@@ -34,7 +33,6 @@ function make_tabs(count: number, overrides: Partial<TabInfo>[] = []): TabInfo[]
 
 function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
   const log: string[] = [];
-  const preloads: string[] = [];
   const deps: TabDeps = {
     tabs_in_window: async () => tabs,
     activate: async (id) => void log.push(`activate ${id}`),
@@ -53,10 +51,9 @@ function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
     listed_tabs: async () => [],
     focus_window: async (id) => void log.push(`focus ${id}`),
     discard: {} as TabDeps["discard"],
-    preload: (window_id, landed_id, direction) => void preloads.push(`${window_id} ${landed_id} ${direction}`),
     toast: async () => {},
   };
-  return { handlers: make_tab_handlers(deps), log, preloads, deps };
+  return { handlers: make_tab_handlers(deps), log, deps };
 }
 
 const ctx_at = (tab_id: number): CommandContext => ({ tab_id, window_id: 1, frame_id: 0, mode: "normal" });
@@ -312,9 +309,9 @@ function make_unload(tabs: TabInfo[], listed_tabs: ListedTab[] = []) {
   deps.discard = {
     read_tab: async (id) => {
       const tab = tabs.find((candidate) => candidate.id === id);
-      return tab && { id, window_id: 1, index: tab.index, audible: tab.audible, pinned: tab.pinned, ...states.get(id)! };
+      return tab && { id, window_id: 1, index: tab.index, audible: tab.audible, ...states.get(id)! };
     },
-    tabs_in_window: async () => tabs.map((tab) => ({ id: tab.id, window_id: 1, index: tab.index, audible: tab.audible, pinned: tab.pinned, ...states.get(tab.id)! })),
+    tabs_in_window: async () => tabs.map((tab) => ({ id: tab.id, window_id: 1, index: tab.index, audible: tab.audible, ...states.get(tab.id)! })),
     alternate_of: async () => undefined,
     activate: async (id) => {
       log.push(`activate ${id}`);
@@ -476,26 +473,9 @@ test("tab.unload with site and a named tab in another window selects the site in
   const { handlers, log, deps } = make_unload(line_tabs, listed_tabs);
   deps.tabs_in_window = async (window_id) => (window_id === 2 ? [other_tab] : line_tabs);
   const read_tab = deps.discard.read_tab;
-  deps.discard.read_tab = async (id) => (id === 200 ? { id, window_id: 2, index: 0, active: false, audible: false, discarded: false, pinned: false } : read_tab(id));
+  deps.discard.read_tab = async (id) => (id === 200 ? { id, window_id: 2, index: 0, active: false, audible: false, discarded: false } : read_tab(id));
   const discard = deps.discard.discard;
   deps.discard.discard = async (id) => (id === 200 ? void log.push("discard 200") : discard(id));
   await handlers.unload(ctx_at(100), unload_args({ tab: "9", side: "site" }));
   assert.deepEqual(log.filter((entry) => entry.startsWith("discard")).sort(), ["discard 100", "discard 101", "discard 200"].sort());
-});
-
-test("tab.next and tab.prev preload in their own direction, also across the wrap", async () => {
-  const { handlers, preloads } = make_fake(make_tabs(3));
-  await handlers.next(ctx_at(101));
-  await handlers.next(ctx_at(102));
-  await handlers.prev(ctx_at(100));
-  assert.deepEqual(preloads, ["1 102 1", "1 100 1", "1 102 -1"]);
-});
-
-test("tab.goto preloads in the direction it travelled and nothing when it stays", async () => {
-  const { handlers, preloads } = make_fake(make_tabs(5));
-  await handlers.goto(ctx_at(101), { index: 4 });
-  await handlers.goto(ctx_at(103), { index: 1 });
-  await handlers.goto(ctx_at(102), { index: 3 });
-  await handlers.goto(ctx_at(102), { index: NEXT_TAB_INDEX });
-  assert.deepEqual(preloads, ["1 103 1", "1 100 -1", "1 103 1"]);
 });

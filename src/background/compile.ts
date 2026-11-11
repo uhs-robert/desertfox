@@ -3,7 +3,7 @@
 // skipped with a warning and the content script never sees it.
 
 import type { CommandDef, Mode } from "../shared/command.ts";
-import type { MergedConfig } from "../shared/config.ts";
+import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
@@ -15,6 +15,8 @@ import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "../s
 import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
+import type { Registry } from "../shared/registry/index.ts";
+import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
 import { match_regex_source } from "../shared/match_pattern.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
@@ -28,16 +30,38 @@ export type CompileInput = {
   default_site_rows?: readonly DefaultSiteRow[];
   get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count" | "modes" | "bundle"> | undefined;
   enum_sources: EnumSources;
+  // Parses the text of a site bind that a browser edit set, since only a config file goes through the build. Absent means such a bind is skipped with a warning.
+  registry?: Registry;
   // The palette the desktop last pushed. `palette = "desktop"` shows it, or the default while none was pushed.
   desktop_palette?: string | undefined;
 };
 
 export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warnings: string[] };
 
+// A browser edit saves a bind as typed, so its text resolves here with the parser of the config build. A bad step is a warning and drops that bind.
+function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, warnings: string[]): Settings["site_rules"] {
+  if (input.registry === undefined) return rows;
+  const { search_engines, command_aliases } = input.config;
+  const registry = input.registry;
+  const aliased: Registry = { ...registry, find: (word) => registry.find(word) ?? (Object.hasOwn(command_aliases, word) && !/\s/.test(word) ? registry.get(command_aliases[word]!) : undefined) };
+  const resolve_entry = make_entry_resolver(aliased, { search_engines: Object.keys(search_engines) }, warnings);
+  return rows.map((row) => {
+    if (row.bind === undefined) return row;
+    const bind: Record<string, unknown> = {};
+    for (const [sequence, entry] of Object.entries(row.bind)) {
+      const resolved = resolve_entry(entry, `site_rules: skipped bind "${sequence}" of "${row.site}"`);
+      if (resolved !== undefined) bind[sequence] = resolved;
+    }
+    return { ...row, bind: bind as never };
+  });
+}
+
 export function compile_config(input: CompileInput): CompileOutput {
   const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
+  const resolve_warnings: string[] = [];
+  const user_rows = with_resolved_binds(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules, input, resolve_warnings);
   // The shipped rows rank after the user's, so a user row decides each column first.
-  const settings = { ...input.config.settings, site_rules: [...(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules), ...default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off)] };
+  const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off)] };
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
@@ -79,7 +103,7 @@ export function compile_config(input: CompileInput): CompileOutput {
       if (waits_for_key || !kept) delete rule.bind![key];
     }
   }
-  return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings };
+  return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings: [...resolve_warnings, ...warnings] };
 }
 
 // Checks and prunes in place.

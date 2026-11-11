@@ -416,3 +416,15 @@ test("a user off row beats the shipped bind", async () => {
 test("the names constant lists exactly the names of the shipped rows", () => {
   assert.deepEqual([...new Set(DEFAULT_SITE_ROWS.map(({ name }) => name))], [...DEFAULT_SITE_ROW_NAMES]);
 });
+
+test("the shipped sheets rows bind G to Ctrl+End then Home, labeled, on both address forms, and default_site_rows_off removes it", async () => {
+  for (const url of [SHEETS, SHEETS_DOMAIN]) {
+    const leaf = (await ask(with_defaults({}), url))!.keymap.modes.normal?.children["G"];
+    assert.equal(leaf?.kind, "leaf", url);
+    if (leaf?.kind !== "leaf") continue;
+    assert.equal(leaf.label, "Bottom of column A");
+    assert.deepEqual(leaf.steps.map((step) => [step.invocation.id, step.invocation.args?.key, step.invocation.args?.key_code, step.invocation.args?.ctrl]), [["page.send_key", "End", 35, true], ["page.send_key", "Home", 36, false]], url);
+  }
+  assert.equal(await key_at(with_defaults({}), "https://example.org/", "G"), "scroll.to");
+  assert.equal(await key_at(with_defaults({ default_site_rows_off: ["sheets"] }), SHEETS, "G"), "scroll.to");
+});
