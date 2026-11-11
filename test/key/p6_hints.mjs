@@ -1,6 +1,5 @@
-// Key cases of piece P6 (hint extras): copy, rapid mode, the text filter and the `sh` headings list. run.mjs calls run_cases with its helpers.
+// Key cases of piece P6 (hint extras): copy, rapid mode and the `sh` headings list. run.mjs calls run_cases with its helpers.
 // The fixture page /hints has a hidden link and a covered link before the visible links "one" and "two", labelled "a" and "s".
-// There is no key for the text filter yet, so its cases send the same `run` message a key sends, from the active tab.
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["hints", "scroll"];
