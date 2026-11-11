@@ -318,6 +318,115 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     expect(new URLSearchParams(result.search).get("q") === "bar", `searched "${new URLSearchParams(result.search).get("q")}", expected "bar"`);
   });
 
+  // The page text is "caret <page id>", "foo bar.baz", "second line here". gV and v start a one-character selection on the first character.
+  async function start_visual(page_id) {
+    await open_page("caret", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret");
+    const mark = events.length;
+    await press_keys("v");
+    await wait_event(mark, badge_is(page_id, "VISUAL"), "the VISUAL badge");
+  }
+
+  await run_case("aw selects the word and its space, a second aw grows it, iw and is select without the space", async () => {
+    await start_visual("caret_object");
+    let mark = events.length;
+    await press_keys("aw");
+    await wait_event(mark, selection_is("caret_object", "caret "), "aw to select the first word and its space");
+    mark = events.length;
+    await press_keys("aw");
+    await wait_event(mark, selection_is("caret_object", "caret caret_object"), "a second aw to grow by the next word");
+    // Escape drops the anchor in caret mode, so the next object starts from one character again.
+    await press_keys("-k", "Escape");
+    await press_and_wait_for_move("caret_object", "gg", "gg to the first character");
+    mark = events.length;
+    await press_keys("v");
+    await wait_event(mark, badge_is("caret_object", "VISUAL"), "the VISUAL badge again");
+    await press_keys("iw");
+    await wait_event(mark, selection_is("caret_object", "caret"), "iw to select the word alone");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, selection_is("caret_object", "t"), "the caret on the last character of the word after Escape");
+    await press_and_wait_for_move("caret_object", "gg", "gg to the first character");
+    mark = events.length;
+    await press_keys("v");
+    await wait_event(mark, badge_is("caret_object", "VISUAL"), "the VISUAL badge for is");
+    mark = events.length;
+    await press_keys("is");
+    await wait_event(mark, selection_is("caret_object", "caret caret_object"), "is to select the sentence of the line");
+    await escape_to_normal("caret_object");
+  });
+
+  await run_case("p searches the selection here, P in a new tab", async () => {
+    await start_visual("caret_open");
+    let mark = events.length;
+    await press_keys("iw");
+    await wait_event(mark, selection_is("caret_open", "caret"), "iw to select the word");
+    mark = events.length;
+    await press_keys("p");
+    let result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page in this tab");
+    expect(new URLSearchParams(result.search).get("q") === "caret", `p searched "${new URLSearchParams(result.search).get("q")}", expected "caret"`);
+    await start_visual("caret_open_tab");
+    await press_keys("iw");
+    mark = events.length;
+    await press_keys("P");
+    result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page in a new tab");
+    expect(new URLSearchParams(result.search).get("q") === "caret", `P searched "${new URLSearchParams(result.search).get("q")}", expected "caret"`);
+  });
+
+  await run_case("2aw grows the selection by two words", async () => {
+    await open_page("caret", "caret_count", { new_tab: true });
+    await press_and_wait_for_move("caret_count", "gV", "the caret");
+    await press_and_wait_for_move("caret_count", "j", "j to the second line");
+    const mark_visual = events.length;
+    await press_keys("v");
+    await wait_event(mark_visual, badge_is("caret_count", "VISUAL"), "the VISUAL badge");
+    const mark = events.length;
+    await press_keys("2aw");
+    await wait_event(mark, selection_is("caret_count", "foo bar"), "2aw to select two words");
+    await escape_to_normal("caret_count");
+  });
+
+  await run_case("aw in line visual mode switches to character visual mode and selects the word", async () => {
+    await open_page("caret", "caret_line_object", { new_tab: true });
+    await press_and_wait_for_move("caret_line_object", "gV", "the caret");
+    let mark = events.length;
+    await press_keys("V");
+    await wait_event(mark, badge_is("caret_line_object", "V-LINE"), "the V-LINE badge");
+    mark = events.length;
+    await press_keys("aw");
+    await wait_event(mark, badge_is("caret_line_object", "VISUAL"), "the VISUAL badge after aw");
+    await wait_event(mark, selection_is("caret_line_object", "caret "), "aw to select the word");
+    await escape_to_normal("caret_line_object");
+  });
+
+  await run_case("p on a blank selection shows a message and stays in visual mode", async () => {
+    await open_page("caret", "caret_blank", { new_tab: true });
+    await press_and_wait_for_move("caret_blank", "gV", "the caret");
+    await press_and_wait_for_move("caret_blank", "5l", "5l onto the space");
+    const mark_visual = events.length;
+    await press_keys("v");
+    await wait_event(mark_visual, badge_is("caret_blank", "VISUAL"), "the VISUAL badge");
+    const mark = events.length;
+    await press_keys("p");
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "caret_blank", "the refusal toast");
+    expect(!events.slice(mark).some((event) => event.type === "indicator" && event.page_id === "caret_blank" && event.label !== "VISUAL"), "p on a blank selection left visual mode");
+    await escape_to_normal("caret_blank");
+  });
+
+  await run_case("p on a selection of two lines searches it with the line break as a space", async () => {
+    await open_page("caret", "caret_collapse", { new_tab: true });
+    await press_and_wait_for_move("caret_collapse", "gV", "the caret");
+    const mark_line = events.length;
+    await press_keys("V");
+    await wait_event(mark_line, badge_is("caret_collapse", "V-LINE"), "the V-LINE badge");
+    await press_and_wait_for_move("caret_collapse", "j", "j to grow the selection");
+    const mark = events.length;
+    await press_keys("p");
+    const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page");
+    const query = new URLSearchParams(result.search).get("q");
+    expect(query === "caret caret_collapse foo bar.baz", `p searched "${query}", expected the two lines joined by a space`);
+  });
+
   // /caret_ft holds forty rows "row N x", 100 pixels apart. The highlights are read from the page's own world, by the names of the character find and of a kept `/` search.
   const READ_FT = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (name) => { const found = []; CSS.highlights.get(name)?.forEach((range) => found.push(range.startContainer.data)); return found; };
