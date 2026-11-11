@@ -38,6 +38,7 @@ export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
+  hint_key_line: { kind: "boolean", default: true },
   // The first row whose `site` matches the page wins. `pass` lists keys that go to the page, `only` lists the only keys that stay on, and a row with neither turns every normal-mode key off.
   // Settable, though `:set` has no typed form for a list of tables: the popup saves rows, and a saved edit of an unsettable setting is dropped when the edits load.
   site_rules: { kind: "table_list", fields: { site: { value: "text" }, pass: { value: "keys", optional: true }, only: { value: "keys", optional: true } }, exclusive: ["pass", "only"], default: [] },

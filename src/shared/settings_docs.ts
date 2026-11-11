@@ -11,6 +11,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
   prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
   hint_letters: "The letters hint labels use, each once, at least two",
+  hint_key_line: "Show the line of hint keys at the bottom right while hint mode is open",
   site_rules: "Per-site key rules. The first row whose site (a match pattern) fits the page wins. pass lists keys that go to the page, only lists the only keys that stay on besides <C-v> and <S-Escape>, and a row with neither turns every normal-mode key off and starts the page in ignore mode. A row may not set both pass and only",
   mode_indicator: "When the mode badge shows: always (NORMAL too), not_normal, or off",
   palette: "Theme name: themes/<name>.toml in the config directory first, then a built-in theme. Light or dark follows the system theme",

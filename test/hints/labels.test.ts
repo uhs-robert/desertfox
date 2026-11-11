@@ -35,6 +35,8 @@ test("a custom alphabet is honored and two letters still work", () => {
 
 test("the letters setting is cleaned, and an unusable one falls back to the home row", () => {
   assert.deepEqual(clean_letters("ASDa d"), ["a", "s", "d"]);
+  assert.deepEqual(clean_letters("a/b"), ["a", "b"]);
+  assert.deepEqual(clean_letters("a/"), HOME_ROW);
   assert.deepEqual(clean_letters("a"), HOME_ROW);
   assert.deepEqual(clean_letters(""), HOME_ROW);
   assert.deepEqual(clean_letters(undefined), HOME_ROW);
