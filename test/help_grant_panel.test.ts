@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../src/background/command_modules.ts";
-import { ask_for_permission, create_panel_controller } from "../src/help/native_install.ts";
+import { ask_for_permission, create_panel_controller } from "../src/help/grant_panel.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
+import { check_args } from "../src/shared/registry/check_args.ts";
 
 test("a granted request says what to do next", async () => {
   const outcome = await ask_for_permission({ has: async () => false, request: async () => true });
@@ -25,8 +26,28 @@ test("a request that throws, for example outside a click, shows Firefox's reason
   assert.match(outcome.message, /user input handler/);
 });
 
-test("native.install is a registered background command", () => {
+test("a denied site-clear request says the keys stay off", async () => {
+  const outcome = await ask_for_permission({ has: async () => false, request: async () => false }, "browsingData");
+  assert.equal(outcome.granted, false);
+  assert.match(outcome.message, /did not grant/);
+  assert.match(outcome.message, /stay off/);
+});
+
+test("a granted site-clear request says the keys work", async () => {
+  const outcome = await ask_for_permission({ has: async () => false, request: async () => true }, "browsingData");
+  assert.match(outcome.message, /work now/);
+});
+
+test("native.install and permissions.grant are registered background commands", () => {
   assert.equal(registry.get("native.install")?.runs_in, "background");
+  assert.equal(registry.get("permissions.grant")?.runs_in, "background");
+});
+
+test("permissions.grant takes only a grantable permission", () => {
+  const command = registry.get("permissions.grant")!;
+  assert.equal(check_args(command, { permission: "browsingData" }, {}).ok, true);
+  assert.equal(check_args(command, { permission: "history" }, {}).ok, false);
+  assert.equal(check_args(command, {}, {}).ok, false);
 });
 
 function deferred_builds() {

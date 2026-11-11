@@ -462,15 +462,15 @@ export async function create_session({ name: session_name, timings, sweep = true
       await ExtensionSettingsStore.addSetting("${EXTENSION_ID}", "newTabNotification", "${EXTENSION_ID}", true, () => false);
     })()`);
     if (notice_confirmation?.error) throw new Error(`confirming the new tab notice failed: ${notice_confirmation.error}`);
-    // config.reload reads the files through the native host. Firefox grants nativeMessaging only from a click, so the test grants it from chrome code.
+    // config.reload reads the files through the native host. Firefox grants an optional permission only from a click, so the test grants nativeMessaging and the site-clear permissions from chrome code.
     install_native_host(work_dir, readFileSync(join(work_dir, "session_home"), "utf8").trim());
     const permission_grant = await evaluate_in_chrome(rdp, `(async () => {
       const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
       // The third argument tells the running extension, as permissions.request does, so its background gains sendNativeMessage at once.
       const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
-      await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["nativeMessaging"], origins: [] }, extension);
+      await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["nativeMessaging", "browsingData", "cookies"], origins: [] }, extension);
     })()`);
-    if (permission_grant?.error) throw new Error(`granting nativeMessaging failed: ${permission_grant.error}`);
+    if (permission_grant?.error) throw new Error(`granting the optional permissions failed: ${permission_grant.error}`);
     // After the setup that uses three of the internals, so the add-on is loaded and a tab exists for the window path.
     firefox_info = await check_firefox_internals(rdp, EXTENSION_ID);
     timings.set_firefox(firefox_info);
@@ -579,6 +579,15 @@ export async function create_session({ name: session_name, timings, sweep = true
   };
   // Firefox shows a notice in a window of its own (user.js), which holds the keyboard focus until it closes.
   const clear_notices = () => in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
+  // Grants or removes optional permissions from chrome code, as Firefox does after the user answers its prompt. The third argument tells the running background at once, so no reload follows.
+  const set_optional_permissions = async (action, permissions) => {
+    const result = await evaluate_in_chrome(rdp, `(async () => {
+      const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
+      const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
+      await ExtensionPermissions.${action === "grant" ? "add" : "remove"}("${EXTENSION_ID}", { permissions: ${JSON.stringify(permissions)}, origins: [] }, extension);
+    })()`);
+    if (result?.error) throw new Error(`${action} of ${permissions} failed: ${result.error}`);
+  };
   const close_tabs_with = (text) => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes(${JSON.stringify(text)})) await browser.tabs.remove(tab.id); })()`);
 
   // Polls until the check holds. `what` names the wait in the error. A probe whose timeout is the normal path and that the caller absorbs passes `expected_timeout`, so the timeout is not counted as a lost-key suspect.
@@ -920,7 +929,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
     const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, expect_no_tab_shown, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, clear_notices, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
+      in_background, clear_notices, set_optional_permissions, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 

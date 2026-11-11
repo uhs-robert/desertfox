@@ -5,7 +5,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["keys", "cmdline"];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, settle_focus, events, wait_event, wait_cmdline, in_active_tab, poll_until, in_background, clear_notices }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, settle_focus, events, wait_event, wait_cmdline, in_active_tab, poll_until, in_background, clear_notices, set_optional_permissions }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const loaded = (page_id, mark) => wait_event(mark, (event) => event.type === "tree_read" && event.page_id === page_id, `${page_id} to load again`);
 
@@ -72,6 +72,35 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
       }
     });
   }
+
+  // The harness grants the site-clear permissions at setup, so rc working above covers the grant. This case removes them and puts them back.
+  await run_case("without the site-clear permissions rc refuses and clears nothing, plain r reloads, and a grant makes rc work at once", async () => {
+    try {
+      await set_site_data();
+      await set_optional_permissions("remove", ["browsingData", "cookies"]);
+      const mark = events.length;
+      await press_keys("r", "c");
+      await wait_event(mark, (event) => event.type === "toast" && event.page_id === "d_clear", "the grant hint toast");
+      const kept = await read_site_data();
+      expect(!is_clear(kept) && kept.cookie.includes("kt_cookie"), `a refused rc cleared site data: ${JSON.stringify(kept)}`);
+      expect((await in_active_tab(`document.documentElement.getAttribute("data-kt-before-reload")`)) === "1", "a refused rc reloaded the page");
+      // Plain reload does not need the permission.
+      const reload_mark = events.length;
+      await press_keys("r", "r");
+      await wait_event(reload_mark, (event) => event.type === "tree_read" && event.page_id === "d_clear", "d_clear to load after plain rr");
+      await set_optional_permissions("grant", ["browsingData", "cookies"]);
+      await settle_focus();
+      await set_site_data();
+      const grant_mark = events.length;
+      await press_keys("r", "c");
+      await wait_event(grant_mark, (event) => event.type === "tree_read" && event.page_id === "d_clear", "d_clear to load after the granted rc");
+      await poll_until("the data to clear after the grant", async () => is_clear(await read_site_data()));
+    } finally {
+      await set_optional_permissions("grant", ["browsingData", "cookies"]);
+      await clear_notices();
+      await settle_focus();
+    }
+  });
 
   await run_case("a database the page holds open blocks its delete, and browsingData hostnames does not clear it", async () => {
     await open_page("page", "d_idb", { new_tab: true });

@@ -167,3 +167,13 @@ Measured in the key test (`test/key/p23_media_keys.mjs`, Firefox 160), with the 
 - `"requestPictureInPicture" in HTMLVideoElement.prototype` is the feature check. Firefox 153 shipped the API on desktop. Before it, `aP` refuses with "Picture-in-picture needs Firefox 153 or newer". Not measured on a Firefox below 153.
 
 Not measured: a `play()` the page blocks. The key press itself activates the top page, so the key test cannot make one. The command maps `NotAllowedError` from `play()` to "The page blocked play until you click it".
+
+## Permissions (optional-permissions)
+
+Read from the Firefox 160 sources (`omni.ja`), plus the key test for the grant and removal paths. The user-input fact is source-read, not measured in a run.
+
+- `permissions.request` has `requireUserInput`. It rejects with "may only be called from a user input handler" unless the calling window handles user input: a trusted DOM event in that same window, or an event listener of `commands.onCommand`, `browserAction.onClicked`, `pageAction.onClicked` or `omnibox`.
+- A key pressed on a page reaches the background through `runtime.sendMessage`, which carries no such flag. So the background cannot request a permission after a key. DesertFox refuses with a hint and asks from the click on an extension page instead (`:permissions.grant`).
+- A declined request resolves `false` and does not throw. A policy block throws "Permissions are blocked by enterprise policy". An already granted permission resolves `true` with no prompt.
+- A grant persists across restarts. The running background sees it at once (`permissions.contains` is true with no reload). The key test grants and removes with `ExtensionPermissions.add` and `remove`, passing the extension as the third argument so the background learns of the change.
+- `cookies` and `contextualIdentities` show no install prompt line. `browsingData` shows "Clear recent browsing history, cookies, and related data". Moving `browsingData` and `cookies` to `optional_permissions` removes that one line.
