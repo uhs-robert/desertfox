@@ -4,6 +4,7 @@ import { make_history_handlers } from "../../src/commands/history.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import type { HistoryItem } from "../../src/shared/messages.ts";
 import type { Where } from "../../src/commands/open_target.ts";
+import { rank } from "../../src/shared/score.ts";
 
 const ctx: CommandContext = { tab_id: 7, window_id: 2, frame_id: 0, mode: "normal" };
 const VISITS: HistoryItem[] = [
@@ -50,4 +51,19 @@ test("a private tab is refused before the history is read", async () => {
     }, is_private: async () => true, open: async () => {} });
   await assert.rejects(handlers.open(ctx, { entry: "arch", where: "here" }), /no history in a private window/);
   assert.equal(reads, 0);
+});
+
+test("Enter on a typed word opens the entry the list ranks first, use included", async () => {
+  const visits: HistoryItem[] = [
+    { title: "Rust book", url: "https://doc.rust-lang.org/book/" },
+    { title: "Rust blog", url: "https://blog.rust-lang.org/", boost: 0.4 },
+    { title: "Docs", url: "https://a.test/" },
+    { title: "Docs", url: "https://b.test/", boost: 0.1 },
+  ];
+  const listed_first = (word: string) => rank(word, visits.map((visit) => ({ name: visit.title, description: visit.url, ...(visit.boost ? { boost: visit.boost } : {}) })))[0]!.description;
+  const { handlers, opened } = make(false, visits);
+  await handlers.open(ctx, { entry: "rust", where: "here" });
+  await handlers.open(ctx, { entry: "docs", where: "here" });
+  assert.deepEqual(opened.map(([url]) => url), [listed_first("rust"), listed_first("docs")]);
+  assert.deepEqual(opened.map(([url]) => url), ["https://blog.rust-lang.org/", "https://b.test/"]);
 });

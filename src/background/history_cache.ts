@@ -3,7 +3,7 @@
 
 export const HISTORY_CACHE_MAX = 8000;
 
-type Row = { url: string; title: string; last_visit: number; visit_count: number };
+export type HistoryRow = { url: string; title: string; last_visit: number; visit_count: number };
 type Visit = { url?: string | undefined; title?: string | undefined; lastVisitTime?: number | undefined; visitCount?: number | undefined };
 type Change = { kind: "visited"; visit: Visit } | { kind: "title"; url: string; title: string } | { kind: "removed"; urls: readonly string[] } | { kind: "cleared" };
 
@@ -14,12 +14,12 @@ export type HistoryCacheDeps = {
   max: number;
 };
 
-const row_of = (visit: Visit): Row | undefined => (visit.url ? { url: visit.url, title: visit.title ?? "", last_visit: visit.lastVisitTime ?? 0, visit_count: visit.visitCount ?? 1 } : undefined);
+export const history_row = (visit: Visit): HistoryRow | undefined => (visit.url ? { url: visit.url, title: visit.title ?? "", last_visit: visit.lastVisitTime ?? 0, visit_count: visit.visitCount ?? 1 } : undefined);
 
 export function create_history_cache(deps: HistoryCacheDeps) {
   // Newest first. `by_url` holds the same rows, so an event finds its row without a scan.
-  let rows: Row[] = [];
-  const by_url = new Map<string, Row>();
+  let rows: HistoryRow[] = [];
+  const by_url = new Map<string, HistoryRow>();
   let state: "empty" | "filling" | "ready" = "empty";
   // Events that arrive while the fill runs. The fill result is older than they are, so they apply after it, in arrival order.
   let pending: Change[] = [];
@@ -42,7 +42,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
       const row = by_url.get(change.url);
       if (row) row.title = change.title;
     } else {
-      const fresh = row_of(change.visit);
+      const fresh = history_row(change.visit);
       if (!fresh) return;
       const old = by_url.get(fresh.url);
       // A visit the fill already holds, or an older one that arrives late, must not push the row back.
@@ -67,7 +67,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
       rows = [];
       by_url.clear();
       for (const visit of found) {
-        const row = row_of(visit);
+        const row = history_row(visit);
         if (row && !by_url.has(row.url)) {
           rows.push(row);
           by_url.set(row.url, row);
@@ -111,7 +111,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
       if (state === "empty") await fill();
     },
     // The rows, newest first, or undefined while the fill has not ended. A read before then starts a fill when none runs.
-    read: (): readonly Row[] | undefined => {
+    read: (): readonly HistoryRow[] | undefined => {
       if (state === "empty") void fill();
       return state === "ready" ? rows : undefined;
     },

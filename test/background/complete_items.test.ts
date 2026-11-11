@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, bookmark_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_rows, bookmark_view, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, OPEN_TAB_BOOST, read_container_identities, read_containers, site_items, usage_boost, usage_by_url } from "../../src/background/complete_items.ts";
+import { MAX_BOOST } from "../../src/shared/score.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { AnythingItems, SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
@@ -33,6 +34,7 @@ const window_of = (id: number, incognito: boolean, title: string, type = "normal
 const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), window_of(11, false, "Docs\n tab")];
 
 function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20, closed = [] as { session_id: string; title: string; url: string }[], quickmark_urls = {} as Record<string, string> } = {}) {
+  const view_privacy: boolean[] = [];
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -51,7 +53,8 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       return sessions;
     },
     folders: async () => folders,
-    bookmark_view: async () => {
+    bookmark_view: async (is_private) => {
+      view_privacy.push(is_private);
       if (fail) throw new Error("no bookmarks");
       return { rows: bookmark_rows(bookmarks, folders), folders };
     },
@@ -90,7 +93,7 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     closed_tabs: async () => closed,
     quickmark_table: async () => quickmark_urls,
   });
-  return { service, asked, opened, history_reads };
+  return { service, asked, opened, history_reads, view_privacy };
 }
 
 const titles = (answer: Awaited<ReturnType<ReturnType<typeof make>["service"]["answer"]>>) => (answer?.items as { title: string }[]).map((item) => item.title);
@@ -274,6 +277,8 @@ test("open rows list the bookmark once, tag each row and send every row with the
         { title: "Newest", url: "https://new.test/", tag: "hist" },
         { title: "https://bare.test/", url: "https://bare.test/", tag: "hist" },
       ],
+      // Each visited host's home page is a row already.
+      sites: [],
     },
   });
 });
@@ -302,7 +307,7 @@ test("a private line lists bookmarks and no history, and does not read history",
 
 test("a failed browser call gives no open rows", async () => {
   const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("open", NORMAL_LINE), { items: { rows: [], history_max: 10 } });
+  assert.deepEqual(await service.answer("open", NORMAL_LINE), { items: { rows: [], history_max: 10, sites: [] } });
 });
 
 test("the opener is checked before and after the history fetch", async () => {
@@ -866,7 +871,8 @@ test("the browser reader answers the 1000-row search until the cache has filled,
   (globalThis as { browser?: unknown }).browser = { history: { search: async (query: { maxResults: number }) => (searches.push(query), rows) } };
   const { browser_complete_items_deps } = await import("../../src/background/complete_items.ts");
   try {
-    assert.deepEqual(await browser_complete_items_deps.search_history(), rows);
+    // The browser's rows take the cache's shape, so the usage reads the same fields from both.
+    assert.deepEqual(await browser_complete_items_deps.search_history(), [{ url: "https://a.test/", title: "A", last_visit: 2, visit_count: 1 }]);
     assert.ok(searches.some((query) => query.maxResults === 1000));
     await new Promise((resolve) => setImmediate(resolve));
     const before = searches.length;
@@ -875,4 +881,99 @@ test("the browser reader answers the 1000-row search until the cache has filled,
   } finally {
     delete (globalThis as { browser?: unknown }).browser;
   }
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = 1000 * DAY;
+
+test("the usage boost grows with visits and recency, stays within the cap, and is 0 for an unknown visit", () => {
+  assert.equal(usage_boost(0, 0, NOW), 0);
+  assert.ok(usage_boost(10, 0, NOW) > usage_boost(2, 0, NOW));
+  assert.ok(usage_boost(1, NOW - DAY, NOW) > usage_boost(1, NOW - 30 * DAY, NOW));
+  // Two weeks halve the recency part.
+  assert.equal(usage_boost(0, NOW - 14 * DAY, NOW), Math.round((MAX_BOOST / 4) * 100) / 100);
+  assert.equal(usage_boost(10_000, NOW, NOW), MAX_BOOST);
+  // A last visit in the future, from a clock set back, counts as now.
+  assert.equal(usage_boost(1, NOW + DAY, NOW), usage_boost(1, NOW, NOW));
+});
+
+test("history rows carry their boost, and a row with none sends no field", () => {
+  const items = history_items([{ title: "Daily", url: "https://daily.test/", visit_count: 40, last_visit: NOW }, { title: "Once", url: "https://once.test/" }], NOW);
+  assert.deepEqual(items, [{ title: "Daily", url: "https://daily.test/", boost: usage_boost(40, NOW, NOW) }, { title: "Once", url: "https://once.test/" }]);
+  assert.deepEqual([...usage_by_url(items)], [["https://daily.test/", usage_boost(40, NOW, NOW)]]);
+});
+
+test("site rows sum the visits of each web host, keep the newest page's scheme, skip listed home pages, busiest first", () => {
+  const nodes = [
+    { url: "https://github.com/a", visit_count: 3, last_visit: NOW },
+    { url: "http://old.test/x", visit_count: 1, last_visit: NOW - 90 * DAY },
+    { url: "https://github.com/b", visit_count: 30, last_visit: NOW - DAY },
+    { url: "https://listed.test/page", visit_count: 50, last_visit: NOW },
+    { url: "file:///home/notes.txt", visit_count: 50, last_visit: NOW },
+  ];
+  assert.deepEqual(site_items(nodes, new Set(["https://listed.test/"]), NOW), [
+    { url: "https://github.com/", boost: usage_boost(33, NOW, NOW) },
+    { url: "http://old.test/", boost: usage_boost(1, NOW - 90 * DAY, NOW) },
+  ]);
+});
+
+test("the http and https pages of one host give one site row, at the newest page's scheme, and a listed home page at either scheme hides it", () => {
+  const nodes = [
+    { url: "http://moved.test/old", visit_count: 4, last_visit: NOW - 10 * DAY },
+    { url: "https://Moved.test/new", visit_count: 2, last_visit: NOW },
+    { url: "http://plain.test/a", visit_count: 1, last_visit: NOW },
+    { url: "http://hidden.test/a", visit_count: 1, last_visit: NOW },
+  ];
+  assert.deepEqual(site_items(nodes, new Set(["https://hidden.test/"]), NOW), [
+    { url: "https://moved.test/", boost: usage_boost(6, NOW, NOW) },
+    { url: "http://plain.test/", boost: usage_boost(1, NOW, NOW) },
+  ]);
+});
+
+test("the bookmark list ranks by use on a normal line only, and its reader is told the line's privacy", async () => {
+  const { service, view_privacy } = make();
+  await service.answer("bookmarks", NORMAL_LINE);
+  await service.answer("bookmarks", PRIVATE_LINE);
+  assert.deepEqual(view_privacy, [false, true]);
+  const history_searches: unknown[] = [];
+  (globalThis as { browser?: unknown }).browser = {
+    bookmarks: { getTree: async () => [{ children: [{ type: "bookmark", title: "Daily", url: "https://daily.test/" }] }] },
+    history: { search: async (query: unknown) => (history_searches.push(query), [{ url: "https://daily.test/", title: "Daily", visitCount: 40, lastVisitTime: Date.now() }]) },
+  };
+  const { browser_complete_items_deps } = await import("../../src/background/complete_items.ts");
+  try {
+    // A private read asks no history, so the row has no boost. A normal read goes through the module's history cache, which other tests share, so it is not checked here.
+    assert.equal((await browser_complete_items_deps.bookmark_view(true)).rows.rows[0]?.boost, undefined);
+    assert.deepEqual(history_searches, []);
+  } finally {
+    delete (globalThis as { browser?: unknown }).browser;
+  }
+});
+
+test("a bookmark takes the boost of its address's history, in open, the finder and the bookmark list", async () => {
+  const history = [{ title: "Marked page", url: "https://marked.test/", visit_count: 20, last_visit: Date.now() }];
+  const boost = usage_boost(20, Date.now(), Date.now());
+  const { service } = make({ bookmarks: MARKS, history });
+  const open = (await service.answer("open", NORMAL_LINE))?.items as { rows: { url: string; boost?: number }[] };
+  assert.deepEqual(open.rows.map((row) => [row.url, row.boost]), [["https://marked.test/", boost], ["https://other.test/", undefined]]);
+  const finder = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  assert.equal(finder.bookmarks.find((row) => row.url === "https://marked.test/")?.boost, boost);
+  const view = bookmark_view([{ children: [{ type: "bookmark", title: "Marked", url: "https://marked.test/" }] }], usage_by_url(history_items(history)));
+  assert.equal(view.rows.rows[0]?.boost, boost);
+});
+
+test("the finder sends each tab its open-tab boost plus its page's use, and a private line gets no site rows", async () => {
+  const history = [{ title: "Repo", url: "https://code.test/repo", visit_count: 50, last_visit: Date.now() }];
+  const tabs = [
+    { id: 1, index: 0, windowId: 10, incognito: false, url: "https://code.test/repo" },
+    { id: 2, index: 1, windowId: 10, incognito: false, url: "https://fresh.test/" },
+  ];
+  const { service } = make({ tabs, history });
+  const normal = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  assert.deepEqual(normal.tab_boost, { 1: MAX_BOOST, 2: OPEN_TAB_BOOST });
+  assert.deepEqual(normal.sites.map((site) => site.url), ["https://code.test/"]);
+  const private_items = (await service.answer("anything", PRIVATE_LINE))?.items as AnythingItems;
+  assert.deepEqual(private_items.sites, []);
+  const private_open = (await service.answer("open", PRIVATE_LINE))?.items as { sites: unknown[] };
+  assert.deepEqual(private_open.sites, []);
 });
