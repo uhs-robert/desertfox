@@ -121,6 +121,16 @@ test("count must name an existing param, modes must be known", () => {
   rejects("a.b", { ...base, runs_in: "both" as never }, /runs_in/);
 });
 
+test("repeat_limit is a positive whole number and needs a count rule", () => {
+  const counted = { ...base, count: "repeat" as const };
+  assert.doesNotThrow(() => create_registry().define("a.b", { ...counted, repeat_limit: 20 }));
+  rejects("a.b", { ...counted, repeat_limit: 0 }, /repeat_limit: must be a positive whole number/);
+  rejects("a.b", { ...counted, repeat_limit: -1 }, /repeat_limit: must be a positive/);
+  rejects("a.b", { ...counted, repeat_limit: 2.5 }, /repeat_limit: must be a positive/);
+  rejects("a.b", { ...base, repeat_limit: 20 }, /repeat_limit: needs a count rule/);
+  rejects("a.b", { ...base, count: "ignore", repeat_limit: 20 }, /repeat_limit: needs a count rule/);
+});
+
 test("the description is one non-empty line", () => {
   rejects("a.b", { ...base, intent: " " }, /intent: .*empty/);
   rejects("a.b", { ...base, intent: "One.\nTwo." }, /intent: .*one line/);
@@ -274,4 +284,12 @@ test("verbatim is for the main string param, and not with value_of", () => {
   rejects("x.b", verbatim({ name: "q", type: "int", main: true, verbatim: true }), /verbatim|string/);
   rejects("x.c", verbatim({ name: "q", type: "string", verbatim: true }), /only the main param can be verbatim/);
   create_registry().define("x.d", verbatim({ name: "q", type: "string", main: true, rest: true, verbatim: true }));
+});
+
+test("every built-in repeat_limit sits on a command with a count rule, and tab.close and tab.unload carry 20", async () => {
+  await import("../../src/background/command_modules.ts");
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  assert.equal(registry.get("tab.close")?.repeat_limit, 20);
+  assert.equal(registry.get("tab.unload")?.repeat_limit, 20);
+  for (const command of registry.list()) if (command.repeat_limit !== undefined) assert.notEqual(command.count, "ignore", command.id);
 });

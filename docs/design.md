@@ -82,6 +82,7 @@ The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init
 - `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
 - `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently.
 - `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
+- `repeat_limit`: the largest count prefix the router accepts, for a command whose repeats are hard to undo. It needs a `count` rule other than `ignore`. A bigger prefix is refused with a toast (`A count of 100 is over the limit of 20 for tab.close`) before any step of the request runs, so `.`, `3.`, macro replay and snippets refuse the same way and a sequence never runs half. A typed param count (`tab.unload --count=100`) is not a prefix and is not limited. `tab.close` and `tab.unload` carry 20. A yes/no confirmation line, so a big count can still run, is a possible follow-up.
 - `repeatable`: whether `.` can replay the command. The default is true. These commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `debug.restart`, `page.print`, `page.save_pdf`, `frame.exit`, `help.open`, `native.install`, `engine.show`, `settings.set`, `settings.toggle` and `settings.unset`, and the page commands that only change a mode or open a prompt: `mode.set`, `mode.escape`, `mode.pass_next`, `find.open`, `help.whichkey`, every `cmdline.*` and `list.*` command, `caret.move` and `visual.act` (a motion replays in normal mode, where it does not apply). One command opts out by its args: `page.reload` is not repeatable with `clear` set to `all`, so `.` and a macro never run a clear of every site. The `repeatable` field takes a function of the checked args for this.
 - `modes`: the modes where a key can run the command. The default is normal.
 - `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
@@ -99,7 +100,7 @@ Define-time checks cover names and params too:
 
 A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two flags from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
 
-A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count, modes and completion. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.
+A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count, repeat_limit, modes and completion. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.
 
 ## Invocations and prompts
 

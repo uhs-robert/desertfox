@@ -231,4 +231,17 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
     await wait_active_tab((page_id) => page_id !== "rp_order_a", "the tab key repeated off rp_order_a");
     await close_tabs_with("rp_order");
   });
+
+  await run_case("25xx is refused over the count limit and closes no tab, and 2xx closes two", async () => {
+    for (const name of ["rp_cap_a", "rp_cap_b", "rp_cap_c"]) await open_page("page", name, { new_tab: true });
+    const tabs_before = await tab_count();
+    const mark = events.length;
+    await press_keys("25xx");
+    await wait_event(mark, toast_on("rp_cap_c"), "the count limit refusal");
+    expect((await tab_count()) === tabs_before, "a count over the limit closed a tab");
+    await settle_focus();
+    await press_keys("2xx");
+    await poll_until("2xx to close two tabs", async () => (await tab_count()) === tabs_before - 2);
+    await close_tabs_with("rp_cap");
+  });
 }

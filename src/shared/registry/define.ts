@@ -376,6 +376,10 @@ function check_count_and_modes(input: CommandInput, fail: Fail): void {
   if (input.count !== undefined && typeof input.count !== "object" && input.count !== "repeat" && input.count !== "ignore") {
     fail("count", `unknown rule "${String(input.count)}"`);
   }
+  if (input.repeat_limit !== undefined) {
+    if (!Number.isInteger(input.repeat_limit) || input.repeat_limit < 1) fail("repeat_limit", "must be a positive whole number");
+    else if (input.count === undefined || input.count === "ignore") fail("repeat_limit", "needs a count rule, because it limits the count");
+  }
   for (const mode of input.modes ?? []) {
     if (!MODES.includes(mode)) fail("modes", `unknown mode "${String(mode)}"`);
   }

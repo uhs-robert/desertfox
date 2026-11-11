@@ -339,3 +339,14 @@ test("a count on `.` after typed text goes to the text step only, never to the e
   await handler({ tab_id: 7, window_id: 1, frame_id: 0, mode: "normal" }, { count: 3 });
   assert.deepEqual(seen, [[{ id: "page.focus_field", args: { direction: "next", steps: 1 } }, { id: "text.insert", args: { text: "hi" }, count: 3 }]]);
 });
+
+test("a repeat with a count over the limit is refused and runs nothing, like any other caller", async () => {
+  const { fake, router, seen, repeat, ctx } = repeat_setup({
+    "tab.shut": { label: "Shut", intent: "x", runs_in: "background", count: "repeat", repeat_limit: 20, run: () => void seen.push("shut") },
+  });
+  await router.run({ invocations: [{ id: "tab.shut", count: 3 }], mode: "normal" });
+  assert.equal(seen.length, 3);
+  await repeat(ctx, { count: 100 });
+  assert.equal(seen.length, 3);
+  assert.deepEqual(fake.log, ["refuse 7 A count of 100 is over the limit of 20 for tab.shut"]);
+});
