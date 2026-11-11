@@ -170,6 +170,19 @@ export function start_server() {
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/clipboard") {
+      // A stand-in for the Sheets grid editor: a parked, empty, focused box that records the clipboard events it gets (and cancels them when the id has "cancel", as Sheets does, and stops their propagation when it has "stop") (type, whether the browser sent it, and the text it carries) in a data attribute.
+      const editor = '<div style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div>';
+      const record = `<script>
+        const editor = document.getElementById("waffle-rich-text-editor");
+        document.documentElement.dataset.clip = "";
+        const cancels = location.search.includes("cancel");
+        const stops = location.search.includes("stop");
+        for (const type of ["cut", "copy", "paste"]) editor.addEventListener(type, (event) => { if (cancels) event.preventDefault(); if (stops) event.stopImmediatePropagation(); document.documentElement.dataset.clip += type + ":" + event.isTrusted + ":" + (event.clipboardData?.getData("text/plain") ?? "") + ","; });
+        editor.focus();
+      </script>`;
+      return response.end(page(`clipboard ${id}`, editor + record));
+    }
     if (url.pathname === "/closed_field") {
       // A field inside a closed root and a plain button outside. F9 focuses the inner field and F2 the outer one (not F10, whose key-up moves Firefox focus to the menu bar), because the test cannot reach into a closed root. With autofocus in the id, the inner field takes the focus at load. A button sits after the field in the root, so Tab moves focus inside it; "open" in the id makes the root open.
       const build = `<div id="host"></div><button id="outside">outside</button><script>
@@ -276,6 +289,18 @@ export function start_server() {
       </script>`;
       return response.end(page(`cell_editor ${id}`, editor + tall_filler + script));
     }
+    // The head and the open body tag at once, the content after `ms`: a page whose height and width arrive late. Firefox hands no key to a document that has no body yet, so the body tag must come first.
+    if (url.pathname === "/slow_body") {
+      const [head, rest] = page(`slow_body ${id}`, tall_filler + '<div style="width:3000px;height:1px"></div>').split("<h1>");
+      response.write(head);
+      // With `tail_ms` the page also holds its last script, so the content is in while the document still loads.
+      const tail_ms = Number(url.searchParams.get("tail_ms") ?? 0);
+      const script_at = tail_ms ? rest.lastIndexOf("<script>") : rest.length;
+      return void setTimeout(() => {
+        response.write("<h1>" + rest.slice(0, script_at));
+        setTimeout(() => response.end(rest.slice(script_at)), tail_ms);
+      }, Number(url.searchParams.get("ms")));
+    }
     // Answers after `ms`, so a page that embeds it stays in its load that long.
     if (url.pathname === "/slow_pixel") return void setTimeout(() => response.end(), Number(url.searchParams.get("ms")));
     if (url.pathname === "/replaces_address") {
@@ -334,9 +359,13 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       </script>`;
       return response.end(page(`media_inner ${id}`, build, MEDIA_REPORTER));
     }
+    if (url.pathname === "/quality_frame") {
+      // The /quality player inside a same-origin frame, so the rule's start reaches a child frame and resolves against the frame's own address.
+      return response.end(page(`quality_frame ${id}`, `<iframe id="inner" src="/quality?id=${id}_yt_inner" style="display:block;width:320px;height:200px"></iframe>`, MEDIA_REPORTER));
+    }
     if (url.pathname === "/quality") {
-      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" for its first two seconds. The #replace button swaps in a second player with other levels, as YouTube does on in-site navigation. Each call the extension makes reports back.
-      const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button>';
+      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" for its first two seconds. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
+      const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button><button id="navigate">navigate</button>';
       const script = `<script>
 const kind = ${JSON.stringify(id)};
 let ready = !kind.includes("slow");
@@ -348,12 +377,18 @@ function make_movie_player(levels, start) {
   player.getAvailableQualityLevels = () => levels.map((entry) => entry[0]);
   player.getAvailableQualityData = () => levels.map(([quality, qualityLabel]) => ({ quality, qualityLabel, isPlayable: true }));
   player.getPlaybackQuality = () => (ready ? current : "unknown");
-  player.setPlaybackQualityRange = (low, high) => { current = low; send("quality_set", { low, high }); };
+  player.setPlaybackQualityRange = (low, high) => { current = low; document.documentElement.dataset.level = low; send("quality_set", { low, high }); };
   player.nextVideo = () => send("quality_skip", { to: "next" });
   player.previousVideo = () => send("quality_skip", { to: "previous" });
+  player.start_over = () => { current = start; document.documentElement.dataset.level = start; };
   return player;
 }
 if (kind.includes("yt") || kind.includes("slow")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+// An in-site navigation: the address changes first, and the next video starts at the site's own level 800 ms later.
+document.getElementById("navigate").addEventListener("click", () => {
+  history.pushState({}, "", location.pathname + location.search + "&next=" + Date.now());
+  setTimeout(() => document.getElementById("movie_player")?.start_over(), 800);
+});
 document.getElementById("replace").addEventListener("click", () => {
   document.getElementById("movie_player")?.remove();
   document.body.append(make_movie_player([["hd2160", "2160p"], ["hd1080", "1080p"]], "hd1080"));

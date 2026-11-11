@@ -161,3 +161,14 @@ test("auto on a YouTube player with no levels yet does nothing and does not clai
   assert.deepEqual(apply_quality(driver, request("set", "auto")), { levels: [] });
   assert.deepEqual(calls, []);
 });
+
+test("the video identity is the YouTube video id and the hls.js address, and a page with none gives undefined", () => {
+  const player = { ...movie_player("hd720"), getVideoData: () => ({ video_id: "abc123" }) };
+  assert.equal(youtube_driver(youtube_page(player))!.video_id(), "abc123");
+  assert.equal(youtube_driver(youtube_page(movie_player("hd720")))!.video_id(), undefined);
+  assert.equal(youtube_driver(youtube_page({ ...movie_player("hd720"), getVideoData: () => ({ video_id: 5 }) }))!.video_id(), undefined);
+  const { page, hls } = hls_page(hls_levels);
+  assert.equal(hls_driver(page)!.video_id(), undefined);
+  (hls as { url?: string }).url = "https://cdn.test/a.m3u8";
+  assert.equal(hls_driver(page)!.video_id(), "https://cdn.test/a.m3u8");
+});

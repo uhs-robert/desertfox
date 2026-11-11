@@ -1,5 +1,5 @@
 // Key-test piece: first-press timing of lazy bundles and the early-j case. See README.md for how to run it.
-// The slow_body case needs a /slow_body route in test/key/server.mjs that this repo does not have yet. The slow-body key test PR (PR B) adds it. Until then the page loads at once and the early-j case does not delay the body.
+// The slow_body case uses the /slow_body route in test/key/server.mjs, which holds the body for the ms query param.
 import { appendFileSync, mkdirSync } from "node:fs";
 const repo = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 const work = process.env.MEASURE_DIR ?? "/tmp/desertfox-measure";
@@ -80,7 +80,10 @@ export async function run_cases({ run_case, in_background, url_of, open_page, pr
         const mark = events.length;
         const opened = Date.now();
         await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("slow_body", id) + "&ms=3000")}, active: true }).then((tab) => tab.id)`);
-        const tree = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === id, "tree_read on the slow page", 5000);
+        // The page reports nothing until its content arrives, so the ready attribute of the content script is the signal.
+        const ready = `(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: "document.documentElement.hasAttribute('data-desertfox-tree-read-ms')", runAt: "document_start" }))[0]; })()`;
+        while (!(await in_background(ready)) && Date.now() - opened < 5000) await sleep(20);
+        const ready_after_open = Date.now() - opened;
         await sleep(400);
         const in_active_tab = (code) => in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)}, runAt: "document_start" }))[0]; })()`);
         const state = "JSON.stringify({ y: scrollY, h: document.documentElement.scrollHeight, inner: innerHeight, ready: document.readyState, focus: document.hasFocus() })";
@@ -95,7 +98,7 @@ export async function run_cases({ run_case, in_background, url_of, open_page, pr
         await sleep(500);
         const control = JSON.parse(await in_active_tab(state));
         const page_saw_j = events.slice(mark).filter((event) => event.page_id === id && event.type === "keydown" && event.key === "j").map((event) => event.at_ms - opened);
-        out({ label: "slow_body", id, tree_read_after_open: tree.at_ms - opened, pressed_after_open: pressed - opened, pre, mid, late, control, page_saw_j });
+        out({ label: "slow_body", id, tree_read_after_open: ready_after_open, pressed_after_open: pressed - opened, pre, mid, late, control, page_saw_j });
       }
     });
   }

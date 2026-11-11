@@ -77,6 +77,7 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: M
     default_keymap: DEFAULT_KEYMAP,
     default_site_rows: DEFAULT_SITE_ROWS,
     get_command: (command_id) => registry.get(command_id),
+    registry,
     enum_sources: { search_engines: Object.keys(config.search_engines), containers: await container_names() },
   });
 

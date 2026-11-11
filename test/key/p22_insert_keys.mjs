@@ -82,7 +82,6 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
 
   await run_case("i in a child frame shows INSERT on the badge and Escape in the frame returns every frame to normal", async () => {
     await open_page("frames", "p22_frames", { new_tab: true });
-    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p22_frames_same", "the same-origin frame to start");
     let mark = events.length;
     await press_keys(";f");
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
@@ -102,7 +101,6 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
 
   await run_case("i on the top page, then keys in a frame and Escape from that frame", async () => {
     await open_page("frames", "p22_top", { new_tab: true });
-    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p22_top_same", "the same-origin frame to start");
     let mark = events.length;
     await press_keys("i");
     await wait_badge(mark, "p22_top", "INSERT");
@@ -116,7 +114,6 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
 
   await run_case("i and Escape on the top page return a frame to normal", async () => {
     await open_page("frames", "p22_top_esc", { new_tab: true });
-    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p22_top_esc_same", "the same-origin frame to start");
     let mark = events.length;
     await press_keys("i");
     await wait_badge(mark, "p22_top_esc", "INSERT");
@@ -149,14 +146,17 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await wait_badge(mark, "p22_late", "INSERT");
     mark = events.length;
     await in_active_tab(`document.body.insertAdjacentHTML("afterbegin", '<iframe id="late" src="/frame_inner?id=p22_late_new" style="display:block;width:300px;height:200px"></iframe>'); 0`);
-    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p22_late_new", "the late frame to start");
+    await poll_until("the late frame to load", async () => await in_active_tab(`document.getElementById("late").contentDocument.URL.endsWith("p22_late_new") && document.getElementById("late").contentDocument.readyState === "complete"`));
     await focus_frame(mark, "p22_late_new", "late");
     await frame_passes_j("p22_late_new");
   });
 
   await run_case("i leaves a frame under an all-off rule in ignore mode, and Escape keeps it there", async () => {
     await open_page("frames", "p22_off", { new_tab: true });
-    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p22_off_same", "the all-off frame to start");
+    // The frame holds the focus once so it has started when i reaches the tab, which then reaches it by the set_mode broadcast.
+    await focus_frame(0, "p22_off_same", "same");
+    await in_active_tab(`document.getElementById("same").blur(); window.focus(); 0`);
+    await wait_takes_keys("p22_off");
     let mark = events.length;
     await press_keys("i");
     await wait_badge(mark, "p22_off", "INSERT");

@@ -5,7 +5,7 @@ export const areas = ["keys"];
 
 const KEYMAP_DELAY_MS = 2500;
 
-export async function run_cases({ run_case, in_background, url_of, wait_event, events, expect, sleep, press_keys }) {
+export async function run_cases({ run_case, in_background, url_of, wait_event, events, expect, sleep, press_keys, in_active_tab }) {
   const delay_keymap_reads = (on) => in_background(`(() => {
     const local = browser.storage.local;
     if (!${on}) { if (local.get.original) local.get = local.get.original; return 0; }
@@ -28,5 +28,49 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, e
     } finally {
       await delay_keymap_reads(false);
     }
+  });
+
+  // Presses `keys` while the body is held, then reads the scroll position once the page is in. A number in `keys` is a pause in ms. With `keymap_late` the keys are held for the keymap and replay after it lands, still before the body. A chord is never held for the keymap, so the Ctrl case leaves the keymap alone. `tail_ms` also holds the page's last script after the content.
+  const press_on_slow_body = async (id, keys, { keymap_late = true, tail_ms = 0 } = {}) => {
+    await delay_keymap_reads(keymap_late);
+    try {
+      const body_ms = KEYMAP_DELAY_MS + 1500;
+      const opened = Date.now();
+      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("slow_body", id) + `&ms=${body_ms}&tail_ms=${tail_ms}`)}, active: true }).then((tab) => tab.id)`);
+      await sleep(900);
+      for (const args of keys) await (typeof args === "number" ? sleep(args) : press_keys(...args));
+      await sleep(Math.max(0, opened + body_ms + tail_ms + 1500 - Date.now()));
+      return JSON.parse(await in_active_tab("JSON.stringify({ x: scrollX, y: scrollY, half: innerHeight / 2 })"));
+    } finally {
+      await delay_keymap_reads(false);
+    }
+  };
+
+  await run_case("three j pressed while the body is still loading make one step once it arrives", async () => {
+    const at = await press_on_slow_body("early_j", [["j", "j", "j"]]);
+    expect(at.y === 50 && at.x === 0, `three j scrolled to ${JSON.stringify(at)} instead of one 50 px step`);
+  });
+
+  await run_case("j then l pressed while the body is still loading move both axes", async () => {
+    const at = await press_on_slow_body("early_jl", [["j"], ["l"]]);
+    expect(at.y === 50 && at.x === 50, `j then l scrolled to ${JSON.stringify(at)} instead of 50 down and 50 right`);
+  });
+
+  await run_case("G pressed while the body is still loading scrolls to the bottom once it arrives", async () => {
+    const at = await press_on_slow_body("early_G", [["G"], ["j"]]);
+    // The j after G runs in the same tick at the load. A smooth G would be cut short by it and end at 50.
+    expect(at.y > 1000, `G scrolled to ${JSON.stringify(at)}`);
+  });
+
+  await run_case("Ctrl+D pressed while the body is still loading scrolls half a page once it arrives", async () => {
+    const at = await press_on_slow_body("early_pages", [["-M", "ctrl", "d", "-m", "ctrl"]], { keymap_late: false });
+    expect(Math.abs(at.y - at.half) < 20, `Ctrl+D scrolled to ${JSON.stringify(at)}`);
+  });
+
+  await run_case("a press that finds room while the page still loads runs the queued ones first, once", async () => {
+    // j waits for room. The content arrives at 4 s and the last script at 7 s, and k is pressed at 4.4 s, so it finds room on a loading page.
+    // Queue first then k: down and back up, ending at 0. k first, or j run again at the end, would end at 50.
+    const at = await press_on_slow_body("early_flush", [["j"], 3500, ["k"]], { keymap_late: false, tail_ms: 3000 });
+    expect(at.y === 0 && at.x === 0, `j then k across the arrival ended at ${JSON.stringify(at)} instead of 0`);
   });
 }

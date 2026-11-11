@@ -79,3 +79,12 @@ test("the exported config builds to the settings in force, whatever settings fil
     for (const [path, text] of Object.entries(source)) assert.equal(config_files[path], text, `${path} was overwritten`);
   }
 });
+
+test("a saved site bind in each binding format survives export then import, as text and as invocations", () => {
+  const resolved = { a: { id: "tab.next" }, b: [{ id: "tab.prev" }, { id: "tab.next" }], c: [{ id: "tab.next", label: "Next", intent: "Go on" }, { id: "tab.prev" }] };
+  const typed = { a: "tab.next", b: ["tab.prev", "tab.next"], c: { run: ["tab.next", "tab.prev"], label: "Next", intent: "Go on" } };
+  for (const bind of [typed, resolved]) {
+    const { config_files } = export_files({}, { site_rules: [{ site: "https://a.test/*", bind }] });
+    assert.deepEqual(settings_in_force(config_files, {}).site_rules, [{ site: "https://a.test/*", bind: resolved }]);
+  }
+});

@@ -3,7 +3,7 @@
 import type { Driver, PlayerLevel } from "./driver.ts";
 import { copy_of } from "./driver.ts";
 
-type Hls = { levels?: unknown; currentLevel?: number; nextLevel?: number };
+type Hls = { levels?: unknown; url?: unknown; currentLevel?: number; nextLevel?: number };
 
 export type HlsPage = { html5player?: { hlsobj?: Hls } };
 
@@ -26,6 +26,8 @@ export function hls_driver(page: HlsPage): Driver | undefined {
         )
         .sort((a, b) => a.height - b.height),
     auto: () => (switch_to(-1), true),
+    // The address hls.js loaded, which changes with the video.
+    video_id: () => (typeof handle.url === "string" ? handle.url : undefined),
     // The site offers a related list, not a next or previous video.
     skip: () => false,
   };

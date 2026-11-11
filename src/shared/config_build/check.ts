@@ -12,6 +12,7 @@ import { parse_binding } from "../registry/parse_binding.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
 import type { Modifier } from "../keymap.ts";
 import { origin_key, type MergedData } from "./merge.ts";
+import { is_labeled_binding, make_entry_resolver } from "./resolve_binding.ts";
 
 const no_op = () => {};
 
@@ -98,44 +99,24 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
       return found ?? (target !== undefined && !/\s/.test(word) ? registry.get(target) : undefined);
     },
   };
-  const resolve_text = (text: string, where: string): BoundInvocation | undefined => {
-    const result = parse_binding(with_aliases, text, sources);
-    if (result.kind === "error") problems.push(`${where}: ${result.error}`);
-    else return result.binding;
-  };
-  const resolve_run = (run: string | string[], where: string): BoundInvocation | BoundInvocation[] | undefined => {
-    if (typeof run === "string") return resolve_text(run, where);
-    const parsed = run.map((text) => resolve_text(text, where));
-    return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
-  };
+  const resolve_entry = make_entry_resolver(with_aliases, sources, problems);
   for (const [mode, entries] of Object.entries(merged.keymap)) {
     if (mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "modifiers" || mode === "group_names") continue;
     const bindings = entries as Record<string, unknown>;
     for (const [sequence, entry] of Object.entries(bindings)) {
-      const where = location(mode, sequence);
-      if (typeof entry === "string" || Array.isArray(entry)) {
-        const binding = resolve_run(entry, where);
-        if (binding) bindings[sequence] = binding;
-      } else if (is_labeled_binding(entry)) {
-        const binding = resolve_run(entry.run, where);
-        if (!binding) continue;
-        const problem = entry.label === undefined ? null : label_problem(entry.label);
-        if (problem) problems.push(`${where}: ${problem}`);
-        const intent_error = entry.intent === undefined ? null : intent_problem(entry.intent);
-        if (intent_error) problems.push(`${where}: ${intent_error}`);
-        // The label and the intent sit on the first invocation, as the compiler reads them there.
-        if (!problem && !intent_error) {
-          if (entry.label !== undefined) [binding].flat()[0]!.label = entry.label;
-          if (entry.intent !== undefined) [binding].flat()[0]!.intent = entry.intent;
-        }
-        bindings[sequence] = binding;
-      }
+      if (typeof entry !== "string" && !Array.isArray(entry) && !is_labeled_binding(entry)) continue;
+      const binding = resolve_entry(entry, location(mode, sequence));
+      if (binding) bindings[sequence] = binding;
     }
   }
-}
-
-function is_labeled_binding(entry: unknown): entry is { run: string | string[]; label?: string; intent?: string } {
-  return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
+  // Site binds take the same formats. Row by row, the settings check already vouched for the shape.
+  const site_where = location_of(merged, "settings", "site_rules");
+  for (const row of merged.settings.site_rules ?? []) {
+    for (const [sequence, entry] of Object.entries(row.bind ?? {})) {
+      const binding = resolve_entry(entry, `${site_where}: bind "${sequence}" of "${row.site}"`);
+      if (binding) (row.bind as Record<string, unknown>)[sequence] = binding;
+    }
+  }
 }
 
 // A fallback must name an engine, and following fallbacks must end.
@@ -224,16 +205,24 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
     if (name.startsWith("-")) warnings.push(`${where("search_engines", name)}: engine "${name}" starts with "-", so a command line can name it only as --engine=${name}`);
   }
 
-  // The settings check covers the shape of each bind. The command and its args get the checks of a keymap entry.
+  // The settings check covers the shape of each bind. Each step gets the checks of a keymap entry.
   for (const row of merged.settings.site_rules ?? []) {
-    for (const [sequence, binding] of Object.entries(row.bind ?? {})) {
-      if (typeof binding?.id !== "string") continue;
-      const command = registry.get(binding.id);
-      if (command && captured_key_param(command, binding.args)) {
-        problems.push(`${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}": a bind cannot wait for a key press`);
-        continue;
+    for (const [sequence, entry] of Object.entries(row.bind ?? {})) {
+      for (const step of [entry].flat() as unknown[]) {
+        // Text here failed to parse, and resolve_bindings already reported it.
+        if (typeof step !== "object" || step === null || is_labeled_binding(step)) continue;
+        const binding = step as BoundInvocation;
+        const prefix = `${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}"`;
+        for (const message of [binding.label === undefined ? null : label_problem(binding.label), binding.intent === undefined ? null : intent_problem(binding.intent)]) {
+          if (message) problems.push(`${prefix}: ${message}`);
+        }
+        const command = registry.get(binding.id);
+        if (command && captured_key_param(command, binding.args)) {
+          problems.push(`${prefix}: a bind cannot wait for a key press`);
+          continue;
+        }
+        for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${prefix}: ${message}`);
       }
-      for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${where("settings", "site_rules")}: bind "${sequence}" of "${row.site}": ${message}`);
     }
   }
 

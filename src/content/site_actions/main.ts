@@ -3,6 +3,8 @@
 import type { BundleHostApi } from "../bundle_host.ts";
 import { send_key_queued } from "./send_key.ts";
 import type { SendKeyArgs } from "./send_key.ts";
+import { clipboard_action, paste_through_clipboard_api } from "./clipboard.ts";
+import type { ClipboardArgs } from "./clipboard.ts";
 
 type SiteActionsWindow = { desertfox_host?: BundleHostApi; desertfox_site_actions_ready?: true };
 const site_actions = window as unknown as SiteActionsWindow;
@@ -12,4 +14,5 @@ const host = site_actions.desertfox_host;
 if (!site_actions.desertfox_site_actions_ready && host) {
   site_actions.desertfox_site_actions_ready = true;
   host.register_handler_("page.send_key", (args) => send_key_queued(document, args as unknown as SendKeyArgs, (type, init) => new KeyboardEvent(type, init)));
+  host.register_handler_("page.clipboard", (args) => clipboard_action(document, args as unknown as ClipboardArgs, paste_through_clipboard_api));
 }

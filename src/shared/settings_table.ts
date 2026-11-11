@@ -4,14 +4,16 @@
 // Data only, so the bundles that check settings (the command line page among them) carry no prose: the editor
 // descriptions live in `settings_docs.ts`.
 
+import type { BoundInvocation } from "./invocation.ts";
 import { BUILT_IN_PAGE, DEFAULT_SITE_ROW_NAMES, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "./theme/roles.ts";
 
 type EnumValue = string | number | boolean;
 
-// A table from a key sequence to a command, in the shape of a keymap entry. The compiler checks the command and its args with the registry validator.
-export type BindingTable = Readonly<Record<string, { id: string; args?: Readonly<Record<string, unknown>> }>>;
+// A table from a key sequence to a binding, in the formats of a keymap entry: a command string, a list of steps, a `{ run, label, intent }` table. The build resolves the text into invocations (`BoundInvocation`), which is also what the shipped rows write. The compiler checks each command and its args with the registry validator.
+export type BindStep = string | BoundInvocation;
+export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[] | { run: BindStep | readonly BindStep[]; label?: string; intent?: string }>>;
 
 type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean" | "bindings"; optional?: true }>>;
 
@@ -29,7 +31,7 @@ export type SettingRow = (
   | { kind: "enum_list"; values: readonly string[]; default: readonly string[] }
   // A table of exactly these keys, each a non-empty string.
   | { kind: "text_table"; keys: readonly string[]; default: Readonly<Record<string, string>> }
-  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces. A `bindings` field takes a table from a key sequence to `{ id, args }`.
+  // A list of tables with these fields. A `web_url` field takes an http or https URL. A `keys` field takes key sequences in keymap notation, split by spaces. A `bindings` field takes a table from a key sequence to a binding as the keymap writes it.
   // The fields in `exclusive` refuse to appear together in one table.
   | { kind: "table_list"; fields: TableFields; exclusive?: readonly string[]; default: readonly [] }
   // A table_list whose rows also take every `per_site` setting as an optional column.
@@ -68,6 +70,8 @@ export const SETTINGS_TABLE = {
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
   // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
   zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
+  // The quality rule for site players (see `src/background/media_quality.ts`): `off` leaves the site alone, `auto` hands the choice to the site, `max` and `min` take an end, a height takes the highest level at or below it.
+  media_quality: { kind: "enum", values: ["off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160, 4320], default: "max", per_site: true },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name. `desktop` follows the palette the desktop pushed over the bridge.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: [DESKTOP_PALETTE, ...BUILT_IN_THEME_NAMES] }, default: "oasis_moonlight" },

@@ -2,13 +2,14 @@
 
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { DEFAULT_SITE_ROW_NAMES } from "../shared/table_constants.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
 
 export type DefaultSiteRow = { name: (typeof DEFAULT_SITE_ROW_NAMES)[number]; row: SiteRuleRow };
 
 // Sheets reads the key code of a keydown and ignores the rest, so hjkl send the arrow keys to its grid editor.
 const SHEETS_TARGET = "#waffle-rich-text-editor";
-const arrow = (key: string, key_code: number, ctrl = false): BindingTable[string] => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
+const arrow = (key: string, key_code: number, ctrl = false): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
 const SHEETS_BIND: BindingTable = {
   h: arrow("ArrowLeft", 37),
   j: arrow("ArrowDown", 40),
@@ -20,9 +21,14 @@ const SHEETS_BIND: BindingTable = {
   "<C-j>": arrow("ArrowDown", 40, true),
   "<C-k>": arrow("ArrowUp", 38, true),
   "<C-l>": arrow("ArrowRight", 39, true),
+  // A synthetic Ctrl+X or Ctrl+V does not cut or paste, so these keys run the page's clipboard action instead.
+  x: { id: "page.clipboard", args: { action: "cut", target: SHEETS_TARGET } },
+  p: { id: "page.clipboard", args: { action: "paste", target: SHEETS_TARGET } },
+  // Ctrl+End goes to the last cell of the data, and Home from there to column A of that row.
+  G: [{ ...arrow("End", 35, true), label: "Bottom of column A", intent: "Go to column A of the last row with data." }, arrow("Home", 36)],
 };
-// Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list both keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave both keys out.
-const SHEETS_PASS = "<C-a> <C-x>";
+// Select all, Cut and Paste are Sheets' own, so url.increment must not take <C-a> and <C-x> and mode.pass_next must not take <C-v> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list all three keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave `<C-a>` and `<C-x>` out. `only` always keeps `<C-v>` for the one-shot pass, so an `only` row cannot free it.
+const SHEETS_PASS = "<C-a> <C-x> <C-v>";
 
 // Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.
 // The second pattern is the address form of a Google Workspace domain.
