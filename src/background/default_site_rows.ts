@@ -2,13 +2,14 @@
 
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { DEFAULT_SITE_ROW_NAMES } from "../shared/table_constants.ts";
+import type { BoundInvocation } from "../shared/invocation.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
 
 export type DefaultSiteRow = { name: (typeof DEFAULT_SITE_ROW_NAMES)[number]; row: SiteRuleRow };
 
 // Sheets reads the key code of a keydown and ignores the rest, so hjkl send the arrow keys to its grid editor.
 const SHEETS_TARGET = "#waffle-rich-text-editor";
-const arrow = (key: string, key_code: number, ctrl = false): BindingTable[string] => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
+const arrow = (key: string, key_code: number, ctrl = false): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
 const SHEETS_BIND: BindingTable = {
   h: arrow("ArrowLeft", 37),
   j: arrow("ArrowDown", 40),
@@ -20,6 +21,8 @@ const SHEETS_BIND: BindingTable = {
   "<C-j>": arrow("ArrowDown", 40, true),
   "<C-k>": arrow("ArrowUp", 38, true),
   "<C-l>": arrow("ArrowRight", 39, true),
+  // Ctrl+End goes to the last cell of the data, and Home from there to column A of that row.
+  G: [{ ...arrow("End", 35, true), label: "Bottom of column A", intent: "Go to column A of the last row with data." }, arrow("Home", 36)],
 };
 // Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list both keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave both keys out.
 const SHEETS_PASS = "<C-a> <C-x>";

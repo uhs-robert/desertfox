@@ -98,7 +98,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   hint_remove: [[], ["nav"]],
   blur_on_load: [true, false],
   escape_to_page: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }]],
   default_site_rows_off: [[], ["sheets"]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
@@ -141,7 +141,7 @@ const REFUSES: Record<string, unknown[]> = {
   blur_on_load: ["true", 1],
   escape_to_page: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "x" } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", label: "y" } } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }],
   ],
   default_site_rows_off: ["sheets", ["other"], ["sheets", "sheets"], [1]],
   next_patterns: ["next", [""], [1]],
@@ -217,7 +217,8 @@ test("a bad site rule names its item and its fault", () => {
   assert.match(explain([{ site: "*://a.test/*", only: "j <j>" }])!, /^item 1 has a field "only" that has "<j>", which /);
   assert.equal(explain([{ pass: "j" }]), 'item 1 needs a non-empty "site"');
   assert.equal(explain([{ site: "*://a.test/*", off: "yes" }]), 'item 1 has a field "off" that is not true or false');
-  assert.equal(explain([{ site: "*://a.test/*", bind: { h: {} } }]), 'item 1 has a field "bind" that binds "h" to something that is not a table with an "id"');
+  assert.equal(explain([{ site: "*://a.test/*", bind: { h: {} } }]), 'item 1 has a field "bind" that binds "h" to something that has a step that is neither a command string nor a table with an "id"');
+  assert.match(explain([{ site: "*://a.test/*", bind: { h: Array(21).fill("x") } }])!, /binds "h" to something that has more than 20 steps$/);
   assert.match(explain([{ site: "*://a.test/*", bind: { "<a>": { id: "x" } } }])!, /^item 1 has a field "bind" that binds "<a>", which /);
 });
 
