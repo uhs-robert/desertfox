@@ -1,9 +1,11 @@
-// The panel that `:native.install` opens (home.html#native-install): a button that asks for the nativeMessaging permission
-// and the one-line command that installs the host. Firefox grants an optional permission only from a click on a page of the add-on,
+// The panel that `:permissions.grant` and `:native.install` open (home.html#grant/<permission>): a button that asks for an optional permission,
+// and for nativeMessaging the one-line command that installs the host. Firefox grants an optional permission only from a click on a page of the add-on,
 // which is why the request lives here and not in the command.
 
 import { copy_text } from "../content/caret/copy_text.ts";
-import { host_channel, install_command, is_native_install_hash, NATIVE_PERMISSION } from "../shared/native_host.ts";
+import { host_channel, install_command } from "../shared/native_host.ts";
+import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
+import type { GrantablePermission } from "../shared/permission_grant.ts";
 
 export type PermissionDeps = {
   has: () => Promise<boolean>;
@@ -12,23 +14,43 @@ export type PermissionDeps = {
 
 export type PermissionOutcome = { granted: boolean; message: string };
 
+// What the panel says for each permission: its title, the first step, the button, and the notes after a grant and after a decline.
+type GrantCopy = { title: string; ask: string; button: string; granted: string; declined: string };
+const COPY: Record<GrantablePermission, GrantCopy> = {
+  nativeMessaging: {
+    title: "Install the native host",
+    ask: "Step 1: allow DesertFox to talk to its native host.",
+    button: "Allow native messaging",
+    granted: "Permission granted. Run the command below in a terminal, then DesertFox can reach the host.",
+    declined: "Firefox did not grant the permission. Press the button again and choose Allow. DesertFox cannot reach the host without it.",
+  },
+  browsingData: {
+    title: "Allow clearing site data",
+    ask: "The clear-and-reload keys (rc, rC) need the browsingData and cookies permissions. Firefox asks once, and the keys work at once after you allow it.",
+    button: "Allow clearing site data",
+    granted: "Permission granted. The clear-and-reload keys work now.",
+    declined: "Firefox did not grant the permission. Press the button again and choose Allow. The clear-and-reload keys stay off without it.",
+  },
+};
+
 // Must run inside the click handler: any await before `request` can lose the user gesture.
-export async function ask_for_permission(deps: PermissionDeps): Promise<PermissionOutcome> {
+export async function ask_for_permission(deps: PermissionDeps, permission: GrantablePermission = "nativeMessaging"): Promise<PermissionOutcome> {
   try {
     const granted = await deps.request();
-    return granted
-      ? { granted, message: "Permission granted. Run the command below in a terminal, then DesertFox can reach the host." }
-      : { granted, message: "Firefox did not grant the permission. Press the button again and choose Allow. DesertFox cannot reach the host without it." };
+    return { granted, message: granted ? COPY[permission].granted : COPY[permission].declined };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { granted: false, message: `Firefox refused the permission request: ${reason}` };
   }
 }
 
-export const browser_permission_deps = (): PermissionDeps => ({
-  has: () => browser.permissions.contains({ permissions: [NATIVE_PERMISSION] }),
-  request: () => browser.permissions.request({ permissions: [NATIVE_PERMISSION] }),
-});
+export const browser_permission_deps = (permission: GrantablePermission): PermissionDeps => {
+  const request = { permissions: [...PERMISSIONS_OF[permission]] } as browser.permissions.Permissions;
+  return {
+    has: () => browser.permissions.contains(request),
+    request: () => browser.permissions.request(request),
+  };
+};
 
 const PANEL_STYLE =
   "position:fixed;top:1rem;right:1rem;z-index:2147483000;box-sizing:border-box;width:min(36rem,calc(100vw - 2rem));padding:1rem 1.25rem;" +
@@ -43,22 +65,11 @@ function element(tag: string, text?: string, style?: string): HTMLElement {
   return node;
 }
 
-async function build_panel(on_close: () => void): Promise<HTMLElement> {
+// The host install command for this build's channel, with a Copy button.
+async function append_install_steps(panel: HTMLElement): Promise<void> {
   const install_type = (await browser.management.getSelf()).installType;
   const channel = host_channel(install_type, browser.runtime.getManifest().version);
   const command = install_command(channel);
-  const deps = browser_permission_deps();
-
-  const panel = element("section", undefined, PANEL_STYLE);
-  panel.setAttribute("aria-label", "Install the native host");
-  const status = element("p", (await deps.has()) ? "Permission already granted." : "Step 1: allow DesertFox to talk to its native host.");
-  status.setAttribute("role", "status");
-  const allow = element("button", "Allow native messaging", BUTTON_STYLE);
-  allow.addEventListener("click", () => {
-    void ask_for_permission(deps).then((outcome) => {
-      status.textContent = outcome.message;
-    });
-  });
   const code = element("pre", command, "white-space:pre-wrap;word-break:break-all;margin:.5rem 0;padding:.5rem;background:rgba(127,127,127,.15)");
   const copy = element("button", "Copy command", BUTTON_STYLE);
   copy.addEventListener("click", () => {
@@ -66,17 +77,31 @@ async function build_panel(on_close: () => void): Promise<HTMLElement> {
       copy.textContent = copied ? "Copied" : "Copy failed, select the text instead";
     });
   });
-  const close = element("button", "Close", `${BUTTON_STYLE};float:right`);
-  close.addEventListener("click", on_close);
   panel.append(
-    close,
-    element("h2", "Install the native host", "margin:0 0 .5rem;font-size:1.1rem"),
-    status,
-    allow,
     element("p", channel === "main" ? "Step 2: run this in a terminal. It fetches the host from the main branch, with no checksum." : `Step 2: run this in a terminal. It fetches the host of version ${channel} and checks its SHA-256.`),
     code,
     copy,
   );
+}
+
+async function build_panel(permission: GrantablePermission, on_close: () => void): Promise<HTMLElement> {
+  const words = COPY[permission];
+  const deps = browser_permission_deps(permission);
+
+  const panel = element("section", undefined, PANEL_STYLE);
+  panel.setAttribute("aria-label", words.title);
+  const status = element("p", (await deps.has()) ? "Permission already granted." : words.ask);
+  status.setAttribute("role", "status");
+  const allow = element("button", words.button, BUTTON_STYLE);
+  allow.addEventListener("click", () => {
+    void ask_for_permission(deps, permission).then((outcome) => {
+      status.textContent = outcome.message;
+    });
+  });
+  const close = element("button", "Close", `${BUTTON_STYLE};float:right`);
+  close.addEventListener("click", on_close);
+  panel.append(close, element("h2", words.title, "margin:0 0 .5rem;font-size:1.1rem"), status, allow);
+  if (permission === "nativeMessaging") await append_install_steps(panel);
   return panel;
 }
 
@@ -116,10 +141,10 @@ export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>)
 }
 
 // The panel sits outside the body because the help router rebuilds the body on every route change.
-export function mount_native_install(): void {
+export function mount_grant_panel(): void {
   const controller: PanelController = create_panel_controller<HTMLElement>({
-    is_wanted: () => is_native_install_hash(location.hash),
-    build: () => build_panel(() => controller.close()),
+    is_wanted: () => permission_of_grant_hash(location.hash) !== undefined,
+    build: () => build_panel(permission_of_grant_hash(location.hash)!, () => controller.close()),
     show: (panel) => document.documentElement.append(panel),
     hide: (panel) => panel.remove(),
   });

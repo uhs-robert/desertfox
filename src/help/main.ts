@@ -9,7 +9,7 @@ import type { Block } from "./blocks.ts";
 import { build_help_model } from "./model.ts";
 import type { HelpModel } from "./model.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
-import { mount_native_install } from "./native_install.ts";
+import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { parse_route } from "./route.ts";
@@ -83,4 +83,4 @@ window.addEventListener("hashchange", () => current && show_route(current.model_
 follow_theme(":root, .desertfox-help");
 follow_user_css();
 follow_settings(draw);
-mount_native_install();
+mount_grant_panel();

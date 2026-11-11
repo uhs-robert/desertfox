@@ -1,11 +1,14 @@
 import { notify } from "../background/browser_deps.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
+import { grant_hint, PERMISSIONS_OF } from "../shared/permission_grant.ts";
 
 export type ClearScope = "site" | "all";
 
 export type PageCookie = { name: string; domain: string; path: string; secure: boolean; store_id: string; first_party_domain: string; partition_key: unknown };
 
 export type ReloadClearDeps = {
+  // Both permissions the clear needs, which the user grants together.
+  has_clear_permissions: () => Promise<boolean>;
   tab_of: (tab_id: number) => Promise<{ url: string; cookie_store_id: string }>;
   // The cookies the page sends, which include the ones a parent domain set.
   cookies_sent_to: (url: string, store_id: string) => Promise<PageCookie[]>;
@@ -81,6 +84,8 @@ export function make_reload_clear(deps: ReloadClearDeps) {
   return {
     // The clear must finish before the reload, or the reload sends the old cookies. A failed cookie or cache clear stops the reload. A page that cannot clear its own storage does not: the reload goes on and a notice names what stayed.
     run: async (tab_id: number, scope: ClearScope): Promise<void> => {
+      // First, so a missing permission refuses before any step clears part of the data. A plain reload never gets here.
+      if (!(await deps.has_clear_permissions())) throw new RuntimeRefusal(`Clearing site data needs the browsingData permission. ${grant_hint("browsingData")}`);
       const target = scope === "site" ? await site_target(tab_id) : undefined;
       let stayed: string[] = [];
       try {
@@ -103,6 +108,7 @@ export function make_reload_clear(deps: ReloadClearDeps) {
 }
 
 export const browser_reload_clear_deps: ReloadClearDeps = {
+  has_clear_permissions: () => browser.permissions.contains({ permissions: [...PERMISSIONS_OF.browsingData] } as browser.permissions.Permissions),
   tab_of: async (tab_id) => {
     const tab = await browser.tabs.get(tab_id);
     if (!tab.url) throw new RuntimeRefusal("This tab has no address");
