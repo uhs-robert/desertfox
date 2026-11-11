@@ -83,6 +83,17 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     await close_tabs_with("id=p9e_mark");
   });
 
+  await run_case("open offers the visited test host as a site row of its own, first, and Tab puts its home page in the line", async () => {
+    // The cases above visited pages of the test host, but never its home page, so the host gets a site row.
+    const home = url_of("page", "p9e_one").replace(/\/page\?.*$/, "/");
+    const host = home.slice("http://".length, -1);
+    await open_line();
+    await type_in_line("open 127.0", { until: (line) => line.row_texts[0]?.includes(host) && line.row_texts[0].includes("site") });
+    await complete_in_line();
+    await wait_cmdline((line) => line.value === `open ${home} `, "the home page of the test host in the line");
+    await close_cmdline();
+  });
+
   await run_case("br opens the line filled with the page's bookmark title, and Enter renames it", async () => {
     await open_page("page", "p9e_rename", { new_tab: true });
     const url = url_of("page", "p9e_rename");

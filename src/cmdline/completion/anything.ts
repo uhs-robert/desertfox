@@ -1,5 +1,5 @@
-// The rows of the finder (`,,`): open tabs, quickmarks, bookmarks, history, recently closed tabs, then the search rows, in that order.
-// Each group ranks on its own and the groups stay in that order, so a weak hit in a higher group sits above a strong hit in a lower one. Pure.
+// The rows of the finder (`,,`): open tabs, quickmarks, bookmarks, history, recently closed tabs and visited sites, ranked as one list between the search rows.
+// The strongest hit leads whatever its group, with use (visits, an open tab) raising a score. An equal score keeps that group order. Pure.
 
 import { encode_ref } from "../../shared/anything_ref.ts";
 import type { AnythingRef } from "../../shared/anything_ref.ts";
@@ -8,10 +8,14 @@ import { rank } from "../../shared/score.ts";
 import type { Ranked } from "../../shared/score.ts";
 import type { Row } from "./sources.ts";
 import { quote_word } from "./tokenize.ts";
+import { host_of, matching_sites } from "./sites.ts";
 
 // With no query the list shows every quickmark, then this many recent tabs, `history_max` history rows and this many closed tabs.
 const RECENT_TABS = 8;
 const RECENT_CLOSED = 5;
+
+// The order an equal score keeps. A tab row has no tag.
+const FOUND_GROUPS = [undefined, "qm", "bm", "hist", "closed", "site"];
 
 export type FinderTab = { row: Row; url: string; id: number; last_used: number; current: boolean };
 
@@ -23,7 +27,7 @@ export type FinderInput = {
   engines: readonly EngineItem[];
 };
 
-const url_row = (title: string, url: string, tag: string, ref: AnythingRef, usage: string): Row => ({
+const url_row = (title: string, url: string, tag: string, ref: AnythingRef, usage: string, boost?: number): Row => ({
   name: title,
   insert: `${quote_word(url)} `,
   description: url,
@@ -33,6 +37,7 @@ const url_row = (title: string, url: string, tag: string, ref: AnythingRef, usag
   usage,
   tag,
   ref: encode_ref(ref),
+  ...(boost ? { boost } : {}),
 });
 
 // The first word is an engine's keyword and a space and more text follow. The comparison is case-sensitive, as the keyword is.
@@ -54,10 +59,10 @@ function search_rows(word: string, engines: readonly EngineItem[], usage: string
   };
 }
 
-const tab_with_ref = (tab: FinderTab): Row => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }) });
-const closed_row = (entry: AnythingItems["closed"][number], usage: string) => url_row(entry.title, entry.url, "closed", { kind: "closed", session_id: entry.session_id }, usage);
-const history_row = (entry: AnythingItems["history"][number], usage: string) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage);
-const quickmark_row = (mark: AnythingItems["quickmarks"][number], usage: string) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage);
+const tab_with_ref = (tab: FinderTab, boost?: number): Row => ({ ...tab.row, ref: encode_ref({ kind: "tab", id: tab.id }), ...(boost ? { boost } : {}) });
+const closed_row = (entry: AnythingItems["closed"][number], usage: string) => url_row(entry.title, entry.url, "closed", { kind: "closed", session_id: entry.session_id }, usage, entry.boost);
+const history_row = (entry: AnythingItems["history"][number], usage: string) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage, entry.boost);
+const quickmark_row = (mark: AnythingItems["quickmarks"][number], usage: string) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage, mark.boost);
 
 // Only the rows the list shows claim an address, so a page that a hidden group also holds still shows. The line's own tab claims its address, so its page is not offered again.
 // A closed tab claims its address before history, so it wins over the history row.
@@ -89,10 +94,13 @@ export function anything_ranked({ word, usage, tabs, items, engines }: FinderInp
   const seen = new Set(tabs.map((tab) => tab.url));
   const fresh = <Entry extends { url: string }>(entries: readonly Entry[]): Entry[] => entries.filter((entry) => !seen.has(entry.url) && seen.add(entry.url));
   const quickmarks = fresh(items.quickmarks).map((mark) => quickmark_row(mark, usage));
-  const bookmarks = fresh(items.bookmarks).map((bookmark) => url_row(bookmark.title, bookmark.url, "bm", { kind: "page", url: bookmark.url }, usage));
+  const bookmarks = fresh(items.bookmarks).map((bookmark) => url_row(bookmark.title, bookmark.url, "bm", { kind: "page", url: bookmark.url }, usage, bookmark.boost));
   const closed = fresh(items.closed).map((entry) => closed_row(entry, usage));
   const history = fresh(items.history).map((entry) => history_row(entry, usage));
+  // The background left out a site whose home page it sent as a row. A tab can still hold it.
+  const sites = matching_sites(word, items.sites, (url) => seen.has(url)).map((site) => url_row(host_of(site), site.url, "site", { kind: "page", url: site.url }, usage, site.boost));
+  const found = [...tabs.map((tab) => tab_with_ref(tab, items.tab_boost[tab.id])), ...quickmarks, ...bookmarks, ...history, ...closed, ...sites];
   // The keyword row goes first, so the highlighted row and Enter search the engine the user named.
   const { keyword, fallback } = search_rows(word, engines, usage);
-  return [...as_ranked(keyword ? [keyword] : []), ...rank(word, tabs.map(tab_with_ref)), ...rank(word, quickmarks), ...rank(word, bookmarks), ...rank(word, history), ...rank(word, closed), ...as_ranked([fallback])];
+  return [...as_ranked(keyword ? [keyword] : []), ...rank(word, found, (row) => FOUND_GROUPS.indexOf(row.tag)), ...as_ranked([fallback])];
 }

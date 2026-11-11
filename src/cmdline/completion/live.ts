@@ -19,7 +19,7 @@ export type LiveDeps = {
   on_ready: () => void;
 };
 
-const empty_items = (kind: FetchedKind): CompleteItemsAnswer["items"] => (kind === "open" ? { rows: [], history_max: 0 } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : []);
+const empty_items = (kind: FetchedKind): CompleteItemsAnswer["items"] => (kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : []);
 
 export function create_live_source(deps: LiveDeps) {
   const cache: { [Kind in FetchedKind]?: LiveItems[Kind] } = {};

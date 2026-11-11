@@ -37,6 +37,8 @@ const tab = (id: number, title: string, url: string, extra: Partial<TabItem> = {
 const TABS: TabItem[] = [tab(1, "Current page", "https://current.test/", { active: true }), tab(2, "Alpha notes", "https://alpha.test/"), tab(3, "Beta notes", "https://beta.test/")];
 const ITEMS: AnythingItems = {
   tab_used: { 1: 900, 2: 100, 3: 500 },
+  tab_boost: {},
+  sites: [],
   quickmarks: [
     { key: "a", url: "https://alpha.test/" },
     { key: "n", url: "https://notes.test/" },
@@ -90,18 +92,37 @@ test("empty query: quickmarks, tabs by last use without the current one, history
   assert.equal(session.get_selected(), -1);
 });
 
-test("typed query: groups keep their order and an address shows once, as the first group that holds it", async () => {
+test("typed query: one ranked list, an equal score keeps the group order, and an address shows once, as the first group that holds it", async () => {
   const { session, type } = make();
   await type("notes");
+  // The `n` quickmark matches on its address only, so it falls below the title hits. The equal title hits keep the old order: tabs, bookmarks, history, closed tabs.
   assert.deepEqual(names(session.get_rows()), [
     "tab:3: Beta notes",
     "tab:2: Alpha notes",
-    "qm:n",
     "bm:Other notes",
     "hist:History notes",
     "closed:Closed notes",
+    "qm:n",
     "search:Search: notes",
   ]);
+});
+
+test("typed query: a strong history hit leads a weak tab hit, and use raises a row past an equal hit", () => {
+  const input = { usage: "", engines: ENGINES, tabs: [{ row: { name: "1: Digital tools", insert: "", description: "https://mail.test/", args: "", also_named: [], keywords: [], usage: "" }, url: "https://mail.test/", id: 1, last_used: 0, current: false }] };
+  const items: AnythingItems = { ...ITEMS, tab_boost: {}, quickmarks: [], bookmarks: [], closed: [], history: [{ title: "git", url: "https://git.test/" }, { title: "A git page", url: "https://a.test/" }, { title: "B git page", url: "https://b.test/", boost: 0.3 }] };
+  assert.deepEqual(names(anything_ranked({ ...input, items, word: "git" })), ["hist:git", "hist:B git page", "hist:A git page", "tab:1: Digital tools", "search:Search: git"]);
+});
+
+test("typed query: a visited host gives a site row that ranks by its use, unless a tab holds its home page", () => {
+  const items: AnythingItems = { ...ITEMS, quickmarks: [], bookmarks: [], closed: [], history: [{ title: "Pull requests", url: "https://github.com/pulls" }], sites: [{ url: "https://github.com/", boost: 0.6 }, { url: "https://www.gitlab.com/", boost: 0.2 }] };
+  const input = { usage: "", engines: ENGINES, tabs: [], items };
+  const rows = anything_ranked({ ...input, word: "git" });
+  assert.deepEqual(names(rows), ["site:github.com", "site:www.gitlab.com", "hist:Pull requests", "search:Search: git"]);
+  assert.deepEqual(ref_of(rows[0]), { kind: "page", url: "https://github.com/" });
+  // One letter is too short for a site row.
+  assert.deepEqual(names(anything_ranked({ ...input, word: "g" })), ["hist:Pull requests", "search:Search: g"]);
+  const tab_row = { name: "1: GitHub", insert: "", description: "https://github.com/", args: "", also_named: [], keywords: [], usage: "" };
+  assert.deepEqual(names(anything_ranked({ ...input, items: { ...items, tab_boost: { 1: 0.3 } }, tabs: [{ row: tab_row, url: "https://github.com/", id: 1, last_used: 0, current: false }], word: "git" })), ["tab:1: GitHub", "site:www.gitlab.com", "hist:Pull requests", "search:Search: git"]);
 });
 
 test("the first row is highlighted as the user types and the last row searches the default engine", async () => {

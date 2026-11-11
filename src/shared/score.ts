@@ -15,10 +15,13 @@ const NAME_HIT_BONUS = 8;
 const DESCRIPTION_WEIGHT = 0.6;
 const KEYWORD_WEIGHT = 0.5;
 const EXACT_NAME_BONUS = 1000;
+// The most a usage `boost` raises a hit, as a fraction of its score.
+export const MAX_BOOST = 0.6;
 
 // `also_named` holds other names the user may type for the same thing, such as the dotted id behind a family word.
 // They count as name hits but show no highlight, since the list shows `name`.
-export type Candidate = { name: string; also_named?: readonly string[]; description?: string; keywords?: readonly string[] };
+// `boost` is opt-in: how much use (visits, an open tab) raises a hit, from 0 to `MAX_BOOST`. It never makes a miss a hit.
+export type Candidate = { name: string; also_named?: readonly string[]; description?: string; keywords?: readonly string[]; boost?: number | undefined };
 
 export type Ranked<Item> = Item & { positions: number[] };
 
@@ -106,20 +109,22 @@ export function score_candidate(query: string, candidate: Candidate): Hit | null
     score += best;
     if (in_name && in_name.score + NAME_HIT_BONUS === best) positions.push(...in_name.positions);
   }
+  // Scaled by the size of the score, so a gappy hit with a negative score still rises. Before the exact bonus, so use never outranks an exact name.
+  if (candidate.boost) score += Math.abs(score) * Math.min(candidate.boost, MAX_BOOST);
   const typed = query.trim().toLowerCase();
   if ([candidate.name, ...(candidate.also_named ?? [])].some((name) => name.toLowerCase() === typed)) score += EXACT_NAME_BONUS;
   return { score, positions };
 }
 
-// Best first. A tie goes to the shorter name, then to the order of the source. An empty query keeps the source order.
-export function rank<Item extends Candidate>(query: string, items: readonly Item[]): Ranked<Item>[] {
+// Best first. A tie goes to the lower `group_of` when the caller ranks several groups as one list, then to the shorter name, then to the order of the source. An empty query keeps the source order.
+export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0): Ranked<Item>[] {
   if (query.trim() === "") return items.map((item) => ({ ...item, positions: [] }));
   const hits: { item: Item; hit: Hit; order: number }[] = [];
   items.forEach((item, order) => {
     const hit = score_candidate(query, item);
     if (hit) hits.push({ item, hit, order });
   });
-  hits.sort((left, right) => right.hit.score - left.hit.score || left.item.name.length - right.item.name.length || left.order - right.order);
+  hits.sort((left, right) => right.hit.score - left.hit.score || group_of(left.item) - group_of(right.item) || left.item.name.length - right.item.name.length || left.order - right.order);
   return hits.map(({ item, hit }) => ({ ...item, positions: hit.positions }));
 }
 

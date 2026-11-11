@@ -163,6 +163,7 @@ export async function open_many(ctx: CommandContext, urls: readonly string[], wh
 export { pick_by };
 export type { Pickable };
 
-export function pick_entry<Entry extends { title: string; url: string }>(entries: readonly Entry[], text: string, noun: string): Entry {
-  return pick_by(entries, text, noun, (entry) => ({ key: entry.url, name: entry.title, description: entry.url }), (entry) => `"${entry.title}" (${entry.url})`, "the address");
+// The boost ranks as in the list, so Enter on a typed word picks the row the list shows first.
+export function pick_entry<Entry extends { title: string; url: string; boost?: number }>(entries: readonly Entry[], text: string, noun: string): Entry {
+  return pick_by(entries, text, noun, (entry) => ({ key: entry.url, name: entry.title, description: entry.url, boost: entry.boost }), (entry) => `"${entry.title}" (${entry.url})`, "the address");
 }
