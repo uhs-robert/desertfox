@@ -12,6 +12,10 @@ import { create_macro_recorder } from "../../src/background/macro_recorder.ts";
 type FakeWatch = PageWatch & { tab_id: number; stopped: boolean; navigate: () => void; answer: (ready: PageReady) => void };
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+// Long enough for the whole grace window, whose pauses each take one turn.
+const settle_grace = async () => {
+  for (let turn = 0; turn < 40; turn++) await settle();
+};
 
 function make(macros: Record<string, BoundInvocation[]>, options: { real_timer?: boolean } = {}) {
   const log: string[] = [];
@@ -22,13 +26,20 @@ function make(macros: Record<string, BoundInvocation[]>, options: { real_timer?:
   let active = 1;
   const loading = new Set<number>();
   // What each step does when it runs: by default it is done at once.
-  const effects: Record<string, (place: StepPlace) => RunResponse | Promise<RunResponse> | void> = {};
+  const effects: Record<string, (place: StepPlace, lost_reply: (() => Promise<boolean>) | undefined) => RunResponse | Promise<RunResponse> | void> = {};
+  // Each grace poll lands here, so a test can start a navigation partway through the grace window. The pause itself is instant.
+  const pauses = { count: 0, on_pause: undefined as undefined | ((count: number) => void) };
   const deps: MacroReplayDeps = {
     read_macro: async (register) => macros[register],
-    run_step: async (step, place) => {
+    run_step: async (step, place, lost_reply) => {
       log.push(`run ${step.id} in ${place.tab_id}:${place.frame_id}`);
       steps_run.push(step);
-      return (await effects[step.id]?.(place)) ?? { ok: true };
+      return (await effects[step.id]?.(place, lost_reply)) ?? { ok: true };
+    },
+    sleep: async () => {
+      pauses.count++;
+      pauses.on_pause?.(pauses.count);
+      await new Promise<void>((resolve) => setImmediate(resolve));
     },
     active_tab_id: async () => active,
     is_loading: async (tab_id) => loading.has(tab_id),
@@ -62,7 +73,7 @@ function make(macros: Record<string, BoundInvocation[]>, options: { real_timer?:
   const release_turns = () => turns.splice(0).forEach((resolve) => resolve());
   const replay = create_macro_replay(deps);
   const start: ReplayStart = { register: "a", tab_id: 1, frame_id: 3, mode: "normal", is_private: false };
-  return { replay, log, watches, effects, start, loading, steps_run, pointers, macros, turns, gate, deps, release_turns, switch_to: (tab_id: number) => (active = tab_id) };
+  return { replay, log, watches, effects, pauses, start, loading, steps_run, pointers, macros, turns, gate, deps, release_turns, switch_to: (tab_id: number) => (active = tab_id) };
 }
 
 test("a replay holds keys in its tab, runs each step in the sender frame, and its end answers ok", async () => {
@@ -538,4 +549,107 @@ test("nested counts end at the pass budget like a failed step, with a notice and
   assert.equal(replay.is_playing(), false);
   assert.equal(turns.length, 0);
   assert.ok(watches.every((watch) => watch.stopped));
+});
+
+const refused_unloaded = { ok: false, refusal: { id: "hint.run", message: "Pick a link needs a page DesertFox runs on" } } as const;
+
+test("a pick that answers before the tab reports loading still waits for the new page", async () => {
+  const { replay, log, watches, effects, pauses, start } = make({ a: [{ id: "hint.run" }, { id: "hint.run" }] });
+  effects["hint.run"] = () => {
+    const watch = watches.at(-1)!;
+    pauses.on_pause = (count) => count === 3 && watch.navigate();
+  };
+  const played = replay.play(start);
+  await settle_grace();
+  assert.deepEqual(log, ["hold 1", "run hint.run in 1:3", "wait 1"]);
+  watches[0]!.answer("ready");
+  await settle_grace();
+  assert.equal(log.filter((line) => line.startsWith("run hint.run")).length, 2);
+  assert.ok(log.indexOf("wait 1") < log.lastIndexOf("run hint.run in 1:3"), "the second pick ran before the first pick's page was ready");
+  assert.equal(await played, true);
+});
+
+test("a pick whose reply the unload ate counts as done when the tab then navigates, with no refusal", async () => {
+  const { replay, log, watches, effects, pauses, start } = make({ a: [{ id: "hint.run" }, { id: "scroll.lines" }] });
+  effects["hint.run"] = async (_place, lost_reply) => {
+    const watch = watches.at(-1)!;
+    pauses.on_pause = (count) => count === 2 && watch.navigate();
+    return (await lost_reply?.()) ? { ok: true } : refused_unloaded;
+  };
+  const played = replay.play(start);
+  await settle_grace();
+  assert.deepEqual(log, ["hold 1", "run hint.run in 1:3", "wait 1"]);
+  watches[0]!.answer("ready");
+  assert.equal(await played, true);
+  assert.deepEqual(log, ["hold 1", "run hint.run in 1:3", "wait 1", "hold 1", "run scroll.lines in 1:3"]);
+  assert.ok(!log.some((line) => line.startsWith("refuse")));
+});
+
+test("a lost reply with no navigation after it stays a failure", async () => {
+  const { replay, effects, start } = make({ a: [{ id: "hint.run" }, { id: "after" }] });
+  let verdict: boolean | undefined;
+  effects["hint.run"] = async (_place, lost_reply) => {
+    verdict = await lost_reply?.();
+    return verdict ? { ok: true } : refused_unloaded;
+  };
+  assert.equal(await replay.play(start), false);
+  assert.equal(verdict, false);
+});
+
+test("a same-document navigation waits a short settle, then goes on without a load wait", async () => {
+  const { replay, log, effects, watches, pauses, start } = make({ a: [{ id: "hint.run" }, { id: "scroll.lines" }] });
+  effects["hint.run"] = () => {
+    watches.at(-1)!.navigate();
+    // The tab never reads loading, so the page-ready wait answers at once.
+    watches.at(-1)!.answer("ready");
+  };
+  assert.equal(await replay.play(start), true);
+  assert.ok(pauses.count >= 1, "no settle pause after the url change");
+  assert.deepEqual(log.slice(0, 4), ["hold 1", "run hint.run in 1:3", "wait 1", "hold 1"]);
+});
+
+test("a load slower than the timeout still stops the replay after a late-seen navigation", async () => {
+  const { replay, log, watches, effects, pauses, start } = make({ a: [{ id: "hint.run" }, { id: "scroll.lines" }] });
+  effects["hint.run"] = () => {
+    const watch = watches.at(-1)!;
+    pauses.on_pause = (count) => count === 2 && watch.navigate();
+  };
+  const played = replay.play(start);
+  await settle_grace();
+  watches[0]!.answer("timeout");
+  assert.equal(await played, false);
+  assert.equal(log.at(-1), "refuse 1 The page did not load within 10 seconds, so the macro stopped");
+  assert.ok(!log.includes("run scroll.lines in 1:3"));
+});
+
+test("a pick that navigates nowhere waits only the grace window", async () => {
+  const { replay, log, pauses, start } = make({ a: [{ id: "hint.run" }, { id: "scroll.lines" }] });
+  assert.equal(await replay.play(start), true);
+  assert.ok(pauses.count > 0 && pauses.count <= 20, `grace polled ${pauses.count} times`);
+  assert.deepEqual(log, ["hold 1", "run hint.run in 1:3", "run scroll.lines in 1:3"]);
+});
+
+test("a step that is not a pick takes no grace wait", async () => {
+  const { replay, pauses, start } = make({ a: [{ id: "scroll.lines" }, { id: "scroll.lines" }] });
+  assert.equal(await replay.play(start), true);
+  assert.equal(pauses.count, 0);
+});
+
+test("a pick whose action cannot navigate this tab takes no grace wait, and page.follow and a default or here pick do", async () => {
+  const cases: [BoundInvocation, boolean][] = [
+    [{ id: "hint.run", args: { action: "tab" } }, false],
+    [{ id: "hint.run", args: { action: "background" } }, false],
+    [{ id: "hint.run", args: { action: "window" } }, false],
+    [{ id: "hint.run", args: { action: "copy" } }, false],
+    [{ id: "hint.run", args: { action: "hover" } }, false],
+    [{ id: "hint.run", args: { action: "here" } }, true],
+    [{ id: "hint.run", args: { action: "double_click" } }, true],
+    [{ id: "hint.run", args: { filter: "links" } }, true],
+    [{ id: "page.follow", args: { direction: "next" } }, true],
+  ];
+  for (const [step, pays] of cases) {
+    const { replay, pauses, start } = make({ a: [step] });
+    assert.equal(await replay.play(start), true);
+    assert.equal(pauses.count > 0, pays, JSON.stringify(step));
+  }
 });

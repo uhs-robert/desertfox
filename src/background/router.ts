@@ -53,6 +53,8 @@ export type RouteRequest = {
   skip_repeat?: boolean;
   // Set by a macro replay: page steps run as a held key's repeats do, so a scroll jumps and a mark after it saves where it ended.
   instant?: boolean;
+  // Asked when a content step gets no reply because the page unloaded. True means the step did its work and the page left, so it is done.
+  lost_reply_is_done?: () => Promise<boolean>;
 };
 
 export type Router = { run: (request: RouteRequest) => Promise<RunResponse> };
@@ -151,7 +153,7 @@ export function create_router(deps: RouterDeps): Router {
     // The handler gets the rechecked args, with a kept marker back as its empty text.
     const final_args = Object.fromEntries(Object.entries(rechecked.args).map(([name, value]) => [name, is_context_source(value) ? filled.args[name] : value]));
 
-    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request.instant === true);
+    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request.instant === true, request.lost_reply_is_done);
     for (let time = 0; time < counted.times; time++) {
       const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
@@ -170,13 +172,14 @@ export function create_router(deps: RouterDeps): Router {
     return undefined;
   }
 
-  async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, instant: boolean): Promise<Outcome> {
+  async function run_in_content(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, instant: boolean, lost_reply_is_done?: () => Promise<boolean>): Promise<Outcome> {
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     const invocations = Array.from({ length: times }, () => ({ id: command.id, args, ...(command.bundle && { bundle: command.bundle }) }));
     try {
       return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations, ...(instant && { repeat: true as const }) }, frame_id));
     } catch {
+      if (await lost_reply_is_done?.().catch(() => false)) return done;
       return refuse(`${command.label} needs a page DesertFox runs on`);
     }
   }

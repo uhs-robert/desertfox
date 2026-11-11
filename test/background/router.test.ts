@@ -658,3 +658,21 @@ test("a bookmark_title prefill types the title of the page's bookmark, and nothi
   await create_router(none.deps).run({ invocations: [binding], mode: "normal", may_prompt: true });
   assert.deepEqual(none.log, ["cmdline 7 0 bookmark.rename "]);
 });
+
+test("a lost reply is done when the caller says the tab navigated, and refuses when it says no or throws", async () => {
+  const cases: [string, () => Promise<boolean>, boolean][] = [
+    ["navigated", async () => true, true],
+    ["did not navigate", async () => false, false],
+    ["threw", async () => Promise.reject(new Error("gone")), false],
+  ];
+  for (const [name, lost_reply_is_done, is_done] of cases) {
+    const log: string[] = [];
+    const { deps } = make_fake(
+      { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } },
+      { send_to_tab: async () => { throw new Error("page unloaded"); }, show_refusal: async (_tab_id, refusal) => void log.push(refusal.message) },
+    );
+    const response = await create_router(deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1, lost_reply_is_done });
+    assert.equal(response.ok, is_done, name);
+    assert.deepEqual(log, is_done ? [] : ["Scroll needs a page DesertFox runs on"], name);
+  }
+});
