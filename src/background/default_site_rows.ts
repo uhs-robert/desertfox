@@ -8,13 +8,26 @@ export type DefaultSiteRow = { name: (typeof DEFAULT_SITE_ROW_NAMES)[number]; ro
 
 // Sheets reads the key code of a keydown and ignores the rest, so hjkl send the arrow keys to its grid editor.
 const SHEETS_TARGET = "#waffle-rich-text-editor";
-const arrow = (key: string, key_code: number): BindingTable[string] => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET } });
-const SHEETS_BIND: BindingTable = { h: arrow("ArrowLeft", 37), j: arrow("ArrowDown", 40), k: arrow("ArrowUp", 38), l: arrow("ArrowRight", 39) };
+const arrow = (key: string, key_code: number, ctrl = false): BindingTable[string] => ({ id: "page.send_key", args: { key, key_code, target: SHEETS_TARGET, ...(ctrl ? { ctrl } : {}) } });
+const SHEETS_BIND: BindingTable = {
+  h: arrow("ArrowLeft", 37),
+  j: arrow("ArrowDown", 40),
+  k: arrow("ArrowUp", 38),
+  l: arrow("ArrowRight", 39),
+  // Ctrl+arrow jumps to the edge of the data, Ctrl+Home to A1.
+  gg: arrow("Home", 36, true),
+  "<C-h>": arrow("ArrowLeft", 37, true),
+  "<C-j>": arrow("ArrowDown", 40, true),
+  "<C-k>": arrow("ArrowUp", 38, true),
+  "<C-l>": arrow("ArrowRight", 39, true),
+};
+// Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list both keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave both keys out.
+const SHEETS_PASS = "<C-a> <C-x>";
 
 // The second pattern is the address form of a Google Workspace domain.
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
-  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND } },
-  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND } },
+  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS } },
+  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): SiteRuleRow[] => rows.filter(({ name }) => !off_names.includes(name)).map(({ row }) => row);
