@@ -17,14 +17,16 @@ const TABS: TabInfo[] = [
   { id: 40, windowId: 1, title: "Odd", url: "https://odd.example/" },
 ];
 
-function make(options: { windows?: WindowInfo[]; tabs?: TabInfo[]; fail?: Set<string> } = {}) {
+function make(options: { windows?: WindowInfo[]; tabs?: TabInfo[]; fail?: Set<string>; fail_once?: Set<string> } = {}) {
   const calls: string[] = [];
   const timers: { run: () => void; delay_ms: number }[] = [];
   const windows = options.windows ?? WINDOWS;
   const tabs = options.tabs ?? TABS;
   const fail = options.fail ?? new Set<string>();
+  const fail_once = options.fail_once ?? new Set<string>();
   const step = (name: string) => {
     calls.push(name);
+    if (fail_once.delete(name)) throw new Error("failed once");
     if (fail.has(name.split(" ")[0]!)) throw new Error('Tab "Secret bank" failed');
   };
   const gates: (() => void)[] = [];
@@ -182,4 +184,11 @@ test("a clear that arrives while a newer activation is still writing its title w
   assert.deepEqual(await clear, { ok: true, cleared: false });
   assert.equal((await second).ok, true);
   assert.equal(test_case.calls.filter((call) => call === 'preface 1 ""').length, 0);
+});
+
+test("a clear whose title write fails keeps the preface, so the timer clear still clears it", async () => {
+  const test_case = make({ fail_once: new Set(['preface 1 ""']) });
+  await test_case.tab_switch.handle("activate", { tab_id: 10, preface: "aaa" });
+  assert.deepEqual(await test_case.tab_switch.handle("clear_preface", { window_id: 1, preface: "aaa" }), { ok: false, message: "clear_preface failed" });
+  assert.deepEqual(await test_case.tab_switch.handle("clear_preface", { window_id: 1, preface: "aaa" }), { ok: true, cleared: true });
 });

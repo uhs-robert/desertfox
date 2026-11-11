@@ -131,8 +131,8 @@ export function create_tab_switch(deps: TabSwitchDeps) {
     if (!is_whole(window_id) || (preface !== undefined && !(typeof preface === "string" && PREFACE_PATTERN.test(preface)))) return refuse("clear_preface needs a window_id and, optionally, the preface");
     if (!is_normal_window(await deps.window(window_id).catch(() => undefined))) return refuse("no such window");
     if (preface !== undefined && prefaces.get(window_id) !== preface) return { ok: true, cleared: false };
-    prefaces.delete(window_id);
     await deps.set_preface(window_id, "");
+    prefaces.delete(window_id);
     return { ok: true, cleared: true };
   }
 

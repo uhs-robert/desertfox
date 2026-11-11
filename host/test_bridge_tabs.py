@@ -84,7 +84,7 @@ class ActivateAndCloseTest(BridgeTestCase):
         host = self.start()
         bad = [
             {"verb": "activate"}, {"verb": "activate", "tab_id": "1"}, {"verb": "activate", "tab_id": True}, {"verb": "activate", "tab_id": 1.5},
-            {"verb": "close"}, {"verb": "close", "tab_id": None},
+            {"verb": "close"}, {"verb": "close", "tab_id": None}, {"verb": "run", "command": "tab.next", "tab_id": None},
             {"verb": "activate", "tab_id": 1, "preface": ""}, {"verb": "activate", "tab_id": 1, "preface": "a b"}, {"verb": "activate", "tab_id": 1, "preface": "x" * 33}, {"verb": "activate", "tab_id": 1, "preface": 5},
             {"verb": "clear_preface"}, {"verb": "clear_preface", "window_id": "1"}, {"verb": "clear_preface", "window_id": 1, "preface": "a;b"},
             {"verb": "run", "command": "tab.next", "tab_id": "1"}, {"verb": "run", "command": "tab.next", "tab_id": True},
@@ -251,7 +251,7 @@ class ThumbnailCleanupTest(BridgeTestCase):
 
     def test_an_answer_that_sharing_is_off_deletes_the_thumbnails_and_the_client_sees_no_extra_field(self):
         host = self.start()
-        for request in ({"verb": "tabs"}, {"verb": "capture"}):
+        for request in ({"verb": "tabs"}, {"verb": "capture"}, {"verb": "close", "tab_id": 10}, {"verb": "activate", "tab_id": 10}, {"verb": "clear_preface", "window_id": 1}, {"verb": "run", "command": "tab.next", "tab_id": 10}):
             kept = self.seed("https://kept.example/", 60)
             client = Client(self.socket_path, request)
             host.send({"verb": "reply", "request_id": host.read_request()["request_id"], **OFF, "sharing": "off"})

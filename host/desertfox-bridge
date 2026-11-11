@@ -291,6 +291,7 @@ class ExtensionLink:
                 return {"ok": False, "message": "the extension is not connected"}
             if not waiting.done.wait(timeout_s):
                 return {"ok": False, "message": "the extension did not answer in time"}
+            forget_thumbnails_if_sharing_off(waiting.reply)
             return waiting.reply
         finally:
             with self.pending_guard:
@@ -426,7 +427,6 @@ def listed_tabs(reply):
 
 
 def tabs_result(reply):
-    forget_thumbnails_if_sharing_off(reply)
     if reply.get("ok") is not True:
         return run_result(reply)
     tabs = listed_tabs(reply)
@@ -467,7 +467,6 @@ def capture(link, request):
     asked for, so the cache never holds an image of a tab the extension did not list as a normal one."""
     tab_ids = request.get("tab_ids")
     listed = link.ask("tabs", {}, REQUEST_TIMEOUT_S)
-    forget_thumbnails_if_sharing_off(listed)
     if listed.get("ok") is not True:
         return run_result(listed)
     tabs = listed_tabs(listed)
@@ -522,11 +521,11 @@ def answer(request, state, link, limiter):
         if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
             return {"ok": False, "message": "run needs a command text"}
         tab_id = request.get("tab_id")
-        if tab_id is not None and not is_int(tab_id):
+        if "tab_id" in request and not is_int(tab_id):
             return {"ok": False, "message": "tab_id is a whole number"}
         if not limiter.admit():
             return RATE_LIMITED
-        fields = {"command": command} if tab_id is None else {"command": command, "tab_id": tab_id}
+        fields = {"command": command, "tab_id": tab_id} if "tab_id" in request else {"command": command}
         return run_result(link.ask("run", fields, REQUEST_TIMEOUT_S))
     if verb == "list":
         if not limiter.admit():

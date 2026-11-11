@@ -32,8 +32,8 @@ EXIT_USAGE = 2
 EXIT_NO_BRIDGE = 3
 # The host gives up on the extension after 10 s, so a reply always comes before this.
 TIMEOUT_S = 15
-# Capture renders one tab at a time, up to 5 s each.
-CAPTURE_TIMEOUT_S = 120
+# The host waits 10 s for the tab list, then up to 5 s for each of 64 tabs.
+CAPTURE_TIMEOUT_S = 345
 
 USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]

@@ -31,8 +31,8 @@ class Host:
 
     def __init__(self, runtime_dir, wait_ready=True, cache_home=None):
         env = dict(os.environ, XDG_RUNTIME_DIR=runtime_dir)
-        if cache_home is not None:
-            env["XDG_CACHE_HOME"] = cache_home
+        # Never the real cache: a host that starts without one prunes whatever cache_home holds.
+        env["XDG_CACHE_HOME"] = cache_home if cache_home is not None else os.path.join(runtime_dir, "cache")
         self.process = subprocess.Popen([sys.executable, HOST_PATH], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         self.ready = self.read_ready() if wait_ready else None
 
