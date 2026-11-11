@@ -56,6 +56,8 @@ export const SETTINGS_TABLE = {
   hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
+  // Each frame resolves it against its own address. Set it only for sites whose editor handles Escape itself: in a field, insert mode then keeps Escape for the page and ends when the page drops the field.
+  escape_to_page: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
   // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. It binds normal-mode keys and runs before `pass` and `only` prune the tree.
   // `off = true` turns every normal-mode key off, and so does a row that sets nothing but `site`.

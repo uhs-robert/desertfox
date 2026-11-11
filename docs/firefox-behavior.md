@@ -194,6 +194,7 @@ Measured on Google's public sample sheet in view mode, in headless Firefox 160, 
 - While a cell is only selected, the box sits at `top: -10000px` from the stylesheet, and the editor is empty with an `offsetWidth` of 0. Arrow keys move the selection and change none of this.
 - Enter or F2 starts an edit. Sheets then sets `left`, `top` and `min-width` inline on the box, so the editor sits over the cell with the cell's width. The key that ends the edit clears the inline style and the text.
 - No focus event fires at either end of an edit.
+- Sheets cancels an edit on an Escape keydown that reaches its handler. Not measured on a sheet with edit rights: the shipped rows turn on `escape_to_page` on the assumption that it does, and the owner check on a real sheet confirms it.
 - The class `editable` is no signal: Sheets adds it at the first edit and never removes it. In view mode `contenteditable` turns `false` at the first edit and stays so.
 
 ## Permissions (optional-permissions)

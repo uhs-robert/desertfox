@@ -1,8 +1,11 @@
 // Key cases for a cell editor that always holds the focus: it takes typing only while a cell is being edited.
 // /cell_editor stands in for Google Sheets. Its editor is parked off screen with no width until an edit starts, and no focus event marks the start or the end of an edit.
-export const areas = ["keys"];
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 
-export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
+export const areas = ["keys", "config"];
+
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
   const page_id = "p15_cell_editor";
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const editor_text = () => in_active_tab(`document.getElementById("waffle-rich-text-editor").textContent`);
@@ -11,7 +14,7 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     let seen;
     await poll_until(`the ${label} badge`, async () => (seen = await badge()) === label, { timeout_ms: 3000, expected_timeout: true }).catch(() => expect(false, `the badge is ${seen}, expected ${label}`));
   }
-  const page_sees = (mark, key) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === page_id, `the page to see ${key}`);
+  const page_sees = (mark, key, seen_page_id = page_id) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === seen_page_id, `the page to see ${key}`);
   async function expect_j_scrolls(when) {
     expect((await scroll_delta_by_press(page_id, ["j"])) > 0, `j did not scroll ${when}`);
     expect((await editor_text()) === "", `the parked editor holds "${await editor_text()}" ${when}`);
@@ -80,4 +83,60 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
       expect((await frame_text()) === text_before, `j was typed into the frame with ${what}`);
     });
   }
+
+  // escape_to_page: the pages with this id prefix get the row, the page above gets none.
+  await setup("load a config with an escape_to_page row for the p15_escape_ pages", async () => {
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=p15_escape_*"\nescape_to_page = true\n');
+    await load_config_dir(dir);
+  });
+
+  const start_edit_by_enter = async (seen_page_id = page_id) => {
+    const mark = events.length;
+    await press_keys("-k", "Return");
+    await page_sees(mark, "Enter", seen_page_id);
+    await expect_badge("INSERT");
+  };
+
+  await run_case("without an escape_to_page row, Escape in a cell edit is swallowed and the edit stays", async () => {
+    await open_page("cell_editor", page_id, { new_tab: true });
+    await start_edit_by_enter();
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    // DesertFox took the Escape and blurred the editor, so the page never saw it.
+    expect((await in_active_tab(`document.getElementById("box").style.top`)) === "100px", "the page ended the edit on a swallowed Escape");
+  });
+
+  await run_case("with an escape_to_page row, Escape reaches the page, ends the edit and returns to normal mode", async () => {
+    const row_page_id = "p15_escape_row";
+    await open_page("cell_editor", row_page_id, { new_tab: true });
+    await start_edit_by_enter(row_page_id);
+    const mark = events.length;
+    await press_keys("-k", "Escape");
+    await page_sees(mark, "Escape", row_page_id);
+    await expect_badge("NORMAL");
+    expect(await editor_holds_focus(), "the cell editor lost the focus when Escape ended the edit");
+    expect((await in_active_tab(`document.getElementById("box").style.top`)) === "-10000px", "the edit did not end");
+  });
+
+  await run_case("with an escape_to_page row, Escape in a plain input reaches the page and insert mode stays", async () => {
+    const row_page_id = "p15_escape_plain";
+    await open_page("cell_editor", row_page_id, { new_tab: true });
+    await in_active_tab(`document.getElementById("plain").focus(); 0`);
+    await expect_badge("INSERT");
+    const mark = events.length;
+    await press_keys("-k", "Escape");
+    await page_sees(mark, "Escape", row_page_id);
+    await expect_badge("INSERT");
+  });
+
+  await run_case("<A-Escape> sends Escape to the page from insert mode on a page with no row", async () => {
+    await open_page("cell_editor", page_id, { new_tab: true });
+    await start_edit_by_enter();
+    const mark = events.length;
+    await press_keys("-M", "alt", "-k", "Escape", "-m", "alt");
+    await wait_event(mark, (event) => event.type === "keydown" && event.key === "Escape" && event.page_id === page_id, "the page to get the sent Escape");
+    await expect_badge("NORMAL");
+    expect((await in_active_tab(`document.getElementById("box").style.top`)) === "-10000px", "the sent Escape did not end the edit");
+  });
 }

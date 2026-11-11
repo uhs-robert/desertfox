@@ -117,6 +117,14 @@ test("blur_on_load reaches a page as a site value, and a frame resolves it again
   assert.equal("frame_site_globals" in (await page_keymap_for(storage_of(compiled), top))!.keymap, false);
 });
 
+test("escape_to_page reaches a page as a site value for its own address only", async () => {
+  const compiled = compile_keymap(KEYMAP, { site_rules: [{ site: "https://top.test/*", escape_to_page: true }] }, resolve).compiled;
+  const top = rule_addresses_of({ frameId: 0, url: "https://top.test/", tab: { url: "https://top.test/" } });
+  assert.deepEqual((await page_keymap_for(storage_of(compiled), top))!.site_values, { escape_to_page: true });
+  const frame = rule_addresses_of({ frameId: 7, url: "https://embed.test/", tab: { url: "https://top.test/page" } });
+  assert.equal((await page_keymap_for(storage_of(compiled), frame))!.site_values, undefined);
+});
+
 test("the global blur_on_load reaches every page, and a site row turns it off there", async () => {
   const compiled = compile_keymap(KEYMAP, { blur_on_load: true, site_rules: [{ site: "https://quiet.test/*", blur_on_load: false }] }, resolve).compiled;
   assert.deepEqual(compiled.frame_site_globals, { blur_on_load: true });
@@ -178,6 +186,7 @@ function make_flow() {
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => false,
+    escape_to_page_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched) => ran.push(String(matched.steps[0]?.invocation.id)),
@@ -340,6 +349,22 @@ test("the shipped sheets rows bind gg and Ctrl+hjkl to Ctrl keys and free Ctrl+A
     assert.equal(tree.frees?.tokens.includes("<C-a>"), true, url);
   }
   assert.equal(await key_at(compiled, "https://example.org/", "<C-a>"), "url.increment");
+});
+
+test("the shipped sheets rows turn escape_to_page on, a user row beats it, and no other page gets it", async () => {
+  const compiled = with_defaults({});
+  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.deepEqual((await ask(compiled, url))!.site_values, { escape_to_page: true }, url);
+  assert.equal((await ask(compiled, "https://docs.google.com/document/d/abc/edit"))!.site_values, undefined);
+  const user = with_defaults({ site_rules: [{ site: "https://docs.google.com/spreadsheets/*", escape_to_page: false }] });
+  assert.equal((await ask(user, SHEETS))!.site_values, undefined);
+  assert.equal(await key_at(user, SHEETS, "j"), "ArrowDown");
+});
+
+test("the default insert keymap binds <A-Escape> to send Escape to the focused element", () => {
+  const leaf = with_defaults({}).modes.insert?.children["<A-Escape>"];
+  assert.equal(leaf?.kind, "leaf");
+  const invocation = leaf?.kind === "leaf" ? leaf.steps[0]!.invocation : undefined;
+  assert.deepEqual([invocation?.id, invocation?.args], ["page.send_key", { key: "Escape", key_code: 27, target: "", times: 1, ctrl: false, shift: false, alt: false, meta: false, keypress: false }]);
 });
 
 test("default_site_rows_off turns off both sheets rows", async () => {

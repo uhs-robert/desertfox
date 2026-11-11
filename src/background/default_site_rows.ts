@@ -24,10 +24,11 @@ const SHEETS_BIND: BindingTable = {
 // Select all and Cut are Sheets' own, so url.increment must not take <C-a> and <C-x> on Sheets. A user Sheets row that sets `pass` replaces this column, so it must list both keys to keep them. A row that sets `only` replaces it too, and there a key left out of `only` goes to the page, so it must leave both keys out.
 const SHEETS_PASS = "<C-a> <C-x>";
 
+// Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.
 // The second pattern is the address form of a Google Workspace domain.
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
-  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS } },
-  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS } },
+  { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS, escape_to_page: true } },
+  { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, pass: SHEETS_PASS, escape_to_page: true } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): SiteRuleRow[] => rows.filter(({ name }) => !off_names.includes(name)).map(({ row }) => row);

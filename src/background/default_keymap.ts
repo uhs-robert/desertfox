@@ -376,6 +376,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
   insert: {
     "<Escape>": { id: "mode.escape" },
     "<C-r>": { id: "register.paste", label: "Paste register" },
+    "<A-Escape>": { id: "page.send_key", args: { key: "Escape", key_code: 27 }, label: "Send Escape to the page" },
   },
   ignore: {
     "<S-Escape>": { id: "mode.set", args: { mode: "normal" } },
