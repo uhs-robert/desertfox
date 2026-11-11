@@ -9,6 +9,7 @@ import { recall_tab_mode } from "./tab_modes.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { create_bridge_run } from "./bridge_run.ts";
 import type { BridgeRunTarget } from "./bridge_run.ts";
+import { typed_url_target } from "../commands/open_target.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_router } from "./router.ts";
 import type { RouterDeps } from "./router.ts";
@@ -43,6 +44,7 @@ export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command
     registry,
     is_snippet,
     get_enum_sources: router_deps.get_enum_sources,
+    resolve_url: typed_url_target,
     target: focused_normal_target,
     run: (invocation, target) => router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true }),
   });

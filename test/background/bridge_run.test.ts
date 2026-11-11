@@ -6,7 +6,10 @@ import { focused_normal_target } from "../../src/background/bridge_browser.ts";
 import { create_router } from "../../src/background/router.ts";
 import { registry as built_in } from "../../src/shared/registry/builtin.ts";
 import type { Invocation } from "../../src/shared/invocation.ts";
+import { url_target } from "../../src/commands/url_build.ts";
 import { make_fake } from "./fakes.ts";
+
+const resolve_url = async (text: string) => url_target(text, "arch", { arch: { url: "https://arch.example/?q={query}" } });
 
 const NORMAL: BridgeRunTarget = { tab_id: 7, window_id: 1, url: "https://example.org/", incognito: false };
 
@@ -30,6 +33,7 @@ function make(options: { target?: BridgeRunTarget | undefined; snippets?: string
     registry,
     is_snippet: (id) => (options.snippets ?? ["snip.hello"]).includes(id),
     get_enum_sources: deps.get_enum_sources,
+    resolve_url,
     target: async () => ("target" in options ? options.target : NORMAL),
     run: (invocation, target) => (calls.push(invocation), router.run({ invocations: [invocation], mode: "normal", sender_tab_id: target.tab_id, skip_repeat: true })),
   });
@@ -84,16 +88,24 @@ test("an unknown command, an empty line, help and a broken quote are refusals", 
 
 test("open.url takes http and https only", async () => {
   const test_case = make();
-  const bypasses = ["file:///etc/passwd", "javascript:alert(1)", "about:config", "data:text/html,x", "MOZ-EXTENSION://abc/x", "ext+x:y", "java\tscript:alert(1)", "java\nscript:alert(1)", "\u0001javascript:alert(1)", "  javascript:alert(1)", "\tjavascript:alert(1)", "jav\rascript:alert(1)", "view-source:https://example.org/"];
+  const bypasses = ["file:///etc/passwd", "about:config", "MOZ-EXTENSION://abc/x", "ext+x:y", "view-source:https://example.org/", "\u00a0vscode://x", "\ufeffvscode://x", "\u2003steam://run/1", "\u00a0\ufeffabout:blank", "mailto:a@b.c", "\tvscode://x"];
   for (const address of bypasses) {
     const text = `open "${address}"`;
     const answer = await test_case.bridge_run.run(text);
     assert.deepEqual(answer, { ok: false, message: "open.url opens only http and https addresses through the bridge" }, text);
   }
   assert.deepEqual(test_case.ran, []);
+  // The handler turns these into a search of the text, so what opens is https and the run passes.
+  for (const address of ["vs\tcode://x", "data:text/html,x", "javascript:alert(1)", "java\tscript:alert(1)", "java\nscript:alert(1)", "\u0001javascript:alert(1)", "  javascript:alert(1)", "jav\rascript:alert(1)"]) {
+    assert.equal(new URL(await resolve_url(address)).protocol, "https:", address);
+    assert.deepEqual(await test_case.bridge_run.run(`open "${address}"`), { ok: true }, address);
+  }
+  test_case.ran.length = 0;
   assert.deepEqual(await test_case.bridge_run.run("open https://example.org/"), { ok: true });
   assert.deepEqual(await test_case.bridge_run.run("open HTTP://example.org/"), { ok: true });
-  assert.deepEqual(test_case.ran, ["open.url", "open.url"]);
+  // Text the handler reads as a host with a port opens as http or https, so it passes.
+  for (const address of ["localhost:8080", "nas:8080", "example.com:8080", "127.0.0.1:8080", "example.org", "some words to search"]) assert.deepEqual(await test_case.bridge_run.run(`open "${address}"`), { ok: true }, address);
+  assert.equal(test_case.ran.length, 8);
 });
 
 test("a handler refusal comes back as fixed text, never the handler's message", async () => {
@@ -101,7 +113,8 @@ test("a handler refusal comes back as fixed text, never the handler's message", 
     "tab.next": { label: "Next", intent: "x", bridge: true, runs_in: "background", run: () => { throw new Error('tab 1 exists in several windows: "Bank - statement"'); } },
   });
   const router = create_router({ ...deps, show_refusal: async () => undefined });
-  const bridge_run = create_bridge_run({ registry, is_snippet: () => false, get_enum_sources: deps.get_enum_sources, target: async () => NORMAL, run: (invocation) => router.run({ invocations: [invocation], mode: "normal", skip_repeat: true }) });
+  const bridge_run = create_bridge_run({ registry, is_snippet: () => false, get_enum_sources: deps.get_enum_sources,
+    resolve_url, target: async () => NORMAL, run: (invocation) => router.run({ invocations: [invocation], mode: "normal", skip_repeat: true }) });
   assert.deepEqual(await bridge_run.run("tab.next"), { ok: false, message: "tab.next failed" });
 });
 
@@ -140,6 +153,7 @@ test("a failure inside the command comes back as fixed text", async () => {
     registry,
     is_snippet: () => false,
     get_enum_sources: deps.get_enum_sources,
+    resolve_url,
     target: async () => NORMAL,
     run: (invocation) => router.run({ invocations: [invocation], mode: "normal", skip_repeat: true }),
   });

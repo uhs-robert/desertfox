@@ -325,7 +325,7 @@ test("a run request from the host is answered with its own request id", async ()
 test("a refusal comes back as ok false with its message, and a throw does too", async () => {
   const test_case = make({
     run_command: async (text) => {
-      if (text === "boom") throw new Error("handler broke");
+      if (text === "boom") throw new Error("handler broke on tab Bank");
       return { ok: false, message: "refused" };
     },
   });
@@ -335,7 +335,7 @@ test("a refusal comes back as ok false with its message, and a throw does too", 
   await test_case.settle();
   assert.deepEqual(replies_of(test_case.port()), [
     { verb: "reply", request_id: 1, ok: false, message: "refused" },
-    { verb: "reply", request_id: 2, ok: false, message: "handler broke" },
+    { verb: "reply", request_id: 2, ok: false, message: "the command failed" },
   ]);
 });
 

@@ -79,8 +79,9 @@ export function create_bridge(deps: BridgeDeps) {
       if (request.verb === "list") return { ok: true, commands: deps.list_commands() };
       if (request.command.length > MAX_COMMAND_CHARS) return { ok: false, message: "the command text is too long" };
       return await deps.run_command(request.command);
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : "the command failed" };
+    } catch {
+      // Fixed text: an unexpected throw can carry a tab title from a browser call.
+      return { ok: false, message: "the command failed" };
     }
   }
 

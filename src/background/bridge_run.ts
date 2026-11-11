@@ -30,22 +30,14 @@ export type BridgeRunDeps = {
   // A snippet from the user's own config is code the owner wrote for the page, so it never runs from outside.
   is_snippet: (command_id: string) => boolean;
   get_enum_sources: () => Promise<EnumSources>;
+  // Turns typed address text into the address the open command opens, as that command does (`typed_url_target`). It throws when the text opens nothing.
+  resolve_url: (text: string) => Promise<string>;
   // The active tab of the focused normal window, undefined when there is none.
   target: () => Promise<BridgeRunTarget | undefined>;
   run: (invocation: Invocation, target: BridgeRunTarget) => Promise<RunResponse>;
 };
 
 const refuse = (message: string): BridgeAnswer => ({ ok: false, message });
-
-// The browser's own URL parser decides the scheme, so leading control characters and tabs or newlines inside it cannot hide `javascript:`. Text that does not parse has no scheme and opens as a search or a bare host.
-function has_foreign_scheme(text: string): boolean {
-  try {
-    const { protocol } = new URL(text);
-    return protocol !== "http:" && protocol !== "https:";
-  } catch {
-    return false;
-  }
-}
 
 // The rules that hold before any arg is read.
 function refusal_for(command: CommandDef, is_snippet: boolean): string | undefined {
@@ -54,10 +46,20 @@ function refusal_for(command: CommandDef, is_snippet: boolean): string | undefin
   return undefined;
 }
 
-// An address that is not http or https could start a program, read a local file or run script, so it is refused after the validator has filled the args.
-function foreign_address(command: CommandDef, args: Record<string, unknown>): boolean {
+// The address the handler will open, found the way the handler finds it (trim, scheme, bare host, search), must be http or https. Checking the typed text instead would read it differently from the handler: `trim` strips Unicode spaces that the URL parser keeps. A blank address opens DesertFox's own new tab page, so it is left to the handler.
+async function foreign_address(command: CommandDef, args: Record<string, unknown>, resolve_url: (text: string) => Promise<string>): Promise<boolean> {
   const url_params = (command.params ?? []).filter((param) => param.format === "url" || command.id === "open.url");
-  return url_params.some((param) => typeof args[param.name] === "string" && has_foreign_scheme(args[param.name] as string));
+  for (const param of url_params) {
+    const text = args[param.name];
+    if (typeof text !== "string" || text.trim() === "") continue;
+    try {
+      const { protocol } = new URL(await resolve_url(text));
+      if (protocol !== "http:" && protocol !== "https:") return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function create_bridge_run(deps: BridgeRunDeps) {
@@ -73,7 +75,7 @@ export function create_bridge_run(deps: BridgeRunDeps) {
     // No may_prompt below, so a missing value is this failure and never an open command line.
     const checked = check_args(command, parsed.invocation.args, sources);
     if (!checked.ok) return refuse(checked.error);
-    if (foreign_address(command, checked.args)) return refuse(`${command.id} opens only http and https addresses through the bridge`);
+    if (await foreign_address(command, checked.args, deps.resolve_url)) return refuse(`${command.id} opens only http and https addresses through the bridge`);
     const target = await deps.target();
     if (!target) return refuse("no normal window is open");
     if (target.incognito && opens_url(command.id)) return refuse("the focused window is private, so nothing opens an address there from outside");
