@@ -373,6 +373,60 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     expect(new URLSearchParams(result.search).get("q") === "caret", `P searched "${new URLSearchParams(result.search).get("q")}", expected "caret"`);
   });
 
+  await run_case("2aw grows the selection by two words", async () => {
+    await open_page("caret", "caret_count", { new_tab: true });
+    await press_and_wait_for_move("caret_count", "gV", "the caret");
+    await press_and_wait_for_move("caret_count", "j", "j to the second line");
+    const mark_visual = events.length;
+    await press_keys("v");
+    await wait_event(mark_visual, badge_is("caret_count", "VISUAL"), "the VISUAL badge");
+    const mark = events.length;
+    await press_keys("2aw");
+    await wait_event(mark, selection_is("caret_count", "foo bar"), "2aw to select two words");
+    await escape_to_normal("caret_count");
+  });
+
+  await run_case("aw in line visual mode switches to character visual mode and selects the word", async () => {
+    await open_page("caret", "caret_line_object", { new_tab: true });
+    await press_and_wait_for_move("caret_line_object", "gV", "the caret");
+    let mark = events.length;
+    await press_keys("V");
+    await wait_event(mark, badge_is("caret_line_object", "V-LINE"), "the V-LINE badge");
+    mark = events.length;
+    await press_keys("aw");
+    await wait_event(mark, badge_is("caret_line_object", "VISUAL"), "the VISUAL badge after aw");
+    await wait_event(mark, selection_is("caret_line_object", "caret "), "aw to select the word");
+    await escape_to_normal("caret_line_object");
+  });
+
+  await run_case("p on a blank selection shows a message and stays in visual mode", async () => {
+    await open_page("caret", "caret_blank", { new_tab: true });
+    await press_and_wait_for_move("caret_blank", "gV", "the caret");
+    await press_and_wait_for_move("caret_blank", "5l", "5l onto the space");
+    const mark_visual = events.length;
+    await press_keys("v");
+    await wait_event(mark_visual, badge_is("caret_blank", "VISUAL"), "the VISUAL badge");
+    const mark = events.length;
+    await press_keys("p");
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "caret_blank", "the refusal toast");
+    expect(!events.slice(mark).some((event) => event.type === "indicator" && event.page_id === "caret_blank" && event.label !== "VISUAL"), "p on a blank selection left visual mode");
+    await escape_to_normal("caret_blank");
+  });
+
+  await run_case("p on a selection of two lines searches it with the line break as a space", async () => {
+    await open_page("caret", "caret_collapse", { new_tab: true });
+    await press_and_wait_for_move("caret_collapse", "gV", "the caret");
+    const mark_line = events.length;
+    await press_keys("V");
+    await wait_event(mark_line, badge_is("caret_collapse", "V-LINE"), "the V-LINE badge");
+    await press_and_wait_for_move("caret_collapse", "j", "j to grow the selection");
+    const mark = events.length;
+    await press_keys("p");
+    const result = await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "search_result", "the search result page");
+    const query = new URLSearchParams(result.search).get("q");
+    expect(query === "caret caret_collapse foo bar.baz", `p searched "${query}", expected the two lines joined by a space`);
+  });
+
   // /caret_ft holds forty rows "row N x", 100 pixels apart. The highlights are read from the page's own world, by the names of the character find and of a kept `/` search.
   const READ_FT = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (name) => { const found = []; CSS.highlights.get(name)?.forEach((range) => found.push(range.startContainer.data)); return found; };

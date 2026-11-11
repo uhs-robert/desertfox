@@ -22,6 +22,7 @@ define("visual.object", {
     { name: "object", type: "enum", values: ["word", "sentence"], value_labels: { word: "a word", sentence: "a sentence" }, description: { word: "Select a word.", sentence: "Select a sentence." } },
     { name: "scope", type: "enum", values: ["around", "inner"], default: "around", value_labels: { inner: "without the space" }, description: { inner: "Leave out the space beside it." } },
   ],
+  count: "repeat",
   bridge: false,
   runs_in: "content",
   repeatable: false,

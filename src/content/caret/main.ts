@@ -353,9 +353,10 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
   });
 };
 
-// A refused object leaves the selection as it was.
+// A refused object leaves the selection as it was. Line visual mode widens every selection to whole lines, so an object leaves it for character visual mode, as in vim.
 const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
-  const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
+  if (session?.mode === "visual_line") page.desertfox_host.set_mode_("visual");
+  const open = ensure_session("visual");
   if (typeof open === "string") return { ok: false, message: open };
   const cursor = select_object(open.model_.text, open.cursor, args as Parameters<typeof select_object>[2]);
   if (!cursor) return { ok: false, message: `No ${args.object} here` };
