@@ -5,7 +5,7 @@ import type { DiscardDeps, DiscardTab } from "../../src/background/tab_discard.t
 
 // A small browser: `tabs.discard` does nothing for the active tab and for ids in `privileged`, as Firefox does, and never rejects.
 function make(tabs: Partial<DiscardTab>[], { alternate, privileged = [] as number[] } = {} as { alternate?: number; privileged?: number[] }) {
-  const state: DiscardTab[] = tabs.map((tab, index) => ({ id: index + 1, window_id: 1, index, active: false, audible: false, discarded: false, ...tab }));
+  const state: DiscardTab[] = tabs.map((tab, index) => ({ id: index + 1, window_id: 1, index, active: false, audible: false, discarded: false, pinned: false, ...tab }));
   const log: string[] = [];
   const deps: DiscardDeps = {
     read_tab: async (id) => state.find((tab) => tab.id === id),
