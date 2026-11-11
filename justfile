@@ -267,8 +267,8 @@ release_stamp:
     set -euo pipefail
     version=$(jq -r .version package.json)
     # The same pattern as VERSION_PATTERN in host/desertfox-host, which refuses to update to any other version.
-    if ! [[ "$version" =~ ^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(-beta\.[0-9]{1,6})?$ ]]; then
-        echo "release_stamp: '$version' is not x.y.z or x.y.z-beta.N, so no host could update to it." >&2
+    if ! [[ "$version" =~ ^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(\.[1-9][0-9]{0,5})?$ ]]; then
+        echo "release_stamp: '$version' is not x.y.z or x.y.z.N, so no host could update to it." >&2
         exit 1
     fi
     mkdir -p "$RELEASE_ASSETS_DIR"
@@ -289,7 +289,7 @@ release_stamp:
         '{version: $version, sha256: {"desertfox-host": $host, "desertfox-bridge": $bridge, "desertfox": $cli}}' > host_sha256.json
     echo "stamped the hosts as $version in $RELEASE_ASSETS_DIR"
 
-# Create the GitHub release v<package.json version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums and the install script, so a release build installs the host of its own version. A -beta.N version is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
+# Create the GitHub release v<package.json version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums and the install script, so a release build installs the host of its own version. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing.
 [private]
 release_publish:
     #!/usr/bin/env bash
@@ -313,7 +313,7 @@ release_publish:
         fi
     done
     gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
-    if [[ "$version" == *-beta.* ]]; then
+    if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         gh_command+=(--prerelease)
     fi
     if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then

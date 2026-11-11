@@ -487,19 +487,19 @@ class ReleaseStepTest(InstallCase):
         return work
 
     def test_a_beta_version_publishes_a_prerelease_and_a_bad_version_stamps_nothing(self):
-        work = self.release_work_dir("0.2.0-beta.3")
+        work = self.release_work_dir("0.2.0.3")
         self.assertEqual(self.just("release_stamp", cwd=work).returncode, 0)
         done = self.just("release_publish", cwd=work)
         self.assertEqual(done.returncode, 0, done.stderr)
         with open(self.gh_log) as file:
             logged = file.read()
-        self.assertTrue(logged.startswith("release create v0.2.0-beta.3 "), logged)
+        self.assertTrue(logged.startswith("release create v0.2.0.3 "), logged)
         self.assertIn("--prerelease", logged)
         with open(os.path.join(work, "package.json"), "w") as file:
-            file.write('{"version": "0.2.0-rc1"}')
+            file.write('{"version": "0.2.0-beta.3"}')
         done = self.just("release_stamp", cwd=work)
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("not x.y.z or x.y.z-beta.N", done.stderr)
+        self.assertIn("not x.y.z or x.y.z.N", done.stderr)
 
     def test_a_stable_version_is_not_a_prerelease(self):
         work = self.release_work_dir("0.2.0")

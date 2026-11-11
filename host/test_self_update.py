@@ -135,14 +135,14 @@ class UpdateCase(unittest.TestCase):
 
 class VersionTest(unittest.TestCase):
     def test_versions_sort_in_release_order(self):
-        ordered = ["0.1.9", "0.1.10", "0.2.0-beta.1", "0.2.0-beta.2", "0.2.0-beta.10", "0.2.0", "1.0.0"]
+        ordered = ["0.1.9", "0.1.10", "0.1.23", "0.1.23.1", "0.1.23.2", "0.1.23.10", "0.1.24", "1.0.0"]
         keys = [host.parse_version(text) for text in ordered]
         self.assertEqual(keys, sorted(keys))
         self.assertEqual(len(set(keys)), len(keys))
         self.assertEqual(host.parse_version("1.2.3"), host.parse_version("1.2.3"))
 
     def test_malformed_versions_parse_to_none(self):
-        for text in ("", "1.2", "1.2.3.4", "v1.2.3", "1.2.3-beta", "1.2.3-rc.1", "1.2.3-beta.1.2", "1.2.3\n", " 1.2.3", "1.2.x",
+        for text in ("", "1.2", "1.2.3.4.5", "1.2.3.0", "1.2.3.01", "1.2.3.", "1.2.3.x", "1.2.3.1234567", "v1.2.3", "1.2.3-beta", "1.2.3-beta.4", "1.2.3-rc.1", "1.2.3\n", " 1.2.3", "1.2.x",
                      "１.2.3", "1.2.3/../x", "1.2.3?a=b", "1234567.0.0", "main", "dev", None, 123, ["1.2.3"]):
             self.assertIsNone(host.parse_version(text), repr(text))
 
@@ -177,8 +177,9 @@ class DowngradeTest(UpdateCase):
         self.assert_refused("refused to downgrade the host from 0.1.22 to 0.1.21", self.request(version="0.1.21"))
         self.assertEqual(self.release.fetched, [])
 
-    def test_a_beta_of_the_running_version_is_older(self):
-        self.assert_refused("refused to downgrade", self.request(version="0.1.22-beta.4"))
+    def test_a_beta_of_the_running_version_is_newer_and_a_beta_before_it_is_older(self):
+        self.assert_refused("refused to downgrade", self.request(version="0.1.21.4"))
+        self.assert_refused("self_update needs a version", self.request(version="0.1.22-beta.4"))
 
     def test_a_development_host_never_updates(self):
         self.assert_refused("development install", current="dev")
@@ -228,7 +229,7 @@ class UpdateTest(UpdateCase):
         self.assertEqual(self.release.fetched, expected)
 
     def test_a_beta_version_fetches_its_own_release(self):
-        beta = "0.1.23-beta.2"
+        beta = "0.1.23.2"
         self.new_scripts = {name: stamped(name, beta) for name in SCRIPTS}
         self.release.publish(beta, self.new_scripts)
         self.assertTrue(self.update(self.request(version=beta))["updated"])

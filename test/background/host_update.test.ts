@@ -50,7 +50,7 @@ test("an older host with consent is updated with the extension's own version and
 
 test("a host that is equal or newer gets no call and no toast", async () => {
   const test_case = make();
-  for (const version of [EXTENSION, "0.1.24", "0.2.0-beta.1"]) {
+  for (const version of [EXTENSION, "0.1.24", "0.1.24.1"]) {
     test_case.updater.watch.seen(version);
     test_case.updater.bridge_ready(version);
   }
