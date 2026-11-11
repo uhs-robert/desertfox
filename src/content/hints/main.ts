@@ -227,8 +227,13 @@ const pick_deps = (current: Pick<Session, "args" | "action" | "rapid" | "collect
 // The line opens in this frame, as it does for a key typed here. Keys typed while cmdline.js loads stay held for it.
 const open_line_ = (text: string): Promise<Outcome> => page.desertfox_host.run_command_("cmdline.open", "cmdline", { text });
 
-const perform_pick = (current: Session, element: HTMLElement) =>
-  current.action === "prompt" ? prompt_pick(element, current.args.command as string, current.with_background_, open_line_) : perform(current.action, element, pick_deps(current), current.with_background_);
+const perform_pick = (current: Session, element: HTMLElement) => {
+  if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, open_line_);
+  const result = perform(current.action, element, pick_deps(current), current.with_background_);
+  // The hint mode has ended, so the frame is in the mode the hint began in. A refused pick leaves it there.
+  if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
+  return result;
+};
 const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
@@ -274,7 +279,7 @@ function register(host: BundleHostApi): void {
   // Insert mode after the pick means the pick focused the field: Escape leaves insert mode without a blur, so a field focused earlier is not a target.
   function leave_with_keys(current: Session, after_leaving?: () => void): void {
     const keys = current.waiting_tokens_.splice(0);
-    host.set_mode_("normal");
+    host.escape_();
     after_leaving?.();
     const focused_a_field = after_leaving && host.get_mode() === "insert";
     if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });

@@ -165,6 +165,9 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
       step.invocation = { ...step.invocation, args: result.args };
+    } else if (result.missing_param !== undefined && typeof command.count === "object" && result.missing_param === command.count.param) {
+      // The typed count fills this param when the key runs (`50%`), and a key with no count is refused then.
+      step.runs_in = "background";
     } else {
       warnings.push(`${mode}: skipped "${path.join("")}": ${result.error}`);
       return false;

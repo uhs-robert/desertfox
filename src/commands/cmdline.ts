@@ -10,6 +10,7 @@ define("cmdline.open", {
   runs_in: "content",
   repeatable: false,
   bundle: "cmdline",
+  modes: ["normal", "media"],
 });
 
 define("cmdline.next_completion", {

@@ -13,7 +13,7 @@ define("hint.run", {
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "prompt"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "prompt"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
         prompt: { filter: HAS_ADDRESS },
@@ -27,9 +27,10 @@ define("hint.run", {
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
+        enter_media: { filter: ["media"] },
         double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
       },
-      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F", prompt: "L" },
+      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F", enter_media: "A", prompt: "L" },
       value_labels: {
         here: "to click",
         tab: "in new tab",
@@ -51,6 +52,7 @@ define("hint.run", {
         play_pause: "to play or pause",
         mute: "to mute or unmute",
         fullscreen: "to toggle fullscreen",
+        enter_media: "to start media mode",
         prompt: "to edit in the command line",
       },
       description: {
@@ -74,6 +76,7 @@ define("hint.run", {
         play_pause: "Play the media, or pause it when it plays.",
         mute: "Mute the media, or unmute it when it is muted.",
         fullscreen: "Show the player in fullscreen, or leave fullscreen.",
+        enter_media: "Start media mode on the video, and pin it.",
         prompt: "Put the address of the element in the command line.",
       },
     },
@@ -107,4 +110,5 @@ define("hint.run", {
   bridge: false,
   runs_in: "content",
   bundle: "hints",
+  modes: ["normal", "media"],
 });

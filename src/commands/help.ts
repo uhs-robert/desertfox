@@ -9,7 +9,7 @@ define("help.whichkey", {
   bridge: false,
   runs_in: "content",
   repeatable: false,
-  modes: ["normal", "caret", "visual", "visual_line"],
+  modes: ["normal", "caret", "visual", "visual_line", "media"],
   bundle: "whichkey",
 });
 

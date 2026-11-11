@@ -19,6 +19,7 @@ import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
+import { fullscreen_step } from "./mode_state.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
 import { focus_page_content, start_content_once } from "./handlers/focus.ts";
@@ -90,6 +91,7 @@ bundles.connect({
   on_idle_: key_flow.release,
   hold_first_: key_flow.hold_first_,
   set_mode_: page_mode.set_mode_,
+  escape_: page_mode.escape,
   show_toast_: show_toast,
   // The toast needs the ui bundle, so without it an error has nowhere to show.
   show_error_: (message) => (bundles.has_handler_("ui.toast") ? show_toast(message) : console.error(message)),
@@ -307,6 +309,17 @@ function start(): void {
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen("pageshow", report_mode, false);
+
+  // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
+  listen(
+    "fullscreenchange",
+    () => {
+      const next = fullscreen_step(page_mode.get_mode_(), !!document.fullscreenElement);
+      if (next) bundles.set_mode_(next);
+    },
+    false,
+    document,
+  );
 
   page_mode.listen_display_(refresh_mode_indicator);
 

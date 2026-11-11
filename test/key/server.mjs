@@ -339,6 +339,20 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       // A same-origin frame holds the media page, so the key's activation reaches its requestFullscreen.
       return response.end(page(`media_host ${id}`, `<iframe src="/media?id=${id}_inner" style="width:340px;height:200px"></iframe>`));
     }
+    if (url.pathname === "/media_mode") {
+      // A large video in a player box, a small one beside it, a field and tall filler. Each video reports its own events. The key e enters or leaves element fullscreen as a site's own button does, and the key is unbound in the media mode, so the page sees it there.
+      const videos = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="big" src="/tone.wav" loop style="width:320px;height:180px"></video></div><video id="small" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><input id="typing" style="display:block"><button id="noop" style="display:block">noop</button>';
+      const script = `<script>
+        for (const video of document.querySelectorAll("video")) report_media(video, (type, data) => send(type, { ...data, video: video.id }));
+        document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement?.id ?? "" }));
+        addEventListener("keydown", (event) => { if (event.key === "e") document.fullscreenElement ? document.exitFullscreen() : document.getElementById("player").requestFullscreen(); });
+      </script>`;
+      return response.end(page(`media_mode ${id}`, videos + tall_filler + script, MEDIA_REPORTER));
+    }
+    if (url.pathname === "/media_mode_host") {
+      // The /media_mode page in a same-origin frame under tall filler, so the mode of each frame shows in whether j scrolls it.
+      return response.end(page(`media_mode_host ${id}`, `<iframe id="frame" src="/media_mode?id=${id}_inner" style="display:block;width:340px;height:300px"></iframe>${tall_filler}`));
+    }
     if (url.pathname === "/media_frames") {
       // A large paused video on top, and a frame from another origin (localhost is not 127.0.0.1) whose small muted video plays in a closed shadow root. Beside them a sandboxed frame and an about:blank frame, where a script may be refused.
       // "audible" or "clip" in the id leaves out the top video and makes the framed one paused, with sound or with a picture.

@@ -98,7 +98,7 @@ if (!page.desertfox_cmdline_ready) {
 
   // Mode first: the exit hook then runs `unmount`, and the keys of the page return to the keymap.
   const close = () => {
-    host.set_mode_("normal");
+    host.escape_();
     unmount();
   };
 

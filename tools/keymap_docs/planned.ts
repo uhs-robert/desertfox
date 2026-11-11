@@ -4,7 +4,7 @@ import { parse } from "smol-toml";
 import type { KeymapConfig, KeymapMode } from "../../src/shared/keymap.ts";
 import { parse_sequence } from "../../src/shared/keys/index.ts";
 
-export const MODE_ORDER: readonly KeymapMode[] = ["normal", "hint", "cmdline", "caret", "visual", "visual_line", "insert", "ignore", "browser"];
+export const MODE_ORDER: readonly KeymapMode[] = ["normal", "media", "hint", "cmdline", "caret", "visual", "visual_line", "insert", "ignore", "browser"];
 
 export const PLANNED_STATUSES = ["later", "dropped"] as const;
 

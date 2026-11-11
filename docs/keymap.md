@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 358 (normal 203, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 407 (normal 205, media 47, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -83,6 +83,7 @@ bound: 358 (normal 203, hint 7, cmdline 19, caret 35, visual 43, visual_line 44,
 | `<A-p>` | bound | `tab.pin` | Toggle pin |  |
 | `<A-m>` | bound | `tab.mute` | Toggle mute |  |
 | `am` | bound | `tab.mute` | Toggle mute |  |
+| `aa` | bound | `media enter` | Start media mode |  |
 | `ap` | bound | `media play_pause` | Play or pause |  |
 | `as` | bound | `media speed up` | Speed up |  |
 | `aS` | bound | `media speed down` | Slow down |  |
@@ -224,6 +225,7 @@ bound: 358 (normal 203, hint 7, cmdline 19, caret 35, visual 43, visual_line 44,
 | `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
+| `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
@@ -270,6 +272,58 @@ Which-key group names:
 - `c`: Reopen in container
 - `C`: Open in container
 - `a`: Media
+
+### media
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `0` | bound | `media seek reset` | Seek to the start |  |
+| `f` | bound | `hint` | Click element |  |
+| `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
+| `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
+| `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
+| `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
+| `;b` | bound | `hint --buttons` | Click button |  |
+| `;a` | bound | `hint --every` | Click every element |  |
+| `;t` | bound | `hint --prose` | Click text |  |
+| `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
+| `;i` | bound | `hint --inputs` | Click input |  |
+| `;l` | bound | `hint --links` | Click link |  |
+| `;I` | bound | `hint --images` | Open image in new tab |  |
+| `;yl` | bound | `hint --copy --links` | Copy link URL |  |
+| `;yi` | bound | `hint --copy-image --images` | Copy picture |  |
+| `;yI` | bound | `hint --copy --images` | Copy image URL |  |
+| `;ym` | bound | `hint --copy --media` | Copy media URL |  |
+| `;yf` | bound | `hint --copy --frames` | Copy frame URL |  |
+| `;yt` | bound | `hint --copy-text --all` | Copy text |  |
+| `;yc` | bound | `hint --copy-selector --every` | Copy CSS selector |  |
+| `;Y` | bound | `hint --copy --links --rapid` | Copy several link URLs |  |
+| `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
+| `;f` | bound | `hint --frames` | Focus frame |  |
+| `;m` | bound | `hint --media` | Play or pause media |  |
+| `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
+| `:` | bound | `cmdline.open` | Command line |  |
+| `<Escape>` | bound | `mode.escape` | Escape |  |
+| `<C-[>` | bound | `mode.escape` | Escape |  |
+| `F` | bound | `media fullscreen` | Toggle fullscreen |  |
+| `h` | bound | `media seek down` | Seek back |  |
+| `l` | bound | `media seek up` | Seek forward |  |
+| `^` | bound | `media seek reset` | Seek to the start |  |
+| `$` | bound | `media seek end` | Seek to the end |  |
+| `%` | bound | `media seek percent` | Seek to a percent, as 50% |  |
+| `H` | bound | `media skip previous` | Previous video |  |
+| `L` | bound | `media skip next` | Next video |  |
+| `j` | bound | `media volume down` | Volume down |  |
+| `k` | bound | `media volume up` | Volume up |  |
+| `<` | bound | `media speed down` | Slow down |  |
+| `>` | bound | `media speed up` | Speed up |  |
+| `=` | bound | `media speed reset` | Reset speed |  |
+| `m` | bound | `media mute` | Mute or unmute |  |
+| `<Space>` | bound | `media play_pause` | Play or pause |  |
+| `p` | bound | `media pip` | Toggle picture-in-picture |  |
+| `q` | bound | `cmdline.open --text='media quality '` | Pick the quality |  |
+| `r` | bound | `media loop` | Toggle loop |  |
+| `i` | bound | `media info` | Show the time, speed, quality and volume |  |
 
 ### hint
 

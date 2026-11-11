@@ -86,6 +86,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
       innerHeight: 600,
       desertfox_host: {
         set_mode_: (mode: string) => void modes.push(mode),
+        escape_: () => void modes.push("normal"),
         get_mode: () => "normal",
         // find.end and the heading commands are called here. Their answers are the test's to give.
         run_command_: (id: string, _bundle: string, args: Record<string, unknown>) => {

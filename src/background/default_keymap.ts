@@ -54,7 +54,7 @@ const VISUAL_KEYS: ModeBindings = {
   "<C-[>": { id: "mode.escape" },
 };
 
-export const DEFAULT_KEYMAP: KeymapConfig = {
+const BASE_SECTIONS: KeymapConfig = {
   // `s//` and `S//`: search the current site with the built-in `site` engine. Only the shipped keymap may use the letter `/`: the build refuses it in a user file.
   site_keys: { "/": ["site"] },
   // Each key adds its args to a variant of every key in the `;` group that accepts them: `;Bl` opens a link in a background tab, `;xa` deletes every element. The label names the group.
@@ -158,6 +158,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
 
     // The a group works on the page's video and audio, in every frame. `A` types the rest of a media command.
     am: { id: "tab.mute" },
+    aa: { id: "media.act", args: { action: "enter" }, label: "Start media mode" },
     ap: { id: "media.act", args: { action: "play_pause" }, label: "Play or pause" },
     as: { id: "media.act", args: { action: "speed", value: "up" }, label: "Speed up" },
     aS: { id: "media.act", args: { action: "speed", value: "down" }, label: "Slow down" },
@@ -311,6 +312,7 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     ";yh": { id: "hint.run", args: { action: "copy_html", filter: "every" }, label: "Copy outer HTML" },
     ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
+    ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
@@ -387,3 +389,37 @@ export const DEFAULT_KEYMAP: KeymapConfig = {
     "<A-,>": { id: "browser.focus_page" },
   },
 };
+
+// The media mode keeps the hint and command line keys of normal mode, so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach.
+const keys_kept_in_media: ModeBindings = Object.fromEntries(Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => sequence === "f" || sequence === ":" || sequence.startsWith(";")));
+
+const media_action = (action: string, value?: string, label?: string) => ({ id: "media.act", args: { action, ...(value === undefined ? {} : { value }) }, ...(label === undefined ? {} : { label }) });
+
+// The keys of the media mode. A digit is a count (`5l`), except `0`, which is the start unless a count is under way.
+const MEDIA_KEYS: ModeBindings = {
+  ...keys_kept_in_media,
+  "<Escape>": { id: "mode.escape" },
+  "<C-[>": { id: "mode.escape" },
+  F: media_action("fullscreen", undefined, "Toggle fullscreen"),
+  h: media_action("seek", "down", "Seek back"),
+  l: media_action("seek", "up", "Seek forward"),
+  "0": media_action("seek", "reset", "Seek to the start"),
+  "^": media_action("seek", "reset", "Seek to the start"),
+  $: media_action("seek", "end", "Seek to the end"),
+  "%": media_action("seek", "percent", "Seek to a percent, as 50%"),
+  H: media_action("skip", "previous", "Previous video"),
+  L: media_action("skip", "next", "Next video"),
+  j: media_action("volume", "down", "Volume down"),
+  k: media_action("volume", "up", "Volume up"),
+  "<": media_action("speed", "down", "Slow down"),
+  ">": media_action("speed", "up", "Speed up"),
+  "=": media_action("speed", "reset", "Reset speed"),
+  m: media_action("mute", undefined, "Mute or unmute"),
+  "<Space>": media_action("play_pause", undefined, "Play or pause"),
+  p: media_action("pip", undefined, "Toggle picture-in-picture"),
+  q: { id: "cmdline.open", args: { text: "media quality " }, label: "Pick the quality" },
+  r: media_action("loop", undefined, "Toggle loop"),
+  i: media_action("info", undefined, "Show the time, speed, quality and volume"),
+};
+
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS };

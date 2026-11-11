@@ -22,7 +22,8 @@ export type Player = {
 
 // The frame's reads: the players in document order with their visible area, and the open picture-in-picture element.
 export type FrameView = {
-  players: () => { player: Player; area: number }[];
+  // `pinned` marks the video `;M` pinned in this frame, while it is still on the page.
+  players: () => { player: Player; area: number; pinned_?: boolean }[];
   pip_element: () => unknown;
   exit_pip: () => Promise<void>;
   fullscreen_element: () => unknown;
@@ -85,6 +86,7 @@ export function scan_frame(view: FrameView): MediaScan {
     audible_video_area: video_areas(audible),
     pip_open: Boolean(view.pip_element()),
     fullscreen_open: Boolean(view.fullscreen_element()),
+    pinned: found.some(({ pinned_ }) => pinned_),
   };
 }
 
@@ -101,6 +103,7 @@ function in_target(player: Player, target: MediaTarget): boolean {
 // The elements are found again here, not kept from the scan: the page may have changed them in between.
 function targets_of(view: FrameView, request: Extract<MediaRequest, { type: "media_apply" }>): Player[] {
   const found = view.players();
+  if (request.target === "pinned") return found.filter(({ pinned_ }) => pinned_).map(({ player }) => player);
   if (request.action === "pip" || request.action === "fullscreen") {
     // A frame holds one picture-in-picture window or fullscreen element at most, and the key closes it whatever the target.
     const open = request.action === "pip" ? view.pip_element() : view.fullscreen_element() && found.find(({ player }) => is_video(player))?.player;
@@ -136,8 +139,8 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   if (action === "speed") player.playbackRate = next_level(player.playbackRate, value, times, SPEED_RULE);
   else if (action === "volume") player.volume = Math.round(next_level(player.volume * 100, value, times, VOLUME_RULE)) / 100;
   else if (action === "seek") player.currentTime = next_level(player.currentTime, value, times, { ...SEEK_RULE, max: Number.isFinite(player.duration) ? player.duration : SEEK_RULE.max });
-  // With any element playing, the key pauses. Else it plays the one chosen element.
-  else if (action === "play_pause") return request.target !== "largest" || is_playing(player) ? player.pause() : within_grace(player.play());
+  // An element that plays pauses, one that does not plays. The audible and playing targets hold only elements that play.
+  else if (action === "play_pause") return is_playing(player) ? player.pause() : within_grace(player.play());
   else if (action === "mute") player.muted = !player.muted;
   else if (action === "loop") player.loop = !player.loop;
   else if (action === "fullscreen") return view.toggle_fullscreen(player);
