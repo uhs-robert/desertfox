@@ -111,6 +111,12 @@ test("compiler builds the tree with steps, runs_in and label", () => {
   assert.equal(compiled.mode_indicator, "always");
 });
 
+test("the compiled keymap carries bridge only when the setting is on", () => {
+  assert.equal("bridge" in compile({}).compiled, false);
+  assert.equal("bridge" in compile({}, { bridge: false }).compiled, false);
+  assert.equal(compile({}, { bridge: true }).compiled.bridge, true);
+});
+
 test("compiler skips the longer entry when a shorter binding is its prefix", () => {
   const { compiled, warnings } = compile({ normal: { gg: { id: "a.b" }, g: { id: "c.d" }, gz: { id: "e.f" } } });
   assert.equal(warnings.length, 2);

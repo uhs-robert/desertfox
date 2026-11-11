@@ -2,7 +2,7 @@
 
 DesertFox is a keyboard-first Firefox extension. It has a small scope and one command registry. Every command is defined once. Keys, the command line, completion, help, the palette and which-key all read that definition.
 
-The extension works on its own. Oasis Dots adds an optional native host. Through it, Hyprland, Quickshell and the shell list and run the same commands, and which-key can show in the Quickshell HUD.
+The extension works on its own. Oasis Dots adds an optional native host. Through it, a desktop shell can show the mode, and later list and run the same commands.
 
 Status: phase 1 is built on the `feat/phase-1-core` branch. [firefox-behavior.md](firefox-behavior.md) holds the measurements this design rests on, and [keymap.md](keymap.md) maps every binding in the current browser config to a command here.
 
@@ -177,6 +177,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - In caret, visual and line visual mode, DesertFox also cancels every other unbound key without Ctrl, Alt or Meta, outside fields. These are reading modes, and a site shortcut (a letter in a mail app, a digit in a video player) moves the user away from the caret. Tab and Shift+Tab, the function keys, Escape, Page Up, Page Down, Home and End still reach the page. So focus moves, Firefox's own keys work, a page dialog closes and the page scrolls. Space and Backspace stay blocked. Every chord passes too, so Ctrl+C copies a selection. Normal mode passes unbound keys, apart from `/` and `'`.
 - A mode badge sits in the bottom right corner, 8 px above the bottom edge. The `mode_indicator` setting controls it: `always` (the default), `not_normal` or `off`. The `palette` setting names a theme (default `oasis_moonlight`), see [Themes](#themes). Light or dark follows the system theme.
 - The which-key panel is a floating frame with a 1 px tinted border and its title set into the top border. The `which_key_border` setting picks the corners: `square` (the default), `round` or `chamfer`. A footer names the exit keys.
+- The `bridge` setting (default off) opens the native bridge, see [Bridge host](#bridge-host-in-progress). It does not change the badge or the which-key panel: both stay in the page.
 - `browser` mode holds the chords for the Firefox shortcuts. The manifest reserves a fixed number of shortcut slots, and the background assigns the chords to them with `commands.update`. The content script also catches these chords. If it cancels a chord, Firefox does not fire the shortcut as well, which the phase 0 key-blocking page showed.
 
 ## Config
@@ -450,7 +451,6 @@ The label of a key comes from one rule, applied to the args the binding sets (ne
 Two keys in one group may share a label only when they run the same binding (`zi` and `z+`). The unit tests check this for every group of the default keymap and of a copy of the user config, and print each group's labels.
 
 - In the browser it draws in a closed shadow root, styled through the CSS variables in [Styles](#styles). It appears after a delay that is a setting.
-- With the native host, it can show in the Quickshell which-key HUD instead. The host writes the rows as `{ "items": [...] }` and calls the `hyprvim_whichkey` IPC target (`open <path>` and `close`). The HUD then uses the current Oasis style. Mouse hover works only in the browser version.
 
 ### Caret and visual
 
@@ -516,20 +516,25 @@ A Python 3.9 stdlib-only host in `host/` (see `host/README.md`), separate from t
 
 The host writes no other file. `nativeMessaging` is an optional permission, requested from a button on the Help page that `:native.install` opens (Firefox grants it only from a click). The page also shows `curl ... | sh` for `host/install.sh`. A release build installs the host of its own version from the GitHub release, checked by SHA-256. A development install takes the host from `main` with no checksum, and `--channel main` forces that. `just release` uploads the host, its checksum and the script. `config.reload` reads the files through it, and each change to the saved edits writes `autoconfig.toml` (see [Delivery](#delivery)).
 
-### Oasis host (planned)
+### Bridge host (in progress)
 
-One long-lived port from the background to a host program. The host merges the existing voxcmd Firefox host (`extras/voxcmd-firefox` in the dotfiles), so there is one extension and one host.
+One long-lived host, `desertfox_bridge` (`host/desertfox-bridge`), serves everything on the desktop that needs to talk to DesertFox. It is generic: it assumes no particular shell, bar or window manager. It sits beside the one-shot config host and does not change it.
 
-The verbs are fixed:
+The extension opens one `connectNative` port to it when the `bridge` setting is on and the optional `nativeMessaging` permission is granted. With either missing there is no port and no socket. A host that is missing or exits before its first message leaves nothing changed, and the extension reconnects with a growing pause (1 s up to 60 s). The host says `ready` once it holds its lock, and the extension trusts the port only after that. Firefox keeps the background awake while the port is open, which also helps a later move to MV3.
 
-- `tabs`, `activate`, `clear_preface`: the voxcmd verbs, unchanged.
-- `list`: the registry as JSON, in the same shape as `hypr-act list`: `{ version, actions: [{ id, label, intent, params, keys, perform }] }`.
-- `run`: one invocation from outside, for example from Hyprland, voice or the shell.
-- `whichkey_show`, `whichkey_hide`: drive the Quickshell HUD.
+Two things come out of the host, both under `$XDG_RUNTIME_DIR/desertfox/` (a folder with mode 0700):
 
-Outside callers reach the host through a Unix socket that it opens, because a desktop program cannot open a channel into the extension. A `desertfox list` and `desertfox run <id> [args]` script wraps the socket, the same as `hypr-act`. Oasis can then expose browser commands in its own palette and keymaps.
+- `state.json`, written for a bar to read: the mode, the host's pid and start time, and `private`. The host writes it atomically (a temp file renamed over it). A reader treats a dead or reused pid as no state. A private window leaves only its mode and `private: true`: no window or tab id, no URL, no title.
+- `bridge.sock`, a Unix socket with mode 0600, because a desktop program cannot open a channel into the extension. The first host to start owns the socket and the state file through a lock on `bridge.lock`. A second host waits 3 s for the lock, then exits with an error, so two Firefox profiles share one bridge and the second one gets none. The socket takes one JSON object per line and answers each with one line. A request over 64 KiB is refused, an idle connection closes after 5 s, and at most 16 connections are open at once. A connection from another user is closed.
 
-Firefox keeps the background awake while the port is open, which also helps a later move to MV3.
+The built verbs are `ping` and `state` (the latest snapshot, the same shape as the file). More verbs follow, each with a fixed name, so there is never a shell or eval verb:
+
+- `list`: the registry as JSON.
+- `run`: one command line from outside, through the one validator and the router. A command runs only when its registry entry has `bridge: yes`, and config, session, clipboard, download, native and debug commands never run, whatever the entry says. The reply carries success or failure and a message, never data.
+- `tabs`, `activate`, `clear_preface`, `capture`, `close`, behind the separate `bridge_share_tabs` setting (off by default) because a tab list leaks browsing.
+- `subscribe`: an event stream of mode, tab and audio changes.
+
+The extension is the trust boundary. It drops everything from a private window before it reaches the host, so a host bug cannot leak it. The host writes only the socket, its lock and the state file, all on tmpfs. A `desertfox list` and `desertfox run <command>` script will wrap the socket.
 
 ## Scope
 
@@ -572,7 +577,7 @@ Firefox keeps the background awake while the port is open, which also helps a la
 8. Macros, with `.` repeat first. `.` repeats the last command or inserted text. Recording and replay follow: `q<reg>` records into a register, `@<reg>` replays it, a count (`5@q`) or `@@` repeats it. A macro records commands and the text typed in insert mode. Replay inserts text like a paste, not as key events, and stops at the first failed step.
 9. Base16 theme importer, after macros.
 10. Toolbar popup and icon. Done. The toolbar button opens a popup (`src/popup/`) with the on/off switch, Settings, Help, Disable on this site, Reload config, the warnings count and the version. Off is one global switch kept in `storage.local` (`desertfox_disabled`, absent means on). While off, the background stores an empty keymap, so the content script matches no key and hides its badge, and sends every open tab to normal mode, which ends hints, the command line and insert mode. The router and the Firefox shortcut slots refuse every command. The manifest shortcut `toggle_enabled` (default `Ctrl+Alt+D`, rebindable in `about:addons`) and the popup stay live while off. The icon turns grey and the title reads "DesertFox (off)". Off differs from an all-off site rule: that rule is a start mode per matching page that a binding can leave, while off stops every key and command on every site until it is turned on. Off wins over a disabled site. "Disable on this site" appends the all-off row `{ site = "*://*.host/*" }` (host without `www.`) to the saved `site_rules` through the same edits as `:set`, and open tabs follow at once. The popup shows the rule that covers the page ("pass 3 keys", "only 2 keys" or "all off") with a link to the settings page. The saved list starts as the config file's list and then replaces it, so later edits to the file's `site_rules` do not apply until `:unset site_rules` clears the saved list. The grey icon is a generated copy of the placeholder, so a real logo with an off state is still owner work.
-11. Phase 4, Oasis. The native host merged with voxcmd's, `desertfox list` and `run`, the Quickshell which-key, and the Oasis theme file written on theme change.
+11. Phase 4, Oasis. The native bridge host, the mode chip, `desertfox list` and `run`, and the Oasis theme file written on theme change.
 12. Phase 4, saved edits on disk. Done: the native host writes the saved edits to a generated `autoconfig.toml` beside the user's files. It never edits the user's own files.
 13. Release path. The maintainer installs through `just release` (signed, unlisted) now. A listed addons.mozilla.org release is a later piece: the listing, a source upload, Mozilla review, permission justifications and a privacy note.
 
