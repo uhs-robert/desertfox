@@ -134,3 +134,18 @@ define("page.heading", {
   count: { param: "steps" },
   bundle: "hints",
 });
+
+// Meant for site rows: a row binds a key to this command to turn it into a key the site's own script reads. Modifiers and keypress are not sent yet.
+define("page.send_key", {
+  label: "Send key to page",
+  intent: "Send a key press to the page. It sends a keydown and a keyup with the given key and key code. The target is the element the CSS selector finds, or the focused element when there is no selector. It refuses when the selector matches nothing. A count prefix sends the key that many times.",
+  params: [
+    { name: "key", type: "string", description: "Send this key name, for example ArrowDown." },
+    { name: "key_code", type: "int", min: 0, description: "Send this legacy key code, such as 40." },
+    { name: "target", type: "string", optional: true, description: "Send to the element this CSS selector finds." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  count: "repeat",
+  bundle: "site_actions",
+});
