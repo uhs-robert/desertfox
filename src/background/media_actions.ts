@@ -146,6 +146,8 @@ export function describe_change(action: MediaAction, state: MediaState, acted: n
     action === "speed" ? `Speed ${rounded(state.rate, 2)}x`
     : action === "volume" ? `Volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`
     : action === "seek" ? (state.duration === null ? clock(state.position) : `${clock(state.position)} of ${clock(state.duration)}`)
+    : action === "captions" ? `Captions ${state.captions === "on" ? "on" : "off"}`
+    : action === "frame" ? `Paused at ${rounded(state.position, 2)} s`
     : action === "mute" ? (state.muted ? "Muted" : "Unmuted")
     : action === "loop" ? `Loop ${state.loop ? "on" : "off"}`
     : action === "fullscreen" ? `Fullscreen ${state.fullscreen ? "on" : "off"}`
@@ -208,6 +210,12 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   const acted = results.reduce((sum, result) => sum + result.acted, 0);
   const state = results.find((result) => result.state)?.state;
   if (acted === 0 || !state) throw no_media;
+  if (args.action === "captions" && state.captions === "none") {
+    // No track on the element: a site player may draw its own captions. The generic path runs first so other pages never pay the quality bundle.
+    const answer = await deps.quality(tab_id, { type: "quality_apply", op: "captions", value: undefined, times: 1 }).catch(() => undefined);
+    if (!answer?.toggled) throw new RuntimeRefusal("No captions");
+    return deps.toast(ctx, "Captions toggled");
+  }
   const quality = args.action === "info" ? (await deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined))?.levels.find((level) => level.active)?.label : undefined;
   await deps.toast(ctx, describe_change(args.action, state, acted, quality));
 }

@@ -314,3 +314,57 @@ test("play_pause on the pinned video toggles it even when another video plays", 
   assert.equal(pinned.paused, false);
   assert.equal(other.paused, false);
 });
+
+const track = (kind: string, mode = "disabled", extra: Record<string, unknown> = {}) => ({ kind, mode, ...extra });
+
+test("captions on shows the default subtitle track, else the first, and ignores other kinds", async () => {
+  const tracks = [track("chapters"), track("subtitles"), track("captions", "disabled", { default: true })];
+  const result = await apply_in_frame(frame([{ player: player({ textTracks: tracks }), area: 1 }]), apply({ action: "captions" }));
+  assert.deepEqual(tracks.map(({ mode }) => mode), ["disabled", "disabled", "showing"]);
+  assert.equal(result.state?.captions, "on");
+  const plain = [track("subtitles"), track("subtitles")];
+  await apply_in_frame(frame([{ player: player({ textTracks: plain }), area: 1 }]), apply({ action: "captions" }));
+  assert.deepEqual(plain.map(({ mode }) => mode), ["showing", "disabled"]);
+});
+
+test("captions off disables every showing track, and a hidden track reads as off", async () => {
+  const tracks = [track("subtitles", "showing"), track("captions", "showing")];
+  const result = await apply_in_frame(frame([{ player: player({ textTracks: tracks }), area: 1 }]), apply({ action: "captions" }));
+  assert.deepEqual(tracks.map(({ mode }) => mode), ["disabled", "disabled"]);
+  assert.equal(result.state?.captions, "off");
+  const hidden = await apply_in_frame(frame([{ player: player({ textTracks: [track("subtitles", "hidden")] }), area: 1 }]), apply({ action: "info" }));
+  assert.equal(hidden.state?.captions, "off");
+});
+
+test("a video with no subtitle track reports captions none and changes nothing", async () => {
+  const result = await apply_in_frame(frame([{ player: player({ textTracks: [track("metadata")] }), area: 1 }]), apply({ action: "captions" }));
+  assert.equal(result.state?.captions, "none");
+  assert.equal((await apply_in_frame(frame([{ player: player(), area: 1 }]), apply({ action: "captions" }))).state?.captions, "none");
+});
+
+test("frame steps pause a playing video, move a thirtieth per count and stay within the media", async () => {
+  const video = player({ paused: false, currentTime: 10 });
+  await apply_in_frame(frame([{ player: video, area: 1 }]), apply({ action: "frame", value: "up", times: 3 }));
+  assert.equal(video.paused, true);
+  assert.ok(Math.abs(video.currentTime - 10.1) < 1e-9);
+  await apply_in_frame(frame([{ player: video, area: 1 }]), apply({ action: "frame", value: "down", times: 6 }));
+  assert.ok(Math.abs(video.currentTime - 9.9) < 1e-9);
+  const start = player({ currentTime: 0.01 });
+  await apply_in_frame(frame([{ player: start, area: 1 }]), apply({ action: "frame", value: "down" }));
+  assert.equal(start.currentTime, 0);
+  const end = player({ currentTime: 99.99, duration: 100 });
+  await apply_in_frame(frame([{ player: end, area: 1 }]), apply({ action: "frame", value: "up", times: 5 }));
+  assert.equal(end.currentTime, 100);
+});
+
+test("the media command takes frame up and down and refuses other frame values", async () => {
+  const { check_args } = await import("../../src/shared/registry/check_args.ts");
+  await import("../../src/background/command_modules.ts");
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  const media = registry.get("media.act")!;
+  assert.equal(check_args(media, { action: "frame", value: "up", times: 3 }).ok, true);
+  assert.equal(check_args(media, { action: "frame", value: "down" }).ok, true);
+  for (const value of ["next", "2", "+1"]) assert.equal(check_args(media, { action: "frame", value }).ok, false, value);
+  assert.equal(check_args(media, { action: "captions" }).ok, true);
+  assert.equal(check_args(media, { action: "captions", value: "up" }).ok, false);
+});

@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 408 (normal 205, media 48, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 411 (normal 205, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -319,6 +319,9 @@ Which-key group names:
 | `<` | bound | `media speed down` | Slow down |  |
 | `>` | bound | `media speed up` | Speed up |  |
 | `=` | bound | `media speed reset` | Reset speed |  |
+| `c` | bound | `media captions` | Toggle captions |  |
+| `,` | bound | `media frame down` | Previous frame |  |
+| `.` | bound | `media frame up` | Next frame |  |
 | `m` | bound | `media mute` | Mute or unmute |  |
 | `<Space>` | bound | `media play_pause` | Play or pause |  |
 | `p` | bound | `media pip` | Toggle picture-in-picture |  |
