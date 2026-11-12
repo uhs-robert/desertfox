@@ -254,6 +254,7 @@ const sink_for = (mode: CaretMode) => ({
     return "handled";
   },
   // Between caret and the visual modes the highlight stays. Every other way out clears it.
+  live_: find_mode.is_live_,
   exit: (destination: ExitDestination) => {
     const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
     find_mode.end();

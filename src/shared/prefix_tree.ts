@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 9;
+export const COMPILED_KEYMAP_VERSION = 10;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -39,6 +39,9 @@ export type TreeLeaf = {
 
 // The child key of a branch whose leaf waits for one key press. The press is the leaf's `key` param, so the branch binds no token of its own.
 export const ANY_KEY = "";
+
+// The second child of a character find's branch: the key flow takes it instead of waiting for a target while the sink reports a live find, so the find key repeats it. No key press names it, because a token is one character or `<name>`.
+export const LIVE_KEY = "live";
 
 // How a key listing writes a token: the capture child reads `<key>`, so `m` then any key lists as `m<key>`.
 export const token_label = (token: string): string => (token === ANY_KEY ? "<key>" : token);

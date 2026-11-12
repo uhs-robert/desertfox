@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 
 export const areas = ["caret", "find"];
 
-export async function run_cases({ sleep, take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
+export async function run_cases({ sleep, take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, in_background, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts). The sheet text reads back with the colors as rgb().
   const CARET_BACKGROUND = "rgb(240, 230, 140)";
@@ -532,7 +532,7 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await escape_to_normal("caret_find_space");
   });
 
-  await run_case("fx lights the visible matches, ; and , repeat across the page and scroll it, 3fx counts", async () => {
+  await run_case("fx lights the visible matches, ; and , repeat across the page and scroll it, 3f repeats the live find three times", async () => {
     await open_page("caret_ft", "ft_repeat", { new_tab: true });
     await press_and_wait_for_move("ft_repeat", "gV", "the caret");
     await press_keys("fx");
@@ -540,8 +540,8 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     expect(lit(first) < 25, `lit ${lit(first)} matches of forty rows: only the visible ones and a screen around should be lit`);
     expect(first.y === 0, `the first f scrolled to ${first.y}`);
     if (shot_dir) await take_shot(`${shot_dir}/char-find-highlights.png`);
-    await press_keys("3fx");
-    await wait_ft((state) => current_row(state) === 3, "3fx to row 3");
+    await press_keys("3f");
+    await wait_ft((state) => current_row(state) === 3, "3f to row 3");
     // Far past the first screen: the page scrolls and the new screen is lit, with the neighbours of the current row.
     for (let step = 1; step < 14; step++) {
       await press_keys(";");
@@ -556,23 +556,121 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
   });
 
-  await run_case("t after f starts a till find that keeps the lit matches while it waits, and the match next to the caret is the current one", async () => {
+  await run_case("t after fx repeats the find, and Escape then tx starts a till find that keeps the lit matches while it waits", async () => {
     await open_page("caret_ft", "ft_till", { new_tab: true });
     await press_and_wait_for_move("ft_till", "gV", "the caret");
     await press_keys("fx");
     await wait_ft((state) => current_row(state) === 0, "row 0 current");
     await press_keys("t");
-    // The key waits in the key layer and takes any printable key as its target, so no barrier key can prove the wait. The lit matches stay through a pause.
-    await sleep(300);
-    expect(lit(await in_active_tab(READ_FT)) > 0, "the highlights ended while the till find waited for its target");
-    await press_keys("x");
-    await wait_ft((state) => current_row(state) === 1, "the x of row 1 current after tx");
-    await press_keys(";");
-    await wait_ft((state) => current_row(state) === 2, "; repeats the till find to row 2");
-    await press_keys(",");
-    await wait_ft((state) => current_row(state) === 1, ", repeats it back to row 1");
+    await wait_ft((state) => current_row(state) === 1, "t to repeat the f find on row 1");
     await press_keys("-k", "Escape");
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
+    await press_keys("t");
+    // The key waits in the key layer and takes any printable key as its target, so no barrier key can prove the wait.
+    await sleep(300);
+    await press_keys("x");
+    await wait_ft((state) => current_row(state) === 2 && lit(state) > 0, "the x of row 2 current after tx");
+    await press_keys(";");
+    await wait_ft((state) => current_row(state) === 3, "; repeats the till find to row 3");
+    await press_keys(",");
+    await wait_ft((state) => current_row(state) === 2, ", repeats it back to row 2");
+    await press_keys("-k", "Escape");
+    await wait_ft((state) => lit(state) === 0, "Escape to end the find");
+  });
+
+  // F reverses an f find as , does, and after a backward find f goes on backward and F forward, because the keys are relative to the direction the find started. ; and , keep the find live, so f repeats after them.
+  await run_case("a live find repeats on f and reverses on F, relative to the direction it started", async () => {
+    await open_page("caret_ft", "ft_relative", { new_tab: true });
+    await press_and_wait_for_move("ft_relative", "gV", "the caret");
+    await press_keys("fx");
+    await wait_ft((state) => current_row(state) === 0, "row 0 current");
+    await press_keys("3f");
+    await wait_ft((state) => current_row(state) === 3, "3f to row 3");
+    await press_keys("F");
+    await wait_ft((state) => current_row(state) === 2, "F reverses to row 2");
+    await press_keys(";");
+    await wait_ft((state) => current_row(state) === 3, "; keeps the find live, row 3");
+    await press_keys("f");
+    await wait_ft((state) => current_row(state) === 4, "f repeats after ;, row 4");
+    await press_keys(",");
+    await wait_ft((state) => current_row(state) === 3, ", keeps the find live, row 3");
+    await press_keys("F");
+    await wait_ft((state) => current_row(state) === 2, "F after , to row 2");
+    await press_keys("-k", "Escape");
+    await wait_ft((state) => lit(state) === 0, "Escape to end the find");
+    await press_keys("Fx");
+    await wait_ft((state) => current_row(state) === 1, "Fx back to row 1");
+    await press_keys("f");
+    await wait_ft((state) => current_row(state) === 0, "f goes on in the direction the find started, row 0");
+    await press_keys("F");
+    await wait_ft((state) => current_row(state) === 1, "F reverses it, row 1");
+    await press_keys("-k", "Escape");
+    await wait_ft((state) => lit(state) === 0, "Escape to end the find");
+  });
+
+  await run_case("a find key remapped to _f repeats its live find and reverses on _F", async () => {
+    await open_page("caret_ft", "ft_remap", { new_tab: true });
+    await press_and_wait_for_move("ft_remap", "gV", "the caret");
+    await press_keys("_fx");
+    await wait_ft((state) => current_row(state) === 0, "_fx to row 0");
+    await press_keys("_f");
+    await wait_ft((state) => current_row(state) === 1, "_f repeats, row 1");
+    await press_keys("_f");
+    await wait_ft((state) => current_row(state) === 2, "_f repeats, row 2");
+    await press_keys("_F");
+    await wait_ft((state) => current_row(state) === 1, "_F reverses, row 1");
+    await press_keys("-k", "Escape");
+    await wait_ft((state) => lit(state) === 0, "Escape to end the find");
+  });
+
+  for (const [mode_keys, name] of [["v", "visual"], ["V", "line visual"]]) {
+    await run_case(`a live find repeats and reverses in ${name} mode`, async () => {
+      const page_id = `ft_${name.replace(" ", "_")}`;
+      await open_page("caret_ft", page_id, { new_tab: true });
+      await press_and_wait_for_move(page_id, "gV", "the caret");
+      await press_keys(mode_keys);
+      await press_keys("fx");
+      await wait_ft((state) => current_row(state) === 0, `${name} fx to row 0`);
+      await press_keys("f");
+      await wait_ft((state) => current_row(state) === 1, `${name} f repeats, row 1`);
+      await press_keys("F");
+      await wait_ft((state) => current_row(state) === 0, `${name} F reverses, row 0`);
+      await press_keys("-k", "Escape");
+      await wait_ft((state) => lit(state) === 0, `${name} Escape to end the find`);
+      await escape_to_normal(page_id);
+    });
+  }
+
+  // The recorder keeps the repeat as its own step, so a replay needs no live find to run it. The stored steps are cut after the repeat, so the replay ends in caret mode with the find on screen.
+  await run_case("a macro that records fx and a repeat replays both", async () => {
+    await open_page("caret_ft", "ft_macro", { new_tab: true });
+    await settle_focus();
+    let mark = events.length;
+    await press_keys("q", "a");
+    await wait_event(mark, badge_is("ft_macro", "NORMAL recording @a"), "the recording badge after qa");
+    await press_keys("gV");
+    await wait_ft((state) => lit(state) === 0, "gV in caret mode");
+    await press_keys("fx");
+    await wait_ft((state) => current_row(state) === 0, "row 0 current while recording");
+    await press_keys("f");
+    await wait_ft((state) => current_row(state) === 1, "the repeat to row 1 while recording");
+    await press_keys("-k", "Escape");
+    await press_keys("-k", "Escape");
+    mark = events.length;
+    await press_keys("q");
+    await wait_event(mark, badge_is("ft_macro", "NORMAL"), "the plain badge after q");
+    const read_macro = () => in_active_tab(`browser.runtime.sendMessage({ type: "register_read", name: "a" })`);
+    await poll_until("register a to hold the recorded steps", async () => (await read_macro())?.some?.((step) => step.id === "caret.move"));
+    const steps = await read_macro();
+    const repeat_at = steps.findIndex((step) => step.id === "caret.move" && step.args?.unit === "find_repeat");
+    expect(steps.some((step) => step.id === "caret.find") && repeat_at > 0, `the macro holds ${JSON.stringify(steps.map((step) => step.id))}, expected caret.find and a find_repeat step`);
+    await in_background(`browser.storage.local.set({ desertfox_register_b: ${JSON.stringify(steps.slice(0, repeat_at + 1))} })`);
+    await open_page("caret_ft", "ft_macro_replay", { new_tab: true });
+    await settle_focus();
+    await press_keys("@", "b");
+    await wait_ft((state) => current_row(state) === 1 && lit(state) > 0, "the replay of fx and its repeat to row 1");
+    await press_keys("-k", "Escape");
+    await escape_to_normal("ft_macro_replay");
   });
 
   await run_case("another key, Escape and a mode change clear the highlights, and ; repeats without them", async () => {

@@ -15,7 +15,7 @@ export type ExitDestination = Mode | "page_hidden";
 
 // Gets each key token while its mode is active. "pass" hands the token on to the keymap.
 // `enter` runs once per entry, after the sink is registered. `exit` runs once per exit, whichever path led out.
-export type Sink = { on_token_: (token: string) => "handled" | "pass"; enter?: () => void; exit: (destination: ExitDestination) => void };
+export type Sink = { on_token_: (token: string) => "handled" | "pass"; live_?: () => boolean; enter?: () => void; exit: (destination: ExitDestination) => void };
 
 // What a handler returns: nothing for done, or an Outcome. A promise stays pending while the handler waits on the user. A throw is failed.
 export type HandlerResult = void | Outcome | Promise<void | Outcome>;
