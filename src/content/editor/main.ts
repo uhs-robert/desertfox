@@ -34,7 +34,8 @@ function write_field(field: Element, text: string, original: string): boolean {
     }
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;
+    // A page handler can put another value back during those events (a controlled input that rejects the change). The page owns the field then, so its value stays and the caller keeps the text in the register.
+    return field.value === text;
   }
   getSelection()?.selectAllChildren(field);
   return text === "" ? document.execCommand("delete") : type_at_caret(text);
