@@ -13,7 +13,7 @@ import { current_tab_url } from "./open_target.ts";
 export type MarkListDeps = {
   // The marks of the page the command ran on, then the global ones. Includes `'`, which the list leaves out.
   items: (ctx: CommandContext) => Promise<MarkItem[]>;
-  // Runs `mark.jump` in the top frame of the command's tab, like the arrival of a global jump.
+  // Runs `mark.jump` in the top frame of the command's tab, as a fresh jump: it carries no arrival number, so it never takes a waiting arrival.
   jump: (ctx: CommandContext, key: string) => Promise<void>;
   remove: (ctx: CommandContext, key: string) => Promise<void>;
   clear: (ctx: CommandContext, scope: MarkClearScope) => Promise<void>;
