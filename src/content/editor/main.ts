@@ -21,13 +21,17 @@ const open_edits = new Map<string, { field: Element; original: string }>();
 const VIRTUALIZED_EDITOR = ".cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
 
 // A plain field takes the value through the native setter and `input` and `change` events, which is what a framework's own change tracking watches. An element that is editable by `contenteditable` takes one `insertText` over its whole content, so undo keeps working. An empty result needs `delete`, which `insertText` refuses.
-function write_field(field: Element, text: string): boolean {
+function write_field(field: Element, text: string, original: string): boolean {
   if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
     const set_value = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")?.set;
     if (!set_value) return false;
     set_value.call(field, text);
     // The field may sanitize the value (line breaks in a single-line input, a non-number in a number input), so what it holds is what counts.
-    if (field.value !== text) return false;
+    // The field is put back, so a refused write leaves the text it had.
+    if (field.value !== text) {
+      set_value.call(field, original);
+      return false;
+    }
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
@@ -49,7 +53,7 @@ function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boole
     // A focus handler of the page can edit the field, so the check runs again before the write.
     (field as HTMLElement).focus();
     if (unchanged()) {
-      if (write_field(field, text)) return Promise.resolve(true);
+      if (write_field(field, text, original)) return Promise.resolve(true);
       reason = "refused";
     }
   }
