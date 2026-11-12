@@ -1,9 +1,9 @@
-// A grid of selection sources against the caret and visual modes. Each cell asserts the selection's two ends, as the page reports them, after the mode took the source and again after one `l`.
+// A grid of selection sources against the caret and visual modes. Each cell asserts the selection's two ends, read from `getSelection()` on the page, after the mode took the source and again after one `l`.
 // The sources are script stand-ins. The harness has no pointer, so click and drag send no pointer events. A drag is `setBaseAndExtent` and a click is a collapsed selection, which is all the caret code reads. The page script uses the drag's call on another span, but keeps its own row.
 // "Before" means the source exists when the mode starts. "During" means the mode is already active when the source arrives.
 // The expected values are what the code did when the grid was written. A cell is not a promise that the behavior is right.
 
-export const areas = ["caret"];
+export const areas = ["caret", "find"];
 
 import { evaluate_in_background } from "./rdp.mjs";
 

@@ -359,6 +359,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   });
 
   // A frame that leaves the page while the search line is open must not break Enter. The frame removes itself a second after the caret first lands in it (see /caret_frame_inner).
+  // It passes with 70a7719d reverted, so it guards only the visible outcome (caret on the page match, CARET badge), not the thrown paint.
   await run_case("Enter on a search lands on the page after the frame holding the caret left while the line was open", async () => {
     const page_id = "search_remove_frame";
     await open_page("caret_frames", page_id, { new_tab: true });

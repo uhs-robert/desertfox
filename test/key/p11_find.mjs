@@ -555,7 +555,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     const mark = events.length;
     await press_keys("gV");
     await wait_event(mark, selection_is(page_id, "f"), "the caret on the f of find_words");
-    await type_search("/find_words");
+    await press_keys("/");
+    await type_in_line("find_words");
     await press_enter_and_wait_for_close();
     await wait_read(on_match("aa"), "Enter to put the caret on aa");
     await press_keys("n");
