@@ -20,6 +20,8 @@ export type ActionDeps = {
   open_link_: (url: string, place: Place) => void | Promise<unknown>;
   // The toast says `Copied <what>` where `what` is given, and quotes the text otherwise.
   copy: (text: string, what?: string) => void | Promise<unknown>;
+  // Drops the tracking parameters of an address a copy puts on the clipboard.
+  strip_: (address: string) => string;
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
   start_caret_: (target: Element, mode: CaretMode) => void | Promise<unknown>;
@@ -252,7 +254,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (starts_caret(action)) return deps.start_caret_(target as unknown as Element, action);
   const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
-  if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address ?? (target.textContent ?? "").trim());
+  if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address === undefined ? (target.textContent ?? "").trim() : deps.strip_(address));
   if (action === "copy_image" || action === "download") return address === undefined ? NO_WEB_ADDRESS : deps.image_action(action, address);
   if (action === "copy_text") return is_frame_element(target) ? { ok: false, message: "A frame has no text" } : deps.copy((target.textContent ?? "").trim());
   if (action === "copy_selector") {

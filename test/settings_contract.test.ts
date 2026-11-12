@@ -22,6 +22,7 @@ const EXPECTATIONS: Record<string, string> = {
   default_site_rows_off: 'a list of "sheets" with no repeat',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
+  strip_tracking_params: "a list of query parameter names",
   zoom: "a number, from 0.3 to 5",
   media_quality: '"off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160 or 4320',
   mode_indicator: '"always", "not_normal" or "off"',
@@ -86,7 +87,7 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["hint_add", "hint_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "open_completion", "statusbar_widgets"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["hint_add", "hint_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
@@ -106,6 +107,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   default_site_rows_off: [[], ["sheets"]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
+  strip_tracking_params: [[], ["utm_*", "fbclid"]],
   zoom: [0.3, 1, 1.25, 5],
   media_quality: ["off", "auto", "max", "min", 144, 480, 720, 1080, 4320],
   mode_indicator: ["always", "not_normal", "off"],
@@ -152,6 +154,7 @@ const REFUSES: Record<string, unknown[]> = {
   default_site_rows_off: ["sheets", ["other"], ["sheets", "sheets"], [1]],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
+  strip_tracking_params: ["utm_*", [""], [1]],
   zoom: [0.2, 5.5, Number.NaN, "1.5"],
   media_quality: ["", "high", "1080", "1080p", "Max", 0, 500, 1081, -720, 1.5, Number.NaN, true, ["max"]],
   mode_indicator: ["normal", true],
@@ -245,6 +248,7 @@ test("the defaults stay the same", () => {
     default_site_rows_off: [],
     next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
     prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
+    strip_tracking_params: ["utm_*", "fbclid", "gclid", "dclid", "msclkid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "mkt_tok"],
     mode_indicator: "always",
     palette: "oasis_moonlight",
     light_intensity: 3,
@@ -311,6 +315,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

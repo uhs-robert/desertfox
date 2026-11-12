@@ -76,6 +76,7 @@ function deps_with(overrides: Partial<YankDeps>, copied: string[] = [], messages
   const everything = [link({ href: "/in-view", text: "Seen" }), link({ href: "/hidden", text: "Hidden" }), link({ href: "/below", text: "Below" })];
   return {
     find: () => everything,
+    strip_patterns: async () => [],
     keep_present_: (found) => found.filter((item) => item.element.getAttribute("href") !== "/hidden"),
     keep_in_view_: async (found) => found.filter((item) => item.element.getAttribute("href") === "/in-view"),
     copy: async (text) => {
@@ -123,4 +124,15 @@ test("a copy that drops the text into the black hole shows no message", async ()
   const outcome = await yank_links("page", "plain", deps_with({ copy: async () => ({ ok: true, dropped: true }) }, [], messages));
   assert.deepEqual(outcome, { ok: true });
   assert.deepEqual(messages, []);
+});
+
+test("links that differ only by tracking parameters make one entry, without them", () => {
+  const links = links_of([link({ href: "/a?utm_source=x&id=5", text: "One" }), link({ href: "/a?id=5&fbclid=z", text: "Again" })], ["utm_*", "fbclid"]);
+  assert.deepEqual(links.map((item) => item.url), ["https://a.com/a?id=5"]);
+});
+
+test("the list setting reaches the copied text", async () => {
+  const copied: string[] = [];
+  await yank_links("page", "plain", deps_with({ find: () => [link({ href: "/p?utm_medium=m&k=1", text: "P" })], strip_patterns: async () => ["utm_*"] }, copied));
+  assert.deepEqual(copied, ["https://a.com/p?k=1"]);
 });

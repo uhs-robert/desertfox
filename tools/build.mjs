@@ -12,7 +12,8 @@ const MAX_BYTES = {
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
-  "page.js": 4 * 1024,
+  // 5 KB: the page copy reads the strip list and drops tracking parameters. The bundle loads on first use, not on every page.
+  "page.js": 5 * 1024,
   "text.js": 4 * 1024,
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
   "media.js": 5.5 * 1024,

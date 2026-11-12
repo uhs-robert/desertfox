@@ -125,6 +125,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "strip_tracking_params",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of query parameter names",
+    "values": []
+  },
+  {
     "name": "zoom",
     "settable": true,
     "is_toggle": false,

@@ -1,5 +1,7 @@
 import type { Outcome } from "../../shared/messages.ts";
 import { copy_yank } from "../caret/copy_text.ts";
+import { read_strip_patterns } from "../strip_setting.ts";
+import { strip_tracking } from "../strip_tracking.ts";
 import { link_text, markdown_address, org_address } from "../link_escape.ts";
 
 export const COPY_FORMATS = ["plain", "canonical", "short", "title", "markdown", "org"] as const;
@@ -34,12 +36,14 @@ function link_href(rel: string): string | undefined {
   return document.querySelector<HTMLLinkElement>(`link[rel~="${rel}"][href]`)?.href || undefined;
 }
 
-export function copy_page_url(format: CopyFormat, register: string | undefined, show_toast: (message: string) => void): Promise<Outcome | void> {
+export async function copy_page_url(format: CopyFormat, register: string | undefined, show_toast: (message: string) => void): Promise<Outcome | void> {
+  const patterns = await read_strip_patterns();
+  const stripped = (address: string | undefined) => address && strip_tracking(address, patterns);
   const text = format_page_link(format, {
-    url: location.href,
+    url: strip_tracking(location.href, patterns),
     title: document.title,
-    canonical_url_: link_href("canonical"),
-    short_url_: link_href("shortlink"),
+    canonical_url_: stripped(link_href("canonical")),
+    short_url_: stripped(link_href("shortlink")),
   });
   // The failure goes to the caller, which shows it once.
   return copy_yank(navigator.clipboard, text, register).then((copied) => {

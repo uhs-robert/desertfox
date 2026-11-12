@@ -10,6 +10,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   which_key_border: "Corner style of the which-key panel border",
   next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
   prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
+  strip_tracking_params: "Query parameters that copying a web address drops: the page address (yy and the other formats), the link list (yl, yL) and a hint copy of an address. Each entry is a name, or a prefix before a final `*`, matched without case. An empty list turns the stripping off",
   hint_letters: "The letters hint labels use, each once, at least two",
   blur_on_load: "Take the focus away from a field that the page focuses as it loads, so keys work at once. It stops at a key or click, or about 1 s after DesertFox starts on the page. Per-site: set it in a site_rules row to turn it on for those sites only",
   escape_to_page: "Let the page keep Escape while a field is focused: in insert mode DesertFox passes the key on, does not blur the field and stays in insert until the page drops the field. A manual insert (i) still ends on Escape. Per-site: set it in a site_rules row, only for sites whose editor handles Escape itself, because on a plain input the field keeps the focus and so does insert mode",

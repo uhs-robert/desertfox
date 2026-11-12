@@ -1,5 +1,6 @@
 // The links of the page for `copy.links`: which links count, their label, and the list in one of three formats.
 
+import { strip_tracking } from "../strip_tracking.ts";
 import { link_text, markdown_address, org_address } from "../link_escape.ts";
 import type { Outcome } from "../../shared/messages.ts";
 import type { Yanked } from "../caret/copy_text.ts";
@@ -33,13 +34,15 @@ export function web_address(raw: string, base: string, document_url: string): st
 // The text a person sees, else the names assistive tools use, else the address.
 export const label_of = (element: Element, address: string): string => name_candidates(element, rendered_text(element))[0] ?? address;
 
-// The first link to an address wins. The list stops at the cap.
-export function links_of(found: readonly Found[]): YankedLink[] {
+// The first link to an address wins, after the tracking parameters are dropped, so links that differ only by them make one entry. The list stops at the cap.
+export function links_of(found: readonly Found[], strip_patterns: readonly string[] = []): YankedLink[] {
   const seen = new Set<string>();
   const links: YankedLink[] = [];
   for (const { element } of found) {
-    const url = web_address(element.getAttribute("href") ?? "", element.baseURI, element.ownerDocument.URL);
-    if (url === undefined || seen.has(url)) continue;
+    const address = web_address(element.getAttribute("href") ?? "", element.baseURI, element.ownerDocument.URL);
+    if (address === undefined) continue;
+    const url = strip_tracking(address, strip_patterns);
+    if (seen.has(url)) continue;
     seen.add(url);
     links.push({ url, text: label_of(element, url) });
     if (links.length === MAX_YANKED_LINKS) break;
@@ -66,6 +69,7 @@ export const all_links = (): Found[] => collect(document, query_for("links", und
 
 export type YankDeps = {
   find: () => Found[];
+  strip_patterns: () => Promise<readonly string[]>;
   keep_present_: (found: Found[]) => Found[];
   keep_in_view_: (found: Found[]) => Promise<Found[]>;
   copy: (text: string) => Promise<Yanked>;
@@ -76,7 +80,7 @@ export type YankDeps = {
 export async function yank_links(scope: "page" | "viewport", format: LinkFormat, deps: YankDeps): Promise<Outcome> {
   const found = deps.find();
   const kept = scope === "page" ? deps.keep_present_(found) : await deps.keep_in_view_(found);
-  const links = links_of(kept);
+  const links = links_of(kept, await deps.strip_patterns());
   if (links.length === 0) return { ok: false, message: "No links on this page" };
   const copied = await deps.copy(format_links(links, format));
   if (!copied.ok) return copied;
