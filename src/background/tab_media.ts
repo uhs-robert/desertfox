@@ -112,6 +112,15 @@ export function create_tab_media(deps: TabMediaDeps) {
           if (!hold.left?.includes(frame_id)) await write(tab_id, { ...hold, left: [...(hold.left ?? []), frame_id] });
         } else if (!KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
       }),
+    // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode. A pin alone is no hold, since it holds no frame yet.
+    // The frame goes into `frames` in the same turn as the read. A hold that ends before the frame reports then still reaches it, and its report cannot start a new hold.
+    join: (tab_id: number, frame_id: number): Promise<boolean> =>
+      in_turn(async () => {
+        const hold = await read(tab_id);
+        if (!hold || (hold.frames.length === 0 && !hold.stepped_on)) return false;
+        if (!hold.frames.includes(frame_id)) await write(tab_id, { ...hold, frames: [...hold.frames, frame_id] });
+        return true;
+      }),
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps the hold and drops the pin, so the keys act on the new main video: a `pushState` (YouTube's next video) sends a bare `url`, and a `replaceState` before the load event sends `status: "loading"` with the `url`.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
