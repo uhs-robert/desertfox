@@ -7,6 +7,7 @@ const noop_async = async () => undefined;
 function deps(run: () => Promise<unknown>, timings: [string, number][]): RouterDeps {
   const commands: Record<string, unknown> = {
     "x.ok": { id: "x.ok", label: "x", runs_in: "background", run },
+    "x.content": { id: "x.content", label: "c", runs_in: "content" },
     "debug.perf": { id: "debug.perf", label: "p", runs_in: "background", run },
   };
   return {
@@ -20,7 +21,7 @@ function deps(run: () => Promise<unknown>, timings: [string, number][]): RouterD
     read_clipboard: async () => "",
     bookmark_title: noop_async,
     has_permission: async () => true,
-    send_to_tab: noop_async,
+    send_to_tab: async () => ({ ok: true, cancelled: true }),
     open_cmdline: noop_async,
     show_refusal: noop_async,
     is_disabled: async () => false,
@@ -41,4 +42,14 @@ test("a finished command reports its time, a refusal and debug.perf do not", asy
   const refused: [string, number][] = [];
   await create_router(deps(async () => ({ ok: false, message: "no" }), refused)).run({ invocations: [{ id: "x.ok" }], mode: "normal" });
   assert.deepEqual(refused, []);
+});
+
+test("a throwing handler and a content command leave no row", async () => {
+  const timings: [string, number][] = [];
+  const throwing = create_router(deps(async () => Promise.reject(new Error("boom")), timings));
+  const response = await throwing.run({ invocations: [{ id: "x.ok" }], mode: "normal" });
+  assert.equal(response.ok, false);
+  const content = await throwing.run({ invocations: [{ id: "x.content" }], mode: "normal" });
+  assert.deepEqual(content, { ok: true, cancelled: true });
+  assert.deepEqual(timings, []);
 });
