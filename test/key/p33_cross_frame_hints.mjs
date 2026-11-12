@@ -113,8 +113,8 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await press_keys(labels.cross[0]);
     labels = await wait_for_labels("the labels again after the cross-origin pick", 6);
     await press_keys(labels.top[0]);
-    await poll_until("the clipboard to hold two lines", async () => (await clipboard_text()).split("\n").length === 2);
-    const lines = (await clipboard_text()).split("\n");
+    let lines = [];
+    await poll_until("the clipboard to hold two lines", async () => (lines = (await clipboard_text()).split("\n")).length === 2);
     expect(lines[0] !== lines[1] && lines[0] !== "seed", `the clipboard holds ${JSON.stringify(lines)}, expected two different picks`);
     await press_keys("-k", "Escape");
     await wait_for_no_labels("the labels to go after Escape");
