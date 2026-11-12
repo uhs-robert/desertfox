@@ -7,7 +7,8 @@ import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { create_media_discovery, create_tab_media, LINE_CLOSE_GRACE_MS } from "../src/background/tab_media.ts";
-import { create_mode_state, fullscreen_step } from "../src/content/mode_state.ts";
+import { create_mode_state, fullscreen_step, takes_media_step } from "../src/content/mode_state.ts";
+import type { MediaStep } from "../src/shared/messages.ts";
 import type { Mode } from "../src/shared/command.ts";
 import { MODES } from "../src/shared/command.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
@@ -122,18 +123,19 @@ const LOAD_START = { status: "loading" };
 
 // `store`, `sent` and `clock` passed in from an earlier fake stand for a background that restarted.
 function fake_tab_media({ store = new Map<string, unknown>(), sent = [] as [number, number | "all", string][], clock = { now_ms: 0 }, gone = new Set<number>() } = {}) {
-  // A `MediaStep` as "on" or "off", with "all" for no frame.
+  // A `MediaStep` as "on" or "off", with "all" for no frame. `skipped_by` holds the reporter each step names, in step order, undefined for none.
+  const skipped_by: (number | undefined)[] = [];
   const media = create_tab_media({
     storage: {
       get: async (key: string) => (typeof key === "string" && store.has(key) ? { [key]: store.get(key) } : {}),
       set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
       remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
     } as never,
-    send_step: async (tab_id, on, frame_id) => void sent.push([tab_id, frame_id ?? "all", on ? "on" : "off"]),
+    send_step: async (tab_id, on, frame_id, from) => void (sent.push([tab_id, frame_id ?? "all", on ? "on" : "off"]), skipped_by.push(from)),
     frame_alive: async (_tab_id, frame_id) => !gone.has(frame_id),
     now: () => clock.now_ms,
   });
-  return { media, sent, store, clock, gone };
+  return { media, sent, store, clock, gone, skipped_by };
 }
 
 // `aa` then an immediate Escape: a second step on, sent when the key's frame reports the mode, could reach it after the Escape and put it back in the mode.
@@ -169,6 +171,23 @@ test("the first frame to report media starts the mode in every frame of the tab,
   await media.reported(4, 0, "media", false);
   await media.enter(4, 0);
   assert.deepEqual(sent, [[4, "all", "on"], [4, "all", "on"]]);
+});
+
+// A site key that starts a fullscreen and ends it at once: the frame is back in normal before the step on that its report caused reaches it.
+test("the step on of a first report names the reporter, which skips it and stays in normal, while every other frame takes it", async () => {
+  const { media, skipped_by } = fake_tab_media();
+  await media.enter(4, 0);
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 0, "normal", true);
+  await media.reported(4, 3, "media", false);
+  assert.deepEqual(skipped_by, [undefined, 3]);
+  const step: MediaStep = { type: "media", on: true, from: 3 };
+  const reporter = create_mode_state();
+  if (takes_media_step(step, 3)) reporter.set_mode_(fullscreen_step(reporter.get_mode_(), true) ?? reporter.get_mode_());
+  assert.equal(reporter.get_mode_(), "normal");
+  const other = create_mode_state();
+  if (takes_media_step(step, 0)) other.set_mode_(fullscreen_step(other.get_mode_(), true) ?? other.get_mode_());
+  assert.equal(other.get_mode_(), "media");
 });
 
 test("a hint or the command line opened from media keeps the hold, and leaving through insert ends it", async () => {
