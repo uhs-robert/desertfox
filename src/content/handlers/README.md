@@ -4,7 +4,7 @@ The content-side code of each command that runs in the page. One file per comman
 
 - `types.ts`: the `ContentHandler` type.
 - `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`). The `scroll_selector` site setting picks the target first.
-- `page.ts`: `page.blur`. It holds `blur_focused_element`, and `hand_focus_to_parent` asks the `ui` bundle for the hand-off of a hidden input frame (`../ui/hand_focus.ts`), only in a frame with a frame element. The bundle host remembers the last blurred field, which the bundles read through it.
+- `page.ts`: `page.blur`. It holds `blur_focused_element` and `hand_focus_to_parent`, the hand-off of a hidden input frame (`../hidden_frame.ts`). The hand-off stays in content.js, because a frame that navigates cannot be counted on to answer a bundle load. The bundle host remembers the last blurred field, which the bundles read through the host.
 - `mode.ts`, `stop.ts`: the mode and stop commands.
 - `align.ts`, `copy.ts`, `focus_input.ts`: the code of `scroll.align`, `copy.url` and `page.focus_input`. These are plain functions, not `ContentHandler` objects. The `page` bundle (`../page/main.ts`) registers them.
 - `focus.ts`: a helper that has no handler object.
