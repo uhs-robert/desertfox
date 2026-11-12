@@ -95,4 +95,13 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, ev
     await poll_until("ten rows", async () => (await bar_rows()).length === 10);
     await press_keys("-k", "Escape");
   });
+
+  await run_case("a description with angle brackets shows them as written", async () => {
+    await focus_address_bar();
+    await type_in_address_bar("df tab.pi");
+    // The keys column of tab.pin is <A-p>. A description that Firefox parsed as markup would lose it or show it as &lt;A-p&gt;.
+    await poll_until("the tab.pin row with its keys", async () => (await bar_rows()).some((row) => /^tab\.pin .*<A-p>/.test(row)));
+    expect(!(await bar_rows()).some((row) => row.includes("&lt;")), "an entity showed literally");
+    await press_keys("-k", "Escape");
+  });
 }

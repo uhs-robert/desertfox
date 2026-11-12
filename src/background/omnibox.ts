@@ -7,7 +7,15 @@ import type { RunResponse, Refusal } from "../shared/messages.ts";
 import { parse_command_line } from "../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../shared/registry/index.ts";
 import type { RouteRequest, ActiveTab } from "./router.ts";
+import { create_completer } from "../cmdline/completion/sources.ts";
 import type { Completion } from "../cmdline/completion/sources.ts";
+import type { LiveKind, LiveRead, LiveItems } from "../cmdline/completion/live.ts";
+import { key_labels } from "../cmdline/completion/keys.ts";
+import { create_word_lookup } from "../cmdline/word_lookup.ts";
+import type { CommandMeta } from "../shared/command.ts";
+import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import type { SearchEngine } from "../shared/config.ts";
+import { engine_items } from "./complete_items.ts";
 
 export type OmniboxSuggestion = { content: string; description: string };
 
@@ -34,6 +42,32 @@ const WHERE_OF: Record<OmniboxDisposition, string | undefined> = { currentTab: u
 
 // The address bar shows 10 rows and the default suggestion takes one (measured by `test/key/p31_omnibox.mjs`).
 export const MAX_SUGGESTIONS = 9;
+
+// The completer's live source for the address bar: the search engines of the config and nothing else. Tabs, bookmarks and history read empty, so no
+// page title, address or private-window item reaches the address bar. A kind that lists nothing is answered, never left loading.
+export function engines_only_live(engines: Record<string, SearchEngine>) {
+  return {
+    read: <Kind extends LiveKind>(kind: Kind): LiveRead<Kind> => {
+      if (kind === "engines") return { loading: false, items: engine_items(engines, undefined) } as LiveRead<Kind>;
+      if (kind === "anything") return { loading: true };
+      const empty: Partial<{ [Kind in LiveKind]: LiveItems[Kind] }> = { open: { rows: [], history_max: 0, sites: [] }, history: { rows: [], max: 0 }, bookmarks: { rows: [], folders: [] } };
+      return { loading: false, items: empty[kind] ?? [] } as LiveRead<Kind>;
+    },
+  };
+}
+
+// The completer and keys column over what the background loaded.
+export type CompleterInput = {
+  commands: readonly CommandMeta[];
+  command_aliases: Readonly<Record<string, string>>;
+  sources: Parameters<typeof create_completer>[3];
+  search_engines: Record<string, SearchEngine>;
+  keymap: CompiledKeymap | undefined;
+};
+export function build_completer(input: CompleterInput) {
+  const lookup = create_word_lookup(input.commands, input.command_aliases);
+  return { complete: create_completer(lookup, input.commands, input.command_aliases, input.sources, "normal", engines_only_live(input.search_engines)), keys: key_labels(input.keymap, input.commands, "normal") };
+}
 
 export function create_omnibox(deps: OmniboxDeps) {
   async function entered(text: string, disposition: OmniboxDisposition): Promise<void> {

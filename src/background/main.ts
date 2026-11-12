@@ -27,9 +27,7 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
 import { create_word_lookup } from "../cmdline/word_lookup.ts";
-import { create_completer } from "../cmdline/completion/sources.ts";
-import { key_labels } from "../cmdline/completion/keys.ts";
-import { create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
+import { build_completer, create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
 import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
@@ -377,10 +375,8 @@ if (browser.omnibox) {
     show_refusal: router_deps.show_refusal,
     completer: async () => {
       const config = await get_config();
-      const commands = registry.list().map(command_meta);
       const keymap = (await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-      const complete = create_completer(create_word_lookup(commands, config.command_aliases), commands, config.command_aliases, await router_deps.get_enum_sources());
-      return { complete, keys: key_labels(keymap, commands, "normal") };
+      return build_completer({ commands: registry.list().map(command_meta), command_aliases: config.command_aliases, sources: await router_deps.get_enum_sources(), search_engines: config.search_engines, keymap });
     },
     record_history: cmdline.record,
   });
