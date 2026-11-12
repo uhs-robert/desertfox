@@ -2,7 +2,8 @@
 // A highlight registry belongs to one document, but a `::highlight()` rule only reaches the tree whose stylesheet holds it.
 // So each tree with text, each shadow root and each frame document, adopts a sheet of its own.
 
-import type { TextModel, TextTree } from "./text_model.ts";
+import { create_sheet_set, owner_of } from "./adopted_sheets.ts";
+import type { TextModel } from "./text_model.ts";
 
 // Painting a hundred thousand ranges would stall the page, so only a window of matches around the current one is painted.
 export const PAINT_CAP = 2000;
@@ -18,7 +19,6 @@ export type HighlightNames = { all: string; current: string };
 // One painter owns one pair of names, so a find by character never clears the matches a kept `/` search stands on.
 export const SEARCH_NAMES: HighlightNames = { all: "oasis-find", current: "oasis-find-current" };
 export const CHAR_FIND_NAMES: HighlightNames = { all: "oasis-ft", current: "oasis-ft-current" };
-const DOCUMENT_NODE = 9;
 
 // Where matches start, and where each ends: one end per match, or one width for all.
 export type Spans = { from: number[] } & ({ to: number[] } | { width: number });
@@ -30,9 +30,6 @@ export type FindColors = { all: { dark: ColorPair; light: ColorPair }; current: 
 
 // The lib's type for the registry lacks the map methods.
 type Registry = { set: (name: string, highlight: Highlight) => void; delete: (name: string) => void };
-type Adopting = TextTree & { adoptedStyleSheets: CSSStyleSheet[] };
-
-const owner_of = (tree: TextTree): Document => (tree.nodeType === DOCUMENT_NODE ? (tree as Document) : (tree as ShadowRoot).ownerDocument);
 
 // A frame's window seen from this script answers `CSS` with this script's own, so its highlights would land in the wrong registry. The page's own view of the window gives the frame's.
 // This script's own document keeps its own globals, so page code cannot patch them and read each query.
@@ -67,20 +64,8 @@ function ranges_of(model: TextModel, from: number, to: number): Range[] {
 }
 
 export function create_painter(names: HighlightNames = SEARCH_NAMES) {
-  const sheets = new Map<TextTree, CSSStyleSheet>();
+  const sheets = create_sheet_set();
   const painted_documents = new Set<Document>();
-
-  const adopt_sheet = (tree: TextTree, colors: FindColors) => {
-    const kept = sheets.get(tree);
-    // The page may have replaced its sheets and dropped ours.
-    if (kept && (tree as Adopting).adoptedStyleSheets.includes(kept)) return;
-    const owner = owner_of(tree);
-    // A sheet works only in the document that made it, so a frame's tree takes the frame's own constructor.
-    const sheet = new (owner.defaultView as unknown as { CSSStyleSheet: typeof CSSStyleSheet }).CSSStyleSheet();
-    sheet.replaceSync(sheet_text(names, colors));
-    (tree as Adopting).adoptedStyleSheets.push(sheet);
-    sheets.set(tree, sheet);
-  };
 
   // A removed frame or shadow host is a dead object, and any use of it throws. The rest still has to be cleared.
   const clear_highlights = () => {
@@ -97,14 +82,6 @@ export function create_painter(names: HighlightNames = SEARCH_NAMES) {
   // The sheets stay for the whole search, so a keystroke does not rebuild one in every tree. Only the end of the search drops them.
   const clear = () => {
     clear_highlights();
-    for (const [tree, sheet] of sheets) {
-      try {
-        const adopted = (tree as Adopting).adoptedStyleSheets;
-        // The page may have replaced its sheets and dropped ours.
-        const at = adopted.indexOf(sheet);
-        if (at >= 0) adopted.splice(at, 1);
-      } catch {}
-    }
     sheets.clear();
   };
 
@@ -123,7 +100,7 @@ export function create_painter(names: HighlightNames = SEARCH_NAMES) {
     }
     for (const tree of model.trees) {
       try {
-        adopt_sheet(tree, colors);
+        sheets.set(tree, sheet_text(names, colors));
       } catch {}
     }
     for (const [owner, group] of by_document) {

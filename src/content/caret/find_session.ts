@@ -66,18 +66,12 @@ const FALLBACK_COLORS: FindColors = {
 const QUERY_REGISTER = "/";
 const DIRECTION_REGISTER = "/:direction";
 
-// An element of DesertFox itself (the command line, the surfaces, the selection style) comes and goes with a search, and its text is not in the model.
+// An element of DesertFox itself (the command line, the surfaces) comes and goes with a search, and its text is not in the model.
 // Marked by an attribute: a style check such as `all: initial` stops holding once the element sets a longhand, as the command line does when it resizes.
-const OWN_ATTRIBUTES = ["data-desertfox-layer", "data-desertfox"];
-const OWN_SELECTOR = OWN_ATTRIBUTES.map((name) => `[${name}]`).join(",");
-const is_own_element = (node: Node) => node.nodeType === 1 && OWN_ATTRIBUTES.some((name) => (node as Element).hasAttribute(name));
-
-// A change inside an own element is ours too: setting the selection style's text adds a Text node, which is not an element.
-const in_own_element = (node: Node) => ((node.nodeType === 1 ? node : node.parentElement) as Element | null)?.closest(OWN_SELECTOR) != null;
+const is_own_element = (node: Node) => node.nodeType === 1 && (node as Element).hasAttribute("data-desertfox-layer");
 
 export const is_page_change = (record: MutationRecord) =>
-  !in_own_element(record.target) &&
-  (record.type === "characterData" || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => !is_own_element(node)));
+  record.type === "characterData" || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => !is_own_element(node));
 
 // The search pair for all matches and the current-match pair for the one the search stands on.
 export async function read_find_colors(): Promise<FindColors> {

@@ -282,7 +282,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   });
 
   // The page swaps text under the open session half a second after the first selection report.
-  const selection_styles = `[...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
+  const selection_styles = `[document, ...[...document.querySelectorAll("*")].map((element) => element.shadowRoot), ...[...document.querySelectorAll("iframe")].map((frame) => frame.contentDocument)].filter(Boolean).flatMap((tree) => [...tree.adoptedStyleSheets]).filter((sheet) => [...sheet.cssRules].some((rule) => rule.cssText.includes("::selection"))).length`;
   await run_case("caret mode survives the page replacing the paragraph that holds the caret", async () => {
     const page_id = "replaced_replace_paragraph";
     await open_page("caret_replaced", page_id, { new_tab: true });
@@ -298,7 +298,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await search_with_line("fresh");
     await wait_for_last_selection(page_id, mark_search, (last) => last.text === "f", 'the caret on the "f" of fresh');
     await escape_to_normal(page_id);
-    await poll_until("the selection style to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
+    await poll_until("the selection colors to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
   });
 
   // A find unit needs a key as its target, so from normal mode `:caret.move` with it does nothing.
@@ -316,9 +316,10 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal(page_id);
   });
 
-  // Pages that add trees after the session started. The style probes read the ::selection style the caret puts on each tree.
-  const root_styles = (host_selector) => `(() => { const root = document.querySelector(${JSON.stringify(host_selector)}).shadowRoot; return [...root.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length; })()`;
-  const frame_styles = (frame_selector) => `[...document.querySelector(${JSON.stringify(frame_selector)}).contentDocument.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
+  // Pages that add trees after the session started. The sheet probes count the adopted sheets with a ::selection rule on each tree.
+  const selection_sheets_of = (tree) => `[...${tree}.adoptedStyleSheets].filter((sheet) => [...sheet.cssRules].some((rule) => rule.cssText.includes("::selection"))).length`;
+  const root_styles = (host_selector) => selection_sheets_of(`document.querySelector(${JSON.stringify(host_selector)}).shadowRoot`);
+  const frame_styles = (frame_selector) => selection_sheets_of(`document.querySelector(${JSON.stringify(frame_selector)}).contentDocument`);
   const add_late_root = (text) => in_active_tab(`(() => { const host = document.createElement("div"); host.id = "late_host"; document.body.append(host); host.attachShadow({ mode: "open" }).innerHTML = "<p>${text}</p>"; return true; })()`);
 
   // A tree that leaves the page makes the next key rebuild the model, and the rebuild brings the new trees. They need the selection style too.

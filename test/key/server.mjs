@@ -24,7 +24,6 @@ addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
 // The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
 let last_indicator = "";
-let last_css = "";
 // The toast host is found by its layer, because its text sits in a closed shadow root.
 // LAYERS.toast in src/shared/layers.ts. The page script cannot import it.
 const TOAST_Z_INDEX = "2147483645";
@@ -43,8 +42,6 @@ new MutationObserver(() => {
     last_whichkey_shape = panel_shape;
     send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-desertfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-desertfox-whichkey-width") ?? 0), viewport: window.innerWidth });
   }
-  const css = root.querySelector(":scope > style:not([data-desertfox-backdrop-reset])")?.textContent ?? "";
-  if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());
   if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
   toast_shown = toast_now;
