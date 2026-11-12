@@ -19,6 +19,8 @@ import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
 import type { Block } from "./blocks.ts";
+import { site_rules_view } from "../background/site_rules_view.ts";
+import type { SiteRulesView } from "../background/site_rules_view.ts";
 import { quick_start_blocks, tip_block } from "./quick_start.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
@@ -75,6 +77,8 @@ export type HelpModel = {
   engines: EngineRow[];
   quick_start: Block[];
   tip: Block;
+  // The Site Rules page's rows for one address, read from the keymap the model was built from.
+  site_rules_for: (address: string) => SiteRulesView;
 };
 
 const MODE_ORDER: readonly KeymapMode[] = [...MODES, "browser"];
@@ -213,6 +217,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),
     tip: tip_block(compiled, commands),
+    site_rules_for: (address) => site_rules_view(compiled, address),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
@@ -285,4 +290,5 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "desertfox-help-tip", meaning: "The tip callout at the top of the Home and Commands pages" },
   { name: "desertfox-help-tip-label", meaning: "The bold \"Tip\" word that starts the callout" },
   { name: "desertfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
+  { name: "desertfox-help-shadowed", meaning: "A column or key on the Site Rules page that an earlier row already decides" },
 ];

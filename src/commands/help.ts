@@ -21,7 +21,7 @@ const command_ids = new Set([...registry.list().map((command) => command.id), "h
 define("help.open", {
   name: "help",
   label: "Help",
-  intent: "Open the help page. On the help page itself, it goes there in place instead of a new tab. Name a command to open its card, or a page such as commands or quick_start. It lists every command, its keys and the config warnings.",
+  intent: "Open the help page. On the help page itself, it goes there in place instead of a new tab. Name a command to open its card, or a page such as commands or quick_start. It lists every command, its keys and the config warnings. `site_rules` lists the site rows that fit the current tab and the keys they change.",
   params: [{ name: "name", type: "string", rest: true, main: true, optional: true, values: help_name_choices(command_ids), strict: true }],
   bridge: false,
   runs_in: "background",
@@ -29,7 +29,10 @@ define("help.open", {
   run: async (ctx, args) => {
     const name = args.name as string;
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
-    const url = help_name_url(help_page_url, name, command_ids) as string; // `strict` limits name to the choices that resolve
+    // The help page holds no web address, so asking from it leaves the Site Rules page without one.
+    const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+    const address = tab?.url?.startsWith(help_page_url) ? undefined : tab?.url;
+    const url = help_name_url(help_page_url, name, command_ids, address) as string; // `strict` limits name to the choices that resolve
     await open_help_url(ctx, help_page_url, url);
   },
 });

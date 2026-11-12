@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
-import { parse_route } from "../src/help/route.ts";
+import { parse_route, site_rules_help_url } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
 
@@ -373,4 +373,46 @@ test("a model change updates the Settings config source line in place", () => {
   const line = root.querySelector(".desertfox-config-source")!;
   update_config_source({ config_source: "Config files, read by config.reload" } as never);
   assert.equal(line.textContent, "Config source: Config files, read by config.reload.");
+});
+
+test("the Site Rules route carries its address through the hash, whatever the address holds", () => {
+  for (const address of ["https://a.test/", "https://a.test/p?x=1&y=%20#top", "https://a.test/?advanced"]) {
+    assert.deepEqual(parse_route(site_rules_help_url("", address)), { page: "site-rules", address }, address);
+  }
+  assert.deepEqual(parse_route("#/site-rules"), { page: "site-rules" });
+  assert.deepEqual(parse_route("#/site-rules?address=%E0%A4%A"), { page: "site-rules" });
+});
+
+const SITE_RULES_VIEW = {
+  address: "https://a.test/",
+  rows: [
+    { origin: "user", site: "https://a.test/*", columns: [{ name: "hint_add", value: ".a, .b", shadowed: false }], changes: [{ keys: "j", action: "Reload", replaces: "Scroll down", shadowed: false }] },
+    { origin: "default", name: "sheets", site: "https://a.test/*", columns: [{ name: "hint_add", value: ".c", shadowed: true }], changes: [{ keys: "k", mode: "visual", action: "Stop", shadowed: true }] },
+  ],
+};
+
+function render_site_rules(address: string | undefined, rows = SITE_RULES_VIEW.rows): FakeNode {
+  (globalThis as { document?: unknown }).document = fake_document;
+  const root = new FakeNode("body");
+  fake_document.body = root;
+  reset_group_state();
+  const model = { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, site_rules_for: () => ({ address, rows }) };
+  render_help(root as never, model as never, { page: "site-rules", ...(address === undefined ? {} : { address }) }, []);
+  return root;
+}
+
+const text_of = (node: FakeNode | string): string => (typeof node === "string" ? node : node.children.map(text_of).join(" "));
+
+test("the Site Rules page draws each row with its origin, columns as name and value, and the keys it changes", () => {
+  const sections = render_site_rules("https://a.test/").find_all(by_class("desertfox-help-command"));
+  assert.equal(sections.length, 2);
+  assert.match(text_of(sections[0]!), /Your row.*hint_add.*\.a, \.b.*Scroll down/);
+  assert.match(text_of(sections[1]!), /Shipped row sheets.*hint_add.*\.c.*visual.*Stop/);
+  assert.equal(sections[0]!.find_all(by_class("desertfox-help-shadowed")).length, 0);
+  assert.equal(sections[1]!.find_all(by_class("desertfox-help-shadowed")).length, 2);
+});
+
+test("the Site Rules page says so when no row fits, and tells where to run it without an address", () => {
+  assert.match(text_of(render_site_rules("https://a.test/", [])), /No site row fits this address/);
+  assert.match(text_of(render_site_rules(undefined)), /Run +:help site_rules +on a web page/);
 });
