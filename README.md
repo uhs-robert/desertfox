@@ -44,7 +44,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Command line with completion | ✅ | 🟡 | 🟡 | ✅ | ✅ |
 | Caret mode | ✅ | 🟡 | 🟡 | ❌ | ✅ |
 | Visual mode | ✅ | ✅ | ✅ | 🟡 | ✅ |
-| Page search | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Page search | ✅ | ✅ | ✅ | 🟡 uses the Firefox find bar | ✅ |
 | Macros | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Per-site keys and settings | ✅ | keys only | 🟡 | ✅ | ✅ |
 | Containers | ✅ | ❌ | 🟡 | ✅ | ❌ |
