@@ -14,6 +14,8 @@ export type Driver = {
   video_id: () => string | undefined;
   // Whether the player took the skip.
   skip: (forward: boolean) => boolean;
+  // Whether the player took the captions toggle. Absent when the player has no such call.
+  toggle_captions?: () => boolean;
 };
 
 // A real player lists a dozen levels. The page owns `length`, so a hostile one cannot make the loop long.

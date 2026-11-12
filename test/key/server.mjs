@@ -83,6 +83,7 @@ const MEDIA_REPORTER = `<script>
 function report_media(video, send) {
   const state = () => ({ rate: video.playbackRate, volume: video.volume, muted: video.muted, time: video.currentTime, paused: video.paused });
   for (const type of ["play", "pause", "ratechange", "volumechange", "seeked", "enterpictureinpicture", "leavepictureinpicture"]) video.addEventListener(type, () => send("media_" + type, state()));
+  video.textTracks.addEventListener("change", () => send("media_captions", { ...state(), mode: video.textTracks[0]?.mode }));
 }
 </script>`;
 
@@ -141,6 +142,10 @@ export function start_server() {
     if (url.pathname === "/icon.svg") {
       response.writeHead(200, { "content-type": "image/svg+xml" });
       return response.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#e8a33d"/><path d="M5 8l2 2 4-4" fill="none" stroke="#fff" stroke-width="2"/></svg>');
+    }
+    if (url.pathname === "/captions.vtt") {
+      response.writeHead(200, { "content-type": "text/vtt" });
+      return response.end("WEBVTT\n\n00:00:00.000 --> 00:00:20.000\nA caption\n");
     }
     if (url.pathname === "/tone.wav") {
       // Thirty seconds of silence at 8 kHz, 8 bit mono, so a media element has a source that plays with no network.
@@ -344,7 +349,7 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
     }
     if (url.pathname === "/media_mode") {
       // A large video in a player box, a small one beside it, a field and tall filler. Each video reports its own events. The key e enters or leaves element fullscreen as a site's own button does, and the key is unbound in the media mode, so the page sees it there.
-      const videos = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="big" src="/tone.wav" loop style="width:320px;height:180px"></video></div><video id="small" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><input id="typing" style="display:block"><button id="noop" style="display:block">noop</button>';
+      const videos = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="big" src="/tone.wav" loop style="width:320px;height:180px"><track kind="subtitles" src="/captions.vtt" srclang="en"></video></div><video id="small" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><input id="typing" style="display:block"><button id="noop" style="display:block">noop</button>';
       const script = `<script>
         for (const video of document.querySelectorAll("video")) report_media(video, (type, data) => send(type, { ...data, video: video.id }));
         document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement?.id ?? "" }));
@@ -395,6 +400,7 @@ function make_movie_player(levels, start) {
   player.getAvailableQualityData = () => levels.map(([quality, qualityLabel]) => ({ quality, qualityLabel, isPlayable: true }));
   player.getPlaybackQuality = () => (ready ? current : "unknown");
   player.setPlaybackQualityRange = (low, high) => { current = low; document.documentElement.dataset.level = low; send("quality_set", { low, high }); };
+  player.toggleSubtitles = () => send("quality_captions", {});
   player.nextVideo = () => send("quality_skip", { to: "next" });
   player.previousVideo = () => send("quality_skip", { to: "previous" });
   player.start_over = () => { current = start; document.documentElement.dataset.level = start; };

@@ -184,3 +184,13 @@ test("the video identity is the YouTube video id and the hls.js address, and a p
   (hls as { url?: string }).url = "https://cdn.test/a.m3u8";
   assert.equal(hls_driver(page)!.video_id(), "https://cdn.test/a.m3u8");
 });
+
+test("the YouTube driver toggles captions through the player and refuses a player without the call", () => {
+  const calls: string[] = [];
+  const request: QualityRequest = { type: "quality_apply", op: "captions", value: undefined, times: 1 };
+  const driver = youtube_driver(youtube_page({ getAvailableQualityLevels: () => [], toggleSubtitles: () => calls.push("toggle") }))!;
+  assert.equal(apply_quality(driver, request).toggled, true);
+  assert.deepEqual(calls, ["toggle"]);
+  const old = youtube_driver(youtube_page({ getAvailableQualityLevels: () => [] }))!;
+  assert.equal(apply_quality(old, request).toggled, false);
+});

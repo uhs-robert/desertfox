@@ -1,7 +1,7 @@
 // What the `media` bundle does in one frame: find the media elements, describe them for the background's choice, and change the chosen ones.
 
 import { shadow_root_of } from "../shadow.ts";
-import { SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
+import { FRAME_RULE, SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
 import type { LevelRule, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../../shared/media.ts";
 
 // The parts of a media element this file reads and writes, so the tests can pass plain objects.
@@ -15,6 +15,7 @@ export type Player = {
   muted: boolean;
   currentTime: number;
   duration: number;
+  textTracks?: ArrayLike<{ kind: string; mode: string; default?: boolean }>;
   play: () => Promise<void>;
   pause: () => void;
   requestPictureInPicture?: () => Promise<unknown>;
@@ -121,8 +122,21 @@ function targets_of(view: FrameView, request: Extract<MediaRequest, { type: "med
   return chosen ? [chosen] : [];
 }
 
+// Only subtitle and caption tracks count. A track a site draws itself stays "hidden", which reads as off.
+const caption_tracks = (player: Player) => Array.from(player.textTracks ?? []).filter(({ kind }) => kind === "subtitles" || kind === "captions");
+
+// `Reflect.get`: a property named default trips the scan that keeps param defaults read in one place.
+function toggle_captions(player: Player): void {
+  const tracks = caption_tracks(player);
+  const shown = tracks.filter(({ mode }) => mode === "showing");
+  if (shown.length > 0) for (const track of shown) track.mode = "disabled";
+  else if (tracks[0]) (tracks.find((track) => Reflect.get(track, "default")) ?? tracks[0]).mode = "showing";
+}
+
 function state_of(player: Player, view: FrameView): MediaState {
+  const tracks = caption_tracks(player);
   return {
+    captions: tracks.length === 0 ? "none" : tracks.some(({ mode }) => mode === "showing") ? "on" : "off",
     rate: player.playbackRate,
     volume: player.volume,
     muted: player.muted,
@@ -145,7 +159,11 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   else if (action === "seek") player.currentTime = next_level(player.currentTime, value, times, { ...SEEK_RULE, max: Number.isFinite(player.duration) ? player.duration : SEEK_RULE.max });
   // An element that plays pauses, one that does not plays. The audible and playing targets hold only elements that play.
   else if (action === "play_pause") return is_playing(player) ? player.pause() : within_grace(player.play());
-  else if (action === "mute") player.muted = !player.muted;
+  else if (action === "captions") toggle_captions(player);
+  else if (action === "frame") {
+    player.pause();
+    player.currentTime = next_level(player.currentTime, value, times, { ...FRAME_RULE, max: Number.isFinite(player.duration) ? player.duration : Infinity });
+  } else if (action === "mute") player.muted = !player.muted;
   else if (action === "loop") player.loop = !player.loop;
   else if (action === "fullscreen") return view.toggle_fullscreen(player);
   else if (action === "info") return;

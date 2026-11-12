@@ -14,6 +14,7 @@ type MoviePlayer = {
   getVideoData?: () => unknown;
   nextVideo?: () => void;
   previousVideo?: () => void;
+  toggleSubtitles?: () => void;
 };
 
 export type YouTubePage = { document: { getElementById: (id: string) => unknown } };
@@ -64,6 +65,12 @@ export function youtube_driver(page: YouTubePage): Driver | undefined {
     video_id: () => {
       const id = (player.getVideoData?.() as { video_id?: unknown } | undefined)?.video_id;
       return typeof id === "string" ? id : undefined;
+    },
+    // Unofficial and unverified on the current site: a player without the call refuses.
+    toggle_captions: () => {
+      if (typeof player.toggleSubtitles !== "function") return false;
+      player.toggleSubtitles();
+      return true;
     },
     skip: (forward) => {
       const go = forward ? player.nextVideo : player.previousVideo;
