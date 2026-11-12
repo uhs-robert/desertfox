@@ -51,7 +51,7 @@ test("an id with no handler and no bundle field is failed", async () => {
 
 test("every command with a bundle field names a real bundle, has no run, and has no entry in the handler map", () => {
   const lazy = registry.list().filter((command) => command.bundle !== undefined);
-  assert.equal(lazy.length, 35);
+  assert.equal(lazy.length, 36);
   for (const command of lazy) {
     assert.equal(command.runs_in, "content", command.id);
     assert.equal(command.run, undefined, command.id);

@@ -301,14 +301,14 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await poll_until("the selection colors to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
   });
 
-  // A find unit needs a key as its target, so from normal mode `:caret.move` with it does nothing.
-  await run_case(":caret.move with char_find from normal mode leaves no find armed for the next caret key", async () => {
+  // A find needs a character, which the line supplies, and a session to move, which normal mode has not. The command leaves the page alone and nothing waits for the next key.
+  await run_case(":caret.find from normal mode starts no session and leaves nothing armed for the next caret key", async () => {
     const page_id = "move_find";
     await open_page("caret", page_id, { new_tab: true });
     const mark = events.length;
-    await run_line(":caret.move --unit=char_find");
+    await run_line(":caret.find l");
     await wait_cmdline((line) => !line.open, "the line to close");
-    await expect_absent(mark, page_id, (event) => is_selection_of(page_id)(event) || badge_is(page_id, "CARET")(event), "caret mode or a selection after the find unit");
+    await expect_absent(mark, page_id, (event) => is_selection_of(page_id)(event) || badge_is(page_id, "CARET")(event), "caret mode or a selection after the find command");
     await press_and_wait_for_move(page_id, "gV", "the caret on the title");
     // The title is "caret move_find". l as a motion lands on "a". l as a find target would jump to the "l" of "line".
     const last = await press_and_wait_for_move(page_id, "l", "l to move the caret");

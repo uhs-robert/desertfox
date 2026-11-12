@@ -145,7 +145,13 @@ test("a chord or named key does not fill the param", () => {
   matcher.feed("normal", "m");
   assert.equal(matcher.feed("normal", "<C-a>").kind, "no_match");
   matcher.feed("normal", "m");
-  assert.equal(matcher.feed("normal", "<Space>").kind, "no_match");
+  assert.equal(matcher.feed("normal", "<Tab>").kind, "no_match");
+});
+
+test("a space fills the key param as a space character", () => {
+  const matcher = create_matcher(capture_tree());
+  matcher.feed("normal", "m");
+  assert.equal(slot_of(matcher.feed("normal", "<Space>")), " ");
 });
 
 test("a mode change drops a pending capture", () => {
@@ -193,16 +199,17 @@ test("key flow runs the leaf with the captured key and count, and cancels both k
   assert.deepEqual(ran, ["test.mark:g:3"]);
 });
 
-test("key flow: Escape during a capture hides the panel and runs the Escape binding", () => {
+test("key flow: Escape during a capture hides the panel and drops only the capture, and a second Escape runs the Escape binding", () => {
   const { flow, ran, prefixes } = make_flow();
   flow.handle_token_("m");
   assert.deepEqual(prefixes.at(-1), ["m"]);
+  assert.equal(flow.handle_token_("<Escape>"), "cancel");
+  assert.deepEqual(ran, []);
+  assert.equal(prefixes.at(-1), undefined);
   flow.handle_token_("<Escape>");
   assert.deepEqual(ran, ["test.down::"]);
-  assert.equal(prefixes.at(-1), undefined);
   // The next key is a plain key again.
   flow.handle_token_("j");
-  assert.equal(ran.at(-1), "test.down::");
   assert.equal(ran.length, 2);
 });
 
