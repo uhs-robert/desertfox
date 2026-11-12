@@ -97,6 +97,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    # Each secret reaches only the command that needs it: the build and checks run with none, the sign step has only the AMO key, and the publish step has only the GitHub token. The steps run the same recipes as `just release_beta`, so only the environment differs.
     # One beta at a time. A queued run waits: cancelling a run that already signed would leave a burned version with no release.
     concurrency:
       group: beta
@@ -137,20 +138,23 @@ jobs:
             exit 1
           fi
           node tools/stamp_beta_manifest.ts --version "$VERSION" --update-url "https://github.com/$REPOSITORY/releases/download/$UPDATES_TAG/updates.json"
-      # release_beta checks the gh login even in a dry run, hence GH_TOKEN. Its sign step needs the AMO key, so the key is in this step only.
-      - name: Build, sign and create the prerelease
+      - name: Build and check the hosts
+        run: just release_beta_build
+      - name: Sign
         env:
-          GH_TOKEN: ${{ github.token }}
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
-        run: just release_beta
-      # The version is burned once AMO signs it, so keep the signed file even when the release step failed.
+        run: just sign_only
+      # The version is burned once AMO signs it, so keep the signed file even when the release step fails.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ !cancelled() && hashFiles('web-ext-artifacts/*.xpi') != '' }}
         with:
           name: signed-xpi-${{ needs.plan.outputs.version }}
           path: web-ext-artifacts/*.xpi
           if-no-files-found: error
+      - name: Create the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: just release_publish "$VERSION" "$(ls web-ext-artifacts/*.xpi)"
       # updates.json is what points beta installs at this build, so it goes out only after these checks pass.
       - name: Smoke check the build
         run: |
