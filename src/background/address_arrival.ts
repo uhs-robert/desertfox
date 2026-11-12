@@ -109,15 +109,18 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       const watch = deps.watch(target_id);
       const own_switch = earlier_switch.catch(() => undefined).then(() => switch_to(from, found, url, next));
       switches.set(from.id, own_switch);
+      // The ended step's target goes, so the map holds no address of a tab that closed.
+      const end_target = () => targets.get(from.id)?.arrival === next && targets.delete(from.id);
       try {
         await own_switch;
       } catch (error) {
         watch.stop();
         if (arrivals.get(target_id) === next) arrivals.delete(target_id);
+        end_target();
         throw error;
       }
       // A discarded tab reads `complete` until it loads, so it waits for the load like a navigation.
-      void arrive(target_id, next, watch, !found || found.discarded, push);
+      void arrive(target_id, next, watch, !found || found.discarded, push).finally(end_target);
     },
   };
 
