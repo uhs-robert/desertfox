@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// A fake page with one clipboard and a code editor that handles Ctrl+A, copy, cut and paste itself, as CodeMirror, Ace and Monaco do.
-const clipboard = { text: "saved by the user", reads_fail: false, writes: [] as string[] };
+// A fake page with one clipboard and a code editor that handles Ctrl+A, copy, cut and paste itself, as CodeMirror, Ace and Monaco do. Like them, it copies the caret line when nothing is selected, pastes at the caret, and keeps a selection after a copy.
+const clipboard = { text: "saved by the user", reads_fail: false, writes: [] as string[], refuses: undefined as string | undefined, on_write: undefined as ((text: string) => void) | undefined };
 const capture_listeners = new Map<string, () => void>();
 let exec_log: string[] = [];
 
@@ -14,6 +14,12 @@ class FakeHTMLElement {
   // The whole document, which only the editor's own copy reveals.
   doc = "";
   takes_ctrl_a = true;
+  // A vim or emacs keymap cancels Ctrl+A but runs another command.
+  ctrl_a_selects = true;
+  read_only = false;
+  sees_clipboard_events = true;
+  // The lines on screen, a slice of `doc`.
+  drawn_lines: string[] = [];
   takes_focus = true;
   // An editor can see the copy event and still put nothing on the clipboard.
   copies = true;
@@ -23,13 +29,15 @@ class FakeHTMLElement {
     if (this.takes_focus) page_document.activeElement = this;
   }
   closest(selector: string) {
-    return selector.includes(".cm-editor") ? this : null;
+    return selector.includes(".cm-editor") ? { querySelectorAll: () => this.drawn_lines.map((innerText) => ({ innerText })) } : null;
   }
-  dispatchEvent(event: { type: string; ctrlKey?: boolean; key?: string }) {
-    if (event.type === "keydown" && event.ctrlKey && event.key === "a" && this.takes_ctrl_a) {
-      this.selected_all = true;
+  dispatchEvent(event: { type: string; ctrlKey?: boolean; metaKey?: boolean; key?: string }) {
+    const select_all_key = navigator.platform === "MacIntel" ? event.metaKey : event.ctrlKey;
+    if (event.type === "keydown" && select_all_key && event.key === "a" && this.takes_ctrl_a) {
+      if (this.ctrl_a_selects) this.selected_all = true;
       return false;
     }
+    if (event.key === "ArrowLeft") this.selected_all = false;
     return true;
   }
 }
@@ -50,12 +58,15 @@ const page_document = {
   execCommand(command: string) {
     exec_log.push(command);
     const editor = page_document.activeElement;
-    if (!editor || !editor.selected_all) return false;
+    if (!editor || !editor.sees_clipboard_events) return false;
     editor.on_copy?.();
-    if ((command === "copy" || command === "cut") && editor.copies) clipboard.text = editor.doc;
-    if (command === "cut") editor.doc = "";
-    if (command === "paste") editor.doc = clipboard.text;
-    editor.selected_all = false;
+    const copied = editor.selected_all ? editor.doc : `${editor.doc.split("\n")[0]}\n`;
+    if ((command === "copy" || command === "cut") && editor.copies) clipboard.text = copied;
+    if (!editor.read_only) {
+      if (command === "cut") editor.doc = editor.selected_all ? "" : editor.doc;
+      if (command === "paste") editor.doc = editor.selected_all ? clipboard.text : clipboard.text + editor.doc;
+    }
+    if (command !== "copy") editor.selected_all = false;
     capture_listeners.get(command)?.();
     return true;
   },
@@ -70,12 +81,15 @@ globals.document = page_document;
 Object.defineProperty(globalThis, "navigator", {
   configurable: true,
   value: {
+    platform: "Linux x86_64",
     clipboard: {
       readText: async () => {
         if (clipboard.reads_fail) throw new Error("denied");
         return clipboard.text;
       },
       writeText: async (text: string) => {
+        if (text === clipboard.refuses) throw new Error("denied");
+        clipboard.on_write?.(text);
         clipboard.writes.push(text);
         clipboard.text = text;
       },
@@ -109,7 +123,7 @@ const run = async (): Promise<void> => handlers.get("text.edit_external")!({});
 const opened = () => sent.filter((message) => message.type === "editor_open").at(-1) as { token: string; text: string };
 const done = (text: string, token = opened().token) => listener!({ type: "editor_done", token, text });
 const yanked = () => sent.filter((message) => message.type === "register_yank");
-const reset = () => ((sent.length = 0), (toasts.length = 0), (exec_log = []), (answer = { ok: true }), (clipboard.text = "saved by the user"), (clipboard.reads_fail = false), (clipboard.writes = []), (clipboard_at_open = ""));
+const reset = () => ((sent.length = 0), (toasts.length = 0), (exec_log = []), (answer = { ok: true }), (clipboard.text = "saved by the user"), (clipboard.reads_fail = false), (clipboard.writes = []), (clipboard.refuses = undefined), (clipboard.on_write = undefined), (clipboard_at_open = ""));
 const editor = (doc: string) => {
   const field = Object.assign(new FakeHTMLElement(), { doc });
   page_document.activeElement = field;
@@ -128,7 +142,7 @@ test("a code editor opens its whole text, copied through the clipboard, and the 
   assert.equal(clipboard_at_open, "saved by the user", "navigation while the editor is open strands nothing on the clipboard");
   assert.equal(clipboard.text, "saved by the user");
   assert.deepEqual(exec_log, ["copy"]);
-  assert.match(toasts.at(-1) ?? "", /went through the clipboard/);
+  assert.match(toasts.at(-1) ?? "", /Used the clipboard/);
 });
 
 test("an unchanged editor takes the result by select-all and paste, and the clipboard is back after", async () => {
@@ -136,7 +150,7 @@ test("an unchanged editor takes the result by select-all and paste, and the clip
   const field = await opened_editor("draft");
   assert.equal(await done("final"), true);
   assert.equal(field.doc, "final");
-  assert.deepEqual(exec_log, ["copy", "copy", "paste"]);
+  assert.deepEqual(exec_log, ["copy", "copy", "paste", "copy"], "the last copy reads the result back");
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(yanked().length, 0);
 });
@@ -146,20 +160,20 @@ test("an empty result clears the editor with a cut, because pasting nothing leav
   const field = await opened_editor("draft");
   await done("");
   assert.equal(field.doc, "");
-  assert.equal(exec_log.at(-1), "cut");
+  assert.deepEqual(exec_log.slice(-2), ["cut", "copy"]);
   assert.equal(clipboard.text, "saved by the user");
 });
 
 test("a copy that leaves the marker on the clipboard keeps the refusal, restores the clipboard and sends nothing", async () => {
   reset();
   editor("draft").copies = false;
-  await assert.rejects(run(), /only part of its text.*copy.*failed.*cannot be edited externally/);
+  await assert.rejects(run(), /only part of its text.*clipboard copy failed: The editor did not copy its text/);
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(sent.length, 0);
   // The editor ignores the copy: its page never sees the event.
   reset();
   const ignoring = editor("draft");
-  ignoring.dispatchEvent = () => false;
+  ignoring.sees_clipboard_events = false;
   await assert.rejects(run(), /did not take copy/);
   assert.equal(clipboard.text, "saved by the user");
 });
@@ -262,4 +276,100 @@ test("a second return for the same job, even while the first is still pasting, w
   assert.equal(await done("again", token), false);
   assert.equal(field.doc, "final");
   assert.equal(clipboard.text, "saved by the user");
+});
+
+test("an editor that cancels Ctrl+A but runs another command (a vim or emacs keymap) copies the caret line, which is refused as shorter than the drawn lines", async () => {
+  reset();
+  const field = editor("line 1\nline 2\nline 3");
+  field.drawn_lines = ["line 1", "line 2", "line 3"];
+  field.ctrl_a_selects = false;
+  await assert.rejects(run(), /shorter than the drawn text/);
+  assert.equal(clipboard.text, "saved by the user");
+  assert.equal(sent.length, 0);
+});
+
+test("a paste the editor sees but drops (a read-only editor) is read back, and the result goes to the register", async () => {
+  reset();
+  const field = await opened_editor("draft");
+  field.read_only = true;
+  await done("final");
+  assert.equal(field.doc, "draft");
+  assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "final" });
+  assert.match(toasts.at(-1) ?? "", /did not take the edited text/);
+  assert.equal(clipboard.text, "saved by the user");
+});
+
+test("no select-all is left behind for the next key to replace: after the open, a changed return and a dropped paste", async () => {
+  reset();
+  const field = await opened_editor("draft");
+  assert.equal(field.selected_all, false, "after the open");
+  field.doc = "draft, then typed";
+  await done("final");
+  assert.equal(field.selected_all, false, "after a changed return");
+  reset();
+  const read_only = await opened_editor("draft");
+  read_only.read_only = true;
+  await done("final");
+  assert.equal(read_only.selected_all, false, "after a dropped paste");
+  reset();
+  const too_big = editor("x".repeat(128 * 1024 + 1));
+  await assert.rejects(run(), /over the 128 KiB/);
+  assert.equal(too_big.selected_all, false, "after a size refusal");
+});
+
+test("an edit on screen while the result goes onto the clipboard is seen before the paste", async () => {
+  reset();
+  const field = editor("draft");
+  field.drawn_lines = ["draft"];
+  await run();
+  clipboard.on_write = (text) => {
+    if (text !== "final") return;
+    field.doc = "draft, edited by a collaborator";
+    field.drawn_lines = ["draft, edited by a collaborator"];
+  };
+  await done("final");
+  assert.equal(field.doc, "draft, edited by a collaborator");
+  assert.match(toasts.at(-1) ?? "", /field changed/);
+  assert.equal(yanked().length, 1);
+});
+
+test("a clipboard that cannot be restored refuses the open, and after a paste the toast says so instead of the success", async () => {
+  reset();
+  editor("draft");
+  clipboard.refuses = "saved by the user";
+  await assert.rejects(run(), /clipboard could not be restored/);
+  assert.equal(sent.length, 0);
+  reset();
+  const field = await opened_editor("draft");
+  clipboard.refuses = "saved by the user";
+  await done("final");
+  assert.equal(field.doc, "final");
+  assert.match(toasts.at(-1) ?? "", /clipboard could not be restored/);
+  assert.doesNotMatch(toasts.at(-1) ?? "", /Its text is back/);
+});
+
+test("on macOS the select-all is Cmd+A", async () => {
+  reset();
+  const platform = navigator.platform;
+  Object.assign(navigator, { platform: "MacIntel" });
+  try {
+    await opened_editor("draft");
+    assert.equal(opened().text, "draft");
+  } finally {
+    Object.assign(navigator, { platform });
+  }
+});
+
+test("two quick presses run one after the other, so the second never saves the first one's marker as the user's clipboard", async () => {
+  reset();
+  editor("draft");
+  let second: Promise<void> | undefined;
+  clipboard.on_write = (text) => {
+    // The second press reads the clipboard once the marker is on it.
+    if (text.startsWith("desertfox-marker-")) second ??= Promise.resolve().then(run);
+  };
+  await run();
+  await second;
+  assert.equal(clipboard.text, "saved by the user");
+  assert.equal(clipboard_at_open, "saved by the user");
 });

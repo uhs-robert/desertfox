@@ -5,7 +5,7 @@ import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { read_field_text } from "../text/field_text.ts";
 import { type_at_caret } from "../text/field_writer.ts";
 import { is_secret_field } from "../text/secret_field.ts";
-import { copy_through_clipboard, paste_through_clipboard } from "./clipboard_fallback.ts";
+import { copy_through_clipboard, paste_through_clipboard, VIRTUALIZED_EDITOR } from "./clipboard_fallback.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { BackgroundToContent, EditorAnswer, EditorDone, EditorOpen } from "../../shared/messages.ts";
 
@@ -17,9 +17,6 @@ const page = window as unknown as EditorWindow;
 
 // What a page waits for, by token. It holds the field and its text at the press, so the result goes in only while the field still holds that text. A navigation drops the page and with it the map.
 const open_edits = new Map<string, { field: Element; original: string; through_clipboard: boolean }>();
-
-// Editors that draw only the lines near the viewport, or keep the focus in a hidden textarea. What they expose is a slice of the document, so their text goes in and out through the clipboard.
-const VIRTUALIZED_EDITOR = ".cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
 
 // A plain field takes the value through the native setter and `input` and `change` events, which is what a framework's own change tracking watches. An element that is editable by `contenteditable` takes one `insertText` over its whole content, so undo keeps working. An empty result needs `delete`, which `insertText` refuses.
 function write_field(field: Element, text: string, original: string): boolean {
@@ -50,9 +47,10 @@ function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boole
   if (text === undefined || text === edit.original) return Promise.resolve(true);
   const { field, original } = edit;
   if (edit.through_clipboard) {
-    return paste_through_clipboard(field as HTMLElement, text, original).then((outcome) => {
-      if (outcome !== "pasted") return keep_in_register(host, text, outcome).then(() => true);
-      host.show_toast_(CLIPBOARD_USED_TOAST);
+    return paste_through_clipboard(field as HTMLElement, text, original).then(async ({ outcome, restored }) => {
+      const note = restored ? "" : "The clipboard could not be restored. ";
+      if (outcome === "pasted") host.show_toast_(note || CLIPBOARD_USED_TOAST);
+      else await keep_in_register(host, text, outcome, note);
       return true;
     });
   }
@@ -70,11 +68,11 @@ function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boole
 }
 
 // The edited text must not be lost, and must not overwrite the newer text. The toast says so only when the register took it.
-async function keep_in_register(host: BundleHostApi, text: string, reason: string): Promise<void> {
+async function keep_in_register(host: BundleHostApi, text: string, reason: string, note = ""): Promise<void> {
   const saved = (await browser.runtime.sendMessage({ type: "register_yank", name: "", text }).catch(() => undefined)) as { ok?: boolean; message?: string } | undefined;
-  if (saved?.ok !== true) return host.show_toast_(`The edited text (${text.length} characters) could not be saved to a register${saved?.message ? `: ${saved.message}` : ""}`);
+  if (saved?.ok !== true) return host.show_toast_(`${note}The edited text (${text.length} characters) could not be saved to a register${saved?.message ? `: ${saved.message}` : ""}`);
   const why = reason === "changed" ? "The field changed while the editor was open." : "The field did not take the edited text.";
-  host.show_toast_(`${why} The edited text is in the unnamed register: paste it with <C-r>"`);
+  host.show_toast_(`${note}${why} The edited text is in the unnamed register: paste it with <C-r>"`);
 }
 
 async function edit_external(host: BundleHostApi, args: Record<string, unknown>): Promise<void> {
@@ -97,7 +95,7 @@ async function edit_external(host: BundleHostApi, args: Record<string, unknown>)
   if (through_clipboard) host.show_toast_(CLIPBOARD_USED_TOAST);
 }
 
-const CLIPBOARD_USED_TOAST = "The editor text went through the clipboard. Its text is back, other content (an image, HTML) is not";
+const CLIPBOARD_USED_TOAST = "Used the clipboard. Its text is back, an image or HTML on it is lost";
 
 // A second run would register again for nothing. With no host, content.js has not started in this frame, and the load it asks for later registers.
 const host = page.desertfox_host;
