@@ -9,8 +9,8 @@ const KEY = HINT_FRAMES_STORAGE_PREFIX + TAB;
 const LETTERS = "asdfghjkl";
 
 // A fake frame. `count` is what it reports to a collect, `silent` never reports, `gone` rejects every message (removed or navigated with no script), and `pick` answers a pick.
-type FakeFrame = { count: number; silent?: boolean; gone?: boolean; pick?: (label: string) => unknown };
-type StartRequest = { letters: string; args: Record<string, unknown>; count?: number };
+type FakeFrame = { count: number; texts?: string[]; silent?: boolean; gone?: boolean; pick?: (label: string) => unknown };
+type StartRequest = { letters: string; args: Record<string, unknown>; count?: number; texts?: string[] };
 type Sent = { frame_id: number | undefined; message: HintFramesMessage };
 
 const flush = () => new Promise((resume) => setImmediate(resume));
@@ -40,7 +40,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
       if (sends_hang) return new Promise(() => {});
       if (frame_id !== undefined && frames[frame_id]?.gone) throw new Error("Could not establish connection. Receiving end does not exist.");
       if (message.type === "hint_frames_collect") {
-        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void current.report(TAB, Number(id), message.session_id, frame.count);
+        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void current.report(TAB, Number(id), message.session_id, frame.count, frame.texts ?? Array.from({ length: frame.count }, (_, index) => `${id}:${index}`));
       }
       if (message.type === "hint_frames_pick") return frames[frame_id!]?.pick?.(message.label);
       return undefined;
@@ -60,7 +60,8 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
         ...current,
         start: (tab_id: number, frame_id: number, request: StartRequest) => {
           keyboard_frame = frame_id;
-          return current.start(tab_id, frame_id, { ...request, count: request.count ?? frames[frame_id]?.count ?? 0 });
+          const count = request.count ?? frames[frame_id]?.count ?? 0;
+          return current.start(tab_id, frame_id, { ...request, count, texts: request.texts ?? frames[frame_id]?.texts ?? Array.from({ length: count }, (_, index) => `${frame_id}:${index}`) });
         },
       };
     },
@@ -71,6 +72,8 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
   };
 }
 
+const texts_of = (frame_id: number, count: number) => Array.from({ length: count }, (_, index) => `${frame_id}:${index}`);
+
 // The harness adds the keyboard frame's own count.
 const START: StartRequest = { letters: LETTERS, args: { action: "here", filter: "clickable" } };
 
@@ -78,7 +81,7 @@ test("one prefix-free label set covers every frame, the top frame first, and the
   const fake = harness({ 0: { count: 5 }, 3: { count: 4 }, 9: { count: 2 } });
   const answer = await fake.hints.start(TAB, 0, START);
   const all = make_labels(11, [...LETTERS]);
-  assert.deepEqual(answer, { ok: true, session_id: "s1", labels: all, own_labels: all.slice(0, 5) });
+  assert.deepEqual(answer, { ok: true, session_id: "s1", labels: all, own_labels: all.slice(0, 5), texts: [...texts_of(0, 5), ...texts_of(3, 4), ...texts_of(9, 2)] });
   assert.deepEqual(fake.of_type("hint_frames_collect"), [{ frame_id: undefined, message: { type: "hint_frames_collect", session_id: "s1", args: START.args } }]);
   assert.deepEqual(fake.of_type("hint_frames_labels"), [
     { frame_id: 3, message: { type: "hint_frames_labels", session_id: "s1", labels: all.slice(5, 9) } },
@@ -163,7 +166,7 @@ test("a second run in the tab ends the first one at once, and the first one's la
   const second = fake.hints.start(TAB, 0, { ...START, letters: "jk" });
   assert.deepEqual(await first, { ok: false, reason: "ended" });
   const answer = await second;
-  assert.deepEqual(answer, { ok: true, session_id: "s2", labels: ["jj", "jk", "kj", "kk"], own_labels: ["jj", "jk"] });
+  assert.deepEqual(answer, { ok: true, session_id: "s2", labels: ["jj", "jk", "kj", "kk"], own_labels: ["jj", "jk"], texts: ["0:0", "0:1", "1:0", "1:1"] });
   assert.deepEqual(fake.of_type("hint_frames_end"), [{ frame_id: undefined, message: { type: "hint_frames_end", session_id: "s1" } }]);
   await fake.hints.report(TAB, 1, "s1", 9);
   await fake.hints.typed(TAB, 0, "s1", "a");
@@ -228,7 +231,7 @@ test("a restart during the wait drops the session's late reports, and the next r
   const answer = fake.hints.start(TAB, 0, START);
   await flush();
   fake.fire_timers();
-  assert.deepEqual(await answer, { ok: true, session_id: "s2", labels: ["a"], own_labels: ["a"] });
+  assert.deepEqual(await answer, { ok: true, session_id: "s2", labels: ["a"], own_labels: ["a"], texts: ["0:0"] });
   assert.equal(fake.of_type("hint_frames_end").at(-1)!.message.session_id, "s1");
 });
 
@@ -295,7 +298,7 @@ test("the keyboard frame's own count is in before the wait, so a slow top page k
   const pending = fake.hints.start(TAB, 0, START);
   await flush();
   fake.fire_timers();
-  assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a", "s", "d"], own_labels: ["a", "s"] });
+  assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a", "s", "d"], own_labels: ["a", "s"], texts: ["0:0", "0:1", "4:0"] });
 });
 
 test("an injection that answers after the deadline sends no collect, because the labels are out", async () => {
@@ -304,7 +307,7 @@ test("an injection that answers after the deadline sends no collect, because the
   const pending = fake.hints.start(TAB, 0, START);
   await flush();
   fake.fire_timers();
-  assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a"], own_labels: ["a"] });
+  assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a"], own_labels: ["a"], texts: ["0:0"] });
   injected(2);
   await flush();
   assert.deepEqual(fake.of_type("hint_frames_collect"), []);
@@ -319,8 +322,43 @@ test("sends that never settle hold neither the start answer nor a typed relay", 
   await flush();
   fake.fire_timers();
   const settled = await Promise.race([second, new Promise((resume) => setTimeout(() => resume("pending"), 50))]);
-  assert.deepEqual(settled, { ok: true, session_id: "s2", labels: ["a"], own_labels: ["a"] });
+  assert.deepEqual(settled, { ok: true, session_id: "s2", labels: ["a"], own_labels: ["a"], texts: ["0:0"] });
   const typed = await Promise.race([fake.hints.typed(TAB, 0, "s2", "a").then(() => "done"), new Promise((resume) => setTimeout(() => resume("pending"), 50))]);
   assert.equal(typed, "done");
   await fake.hints.end(TAB, 0, "s2");
+});
+
+test("the start answer carries every frame's texts in label order, and a frame with too few texts gets blanks", async () => {
+  const fake = harness({ 0: { count: 2 }, 3: { count: 3, texts: ["x", "y"] }, 9: { count: 1, texts: ["z"] } });
+  const answer = await fake.hints.start(TAB, 0, START);
+  assert.deepEqual(answer.ok && answer.texts, ["0:0", "0:1", "x", "y", "", "z"]);
+});
+
+test("a frame with no candidates adds no text, and the others stay aligned with their labels", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 0 }, 4: { count: 2 } });
+  const answer = await fake.hints.start(TAB, 0, START);
+  assert.deepEqual(answer.ok && [answer.labels.length, answer.texts], [3, ["0:0", "4:0", "4:1"]]);
+});
+
+test("the texts live in the wait only: none in storage, and a report after the wait adds none", async () => {
+  const fake = harness({ 0: { count: 1 }, 5: { count: 1, silent: true } });
+  const answer_promise = fake.hints.start(TAB, 0, START);
+  await flush();
+  fake.fire_timers();
+  const answer = await answer_promise;
+  await fake.hints.report(TAB, 5, "s1", 1, ["late"]);
+  assert.deepEqual(answer.ok && answer.texts, ["0:0"]);
+  assert.equal(JSON.stringify(fake.data).includes("0:0"), false);
+  assert.equal(JSON.stringify(fake.data).includes("late"), false);
+});
+
+test("the typed relay passes the text mode matches and the active label to the other frames, and a plain prefix carries none", async () => {
+  const fake = harness({ 0: { count: 2 }, 3: { count: 2 } });
+  await fake.hints.start(TAB, 0, START);
+  await fake.hints.typed(TAB, 0, "s1", "/", { matches: ["d"], active: "d" });
+  await fake.hints.typed(TAB, 0, "s1", "a");
+  assert.deepEqual(fake.of_type("hint_frames_typed").map((entry) => [entry.frame_id, entry.message]), [
+    [3, { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["d"], active: "d" }],
+    [3, { type: "hint_frames_typed", session_id: "s1", typed: "a" }],
+  ]);
 });

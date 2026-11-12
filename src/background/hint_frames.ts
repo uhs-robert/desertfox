@@ -34,12 +34,15 @@ export type HintFramesSession = {
   labels?: Record<string, string[]>;
 };
 
-// The in-memory side of a wait: how many frames ran the bundle, and the call that ends the wait.
-type Wait = { expected?: number; wake: () => void };
+// The in-memory side of a wait: how many frames ran the bundle, the call that ends the wait, and the candidate texts of the frames that reported. The texts stay out of storage.session: they can be hundreds of KB, and a restart ends the wait anyway.
+type Wait = { expected?: number; wake: () => void; texts: Record<string, string[]> };
 
 const key_of = (tab_id: number): string => HINT_FRAMES_STORAGE_PREFIX + tab_id;
 
 const whole_count = (count: unknown): count is number => Number.isInteger(count) && (count as number) >= 0;
+
+// One text per candidate: a report that sends none, or too few, leaves "" for the rest.
+const texts_for = (count: number, texts: unknown): string[] => Array.from({ length: count }, (_, index) => (Array.isArray(texts) && typeof texts[index] === "string" ? texts[index] : ""));
 
 const is_outcome = (answer: unknown): answer is Outcome => typeof (answer as Outcome | undefined)?.ok === "boolean";
 
@@ -80,10 +83,10 @@ export function create_hint_frames(deps: HintFramesDeps) {
   const send_quietly = (tab_id: number, message: HintFramesMessage, frame_id?: number) => deps.send(tab_id, message, frame_id).catch(() => undefined);
 
   // The keyboard frame's own count is in already, so only the other frames race the deadline.
-  async function collect(tab_id: number, session_id: string, args: Record<string, unknown>): Promise<void> {
+  async function collect(tab_id: number, session_id: string, args: Record<string, unknown>, own: Wait["texts"]): Promise<Wait["texts"]> {
     let wake!: () => void;
     const woken = new Promise<void>((resolve) => (wake = resolve));
-    const wait: Wait = { wake };
+    const wait: Wait = { wake, texts: own };
     waits.set(session_id, wait);
     const timer = deps.set_timer(wake, deps.wait_ms);
     // The bundle must run before the ask, or a frame that loads it now misses the ask. A frame that refuses scripts rejects the count, and the deadline ends the wait.
@@ -100,6 +103,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
       deps.clear_timer(timer);
       waits.delete(session_id);
     }
+    return wait.texts;
   }
 
   // A newer run can start while this one's injection runs. Its frames keep the latest ask only, so an ask for a session that has ended must not go out after the newer one. An injection that answers after the deadline asks nobody, because the labels are out.
@@ -112,7 +116,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
 
   return {
     // A new run in the tab ends the one before, in every frame.
-    start: async (tab_id: number, frame_id: number, request: Pick<HintFramesStart, "letters" | "args" | "count">): Promise<HintFramesStartAnswer> => {
+    start: async (tab_id: number, frame_id: number, request: Pick<HintFramesStart, "letters" | "args" | "count" | "texts">): Promise<HintFramesStartAnswer> => {
       const session_id = deps.new_session_id();
       const replaced = await in_turn(async () => {
         const old = await read(tab_id);
@@ -121,7 +125,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
         return old;
       });
       if (replaced) void send_quietly(tab_id, { type: "hint_frames_end", session_id: replaced.session_id });
-      await collect(tab_id, session_id, request.args);
+      const texts = await collect(tab_id, session_id, request.args, whole_count(request.count) ? { [frame_id]: texts_for(request.count, request.texts) } : {});
       const labeled = await in_turn(async () => {
         const session = await read(tab_id);
         if (session?.session_id !== session_id) return undefined;
@@ -133,25 +137,28 @@ export function create_hint_frames(deps: HintFramesDeps) {
       if (!labeled?.labels) return { ok: false, reason: "ended" };
       const shares = Object.entries(labeled.labels).filter(([owner]) => Number(owner) !== frame_id);
       for (const [owner, labels] of shares) void send_quietly(tab_id, { type: "hint_frames_labels", session_id, labels }, Number(owner));
-      return { ok: true, session_id, labels: Object.values(labeled.labels).flat(), own_labels: labeled.labels[frame_id] ?? [] };
+      const aligned = Object.entries(labeled.labels).flatMap(([owner, labels]) => texts_for(labels.length, texts[owner]));
+      return { ok: true, session_id, labels: Object.values(labeled.labels).flat(), own_labels: labeled.labels[frame_id] ?? [], texts: aligned };
     },
 
     // A frame's count. Only the first report of a frame counts, and only while this background waits for the session. A restarted background has no wait, so a report cannot fill a session nobody labels.
-    report: (tab_id: number, frame_id: number, session_id: string, count: unknown): Promise<void> =>
+    report: (tab_id: number, frame_id: number, session_id: string, count: unknown, texts?: unknown): Promise<void> =>
       in_turn(async () => {
-        if (!whole_count(count) || !waits.has(session_id)) return;
+        const wait = waits.get(session_id);
+        if (!whole_count(count) || !wait) return;
         const session = await read(tab_id);
         if (session?.session_id !== session_id || !session.reports || String(frame_id) in session.reports) return;
         const next = { ...session, reports: { ...session.reports, [frame_id]: count } };
         await write(tab_id, next);
+        wait.texts[frame_id] = texts_for(count, texts);
         wake_when_all_reported(next);
       }),
 
-    typed: async (tab_id: number, frame_id: number, session_id: string, typed: string): Promise<void> => {
+    typed: async (tab_id: number, frame_id: number, session_id: string, typed: string, text_mode?: Pick<HintFramesTyped, "matches" | "active"> | undefined): Promise<void> => {
       const session = await labeled_for(tab_id, frame_id, session_id);
       if (!session?.labels) return;
       const others = Object.keys(session.labels).map(Number).filter((owner) => owner !== frame_id);
-      for (const owner of others) void send_quietly(tab_id, { type: "hint_frames_typed", session_id, typed }, owner);
+      for (const owner of others) void send_quietly(tab_id, { type: "hint_frames_typed", session_id, typed, ...text_mode }, owner);
     },
 
     // The owner's answer is the pick's. It can wait on the user (a prompt), so it runs outside the turn.

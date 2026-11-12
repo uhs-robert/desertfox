@@ -1222,7 +1222,8 @@ test("hints start with no site selectors when the background never answers, and 
 
 // Hints across frames (`frames=all_frames`). The background's answers stand in for `src/background/hint_frames.ts`.
 const types_sent = (page: { sent: unknown[] }) => page.sent.map((message) => (message as { type: string }).type);
-const across_answer = (labels: string[], own_labels: string[]) => () => ({ ok: true, session_id: "s1", labels, own_labels });
+const across_answer = (labels: string[], own_labels: string[], texts: string[] = labels.map(() => "")) => () => ({ ok: true, session_id: "s1", labels, own_labels, texts });
+const typed_relays = (page: { sent: unknown[] }) => page.sent.filter((message) => (message as { type: string }).type === "hint_frames_typed");
 const opened = (page: { sent: unknown[] }) => page.sent.flatMap((message) => ((message as { type: string }).type === "run" ? [(message as { invocations: { args: { url: string } }[] }).invocations[0]!.args.url] : []));
 
 test("across frames the keyboard frame sends its count, draws its own share and picks its own label here", async () => {
@@ -1230,7 +1231,7 @@ test("across frames the keyboard frame sends its count, draws its own share and 
   page.answer_start(across_answer(["a", "s", "d", "f", "g"], ["s", "d", "f"]));
   void page.run({ action: "background", frames: "all_frames" });
   await settle();
-  assert.deepEqual(page.sent[0], { type: "hint_frames_start", letters: "asdfghjkl", args: { action: "background", filter: "links", rapid: false, frames: "all_frames" }, count: 3 });
+  assert.deepEqual(page.sent[0], { type: "hint_frames_start", letters: "asdfghjkl", args: { action: "background", filter: "links", rapid: false, frames: "all_frames" }, count: 3, texts: ["one", "two", "three"] });
   assert.deepEqual(page.labels(), ["s", "d", "f"]);
   page.type("d");
   await settle();
@@ -1256,16 +1257,64 @@ test("across frames a label of another frame goes to the background before hint 
   assert.deepEqual(await answer, { ok: false, message: "That hint is gone" });
 });
 
-test("across frames text mode ranks this frame's hints only and hides the other frames' labels", async () => {
+test("across frames text mode ranks a text another frame owns and picks that frame's label", async () => {
   const page = await page_with(["Alpha", "Beta"]);
-  page.answer_start(across_answer(["a", "s", "d"], ["s", "d"]));
+  page.answer_start(across_answer(["a", "s", "d"], ["s", "d"], ["Gamma", "Alpha", "Beta"]));
+  void page.run({ action: "background", frames: "all_frames" });
+  await settle();
+  page.type("/");
+  page.type("g");
+  await after_grace();
+  assert.deepEqual(typed_relays(page), [
+    { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["a", "s", "d"], active: "a" },
+    { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["a"], active: "a" },
+  ]);
+  assert.deepEqual(page.sent.find((message) => (message as { type: string }).type === "hint_frames_pick"), { type: "hint_frames_pick", session_id: "s1", label: "a" });
+  assert.deepEqual(opened(page), []);
+});
+
+test("across frames text mode ranks this frame's own hints from the answer's texts, and Enter picks the active one", async () => {
+  const page = await page_with(["Alpha", "Beta"]);
+  page.answer_start(across_answer(["a", "s", "d"], ["s", "d"], ["Gamma", "Alpha", "Beta"]));
   void page.run({ action: "background", frames: "all_frames" });
   await settle();
   page.type("/");
   page.type("b");
   await after_grace();
-  assert.deepEqual(page.sent.filter((message) => (message as { type: string }).type === "hint_frames_typed"), [{ type: "hint_frames_typed", session_id: "s1", typed: "/" }]);
+  assert.deepEqual(typed_relays(page).at(-1), { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["d"], active: "d" });
   assert.deepEqual(opened(page), ["https://example.com/Beta"]);
+});
+
+test("across frames text mode with several matches cycles the active hint with Tab over both frames, and Enter picks the other frame's", async () => {
+  const page = await page_with(["Alpha"]);
+  page.answer_start(across_answer(["a", "s"], ["s"], ["Alps", "Alpha"]));
+  void page.run({ action: "background", frames: "all_frames" });
+  await settle();
+  page.type("/");
+  page.type("a");
+  page.type("l");
+  await settle();
+  assert.deepEqual(typed_relays(page).at(-1), { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["a", "s"], active: "a" });
+  page.type("<Tab>");
+  assert.deepEqual(typed_relays(page).at(-1), { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["a", "s"], active: "s" });
+  page.type("<Tab>");
+  assert.deepEqual(typed_relays(page).at(-1), { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["a", "s"], active: "a" });
+  page.type("<Enter>");
+  await settle();
+  assert.deepEqual(page.sent.find((message) => (message as { type: string }).type === "hint_frames_pick"), { type: "hint_frames_pick", session_id: "s1", label: "a" });
+});
+
+test("another frame hides the labels outside the text matches and marks the active one", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "background", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s", "d"] });
+  page.deliver({ type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["s", "x"], active: "s" });
+  assert.deepEqual(page.labels(), ["s"]);
+  page.deliver({ type: "hint_frames_typed", session_id: "s1", typed: "/", matches: [] });
+  assert.deepEqual(page.labels(), []);
+  page.deliver({ type: "hint_frames_typed", session_id: "s1", typed: "" });
+  assert.deepEqual(page.labels(), ["a", "s", "d"]);
 });
 
 test("across frames a background that does not answer leaves the frame its own labels", async () => {
@@ -1313,7 +1362,7 @@ test("across frames a frame with no hints of its own still asks the other frames
   page.answer_start(across_answer(["a", "s"], []));
   const answer = page.run({ frames: "all_frames" });
   await settle();
-  assert.deepEqual(page.sent[0], { type: "hint_frames_start", letters: "asdfghjkl", args: { action: "here", filter: "links", rapid: false, frames: "all_frames" }, count: 0 });
+  assert.deepEqual(page.sent[0], { type: "hint_frames_start", letters: "asdfghjkl", args: { action: "here", filter: "links", rapid: false, frames: "all_frames" }, count: 0, texts: [] });
   assert.equal(page.mode(), "hint");
   page.type("s");
   await settle();
@@ -1339,14 +1388,14 @@ test("across frames a start the background never answers gives up after its wait
   page.escape();
   page.deliver({ type: "hint_frames_collect", session_id: "s9", args: { action: "here", filter: "links" } });
   await settle();
-  assert.deepEqual(page.sent.at(-1), { type: "hint_frames_report", session_id: "s9", count: 2 });
+  assert.deepEqual(page.sent.at(-1), { type: "hint_frames_report", session_id: "s9", count: 2, texts: ["one", "two"] });
 });
 
 test("a frame the user never entered starts its content script for the bundle, and draws its labels", async () => {
   const page = await page_with(["one", "two"], {}, { unfocused: true });
   page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
   await settle();
-  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 2 }]);
+  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 2, texts: ["one", "two"] }]);
   page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["d", "f"] });
   assert.deepEqual(page.labels(), ["d", "f"]);
 });
@@ -1355,7 +1404,7 @@ test("another frame reports its count, takes a prefix before its labels, and run
   const page = await page_with(["one", "two", "three"]);
   page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "background", filter: "links" } });
   await settle();
-  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 3 }]);
+  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 3, texts: ["one", "two", "three"] }]);
   page.deliver({ type: "hint_frames_typed", session_id: "s1", typed: "k" });
   page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["j", "kj", "kk"] });
   assert.deepEqual(page.labels(), ["kj", "kk"]);
@@ -1401,7 +1450,7 @@ test("across frames a frame its parent can read labels nothing itself, because t
   const page = await page_with(["one", "two"], {}, { in_readable_frame: true });
   page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
   await settle();
-  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 0 }]);
+  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 0, texts: [] }]);
 });
 
 test("across frames a keyboard frame its parent can read sends no count of its own", async () => {
