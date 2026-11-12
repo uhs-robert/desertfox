@@ -1,7 +1,7 @@
 // The links of the page for `copy.links`: which links count, their label, and the list in one of three formats.
 
 import { strip_tracking } from "../strip_tracking.ts";
-import { link_text, markdown_address, org_address } from "../link_escape.ts";
+import { format_link_list } from "../link_list.ts";
 import type { Outcome } from "../../shared/messages.ts";
 import type { Yanked } from "../caret/copy_text.ts";
 import { collect, name_candidates, query_for } from "./candidates.ts";
@@ -50,20 +50,7 @@ export function links_of(found: readonly Found[], strip_patterns: readonly strin
   return links;
 }
 
-export function format_links(links: readonly YankedLink[], format: LinkFormat): string {
-  return links
-    .map(({ url, text }) => {
-      switch (format) {
-        case "plain":
-          return url;
-        case "markdown":
-          return `- [${link_text(text)}](${markdown_address(url)})`;
-        case "org":
-          return `- [[${org_address(url)}][${link_text(text)}]]`;
-      }
-    })
-    .join("\n");
-}
+export const format_links = (links: readonly YankedLink[], format: LinkFormat): string => format_link_list(links, format);
 
 export const all_links = (): Found[] => collect(document, query_for("links", undefined));
 

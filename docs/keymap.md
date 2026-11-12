@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 411 (normal 205, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 412 (normal 206, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -130,6 +130,7 @@ bound: 411 (normal 205, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `yt` | bound | `copy --title` | Copy URL |  |
 | `yL` | bound | `copylinks` | Copy page links |  |
 | `yl` | bound | `copylinks --viewport` | Copy links in view |  |
+| `yT` | bound | `copytabs` | Copy tab links |  |
 | `gu` | bound | `url.parent` | Parent URL |  |
 | `gU` | bound | `url.root` | Root URL |  |
 | `<C-a>` | bound | `url.increment --up` | Change URL number |  |

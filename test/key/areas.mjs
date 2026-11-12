@@ -29,7 +29,7 @@ export const area_rules = [
   { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
   // The hand-off of a hidden input frame, which p15_frame_mode tests, and the `gi` search that returns into it.
   { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
-  { globs: ["src/content/strip_{setting,tracking}.ts"], areas: ["hints", "bundles"] },
+  { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts"], areas: ["hints", "bundles"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles"] },
@@ -59,7 +59,7 @@ export const area_rules = [
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
   { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
   {
-    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open}.ts", "src/shared/{tab_model_port,container_store}.ts"],
+    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store}.ts"],
     areas: ["tabs"],
   },
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },
