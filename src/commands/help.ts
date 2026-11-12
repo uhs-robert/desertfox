@@ -2,7 +2,7 @@ import { help_name_choices, help_name_url, key_command_id } from "../background/
 import { command_help_url, HELP_PAGE_FILE } from "../help/route.ts";
 import { open_help_url } from "./help_tab.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY, type CompiledKeymap } from "../shared/prefix_tree.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap, type CompiledKeymap } from "../shared/prefix_tree.ts";
 import { define, registry } from "../shared/registry/builtin.ts";
 
 define("help.whichkey", {
@@ -37,15 +37,15 @@ define("help.open", {
 define("help.key", {
   name: "helpkey",
   label: "Help for a key",
-  intent: "Open the help card of the command a normal mode key runs. Give the keys as in the config, such as gg, <C-d> or ,r. Quote a key the command line reads itself, such as a backslash or a quote.",
-  params: [{ name: "keys", type: "string", main: true, pattern: "^\\S+$" }],
+  intent: "Open the help card of the command a normal mode key runs. Give the keys as in the config, such as gg, <C-d> or ,r. A count or register prefix is ignored. A key bound to several steps shows the first step. Quote a key the command line reads itself, such as a backslash or a quote.",
+  params: [{ name: "keys", type: "string", main: true, format: "keys" }],
   bridge: false,
   runs_in: "background",
   repeatable: false,
   run: async (ctx, args) => {
     const keys = args.keys as string;
     const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
-    const found = key_command_id(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, keys);
+    const found = key_command_id(current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined), keys);
     if (found.error !== undefined) throw new RuntimeRefusal(found.error);
     if (!command_ids.has(found.id)) throw new RuntimeRefusal(`${keys} runs ${found.id}, which has no help card`);
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);

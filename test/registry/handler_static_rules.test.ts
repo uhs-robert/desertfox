@@ -20,7 +20,7 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
-  "help.key": [/is bound to nothing/],
+  "help.key": [/has no normal-mode binding/],
   "tab.goto_audible": [/no tab is playing sound/],
   "tab.switch": [/matches .* equally, use a number/],
   "tab.move": [/matches .* equally/],

@@ -1,6 +1,7 @@
 import { command_help_url, PAGES } from "../help/route.ts";
+import { create_matcher, type MatchResult } from "../shared/keys/matcher.ts";
 import { parse_sequence } from "../shared/keys/notation.ts";
-import { ANY_KEY, type CompiledKeymap, type TreeNode } from "../shared/prefix_tree.ts";
+import { ANY_KEY, type CompiledKeymap } from "../shared/prefix_tree.ts";
 
 export type OpenHelpDeps = {
   is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
@@ -34,18 +35,22 @@ export function help_name_url(help_page_url: string, name: string, command_ids: 
   return command_ids.has(name) ? command_help_url(help_page_url, name) : undefined;
 }
 
-// What `:helpkey <keys>` resolves to in normal mode: the command id the sequence runs, or the reason it runs none.
-// A key that waits for one more key press (`m` of a mark) is a branch with a capture child, so it names that leaf's command.
+// What `:helpkey <keys>` resolves to: the first step's command id of the normal mode binding the keys end on. The matcher reads
+// a count or register prefix as the page does. A key that waits for one more key press (`m`) names its capture leaf.
 export function key_command_id(keymap: CompiledKeymap | undefined, sequence: string): { id: string; error?: undefined } | { id?: undefined; error: string } {
-  const parsed = parse_sequence(sequence);
-  if (parsed.error !== undefined) return { error: parsed.error };
-  let node: TreeNode | undefined = keymap?.modes.normal;
-  for (const token of parsed.tokens) {
-    node = node?.kind === "branch" ? node.children[token] : undefined;
+  const tokens = parse_sequence(sequence).tokens ?? [];
+  const none = { error: `${sequence} has no normal-mode binding` };
+  if (!keymap) return none;
+  const matcher = create_matcher(keymap);
+  let result: MatchResult = { kind: "no_match" };
+  for (const token of tokens) {
+    result = matcher.feed("normal", token);
+    if (result.kind !== "pending") break;
   }
-  if (node?.kind === "branch") node = node.children[ANY_KEY] ?? node;
-  if (node?.kind === "leaf") return { id: node.steps[0]!.invocation.id };
-  return { error: node === undefined ? `${sequence} is bound to nothing` : `${sequence} is the start of longer keys, not a command` };
+  if (result.kind === "match") return { id: result.leaf.steps[0]!.invocation.id };
+  const capture = result.kind === "pending" ? result.node.children[ANY_KEY] : undefined;
+  if (capture?.kind === "leaf") return { id: capture.steps[0]!.invocation.id };
+  return result.kind === "pending" ? { error: `${sequence} is the start of longer keys, not a command` } : none;
 }
 
 // The names `:help` completes: the help pages, then every command id.

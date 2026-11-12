@@ -223,7 +223,7 @@ export function visible_commands_model(model: HelpModel, show_advanced: boolean,
   if (show_advanced) return model;
   const groups = model.groups.flatMap((group) => {
     const commands = group.commands.filter((command) => !command.advanced || command.id === named_command);
-    return commands.length < group.commands.length && commands.length === 0 ? [] : [{ name: group.name, commands }];
+    return commands.length === 0 && group.commands.length > 0 ? [] : [{ name: group.name, commands }];
   });
   return { ...model, groups };
 }
