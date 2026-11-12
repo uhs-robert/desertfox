@@ -65,3 +65,10 @@ test("a jump leaf holds the keys after it, so a key typed next runs after the ju
   assert.equal(holds_keys_after(leaf_of(jump), false), true);
   assert.equal(holds_keys_after(leaf_of(jump), true), false);
 });
+
+test("a leaf with a jump step holds the keys after it, even with a plain step beside it", () => {
+  const jump = { ...step("scroll.to", "content"), jump: true as const };
+  assert.equal(holds_keys_after(leaf_of(jump, step("copy.url", "content")), false), true);
+  assert.equal(holds_keys_after(leaf_of(step("copy.url", "content"), jump), false), true);
+  assert.equal(holds_keys_after(leaf_of(jump, step("copy.url", "content")), true), false);
+});
