@@ -2,6 +2,7 @@
 // into this frame. It registers through `register_sink_` and `register_handler_` and enters its mode with `set_mode_`.
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
+import { last_blurred_element } from "./handlers/page.ts";
 import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
@@ -59,10 +60,6 @@ export type BundleHostDeps = {
   // The frame's own Escape: hint and command line mode return to where they began. Content passes it, a test host may not.
   escape_?: () => void;
 };
-
-// The element the last blur took focus from, kept so scroll.align can still find the field the user left. It lives here, not in handlers/page.ts, which imports the host.
-let last_blurred: HTMLElement | undefined;
-export const remember_blurred = (element: HTMLElement) => void (last_blurred = element);
 
 export const message_of = (error: unknown) => String((error as Error)?.message ?? error);
 
@@ -190,7 +187,7 @@ export function create_bundle_host() {
       escape_: () => in_mode_order_(() => deps.escape_?.()),
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),
       show_toast_: (message) => (deps.show_toast_ ?? deps.show_error_)(message),
-      last_blurred_: () => last_blurred,
+      last_blurred_: last_blurred_element,
       scroll_box_: () => (end_flight(), scroll_target("y")),
       hold_keys_until_: (handed_back, drop_on_hide?: boolean) => {
         waiting++;

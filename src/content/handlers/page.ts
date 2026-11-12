@@ -1,13 +1,17 @@
 import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { is_hidden_frame } from "../hidden_frame.ts";
 import { page_mode } from "../page_mode.ts";
-import { remember_blurred } from "../bundle_host.ts";
 import type { ContentHandler } from "./types.ts";
+
+let last_blurred: HTMLElement | undefined;
+
+// The element the last blur took focus from, kept so scroll.align can still find the field the user left.
+export const last_blurred_element = () => last_blurred;
 
 export function blur_focused_element(): void {
   const focused = deepest_focused_element();
   if (focused instanceof HTMLElement && focused !== document.body) {
-    remember_blurred(focused);
+    last_blurred = focused;
     focused.blur();
   }
   hand_focus_to_parent();
