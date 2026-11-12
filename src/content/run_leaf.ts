@@ -13,7 +13,7 @@ export async function run_leaf(
   run_steps: (steps: TreeLeaf["steps"], count: number | undefined, repeat: boolean) => Promise<Outcome>,
   show_toast: (message: string) => void,
 ): Promise<void> {
-  if (leaf.steps.some((step) => step.runs_in === "background")) {
+  if (leaf.steps.some((step) => step.runs_in === "background" || (step.jump && !repeat))) {
     // The background shows a refusal itself.
     await send({ type: "run", invocations: counted_invocations(leaf.steps, count), mode: get_mode() });
     return;
@@ -25,4 +25,4 @@ export async function run_leaf(
 }
 
 // A captured key goes through the router, so the keys after it wait until the leaf has run. Only a leaf made of captured-key steps holds: a step that waits on the user (a hint pick) would never see its keys. In a field the held keys go to the page unprocessed, so a hold there skips the Escape that leaves insert mode.
-export const holds_keys_after = (leaf: TreeLeaf, in_field: boolean): boolean => !in_field && leaf.steps.every((step) => step.capture !== undefined);
+export const holds_keys_after = (leaf: TreeLeaf, in_field: boolean): boolean => !in_field && leaf.steps.every((step) => step.capture !== undefined || step.jump === true);

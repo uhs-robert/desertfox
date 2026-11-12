@@ -143,7 +143,7 @@ const jump_step = create_jump_step({
   push_jump: (tab_id, steps, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps), ...(arrival && { arrival }) }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "page.jump", message }, 0),
 });
-const jump_leave = create_jump_leave({ store: browser_jump_store, is_stepping: jump_step.is_stepping });
+const jump_leave = create_jump_leave({ store: browser_jump_store, is_stepping: jump_step.is_stepping, is_open: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined)) !== undefined });
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
 wire_repeat({

@@ -24,6 +24,8 @@ export type LeafStep = {
   capture?: string;
   // The command has a `register` param, so the matcher fills it from a `"<reg>` typed before the leaf.
   register?: true;
+  // The command moves the view and the router records the place it left, so the leaf goes there for a first press and the keys after it wait. A held key's repeats run in the page and record nothing.
+  jump?: true;
 };
 
 export type TreeLeaf = {

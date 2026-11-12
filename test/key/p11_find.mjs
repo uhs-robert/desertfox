@@ -494,11 +494,11 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await wait_highlights((read) => current_of(read) === "find_words aa", "n onto the next match");
     const reads_after_line = await in_active_tab("window.style_reads");
     // Control: the probe sees a walk when the page changes.
-    await in_active_tab(`document.body.append(document.createElement("p")); true`);
+    await in_active_tab(`window.style_reads = 0; document.body.append(document.createElement("p")); true`);
     await press_keys("n");
-    await poll_until("the probe to count a model walk after the page change", async () => (await in_active_tab("window.style_reads")) > 0);
+    await poll_until("the probe to count more than the scroll box read after the page change", async () => (await in_active_tab("window.style_reads")) > reads_of_offset);
     const reads_after_change = await in_active_tab("window.style_reads");
-    expect(reads_after_change > 0, "the probe never counted a model walk, so it proves nothing");
+    expect(reads_after_change > reads_of_offset, "the probe never counted a model walk beyond the scroll box read, so it proves nothing");
     expect(reads_after_line === reads_of_offset, `the model was read again after the command line (${reads_after_line} style reads, ${reads_of_offset} for the scroll box alone)`);
   });
 

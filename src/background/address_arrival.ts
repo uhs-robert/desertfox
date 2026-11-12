@@ -38,6 +38,9 @@ export type Arrival<Data> = { data: Data; armed: boolean };
 
 export function create_address_arrivals<Data>(deps: AddressDeps) {
   const arrivals = new Map<number, Arrival<Data>>();
+  // The tab each origin tab sent its newest step to, and the switch or navigation of that step. A newer step of the same origin cancels the older arrival, and its switch starts after the older one ended, so the newest tab is the one left active.
+  const targets = new Map<number, number>();
+  const switches = new Map<number, Promise<unknown>>();
 
   const problem_of_page: Record<Exclude<PageReady, "ready" | "gone">, string> = {
     timeout: "The page did not finish loading",
@@ -94,21 +97,19 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
     go: async (from: TabOrigin, found: MarkTab | undefined, url: string, data: Data, push: PushToTab<Data>): Promise<void> => {
       const target_id = found?.id ?? from.id;
       const next: Arrival<Data> = { data, armed: false };
-      // A new step supersedes the unfinished one of this tab and of the target tab.
+      // A new step supersedes the unfinished one of this tab, of the target tab and of the tab the origin's last step went to.
       arrivals.delete(from.id);
+      const earlier_target = targets.get(from.id);
+      if (earlier_target !== undefined) arrivals.delete(earlier_target);
+      targets.set(from.id, target_id);
       arrivals.set(target_id, next);
+      const earlier_switch = switches.get(from.id) ?? Promise.resolve();
       // Before the step that navigates: right after it the tab still reads as loaded.
       const watch = deps.watch(target_id);
+      const own_switch = earlier_switch.catch(() => undefined).then(() => switch_to(from, found, url, next));
+      switches.set(from.id, own_switch);
       try {
-        if (found) {
-          await deps.activate_tab(found.id);
-          // A compositor may refuse to raise a window. The tab is active in its window anyway.
-          if (found.window_id !== from.window_id) await deps.focus_window(found.window_id).catch(() => undefined);
-        } else {
-          await deps.navigate(from.id, url).catch(() => {
-            throw new RuntimeRefusal(`Firefox does not let extensions open ${url}`);
-          });
-        }
+        await own_switch;
       } catch (error) {
         watch.stop();
         if (arrivals.get(target_id) === next) arrivals.delete(target_id);
@@ -118,4 +119,18 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       void arrive(target_id, next, watch, !found || found.discarded, push);
     },
   };
+
+  // The switch or the navigation of one step. A step that a newer one superseded does nothing.
+  async function switch_to(from: TabOrigin, found: MarkTab | undefined, url: string, own: Arrival<Data>): Promise<void> {
+    if (arrivals.get(found?.id ?? from.id) !== own) return;
+    if (found) {
+      await deps.activate_tab(found.id);
+      // A compositor may refuse to raise a window. The tab is active in its window anyway.
+      if (found.window_id !== from.window_id) await deps.focus_window(found.window_id).catch(() => undefined);
+      return;
+    }
+    await deps.navigate(from.id, url).catch(() => {
+      throw new RuntimeRefusal(`Firefox does not let extensions open ${url}`);
+    });
+  }
 }

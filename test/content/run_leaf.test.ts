@@ -49,3 +49,19 @@ test("only a leaf made of captured-key steps holds the keys after it, and never 
   assert.equal(holds_keys_after(leaf_of(hint), false), false);
   assert.equal(holds_keys_after(leaf_of(captured), true), false);
 });
+
+test("a jump leaf goes to the router on a first press, and runs in the page on a held key's repeat", async () => {
+  const jump = { ...step("scroll.to", "content"), jump: true as const };
+  const first = setup();
+  await first.run_leaf(leaf_of(jump), undefined, false);
+  assert.deepEqual(first.sent, [{ type: "run", invocations: [{ id: "scroll.to" }], mode: "normal" }]);
+  const repeat = setup();
+  await repeat.run_leaf(leaf_of(jump), undefined, true);
+  assert.deepEqual(repeat.sent, []);
+});
+
+test("a jump leaf holds the keys after it, so a key typed next runs after the jump", () => {
+  const jump = { ...step("scroll.to", "content"), jump: true as const };
+  assert.equal(holds_keys_after(leaf_of(jump), false), true);
+  assert.equal(holds_keys_after(leaf_of(jump), true), false);
+});

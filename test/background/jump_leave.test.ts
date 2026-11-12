@@ -16,11 +16,11 @@ function fake_area() {
 const A = "https://a.test/";
 const B = "https://b.test/";
 
-function make(stepping = false) {
+function make(stepping = false, open = true) {
   const session = fake_area();
   const store = create_jump_store({ session: () => session });
   const state = { stepping };
-  const leave = create_jump_leave({ store, is_stepping: () => state.stepping });
+  const leave = create_jump_leave({ store, is_stepping: () => state.stepping, is_open: async () => open });
   const sender = (url: string, extra = {}) => ({ incognito: false, id: 5, window_id: 1, url, frame_id: 0, ...extra });
   const tab = (incognito = false) => ({ tab_id: 5, window_id: 1, incognito, url: undefined });
   // The list as a step back from the present sees it.
@@ -89,4 +89,11 @@ test("a private tab records in the private list only", async () => {
   await leave.updated(tab(true), { url: B });
   assert.deepEqual(await places(false), []);
   assert.deepEqual(await places(true), [{ url: A, x: 0, y: 700 }]);
+});
+
+test("a report that arrives after its tab closed leaves nothing held", async () => {
+  const { leave, sender, tab, places } = make(false, false);
+  await leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(A), A);
+  await leave.updated(tab(), { url: B });
+  assert.deepEqual(await places(), []);
 });
