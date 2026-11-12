@@ -9,6 +9,9 @@ import { HINT_FRAMES_STORAGE_PREFIX } from "./storage_keys.ts";
 // Slow ad frames answer late, and a frame that has not reported by then gets no labels. The labels already drawn are never redrawn for it.
 export const HINT_FRAMES_WAIT_MS = 500;
 
+// A pick the owner frame never answers (it navigated mid-pick and Firefox leaves the message unanswered) ends as a gone frame. Above the 20 s image copy, the slowest honest answer.
+export const HINT_FRAMES_PICK_MS = 25_000;
+
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
 export type HintFramesMessage = HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover;
@@ -23,6 +26,7 @@ export type HintFramesDeps = {
   set_timer: (callback: () => void, delay_ms: number) => unknown;
   clear_timer: (handle: unknown) => void;
   wait_ms: number;
+  pick_ms: number;
 };
 
 // Frame ids are object keys here, because the session goes through storage.
@@ -167,8 +171,15 @@ export function create_hint_frames(deps: HintFramesDeps) {
       if (!session?.labels) return NO_SESSION;
       const owner = Object.entries(session.labels).find(([, labels]) => labels.includes(label))?.[0];
       if (owner === undefined) return { ok: false, message: `No hint has the label ${label}` };
-      const answer = await deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)).catch(() => undefined);
-      return is_pick_answer(answer) ? answer : FRAME_GONE;
+      let timer: unknown;
+      const deadline = new Promise<undefined>((resolve) => (timer = deps.set_timer(() => resolve(undefined), deps.pick_ms)));
+      const reply = deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)).catch(() => undefined);
+      try {
+        const answer = await Promise.race([reply, deadline]);
+        return is_pick_answer(answer) ? answer : FRAME_GONE;
+      } finally {
+        deps.clear_timer(timer);
+      }
     },
 
     // To every frame, so a frame that reported late drops its candidates too.
@@ -215,5 +226,6 @@ export function browser_hint_frames_deps(): HintFramesDeps {
     set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),
     clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
     wait_ms: HINT_FRAMES_WAIT_MS,
+    pick_ms: HINT_FRAMES_PICK_MS,
   };
 }
