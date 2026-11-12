@@ -133,10 +133,15 @@ function toggle_captions(player: Player): void {
   else if (tracks[0]) (tracks.find((track) => Reflect.get(track, "default")) ?? tracks[0]).mode = "showing";
 }
 
-function state_of(player: Player, view: FrameView): MediaState {
-  const tracks = caption_tracks(player);
+// `none` only when no acted-on player has a track, so another player's track still counts.
+function captions_of(players: Player[]): MediaState["captions"] {
+  const tracks = players.flatMap(caption_tracks);
+  return tracks.length === 0 ? "none" : tracks.some(({ mode }) => mode === "showing") ? "on" : "off";
+}
+
+function state_of(player: Player, view: FrameView, captions: MediaState["captions"]): MediaState {
   return {
-    captions: tracks.length === 0 ? "none" : tracks.some(({ mode }) => mode === "showing") ? "on" : "off",
+    captions,
     rate: player.playbackRate,
     volume: player.volume,
     muted: player.muted,
@@ -172,12 +177,13 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
 }
 
 export async function apply_in_frame(view: FrameView, request: Extract<MediaRequest, { type: "media_apply" }>): Promise<MediaResult> {
-  const players = targets_of(view, request);
+  // A frame step needs a picture, so an audio element in the targets is left alone.
+  const players = targets_of(view, request).filter((player) => request.action !== "frame" || is_video(player));
   const settled = await Promise.allSettled(players.map((player) => change(player, request, view)));
   const failure = settled.find((outcome) => outcome.status === "rejected");
   if (failure) return refused(failure.reason);
   const [first] = players;
-  return first ? { acted: players.length, state: state_of(first, view) } : { acted: 0 };
+  return first ? { acted: players.length, state: state_of(first, view, captions_of(players)) } : { acted: 0 };
 }
 
 function refused(error: unknown): MediaResult {

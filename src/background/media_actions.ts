@@ -193,7 +193,7 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   if (tab_id === undefined) throw new RuntimeRefusal("Media needs a tab");
   if (args.action === "quality" || args.action === "skip") return run_quality(deps, ctx, tab_id, args);
   if (args.action === "pip" && !deps.can_picture_in_picture()) throw new RuntimeRefusal("Picture-in-picture needs Firefox 153 or newer");
-  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" || args.action === "enter" ? "No video on this page" : "No video or audio on this page");
+  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" || args.action === "frame" || args.action === "enter" ? "No video on this page" : "No video or audio on this page");
   const scans = await scan_frames(deps, tab_id);
   // Audio alone has no picture to watch, so the mode needs a video.
   if (args.action === "enter" && !scans.some((scan) => scan.has_video)) throw no_media;
@@ -210,11 +210,13 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   const acted = results.reduce((sum, result) => sum + result.acted, 0);
   const state = results.find((result) => result.state)?.state;
   if (acted === 0 || !state) throw no_media;
-  if (args.action === "captions" && state.captions === "none") {
+  // Only when no acted-on player had a track does the site player get the key. It is asked for the planned frame first, the pinned one when a video is pinned.
+  if (args.action === "captions" && results.every((result) => result.state?.captions !== "on" && result.state?.captions !== "off")) {
     // No track on the element: a site player may draw its own captions. The generic path runs first so other pages never pay the quality bundle.
-    const answer = await deps.quality(tab_id, { type: "quality_apply", op: "captions", value: undefined, times: 1 }).catch(() => undefined);
+    const answer = await deps.quality(tab_id, { type: "quality_apply", op: "captions", value: undefined, times: 1 }, plan[0]!.frame_id).catch(() => undefined);
     if (!answer?.toggled) throw new RuntimeRefusal("No captions");
-    return deps.toast(ctx, "Captions toggled");
+    // The player may not say what it did, so the notice claims no change then.
+    return deps.toast(ctx, answer.captions ? `Captions ${answer.captions}` : "Asked the player to toggle captions");
   }
   const quality = args.action === "info" ? (await deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined))?.levels.find((level) => level.active)?.label : undefined;
   await deps.toast(ctx, describe_change(args.action, state, acted, quality));
