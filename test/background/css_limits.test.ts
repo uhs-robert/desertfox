@@ -39,7 +39,8 @@ test("css limits: escapes and rules read across files in the order the build joi
 });
 
 test("css limits: a fragment reference passes, also inside a data: url", () => {
-  assert.deepEqual(breaches_of("a { filter: url(#f) } b { filter: url( '#f' ) } c { filter: url(%23f) }"), []);
+  assert.deepEqual(breaches_of("a { filter: url(#f) } b { filter: url( '#f' ) }"), []);
+  assert.deepEqual(breaches_of("a { filter: url(%23f) }"), ["1 url() that is not data:"]);
   assert.deepEqual(breaches_of("a { background: url(\"data:image/svg+xml,<svg><g fill='url(#g)'/></svg>\") }"), []);
   assert.deepEqual(breaches_of("a { background: url(x.svg#f) }"), ["1 url() that is not data:"]);
 });
