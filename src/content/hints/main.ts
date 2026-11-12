@@ -6,7 +6,7 @@ import type { HintFramesStart, HintFramesStartAnswer, Outcome } from "../../shar
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret } from "./actions.ts";
+import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret, takes_typing } from "./actions.ts";
 import type { CaretMode, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
@@ -257,6 +257,9 @@ const perform_pick = (current: PickArgs, element: HTMLElement) => {
 // The background answers within its 300 ms wait. Past this, it is gone or stuck, and the frame keeps its own labels.
 const ACROSS_START_WAIT_MS = 2000;
 
+// Across frames every frame runs the bundle, and a parent that can read a frame (same origin, about:blank) already labels it with its own walk. Such a frame labels nothing itself, so no element gets two labels. A frame of another site reads null here.
+const parent_labels_me = (): boolean => window.frameElement !== null;
+
 // While this frame starts hints across frames, it ignores the collect: the start carries its count.
 let starting = 0;
 
@@ -347,11 +350,11 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, key_line_setting, found] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates)]);
+    const [letters, key_line_setting, shown] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates)]);
     if (current.cancelled) return;
-    const labeled = current.across_frames_ ? await label_across(current, found, letters) : single_frame(found, letters);
+    const labeled = current.across_frames_ ? await label_across(current, parent_labels_me() ? [] : shown, letters) : single_frame(shown, letters);
     if (current.cancelled) return;
-    const { labels, own_of_ } = labeled;
+    const { labels, own_of_, found } = labeled;
     if (labels.length === 0) {
       const message = none_message(current.text);
       current.finish({ ok: false, message });
@@ -528,7 +531,7 @@ function answer_across(): void {
     const filter = args.filter as HintFilter;
     const text = (args.text as string | undefined) || undefined;
     let found: Found[] = [];
-    try {
+    if (!parent_labels_me()) try {
       const candidates = find_candidates(filter, args.selector as string | undefined, action, await read_site_selectors(() => {}));
       found = await shown_of({ filter, action, lower_text_: text?.toLowerCase() }, candidates);
     } catch {
@@ -547,6 +550,8 @@ function answer_across(): void {
     if (!element) return Promise.resolve({ ok: false, message: "That hint is gone" });
     const { args } = current;
     const pick_args: PickArgs = { args, action: args.action as HintAction, rapid: false, collected_: [], with_background_: args.filter === "images" };
+    // The keyboard focus is in another frame. Gecko keeps an element's focus() out of a frame of another site that does not hold it, and the window's focus() brings it in.
+    if (pick_args.action === "focus" || takes_typing(element)) window.focus();
     return Promise.resolve()
       .then(() => perform_pick(pick_args, element))
       .then((result) => (result as Outcome | undefined) ?? done, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));

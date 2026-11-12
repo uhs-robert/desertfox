@@ -48,6 +48,14 @@ test("inspect is refused across frames, because the devtools eval runs in the to
   for (const action of ["here", "tab", "copy", "copy_html", "hover", "double_click", "focus"]) assert.equal(check_args(hint, { action, filter: "all", frames: "all_frames" }).ok, true, action);
 });
 
+test("the actions that need the keyboard in the frame of the pick are refused across frames", () => {
+  for (const [action, filter] of [["prompt", "links"], ["caret", "prose"], ["visual", "prose"], ["enter_media", "media"]]) {
+    const result = check_args(hint, { action, filter, frames: "all_frames" });
+    assert.equal(result.ok ? "" : result.error, `action ${action} needs frames same_origin`, action);
+    assert.equal(check_args(hint, { action, filter }).ok, true, action);
+  }
+});
+
 test("double_click is refused for the links filter", () => {
   assert.equal(check_args(hint, { action: "double_click", filter: "links" }).ok, false);
   assert.equal(check_args(hint, { action: "double_click", filter: "buttons" }).ok, true);

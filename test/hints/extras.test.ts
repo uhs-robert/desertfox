@@ -94,7 +94,9 @@ let import_count = 0;
 
 // Builds a page of links with the given texts and loads the hints bundle against it.
 // `unfocused` is a subframe the user never entered: its content script waits for the first focus, so the host is not there yet.
-async function page_with(texts: string[], settings: Record<string, unknown> = {}, { unfocused = false } = {}) {
+// `in_readable_frame` is a frame its parent can read (same origin or about:blank), whose `frameElement` is not null.
+async function page_with(texts: string[], settings: Record<string, unknown> = {}, { unfocused = false, in_readable_frame = false } = {}) {
+  let window_focuses = 0;
   const document_root = new FakeNode();
   const links: Link[] = [];
   const active_listeners = new Set<string>();
@@ -133,6 +135,8 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   let close_line: (outcome: Outcome) => void = () => {};
 
   const win = {
+    frameElement: in_readable_frame ? {} : null,
+    focus: () => void window_focuses++,
     innerWidth: 800,
     innerHeight: 600,
     getComputedStyle: () => ({ visibility: "visible" }),
@@ -283,6 +287,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     set_hint_selectors: (selectors: Record<string, unknown> | (() => Promise<unknown>)) => void (hint_selectors = selectors),
     selector_asks: () => selector_asks,
     answer_start: (answer: (message: unknown) => unknown) => void (start_answer = answer),
+    window_focuses: () => window_focuses,
     // A message from the background, as the frame's listener gets it. The answer is the listener's.
     deliver: (message: Record<string, unknown>) => message_listeners.map((listener) => listener(message)).find((answer) => answer !== undefined),
     toasts,
@@ -1373,4 +1378,35 @@ test("a frame that starts hints across frames ignores the collect, because its s
   assert.deepEqual(types_sent(page), ["hint_frames_start"]);
   assert.deepEqual(page.labels(), ["a"]);
   page.escape();
+});
+
+test("across frames a frame its parent can read labels nothing itself, because the parent's walk labels it", async () => {
+  const page = await page_with(["one", "two"], {}, { in_readable_frame: true });
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
+  await settle();
+  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 0 }]);
+});
+
+test("across frames a keyboard frame its parent can read sends no count of its own", async () => {
+  const page = await page_with(["one", "two"], {}, { in_readable_frame: true });
+  page.answer_start(across_answer(["a", "s"], []));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  assert.equal((page.sent[0] as { count: number }).count, 0);
+  assert.equal(page.labels().length, 0);
+  page.escape();
+});
+
+test("another frame focuses its window before a focus pick, and not before a link pick", async () => {
+  const page = await page_with(["one", "two"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "background", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" });
+  assert.equal(page.window_focuses(), 0);
+  page.deliver({ type: "hint_frames_collect", session_id: "s2", args: { action: "focus", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s2", labels: ["a", "s"] });
+  await page.deliver({ type: "hint_frames_pick", session_id: "s2", label: "s" });
+  assert.equal(page.window_focuses(), 1);
 });
