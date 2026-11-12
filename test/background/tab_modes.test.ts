@@ -276,3 +276,38 @@ test("a navigation ends the insert hold, and a page's own address change keeps i
   await modes.forget_on_navigation(4, { status: "loading", url: NEW_PAGE });
   assert.equal(await read_insert_hold(storage, 4), false, "a hold the old page set after the load started reached the new page");
 });
+
+// The back-forward cache and the end of a load
+
+test("a focused child frame that claims during a load keeps its claim through the load's end", async () => {
+  const storage = fake_storage();
+  const modes = create_tab_modes(storage);
+  await modes.forget_on_navigation(4, { status: "loading" });
+  await modes.report(4, { frame_id: TOP, mode: "normal", focus: false });
+  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
+  await modes.forget_on_navigation(4, { status: "complete" });
+  assert.equal(await modes.recall(4), "insert", "the end of the load dropped the focused child frame");
+  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "normal", focused_child: { frame_id: CHILD, mode: "insert" } } });
+});
+
+test("a load start that arrives after the page's restore reports wipes the child claim, and the next top report tells the top frame", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
+  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
+  // A page restored from the back-forward cache reports on pageshow, and Firefox may send the load start after it.
+  await modes.report(4, { frame_id: TOP, mode: "normal", focus: false });
+  await modes.forget_on_navigation(4, { status: "loading" });
+  assert.equal(await modes.recall(4), "normal", "the record kept the child claim past the load start");
+  // The top frame still draws the child mode it had, so a top report must reach it even though the record changes nothing.
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: undefined, tell_top: true });
+});
+
+test("a top report heals a child mode the top frame still draws after the record lost it", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
+  await modes.forget_on_navigation(4, { status: "loading" });
+  await modes.forget_on_navigation(4, { status: "loading", url: NEW_PAGE });
+  const healed = await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
+  assert.equal(healed.tell_top, true, "the top frame was left drawing the lost child mode");
+  assert.equal(healed.child_mode, undefined);
+});
