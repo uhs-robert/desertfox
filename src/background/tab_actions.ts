@@ -15,7 +15,7 @@ export type TabActionDeps = {
 
 // What the group actions read of a tab before they act. `group_id` is -1 for a tab in no group, as Firefox reports it.
 export type GroupTabInfo = { id: number; window_id: number; pinned: boolean; group_id: number };
-export type GroupProps = { title?: string; collapsed?: boolean };
+export type GroupProps = { title?: string; collapsed?: boolean; color?: browser.tabGroups.Color };
 
 export type GroupDeps = {
   tab_infos: (tab_ids: number[]) => Promise<GroupTabInfo[]>;

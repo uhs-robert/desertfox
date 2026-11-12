@@ -48,6 +48,28 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await wait_group(first, "the toggle to expand", (group) => group.collapsed === false);
   });
 
+  await run_case("tgl colors the group from the command line", async () => {
+    await press_keys("tgl");
+    await submit_line("red");
+    await wait_group(first, "the group to turn red", (group) => group.color === "red");
+  });
+
+  await run_case("tgj and tgk move focus to the first tab of the next and previous group", async () => {
+    await open_page("page", "p31_other", { new_tab: true });
+    const other = (await active()).id;
+    await settle_focus();
+    await press_keys("tgA");
+    await wait_group(other, "the other tab to join a new group", (group) => group.id !== -1);
+    await press_keys("tgk");
+    await poll_until("focus on the Work group", async () => (await active()).id === first);
+    await press_keys("tgj");
+    await poll_until("focus on the other group", async () => (await active()).id === other);
+    await press_keys("tgd");
+    await wait_group(other, "the other tab to leave its group", (group) => group.id === -1);
+    await background(`browser.tabs.update(${first}, { active: true })`);
+    await settle_focus();
+  });
+
   await run_case("tga lists the group by title and a pick joins a second tab to it", async () => {
     await open_page("page", "p31_two", { new_tab: true });
     const second = (await active()).id;

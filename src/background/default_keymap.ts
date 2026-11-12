@@ -199,6 +199,9 @@ const BASE_SECTIONS: KeymapConfig = {
     tgc: { id: "tabgroup.collapse" },
     tge: { id: "tabgroup.expand" },
     tgt: { id: "tabgroup.toggle" },
+    tgl: { id: "tabgroup.color", prompt: { param: "color" } },
+    tgj: { id: "tabgroup.next" },
+    tgk: { id: "tabgroup.prev" },
 
     // The w group works on windows.
     W: { id: "window.new", prompt: { param: "url", prefill: { from: "current_url" } }, label: "New window, edit current URL" },
