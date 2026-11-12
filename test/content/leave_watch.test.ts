@@ -206,3 +206,11 @@ test("arming twice keeps one listener per document", () => {
   navigate("https://app.test/a");
   assert.equal(heard, 2);
 });
+
+test("a listener runs after the record, so the move is already sent when it hears the change", () => {
+  const { watch, navigate } = make();
+  const sent_when_heard: number[] = [];
+  watch.listen_(() => sent_when_heard.push(sent.length));
+  navigate("https://app.test/mail/1");
+  assert.deepEqual(sent_when_heard, [1]);
+});

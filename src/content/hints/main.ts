@@ -294,8 +294,8 @@ const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipbo
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
-  // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode, as a hidden page does.
-  arm_leave_watch(host).listen_(() => session && !picking && host.set_mode_("normal"));
+  // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode as Escape does, so hints opened from media mode return to it.
+  arm_leave_watch(host).listen_(() => session && !picking && host.escape_());
 
   function end_session(): void {
     const session_id = session?.ready?.session_id_;

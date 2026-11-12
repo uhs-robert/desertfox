@@ -45,17 +45,69 @@ test("a bundle that runs before the content script's host waits for the host, so
   assert.ok(registered.includes("hint.run"));
 });
 
-test("a same-document change with no hint session ends no mode, and the watch is armed once however often the bundle loads", async () => {
-  const modes: string[] = [];
+// A hint session in a bare document: `frames=all_frames` starts one with nothing to label, and a background that never answers the start keeps the session open while the frame waits.
+let loads = 0;
+async function with_session(opened_from: "normal" | "media") {
+  const { create_mode_state } = await import("../../src/content/mode_state.ts");
+  const state = create_mode_state(opened_from);
+  const exits: string[] = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+  const sinks = new Map<string, { exit: (next: string) => void }>();
   const navigation = new EventTarget();
-  const host = { register_sink_: () => {}, register_handler_: () => {}, set_mode_: (mode: string) => void modes.push(mode), escape_: () => {} };
-  const page: Record<string, unknown> = { desertfox_host: host, navigation, location: { href: "https://app.test/a" }, document: { hidden: false }, performance: { now: () => 1 }, addEventListener: () => {} };
+  const host = {
+    register_sink_: (mode: string, sink: never) => void sinks.set(mode, sink),
+    register_handler_: (id: string, handler: never) => void handlers.set(id, handler),
+    hold_keys_until_: () => {},
+    set_mode_: (mode: string) => {
+      const left = state.get_mode_();
+      state.set_mode_(mode as never);
+      if (left === "hint" && mode !== "hint") sinks.get("hint")!.exit(mode);
+    },
+    escape_: () => {
+      const left = state.get_mode_();
+      state.escape();
+      if (left === "hint") exits.push(state.get_mode_());
+      if (left === "hint") sinks.get("hint")!.exit(state.get_mode_());
+    },
+  };
+  const page: Record<string, unknown> = { desertfox_host: host, navigation, location: { href: "https://app.test/a" }, document: { hidden: false, querySelectorAll: () => [] }, performance: { now: () => 1 }, addEventListener: () => {}, setTimeout, clearTimeout };
   page.top = page;
-  (globalThis as Record<string, unknown>).window = page;
-  (globalThis as Record<string, unknown>).browser = { runtime: { onMessage: { addListener: () => {} }, sendMessage: async () => undefined } };
-  const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
-  await import(`${bundle_url}?armed_once`);
-  await import(`${bundle_url}?armed_twice`);
-  navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: "push" }));
-  assert.deepEqual(modes, []);
+  const globals = globalThis as Record<string, unknown>;
+  globals.window = page;
+  globals.document = page.document;
+  globals.browser = { runtime: { onMessage: { addListener: () => {} }, sendMessage: (message: { type: string }) => (message.type === "hint_frames_start" ? new Promise(() => {}) : Promise.resolve(undefined)) }, storage: { local: { get: async () => ({}) } } };
+  await import(`${new URL("../../src/content/hints/main.ts", import.meta.url).href}?session_${loads++}`);
+  const commit = (type: string | null) => navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: type }));
+  const open = async () => {
+    state.set_mode_("hint");
+    void handlers.get("hint.run")!({ action: "click", filter: "links", frames: "all_frames" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  };
+  return { state, exits, commit, open };
+}
+
+test("a pushState that commits ends the hint session once and returns to normal mode", async () => {
+  const { state, exits, commit, open } = await with_session("normal");
+  await open();
+  commit("push");
+  assert.deepEqual(exits, ["normal"]);
+  assert.equal(state.get_mode_(), "normal");
+  commit("push");
+  assert.deepEqual(exits, ["normal"], "a second change finds no session");
+});
+
+test("a replace or a change with no navigation leaves the hint session on", async () => {
+  const { state, commit, open } = await with_session("normal");
+  await open();
+  commit("replace");
+  commit(null);
+  assert.equal(state.get_mode_(), "hint");
+});
+
+test("a session opened from media mode returns to media mode on a committed pushState", async () => {
+  const { state, commit, open } = await with_session("media");
+  await open();
+  assert.equal(state.get_mode_(), "hint");
+  commit("push");
+  assert.equal(state.get_mode_(), "media");
 });
