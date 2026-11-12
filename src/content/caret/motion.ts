@@ -2,8 +2,13 @@
 // The caret never rests on a "\n" except on an empty line, where that "\n" is the line itself.
 // Motions along the screen line (j k 0 ^ $) are not here: where text wraps is the browser's to say.
 
-export type MotionUnit = "char" | "word" | "word_end" | "line" | "line_start" | "line_first" | "line_end" | "start" | "end";
-export type Motion = { unit: MotionUnit; direction: "forward" | "back"; big: boolean };
+type TextUnit = "char" | "word" | "word_end" | "start" | "end";
+type ScreenUnit = "line" | "line_start" | "line_first" | "line_end";
+export type MotionUnit = TextUnit | ScreenUnit;
+export type Direction = "forward" | "back";
+// Two engines: the text motions here, and the screen line motions of screen_line.ts, which only layout can answer. `big` means nothing to the screen line ones.
+export type TextMotion = { unit: TextUnit; direction: Direction; big: boolean };
+export type ScreenMotion = { unit: ScreenUnit; direction: Direction };
 
 // Letters and digits of any script, and the underscore.
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
@@ -73,10 +78,11 @@ function word_end_back(text: string, from: number, big: boolean): number {
   return index;
 }
 
-export const SCREEN_LINE_UNITS: readonly MotionUnit[] = ["line", "line_start", "line_first", "line_end"];
+const SCREEN_UNITS: readonly MotionUnit[] = ["line", "line_start", "line_first", "line_end"];
+export const is_screen_unit = (unit: MotionUnit): unit is ScreenUnit => SCREEN_UNITS.includes(unit);
 
-// One step of a motion over the text. The screen line units are Firefox's to answer, see screen_line.ts.
-export function move_once(text: string, from: number, motion: Motion): number {
+// One step of a motion over the text.
+export function move_once(text: string, from: number, motion: TextMotion): number {
   if (text.length === 0) return 0;
   const forward = motion.direction === "forward";
   switch (motion.unit) {
@@ -88,11 +94,6 @@ export function move_once(text: string, from: number, motion: Motion): number {
       return forward ? word_forward(text, from, motion.big) : word_back(text, from, motion.big);
     case "word_end":
       return forward ? word_end_forward(text, from, motion.big) : word_end_back(text, from, motion.big);
-    case "line":
-    case "line_start":
-    case "line_first":
-    case "line_end":
-      return from;
     case "start":
       return first_non_blank_of(text, 0);
     case "end":
