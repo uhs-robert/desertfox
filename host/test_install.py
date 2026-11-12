@@ -337,6 +337,12 @@ class ArgumentAndPythonTest(InstallCase):
 
 GH_STUB = """#!/bin/sh
 echo "$@" >> "$GH_LOG"
+# `run list` answers the id it would print after the jq filter: 0 before the dispatch, 42 after.
+if [ "$1 $2" = "run list" ]; then
+  if [ -f "$GH_LOG.dispatched" ]; then echo 42; else echo 0; fi
+  exit 0
+fi
+[ "$1 $2" = "workflow run" ] && touch "$GH_LOG.dispatched"
 for arg in "$@"; do
   [ -f "$arg" ] && cp "$arg" "$GH_OUT/"
 done
@@ -441,6 +447,29 @@ class ReleaseStepTest(InstallCase):
     def package_version(self):
         with open(os.path.join(os.path.dirname(HOST_DIR), "src", "manifest.json")) as file:
             return json.load(file)["version"]
+
+    def policy_file(self, install_url):
+        path = os.path.join(self.tmp.name, "policies.json")
+        with open(path, "w") as file:
+            json.dump({"policies": {"ExtensionSettings": {"desertfox@uhs-robert": {"installation_mode": "normal_installed", "install_url": install_url}}}}, file)
+        return path
+
+    def test_release_install_skips_the_install_when_the_policy_follows_the_beta(self):
+        policy = self.policy_file("https://example.invalid/desertfox.xpi")
+        done = self.just("release_install", DESERTFOX_POLICIES_FILE=policy)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("on beta", done.stdout)
+        self.assertNotIn("install_policy.sh", done.stderr)
+
+    def test_release_install_runs_the_install_when_the_policy_is_stable(self):
+        # A stub sudo keeps a stray signed xpi from ever reaching the real one.
+        with open(os.path.join(self.stub_bin, "sudo"), "w") as file:
+            file.write("#!/bin/sh\necho sudo blocked >&2\nexit 1\n")
+        os.chmod(os.path.join(self.stub_bin, "sudo"), 0o755)
+        policy = self.policy_file("file:///usr/local/share/desertfox/desertfox@uhs-robert.xpi")
+        done = self.just("release_install", DESERTFOX_POLICIES_FILE=policy)
+        self.assertNotIn("on beta", done.stdout)
+        self.assertIn("install_policy.sh", done.stderr)
 
     def test_stamp_writes_the_version_into_both_hosts_before_hashing(self):
         self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
