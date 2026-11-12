@@ -182,7 +182,7 @@ With it you can:
 
 Without the host, almost everything works. Change settings with `:set` or on the settings page, and bring in keys, search engines and themes there as a zip or a folder. Only the features above need the host. The `,f` keys copy the page address instead, so you can paste it.
 
-To install it, run `:native.install` in DesertFox. It shows one command to paste in a terminal. See [host/README.md](host/README.md) for the steps, the bridge setup and every detail.
+To install it, run `:native.install` in DesertFox. It shows one command to paste in a terminal. See [host/README.md](host/README.md) for how the host works, the bridge setup and every detail.
 
 What the host can and cannot do:
 
