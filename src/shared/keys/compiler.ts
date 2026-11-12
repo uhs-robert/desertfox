@@ -371,8 +371,11 @@ function warn_prefix_binds(rows: readonly { site: string; rule: SiteRule }[], wa
         warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}": "${shorter.tokens.join("")}" is already a complete bind for the same site`);
         continue;
       }
+      // Only the row's own binds merge across rows. A named mode comes whole from the first matching row, so its binds never meet those of another row.
+      if (scope.mode !== "") continue;
       for (const other of scopes.values()) {
-        const hiding = other === scope || other.mode !== scope.mode || hosts_disjoint(scope.site, other.site) ? undefined : under(longer, other.binds);
+        // Disjoint hosts are skipped, though an embedded cross-site frame resolves rules by both its own URL and the tab's and can still meet both rows.
+        const hiding = other === scope || other.mode !== "" || hosts_disjoint(scope.site, other.site) ? undefined : under(longer, other.binds);
         if (hiding) warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}" of "${scope.site}": "${hiding.tokens.join("")}" is already a complete bind of "${other.site}", which can match the same pages`);
       }
     }
