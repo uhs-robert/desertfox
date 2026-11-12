@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,4 +47,16 @@ test("--schemas writes the data schemas and nothing else", () => {
 test("an unreadable commands file exits non-zero", () => {
   const { result } = run_cli(["--commands", join(FIXTURES, "missing.json")]);
   assert.notEqual(result.status, 0);
+});
+
+test("editor.toml is host-only: the lint skips it instead of reporting an unknown file", () => {
+  const { config_dir } = run_cli([]);
+  writeFileSync(join(config_dir, "editor.toml"), 'argv = ["term", "{file}"]\n');
+  const result = spawnSync(
+    process.execPath,
+    [CLI, config_dir, "--commands", join(FIXTURES, "commands.json")],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout + result.stderr, /editor\.toml/);
 });

@@ -603,7 +603,7 @@ class SourceTest(unittest.TestCase):
 
     def test_the_host_runs_no_shell_and_starts_one_process_only_for_the_editor(self):
         source = repo_bytes("desertfox-host").decode()
-        for needle in ("os.system", "os.popen", "os.exec", "shell=", "eval(", "exec(", "subprocess.run", "subprocess.call", "check_output"):
+        for needle in ("os.system", "os.popen", "os.exec", "shell=", "eval(", "exec(", "subprocess.run", "subprocess.call", "check_output", "subprocess.getoutput", "subprocess.getstatusoutput", "os.spawn", "posix_spawn", "import pty", "pty."):
             self.assertNotIn(needle, source)
         self.assertEqual(source.count("subprocess.Popen("), 1)
 

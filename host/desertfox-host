@@ -18,7 +18,7 @@ in the same framing to stdout and exits. It has five verbs and no others:
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
-file there, autoconfig.toml. It never edits the user's own files, and it parses nothing: the extension owns the TOML.
+file there, autoconfig.toml. It never edits the user's own files, and it parses no config of the extension: the extension owns that TOML. Only editor.toml, which the extension never sees, is parsed here.
 `self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
 reply ever carries. Stdout carries only protocol bytes.
@@ -503,9 +503,6 @@ EXT_PATTERN = re.compile(r"[A-Za-z0-9]{1,10}")
 MAX_EDITOR_TEXT_BYTES = MAX_REPLY_BYTES // 8
 COLLECT_WAIT_S = 20
 COLLECT_POLL_S = 0.1
-# A save that quits the editor is seen as an exit. For an editor that stays open, a changed file counts as saved once
-# it holds still for this long, so a write in progress is never read.
-SETTLE_S = 0.3
 STALE_JOB_S = 24 * 60 * 60
 JOB_PATTERN = re.compile(r"[0-9a-f]{32}")
 
@@ -612,9 +609,10 @@ def remove_quietly(path):
 
 
 def sweep_stale_jobs(directory):
-    """Removes the files of a job whose editor is gone and which nobody collected for a day (a closed browser)."""
+    """Removes the files of a job whose editor is gone and which nobody collected for a day (a closed browser). A claimed
+    `.done` job file, left by a collector that died after claiming, goes the same way."""
     for name in os.listdir(directory):
-        if not (name.startswith("job-") and name.endswith(".json")):
+        if not (name.startswith("job-") and (name.endswith(".json") or name.endswith(".done"))):
             continue
         path = os.path.join(directory, name)
         try:
@@ -623,8 +621,8 @@ def sweep_stale_jobs(directory):
             job = json.loads(read_text(path))
             if editor_is_running(job["pid"], job["start_ticks"]):
                 continue
-            remove_quietly(os.path.join(directory, job["scratch"]))
-        except (OSError, ValueError, KeyError, HostError):
+            remove_quietly(os.path.join(directory, os.path.basename(job["scratch"])))
+        except (OSError, ValueError, KeyError, TypeError, HostError):
             pass
         remove_quietly(path)
 
@@ -680,15 +678,19 @@ def editor_start(request):
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True, start_new_session=True,
         )
-    except OSError as error:
+    except (OSError, ValueError) as error:
         remove_quietly(scratch_path)
-        raise HostError(f"cannot start {argv[0]!r} from {EDITOR_CONFIG_NAME}: {error.strerror or error}") from error
+        raise HostError(f"cannot start {argv[0]!r} from {EDITOR_CONFIG_NAME}: {getattr(error, "strerror", None) or error}") from error
     record = {"scratch": scratch_name, "mtime_ns": saved_mtime_ns, "pid": process.pid, "start_ticks": process_start_ticks(process.pid)}
     try:
         descriptor = os.open(job_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as file:
             json.dump(record, file)
     except OSError as error:
+        # The editor is already running with no job to collect it, so end its whole session first.
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
         remove_quietly(job_path)
         remove_quietly(scratch_path)
         raise HostError(f"cannot write {job_path}: {error.strerror or error}") from error
@@ -726,9 +728,9 @@ def collect_result(record, scratch_path, claimed_job):
         if not changed:
             return {"done": True, "changed": False}
         with open(scratch_path, "rb") as file:
-            data = file.read()
+            data = file.read(MAX_EDITOR_TEXT_BYTES + 1)
         if len(data) > MAX_EDITOR_TEXT_BYTES:
-            raise HostError(f"the edited text is {len(data)} bytes, over the {MAX_EDITOR_TEXT_BYTES} byte limit, so it was dropped")
+            raise HostError(f"the edited text is over the {MAX_EDITOR_TEXT_BYTES} byte limit, so it was dropped")
         return {"done": True, "changed": True, "text": data.decode("utf-8", errors="replace").rstrip("\r\n")}
     except OSError as error:
         raise HostError(f"cannot read {scratch_path}: {error.strerror or error}") from error
@@ -740,25 +742,14 @@ def collect_result(record, scratch_path, claimed_job):
 def editor_collect(request, wait_s=COLLECT_WAIT_S):
     """Waits up to `wait_s` for the editor to end, then answers {"pending": true} or the result.
 
-    The file is read only after the editor exited, or after a changed file held still for SETTLE_S, so a write in
-    progress is never read. A job that exited without saving gives changed false."""
+    The file is read only after the editor exited, so a write in progress is never read. While the editor runs, a
+    missing or changing file is a save in progress (a rename-and-write save removes the name for a moment), and the
+    answer stays pending. A job that exited without saving gives changed false."""
     checked_fields(request, {"job"}, "editor_collect")
     directory = editor_dir()
     job_path, record, scratch_path = read_job(directory, request.get("job"))
     deadline = time.monotonic() + wait_s
-    seen, seen_since = None, 0.0
-    while True:
-        if not editor_is_running(record["pid"], record["start_ticks"]):
-            break
-        try:
-            stat = os.stat(scratch_path)
-        except OSError:
-            break
-        state = (stat.st_mtime_ns, stat.st_size)
-        if state != seen:
-            seen, seen_since = state, time.monotonic()
-        elif stat.st_mtime_ns != record["mtime_ns"] and time.monotonic() - seen_since >= SETTLE_S:
-            break
+    while editor_is_running(record["pid"], record["start_ticks"]):
         if time.monotonic() >= deadline:
             return {"pending": True}
         time.sleep(COLLECT_POLL_S)
