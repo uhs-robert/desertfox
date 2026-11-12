@@ -1,6 +1,6 @@
 import { deepest_focused_element } from "../editable.ts";
 import { bundles } from "../bundles.ts";
-import { remember_blurred } from "./last_blurred.ts";
+import { remember_blurred } from "../bundle_host.ts";
 import type { ContentHandler } from "./types.ts";
 
 export function blur_focused_element(): void {
