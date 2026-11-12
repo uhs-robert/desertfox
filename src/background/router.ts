@@ -28,7 +28,7 @@ export type RouterDeps = {
   runs_with_empty: (command_id: string, args: CheckedArgs, param: string, context: CommandContext) => Promise<boolean>;
   read_clipboard: () => Promise<string>;
   // The scroll offset of the top frame's page, read through the `page` bundle (loaded on first use), with the address of the page that answered. Undefined when the page cannot answer.
-  read_offset: (tab_id: number) => Promise<{ x: number; y: number; url: string } | undefined>;
+  read_offset: (tab_id: number) => Promise<PageOffset | undefined>;
   // Puts a place in the jump list of the window. Rejects for an address the list refuses.
   record_jump: (window_id: number, is_private: boolean, entry: JumpEntry) => Promise<unknown>;
   // The title of the bookmark at this address, undefined when there is none.
@@ -80,13 +80,18 @@ const NO_PAGE = "a page DesertFox runs on";
 // A page that does not answer the offset read must not hold the command: it runs and records nothing.
 export const JUMP_READ_TIMEOUT_MS = 1000;
 
-// The offset, or nothing when the read fails or takes longer than `JUMP_READ_TIMEOUT_MS`.
-export async function read_offset_in_time<Offset>(read: Promise<Offset | undefined>): Promise<Offset | undefined> {
+export type PageOffset = { x: number; y: number; url: string };
+
+// The place the top page of a tab on `tab_url` stands, or nothing when the read fails or takes longer than `JUMP_READ_TIMEOUT_MS`.
+// The read can load `page.js`, and a page that loaded in the tab meanwhile answers for itself, not for `tab_url`, so that answer is nothing too.
+export async function read_place_in_time(read: Promise<PageOffset | undefined>, tab_url: string): Promise<JumpEntry | undefined> {
   let timer: number | undefined;
   const waited = new Promise<undefined>((resolve) => {
     timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
   });
-  return Promise.race([read.catch(() => undefined), waited]).finally(() => clearTimeout(timer));
+  const offset = await Promise.race([read.catch(() => undefined), waited]).finally(() => clearTimeout(timer));
+  const url = mark_page_url(tab_url);
+  return offset && mark_page_url(offset.url) === url ? { url, x: offset.x, y: offset.y } : undefined;
 }
 
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.
@@ -220,10 +225,8 @@ export function create_router(deps: RouterDeps): Router {
   async function read_place_left(command: CommandDef, args: CheckedArgs, context: CommandContext, active: ActiveTab | undefined) {
     const moves_view = typeof command.jumps === "function" ? command.jumps(args) : command.jumps === true;
     if (!moves_view || !active?.url || active.window_id < 0 || (context.frame_id ?? 0) !== 0 || context.tab_id !== active.tab_id) return undefined;
-    const offset = await read_offset_in_time(deps.read_offset(active.tab_id));
-    // A page that loaded in the tab during the read answers for itself, not for the address read before it.
-    if (!offset || mark_page_url(offset.url) !== mark_page_url(active.url)) return undefined;
-    return { window_id: active.window_id, is_private: active.incognito === true, entry: { url: mark_page_url(active.url), x: offset.x, y: offset.y } };
+    const entry = await read_place_in_time(deps.read_offset(active.tab_id), active.url);
+    return entry && { window_id: active.window_id, is_private: active.incognito === true, entry };
   }
 
   // A replay step names its number, because the user did not type the step.

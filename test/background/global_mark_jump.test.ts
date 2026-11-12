@@ -50,7 +50,9 @@ function make(tabs: MarkTab[]) {
   const refusals: { tab_id: number; message: string }[] = [];
   // The places put in the jump list, as `window: url x y`.
   const records: string[] = [];
-  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, activate_gate: undefined as Promise<void> | undefined, read_top_offset: async (): Promise<{ x: number; y: number } | undefined> => ({ x: 7, y: 77 }) };
+  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, activate_gate: undefined as Promise<void> | undefined };
+  // The top frame answers for the page the tab is on.
+  let read_top_offset = async (tab_id: number): Promise<{ x: number; y: number; url: string } | undefined> => ({ x: 7, y: 77, url: state.tabs.find((candidate) => candidate.id === tab_id)?.url ?? "" });
   const global_jump = create_global_mark_jump({
     store: real,
     list_tabs: async () => state.tabs,
@@ -84,13 +86,14 @@ function make(tabs: MarkTab[]) {
     push_jump: async (tab_id, key) => (log.push(`push ${tab_id} ${key}`), await state.during_push?.(), state.push_reply),
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
     record_jump: async (window_id, _is_private, entry) => void records.push(`${window_id}: ${entry.url} ${entry.x} ${entry.y}`),
-    read_top_offset: () => state.read_top_offset(),
+    read_top_offset: (tab_id) => read_top_offset(tab_id),
   });
+  const set_read_top_offset = (read: typeof read_top_offset) => (read_top_offset = read);
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: "https://sender.test/", frame_id: 0, ...extra });
   const jump = (key = "A", y = 40, url = "https://sender.test/"): MarkJump => ({ type: "mark_jump", key, url, x: 0, y });
   const set_mark = (key = "A", is_private = false) => answer_mark_request(real, { type: "mark_set", key, url: "ignored", x: 0, y: 300 }, { incognito: is_private, id: 9, window_id: 1, url: MARK_URL, frame_id: 0 }, global_jump);
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { store: real, global_jump, log, watches, refusals, records, state, sender, jump, set_mark, flush };
+  return { store: real, global_jump, log, watches, refusals, records, state, sender, jump, set_mark, flush, set_read_top_offset };
 }
 
 test("a jump with no mark refuses and touches no tab", async () => {
@@ -298,7 +301,7 @@ test("a top frame that never answers the offset read does not hold a child frame
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const fakes = make([tab(1, "https://sender.test/"), tab(2, MARK_URL)]);
   await fakes.set_mark();
-  fakes.state.read_top_offset = () => new Promise(() => {});
+  fakes.set_read_top_offset(() => new Promise(() => {}));
   const jumping = fakes.global_jump(fakes.jump("A", 40), fakes.sender(1, { frame_id: 2 }));
   for (let turn = 0; turn < 20; turn++) await Promise.resolve();
   context.mock.timers.tick(JUMP_READ_TIMEOUT_MS);
@@ -326,4 +329,13 @@ test("a jump that a newer one superseded before its switch records nothing", asy
   await Promise.all([to_a, to_b, to_c]);
   assert.deepEqual(fakes.log.filter((line) => line.startsWith("activate")), ["activate 2", "activate 4"]);
   assert.deepEqual(fakes.records.map((line) => line.split(":")[0]), ["2", "4"], "B never switched, so window 3 got no place");
+});
+
+test("a child frame's jump records nothing when another page loaded in the tab during the top frame's offset read", async () => {
+  const fakes = make([tab(1, "https://sender.test/"), tab(2, MARK_URL)]);
+  await fakes.set_mark();
+  fakes.set_read_top_offset(async () => ({ x: 7, y: 77, url: "https://next.test/" }));
+  assert.deepEqual(await fakes.global_jump(fakes.jump("A", 40), fakes.sender(1, { frame_id: 2 })), { ok: true });
+  assert.deepEqual(fakes.log, ["watch 2", "activate 2"]);
+  assert.deepEqual(fakes.records, []);
 });

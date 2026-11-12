@@ -6,7 +6,7 @@ import type { JumpEntry } from "../shared/jump_names.ts";
 import { mark_page_url } from "../shared/mark_names.ts";
 import type { MarkAnswer, MarkJump } from "../shared/messages.ts";
 import { create_address_arrivals, type AddressDeps } from "./address_arrival.ts";
-import { read_offset_in_time } from "./router.ts";
+import { read_place_in_time, type PageOffset } from "./router.ts";
 import type { GlobalJump, MarkSender, MarkStore } from "./mark_store.ts";
 
 export { find_mark_tab, type MarkTab } from "./address_arrival.ts";
@@ -18,18 +18,18 @@ export type GlobalJumpDeps = Omit<AddressDeps, "failed_text"> & {
   // Puts the place a jump left into a window's jump list. The router records other jumps, but only this knows the window a global mark lands in.
   record_jump: (window_id: number, is_private: boolean, entry: JumpEntry) => Promise<unknown>;
   // The scroll offset of the tab's top frame, for a jump a child frame asked for.
-  read_top_offset: (tab_id: number) => Promise<{ x: number; y: number } | undefined>;
+  read_top_offset: (tab_id: number) => Promise<PageOffset | undefined>;
 };
 
 export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
   const arrivals = create_address_arrivals<string>({ ...deps, failed_text: "Mark jump failed" });
   const push = (tab_id: number, key: string) => deps.push_jump(tab_id, key);
 
-  // Where the top frame of the sender's tab stands. A refused or slow read records nothing, and the read is capped as the router's is, so a frame that never answers cannot hold the jump.
+  // Where the top frame of the sender's tab stands. The read is the router's, so a frame that never answers cannot hold the jump and another page's answer records nothing.
   async function place_left(request: MarkJump, tab: MarkSender): Promise<JumpEntry | undefined> {
     if (tab.url === undefined || tab.id === undefined) return undefined;
-    const offset = tab.frame_id === 0 ? request : await read_offset_in_time(deps.read_top_offset(tab.id));
-    return offset && { url: mark_page_url(tab.url), x: offset.x, y: offset.y };
+    if (tab.frame_id === 0) return { url: mark_page_url(tab.url), x: request.x, y: request.y };
+    return read_place_in_time(deps.read_top_offset(tab.id), tab.url);
   }
   // In the list of the window the jump lands in, so `<C-o>` there comes back.
   const record = async (window_id: number, is_private: boolean, left: JumpEntry | undefined) => {
