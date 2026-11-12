@@ -3,6 +3,8 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { create_omnibox } from "../../src/background/omnibox.ts";
 import { create_router } from "../../src/background/router.ts";
+import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
+import { command_meta } from "../../src/shared/registry/index.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { make_fake } from "./fakes.ts";
 
@@ -35,6 +37,7 @@ function make(options: { disabled?: boolean; incognito?: boolean } = {}) {
   const router = create_router(deps);
   const omnibox = create_omnibox({
     registry,
+    lookup: async () => create_word_lookup(registry.list().map(command_meta), { nx: "tab.next" }),
     get_enum_sources: deps.get_enum_sources,
     active_tab: deps.active_tab,
     mode_of: async () => "normal",
@@ -87,10 +90,18 @@ test("a modified Enter sets where on a command that has it, and leaves others al
   assert.deepEqual(t.ran, ["open https://a.example ", "open https://b.example tab", "open https://c.example background", "tab.next"]);
 });
 
-test("DesertFox off refuses the run through the router's own gate", async () => {
+test("DesertFox off shows the off refusal and records nothing", async () => {
   const t = make({ disabled: true });
   await t.omnibox.entered("next", "currentTab");
   assert.deepEqual(t.ran, []);
+  assert.deepEqual(t.log, ["refuse 7 DesertFox is off"]);
+  assert.deepEqual(t.history, []);
+});
+
+test("a configured alias runs like its command", async () => {
+  const t = make();
+  await t.omnibox.entered("nx", "currentTab");
+  assert.deepEqual(t.ran, ["tab.next"]);
 });
 
 test("a content command refuses on a page with no content script, and the refusal is delivered", async () => {

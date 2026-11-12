@@ -26,6 +26,7 @@ import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
+import { create_word_lookup } from "../cmdline/word_lookup.ts";
 import { create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
@@ -362,7 +363,8 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
 if (browser.omnibox) {
   const omnibox = create_omnibox({
     registry,
-    // Waits for the config first: its aliases and snippets are in the registry only once it has loaded.
+    // The command line's own word lookup, so a configured alias works here too. Built after the config has loaded.
+    lookup: async () => create_word_lookup(registry.list().map(command_meta), (await get_config()).command_aliases),
     get_enum_sources: async () => (await get_config(), router_deps.get_enum_sources()),
     active_tab: router_deps.active_tab,
     mode_of: async (tab_id) => (tab_id === undefined ? "normal" : tab_modes.recall(tab_id)),
@@ -371,7 +373,7 @@ if (browser.omnibox) {
     record_history: cmdline.record,
   });
   browser.omnibox.setDefaultSuggestion({ description: OMNIBOX_HINT });
-  browser.omnibox.onInputEntered.addListener((text, disposition) => void omnibox.entered(text, disposition));
+  browser.omnibox.onInputEntered.addListener((text, disposition) => omnibox.entered(text, disposition).catch((error: unknown) => void router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) })));
 }
 
 const site_zoom = create_site_zoom({
