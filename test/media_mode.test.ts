@@ -240,11 +240,31 @@ test("an address change the page makes keeps the hold and drops the pin, and a n
   assert.deepEqual(sent.slice(1).sort(), [[6, 0, "off"], [6, 2, "off"]]);
 });
 
-test("a fullscreen that ends while hint or the line is open sends the escape to normal", () => {
+test("a media mode that ends in another frame while hint or the line is open sends the escape to normal", () => {
   const state = create_mode_state();
   state.set_mode_("media");
   state.set_mode_("cmdline");
-  state.back_to_normal_();
+  assert.equal(state.media_ended_(false), undefined);
+  state.escape();
+  assert.equal(state.get_mode_(), "normal");
+});
+
+test("a fullscreen that ends in this frame closes a line opened from media mode to media mode", () => {
+  for (const line of ["cmdline", "hint"] as const) {
+    const state = create_mode_state();
+    state.set_mode_("media");
+    state.set_mode_(line);
+    assert.equal(state.media_ended_(true), "media", line);
+    state.set_mode_("media");
+    assert.equal(state.get_mode_(), "media");
+    assert.equal(state.media_ended_(true), "normal");
+  }
+});
+
+test("a line opened from normal mode ignores a fullscreen that ends, and the media mode ends with it", () => {
+  const state = create_mode_state();
+  state.set_mode_("cmdline");
+  assert.equal(state.media_ended_(true), undefined);
   state.escape();
   assert.equal(state.get_mode_(), "normal");
 });

@@ -261,6 +261,22 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await j_scrolls(id);
   });
 
+  await run_case("Escape on the line in fullscreen ends the fullscreen and closes the line, and the mode stays", async () => {
+    const id = "p29_line_escape";
+    await open_media_page(id);
+    let mark = events.length;
+    await press_keys("F");
+    await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "player", "fullscreen to start");
+    await press_keys(":");
+    await wait_cmdline((line) => line.open, "the line to open");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "", "fullscreen to end");
+    await wait_cmdline((line) => !line.open, "the line to close with the fullscreen");
+    await expect_absent(mark, id, indicator(id, "NORMAL"), "the mode ended with the fullscreen");
+    await j_is_media(id, 0.9);
+  });
+
   await run_case("the site's own key that leaves the fullscreen returns the mode to normal, and the key reaches the page in the mode", async () => {
     const id = "p29_site_exit";
     await open_page("media_mode", id, { new_tab: true });

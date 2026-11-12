@@ -6,6 +6,9 @@ import { is_caret_mode } from "../shared/command.ts";
 // The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Only normal mode starts the media mode, so insert, ignore, hint and the reading modes win, and only the media mode ends with the fullscreen.
 export const fullscreen_step = (mode: Mode, has_fullscreen_element: boolean): Mode | undefined => (has_fullscreen_element ? (mode === "normal" ? "media" : undefined) : mode === "media" ? "normal" : undefined);
 
+// Hint and command line mode, the two that return to where they began.
+const is_line = (mode: Mode): boolean => mode === "hint" || mode === "cmdline";
+
 export function create_mode_state(initial: Mode = "normal") {
   let mode = initial;
   let pass_next_armed = false;
@@ -25,13 +28,17 @@ export function create_mode_state(initial: Mode = "normal") {
 
   const set_mode_ = (next: Mode) => {
     manual_insert = next === "insert";
-    if ((next === "hint" || next === "cmdline") && mode !== "hint" && mode !== "cmdline") back_mode = mode === "media" ? "media" : "normal";
+    if (is_line(next) && !is_line(mode)) back_mode = mode === "media" ? "media" : "normal";
     follow_focus_to_(next);
   };
 
   return {
-    // The media mode ended (the fullscreen, or in another frame) while hint or command line mode was open, so closing it lands in normal mode.
-    back_to_normal_: () => void (back_mode = "normal"),
+    // The media mode ended, and this is the mode to take (undefined: stay). `own` is a fullscreen that ended in this frame. A line or hint opened from media mode then closes to it, because Firefox spends the Escape on leaving fullscreen and the user did not ask to leave the mode. Otherwise hint and the line close to normal mode.
+    media_ended_: (own?: boolean): Mode | undefined => {
+      if (own && is_line(mode) && back_mode === "media") return "media";
+      back_mode = "normal";
+      return fullscreen_step(mode, false);
+    },
     is_manual_insert_: () => manual_insert,
     get_mode_: () => mode,
     set_mode_,
@@ -52,7 +59,7 @@ export function create_mode_state(initial: Mode = "normal") {
     },
     // Ignore mode is left only by its own binding, never by Escape. Hint and command line mode return to where they began.
     escape: () => {
-      if (mode !== "ignore") set_mode_(mode === "hint" || mode === "cmdline" ? back_mode : "normal");
+      if (mode !== "ignore") set_mode_(is_line(mode) ? back_mode : "normal");
     },
     arm_pass_next_: () => {
       pass_next_armed = true;
