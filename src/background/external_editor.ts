@@ -18,7 +18,12 @@ export type ExternalEditorDeps = {
   send_done: (tab_id: number, frame_id: number, message: EditorDone) => Promise<unknown>;
   toast: (tab_id: number, frame_id: number, message: string) => Promise<unknown>;
   tab_exists: (tab_id: number) => Promise<boolean>;
+  now: () => number;
+  pause: (ms: number) => Promise<void>;
 };
+
+// A host long-polls about 20 s. A pending answer sooner than this means it did not wait, so the loop waits instead of spinning.
+const MIN_POLL_MS = 1000;
 
 const failure_text = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -51,13 +56,18 @@ export function create_external_editor(deps: ExternalEditorDeps) {
       for (;;) {
         if (!(await is_current(tab_id, held.job))) return;
         let reply: EditorCollectReply;
+        const asked_at = deps.now();
         try {
           reply = await deps.client.editor_collect(held.job);
         } catch (error) {
           if (await clear(tab_id, held.job)) await deps.toast(tab_id, held.frame_id, failure_text(error)).catch(() => undefined);
           return;
         }
-        if ("pending" in reply) continue;
+        if ("pending" in reply) {
+          const waited = deps.now() - asked_at;
+          if (waited < MIN_POLL_MS) await deps.pause(MIN_POLL_MS - waited);
+          continue;
+        }
         // A navigation or a closed tab dropped the job meanwhile: the result belongs to a page that is gone.
         if (!(await clear(tab_id, held.job))) return;
         await deps.send_done(tab_id, held.frame_id, { type: "editor_done", token: held.token, ...(reply.changed ? { text: reply.text } : {}) }).catch(() => undefined);
