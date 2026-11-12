@@ -106,6 +106,12 @@ function span_of(open: Session): Span {
 // A Range stays in one tree, so a span across a shadow root or a frame takes one range per tree. Firefox keeps several ranges in one selection.
 function paint(open: Session): void {
   const { from, to } = (open.painted_span_ = span_of(open));
+  // The last paint can sit in a document the model no longer reads, such as a frame that lost its text.
+  for (const { selection } of open.painted_) {
+    try {
+      selection.removeAllRanges();
+    } catch {}
+  }
   const selections = selections_of(open.model_);
   for (const selection of selections) selection.removeAllRanges();
   const runs = open.model_.tree_runs_(from, to);
@@ -137,7 +143,8 @@ function start_session(mode: CaretMode): Session | string {
     return "Caret cannot reach a frame from another site";
   }
   // The model covers the whole page, so motion is not trapped in the element.
-  const model = page_text.current(target);
+  // Read again even while the held model is current: a plain element that attached a shadow root since fired no mutation.
+  const model = page_text.read(target);
   if (model.text === "") return "No text here";
   const dragged = target === undefined ? selections_of(model).flatMap((selection) => page_selection_cursor(model, selection) ?? [])[0] : undefined;
   // A search position is valid only while no selection came after it, so it is newer than any drag and wins.
@@ -150,15 +157,16 @@ function start_session(mode: CaretMode): Session | string {
 }
 
 // The page changed its text since the session read it, so the session reads it again. The caret keeps its character if that is still on the page.
+// The page selection stays as painted until the next paint: the search reads it to tell its match from a later click.
 function catch_up(open: Session): Session | undefined {
   if (page_text.is_current(open.model_)) return open;
-  for (const selection of selections_of(open.model_)) selection.removeAllRanges();
   const model = page_text.current();
   if (model.text === "") return undefined;
   const carry = (index: number) => page_text.carry(open.model_, index, model);
   const caret = carry(open.cursor.caret) ?? first_visible_index(model);
   const anchor = is_visual(open.mode) ? (carry(open.cursor.anchor) ?? caret) : caret;
-  return retarget(open, model, { anchor, caret });
+  const { painted_ } = open;
+  return Object.assign(retarget(open, model, { anchor, caret }), { painted_ });
 }
 
 function selection_is_in_focused_editable(selection: Selection): boolean {
@@ -199,7 +207,7 @@ function adopt_page_selection(open: Session): void {
 // A string is the failure message. The mode went back to normal then.
 function ensure_session(mode: CaretMode): Session | string {
   const mode_changed = !session || session.mode !== mode;
-  // Adopted before the catch-up, which clears the page selections: a drag the user made since the last key must survive a page that changes without pause.
+  // Adopted with the model the drag was made on: the catch-up can drop the node it ends in from the next model.
   if (session) adopt_page_selection(session);
   if (session) session = catch_up(session);
   if (!session) {
@@ -376,51 +384,65 @@ function word_target(): { pattern: string; from: DomPoint } | string {
 // A session searches from its caret, so it first catches up with the page. Normal mode has no session.
 const open_session_now = () => (session ? ensure_session(session.mode) : undefined);
 
-// Moves the caret to the current match. True when the session changed and needs a paint.
-// A match in text the page added since the session read it needs the session to catch up first.
-function land_on_match(open: Session): boolean {
+// No caret can show on a page that lost all its text, so the session ends, as an entry on such a page does.
+function end_empty_session(): void {
+  end_session();
+  if (SESSION_MODES.includes(page.desertfox_host.get_mode())) page.desertfox_host.set_mode_("normal");
+}
+
+// After a search the session catches up with the page, and with `take_match` its caret goes to the current match. It paints when either changed something.
+// A match in text the page added since the session read it needs the catch-up first.
+function follow_search(open: Session, take_match: boolean): void {
   const model_before = open.model_;
   // Paint runs before the next mode change, so a frame that left the page must leave the model first.
-  catch_up(open);
-  const landed = find.position(open.model_);
-  if (landed === undefined) return open.model_ !== model_before;
-  open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
-  open.goal_x_ = undefined;
-  return true;
+  if (!catch_up(open)) return end_empty_session();
+  const landed = take_match ? find.position(open.model_) : undefined;
+  if (landed !== undefined) {
+    open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
+    open.goal_x_ = undefined;
+  }
+  if (landed !== undefined || open.model_ !== model_before) paint(open);
 }
+
+const found_match = (outcome: Outcome) => outcome.ok && !("cancelled" in outcome && outcome.cancelled);
 
 // `n` and `N`: step to the match, and an open session takes its caret there.
 async function find_step(reverse: boolean): Promise<Outcome> {
   find_mode.end();
-  const started = open_session_now();
-  if (typeof started === "string") return { ok: false, message: started };
-  const outcome = await find.step(reverse, started && started.model_.point_at_(started.cursor.caret));
-  const open = session;
-  if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
-  release_if_idle();
-  return outcome;
+  try {
+    const started = open_session_now();
+    if (typeof started === "string") return { ok: false, message: started };
+    const outcome = await find.step(reverse, started && started.model_.point_at_(started.cursor.caret));
+    if (session) follow_search(session, found_match(outcome));
+    return outcome;
+  } finally {
+    release_if_idle();
+  }
 }
 
 // `*` and `#`: search for the word or selection at once, and let an open session follow the match.
+// A refusal releases the page text too, because `word_target` may have read it.
 async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
   find_mode.end();
-  const started = open_session_now();
-  if (typeof started === "string") return { ok: false, message: started };
-  const target = word_target();
-  if (typeof target === "string") return { ok: false, message: target };
-  const outcome = await find.jump(target.pattern, direction, target.from);
-  const open = session;
-  if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
-  release_if_idle();
-  return outcome;
+  try {
+    const started = open_session_now();
+    if (typeof started === "string") return { ok: false, message: started };
+    const target = word_target();
+    if (typeof target === "string") return { ok: false, message: target };
+    const outcome = await find.jump(target.pattern, direction, target.from);
+    if (session) follow_search(session, found_match(outcome));
+    return outcome;
+  } finally {
+    release_if_idle();
+  }
 }
 
 // The search line closed on a session. Enter takes the caret to the match, and either way the mode goes back to the session's.
 async function end_session_search(from: Session, keep: boolean): Promise<void> {
   if (session !== from) return;
   // Painted before the mode change, because entering the mode adopts any page selection that differs from the last paint.
-  if (keep && land_on_match(from)) paint(from);
-  page.desertfox_host.set_mode_(from.mode);
+  follow_search(from, keep);
+  if (session === from) page.desertfox_host.set_mode_(from.mode);
 }
 
 // A bundle may run twice, and a second run would hold fresh state next to the first.
