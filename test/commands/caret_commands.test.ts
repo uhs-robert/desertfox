@@ -67,6 +67,6 @@ test("caret.find captures its key and takes the count as a param, so one run rea
 
 test("caret.move no longer has a char find unit, so an old binding warns", () => {
   const unit = registry.get("caret.move")!.params!.find((param) => param.name === "unit")!;
-  assert.equal(unit.values?.includes("char_find" as never), false);
+  assert.equal((unit.values as readonly string[]).includes("char_find"), false);
   assert.equal(registry.get("caret.move")!.params!.some((param) => param.name === "till"), false);
 });
