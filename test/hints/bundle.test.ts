@@ -27,3 +27,17 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
   for (const token of ["/", "<Tab>", "<S-Tab>", "<Enter>", "<Space>"]) assert.equal(sinks.get("hint")!.on_token_(token), "pass", token);
   sinks.get("hint")!.exit();
 });
+
+test("a bundle that runs before the content script's host waits for the host, so a later load still registers", async () => {
+  const registered: string[] = [];
+  const page: Record<string, unknown> = {};
+  (globalThis as Record<string, unknown>).window = page;
+  (globalThis as Record<string, unknown>).browser = { runtime: { onMessage: { addListener: () => {} } } };
+  const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
+  await import(`${bundle_url}?no_host`);
+  assert.equal(page.desertfox_hints_ready, undefined);
+  page.desertfox_host = { register_sink_: () => {}, register_handler_: (id: string) => void registered.push(id), set_mode_: () => {}, escape_: () => {} };
+  await import(`${bundle_url}?with_host`);
+  assert.equal(page.desertfox_hints_ready, true);
+  assert.ok(registered.includes("hint.run"));
+});

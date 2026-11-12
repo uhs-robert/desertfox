@@ -438,8 +438,8 @@ function register(host: BundleHostApi): void {
   });
 }
 
-// A second run would register a second copy and orphan the first copy's labels.
-if (!page.desertfox_hints_ready) {
+// A second run would register a second copy and orphan the first copy's labels. The background injects the bundle into every frame for hints across frames, also into a frame whose content script has not started: the flag waits for the host, so a later load there still registers.
+if (!page.desertfox_hints_ready && page.desertfox_host) {
   page.desertfox_hints_ready = true;
   register(page.desertfox_host);
 }
