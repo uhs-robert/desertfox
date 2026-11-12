@@ -1,4 +1,4 @@
-import { help_name_choices, help_name_url, key_command_id } from "../background/open_help.ts";
+import { help_name_choices, help_name_url, key_command_id_on_page } from "../background/open_help.ts";
 import { command_help_url, HELP_PAGE_FILE } from "../help/route.ts";
 import { open_help_url } from "./help_tab.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
@@ -45,7 +45,9 @@ define("help.key", {
   run: async (ctx, args) => {
     const keys = args.keys as string;
     const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
-    const found = key_command_id(current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined), keys);
+    // A tab the command has no hold of (none, or gone) gets the global tree.
+    const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+    const found = key_command_id_on_page(current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined), tab?.url, keys);
     if (found.error !== undefined) throw new RuntimeRefusal(found.error);
     if (!command_ids.has(found.id)) throw new RuntimeRefusal(`${keys} runs ${found.id}, which has no help card`);
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);

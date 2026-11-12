@@ -126,7 +126,8 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       if (param.pattern !== undefined && !param.pattern_arms && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
       if (param.format === "url" && !URL.canParse(given)) return bad("an address");
-      if (param.format === "keys" && parse_sequence(given).error !== undefined) return bad(`keys in config notation (${parse_sequence(given).error})`);
+      const key_error = param.format === "keys" ? parse_sequence(given).error : undefined;
+      if (key_error !== undefined) return bad(`keys in config notation (${key_error})`);
       return { ok: true, value: given };
     }
     case "int": {
