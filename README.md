@@ -178,7 +178,7 @@ DesertFox works without it. The native host is a small helper program outside Fi
 - Update the host, the bridge, the `desertfox` command and the manifests with `:native.update`, checked against hashes in the signed extension.
 - Run commands from scripts and desktop programs, and read the current mode and its changes as they happen. This needs `bridge = true` and the permission granted on the `:native.install` page.
 - List, activate, close and capture tabs from scripts, with `bridge_share_tabs` turned on as well. Private windows never show up.
-- Follow the theme your desktop pushes with `desertfox theme <name>`, using `palette = "desktop"`. It needs `bridge = true`, and only built-in theme names work.
+- Follow the theme your desktop pushes with `desertfox theme <name>`. Set `palette = "desktop"` to use it. It needs `bridge = true`, and only built-in theme names work.
 
 Run `:native.install` in DesertFox for the steps.
 
