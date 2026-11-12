@@ -51,12 +51,13 @@ export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindo
     const type = (event as unknown as { navigationType: string | null }).navigationType;
     const left = type && pending;
     pending = false;
-    // `replace` keeps the view the user is on.
-    if (/^(push|traverse)$/.test(type!)) for (const listener of listeners) listener();
     const is_quiet = now() - quiet_since < LEAVE_QUIET_MS;
-    if (!left || page.document.hidden || is_quiet) return;
-    quiet_since = now();
-    send({ type: "jump_push", ...left });
+    if (left && !page.document.hidden && !is_quiet) {
+      quiet_since = now();
+      send({ type: "jump_push", ...left });
+    }
+    // The listeners run after the record, so one that throws cannot skip it. `replace` keeps the view the user is on.
+    if (/^(push|traverse)$/.test(type!)) for (const listener of listeners) listener();
   });
   // Only the top frame's report counts.
   if (is_top) page.addEventListener("pagehide", () => send({ type: "jump_leave", ...place_here() }));
