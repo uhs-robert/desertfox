@@ -19,11 +19,9 @@ export type JumpStepDeps = Omit<AddressDeps, "failed_text"> & {
 export type JumpAnswerer = (request: JumpRequest, tab: MarkSender | undefined) => Promise<JumpAnswer>;
 
 export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
-  // `arrival` numbers each step that goes to another address. The pushed request carries it back, so a late request of an older step cannot take a newer step's entry.
-  const arrivals = create_address_arrivals<{ entry: JumpEntry; arrival: number }>({ ...deps, failed_text: "Jump failed" });
-  let last_arrival = 0;
+  const arrivals = create_address_arrivals<JumpEntry>({ ...deps, failed_text: "Jump failed" });
   // The pushed `page.jump` of an arrival asks for its own entry. Its direction does not matter, the entry is already chosen.
-  const push_arrival = (tab_id: number, data: { arrival: number }) => deps.push_jump(tab_id, -1, data.arrival);
+  const push_arrival = (tab_id: number, _entry: JumpEntry, arrival: number) => deps.push_jump(tab_id, -1, arrival);
 
   async function answer(request: JumpRequest, tab: MarkSender | undefined): Promise<JumpAnswer> {
     if (!tab || tab.id === undefined || tab.window_id === undefined || tab.url === undefined) throw new RuntimeRefusal("No page to jump from");
@@ -35,9 +33,9 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
     }
     // The page that was sent here asks again, and gets the entry the step chose, whatever address it ended on. Only the pushed request does that: a key the user pressed meanwhile is a step of its own.
     if (request.arrival) {
-      const arrived = arrivals.claim_armed(tab_id, (data) => data.arrival === request.arrival);
+      const arrived = arrivals.claim_armed(tab_id, request.arrival);
       // The arrival was superseded or its tab left, so the pushed request has nothing to do.
-      return arrived ? { ok: true, x: arrived.data.entry.x, y: arrived.data.entry.y } : { ok: true };
+      return arrived ? { ok: true, x: arrived.data.x, y: arrived.data.y } : { ok: true };
     }
     // The frame would scroll its own box, so the top frame steps instead, from its own offset.
     if (tab.frame_id !== 0) {
@@ -56,7 +54,7 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
     const found = await arrivals.find_tab(entry.url, from, true);
     // Marked before the navigation starts, so the report of the page this tab leaves finds the mark whenever it comes.
     if (!found) await deps.store.mark_step(tab_id, tab.incognito, here.url);
-    await arrivals.go(from, found, entry.url, { entry, arrival: ++last_arrival }, push_arrival).catch(async (error: unknown) => {
+    await arrivals.go(from, found, entry.url, entry, push_arrival).catch(async (error: unknown) => {
       if (!found) await deps.store.forget_tab(tab_id, tab.incognito);
       throw error;
     });

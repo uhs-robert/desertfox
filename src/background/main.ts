@@ -130,7 +130,7 @@ const global_mark_jump = create_global_mark_jump({
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
   navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
   watch: watch_tab,
-  push_jump: (tab_id, key) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key }, bundle: "page" }] }, 0),
+  push_jump: (tab_id, key, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key, arrival }, bundle: "page" }] }, 0),
   record_jump: (window_id, is_private, entry) => browser_jump_store.push(window_id, is_private, entry),
   read_top_offset: (tab_id) => router_deps.read_offset(tab_id),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "mark.jump", message }, 0),

@@ -30,17 +30,20 @@ export type AddressDeps = {
   failed_text: string;
 };
 
-// What the caller runs in the top frame of the target tab once its page is ready. The reply is the content script's.
-export type PushToTab<Data> = (tab_id: number, data: Data) => Promise<unknown>;
+// What the caller runs in the top frame of the target tab once its page is ready. The push carries `arrival` and the page's request sends it back for `claim_armed`. The reply is the content script's.
+export type PushToTab<Data> = (tab_id: number, data: Data, arrival: number) => Promise<unknown>;
 
 // `armed` is set once the page is ready and the push goes out. Before that the entry only marks the newest step of the tab.
-export type Arrival<Data> = { data: Data; armed: boolean };
+// `number` names the step, so a late request of an older step cannot take a newer step's entry, and finds none.
+export type Arrival<Data> = { data: Data; number: number; armed: boolean };
 
 export function create_address_arrivals<Data>(deps: AddressDeps) {
   const arrivals = new Map<number, Arrival<Data>>();
   // The tab each origin tab sent its newest step to, and the switch or navigation of that step. A newer step of the same origin cancels the older arrival, and its switch starts after the older one ended, so the newest tab is the one left active.
   const targets = new Map<number, { target_id: number; arrival: Arrival<Data> }>();
   const switches = new Map<number, Promise<unknown>>();
+  let last_number = 0;
+  const new_arrival = (data: Data): Arrival<Data> => ({ data, number: ++last_number, armed: false });
 
   const problem_of_page: Record<Exclude<PageReady, "ready" | "gone">, string> = {
     timeout: "The page did not finish loading",
@@ -63,7 +66,7 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
   async function run_push(tab_id: number, arrival: Arrival<Data>, push: PushToTab<Data>): Promise<void> {
     try {
       arrival.armed = true;
-      const reply = (await push(tab_id, arrival.data)) as { ok?: boolean; message?: string } | undefined;
+      const reply = (await push(tab_id, arrival.data, arrival.number)) as { ok?: boolean; message?: string } | undefined;
       if (reply?.ok === false) await deps.show_refusal(tab_id, reply.message ?? deps.failed_text);
     } catch (error) {
       await deps.show_refusal(tab_id, error instanceof Error ? error.message : String(error)).catch(() => undefined);
@@ -78,9 +81,9 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
     find_tab: async (url: string, from: TabOrigin, own_window_only = false): Promise<MarkTab | undefined> =>
       find_mark_tab((await deps.list_tabs()).filter((tab) => !own_window_only || tab.window_id === from.window_id), url, from),
     // The page that was sent here asks again, and takes its armed entry whatever address it ended on. Without this a redirect would match no tab and open the address again, in a loop.
-    claim_armed: (tab_id: number, is_same_step: (data: Data) => boolean): Arrival<Data> | undefined => {
+    claim_armed: (tab_id: number, arrival_number: number): Arrival<Data> | undefined => {
       const arrival = arrivals.get(tab_id);
-      if (!arrival?.armed || !is_same_step(arrival.data)) return undefined;
+      if (!arrival?.armed || arrival.number !== arrival_number) return undefined;
       arrivals.delete(tab_id);
       return arrival;
     },
@@ -89,7 +92,7 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
     is_arriving: (tab_id: number): boolean => arrivals.has(tab_id),
     // Pushes into the tab at once, with no navigation to wait for.
     push_now: (tab_id: number, data: Data, push: PushToTab<Data>): void => {
-      const own: Arrival<Data> = { data, armed: false };
+      const own = new_arrival(data);
       arrivals.set(tab_id, own);
       void run_push(tab_id, own, push);
     },
@@ -97,7 +100,7 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
     // Answers false when a newer step superseded this one before its switch ran, so the switch never happened.
     go: async (from: TabOrigin, found: MarkTab | undefined, url: string, data: Data, push: PushToTab<Data>): Promise<boolean> => {
       const target_id = found?.id ?? from.id;
-      const next: Arrival<Data> = { data, armed: false };
+      const next = new_arrival(data);
       // A new step supersedes the unfinished one of this tab, of the target tab and of the tab the origin's last step went to.
       arrivals.delete(from.id);
       // Only while the origin's last arrival still stands there: another tab's arrival at that target is not this origin's to cancel.

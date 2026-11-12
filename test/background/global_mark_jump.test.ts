@@ -50,7 +50,7 @@ function make(tabs: MarkTab[]) {
   const refusals: { tab_id: number; message: string }[] = [];
   // The places put in the jump list, as `window: url x y`.
   const records: string[] = [];
-  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, activate_gate: undefined as Promise<void> | undefined };
+  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, activate_gate: undefined as Promise<void> | undefined, last_arrival: undefined as number | undefined };
   // The top frame answers for the page the tab is on.
   let read_top_offset = async (tab_id: number): Promise<{ x: number; y: number; url: string } | undefined> => ({ x: 7, y: 77, url: state.tabs.find((candidate) => candidate.id === tab_id)?.url ?? "" });
   const global_jump = create_global_mark_jump({
@@ -83,7 +83,7 @@ function make(tabs: MarkTab[]) {
         done: (_timeout, options) => ((entry.requires_navigation = options?.requires_navigation), done),
       } satisfies PageWatch;
     },
-    push_jump: async (tab_id, key) => (log.push(`push ${tab_id} ${key}`), await state.during_push?.(), state.push_reply),
+    push_jump: async (tab_id, key, arrival) => (log.push(`push ${tab_id} ${key}`), (state.last_arrival = arrival), await state.during_push?.(), state.push_reply),
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
     record_jump: async (window_id, _is_private, entry) => void records.push(`${window_id}: ${entry.url} ${entry.x} ${entry.y}`),
     read_top_offset: (tab_id) => read_top_offset(tab_id),
@@ -91,9 +91,11 @@ function make(tabs: MarkTab[]) {
   const set_read_top_offset = (read: typeof read_top_offset) => (read_top_offset = read);
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: "https://sender.test/", frame_id: 0, ...extra });
   const jump = (key = "A", y = 40, url = "https://sender.test/"): MarkJump => ({ type: "mark_jump", key, url, x: 0, y });
+  // The request of the page a push reached, which sends the push's arrival back.
+  const pushed = (key: string, y: number, url: string): MarkJump => ({ ...jump(key, y, url), ...(state.last_arrival !== undefined && { arrival: state.last_arrival }) });
   const set_mark = (key = "A", is_private = false) => answer_mark_request(real, { type: "mark_set", key, url: "ignored", x: 0, y: 300 }, { incognito: is_private, id: 9, window_id: 1, url: MARK_URL, frame_id: 0 }, global_jump);
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { store: real, global_jump, log, watches, refusals, records, state, sender, jump, set_mark, flush, set_read_top_offset };
+  return { store: real, global_jump, log, watches, refusals, records, state, sender, jump, pushed, set_mark, flush, set_read_top_offset };
 }
 
 test("a jump with no mark refuses and touches no tab", async () => {
@@ -151,7 +153,7 @@ test("the arrival jump scrolls from the stored mark and a redirect does not open
   // The page redirected, so its address matches no tab. The second jump of the push must still scroll.
   let arrival: unknown;
   fakes.state.during_push = async () => {
-    arrival = await answer_mark_request(fakes.store, fakes.jump("A", 0, "https://login.test/"), { incognito: false, id: 1, window_id: 1, url: "https://login.test/", frame_id: 0 }, fakes.global_jump);
+    arrival = await answer_mark_request(fakes.store, fakes.pushed("A", 0, "https://login.test/"), { incognito: false, id: 1, window_id: 1, url: "https://login.test/", frame_id: 0 }, fakes.global_jump);
   };
   await fakes.global_jump(fakes.jump(), fakes.sender());
   fakes.watches[0]!.resolve("ready");
@@ -275,7 +277,7 @@ test("a jump records in the sender's window when it stays there, and the pushed 
   assert.deepEqual(same_tab.records, [`1: ${MARK_URL} 0 40`]);
   const opened = make([tab(1, "https://sender.test/")]);
   await opened.set_mark();
-  opened.state.during_push = () => answer_mark_request(opened.store, opened.jump("A", 0, MARK_URL), { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, opened.global_jump);
+  opened.state.during_push = () => answer_mark_request(opened.store, opened.pushed("A", 0, MARK_URL), { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, opened.global_jump);
   await opened.global_jump(opened.jump("A", 40), opened.sender());
   opened.watches[0]!.resolve("ready");
   await opened.flush();
@@ -290,7 +292,7 @@ test("a jump a child frame asks for records the top frame's place once, on anoth
   const same = make([tab(1, MARK_URL)]);
   await same.set_mark();
   // The top frame's pushed request comes back while the push waits, as the page answers it.
-  same.state.during_push = () => answer_mark_request(same.store, same.jump("A", 77, MARK_URL), { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, same.global_jump);
+  same.state.during_push = () => answer_mark_request(same.store, same.pushed("A", 77, MARK_URL), { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, same.global_jump);
   await same.global_jump(same.jump(), same.sender(1, { url: MARK_URL, frame_id: 2 }));
   await same.flush();
   assert.deepEqual(same.log, ["push 1 A"]);
@@ -338,4 +340,25 @@ test("a child frame's jump records nothing when another page loaded in the tab d
   assert.deepEqual(await fakes.global_jump(fakes.jump("A", 40), fakes.sender(1, { frame_id: 2 })), { ok: true });
   assert.deepEqual(fakes.log, ["watch 2", "activate 2"]);
   assert.deepEqual(fakes.records, []);
+});
+
+test("a late pushed request of an older jump does nothing after a newer jump went on from the same tab", async () => {
+  const fakes = make([tab(1, "https://sender.test/")]);
+  await fakes.set_mark();
+  await answer_mark_request(fakes.store, { type: "mark_set", key: "B", url: "ignored", x: 0, y: 500 }, { incognito: false, id: 9, window_id: 1, url: "https://b.test/", frame_id: 0 }, fakes.global_jump);
+  // The A page has the push but has not asked yet.
+  fakes.state.during_push = () => new Promise(() => {});
+  await fakes.global_jump(fakes.jump("A"), fakes.sender());
+  fakes.watches[0]!.resolve("ready");
+  await fakes.flush();
+  const a_arrival = fakes.state.last_arrival;
+  // `'B` before the A page asks: the tab goes on to B.
+  fakes.state.tabs = [tab(1, MARK_URL)];
+  await fakes.global_jump(fakes.jump("B", 0, MARK_URL), fakes.sender(1, { url: MARK_URL }));
+  fakes.state.tabs = [tab(1, "https://b.test/")];
+  const records_before = fakes.records.length;
+  const late = await answer_mark_request(fakes.store, { ...fakes.jump("A", 0, MARK_URL), ...(a_arrival !== undefined && { arrival: a_arrival }) }, { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, fakes.global_jump);
+  assert.deepEqual(late, { ok: true });
+  assert.deepEqual(fakes.log.filter((line) => line.startsWith("navigate")), [`navigate 1 ${MARK_URL}`, "navigate 1 https://b.test/"]);
+  assert.equal(fakes.records.length, records_before, "the stale request recorded a place");
 });
