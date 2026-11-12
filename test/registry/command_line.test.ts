@@ -219,7 +219,7 @@ test("@source words are context sources, unquoted only", () => {
   assert.deepEqual(parsed(`open "@selection"`).args, { url: "@selection" });
   assert.deepEqual(parsed(`open --url="@selection"`).args, { url: "@selection" });
   assert.deepEqual(parsed(`open a@b.example`).args, { url: "a@b.example" });
-  assert.match(error_of("open @nope"), /unknown source "@nope" \(known: @current_url, @selection, @clipboard, @bookmark_title\), quote text that starts with @/);
+  assert.match(error_of("open @nope"), /unknown source "@nope" \(known: @current_url, @selection, @clipboard, @bookmark_title, @search_query\), quote text that starts with @/);
 });
 
 test("shell quoting", () => {

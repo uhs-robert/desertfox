@@ -13,7 +13,7 @@ import { SLOTS } from "../engines/index.ts";
 import type { SnippetEntry } from "../config.ts";
 
 const PARAM_TYPES: readonly string[] = ["int", "float", "string", "bool", "enum"];
-const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard", "bookmark_title"];
+const CONTEXT_SOURCES: readonly string[] = ["current_url", "selection", "clipboard", "bookmark_title", "search_query"];
 const SINGLE_KEYS = ["id", "label", "intent", "name", "modes", "requires"] as const;
 // Only the modes where a key press reaches a page command. Insert, ignore, hint and cmdline take typed text.
 const SNIPPET_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
@@ -57,8 +57,10 @@ function parse_param_words(words: string[], name: string, where: string, problem
       param.short = parse_short(option.slice("short=".length), type, name, where, problems);
     } else if (option.startsWith("default=")) {
       const raw = option.slice("default=".length);
-      if (type === "string" && CONTEXT_SOURCES.includes(raw)) {
-        param.default = { from: raw as ContextSourceName };
+      // `default=selection,search_query` reads the selection, else the query of the results page.
+      const [from, then, ...rest] = raw.split(",");
+      if (type === "string" && from !== undefined && CONTEXT_SOURCES.includes(from) && rest.length === 0 && (then === undefined || CONTEXT_SOURCES.includes(then))) {
+        param.default = then === undefined ? { from: from as ContextSourceName } : { from: from as ContextSourceName, then: then as ContextSourceName };
       } else {
         const value = parse_value(raw, type);
         if (value === undefined) problems.push(`${where}: default "${raw}" is not a ${type}`);

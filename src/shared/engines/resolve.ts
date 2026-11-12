@@ -2,18 +2,19 @@
 // so the extension stores and reads finished engines.
 //
 // An engine is a TOML table. A table inside it is a child, unless it is `params` or holds only `only` (a narrowing).
-// A child inherits every field of its parent and overrides by name. `hosts` is a list of host names, the sites the engine belongs to. `label` and `keyword` do not inherit:
-// the label of an engine is the chain of the labels on its path, and a keyword names one engine.
+// A child inherits every field of its parent and overrides by name. `hosts` is a list of host names, the sites the engine belongs to. `label`, `keyword` and `reverse` do not inherit:
+// the label of an engine is the chain of the labels on its path, a keyword names one engine, and a reverse pattern reads the results page of one URL.
 
 import type { SearchEngine } from "../config.ts";
 import { expressions_of, page_requirements, SLOT_EXPRESSION } from "./fill.ts";
+import { reverse_problem } from "./reverse.ts";
 import { is_slot_name, SLOT_NAMES } from "./slots.ts";
 
 // One table of the tree, without its child tables. `path` is the dotted full name.
 export type EngineNode = { path: string; file: string; fields: Record<string, unknown> };
 
 // A child table cannot take these names. Slot names are free for children (github.repo) but not for vars and params.
-const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback", "hosts", "keyword"]);
+const RESERVED_CHILD_NAMES = new Set(["url", "label", "params", "fallback", "hosts", "keyword", "reverse"]);
 const RESERVED_NAMES = new Set([...RESERVED_CHILD_NAMES, ...SLOT_NAMES]);
 const PARAM_KEYS = new Set(["default", "values", "children"]);
 const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
@@ -58,6 +59,7 @@ type Level = {
   fallback?: Origined;
   hosts?: { value: string[]; origin: string };
   keyword?: Origined;
+  reverse?: Origined;
   vars: Record<string, Origined>;
   params: Record<string, ParamDecl>;
   allowed: Record<string, string[]>;
@@ -139,6 +141,10 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
       } else if (key === "keyword") {
         if (ENGINE_KEYWORD.test(value)) level.keyword = { value, origin };
         else problems.push(`${where}: keyword must be one to eight lower case letters or digits, such as "g"`);
+      } else if (key === "reverse") {
+        const problem = reverse_problem(value);
+        if (problem === undefined) level.reverse = { value, origin };
+        else problems.push(`${where}: ${problem}`);
       } else if (key === "label") {
         if (value === "") problems.push(`${where}: label cannot be empty`);
         else {
@@ -228,6 +234,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     if (level.fallback) origins.fallback = level.fallback.origin;
     if (level.hosts) origins.hosts = level.hosts.origin;
     if (level.keyword) origins.keyword = level.keyword.origin;
+    if (level.reverse) origins.reverse = level.reverse.origin;
     for (const [name, found] of Object.entries(level.vars)) origins[name] = found.origin;
     for (const [name, found] of Object.entries(level.assigned)) origins[name] = found.origin;
     engines[path] = {
@@ -238,6 +245,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
       ...(level.fallback ? { fallback: level.fallback.value } : {}),
       ...(level.hosts ? { hosts: level.hosts.value } : {}),
       ...(level.keyword ? { keyword: level.keyword.value } : {}),
+      ...(level.reverse ? { reverse: level.reverse.value } : {}),
     };
   };
 
@@ -247,6 +255,7 @@ export function resolve_engines(nodes: EngineNode[]): Resolved {
     const level = copy_level(parent);
     delete level.label_origin;
     delete level.keyword;
+    delete level.reverse;
     const name = path.slice(path.lastIndexOf(".") + 1);
     level.labels.push(generated ? generated.value : name);
     if (generated) level.assigned[generated.param] = { value: generated.value, origin: generated.origin };

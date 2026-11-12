@@ -135,7 +135,7 @@ test("the run target is the last focused window only when it is a normal one", a
 
 test("a source word is refused, and the same text in quotes is plain text", async () => {
   const test_case = make();
-  for (const text of ["open @clipboard", "open @selection", "open @current_url", "open @bookmark_title", "scroll.lines @clipboard"]) {
+  for (const text of ["open @clipboard", "open @selection", "open @current_url", "open @bookmark_title", "open @search_query", "scroll.lines @clipboard"]) {
     const answer = await test_case.bridge_run.run(text);
     assert.equal(answer.ok, false, text);
   }

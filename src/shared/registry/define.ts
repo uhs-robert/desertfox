@@ -276,6 +276,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
   } else if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
+      if (param.default.then === param.default.from) fail(`${at}.default`, "`then` repeats `from`, so it can never add a value");
     } else {
       const problem = value_problem(param, param.default);
       if (problem) fail(`${at}.default`, problem);

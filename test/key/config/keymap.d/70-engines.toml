@@ -7,3 +7,5 @@
 "sf" = "search keysub @selection"
 # An engine on {query|url}: with nothing selected it searches the page address.
 "sp" = "search keypage @selection"
+# No query named: the selection, else the query of the search results page the tab is on (the test server stands in for a results page).
+"<A-q>" = "search keysite"
