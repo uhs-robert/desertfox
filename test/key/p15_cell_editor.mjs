@@ -43,14 +43,6 @@ export async function run_cases({ in_background, config_copy, load_config_dir, s
     await expect_j_scrolls("while the editor is parked");
   });
 
-  await run_case("an editor the page focused before the keymap reply arrived leaves insert mode once the rule is known", async () => {
-    // The page builds and focuses the editor in its head, before any reply can come, so the frame enters insert mode on empty rules.
-    await open_page("cell_editor_early", page_id + "_early", { new_tab: true });
-    expect(await editor_holds_focus(), "the cell editor does not hold the focus after load");
-    await expect_badge("NORMAL");
-    await open_page("cell_editor", page_id, { new_tab: true });
-  });
-
   await run_case("the key that starts an edit switches to insert mode on its keyup", async () => {
     const mark = events.length;
     await press_keys("-k", "Return");
@@ -160,5 +152,12 @@ export async function run_cases({ in_background, config_copy, load_config_dir, s
   await run_case("without the rule, a parked cell editor that holds the focus puts the page in insert mode", async () => {
     await open_page("cell_editor", "q15_no_rule", { new_tab: true });
     await expect_badge("INSERT");
+  });
+
+  await run_case("an editor the page focused before the keymap reply arrived leaves insert mode once the rule is known", async () => {
+    // The page builds and focuses the editor in its head, before any reply can come, so the frame enters insert mode on empty rules.
+    await open_page("cell_editor_early", page_id + "_early", { new_tab: true });
+    expect(await editor_holds_focus(), "the cell editor does not hold the focus after load");
+    await expect_badge("NORMAL");
   });
 }
