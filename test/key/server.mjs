@@ -591,6 +591,20 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const added = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { if (document.getElementById("added")) return; document.body.insertAdjacentHTML("beforeend", "<p id=added>zebra words</p>"); send("text_added"); }, 500), { once: true });</script>`;
       return response.end(page(`caret_added ${id}`, `<p>foo bar</p>${added}`));
     }
+    if (url.pathname === "/caret_replaced") {
+      // After the first selection report the page swaps its text for new text and reports text_replaced. With replace_paragraph in the id only the heading, which holds the caret, is swapped.
+      const swap = id.includes("replace_paragraph")
+        ? `document.querySelector("h1").replaceWith(Object.assign(document.createElement("h1"), { textContent: "fresh heading" }));`
+        : `document.querySelectorAll("h1, p").forEach((node) => node.remove()); document.body.insertAdjacentHTML("afterbegin", "<p>quartz words</p><p>zebra stripes</p>");`;
+      const replace = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { ${swap} send("text_replaced"); }, 500), { once: true });</script>`;
+      return response.end(page(`caret_replaced ${id}`, `<p>foo bar</p>${replace}`));
+    }
+    if (url.pathname === "/caret_clip_frame") {
+      // The frame is 100px tall. "zebra hidden" sits 300px down in it, outside the frame's own viewport but inside the top one. The page is scrolled so its title is off screen and the frame is the first text in view.
+      const inner = "<body style='margin:0'><p>shown words</p><div style='height:300px'></div><p id='hidden_text'>zebra hidden</p></body>";
+      const frame = `<div style="height:600px"></div><iframe id="clip" srcdoc="${inner}" style="width:400px;height:100px;border:0;display:block"></iframe><div style="height:2000px"></div>`;
+      return response.end(page(`caret_clip_frame ${id}`, frame, "<script>addEventListener('load', () => scrollTo(0, 500))</script>"));
+    }
     if (url.pathname === "/caret_wrap") {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.
       return response.end(page(`caret_wrap ${id}`, '<p style="width:6ch;font-family:monospace">abc def ghi jkl</p><input id="paste_target">'));
