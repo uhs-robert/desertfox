@@ -27,6 +27,8 @@ export type RouterDeps = {
   read_clipboard: () => Promise<string>;
   // The title of the bookmark at this address, undefined when there is none.
   bookmark_title: (url: string | undefined) => Promise<string | undefined>;
+  // The query of the search results page at this address, undefined when it is no engine's results page.
+  search_query: (url: string | undefined) => Promise<string | undefined>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
   // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
@@ -219,10 +221,10 @@ export function create_router(deps: RouterDeps): Router {
   ): Promise<Outcome> {
     const typed: Record<string, unknown> = {};
     for (const [name, value] of Object.entries(args)) {
-      typed[name] = is_context_source(value) ? await read_source(value.from, context, active).catch(() => undefined) : value;
+      typed[name] = is_context_source(value) ? await read_chain(value, context, active).catch(() => undefined) : value;
     }
     // The line opens when the key is pressed, because focus moves into the iframe and the selection with it.
-    if (prefill) typed[open_param] = await read_source(prefill.from, context, active).catch(() => undefined);
+    if (prefill) typed[open_param] = await read_chain(prefill, context, active).catch(() => undefined);
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     // A reply lost after the line opened means the page went away, as when Enter opens a link in this tab. Navigation cancels the wait,
@@ -247,7 +249,7 @@ export function create_router(deps: RouterDeps): Router {
         filled[name] = value;
         continue;
       }
-      const text = await read_source(value.from, context, active);
+      const text = await read_chain(value, context, active);
       if (text === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name, context))) {
         filled[name] = "";
         continue;
@@ -261,10 +263,16 @@ export function create_router(deps: RouterDeps): Router {
     return { ok: true, args: filled };
   }
 
+  // The first source with a value: `from`, else `then`.
+  async function read_chain(source: ContextSource, context: CommandContext, active: ActiveTab | undefined) {
+    return (await read_source(source.from, context, active)) ?? (source.then === undefined ? undefined : read_source(source.then, context, active));
+  }
+
   async function read_source(source: ContextSourceName, context: CommandContext, active: ActiveTab | undefined) {
     if (source === "current_url") return active?.url;
     if (source === "clipboard") return deps.read_clipboard();
     if (source === "bookmark_title") return deps.bookmark_title(active?.url);
+    if (source === "search_query") return deps.search_query(active?.url);
     const selection = context.tab_id === undefined ? undefined : await deps.ask_selection(context.tab_id, context.frame_id ?? 0);
     return selection === "" ? undefined : selection;
   }

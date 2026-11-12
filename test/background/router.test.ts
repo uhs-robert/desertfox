@@ -761,3 +761,36 @@ test("a replayed step over the limit is refused with instant set", async () => {
   assert.equal(response.ok, false);
   assert.deepEqual(seen, []);
 });
+
+const SEARCH_DEFAULT = { from: "selection", then: "search_query" } as const;
+const search_command = (seen: unknown[]) => ({
+  "open.go": { label: "Go", intent: "x", name: "go", params: [{ name: "q", type: "string" as const, main: true, default: SEARCH_DEFAULT }], runs_in: "background" as const, run: (_context: unknown, args: unknown) => void seen.push(args) },
+});
+
+test("a default of selection then search_query reads the page query when nothing is selected, and the selection wins when there is one", async () => {
+  const seen: unknown[] = [];
+  const results = { ask_selection: async () => "", search_query: async (url: string | undefined) => (url === "https://example.org/" ? "rust" : undefined) };
+  await create_router(make_fake(search_command(seen), results).deps).run({ invocations: [{ id: "open.go" }], mode: "normal" });
+  await create_router(make_fake(search_command(seen), { ...results, ask_selection: async () => "picked" }).deps).run({ invocations: [{ id: "open.go" }], mode: "normal" });
+  assert.deepEqual(seen, [{ q: "rust" }, { q: "picked" }]);
+});
+
+test("off a results page the chain falls back to the empty selection: the line opens with the param left open", async () => {
+  const { deps, log } = make_fake(search_command([]), { ask_selection: async () => "" });
+  const response = await create_router(deps).run({ invocations: [{ id: "open.go" }], mode: "normal", may_prompt: true });
+  assert.deepEqual(response, { ok: true });
+  assert.deepEqual(log, ["cmdline 7 0 go "]);
+});
+
+test("a prompt prefilled from the chain types the page query into the line", async () => {
+  const { deps, log } = make_fake(search_command([]), { ask_selection: async () => "", search_query: async () => "rust lang" });
+  await create_router(deps).run({ invocations: [{ id: "open.go", prompt: { param: "q", prefill: SEARCH_DEFAULT } }], mode: "normal", may_prompt: true });
+  assert.deepEqual(log, ["cmdline 7 0 go rust lang"]);
+});
+
+test("@search_query typed outside a results page refuses with a message", async () => {
+  const { deps, log } = make_fake(search_command([]), { search_query: async () => undefined });
+  const response = await create_router(deps).run({ invocations: [{ id: "open.go", args: { q: { from: "search_query" } } }], mode: "normal" });
+  assert.equal(response.ok, false);
+  assert.match(JSON.stringify(response) + log.join(), /search_query is not available here/);
+});

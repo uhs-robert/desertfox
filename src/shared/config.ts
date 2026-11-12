@@ -25,6 +25,8 @@ export type SearchEngine = {
   hosts?: string[];
   // One to eight lower case letters or digits, unique across engines. When the first word of a query equals it, that engine is the one to search. Never inherited by a child engine.
   keyword?: string;
+  // A JavaScript regular expression with one capture group, matched against the whole results page address to read the query back. Absent means the reader comes from `url`. Never inherited.
+  reverse?: string;
   // Where each field came from, for `engine.show`: field name to "file [level]".
   origins?: Record<string, string>;
 };

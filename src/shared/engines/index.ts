@@ -4,3 +4,4 @@ export { nodes_of_file, resolve_engines } from "./resolve.ts";
 export type { EngineNode, Resolved } from "./resolve.ts";
 export { SLOT_NAMES, SLOTS, is_slot_name, parse_http_url, slot_of } from "./slots.ts";
 export type { PageInfo, SlotDef } from "./slots.ts";
+export { engine_of_page, read_query, reverse_problem, REVERSE_MAX_CHARS } from "./reverse.ts";

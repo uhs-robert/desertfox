@@ -3,7 +3,7 @@ import { copyFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { fill_template } from "../src/shared/engines/index.ts";
+import { engine_of_page, fill_template, read_query } from "../src/shared/engines/index.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 
 const SAMPLE = join(import.meta.dirname, "..", "examples", "engines.toml");
@@ -75,4 +75,16 @@ test("the sample engines give a few engines a keyword, all unique", () => {
   assert.equal(engines["google"]?.keyword, "g");
   assert.ok(keywords.length >= 3);
   assert.equal(new Set(keywords).size, keywords.length);
+});
+
+test("every shipped engine reads back the query it was filled with, and the page's owner reads it too", () => {
+  const page = { url: "https://github.com/foo/bar", title: "t" };
+  for (const [name, engine] of Object.entries(engines)) {
+    if (/\{query\|/.test(engine.url)) continue;
+    const filled = fill_template(engine.url, { query: "a b&c/é+d", page });
+    if (!filled.ok) continue;
+    const want = "a b&c/é+d";
+    assert.equal(read_query(engine, filled.url), want, name);
+    assert.equal(engine_of_page(engines, filled.url)?.query, want, `${name} owner`);
+  }
 });
