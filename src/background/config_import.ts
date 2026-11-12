@@ -60,7 +60,7 @@ function split_files(files: ConfigFiles): { config_files: ConfigFiles; snippet_f
 }
 
 // Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on.
-export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update"] as const;
+const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update"] as const;
 const is_settings_file = (path: string) => path === "settings.toml" || (path.startsWith("settings.d/") && path.endsWith(".toml"));
 
 // A settings file that holds a consent key is rewritten without it, which drops its comments. One that does not parse stays as it is, and the build reports it.
@@ -87,14 +87,12 @@ export function drop_consent_settings(files: ConfigFiles): { files: ConfigFiles;
 
 // The files an import leaves in the slot. Config files in the import replace every config file in the slot. Without any, the slot's stay.
 // The slot's snippets always stay, and an accepted snippet joins them, in place of one at the same path.
-export function plan_import_files(incoming: ConfigFiles, current: ConfigFiles, accepted: Record<string, string>): { files: ConfigFiles; replaces_config: boolean } {
+export function plan_import_files(incoming: ConfigFiles, current: ConfigFiles, accepted: Record<string, string>): { files: ConfigFiles; replaces_config: boolean; dropped: string[] } {
   const imported = split_files(incoming);
   const kept = split_files(current);
   const replaces_config = Object.keys(imported.config_files).length > 0;
-  return {
-    files: { ...(replaces_config ? drop_consent_settings(imported.config_files).files : kept.config_files), ...kept.snippet_files, ...accepted },
-    replaces_config,
-  };
+  const { files: config_files, dropped } = replaces_config ? drop_consent_settings(imported.config_files) : { files: kept.config_files, dropped: [] };
+  return { files: { ...config_files, ...kept.snippet_files, ...accepted }, replaces_config, dropped };
 }
 
 // Consent is to the exact code the preview showed, so the commit takes the code back and stores only an exact match.
@@ -128,8 +126,8 @@ function preview_snippet(path: string, code: string, current: ConfigFiles): Snip
 // The build runs with every snippet accepted, so a problem shows before the user decides. Declining a snippet a key binds makes the commit refuse.
 export function preview_import(incoming: ConfigFiles, current: ConfigFiles, commands: CommandMeta[]): ConfigImportPreview {
   const imported = split_files(incoming);
-  const { files, replaces_config } = plan_import_files(incoming, current, imported.snippet_files);
-  const warnings: string[] = drop_consent_settings(imported.config_files).dropped;
+  const { files, replaces_config, dropped } = plan_import_files(incoming, current, imported.snippet_files);
+  const warnings: string[] = [...dropped];
   let problems: string[] = [];
   try {
     build_config(files, commands, warnings, { dir_label: IMPORT_DIR_LABEL });
