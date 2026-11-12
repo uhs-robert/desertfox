@@ -5,6 +5,7 @@ import "../commands/scroll.ts";
 import "../commands/mode.ts";
 import "../commands/tab.ts";
 import "../commands/window.ts";
+import "../commands/tab_group.ts";
 import "../commands/session.ts";
 import "../commands/register.ts";
 import "../commands/macro.ts";

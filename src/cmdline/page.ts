@@ -133,6 +133,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const live = create_live_source({
     ask: (kind) => (kind === "headings" ? ask_headings() : ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind })),
     tabs: () => (model ??= connect_model()).items() ?? (model_lost ? [] : undefined),
+    groups: () => (model ??= connect_model()).group_items() ?? (model_lost ? [] : undefined),
     all_tabs: () => (model ??= connect_model()).all_items() ?? (model_lost ? [] : undefined),
     on_ready: () => {
       session.source_ready();

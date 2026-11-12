@@ -24,6 +24,7 @@ Phase 0 measured these on Firefox 159 with real key presses. They shape every ch
 - No Rust and no WASM. The slow parts are DOM work and messages between processes, not computation. WASM also adds load cost to every page.
 - No ex-command language. The command line parses text into the same typed invocation that a key produces. Snippets are the only user code. They come from the user's own config folder, or from an import the user accepts snippet by snippet.
 - No shell access. The native host has a fixed set of verbs.
+- Native tab groups and the parked sidebar stay separate layers. A native group is the user's own, named and collapsed by keys. The sidebar groups tabs by site on its own, and a future sidebar shows `group_id` only as a badge.
 
 ## Registry
 
@@ -467,6 +468,16 @@ Tabs and bookmarks come from the background, because it knows the window and pri
 - Private windows refuse every session command and the list is empty there.
 - The `sessions` completion source (`values: { from: "sessions" }`, `kind: "sessions"`) lists the names newest first with the tab count and age in the description column, which the background writes. It ships the whole list once per line, like the bookmarks.
 - The `folders` completion source (`values: { from: "folders" }`, `kind: "folders"`) lists every bookmark folder as a path from the root, such as `Bookmarks Toolbar / Work`, with the count of bookmarks directly inside in the description column. The background builds it from `getTree` with a walk that keeps the parent chain. Folder titles are display text that Firefox localizes, so a folder is named by its path and a command re-reads the tree and looks the path up: an exact path wins, other text is a fuzzy match, and a path that two folders share is refused, as an equal tie is for `bookmark`. `bookmark.add --folder=` files a new bookmark there, and with no folder Firefox's default applies. A page that already has a bookmark refuses with a folder, because `bookmark.move` is the way to change its folder. `bookmark.move` takes the folder as its main param and `--bookmark=` for another bookmark (empty means the current page), and moves every unmanaged bookmark at that address. `bookmark.open_folder` opens the folder's own bookmarks, not those of its subfolders, in a tab (the first one active), in background tabs or in a new window, never `here`. It opens at most 25 and one toast says when the cap cut the list or an address was skipped. It skips the addresses Firefox does not let an extension open: `place:` queries, `javascript:`, `chrome:`, `resource:`, `file:`, `data:`, `view-source:` and the privileged `about:` pages (`about:blank`, `about:home` and `about:newtab` open). An address that passes that filter and still fails is skipped and counted too, and the rest open. In a tab, the tabs open in the background in folder order and then the first one becomes active, so the strip keeps the folder order. When every address fails the command refuses.
+
+### Tab groups
+
+Firefox native tab groups (`tabs.group`, 138, and `tabGroups`, 139, under `strict_min_version` 140). The `tg` keys and `tabgroup.*` commands (`src/commands/tab_group.ts`) act on the line's own tab and its group: `tabgroup.add [group]` (`tga` prompts, `tgA` starts an untitled group), `tabgroup.remove` (`tgd`), `tabgroup.name <title>` (`tgn`), `tabgroup.collapse` (`tgc`), `tabgroup.expand` (`tge`) and `tabgroup.toggle` (`tgt`). Marked tabs reach no command today, so there is no many-tab form. Color and moving between groups come later.
+
+- `tab_actions.ts` holds `group_tabs`, `ungroup_tabs` and `set_group` over an injected `GroupDeps`. A pinned tab and a list that spans windows are refused with a `RuntimeRefusal`, as is a target group of another window, because a group stays in one window.
+- `add` names a group of the tab's window. A name that no group has starts a group with that title. A group is named by its title, and a title that is empty or shared by several groups of the window gets the id as a suffix (`Play #12`, `#12`), which is also how the completion lists it (`src/shared/group_name.ts`). A bare title that several groups share is refused and the refusal names the id form.
+- The `groups` completion source (`values: { from: "groups" }`) lists the groups of the line's window from the live tab model, so it needs no fetch. A group is not private or normal by itself: it takes the privacy of its window's tabs.
+- The manifest needs the `tabGroups` permission. Measured in Firefox 160: without it `browser.tabGroups` is absent (see `docs/firefox-behavior.md`).
+- The model keeps `group_id` per tab (-1 for none) and a groups table. A patch carries `groups` and `groups_removed` only when some changed. A group event patches the table. A removed group also clears the `group_id` of its tabs in the same patch. A group move reads the tabs again, because its tabs change index and Firefox may report it as tab moves or not.
 
 ### Live tab model
 

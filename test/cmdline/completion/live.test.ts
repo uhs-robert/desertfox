@@ -16,6 +16,7 @@ function make() {
   const live = create_live_source({
     ask: (kind) => new Promise((resolve, reject) => void asks.push({ kind, answer: resolve, fail: () => reject(new Error("gone")) })),
     tabs: () => tab_items,
+    groups: () => [],
     all_tabs: () => tab_items,
     on_ready: () => void ready++,
   });

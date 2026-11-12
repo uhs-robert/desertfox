@@ -505,7 +505,15 @@ export type TabRow = {
   container_name: string;
   container_color: string;
   container_icon: string;
+  // The native tab group of the tab, -1 for none, as Firefox reports it. The group's own fields are in the groups table.
+  group_id: number;
 };
 
-export type TabModelMessage = { type: "snapshot"; rev: number; tabs: TabRow[] } | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[] };
+// A native tab group. `color` is Firefox's own color name.
+export type GroupRow = { id: number; window_id: number; title: string; color: string; collapsed: boolean };
+
+// A patch names groups only when some changed. The group lists follow the same privacy rule as the tabs.
+export type TabModelMessage =
+  | { type: "snapshot"; rev: number; tabs: TabRow[]; groups: GroupRow[] }
+  | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[]; groups?: GroupRow[]; groups_removed?: number[] };
 export type TabModelRequest = { type: "resync" };
