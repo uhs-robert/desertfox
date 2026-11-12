@@ -255,3 +255,19 @@ test("a push from a child frame or with no tab refuses", async () => {
   assert.deepEqual(await fakes.step({ type: "jump_push", x: 0, y: 5 }, undefined), { ok: false, message: "No page to jump from" });
   assert.deepEqual(await fakes.step({ type: "jump_step", step: -1, x: 0, y: 5 }, fakes.sender(1, { url: undefined })), { ok: false, message: "No page to jump from" });
 });
+
+test("two quick steps from one tab to two other tabs: the newer step wins, one scroll lands and its tab is active last", async () => {
+  const fakes = make([tab(1, HERE), tab(2, "https://a.test/"), tab(3, "https://b.test/")]);
+  await fakes.push(100, "https://a.test/");
+  await fakes.push(200, "https://b.test/");
+  const first = fakes.go(-1, 0);
+  const second = fakes.go(-1, 0);
+  await Promise.all([first, second]);
+  await fakes.flush();
+  for (const watch of fakes.watches) watch.resolve("ready");
+  await fakes.flush();
+  await fakes.flush();
+  const activations = fakes.log.filter((line) => line.startsWith("activate"));
+  assert.equal(activations.at(-1), "activate 2", fakes.log.join(" | "));
+  assert.deepEqual(fakes.pushes(), ["push 2 -1 arrival"], fakes.log.join(" | "));
+});

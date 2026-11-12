@@ -11,6 +11,8 @@ export type JumpLeaveDeps = {
   store: JumpStore;
   // True while a jump step is taking the tab to another address: that move is not a new place.
   is_stepping: (tab_id: number) => boolean;
+  // False once the tab is gone. A page's report can arrive after its tab closed, and nothing would take the held offset then.
+  is_open: (tab_id: number) => Promise<boolean>;
 };
 
 export type TabChange = { tab_id: number; window_id: number; incognito: boolean; url: string | undefined };
@@ -31,6 +33,7 @@ export function create_jump_leave(deps: JumpLeaveDeps) {
       const is_private = sender.incognito === true;
       const entry = { url: mark_page_url(document_url), x: request.x, y: request.y };
       await deps.store.hold_leaving(sender.id, is_private, { window_id: sender.window_id, entry });
+      if (!(await deps.is_open(sender.id))) return void (await deps.store.take_leaving(sender.id, is_private));
       if (mark_page_url(sender.url) !== entry.url) await record(sender.id, is_private, sender.url);
     },
     // The tab's address changed, or its page finished loading.

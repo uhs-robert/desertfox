@@ -147,18 +147,19 @@ test("palette desktop shows the pushed palette, else oasis_moonlight, and leaves
   assert.deepEqual(compile({}, "oasis_dune").theme, compile({ palette: "oasis_moonlight" }).theme);
 });
 
-test("a content command that moves the view goes to the background, so the router can record the place it left", () => {
+test("a content command that moves the view is marked, so a first press goes to the router and a line edge does not", () => {
   const { registry } = make_fake({
-    "scroll.to": { label: "To", intent: "x", params: [{ name: "percent", type: "float" as const }], runs_in: "content", jumps: true },
+    "scroll.to": { label: "To", intent: "x", params: [{ name: "percent", type: "float" as const }, { name: "axis", type: "enum" as const, values: ["x", "y"], default: "y" }], runs_in: "content", jumps: (args) => args.axis !== "x" },
     "scroll.by": { label: "By", intent: "x", runs_in: "content" },
     "page.follow": { label: "Follow", intent: "x", params: [{ name: "where", type: "enum" as const, values: ["here", "tab"], default: "here" }], runs_in: "content", jumps: (args) => args.where === "here" },
   });
   const { compiled } = compile_config({
-    config: { ...empty_config(), keymap: { normal: { a: { id: "scroll.to", args: { percent: 0 } }, b: { id: "scroll.by" }, c: { id: "page.follow" }, d: { id: "page.follow", args: { where: "tab" } } } } },
+    config: { ...empty_config(), keymap: { normal: { a: { id: "scroll.to", args: { percent: 0 } }, e: { id: "scroll.to", args: { percent: 0, axis: "x" } }, b: { id: "scroll.by" }, c: { id: "page.follow" }, d: { id: "page.follow", args: { where: "tab" } } } } },
     default_keymap: {},
     get_command: (id) => registry.get(id),
     enum_sources: { search_engines: [], containers: [] },
   });
-  const runs_in = (key: string) => (compiled.modes.normal!.children[key] as TreeLeaf).steps[0]!.runs_in;
-  assert.deepEqual(["a", "b", "c", "d"].map(runs_in), ["background", "content", "background", "content"]);
+  const step_of = (key: string) => (compiled.modes.normal!.children[key] as TreeLeaf).steps[0]!;
+  assert.deepEqual(["a", "b", "c", "d", "e"].map((key) => step_of(key).jump === true), [true, false, true, false, false]);
+  assert.deepEqual(["a", "c"].map((key) => step_of(key).runs_in), ["content", "content"]);
 });

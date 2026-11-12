@@ -198,8 +198,8 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
       step.invocation = { ...step.invocation, args: result.args };
-      // Only the router reads the offset a jump leaves, so a content command that moves the view goes to the background, as a command that needs the line does.
-      if (typeof command.jumps === "function" ? command.jumps(result.args) : command.jumps === true) step.runs_in = "background";
+      // Only the router reads the offset a jump leaves, so a first press of a content command that moves the view goes to the router.
+      if (typeof command.jumps === "function" ? command.jumps(result.args) : command.jumps === true) step.jump = true;
     } else if (COUNT_MODES.includes(mode) && result.missing_param !== undefined && typeof command.count === "object" && result.missing_param === command.count.param) {
       // The typed count fills this param when the key runs (`50%`), and a key with no count is refused then. A stand-in count lets every other arg get its check. A Firefox shortcut takes no count, so it gets no such pass.
       const stand_in = check_args(command, { ...step.invocation.args, [result.missing_param]: 1 }, input.enum_sources);

@@ -44,7 +44,8 @@ define("scroll.to", {
   ],
   bridge: true,
   runs_in: "content",
-  jumps: true,
+  // The line edges `$` and `^` are no jumps.
+  jumps: (args) => args.axis !== "x",
 });
 
 define("scroll.align", {
