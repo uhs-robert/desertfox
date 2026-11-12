@@ -1,6 +1,6 @@
 // Key test cases of array bindings (awaitable commands, routing). The harness calls run_cases with the piece context.
 // The bindings live in config/keymap.toml: ,n = [tab.next, scroll.to 0], \h = [hint.run background, scroll 300],
-// ,f = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], \t = [hint.run background, tab.next].
+// ,g = [find.next, scroll 300], ,o = [cmdline.open, scroll 300], ,p = [:scroll.pixels, scroll 300], \t = [hint.run background, tab.next].
 
 export const areas = ["keys", "tabs", "hints", "find", "cmdline", "scroll"];
 
@@ -64,7 +64,7 @@ export async function run_cases({ close_tabs_with, run_case, press_keys, poll_un
   await run_case("[find.next, scroll] with no earlier search stops after the failure", async () => {
     await open_page("page", "sq_find", { new_tab: true });
     const mark = events.length;
-    await press_keys(",f");
+    await press_keys(",g");
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "sq_find", "the failure notice of find.next");
     await expect_absent(mark, "sq_find", scroll_of("sq_find"), "the page scrolled after find.next failed", { report_delay_ms: scroll_report_wait_ms });
     await close_tabs_with("sq_find");

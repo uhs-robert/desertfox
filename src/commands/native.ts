@@ -1,11 +1,14 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { MANUAL_HINT } from "../background/host_update.ts";
-import { host_update } from "../background/startup.ts";
+import { host_update, native_host } from "../background/startup.ts";
+import { FIREFOX_PAGE_NOTICE_STORAGE_KEY } from "../background/storage_keys.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { grant_hash, GRANTABLE_PERMISSIONS } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
+import { FIREFOX_PAGES, make_open_firefox_page_handler } from "./firefox_page.ts";
+import type { FirefoxPage } from "./firefox_page.ts";
 import { open_help_url } from "./help_tab.ts";
 
 async function open_grant_panel(ctx: Parameters<typeof open_help_url>[0], permission: GrantablePermission): Promise<void> {
@@ -51,4 +54,23 @@ define("permissions.grant", {
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => open_grant_panel(ctx, args.permission as GrantablePermission),
+});
+
+const open_firefox_page = make_open_firefox_page_handler({
+  open_page: (page) => native_host.open_firefox_page(page),
+  write_clipboard: (text) => navigator.clipboard.writeText(text),
+  notice_shown: async () => (await browser.storage.local.get(FIREFOX_PAGE_NOTICE_STORAGE_KEY))[FIREFOX_PAGE_NOTICE_STORAGE_KEY] === true,
+  mark_notice_shown: () => browser.storage.local.set({ [FIREFOX_PAGE_NOTICE_STORAGE_KEY]: true }),
+  toast: (ctx, message) => show_toast_on_tab(ctx, "firefox_page", message, "info"),
+});
+
+define("browser.open_firefox_page", {
+  name: "firefox",
+  label: "Open a Firefox page",
+  intent: "Open a Firefox page that extensions cannot open. Settings, add-ons, about:config and more open in a new tab. The native host asks Firefox to open it. Without the host, the address goes to the clipboard to paste into the address bar. Add-on shortcuts and the update check have no address: open add-ons, then the gear menu.",
+  params: [{ name: "page", type: "string", main: true, values: FIREFOX_PAGES, strict: true, description: "Name the Firefox page to open." }],
+  bridge: false,
+  runs_in: "background",
+  repeatable: false,
+  run: (ctx, args) => open_firefox_page(ctx, { page: args.page as FirefoxPage }),
 });
