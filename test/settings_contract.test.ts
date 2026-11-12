@@ -29,6 +29,7 @@ const EXPECTATIONS: Record<string, string> = {
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",
   strip_tracking_params: "a list of query parameter names",
+  strip_tracking: "true or false",
   zoom: "a number, from 0.3 to 5",
   media_quality: '"off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160 or 4320',
   editor_ext: "a file extension of up to 10 letters or digits, without a dot, or empty for none",
@@ -79,6 +80,7 @@ test("every setting keeps its listed values", () => {
     media_quality: ["off", "auto", "max", "min", "144", "240", "360", "480", "720", "1080", "1440", "2160", "4320"],
     editable_remove_unsized: ["true", "false"],
     escape_to_page: ["true", "false"],
+    strip_tracking: ["true", "false"],
     bridge: ["true", "false"],
     bridge_share_tabs: ["true", "false"],
     host_auto_update: ["true", "false"],
@@ -100,7 +102,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, bridge: false, bridge_share_tabs: false, host_auto_update: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
+  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -118,11 +120,12 @@ const ACCEPTS: Record<string, unknown[]> = {
   editable_remove_unsized: [true, false],
   escape_to_page: [true, false],
   scroll_selector: ["", "#pane", ".kix-appview-editor"],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", scroll_selector: "#pane" }], [{ site: "*://a.com/*", editable_add: ["div"], editable_remove: ["#e"], editable_remove_unsized: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }], [{ site: "*://a.com/*", media_quality: "auto" }, { site: "*://b.com/*", media_quality: 720 }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", strip_tracking: false }, { site: "*://b.com/*", strip_tracking: true }], [{ site: "*://a.com/*", scroll_selector: "#pane" }], [{ site: "*://a.com/*", editable_add: ["div"], editable_remove: ["#e"], editable_remove_unsized: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }], [{ site: "*://a.com/*", media_quality: "auto" }, { site: "*://b.com/*", media_quality: 720 }]],
   default_site_rows_off: [[], ["sheets"]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
   strip_tracking_params: [[], ["utm_*", "fbclid"]],
+  strip_tracking: [true, false],
   zoom: [0.3, 1, 1.25, 5],
   media_quality: ["off", "auto", "max", "min", 144, 480, 720, 1080, 4320],
   editor_ext: ["", "md", "py", "txt", "Mp4", "abcdefghij"],
@@ -171,12 +174,13 @@ const REFUSES: Record<string, unknown[]> = {
   escape_to_page: ["true", 1],
   scroll_selector: [1, true, ["#a"]],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", scroll_selector: 1 }], [{ site: "a", editable_add: [""] }], [{ site: "a", editable_remove: "x" }], [{ site: "a", editable_remove_unsized: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }], [{ site: "a", media_quality: "high" }], [{ site: "a", media_quality: 500 }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", strip_tracking: "yes" }], [{ site: "a", scroll_selector: 1 }], [{ site: "a", editable_add: [""] }], [{ site: "a", editable_remove: "x" }], [{ site: "a", editable_remove_unsized: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }], [{ site: "a", media_quality: "high" }], [{ site: "a", media_quality: 500 }],
   ],
   default_site_rows_off: ["sheets", ["other"], ["sheets", "sheets"], [1]],
   next_patterns: ["next", [""], [1]],
   prev_patterns: ["prev", [""], [1]],
   strip_tracking_params: ["utm_*", [""], [1]],
+  strip_tracking: ["true", 1],
   zoom: [0.2, 5.5, Number.NaN, "1.5"],
   media_quality: ["", "high", "1080", "1080p", "Max", 0, 500, 1081, -720, 1.5, Number.NaN, true, ["max"]],
   editor_ext: [1, true, ["md"], ".md", "../x", "abcdefghijk", "m d"],
@@ -278,6 +282,7 @@ test("the defaults stay the same", () => {
     next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
     prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
     strip_tracking_params: ["utm_*", "fbclid", "gclid", "dclid", "msclkid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "mkt_tok"],
+    strip_tracking: true,
     mode_indicator: "always",
     palette: "oasis_moonlight",
     light_intensity: 3,
@@ -345,6 +350,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

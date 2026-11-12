@@ -21,8 +21,8 @@ const MAX_BYTES = {
   // 4.5 KB: the YouTube driver gained the captions toggle and its state read. The bundle loads on first use.
   "quality.js": 4.5 * 1024,
   "site_actions.js": 4 * 1024,
-  // 56 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text.
-  "cmdline_page.js": 56.5 * 1024,
+  // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking.
+  "cmdline_page.js": 57 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,
 };

@@ -9,7 +9,7 @@ import { browser_register_store, is_private_context } from "../background/regist
 import type { RegisterStore } from "../background/register_store.ts";
 import { format_link_list, is_web_address, LIST_FORMATS } from "../content/link_list.ts";
 import type { ListFormat } from "../content/link_list.ts";
-import { read_strip_patterns } from "../content/strip_setting.ts";
+import { strip_resolver } from "../background/strip_patterns.ts";
 import { strip_tracking } from "../content/strip_tracking.ts";
 import { YANK_REGISTER_PARAM } from "./register_param.ts";
 
@@ -17,7 +17,8 @@ export type CopyTabsDeps = {
   // The tabs a line of this window lists: its own privacy only, its own window first, each window in tab order.
   tabs: (ctx: CommandContext, all_windows: boolean, is_private: boolean) => Promise<ListedTab[]>;
   is_private: (ctx: CommandContext) => Promise<boolean>;
-  strip_patterns: () => Promise<readonly string[]>;
+  // Resolved per tab address: a site row can turn the stripping off for one tab of the list.
+  strip_patterns: () => Promise<(address: string) => readonly string[]>;
   write_clipboard: (text: string) => Promise<void>;
   store: RegisterStore;
   toast: (ctx: CommandContext, message: string) => Promise<void>;
@@ -40,8 +41,8 @@ export function make_copy_tabs_handler(deps: CopyTabsDeps) {
     const web_tabs = listed.filter((tab) => is_web_address(tab.url));
     if (web_tabs.length === 0) throw new RuntimeRefusal("No web tabs to copy");
     if (register === BLACK_HOLE_REGISTER) return;
-    const patterns = await deps.strip_patterns();
-    const windows = by_window(web_tabs).map((tabs) => format_link_list(tabs.map((tab) => ({ url: strip_tracking(tab.url, patterns), text: tab.title })), args.format));
+    const patterns_for = await deps.strip_patterns();
+    const windows = by_window(web_tabs).map((tabs) => format_link_list(tabs.map((tab) => ({ url: strip_tracking(tab.url, patterns_for(tab.url)), text: tab.title })), args.format));
     const text = windows.join("\n\n");
     let clipboard_failed = false;
     await deps.write_clipboard(text).catch(() => void (clipboard_failed = true));
@@ -59,7 +60,7 @@ const handler = make_copy_tabs_handler({
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: ctx.window_id, incognito }, all_windows);
   },
   is_private: is_private_context,
-  strip_patterns: read_strip_patterns,
+  strip_patterns: () => strip_resolver(browser.storage.local),
   write_clipboard: (text) => navigator.clipboard.writeText(text),
   store: browser_register_store,
   toast: (ctx, message) => show_toast_on_tab(ctx, "copy_tabs", message, "success"),

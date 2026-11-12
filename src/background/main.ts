@@ -18,6 +18,7 @@ import { requirement_lookup, site_engine_for, with_site_engines } from "./availa
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
+import { strip_patterns_for } from "./strip_patterns.ts";
 import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
@@ -309,6 +310,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
   if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender.url);
+  if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
   if (request?.type === "read_media_quality") return read_disabled().then((is_disabled) => (is_disabled ? "off" : media_quality_reply(browser.storage.local, sender.url)));
   if (request?.type === "read_keymap") {
     const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));

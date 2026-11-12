@@ -137,6 +137,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   let close_line: (outcome: Outcome) => void = () => {};
 
   const win = {
+    location: { href: "https://page.test/" },
     frameElement: in_readable_frame ? {} : null,
     focus: () => void window_focuses++,
     innerWidth: 800,
@@ -246,6 +247,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     if ((message as { type?: string }).type === "hint_frames_start") return sent.push(message), start_answer(message);
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
     if ((message as { type?: string }).type === "record_timing") return void timings.push(message);
+    if ((message as { type?: string }).type === "read_strip_patterns") return [];
     if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);

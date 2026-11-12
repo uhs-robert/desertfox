@@ -134,5 +134,9 @@ test("links that differ only by tracking parameters make one entry, without them
 test("the list setting reaches the copied text", async () => {
   const copied: string[] = [];
   await yank_links("page", "plain", deps_with({ find: () => [link({ href: "/p?utm_medium=m&k=1", text: "P" })], strip_patterns: async () => ["utm_*"] }, copied));
+  // The setting off for the page's site gives an empty list: the address keeps its parameters.
+  const kept: string[] = [];
+  await yank_links("page", "plain", deps_with({ find: () => [link({ href: "/p?utm_medium=m&k=1", text: "P" })], strip_patterns: async () => [] }, kept));
+  assert.ok(kept[0]!.includes("utm_medium=m"));
   assert.deepEqual(copied, ["https://a.com/p?k=1"]);
 });

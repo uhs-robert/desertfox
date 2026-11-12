@@ -307,6 +307,12 @@ export type ReadHintSelectors = {
   type: "read_hint_selectors";
 };
 
+// From the page and hints bundles before a copy of a web address. The answer is the `strip_tracking_params` names to drop, empty when the site's `strip_tracking` is off, resolved against `address`, the address of the frame holding what is copied.
+export type ReadStripPatterns = {
+  type: "read_strip_patterns";
+  address: string;
+};
+
 // From the `quality` bundle when it starts the `media_quality` rule in a frame. The answer is the rule for the frame's own address: a `media quality` value (`max`, `min`, `auto` or a height as text) or `off`.
 export type ReadMediaQuality = {
   type: "read_media_quality";
@@ -468,7 +474,7 @@ export type HintFramesEnd = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | ReadMediaQuality | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

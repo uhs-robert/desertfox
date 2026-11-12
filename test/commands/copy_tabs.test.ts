@@ -17,7 +17,7 @@ function make(tabs: ListedTab[], over: Partial<CopyTabsDeps> = {}) {
   const deps: CopyTabsDeps = {
     tabs: async (_ctx, all_windows) => (all_windows ? tabs : tabs.filter((row) => row.window_id === 1)),
     is_private: async () => false,
-    strip_patterns: async () => ["utm_*"],
+    strip_patterns: async () => () => ["utm_*"],
     write_clipboard: async (text) => void log.clipboard.push(text),
     store: { yank: async (...call: unknown[]) => void log.yanks.push(call) } as never,
     toast: async (_ctx, message) => void log.toasts.push(message),
@@ -34,6 +34,15 @@ test("the window scope copies this window's web tabs as markdown, stripped, and 
   assert.deepEqual(log.clipboard, ["- [A (x)](https://a.com/?k=1)\n- [B](https://b.com/)"]);
   assert.deepEqual(log.yanks, [["", log.clipboard[0], false]]);
   assert.deepEqual(log.toasts, ["Copied 2 tabs, skipped 1 non-web tab"]);
+});
+
+test("each tab strips by its own address: a tab whose site turned the stripping off keeps its parameters", async () => {
+  const keeps_a = make(TABS, { strip_patterns: async () => (address) => (address.startsWith("https://a.com/") ? [] : ["utm_*"]) });
+  await keeps_a.run(CTX, { scope: "window", format: "plain" });
+  assert.equal(keeps_a.log.clipboard[0], "https://a.com/?utm_source=z&k=1\nhttps://b.com/");
+  const keeps_all = make(TABS, { strip_patterns: async () => () => [] });
+  await keeps_all.run(CTX, { scope: "window", format: "plain" });
+  assert.equal(keeps_all.log.clipboard[0], "https://a.com/?utm_source=z&k=1\nhttps://b.com/");
 });
 
 test("the all scope puts a blank line between windows, and each other format has its lines", async () => {

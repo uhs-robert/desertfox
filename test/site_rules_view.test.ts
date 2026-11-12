@@ -139,3 +139,9 @@ test("the editable and scroll target columns show through the generic path", () 
   const [row] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", editable_add: [".ed"], editable_remove: [".no"], editable_remove_unsized: true, scroll_selector: ".pane" }] }), "https://a.test/").rows;
   assert.deepEqual(row!.columns.map(({ name, value }) => [name, value]), [["editable_add", ".ed"], ["editable_remove", ".no"], ["editable_remove_unsized", "true"], ["scroll_selector", ".pane"]]);
 });
+
+test("a strip_tracking row shows as a column, and an earlier row shadows a later one", () => {
+  const view = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", strip_tracking: false }, { site: "https://a.test/*", strip_tracking: true }, { site: "https://b.test/*", strip_tracking: true }] }), "https://a.test/");
+  assert.deepEqual(view.rows.map((row) => row.columns.filter(({ name }) => name === "strip_tracking")), [[{ name: "strip_tracking", value: "false", shadowed: false }], [{ name: "strip_tracking", value: "true", shadowed: true }]]);
+  assert.deepEqual(site_rules_view(compiled_with({ strip_tracking: false, site_rules: [{ site: "https://b.test/*", strip_tracking: true }] }), "https://b.test/").rows[0]!.columns, [{ name: "strip_tracking", value: "true", shadowed: false }]);
+});
