@@ -198,7 +198,7 @@ class SubscribeTest(BridgeTestCase):
             reader.wait_lines(1 + sent)
             self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
         self.assertEqual([line["seq"] for line in reader.lines[1:]], list(range(1, sent + 1)))
-        stuck.connection.settimeout(10)
+        stuck.connection.settimeout(LIVENESS_S)
         received = b""
         while True:
             chunk = stuck.connection.recv(1 << 20)

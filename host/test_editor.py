@@ -334,7 +334,7 @@ class CollectTest(EditorCase):
         self.configure(self.stub(f"while not os.path.exists({gate!r}): time.sleep(0.02)\nopen(path, 'w').write('later')\n"))
         from test_host import frame, unframe
         from host_under_test import HOST_PATH
-        run = subprocess.run([sys.executable, HOST_PATH], input=frame({"cmd": "editor_start", "text": "t"}), capture_output=True, timeout=10)
+        run = subprocess.run([sys.executable, HOST_PATH], input=frame({"cmd": "editor_start", "text": "t"}), capture_output=True, timeout=LIVENESS_S)
         job = unframe(run.stdout)["job"]
         self.children.append(self.job_record(job)["pid"])
         self.assertEqual(self.collect(job, wait_s=0.2), {"pending": True})

@@ -317,7 +317,7 @@ class LifecycleTest(BridgeTestCase):
         second = self.start(wait_ready=False)
         started = time.monotonic()
         # Both processes race for the lock. Whoever loses waits 3 s and exits without ready.
-        deadline = started + 10
+        deadline = started + LIVENESS_S
         while time.monotonic() < deadline and first.process.poll() is None and second.process.poll() is None:
             time.sleep(0.05)
         losers = [host for host in (first, second) if host.process.poll() is not None]
