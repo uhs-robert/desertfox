@@ -9,7 +9,7 @@ import { is_hint_char } from "./hints/hint_keys.ts";
 import type { Sink } from "./bundle_host.ts";
 import { is_caret_mode } from "../shared/command.ts";
 import { is_chord } from "../shared/keys/token.ts";
-import { ANY_KEY } from "../shared/prefix_tree.ts";
+import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
@@ -160,7 +160,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
       deps.on_prefix_(shown.length > 0 ? { mode, typed_: shown } : undefined, true);
       return "cancel";
     }
-    const result = active.feed(mode, token);
+    let result = active.feed(mode, token);
+    // A find key waits for its target, unless a find is live: then the same press repeats it.
+    if (result.kind === "pending" && result.node.children[LIVE_KEY] && deps.sink_of_(mode)?.live_?.()) result = active.feed(mode, LIVE_KEY);
     sequence_in_progress = result.kind === "pending";
     if (result.kind === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
     awaiting_argument = result.kind === "pending" && (register === '"' || !!result.node.children[ANY_KEY]);

@@ -5,6 +5,7 @@ import type { KeymapMode } from "../shared/keymap.ts";
 import type { CommandMeta } from "../shared/command.ts";
 import { default_of } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
+import { LIVE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import type { Block, Inline } from "./blocks.ts";
 
@@ -45,7 +46,7 @@ function key_paths(compiled: CompiledKeymap | undefined, commands: CommandMeta[]
   const found: string[][] = [];
   const walk = (node: TreeNode, path: string[]): void => {
     if (node.kind === "branch") {
-      for (const [token, child] of Object.entries(node.children)) walk(child, [...path, token]);
+      for (const [token, child] of Object.entries(node.children)) if (token !== LIVE_KEY) walk(child, [...path, token]);
     } else if (fits(commands, binding, node.steps)) {
       found.push(path);
     }

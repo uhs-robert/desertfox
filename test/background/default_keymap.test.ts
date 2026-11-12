@@ -4,9 +4,10 @@ import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
-import { ANY_KEY } from "../../src/shared/prefix_tree.ts";
+import { ANY_KEY, LIVE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
+import { panel_after_prefix } from "../../src/background/list_keys.ts";
 import { check_args } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
@@ -301,4 +302,34 @@ test("a container key that extends a real default leaf drops it", () => {
 test("a search key for an unknown engine leaves the default it would extend", () => {
   const { compiled } = compile_config(gt_prefix_config({ search_keys: { x: "nope" } }));
   assert.equal(((compiled.modes.normal!.children["g"] as TreeBranch).children["t"] as { kind: string }).kind, "leaf");
+});
+
+const live_of = (tree: TreeBranch, key: string) => ((tree.children[key] as TreeBranch).children[LIVE_KEY] as { steps: { invocation: { id: string; args?: Record<string, unknown> }; runs_in: string; count_rule: string }[] }).steps[0]!;
+
+test("every caret find key carries a live repeat: f and t as ; and F and T as ,", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  for (const mode of ["caret", "visual", "visual_line"] as const) {
+    const tree = compiled.modes[mode]!;
+    for (const [key, direction] of [["f", "forward"], ["t", "forward"], ["F", "back"], ["T", "back"]] as const) {
+      const step = live_of(tree, key);
+      assert.deepEqual(step.invocation, { id: "caret.move", args: { unit: "find_repeat", direction, big: false } }, `${mode} ${key}`);
+      assert.equal(step.count_rule, "repeat");
+      assert.equal(step.runs_in, "content");
+    }
+  }
+  assert.equal((compiled.modes.caret!.children.l as { kind: string }).kind, "leaf");
+});
+
+test("a remapped find key gets its live repeat from the binding, not from its letter", () => {
+  const { compiled } = compile({ caret: { q: { id: "caret.find", args: { direction: "back" } }, z: { id: "caret.find" }, f: { id: "caret.move", args: { unit: "char" } } } } as KeymapConfig);
+  const tree = compiled.modes.caret!;
+  assert.equal(live_of(tree, "q").invocation.args!.direction, "back");
+  assert.equal(live_of(tree, "z").invocation.args!.direction, "forward");
+  assert.equal((tree.children.f as { kind: string }).kind, "leaf");
+});
+
+test("which-key lists one <key> row under a find key and skips its live repeat", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  const panel = panel_after_prefix(compiled.modes.caret, ["f"], (id) => registry.get(id) as never);
+  assert.deepEqual(panel.rows.map((row) => row.keys), ["<key>"]);
 });

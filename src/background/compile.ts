@@ -6,8 +6,8 @@ import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
-import { ANY_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
+import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -144,8 +144,18 @@ function check_branch(branch: TreeBranch, path: string[], mode: string, input: C
   for (const [token, node] of Object.entries(branch.children)) {
     if (!keep_node(node, [...path, token], mode, input, warnings)) delete branch.children[token];
     // A leaf that waits for a key press moves under a branch of its own, so the matcher reaches it through one more key.
-    else if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = { kind: "branch", ...(node.label === undefined ? {} : { label: node.label }), children: { [ANY_KEY]: node } };
+    else if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = { kind: "branch", ...(node.label === undefined ? {} : { label: node.label }), children: { [ANY_KEY]: node, ...live_repeat_child(node, input) } };
   }
+}
+
+// While a find is live its key repeats it, as `;` for a forward binding and `,` (the reverse) for a backward one, whatever way the find started. It derives from the binding, so a remapped key follows.
+function live_repeat_child(captured: TreeLeaf, input: CompileInput): Record<string, TreeLeaf> {
+  const find = captured.steps.find((step) => step.capture && step.invocation.id === "caret.find");
+  const move = input.get_command("caret.move");
+  if (!find || !move) return {};
+  const direction = find.invocation.args?.direction === "back" ? "back" : "forward";
+  const step: LeafStep = { invocation: { id: "caret.move", args: { unit: "find_repeat", direction, big: false } }, runs_in: move.runs_in, count_rule: move.count ?? "ignore", ...(move.bundle && { bundle: move.bundle }) };
+  return { [LIVE_KEY]: { kind: "leaf", label: "Repeat the character find", steps: [step] } };
 }
 
 // Only the router reads the offset a jump leaves, so a first press of a content command that moves the view goes to the router.
