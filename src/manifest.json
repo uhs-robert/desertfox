@@ -60,6 +60,9 @@
     "48": "icons/desertfox.svg",
     "96": "icons/desertfox.svg"
   },
+  "omnibox": {
+    "keyword": "df"
+  },
   "browser_action": {
     "default_title": "DesertFox",
     "default_icon": "icons/desertfox.svg",

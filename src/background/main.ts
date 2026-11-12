@@ -25,6 +25,7 @@ import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
+import { create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
 import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
@@ -350,6 +351,22 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   const mode = active?.id === undefined ? "normal" : await tab_modes.recall(active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });
 });
+
+// A fake browser in a test may lack the API, and so may a Firefox without the manifest key.
+if (browser.omnibox) {
+  const omnibox = create_omnibox({
+    registry,
+    // Waits for the config first: its aliases and snippets are in the registry only once it has loaded.
+    get_enum_sources: async () => (await get_config(), router_deps.get_enum_sources()),
+    active_tab: router_deps.active_tab,
+    mode_of: async (tab_id) => (tab_id === undefined ? "normal" : tab_modes.recall(tab_id)),
+    run: router.run,
+    show_refusal: router_deps.show_refusal,
+    record_history: cmdline.record,
+  });
+  browser.omnibox.setDefaultSuggestion({ description: OMNIBOX_HINT });
+  browser.omnibox.onInputEntered.addListener((text, disposition) => void omnibox.entered(text, disposition));
+}
 
 const site_zoom = create_site_zoom({
   session: browser.storage.session,

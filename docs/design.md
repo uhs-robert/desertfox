@@ -10,7 +10,7 @@ Status: phase 1 is built on the `feat/phase-1-core` branch. [firefox-behavior.md
 
 Phase 0 measured these on Firefox 159 with real key presses. They shape every choice below.
 
-- A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus.
+- A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus. The address bar keyword `df` runs commands on these pages (see "Command line and completion").
 - `moz-extension://` pages do not match `<all_urls>`, so no content script runs on them by itself. The help page loads `content.js` with a script tag, and `tabs.sendMessage` reaches it like any other tab.
 - The `commands` API (Firefox shortcuts) catches a modifier chord such as `Alt+J` everywhere except on a page that cancels the key first. Firefox rejects bare keys and Shift plus a letter there.
 - A `document_start` listener is ready 11-58 ms (median 27) after the first byte of a page. Keys before that moment are lost. Navigating from a live page keeps the old listener until the new page commits.
@@ -418,6 +418,8 @@ The reason for 32 KB: size does not delay the first key below about 64 KB. Probe
 ## Interfaces
 
 ### Command line and completion
+
+The address bar keyword `df` (the `omnibox` manifest key, `src/background/omnibox.ts`) runs a command on a page where no key reaches DesertFox. You type `df`, a space and the command text, for example `df tab.next`, and press Enter. The text takes the command line's path: the same parser, then the router, whose check is the one validator. Every router command runs. A command that needs the page, such as a scroll, refuses on a page with no content script, as it does anywhere else. Nobody can type a missing value into a prompt there, so a command with a missing value refuses with its usage, and so does text that is no command (`df rust`). Refusals reach the user as a notification when the page has no content script to draw a toast. Enter in a new tab or a background tab sets `where` on a command that has that param. A parsed line is added to the command line history, except from a private window. The keyword is fixed in the manifest, so it cannot change at run time. The address bar shows one row for it, the hint "Type a DesertFox command" and the typed text (see `docs/firefox-behavior.md`). Suggestions from the completer are not built yet.
 
 The command line is an extension page in an iframe, so page scripts and CSS cannot reach it. It reads the stored keymap itself and asks the background for everything else. Keys typed while it opens are buffered and replayed.
 
