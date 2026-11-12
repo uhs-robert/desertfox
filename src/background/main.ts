@@ -45,7 +45,7 @@ import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_media_quality } from "./media_quality.ts";
-import { ask_quality_in_tab, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
+import { ask_quality_in_tab, inject_quality_about_blank, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
 import { media_reports, tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
@@ -419,6 +419,9 @@ void external_editor.resume().catch(() => undefined);
 const media_quality = create_media_quality({
   is_disabled: read_disabled,
   inject_all: inject_quality_for_rule,
+  inject_about_blank: inject_quality_about_blank,
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  settle_ms: 1000,
   start: (tab_id, message) => browser.tabs.sendMessage(tab_id, message),
 });
 

@@ -103,6 +103,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect(!events.slice(mark).some(on_set("p26_frame_yt_inner", (event) => event.low === "hd1080")), "the framed player got the global max");
   });
 
+  await run_case("a navigation's watch outlasts the second injection: a reset 6 s after the navigation is still caught", async () => {
+    let mark = events.length;
+    await open_page("quality", "p26_late", { new_tab: true });
+    await wait_event(mark, on_set("p26_late", (event) => event.low === "hd1080"), "the fresh load at 1080p");
+    mark = events.length;
+    await navigate();
+    await wait_event(mark, on_set("p26_late", (event) => event.low === "hd1080"), "the level again after the late reset", 9000);
+  });
+
   await run_case("a player in an about:blank frame gets the rule", async () => {
     const mark = events.length;
     await open_page("quality", "p26_blank", { new_tab: true });

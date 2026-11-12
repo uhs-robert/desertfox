@@ -132,7 +132,7 @@ test("a start whose rule read answers after a newer start never runs", async () 
   let answered = "max";
   const { rule, player } = setup(() => (release.length < 2 ? new Promise<string>((resolve) => release.push(resolve)) : Promise.resolve(answered)));
   const early = rule.start(false);
-  const late = rule.start(false);
+  const late = rule.start(true);
   // The newer read answers first, then the older one answers with a stale value.
   release[1]!("min");
   answered = "min";
@@ -262,4 +262,13 @@ test("a rule poll on an hls.js player that has buffered nothing writes the level
   const { rule } = setup("max", { state: fake_player().state, driver });
   await rule.start(false);
   assert.deepEqual(writes, ["next"]);
+});
+
+test("a start that is not a navigation changes nothing while a poll runs", async () => {
+  let reads = 0;
+  const { rule } = setup(() => (reads++, Promise.resolve("max")));
+  const running = rule.start(true);
+  await rule.start(false);
+  assert.equal(reads, 1, "the second start read the rule again");
+  await running;
 });
