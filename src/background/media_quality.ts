@@ -1,5 +1,5 @@
 // The `media_quality` rule on the background side: a tab that navigates gets the `quality` bundle in every frame and a start message, and each frame resolves and applies the rule for its own address (`read_media_quality`).
-// A frame that loads after the tab's last event misses the rule, and so does an about:blank frame. Both are known limits.
+// A frame that loads after the tab's last event misses the rule. That is a known limit. An about:blank frame gets it from the second pass of `inject_quality_for_rule`.
 
 import type { QualityRuleStart } from "../shared/quality.ts";
 

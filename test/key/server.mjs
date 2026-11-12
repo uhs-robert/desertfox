@@ -421,6 +421,12 @@ function make_movie_player(levels, start) {
   return player;
 }
 if (kind.includes("yt") || kind.includes("slow")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+// "blank": the player lives in a frame with no address, as on some hls.js-based sites.
+if (kind.includes("blank")) {
+  const blank = document.createElement("iframe");
+  document.body.append(blank);
+  blank.contentDocument.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+}
 // An in-site navigation: the address changes first, and the next video starts at the site's own level 800 ms later.
 document.getElementById("navigate").addEventListener("click", () => {
   history.pushState({}, "", location.pathname + location.search + "&next=" + Date.now());
