@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 418 (normal 212, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 419 (normal 212, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
