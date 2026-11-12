@@ -22,6 +22,8 @@ test("refuses a stable version, a bad version and a non-https update_url", () =>
   assert.throws(() => stamp_beta_manifest(manifest, "0.1.23", UPDATE_URL), /not x\.y\.z\.N/);
   assert.throws(() => stamp_beta_manifest(manifest, "0.1.23-beta.1", UPDATE_URL), /not x\.y\.z\.N/);
   assert.throws(() => stamp_beta_manifest(manifest, "0.1.23.1", "http://example.invalid/u.json"), /https/);
+  assert.throws(() => stamp_beta_manifest(manifest, "0.1.23.1", "https://"), /https/);
+  assert.throws(() => stamp_beta_manifest(manifest, "0.1.23.1", "not a url"), /https/);
   assert.throws(() => stamp_beta_manifest({ version: "0.1.22" }, "0.1.23.1", UPDATE_URL), /gecko/);
 });
 
