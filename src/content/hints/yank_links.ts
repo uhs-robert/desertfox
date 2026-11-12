@@ -1,7 +1,7 @@
 // The links of the page for `copy.links`: which links count, their label, and the list in one of three formats.
 
 import { strip_tracking } from "../strip_tracking.ts";
-import { link_text, markdown_address, org_address } from "../link_escape.ts";
+import { format_link_list, is_web_address } from "../link_list.ts";
 import type { Outcome } from "../../shared/messages.ts";
 import type { Yanked } from "../caret/copy_text.ts";
 import { collect, name_candidates, query_for } from "./candidates.ts";
@@ -13,8 +13,6 @@ export type LinkFormat = (typeof LINK_FORMATS)[number];
 
 export const MAX_YANKED_LINKS = 500;
 
-const WEB_PROTOCOLS = new Set(["http:", "https:", "ftp:", "file:"]);
-
 export type YankedLink = { url: string; text: string };
 
 // Mailto, tel, javascript and data links are no web address, and a link that stays on its own page by a fragment is no destination. A bare `#` is a fragment too, though its `hash` is empty.
@@ -25,7 +23,7 @@ export function web_address(raw: string, base: string, document_url: string): st
   } catch {
     return undefined;
   }
-  if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
+  if (!is_web_address(url.href)) return undefined;
   const without_fragment = (address: string) => address.split("#")[0];
   if (url.href.includes("#") && without_fragment(url.href) === without_fragment(document_url)) return undefined;
   return url.href;
@@ -50,20 +48,7 @@ export function links_of(found: readonly Found[], strip_patterns: readonly strin
   return links;
 }
 
-export function format_links(links: readonly YankedLink[], format: LinkFormat): string {
-  return links
-    .map(({ url, text }) => {
-      switch (format) {
-        case "plain":
-          return url;
-        case "markdown":
-          return `- [${link_text(text)}](${markdown_address(url)})`;
-        case "org":
-          return `- [[${org_address(url)}][${link_text(text)}]]`;
-      }
-    })
-    .join("\n");
-}
+export const format_links = (links: readonly YankedLink[], format: LinkFormat): string => format_link_list(links, format);
 
 export const all_links = (): Found[] => collect(document, query_for("links", undefined));
 

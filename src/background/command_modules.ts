@@ -22,6 +22,7 @@ import "../commands/quickmark.ts";
 import "../commands/url.ts";
 import "../commands/open.ts";
 import "../commands/copy.ts";
+import "../commands/copy_tabs.ts";
 import "../commands/hint.ts";
 import "../commands/hint_text.ts";
 import "../commands/heading.ts";

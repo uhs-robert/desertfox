@@ -220,6 +220,7 @@ const BASE_SECTIONS: KeymapConfig = {
     yt: { id: "copy.url", args: { format: "title" } },
     yL: { id: "copy.links", args: { scope: "page", format: "markdown" }, label: "Copy page links" },
     yl: { id: "copy.links", args: { scope: "viewport", format: "markdown" }, label: "Copy links in view" },
+    yT: { id: "copy.tabs", args: { scope: "window", format: "markdown" }, label: "Copy tab links" },
     gu: { id: "url.parent" },
     gU: { id: "url.root" },
     "<C-a>": { id: "url.increment", args: { direction: "up" } },

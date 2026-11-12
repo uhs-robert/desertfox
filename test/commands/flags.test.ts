@@ -19,6 +19,7 @@ test("typed names are the dotted id except the family words and one-word command
     "bookmark.open=bookmark",
     "command.repeat=repeat",
     "copy.links=copylinks",
+    "copy.tabs=copytabs",
     "copy.url=copy",
     "debug.perf=perf",
     "find.open=find",
