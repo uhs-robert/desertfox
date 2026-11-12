@@ -4,6 +4,7 @@ import type { Settings } from "./settings_table.ts";
 
 // One constant per setting, so a bundle that reads one default (the content script) carries only that one.
 export const DEFAULT_WHICH_KEY_DELAY_MS: Settings["which_key_delay_ms"] = 300;
+export const DEFAULT_WHICH_KEY_REPEAT: Settings["which_key_repeat"] = true;
 export const DEFAULT_WHICH_KEY_BORDER: Settings["which_key_border"] = "square";
 export const DEFAULT_HINT_LETTERS: Settings["hint_letters"] = "asdfghjkl";
 export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
@@ -44,6 +45,7 @@ export const DEFAULT_NEWTAB_LINKS: Settings["newtab_links"] = [];
 
 export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: DEFAULT_WHICH_KEY_DELAY_MS,
+  which_key_repeat: DEFAULT_WHICH_KEY_REPEAT,
   which_key_border: DEFAULT_WHICH_KEY_BORDER,
   hint_letters: DEFAULT_HINT_LETTERS,
   hint_key_line: DEFAULT_HINT_KEY_LINE,

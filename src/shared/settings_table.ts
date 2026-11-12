@@ -50,6 +50,7 @@ export type SettingRow = (
 
 export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
+  which_key_repeat: { kind: "boolean", default: true },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   hint_key_line: { kind: "boolean", default: true },

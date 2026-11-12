@@ -22,6 +22,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "which_key_repeat",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "which_key_border",
     "settable": true,
     "is_toggle": false,

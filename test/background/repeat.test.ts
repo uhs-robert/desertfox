@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_router } from "../../src/background/router.ts";
-import { create_repeat_memory, no_repeat_memory } from "../../src/background/repeat_memory.ts";
+import { create_repeat_memory, no_repeat_memory, repeat_preview } from "../../src/background/repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "../../src/background/record_step.ts";
 import { make_repeat_handler, type RepeatDeps } from "../../src/commands/command.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -349,4 +349,28 @@ test("a repeat with a count over the limit is refused and runs nothing, like any
   await repeat(ctx, { count: 100 });
   assert.equal(seen.length, 3);
   assert.deepEqual(fake.log, ["refuse 7 A count of 100 is over the limit of 20 for tab.shut"]);
+});
+
+test("the preview names the stored step as a command line, and a private step stays out", async () => {
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  const get = (id: string) => registry.get(id);
+  const stored: Record<string, unknown> = {};
+  const memory = create_repeat_memory({ get: async (key) => (typeof key === "string" && key in stored ? { [key]: stored[key] } : {}), set: async (items) => void Object.assign(stored, items), remove: async () => undefined });
+  assert.equal(await repeat_preview(memory, get), undefined);
+  await memory.save([{ id: "command.repeat", args: {} }], false);
+  const text = await repeat_preview(memory, get);
+  assert.ok(text?.startsWith(":"), `got ${text}`);
+  await memory.save([{ id: "command.repeat", args: {} }], true);
+  assert.equal(await repeat_preview(no_repeat_memory, get), undefined);
+  const before = await repeat_preview(memory, get);
+  await memory.save([{ id: "page.scroll", args: {} }], true);
+  assert.equal(await repeat_preview(memory, get), before);
+});
+
+test("the preview falls back to the label for a command with no name, and shortens a long line", async () => {
+  const memory = { load: async () => [{ id: "x.nameless" }, { id: "x.long", args: {} }] };
+  const text = await repeat_preview(memory, (id) => ({ id, label: id === "x.long" ? "L".repeat(100) : "Nameless", params: [] }) as never);
+  assert.equal(text?.length, 48);
+  assert.ok(text?.startsWith("Nameless | "));
+  assert.ok(text?.endsWith("\u2026"));
 });

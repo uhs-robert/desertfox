@@ -38,6 +38,7 @@ export const STYLE = `
 .label { overflow: hidden; text-overflow: ellipsis; }
 .group .label { color: var(--primary); font-weight: bold; }
 .footer { margin-top: 6px; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--fg) 15%, var(--bg)); text-align: center; color: var(--dim); font-style: italic; }
+.repeat { margin-top: 4px; font-style: normal; white-space: nowrap; }
 .footer span { font-style: normal; color: var(--secondary); font-size: 0.8em; margin: 0 4px 0 14px; }`;
 
 const FOOTER: readonly [key: string, word: string][] = [["ESC", "close"], ["←", "back"]];
@@ -49,7 +50,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, class_name: 
 }
 
 // Rows fill left to right, then down.
-export function show_panel({ title, rows, border }: WhichKeyPanel): void {
+export function show_panel({ title, rows, border, repeat }: WhichKeyPanel): void {
   surface ??= create_surface("desertfox-whichkey", STYLE, LAYERS.which_key);
   const columns = choose_columns(rows.length, window.innerHeight);
   surface.text.className = "desertfox-whichkey";
@@ -65,6 +66,11 @@ export function show_panel({ title, rows, border }: WhichKeyPanel): void {
   );
   const footer = element("div", "footer");
   for (const [key, word] of FOOTER) footer.append(element("span", "", key), word);
+  if (repeat !== undefined) {
+    const line = element("div", "repeat");
+    line.append(element("span", "", "."), repeat);
+    footer.append(line);
+  }
   const frame = element("div", `frame ${border}`);
   const body = element("div", "body");
   body.append(list, footer);

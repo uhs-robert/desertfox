@@ -16,6 +16,8 @@ test("help.whichkey asks for the keys of the mode the host reports", async () =>
   handlers.get("help.whichkey")!({});
   assert.deepEqual(asked, [
     { type: "list_keys", mode: "caret", prefix: [] },
+    { type: "read_repeat_preview" },
     { type: "list_keys", mode: "visual", prefix: [] },
+    { type: "read_repeat_preview" },
   ]);
 });
