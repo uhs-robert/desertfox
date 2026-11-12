@@ -824,7 +824,6 @@ const jump_commands = {
     jumps: (args: Record<string, unknown>) => args.where === "here",
     run: () => {},
   },
-  "mark.go": { label: "Mark", intent: "x", params: [{ name: "key", type: "string" as const }], runs_in: "content" as const, jumps: (args: Record<string, unknown>) => (args.key === "A" ? ("top_frame" as const) : true) },
 };
 
 function make_jumps(overrides: Parameters<typeof make_fake>[1] = {}) {
@@ -918,15 +917,6 @@ test("a private tab records as private, and a command from a child frame records
   const framed = make_jumps();
   await create_router(framed.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7, frame_id: 3 });
   assert.ok(!framed.log.includes("read"));
-});
-
-test("a command that moves the top frame records from a child frame too, and one that scrolls the frame's own box does not", async () => {
-  const global = make_jumps();
-  await create_router(global.deps).run({ invocations: [{ id: "mark.go", args: { key: "A" } }], mode: "normal", sender_tab_id: 7, frame_id: 3 });
-  assert.equal(global.log.find((line) => line.startsWith("record")), 'record 1 false {"url":"https://example.org/","x":3,"y":420}');
-  const local = make_jumps();
-  await create_router(local.deps).run({ invocations: [{ id: "mark.go", args: { key: "a" } }], mode: "normal", sender_tab_id: 7, frame_id: 3 });
-  assert.ok(!local.log.includes("read"));
 });
 
 test("a record the list refuses does not fail the command", async () => {

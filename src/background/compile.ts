@@ -149,7 +149,7 @@ function check_branch(branch: TreeBranch, path: string[], mode: string, input: C
 }
 
 // Only the router reads the offset a jump leaves, so a first press of a content command that moves the view goes to the router.
-const moves_view = (command: Pick<CommandDef, "jumps">, args: Record<string, unknown>): boolean => !!(typeof command.jumps === "function" ? command.jumps(args) : command.jumps);
+const moves_view = (command: Pick<CommandDef, "jumps">, args: Record<string, unknown>): boolean => (typeof command.jumps === "function" ? command.jumps(args) : command.jumps === true);
 
 function keep_node(node: TreeNode, path: string[], mode: string, input: CompileInput, warnings: string[]): boolean {
   if (node.kind === "branch") {
