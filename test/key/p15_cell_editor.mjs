@@ -154,8 +154,8 @@ export async function run_cases({ in_background, config_copy, load_config_dir, s
     await expect_badge("INSERT");
   });
 
-  await run_case("an editor the page focused before the keymap reply arrived leaves insert mode once the rule is known", async () => {
-    // The page builds and focuses the editor in its head, before any reply can come, so the frame enters insert mode on empty rules.
+  await run_case("smoke check: an editor built and focused in the page head leaves the page in normal mode", async () => {
+    // A smoke check, not a regression test for the resync: it passes without the resync too, because the stale mode needs the focus to land before the reply and this page cannot force that order.
     await open_page("cell_editor_early", page_id + "_early", { new_tab: true });
     expect(await editor_holds_focus(), "the cell editor does not hold the focus after load");
     await expect_badge("NORMAL");
