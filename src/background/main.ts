@@ -57,6 +57,7 @@ import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
 import { answer_config_transfer } from "./config_transfer.ts";
+import { browser_timing_log } from "./timing_browser.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
@@ -247,6 +248,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     });
   }
   if (request?.type === "quality_report") return void quality_reports.receive(sender.tab?.id, sender.frameId, request);
+  if (request?.type === "record_timing" && typeof request.name === "string" && Number.isFinite(request.ms)) return void browser_timing_log.record(request.name, request.ms);
   if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();

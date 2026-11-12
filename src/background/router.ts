@@ -40,6 +40,8 @@ export type RouterDeps = {
   repeat_memory: RepeatMemory;
   // Replaces the `.` recorder, for a caller that records every step.
   record_step?: RecordStep;
+  // Gets the time one command took from the start of its step to its answer, for `debug.perf`.
+  record_timing?: (command_id: string, ms: number) => void;
 };
 
 export type RouteRequest = {
@@ -175,9 +177,17 @@ export function create_router(deps: RouterDeps): Router {
     // The handler gets the rechecked args, with a kept marker back as its empty text.
     const final_args = Object.fromEntries(Object.entries(rechecked.args).map(([name, value]) => [name, is_context_source(value) ? filled.args[name] : value]));
 
-    if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request);
-    for (let time = 0; time < counted.times; time++) {
-      const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
+    const started_ms = performance.now();
+    const outcome = await run_command(command, final_args, counted.times, context, request);
+    // Not `debug.perf`, which would time itself into the numbers it reports. A refusal is not a round trip.
+    if (outcome.ok && !outcome.cancelled && command.id !== "debug.perf") deps.record_timing?.(command.id, performance.now() - started_ms);
+    return outcome;
+  }
+
+  async function run_command(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, request: RouteRequest): Promise<Outcome> {
+    if (command.runs_in === "content") return run_in_content(command, args, times, context, request);
+    for (let time = 0; time < times; time++) {
+      const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, args));
       if (!result.ok) return result;
     }
     return done;

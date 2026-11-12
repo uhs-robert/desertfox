@@ -13,6 +13,7 @@ import { create_bundle_loader } from "./bundle_loader.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
+import { browser_timing_log } from "./timing_browser.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "./storage_keys.ts";
@@ -98,6 +99,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
     is_disabled: read_disabled,
     repeat_memory,
+    record_timing: (command_id, ms) => void browser_timing_log.record(command_id, ms),
   };
 }
 

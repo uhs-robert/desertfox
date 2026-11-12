@@ -35,7 +35,7 @@ import type { FollowDirection } from "./follow_links.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
-import type { HeadingItem } from "../../shared/messages.ts";
+import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
 
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
@@ -295,6 +295,7 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
+    const started_ms = performance.now();
     const [letters, key_line_setting, visible, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect"), read_strip_patterns()]);
     if (current.cancelled) return;
     strip_patterns = patterns;
@@ -323,6 +324,7 @@ function register(host: BundleHostApi): void {
     // Every build starts in label mode. `text` only filters the hints, it does not start text mode, so the labels stay typable.
     const picker = create_picker(labels, text_of_found_);
     current.ready = { picker, found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
+    void browser.runtime.sendMessage({ type: "record_timing", name: "hint.build", ms: performance.now() - started_ms } satisfies RecordTiming).catch(() => undefined);
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
     while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
   }
