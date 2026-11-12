@@ -115,7 +115,7 @@ export function imports_nothing(incoming: ConfigFiles, accepted: Record<string, 
   return Object.keys(split_files(incoming).config_files).length === 0 && Object.keys(accepted).length === 0;
 }
 
-function preview_snippet(path: string, code: string, current: ConfigFiles): SnippetPreview {
+export function preview_snippet(path: string, code: string, current: ConfigFiles): SnippetPreview {
   const problems: string[] = [];
   const entry = parse_snippet(`${IMPORT_DIR_LABEL}/${path}`, code, problems);
   return {

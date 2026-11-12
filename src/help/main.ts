@@ -13,11 +13,14 @@ import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
 import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
+import { mount_files } from "./files_page.ts";
 import { parse_route } from "./route.ts";
 
 let stop_settings: (() => void) | undefined;
 // The hold of the mounted import section. A new mount replaces it, and the old one can no longer change the gate.
 let transfer_hold: UserCssHold = NO_USER_CSS_HOLD;
+// The same for the files editor, so its consent card and the import review never release each other.
+let files_hold: UserCssHold = NO_USER_CSS_HOLD;
 
 // `refresh` draws the same route again after a settings change. The caller keeps scroll and focus, so the route's own scroll and focus rules stay out.
 function show_route(model: HelpModel, guide: Block[], engines: string[], cause: "first" | "moved" | "refresh"): void {
@@ -31,6 +34,10 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   transfer_hold.dispose();
   transfer_hold = open_user_css_hold();
   if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message), transfer_hold);
+  const files_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-files") : null;
+  files_hold.dispose();
+  files_hold = open_user_css_hold();
+  if (files_box) mount_files(files_box, (message) => browser.runtime.sendMessage(message), files_hold);
   if (cause === "refresh") return;
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));

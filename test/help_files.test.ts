@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { template_for } from "../src/help/file_templates.ts";
+import { create_files_session } from "../src/help/files_model.ts";
+
+function session_with(answer_of: (message: { op: string; path?: string; text?: string | null; accepted?: string }) => unknown) {
+  const sent: { op: string; path?: string; text?: string | null; accepted?: string }[] = [];
+  const session = create_files_session({
+    send: async (message) => {
+      sent.push(message as never);
+      return answer_of(message as never);
+    },
+    on_change: () => undefined,
+  });
+  return { session, sent };
+}
+
+test("a new file starts from its template, and a bad path or a taken one is refused", async () => {
+  const { session } = session_with((message) => (message.op === "read" ? { ok: true, files: { "keymap.toml": "x" } } : { ok: true, message: "Saved." }));
+  await session.load();
+  assert.match(session.start_new("notes.txt") ?? "", /not a config file/);
+  assert.match(session.start_new("keymap.toml") ?? "", /exists already/);
+  assert.equal(session.start_new("search_engines.toml"), undefined);
+  assert.equal(session.state.open?.is_new, true);
+  assert.equal(session.state.open?.text, template_for("search_engines.toml"));
+  assert.match(session.state.open!.text, /^#/);
+  for (const path of ["keymap.toml", "keymap.d/a.toml", "search_engines.toml", "command_aliases.toml", "quickmarks.toml", "settings.toml", "style.css", "themes/x.toml", "snippets/x.js"]) assert.notEqual(template_for(path), "", path);
+});
+
+test("a refused save shows every problem and keeps the draft", async () => {
+  const problems = ["a: x", "b: y", "c: z", "d: w", "e: v"];
+  const { session } = session_with((message) => (message.op === "read" ? { ok: true, files: { "settings.toml": "ok" } } : { ok: false, message: "File not saved", problems }));
+  await session.load();
+  session.open("settings.toml");
+  session.edit("broken");
+  await session.save();
+  assert.deepEqual(session.state.problems, problems);
+  assert.equal(session.state.message?.ok, false);
+  assert.equal(session.state.open?.text, "broken");
+  assert.equal(session.state.files["settings.toml"], "ok");
+});
+
+test("a snippet save waits for consent to its exact code, and an edit voids the consent", async () => {
+  const consent = { path: "snippets/a.js", code: "A", replaces: false, problems: [], matches: [], requires: [] };
+  const { session, sent } = session_with((message) => {
+    if (message.op === "read") return { ok: true, files: {} };
+    return message.accepted === message.text ? { ok: true, message: "Saved." } : { ok: false, message: "consent", consent: { ...consent, code: message.text } };
+  });
+  await session.load();
+  session.start_new("snippets/a.js");
+  session.edit("A");
+  await session.save();
+  assert.equal(session.state.consent?.code, "A");
+  assert.equal(sent.at(-1)?.accepted, undefined);
+  session.edit("AB");
+  assert.equal(session.state.consent, undefined);
+  await session.save();
+  session.accept(true);
+  await session.save();
+  assert.equal(sent.findLast((message) => message.op === "save")?.accepted, "AB");
+  assert.equal(session.state.consent, undefined);
+  assert.equal(session.state.message?.ok, true);
+});
+
+test("a delete sends text null and closes the open file", async () => {
+  const { session, sent } = session_with((message) => (message.op === "read" ? { ok: true, files: { "style.css": "a" } } : { ok: true, message: "Deleted." }));
+  await session.load();
+  session.open("style.css");
+  await session.remove("style.css");
+  assert.deepEqual(sent.at(-2), { type: "config_files", op: "save", path: "style.css", text: null });
+  assert.equal(session.state.open, undefined);
+});

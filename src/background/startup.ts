@@ -22,9 +22,10 @@ import { create_host_update } from "./host_update.ts";
 import { browser_host_update_deps } from "./host_update_browser.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
-import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, read_import_source } from "./config_import.ts";
+import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
+import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
-import type { ConfigImportPreview } from "../shared/messages.ts";
+import type { ConfigImportPreview, SnippetPreview } from "../shared/messages.ts";
 import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
@@ -298,6 +299,20 @@ export function remove_snippet(path: string): Promise<{ warnings: number }> {
     if (!path.startsWith("snippets/") || !Object.hasOwn(current.files, path)) throw new ConfigRefusal(`${KEPT_CURRENT.remove} No snippet ${path} is installed.`);
     const { [path]: _removed, ...files } = current.files;
     return apply_files(files, current.dir_label, "remove");
+  });
+}
+
+// Stores one file the user typed in the files editor, or deletes it with `text` null, and rebuilds. The user's own config: the import guards do not apply.
+// It runs in the change queue, so saves and reloads apply one after another, each on the files the one before left. A build that fails writes nothing, so the stored files and the config stay as they were.
+// A snippet is code with every permission, so it is stored only with `accepted` equal to its text. Otherwise the answer is the consent preview, and nothing is stored.
+export function save_config_file(path: string, text: string | null, accepted?: string): Promise<{ warnings: number } | { consent: SnippetPreview }> {
+  return in_change_queue(async () => {
+    const current = await load_files_source();
+    const problem = edit_problem(path, text, current.files);
+    if (problem) throw new ConfigRefusal(`${KEPT_CURRENT.edit} ${problem}`);
+    if (text !== null && is_snippet_file(path) && accepted !== text) return { consent: preview_snippet(path, text, current.files) };
+    const { [path]: _replaced, ...others } = current.files;
+    return apply_files(text === null ? others : { ...others, [path]: text }, current.dir_label, "edit");
   });
 }
 
