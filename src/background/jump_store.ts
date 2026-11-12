@@ -32,7 +32,7 @@ const is_jumps_value = (value: unknown): value is JumpsValue => {
   return stored?.v === 1 && typeof stored.windows === "object" && stored.windows !== null && Object.values(stored.windows).every(is_list);
 };
 
-const same_place = (left: JumpEntry, right: JumpEntry): boolean => left.url === right.url && Math.abs(left.y - right.y) < JUMP_SAME_PLACE_PX;
+const same_place = (left: JumpEntry, right: JumpEntry): boolean => left.url === right.url && Math.abs(left.x - right.x) < JUMP_SAME_PLACE_PX && Math.abs(left.y - right.y) < JUMP_SAME_PLACE_PX;
 
 // Keeps the newest entries and moves the cursor with them.
 function trimmed(list: JumpList): JumpList {
