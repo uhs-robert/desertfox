@@ -34,6 +34,11 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await run_line("hint --links --all-frames");
     return wait_for_labels("the labels of the top page and the cross-origin frame", 6);
   };
+  // run_in_console answers {error} when the promise rejects, so a clipboard that is busy reads as empty and the poll goes on.
+  const clipboard_text = async () => {
+    const text = await in_background("navigator.clipboard.readText()");
+    return typeof text === "string" ? text : "";
+  };
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;
 
   await run_case("--all-frames labels every element once, across the top page, its readable frames and the cross-origin frame, and none in a frame below the viewport", async () => {
@@ -108,8 +113,8 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await press_keys(labels.cross[0]);
     labels = await wait_for_labels("the labels again after the cross-origin pick", 6);
     await press_keys(labels.top[0]);
-    await poll_until("the clipboard to hold two lines", async () => (await in_background("navigator.clipboard.readText()")).split("\n").length === 2);
-    const lines = (await in_background("navigator.clipboard.readText()")).split("\n");
+    await poll_until("the clipboard to hold two lines", async () => (await clipboard_text()).split("\n").length === 2);
+    const lines = (await clipboard_text()).split("\n");
     expect(lines[0] !== lines[1] && lines[0] !== "seed", `the clipboard holds ${JSON.stringify(lines)}, expected two different picks`);
     await press_keys("-k", "Escape");
     await wait_for_no_labels("the labels to go after Escape");
