@@ -330,7 +330,7 @@ function register(host: BundleHostApi): void {
   }
 
   // Hands this frame's count to the background and waits for the labels of every frame. A background that does not answer leaves this frame's own labels.
-  async function label_across(current: Session, found: Found[], letters: string[]): Promise<Labeled> {
+  async function label_across(current: Session, found: Found[], letters: string[]): Promise<Labeled | undefined> {
     starting++;
     let answer: HintFramesStartAnswer | undefined;
     try {
@@ -341,7 +341,9 @@ function register(host: BundleHostApi): void {
     } finally {
       starting--;
     }
-    if (!answer?.ok) return single_frame(found, letters);
+    // An end answer means another frame started a run, so this frame's own labels would overlap its labels.
+    if (answer && !answer.ok) return undefined;
+    if (!answer) return single_frame(found, letters);
     if (current.cancelled) send_across({ type: "hint_frames_end", session_id: answer.session_id });
     const first_own = answer.labels.indexOf(answer.own_labels[0]!);
     const own_of_ = (index: number) => (index >= first_own && index < first_own + answer.own_labels.length ? index - first_own : undefined);
@@ -364,6 +366,11 @@ function register(host: BundleHostApi): void {
     strip_patterns = patterns;
     const labeled = current.across_frames_ ? await label_across(current, parent_labels_me() ? [] : shown, letters) : single_frame(shown, letters);
     if (current.cancelled) return;
+    if (!labeled) {
+      current.finish(cancelled_outcome);
+      leave_with_keys(current);
+      return;
+    }
     const { labels, own_of_, found } = labeled;
     if (labels.length === 0) {
       const message = none_message(current.text);
@@ -517,7 +524,9 @@ function register(host: BundleHostApi): void {
     return { picked };
   }
 
-  answer_across();
+  answer_across((session_id) => {
+    if (session?.ready?.session_id_ === session_id) host.escape_();
+  });
 
   host.register_handler_("hint.run", (args): Promise<Outcome> => {
     end_session();
@@ -531,7 +540,7 @@ function register(host: BundleHostApi): void {
 // Another frame's hints across frames: this frame finds its candidates, reports how many, draws the labels the background hands it, follows the typed prefix and runs the pick it owns. Only the frame that started the session reads keys, so this frame stays in its mode.
 type Across = { session_id: string; args: Record<string, unknown>; found?: Found[]; labels?: readonly string[]; typed: string; text_mode?: Pick<HintFramesTyped, "matches" | "active"> | undefined; view?: HintView; stop_following_?: () => void };
 
-function answer_across(): void {
+function answer_across(end_keyboard_session: (session_id: string) => void): void {
   let across: Across | undefined;
   const clear = () => {
     across?.stop_following_?.();
@@ -551,8 +560,10 @@ function answer_across(): void {
     const filter = args.filter as HintFilter;
     const text = (args.text as string | undefined) || undefined;
     let found: Found[] = [];
+    const [site_selectors, patterns] = await Promise.all([read_site_selectors(() => {}), read_strip_patterns(window.location.href)]);
+    strip_patterns = patterns;
     if (!parent_labels_me()) try {
-      const candidates = find_candidates(filter, args.selector as string | undefined, action, await read_site_selectors(() => {}));
+      const candidates = find_candidates(filter, args.selector as string | undefined, action, site_selectors);
       found = await shown_of({ filter, action, lower_text_: text?.toLowerCase() }, candidates);
     } catch {
       // A selector that does not parse labels nothing here. The keyboard frame shows the notice.
@@ -579,6 +590,7 @@ function answer_across(): void {
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as HintFramesMessage;
+    if (message.type === "hint_frames_end") end_keyboard_session(message.session_id);
     if (message.type === "hint_frames_collect") {
       if (starting > 0) return undefined;
       clear();
