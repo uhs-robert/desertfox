@@ -128,7 +128,9 @@ export function create_mark_store(deps: MarkStoreDeps) {
       in_turn(async () => {
         const all = await read_all(is_private);
         const address = mark_page_url(url);
-        const has_pages = scope === "all" ? Object.keys(all.pages).length > 0 : Object.keys(all.pages[address]?.marks ?? {}).length > 0;
+        // mark.delete leaves a page record with no marks, so count marks, not records.
+        const has_marks = (page: MarkPage | undefined) => Object.keys(page?.marks ?? {}).length > 0;
+        const has_pages = scope === "all" ? Object.values(all.pages).some(has_marks) : has_marks(all.pages[address]);
         if (!has_pages && Object.keys(all.globals).length === 0) throw new RuntimeRefusal("No marks to clear");
         if (scope === "all") all.pages = {};
         else delete all.pages[address];
