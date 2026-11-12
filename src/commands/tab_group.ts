@@ -19,6 +19,14 @@ export type TabGroupDeps = GroupDeps & {
 // The colors Firefox offers for a tab group, as `tabGroups.Color` lists them.
 export const GROUP_COLORS = ["blue", "cyan", "grey", "green", "orange", "pink", "purple", "red", "yellow"] as const;
 
+// The first tab of each group, in strip order.
+export function group_stops(tabs: GroupedTab[]): GroupedTab[] {
+  const seen = new Set<number>();
+  return [...tabs]
+    .sort((a, b) => a.index - b.index)
+    .filter((tab) => tab.group_id !== -1 && !seen.has(tab.group_id) && seen.add(tab.group_id));
+}
+
 // A group's place is the order of its first tab. A tab in no group sits between the groups before and after it, so `next` from it
 // lands on the first group after it and `prev` on the last group before it.
 export function pick_group_stop(stops: GroupedTab[], current: GroupedTab, steps: number): GroupedTab | undefined {
@@ -52,9 +60,7 @@ export function make_tab_group_handlers(deps: TabGroupDeps) {
     const window_tabs = await deps.tabs_in_window(info.window_id);
     const current = window_tabs.find((tab) => tab.id === info.id);
     if (!current) throw new RuntimeRefusal("the active tab is gone");
-    const sorted = [...window_tabs].sort((a, b) => a.index - b.index);
-    const stops = sorted.filter((tab, at) => tab.group_id !== -1 && sorted.findIndex((other) => other.group_id === tab.group_id) === at);
-    const target = pick_group_stop(stops, current, direction * count);
+    const target = pick_group_stop(group_stops(window_tabs), current, direction * count);
     if (!target) throw new RuntimeRefusal("this window has no tab groups");
     const group = (await deps.groups_in_window(info.window_id)).find((candidate) => candidate.id === target.group_id);
     if (group?.collapsed) await set_group(deps, group.id, { collapsed: false });

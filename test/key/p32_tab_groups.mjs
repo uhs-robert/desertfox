@@ -54,18 +54,32 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await wait_group(first, "the group to turn red", (group) => group.color === "red");
   });
 
-  await run_case("tgj and tgk move focus to the first tab of the next and previous group", async () => {
-    await open_page("page", "p31_other", { new_tab: true });
-    const other = (await active()).id;
-    await settle_focus();
-    await press_keys("tgA");
-    await wait_group(other, "the other tab to join a new group", (group) => group.id !== -1);
+  await run_case("tgk and tgj walk three groups, and tgj expands a collapsed target before focus", async () => {
+    const group_tab = async (name) => {
+      await open_page("page", name, { new_tab: true });
+      const { id } = await active();
+      await settle_focus();
+      await press_keys("tgA");
+      await wait_group(id, `${name} to join a new group`, (group) => group.id !== -1);
+      return id;
+    };
+    const second = await group_tab("p31_other");
+    const third = await group_tab("p31_third");
+    const focus_on = (id, what) => poll_until(what, async () => (await active()).id === id);
     await press_keys("tgk");
-    await poll_until("focus on the Work group", async () => (await active()).id === first);
+    await focus_on(second, "focus on the second group");
+    await press_keys("tgk");
+    await focus_on(first, "focus on the Work group");
     await press_keys("tgj");
-    await poll_until("focus on the other group", async () => (await active()).id === other);
-    await press_keys("tgd");
-    await wait_group(other, "the other tab to leave its group", (group) => group.id === -1);
+    await focus_on(second, "focus back on the second group");
+    const third_group = (await group_of(third)).id;
+    await background(`browser.tabGroups.update(${third_group}, { collapsed: true })`);
+    await press_keys("tgj");
+    await focus_on(third, "focus on the collapsed third group");
+    await wait_group(third, "the third group to expand", (group) => group.collapsed === false);
+    for (const id of [third, second]) {
+      await background(`browser.tabs.ungroup([${id}])`);
+    }
     await background(`browser.tabs.update(${first}, { active: true })`);
     await settle_focus();
   });
