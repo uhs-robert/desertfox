@@ -72,8 +72,8 @@ export type ParamDef = {
   pattern_arms?: readonly PatternArm[];
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;
-  // A `string` param whose text must be an absolute address, as `URL.canParse` reads it. An optional param may still be empty.
-  format?: "url";
+  // A `string` param whose text must be an absolute address, as `URL.canParse` reads it (`url`), or a key sequence in config notation, as `parse_sequence` reads it (`keys`). An optional param may still be empty.
+  format?: "url" | "keys";
   // A `string` param that holds the value of the setting named by the sibling param of this name. `check_args` checks it with that setting's entry in `SETTING_SPECS`. An empty value passes.
   value_of?: string;
   // Exactly one key, so `{ param: [values] }`.

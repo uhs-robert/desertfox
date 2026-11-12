@@ -28,6 +28,8 @@ test(":helpkey takes a leader sequence typed on the command line, and refuses mi
   assert.equal(check_args(help_key, {}, {}).ok, false);
   assert.equal(check_args(help_key, { keys: "g g" }, {}).ok, false);
   assert.equal(check_args(help_key, { keys: ",r" }, {}).ok, true);
+  for (const keys of ["<S-1>", "<A-x>y z"]) assert.equal(check_args(help_key, { keys }, {}).ok, false, keys);
+  for (const keys of ["3j", "<S-a>", '"a,r']) assert.equal(check_args(help_key, { keys }, {}).ok, true, keys);
 });
 
 test("the debug, config and native commands are advanced and the rest of the help commands are not", () => {

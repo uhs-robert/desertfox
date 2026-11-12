@@ -95,9 +95,14 @@ test("key_command_id follows a leader sequence, a chord and a capture key to the
   assert.deepEqual(key_command_id(keymap, "m"), { id: "mark.set" });
 });
 
+test("key_command_id reads a count or register prefix as the page does", () => {
+  assert.deepEqual(key_command_id(keymap, "3j"), { id: "scroll.lines" });
+  assert.deepEqual(key_command_id(keymap, '"a3,r'), { id: "page.reload" });
+});
+
 test("key_command_id says why a sequence names no command", () => {
-  assert.match(key_command_id(keymap, "z").error!, /bound to nothing/);
+  assert.equal(key_command_id(keymap, "z").error, "z has no normal-mode binding");
+  assert.equal(key_command_id(keymap, "3z").error, "3z has no normal-mode binding");
+  assert.equal(key_command_id(undefined, "j").error, "j has no normal-mode binding");
   assert.match(key_command_id(keymap, ",").error!, /start of longer keys/);
-  assert.match(key_command_id(undefined, "j").error!, /bound to nothing/);
-  assert.match(key_command_id(keymap, "<A-").error ?? "x", /./);
 });

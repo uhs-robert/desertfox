@@ -2,6 +2,7 @@
 // page imports this directly because the setting rules (`settings_schema.ts`) are too big for its bundle.
 // Everything else calls `check_args`, which adds the setting value check.
 
+import { parse_sequence } from "../keys/notation.ts";
 import type { CheckedArgs, CommandDef, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 import {
   default_of as applicable_default_of,
@@ -125,6 +126,7 @@ function coerce(param: ParamDef, given: unknown, sources: EnumSources): Coerced 
       if (allowed && !allowed.includes(given)) return bad(`one of ${allowed.join(", ")}`);
       if (param.pattern !== undefined && !param.pattern_arms && !new RegExp(param.pattern).test(given)) return bad(`text matching ${param.pattern}`);
       if (param.format === "url" && !URL.canParse(given)) return bad("an address");
+      if (param.format === "keys" && parse_sequence(given).error !== undefined) return bad(`keys in config notation (${parse_sequence(given).error})`);
       return { ok: true, value: given };
     }
     case "int": {
