@@ -17,9 +17,9 @@ define("hint.run", {
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
         // These need the keyboard in the frame of the pick, and across frames it stays in the frame that ran the hint.
-        prompt: { filter: HAS_ADDRESS },
         caret: { frames: ["same_origin"] },
         visual: { frames: ["same_origin"] },
+        prompt: { filter: HAS_ADDRESS },
         tab: { filter: HAS_ADDRESS },
         background: { filter: HAS_ADDRESS },
         window: { filter: HAS_ADDRESS },

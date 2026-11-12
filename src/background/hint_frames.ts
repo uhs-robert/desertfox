@@ -44,7 +44,7 @@ const whole_count = (count: unknown): count is number => Number.isInteger(count)
 // One text per candidate: a report that sends none, or too few, leaves "" for the rest.
 const texts_for = (count: number, texts: unknown): string[] => Array.from({ length: count }, (_, index) => (Array.isArray(texts) && typeof texts[index] === "string" ? texts[index] : ""));
 
-const is_outcome = (answer: unknown): answer is HintFramesPickAnswer => typeof (answer as Outcome | undefined)?.ok === "boolean";
+const is_pick_answer = (answer: unknown): answer is HintFramesPickAnswer => typeof (answer as Outcome | undefined)?.ok === "boolean";
 
 const FRAME_GONE: Outcome = { ok: false, message: "The frame of that hint is gone" };
 const NO_SESSION: Outcome = { ok: false, message: "The hints of the other frames have ended" };
@@ -161,14 +161,14 @@ export function create_hint_frames(deps: HintFramesDeps) {
       for (const owner of others) void send_quietly(tab_id, { type: "hint_frames_typed", session_id, typed, ...text_mode }, owner);
     },
 
-    // The owner's answer is the pick's. It can wait on the user (a prompt), so it runs outside the turn.
+    // The owner's answer is the pick's. It waits on another frame, so it runs outside the turn.
     pick: async (tab_id: number, frame_id: number, session_id: string, label: string): Promise<HintFramesPickAnswer> => {
       const session = await labeled_for(tab_id, frame_id, session_id);
       if (!session?.labels) return NO_SESSION;
       const owner = Object.entries(session.labels).find(([, labels]) => labels.includes(label))?.[0];
       if (owner === undefined) return { ok: false, message: `No hint has the label ${label}` };
       const answer = await deps.send(tab_id, { type: "hint_frames_pick", session_id, label }, Number(owner)).catch(() => undefined);
-      return is_outcome(answer) ? answer : FRAME_GONE;
+      return is_pick_answer(answer) ? answer : FRAME_GONE;
     },
 
     // To every frame, so a frame that reported late drops its candidates too.

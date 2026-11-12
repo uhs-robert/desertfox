@@ -1579,7 +1579,7 @@ test("the owner frame answers a prompt with the line and opens nothing", async (
   assert.deepEqual(page.lines, []);
 });
 
-test("the owner frame names a selector copy for the toast", async () => {
+test("the owner frame names an HTML copy for the toast", async () => {
   const page = await page_with(["one"]);
   page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "copy_html", filter: "links" } });
   await settle();
