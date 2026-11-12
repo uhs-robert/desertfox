@@ -14,7 +14,8 @@ const MAX_BYTES = {
   "ui.js": 8 * 1024,
   "page.js": 4 * 1024,
   "text.js": 4 * 1024,
-  "media.js": 4 * 1024,
+  // 4.5 KB: the size rule for the media keys picks among a frame's videos by area.
+  "media.js": 4.5 * 1024,
   "quality.js": 4 * 1024,
   "site_actions.js": 4 * 1024,
   // 56 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
