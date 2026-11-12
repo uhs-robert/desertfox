@@ -102,3 +102,5 @@ export const QUICKMARK_PRIVATE_STORAGE_KEY = "desertfox_private_quickmarks";
 
 // The frames of a tab that are in media mode, and the video that `;M` pinned, in `storage.session`. See `tab_media.ts`.
 export const TAB_MEDIA_STORAGE_PREFIX = "desertfox_tab_media_";
+// The last mode the top frame of a tab reported and a counter of its changes, in `storage.session`. See `create_media_discovery`.
+export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";

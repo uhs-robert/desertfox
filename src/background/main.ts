@@ -44,6 +44,7 @@ import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
 import { media_reports, tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
+import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -86,9 +87,11 @@ const record_step: RecordStep = async (steps, outcome, origin) => {
   await browser_macro_recorder.record(steps, outcome, origin);
 };
 const media_discovery = create_media_discovery({
+  storage: browser.storage.session,
+  tab_is_open: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined)) !== undefined,
   which_key_delay_ms: async () => effective_settings((await get_config()).settings).which_key_delay_ms,
   top_in_fullscreen: async (tab_id) => (await browser.tabs.executeScript(tab_id, { code: "!!document.fullscreenElement", frameId: 0, runAt: "document_start" }))[0] === true,
-  open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "help.whichkey", args: { only_in_mode: "media" }, bundle: "whichkey" }] }, 0),
+  open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0),
 });
 const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
 const router = create_router(router_deps);
@@ -381,7 +384,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
   void tab_media.forget(tab_id).catch(() => undefined);
-  media_discovery.forget(tab_id);
+  void media_discovery.forget(tab_id).catch(() => undefined);
   return tab_modes.forget(tab_id);
 });
 
