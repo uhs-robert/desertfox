@@ -38,13 +38,17 @@ export function create_media_quality(deps: MediaQualityDeps) {
   // Whether the rule was off at the last settings change, so a change from off to on is seen.
   let was_off: boolean | undefined;
   return {
-    // A page that loaded while the rule was off has no bundle, so a settings change that turns the rule on injects it into the open web tabs, with no navigation needed.
+    // A page that loaded while the rule was off has no bundle, so a settings change that turns the rule on injects it into the open web tabs, about:blank frames included, with no navigation needed.
     async settings_changed(open_tabs: () => Promise<readonly { id?: number | undefined; url?: string | undefined }[]>): Promise<void> {
       const off = await deps.is_off();
       const turned_on = was_off === true && !off;
       was_off = off;
       if (!turned_on) return;
-      for (const { id, url } of await open_tabs()) if (id !== undefined && is_web(url)) await deps.inject_all(id).catch(() => undefined);
+      for (const { id, url } of await open_tabs()) {
+        if (id === undefined || !is_web(url)) continue;
+        await deps.inject_all(id).catch(() => undefined);
+        await deps.inject_about_blank(id).catch(() => undefined);
+      }
     },
     async tab_updated(tab_id: number, change: TabChange, address: string | undefined): Promise<void> {
       if (!is_trigger(change)) return;

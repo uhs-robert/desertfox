@@ -440,7 +440,7 @@ function make_movie_player(levels, start) {
 }
 function add_movie_player() { document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720")); }
 if (kind.includes("shadow")) {
-  // The video comes inside an open shadow root at 4 s, where no media event reaches the document. The site player comes at 5.5 s, so the rule must find the video by looking again.
+  // The video comes inside an open shadow root at 4 s, where no media event reaches the document. The site player comes at 12.5 s, after the look-again time of a frame with no video has run out, so only a poll that the shadow-root hit started at about 4 s still finds it.
   setTimeout(() => {
     const host = document.createElement("div");
     const video = document.createElement("video");
@@ -449,7 +449,7 @@ if (kind.includes("shadow")) {
     host.attachShadow({ mode: "open" }).append(video);
     document.body.append(host);
   }, 4000);
-  setTimeout(add_movie_player, 5500);
+  setTimeout(add_movie_player, 12500);
 } else if (kind.includes("lazy")) {
   setTimeout(() => {
     const video = document.createElement("video");

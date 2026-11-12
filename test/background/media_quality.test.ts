@@ -140,7 +140,7 @@ test("the reply to a report carries the resolved rule for a frame with a video, 
 
 test("a settings change that turns the rule from off to on injects the open web tabs, once", async () => {
   let off = true;
-  const { quality, injected } = make({ off: () => off });
+  const { quality, injected, about_blank } = make({ off: () => off });
   const tabs = async () => [{ id: 1, url: web }, { id: 2, url: "about:blank" }, { id: 3, url: "https://other.test/" }, { id: undefined, url: web }];
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [], "the first read only records the state");
@@ -149,6 +149,7 @@ test("a settings change that turns the rule from off to on injects the open web 
   off = false;
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [1, 3]);
+  assert.deepEqual(about_blank, [1, 3], "the about:blank pass runs for each tab too");
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [1, 3], "on to on injects nothing");
   off = true;
