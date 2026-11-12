@@ -243,16 +243,16 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await wait_event(mark, on_quality("p23_quality_slow", (event) => event.low === "large"), "the player at its lowest level");
   });
 
-  await run_case("an hls.js player takes current and next level, auto is -1, and skip refuses", async () => {
+  await run_case("an hls.js player takes the next level only, auto is -1, and skip refuses", async () => {
     await open_page("quality", "p23_quality_hls", { new_tab: true });
     let mark = events.length;
     await run_line("quality max");
-    await wait_event(mark, on_quality("p23_quality_hls", (event) => event.current === 2), "the current level set to 2");
     await wait_event(mark, on_quality("p23_quality_hls", (event) => event.next === 2), "the next level set to 2");
     await wait_toast("Quality 720p");
     mark = events.length;
     await run_line("quality auto");
-    await wait_event(mark, on_quality("p23_quality_hls", (event) => event.current === -1), "the current level back to auto");
+    await wait_event(mark, on_quality("p23_quality_hls", (event) => event.next === -1), "the next level back to auto");
+    expect(!events.some(on_quality("p23_quality_hls", (event) => event.current !== undefined)), "a write to the current level flushes the buffer");
     await run_line("skip");
     await wait_toast("No next video");
   });

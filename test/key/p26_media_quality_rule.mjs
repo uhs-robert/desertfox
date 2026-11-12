@@ -106,6 +106,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await run_case("an hls.js player is taken to its top level", async () => {
     const mark = events.length;
     await open_page("quality", "p26_hls", { new_tab: true });
-    await wait_event(mark, on_set("p26_hls", (event) => event.current === 2), "the current level at the top");
+    await wait_event(mark, on_set("p26_hls", (event) => event.next === 2), "the next level at the top");
+    await sleep(1000);
+    const writes = events.slice(mark).filter(on_set("p26_hls"));
+    expect(writes.length === 1 && writes[0].next === 2, `the poll wrote ${JSON.stringify(writes)}, not one next level`);
   });
 }
