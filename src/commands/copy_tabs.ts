@@ -7,7 +7,7 @@ import { browser_complete_items_deps, read_tabs } from "../background/complete_i
 import type { ListedTab } from "../background/complete_items.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
-import { format_link_list, LIST_FORMATS } from "../content/link_list.ts";
+import { format_link_list, is_web_address, LIST_FORMATS } from "../content/link_list.ts";
 import type { ListFormat } from "../content/link_list.ts";
 import { read_strip_patterns } from "../content/strip_setting.ts";
 import { strip_tracking } from "../content/strip_tracking.ts";
@@ -15,15 +15,13 @@ import { YANK_REGISTER_PARAM } from "./register_param.ts";
 
 export type CopyTabsDeps = {
   // The tabs a line of this window lists: its own privacy only, its own window first, each window in tab order.
-  tabs: (ctx: CommandContext, all_windows: boolean) => Promise<ListedTab[]>;
+  tabs: (ctx: CommandContext, all_windows: boolean, is_private: boolean) => Promise<ListedTab[]>;
   is_private: (ctx: CommandContext) => Promise<boolean>;
   strip_patterns: () => Promise<readonly string[]>;
   write_clipboard: (text: string) => Promise<void>;
   store: RegisterStore;
   toast: (ctx: CommandContext, message: string) => Promise<void>;
 };
-
-const WEB_ADDRESS = /^(https?|ftp|file):/i;
 
 const count_of = (count: number) => `${count} ${count === 1 ? "tab" : "tabs"}`;
 
@@ -37,8 +35,9 @@ function by_window(tabs: readonly ListedTab[]): ListedTab[][] {
 export function make_copy_tabs_handler(deps: CopyTabsDeps) {
   return async (ctx: CommandContext, args: { scope: "window" | "all"; format: ListFormat; register?: string }): Promise<void> => {
     const register = args.register ?? "";
-    const listed = await deps.tabs(ctx, args.scope === "all");
-    const web_tabs = listed.filter((tab) => WEB_ADDRESS.test(tab.url));
+    const is_private = await deps.is_private(ctx);
+    const listed = await deps.tabs(ctx, args.scope === "all", is_private);
+    const web_tabs = listed.filter((tab) => is_web_address(tab.url));
     if (web_tabs.length === 0) throw new RuntimeRefusal("No web tabs to copy");
     if (register === BLACK_HOLE_REGISTER) return;
     const patterns = await deps.strip_patterns();
@@ -47,7 +46,7 @@ export function make_copy_tabs_handler(deps: CopyTabsDeps) {
     let clipboard_failed = false;
     await deps.write_clipboard(text).catch(() => void (clipboard_failed = true));
     // A private window's registers stay apart from the normal ones, as for every yank.
-    await deps.store.yank(register, text, await deps.is_private(ctx));
+    await deps.store.yank(register, text, is_private);
     if (clipboard_failed) throw new RuntimeRefusal("Could not copy to the clipboard");
     const skipped = listed.length - web_tabs.length;
     await deps.toast(ctx, `Copied ${count_of(web_tabs.length)}${skipped > 0 ? `, skipped ${skipped} non-web ${skipped === 1 ? "tab" : "tabs"}` : ""}`);
@@ -55,9 +54,8 @@ export function make_copy_tabs_handler(deps: CopyTabsDeps) {
 }
 
 const handler = make_copy_tabs_handler({
-  tabs: async (ctx, all_windows) => {
+  tabs: async (ctx, all_windows, incognito) => {
     if (ctx.window_id === undefined) throw new RuntimeRefusal("No window");
-    const incognito = await is_private_context(ctx);
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: ctx.window_id, incognito }, all_windows);
   },
   is_private: is_private_context,

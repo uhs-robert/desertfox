@@ -3,6 +3,9 @@
 
 import { link_text, markdown_address, org_address } from "./link_escape.ts";
 
+// Mailto, tel, javascript and data addresses are no web address.
+export const is_web_address = (url: string): boolean => /^(https?|ftp|file):/i.test(url);
+
 export type ListedLink = { url: string; text: string };
 
 export const LIST_FORMATS = ["markdown", "plain", "org", "title"] as const;
