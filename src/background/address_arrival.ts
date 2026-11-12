@@ -82,6 +82,8 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       return arrival;
     },
     forget: (tab_id: number): void => void arrivals.delete(tab_id),
+    // True from the start of a step to the tab until its page has arrived.
+    is_arriving: (tab_id: number): boolean => arrivals.has(tab_id),
     // Pushes into the tab at once, with no navigation to wait for.
     push_now: (tab_id: number, data: Data, push: PushToTab<Data>): void => {
       const own: Arrival<Data> = { data, armed: false };

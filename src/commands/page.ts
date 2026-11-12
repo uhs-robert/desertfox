@@ -106,6 +106,7 @@ define("page.follow", {
   bridge: false,
   runs_in: "content",
   bundle: "hints",
+  jumps: (args) => args.where === "here",
 });
 
 // Both keys start from the focused control, else the last one Escape left, else the top of the view. It stops at the ends and does not wrap.
@@ -134,6 +135,7 @@ define("page.heading", {
   runs_in: "content",
   count: { param: "steps" },
   bundle: "hints",
+  jumps: true,
 });
 
 // Meant for site rows: a row binds a key to this command to turn it into a key the site's own script reads. The default `<A-Escape>` insert binding also uses it, to send Escape to the page on any site.

@@ -20,4 +20,5 @@ define("mark.jump", {
   runs_in: "content",
   bundle: "page",
   repeatable: false,
+  jumps: true,
 });

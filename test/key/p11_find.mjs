@@ -481,6 +481,11 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await press_enter_and_wait_for_close();
     // The model walk reads each element's style. The count is kept on the extension's window.
     await in_active_tab(`window.style_reads = 0; if (!window.style_reads_hooked) { window.style_reads_hooked = true; const original = window.getComputedStyle; window.getComputedStyle = function (...args) { window.style_reads++; return original.apply(window, args); }; } true`);
+    // n reads the scroll box first, which reads some styles of its own. ma reads the box and walks no model, so its count is the part of an n that is not the model.
+    await press_keys("m", "a");
+    await poll_until("the scroll box read of ma", async () => (await in_active_tab("window.style_reads")) > 0);
+    const reads_of_offset = await in_active_tab("window.style_reads");
+    await in_active_tab(`window.style_reads = 0; true`);
     await press_keys(":");
     // The completion list is open, so the first Escape closes it and the second closes the line.
     await wait_cmdline((line) => line.open && line.list_open, "the command line to open with its list");
@@ -494,7 +499,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await poll_until("the probe to count a model walk after the page change", async () => (await in_active_tab("window.style_reads")) > 0);
     const reads_after_change = await in_active_tab("window.style_reads");
     expect(reads_after_change > 0, "the probe never counted a model walk, so it proves nothing");
-    expect(reads_after_line === 0, `the model was read again after the command line (${reads_after_line} style reads)`);
+    expect(reads_after_line === reads_of_offset, `the model was read again after the command line (${reads_after_line} style reads, ${reads_of_offset} for the scroll box alone)`);
   });
 
   await run_case("a page over 4000000 characters gives the cut note", async () => {

@@ -57,6 +57,7 @@ import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_de
 import { create_global_mark_jump } from "./global_mark_jump.ts";
 import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
+import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
 import { native_host, change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
@@ -142,6 +143,7 @@ const jump_step = create_jump_step({
   push_jump: (tab_id, steps, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps), ...(arrival && { arrival }) }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "page.jump", message }, 0),
 });
+const jump_leave = create_jump_leave({ store: browser_jump_store, is_stepping: jump_step.is_stepping });
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
 wire_repeat({
@@ -291,6 +293,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
+  if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(() => undefined);
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -447,11 +450,13 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void external_editor.orphan(tab_id).catch(() => undefined);
+  if (tab.windowId !== undefined) void jump_leave.updated({ tab_id, window_id: tab.windowId, incognito: tab.incognito, url: tab.url }, change).catch(() => undefined);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   void hint_frames.navigated(tab_id, change).catch(() => undefined);
   return tab_modes.forget_on_navigation(tab_id, change);
 });
 
+browser.tabs.onRemoved.addListener((tab_id) => void jump_leave.forget(tab_id).catch(() => undefined));
 browser.windows.onRemoved.addListener((window_id) => void browser_jump_store.forget_window(window_id).catch(() => undefined));
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
 wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);

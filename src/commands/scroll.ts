@@ -44,6 +44,7 @@ define("scroll.to", {
   ],
   bridge: true,
   runs_in: "content",
+  jumps: true,
 });
 
 define("scroll.align", {

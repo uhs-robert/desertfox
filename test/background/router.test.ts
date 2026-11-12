@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_router } from "../../src/background/router.ts";
+import { create_router, JUMP_READ_TIMEOUT_MS } from "../../src/background/router.ts";
 import { make_fake } from "./fakes.ts";
 
 test("a background command runs with checked args and the count rule", async () => {
@@ -810,4 +810,116 @@ test("@search_query typed outside a results page refuses with a message", async 
   const response = await create_router(deps).run({ invocations: [{ id: "open.go", args: { q: { from: "search_query" } } }], mode: "normal" });
   assert.equal(response.ok, false);
   assert.match(JSON.stringify(response) + log.join(), /search_query is not available here/);
+
+// A command that moves the view and says so, next to one that does not. The content ones answer through `send_to_tab`.
+const jump_commands = {
+  "scroll.to": { label: "To", intent: "x", params: [{ name: "percent", type: "float" as const }], runs_in: "content" as const, count: { param: "percent" }, jumps: true },
+  "scroll.by": { label: "By", intent: "x", runs_in: "content" as const, count: "repeat" as const },
+  "open.go": {
+    label: "Go",
+    intent: "x",
+    params: [{ name: "where", type: "enum" as const, values: ["here", "tab"], default: "here" }],
+    runs_in: "background" as const,
+    jumps: (args: Record<string, unknown>) => args.where === "here",
+    run: () => {},
+  },
+};
+
+function make_jumps(overrides: Parameters<typeof make_fake>[1] = {}) {
+  const fake = make_fake(jump_commands, {
+    read_offset: async () => {
+      fake.log.push("read");
+      return { x: 3, y: 420 };
+    },
+    record_jump: async (window_id, is_private, entry) => void fake.log.push(`record ${window_id} ${is_private} ${JSON.stringify(entry)}`),
+    ...overrides,
+  });
+  return fake;
+}
+
+test("a command that jumps records the place it left, after it ran", async () => {
+  const fake = make_jumps();
+  const response = await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.deepEqual(response, { ok: true });
+  assert.equal(fake.log[0], "read");
+  assert.ok(fake.log[1]!.startsWith("send 7"));
+  assert.equal(fake.log[2], 'record 1 false {"url":"https://example.org/","x":3,"y":420}');
+});
+
+test("the offset read finishes before the command runs, so the command cannot move the view first", async () => {
+  let release: (offset: { x: number; y: number }) => void = () => {};
+  const fake = make_jumps({ read_offset: () => new Promise((resolve) => (release = resolve)) });
+  const running = create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(fake.log.length, 0, "the command started before the read ended");
+  release({ x: 0, y: 9 });
+  await running;
+  assert.ok(fake.log[0]!.startsWith("send 7"));
+  assert.ok(fake.log[1]!.startsWith("record 1 false"));
+});
+
+test("a command without the flag pays no read and records nothing", async () => {
+  const fake = make_jumps();
+  await create_router(fake.deps).run({ invocations: [{ id: "scroll.by", count: 5 }], mode: "normal", sender_tab_id: 7 });
+  assert.ok(!fake.log.includes("read"));
+  assert.ok(!fake.log.some((line) => line.startsWith("record")));
+});
+
+test("a count that fills the param does not stop the flag: 50 then scroll.to is a jump, 5 then scroll.by is not", async () => {
+  const fake = make_jumps();
+  await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", count: 50 }], mode: "normal", sender_tab_id: 7 });
+  assert.ok(fake.log.some((line) => line.startsWith("record")));
+});
+
+test("a flag that depends on the args records only when the args move the view in this tab", async () => {
+  const here = make_jumps();
+  await create_router(here.deps).run({ invocations: [{ id: "open.go" }], mode: "normal", sender_tab_id: 7 });
+  assert.equal(here.log.filter((line) => line.startsWith("record")).length, 1);
+  const elsewhere = make_jumps();
+  await create_router(elsewhere.deps).run({ invocations: [{ id: "open.go", args: { where: "tab" } }], mode: "normal", sender_tab_id: 7 });
+  assert.deepEqual(elsewhere.log, []);
+});
+
+test("a refused command records nothing", async () => {
+  const fake = make_jumps({ send_to_tab: async () => ({ ok: false, message: "No match" }) });
+  const response = await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.equal(response.ok, false);
+  assert.ok(!fake.log.some((line) => line.startsWith("record")));
+  const bad_args = make_jumps();
+  await create_router(bad_args.deps).run({ invocations: [{ id: "scroll.to", args: { percent: "x" } }], mode: "normal", sender_tab_id: 7 });
+  assert.ok(!bad_args.log.includes("read"), "a bad argument read the offset");
+});
+
+test("a page that cannot answer the read runs the command and records nothing", async () => {
+  const fake = make_jumps({ read_offset: async () => undefined });
+  const response = await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.deepEqual(response, { ok: true });
+  assert.ok(fake.log[0]!.startsWith("send 7"));
+  assert.ok(!fake.log.some((line) => line.startsWith("record")));
+});
+
+test("a read that never answers holds the command no longer than the limit", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = make_jumps({ read_offset: () => new Promise(() => {}) });
+  const running = create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+  context.mock.timers.tick(JUMP_READ_TIMEOUT_MS);
+  assert.deepEqual(await running, { ok: true });
+  assert.ok(fake.log[0]!.startsWith("send 7"));
+  assert.ok(!fake.log.some((line) => line.startsWith("record")));
+});
+
+test("a private tab records as private, and a command from a child frame records nothing", async () => {
+  const fake = make_jumps({ active_tab: async () => ({ tab_id: 7, window_id: 4, url: "https://example.org/a#b", incognito: true }), get_tab: async (tab_id) => ({ tab_id, window_id: 4, url: "https://example.org/a#b", incognito: true }) });
+  await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.equal(fake.log.find((line) => line.startsWith("record")), 'record 4 true {"url":"https://example.org/a","x":3,"y":420}');
+  const framed = make_jumps();
+  await create_router(framed.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7, frame_id: 3 });
+  assert.ok(!framed.log.includes("read"));
+});
+
+test("a record the list refuses does not fail the command", async () => {
+  const fake = make_jumps({ record_jump: async () => Promise.reject(new Error("URL too long")) });
+  const response = await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.deepEqual(response, { ok: true });
 });

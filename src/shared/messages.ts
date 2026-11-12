@@ -230,6 +230,8 @@ export type JumpPush = { type: "jump_push"; x: number; y: number };
 // `arrival` marks the step the background pushed into the tab it went to. Only that request takes the entry the step already chose.
 export type JumpStep = { type: "jump_step"; step: number; x: number; y: number; arrival?: true };
 export type JumpRequest = JumpPush | JumpStep;
+// From the `page` bundle as the page goes away: the offset it left. The background pushes it when the tab went to another address.
+export type JumpLeave = { type: "jump_leave"; x: number; y: number };
 export type JumpAnswer = MarkAnswer;
 
 // From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
@@ -466,7 +468,7 @@ export type HintFramesEnd = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -530,6 +532,11 @@ export type GetSelection = {
   type: "get_selection";
 };
 
+// Asks the `page` bundle for the scroll offset of the box the scroll keys move. It answers `{ x, y }`, and content.js does not answer.
+export type GetJumpOffset = {
+  type: "get_jump_offset";
+};
+
 // Moves keyboard focus from the browser chrome into the page and leaves no field focused.
 export type FocusPage = {
   type: "focus_page";
@@ -557,7 +564,7 @@ export type HintFramesLabels = {
 // To the frame that opened an edit, when the editor ends. `text` is present only when the file changed. A frame with another `token` (a new page) ignores it.
 export type EditorDone = { type: "editor_done"; token: string; text?: string };
 
-export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | GetJumpOffset | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 
