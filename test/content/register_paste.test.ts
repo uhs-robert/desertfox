@@ -22,7 +22,7 @@ const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
 globals.document = { activeElement: new FakeHTMLInputElement(), execCommand: (_command: string, _ui: boolean, text: string) => (typed.push(text), true) };
 globals.browser = { runtime: { sendMessage: async (message: unknown) => (asked.push(message), stored) } };
 globals.window = {
-  desertfox_host: { register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => handlers.set(id, handler), last_blurred_: () => undefined, get_mode: () => mode },
+  desertfox_host: { register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => handlers.set(id, handler), last_blurred_: () => undefined, get_mode: () => mode, is_editable_: () => true },
   addEventListener: () => {},
 };
 await import("../../src/content/text/main.ts");
