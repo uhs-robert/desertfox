@@ -362,3 +362,17 @@ test("a late pushed request of an older jump does nothing after a newer jump wen
   assert.deepEqual(fakes.log.filter((line) => line.startsWith("navigate")), [`navigate 1 ${MARK_URL}`, "navigate 1 https://b.test/"]);
   assert.equal(fakes.records.length, records_before, "the stale request recorded a place");
 });
+
+test("a jump with no arrival number pressed while an arrival for the same key waits is a fresh jump", async () => {
+  const fakes = make([tab(1, "https://sender.test/")]);
+  await fakes.set_mark();
+  // The A page has the push but has not asked yet, so its arrival stays armed.
+  fakes.state.during_push = () => new Promise(() => {});
+  await fakes.global_jump(fakes.jump("A"), fakes.sender());
+  fakes.watches[0]!.resolve("ready");
+  await fakes.flush();
+  // `'A` again from the page that just loaded, with no tab on the address in the list.
+  fakes.state.tabs = [tab(1, "https://login.test/")];
+  assert.deepEqual(await fakes.global_jump(fakes.jump("A", 0, "https://login.test/"), fakes.sender(1, { url: "https://login.test/" })), { ok: true });
+  assert.deepEqual(fakes.log.filter((line) => line.startsWith("navigate")), [`navigate 1 ${MARK_URL}`, `navigate 1 ${MARK_URL}`]);
+});
