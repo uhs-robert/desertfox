@@ -136,7 +136,7 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_
 
 const yank_deps = (register: string | undefined): YankDeps => ({
   find: all_links,
-  strip_patterns: read_strip_patterns,
+  strip_patterns: () => read_strip_patterns(window.location.href),
   keep_present_: keep_present_found,
   keep_in_view_: (found) => keep_visible_ones(found, "links"),
   copy: (text) => copy_yank(navigator.clipboard, text, register),
@@ -359,7 +359,7 @@ function register(host: BundleHostApi): void {
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   // `started_ms` is taken before the candidates are found, so the time covers finding, filtering and labeling.
   async function build(current: Session, candidates: Found[], first_build: boolean, started_ms: number): Promise<void> {
-    const [letters, key_line_setting, shown, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates), read_strip_patterns()]);
+    const [letters, key_line_setting, shown, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates), read_strip_patterns(window.location.href)]);
     if (current.cancelled) return;
     strip_patterns = patterns;
     const labeled = current.across_frames_ ? await label_across(current, parent_labels_me() ? [] : shown, letters) : single_frame(shown, letters);

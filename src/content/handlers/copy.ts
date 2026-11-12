@@ -37,7 +37,7 @@ function link_href(rel: string): string | undefined {
 }
 
 export async function copy_page_url(format: CopyFormat, register: string | undefined, show_toast: (message: string) => void): Promise<Outcome | void> {
-  const patterns = await read_strip_patterns();
+  const patterns = await read_strip_patterns(location.href);
   const stripped = (address: string | undefined) => address && strip_tracking(address, patterns);
   const text = format_page_link(format, {
     url: strip_tracking(location.href, patterns),

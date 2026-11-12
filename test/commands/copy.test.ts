@@ -63,11 +63,16 @@ test("copy.url drops the tracking parameters of the shipped list, and an empty l
   });
   const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
   const { CONFIG_STATUS_STORAGE_KEY } = await import("../../src/background/storage_keys.ts");
-  const stored = (settings: object) => ({ runtime: { sendMessage: async () => ({ ok: true }) }, storage: { local: { get: async () => ({ [CONFIG_STATUS_STORAGE_KEY]: { settings } }) } } });
+  const { strip_patterns_for } = await import("../../src/background/strip_patterns.ts");
+  // The background answers the ask: the page address goes in, the names to drop come out.
+  const stored = (settings: object) => ({ runtime: { sendMessage: async (message: { type: string; address: string }) => (message.type === "read_strip_patterns" ? strip_patterns_for({ get: async () => ({ [CONFIG_STATUS_STORAGE_KEY]: { settings } }) } as never, message.address) : { ok: true }) } });
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void written.push(text) } }, configurable: true });
   Object.defineProperty(globalThis, "browser", { value: stored({}), configurable: true });
   await copy_page_url("plain", undefined, () => {});
   Object.defineProperty(globalThis, "browser", { value: stored({ strip_tracking_params: [] }), configurable: true });
   await copy_page_url("plain", undefined, () => {});
-  assert.deepEqual(written, ["https://a.com/p?id=5#frag", "https://a.com/p?utm_source=x&id=5#frag"]);
+  // A site that turned the stripping off in its row gets the page's own answer: the background is asked with the page address.
+  Object.defineProperty(globalThis, "browser", { value: { runtime: { sendMessage: async (message: { address: string }) => (message.address.startsWith("https://a.com/") ? [] : ["utm_*"]) } }, configurable: true });
+  await copy_page_url("plain", undefined, () => {});
+  assert.deepEqual(written, ["https://a.com/p?id=5#frag", "https://a.com/p?utm_source=x&id=5#frag", "https://a.com/p?utm_source=x&id=5#frag"]);
 });

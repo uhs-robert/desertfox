@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CONFIG_STATUS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
@@ -154,6 +155,25 @@ test("hint selectors answer read_hint_selectors for the frame's own address, and
   assert.deepEqual(await hint_selectors_reply(storage_of(undefined), "https://top.test/"), {});
   // An empty list is the default, so a fresh array of it stays out of the stored keymap.
   assert.equal("frame_site_globals" in compile_keymap(KEYMAP, { hint_add: [], hint_remove: [] }, resolve).compiled, false);
+});
+
+test("the strip rule is the global list on by default, none where a site row turns it off, and the list only where a row turns it on under a global off", async () => {
+  const { strip_patterns_for } = await import("../src/background/strip_patterns.ts");
+  const stored = (settings: Record<string, unknown>, list?: string[]) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compile_keymap(KEYMAP, settings, resolve).compiled, [CONFIG_STATUS_STORAGE_KEY]: { settings: list === undefined ? {} : { strip_tracking_params: list } } }) }) as never;
+  const shipped = (await strip_patterns_for(stored({}), "https://a.test/p")) as string[];
+  assert.ok(shipped.includes("utm_*"));
+  const all_except = stored({ site_rules: [{ site: "https://off.test/*", strip_tracking: false }] }, ["utm_*"]);
+  assert.deepEqual(await strip_patterns_for(all_except, "https://a.test/"), ["utm_*"]);
+  assert.deepEqual(await strip_patterns_for(all_except, "https://off.test/x"), []);
+  const none_except = stored({ strip_tracking: false, site_rules: [{ site: "https://on.test/*", strip_tracking: true }] }, ["utm_*"]);
+  assert.deepEqual(await strip_patterns_for(none_except, "https://a.test/"), []);
+  assert.deepEqual(await strip_patterns_for(none_except, "https://on.test/x"), ["utm_*"]);
+  // An empty list strips nothing, even on a site row that turns the setting on.
+  assert.deepEqual(await strip_patterns_for(stored({ site_rules: [{ site: "https://on.test/*", strip_tracking: true }] }, []), "https://on.test/"), []);
+  // Nothing compiled yet keeps the default: on.
+  assert.deepEqual(await strip_patterns_for({ get: async () => ({}) } as never, "https://a.test/"), shipped);
+  assert.deepEqual(compile_keymap(KEYMAP, { strip_tracking: false }, resolve).compiled.frame_site_globals, { strip_tracking: false });
+  assert.equal("frame_site_globals" in compile_keymap(KEYMAP, {}, resolve).compiled, false);
 });
 
 test("the media_quality rule is max by default, a site value overrides the global one, and off is a value", async () => {
