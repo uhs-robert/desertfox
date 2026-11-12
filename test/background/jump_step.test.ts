@@ -27,7 +27,7 @@ function make(tabs: MarkTab[]) {
   const log: string[] = [];
   const watches: { tab_id: number; stopped: boolean; resolve: (result: PageReady) => void; requires_navigation?: boolean | undefined }[] = [];
   const refusals: { tab_id: number; message: string }[] = [];
-  const state = { tabs, navigate_fails: false, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined };
+  const state = { tabs, navigate_fails: false, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, last_arrival: undefined as number | undefined };
   const step = create_jump_step({
     store,
     list_tabs: async () => state.tabs,
@@ -51,12 +51,13 @@ function make(tabs: MarkTab[]) {
         done: (_timeout, options) => ((entry.requires_navigation = options?.requires_navigation), done),
       } satisfies PageWatch;
     },
-    push_jump: async (tab_id, steps, arrival) => (log.push(`push ${tab_id} ${steps}${arrival ? " arrival" : ""}`), await state.during_push?.(), state.push_reply),
+    push_jump: async (tab_id, steps, arrival) => (log.push(`push ${tab_id} ${steps}${arrival ? " arrival" : ""}`), (state.last_arrival = arrival), await state.during_push?.(), state.push_reply),
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
   });
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: HERE, frame_id: 0, ...extra });
   const push = (y: number, url = FAR, window_id = 1, incognito = false) => step({ type: "jump_push", x: 0, y }, sender(9, { url, window_id, incognito }));
-  const go = (delta: number, y = 40, extra = {}, id = 1, arrival = false): Promise<unknown> => step({ type: "jump_step", step: delta, x: 0, y, ...(arrival && { arrival: true }) } as JumpRequest, sender(id, extra));
+  // `arrival` makes the request the pushed one of that step.
+  const go = (delta: number, y = 40, extra = {}, id = 1, arrival?: number): Promise<unknown> => step({ type: "jump_step", step: delta, x: 0, y, ...(arrival !== undefined && { arrival }) } as JumpRequest, sender(id, extra));
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const pushes = () => log.filter((line) => line.startsWith("push"));
   // The stored list of window 1, read without moving the cursor.
@@ -125,7 +126,7 @@ test("the page the push reaches gets the chosen entry and moves the cursor no fu
   let arrival: unknown;
   fakes.state.during_push = async () => {
     // The tab redirected, so its address is neither the entry's nor the tab's old one.
-    arrival = await fakes.go(-1, 0, { url: "https://login.test/" }, 1, true);
+    arrival = await fakes.go(-1, 0, { url: "https://login.test/" }, 1, fakes.state.last_arrival);
   };
   await fakes.go(-1);
   fakes.watches[0]!.resolve("ready");
@@ -159,7 +160,7 @@ test("a step the user pressed before the pushed one arrives is a step of its own
 test("a pushed request with no arrival waiting does not step", async () => {
   const fakes = make([tab(1, HERE)]);
   await fakes.push(500, HERE);
-  assert.deepEqual(await fakes.go(-1, 0, {}, 1, true), { ok: true });
+  assert.deepEqual(await fakes.go(-1, 0, {}, 1, 1), { ok: true });
   // The list was not touched: the older place is still ahead of the cursor.
   assert.deepEqual(await fakes.go(-1, 0), { ok: true, x: 0, y: 500 });
 });
@@ -325,4 +326,29 @@ test("a step that Firefox refuses to open leaves no mark, so the page's next lea
   const leave = create_jump_leave({ store: fakes.store, tab_now: async () => ({ url: "https://other.test/", status: "loading" }) });
   await leave.leave({ type: "jump_leave", x: 0, y: 40 }, fakes.sender(), HERE);
   assert.deepEqual((await fakes.list())?.entries.at(-1), { url: HERE, x: 0, y: 40 });
+});
+
+test("a late pushed request of an older step does not take a newer step's arrival at the same tab", async () => {
+  const fakes = make([tab(1, HERE), tab(2, FAR)]);
+  await fakes.push(500);
+  await fakes.push(900);
+  const answers: Record<string, unknown> = {};
+  let first_arrival: number | undefined;
+  fakes.state.during_push = async () => {
+    if (first_arrival === undefined) {
+      first_arrival = fakes.state.last_arrival;
+      // While the first step's request is on its way, a second step goes to the same tab, and its page is ready at once.
+      await fakes.go(-1);
+      fakes.watches[1]!.resolve("ready");
+      await fakes.flush();
+      return;
+    }
+    answers.stale = await fakes.go(-1, 0, { url: FAR }, 2, first_arrival);
+    answers.own = await fakes.go(-1, 0, { url: FAR }, 2, fakes.state.last_arrival);
+  };
+  await fakes.go(-1);
+  fakes.watches[0]!.resolve("ready");
+  await fakes.flush();
+  await fakes.flush();
+  assert.deepEqual(answers, { stale: { ok: true }, own: { ok: true, x: 0, y: 500 } });
 });
