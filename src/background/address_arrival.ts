@@ -39,7 +39,7 @@ export type Arrival<Data> = { data: Data; armed: boolean };
 export function create_address_arrivals<Data>(deps: AddressDeps) {
   const arrivals = new Map<number, Arrival<Data>>();
   // The tab each origin tab sent its newest step to, and the switch or navigation of that step. A newer step of the same origin cancels the older arrival, and its switch starts after the older one ended, so the newest tab is the one left active.
-  const targets = new Map<number, number>();
+  const targets = new Map<number, { target_id: number; arrival: Arrival<Data> }>();
   const switches = new Map<number, Promise<unknown>>();
 
   const problem_of_page: Record<Exclude<PageReady, "ready" | "gone">, string> = {
@@ -99,9 +99,10 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       const next: Arrival<Data> = { data, armed: false };
       // A new step supersedes the unfinished one of this tab, of the target tab and of the tab the origin's last step went to.
       arrivals.delete(from.id);
-      const earlier_target = targets.get(from.id);
-      if (earlier_target !== undefined) arrivals.delete(earlier_target);
-      targets.set(from.id, target_id);
+      // Only while the origin's last arrival still stands there: another tab's arrival at that target is not this origin's to cancel.
+      const earlier = targets.get(from.id);
+      if (earlier && arrivals.get(earlier.target_id) === earlier.arrival) arrivals.delete(earlier.target_id);
+      targets.set(from.id, { target_id, arrival: next });
       arrivals.set(target_id, next);
       const earlier_switch = switches.get(from.id) ?? Promise.resolve();
       // Before the step that navigates: right after it the tab still reads as loaded.

@@ -163,3 +163,18 @@ test("a content command that moves the view is marked, so a first press goes to 
   assert.deepEqual(["a", "b", "c", "d", "e"].map((key) => step_of(key).jump === true), [true, false, true, false, false]);
   assert.deepEqual(["a", "c"].map((key) => step_of(key).runs_in), ["content", "content"]);
 });
+
+test("a jump bound without its count param is marked too, so the keys after a typed 50 and the key wait", () => {
+  const { registry } = make_fake({
+    "scroll.to": { label: "To", intent: "x", params: [{ name: "percent", type: "float" as const }], count: { param: "percent" }, runs_in: "content", jumps: true },
+  });
+  const { compiled } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { a: { id: "scroll.to" } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  const step = (compiled.modes.normal!.children.a as TreeLeaf).steps[0]!;
+  assert.equal(step.runs_in, "background");
+  assert.equal(step.jump, true);
+});

@@ -11,7 +11,7 @@ import { JUMP_PRIVATE_STORAGE_KEY, JUMP_STORAGE_KEY } from "./storage_keys.ts";
 type JumpList = { entries: JumpEntry[]; cursor: number };
 // A page that went away leaves its last offset here, per tab, until the tab's address changes or the page loads again.
 export type Leaving = { window_id: number; entry: JumpEntry };
-type JumpsValue = { v: 1; windows: Record<string, JumpList>; leaving?: Record<string, Leaving> };
+type JumpsValue = { v: 1; windows: Record<string, JumpList>; leaving?: Record<string, Leaving>; moved?: Record<string, string> };
 
 export type JumpArea = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -108,6 +108,22 @@ export function create_jump_store(deps: JumpStoreDeps) {
         const all = await read_all(is_private);
         all.leaving = { ...all.leaving, [tab_id]: { window_id: leaving.window_id, entry: check_entry(leaving.entry) } };
         await deps.session().set({ [key_of(is_private)]: all });
+      }),
+    // Notes the address a tab went to before its page reported the offset it left.
+    note_moved: (tab_id: number, is_private: boolean, url: string) =>
+      in_turn(async () => {
+        const all = await read_all(is_private);
+        all.moved = { ...all.moved, [tab_id]: url };
+        await deps.session().set({ [key_of(is_private)]: all });
+      }),
+    take_moved: (tab_id: number, is_private: boolean): Promise<string | undefined> =>
+      in_turn(async () => {
+        const all = await read_all(is_private);
+        const url = all.moved?.[tab_id];
+        if (url === undefined) return undefined;
+        delete all.moved![tab_id];
+        await deps.session().set({ [key_of(is_private)]: all });
+        return url;
       }),
     // Takes what the tab's page left, and nothing when it left none.
     take_leaving: (tab_id: number, is_private: boolean): Promise<Leaving | undefined> =>
