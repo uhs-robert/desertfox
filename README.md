@@ -173,7 +173,7 @@ A beta build is signed by Mozilla, built nightly from `main` and updates itself.
 DesertFox works without it. The native host is a small helper program outside Firefox. With it:
 
 - Keep your keys, search engines and settings in TOML files in `~/.config/desertfox/`, and DesertFox reads them.
-- Edit a text field in your own editor with `<C-o>` in insert mode, once you add an `editor.toml` file.
+- Edit a text field in your own text editor, like Neovim, with `<C-o>` in insert mode, once you add an `editor.toml` file.
 - Open Firefox pages such as settings, add-ons and downloads with the `,f` keys.
 - Update the host, the bridge, the `desertfox` command and the manifests with `:native.update`, checked against hashes in the signed extension.
 - Run commands from scripts and desktop programs, and read the current mode and its changes as they happen. This needs `bridge = true` and the permission granted on the `:native.install` page.
