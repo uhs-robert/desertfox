@@ -142,21 +142,21 @@ Result:
 - `inspect()` switches the toolbox from the Console tab to the Inspector. It does not open the split console, and it leaves an open split console open.
 - After `inspect()`, keyboard focus is in the Inspector panel and the page reports `document.hasFocus() === false`. So the native Inspector keys work at once. This holds from the Console tab, the Inspector tab and with the split console open.
 - Back to the page takes two keys: F6 then Escape, or F6 twice. Escape alone opens the split console. Ctrl+Shift+C leaves focus in the Inspector. Ctrl+Shift+I was not tried.
-- `devtools.panels.elements.onSelectionChanged` fires once per `inspect()` call. Only Firefox 159 was run, so the 140 boundary is untested.
+- `devtools.panels.elements.onSelectionChanged` fires once per `inspect()` call. Only Firefox 159 was run, so the 153 minimum is untested.
 - Not measured: whether the Ctrl+Shift+C picker reaches an element under an overlay, in a closed shadow root or in an iframe. The key test cannot assert toolbox state either, so it checks the page property and the toast.
 
 ## browsingData hostnames (reload-clear)
 
 Question: does `browsingData.remove({ hostnames })` clear one host's data, so a per-site clear needs no page script?
 
-Setup: Firefox 160 in the key test session (the harness Firefox, not the 140 minimum). A local HTTP server answered with `cache-control: max-age=3600` and counted requests. Hosts were `127.0.0.1`, `localhost`, `sub.localhost` and `desertfox-probe.test`, which `network.dns.localDomains` resolved to the loopback server. localStorage was set in a tab on the host.
+Setup: Firefox 160 in the key test session (the harness Firefox, not the 153 minimum). A local HTTP server answered with `cache-control: max-age=3600` and counted requests. Hosts were `127.0.0.1`, `localhost`, `sub.localhost` and `desertfox-probe.test`, which `network.dns.localDomains` resolved to the loopback server. localStorage was set in a tab on the host.
 
 Result:
 - `cookies` clear by `hostnames`, with a `cookieStoreId`.
 - The cache is not cleared by `hostnames`: the call returns ok and the next fetch is still served from the cache, for every host above. `remove({}, { cache: true })` clears it.
 - localStorage is not cleared by `hostnames`, with or without `cookieStoreId`: the call returns ok and the value survives, even after a reload.
 - A `cookieStoreId` with `cache` rejects the whole call.
-- Not measured: Firefox 140, a real public host name, `serviceWorkers` and `indexedDB` with `hostnames`.
+- Not measured: Firefox 153, a real public host name, `serviceWorkers` and `indexedDB` with `hostnames`.
 
 Follow-up on `indexedDB` (Firefox 160, same setup):
 - `browsingData.remove({ hostnames, cookieStoreId }, { indexedDB: true })` returns ok but clears nothing: a database with no open connection stayed too. So `hostnames` is ignored for IndexedDB as well, and it cannot stand in for the page's own delete.
