@@ -26,14 +26,16 @@ export type LeaveWatch = {
 type WatchWindow = Window & { desertfox_leave_watch?: LeaveWatch; navigation?: EventTarget & { currentEntry?: { url: string } } };
 
 export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindow): LeaveWatch {
-  if (page.desertfox_leave_watch) return page.desertfox_leave_watch;
+  const armed = page.desertfox_leave_watch;
+  if (armed) return armed;
   const is_top = page === page.top;
   const listeners = new Set<SameDocumentListener>();
   let quiet_since = -Infinity;
   const now = () => page.performance.now();
   const navigation = page.navigation;
+  const place_here = () => ({ url: page.location.href, ...scroll_offset(host) });
   // The latest `navigate` and, when it would be a move, the place it leaves. Only a commit in this document (`currententrychange`) acts on it: a cancelled change never commits, and one that loads another document leaves it to `pagehide`.
-  let pending: { event: NavigateEvent; left?: JumpPush } | undefined;
+  let pending: { event_: NavigateEvent; left_: false | ReturnType<typeof place_here> } | undefined;
   const send = (message: JumpPush | JumpLeave) => void browser.runtime.sendMessage(message).catch(() => undefined);
 
   navigation?.addEventListener("navigate", (event) => {
@@ -42,21 +44,21 @@ export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindo
     const is_move = navigate.navigationType === "push" || navigate.navigationType === "traverse";
     const stays_on_page = mark_page_url(navigate.destination.url) === mark_page_url(page.location.href);
     // The event fires before the address changes and before the app scrolls for its new view, so `location` and the offset are still the page left.
-    pending = { event: navigate, ...(is_top && is_move && !stays_on_page && { left: { type: "jump_push", url: page.location.href, ...scroll_offset(host) } }) };
+    pending = { event_: navigate, left_: is_top && is_move && !stays_on_page && place_here() };
   });
   // An app that intercepts a link (`event.intercept()`) commits here too, though its `navigate` named another document.
   navigation?.addEventListener("currententrychange", () => {
-    const committed = pending;
+    if (!pending) return;
+    const { event_, left_ } = pending;
     pending = undefined;
-    if (!committed) return;
-    for (const listener of listeners) listener(committed.event);
+    for (const listener of listeners) listener(event_);
     const is_quiet = now() - quiet_since < LEAVE_QUIET_MS;
-    if (!committed.left || page.document.hidden || is_quiet) return;
+    if (!left_ || page.document.hidden || is_quiet) return;
     quiet_since = now();
-    send(committed.left);
+    send({ type: "jump_push", ...left_ });
   });
   // Only the top frame's report counts.
-  if (is_top) page.addEventListener("pagehide", () => send({ type: "jump_leave", url: page.location.href, ...scroll_offset(host) }));
+  if (is_top) page.addEventListener("pagehide", () => send({ type: "jump_leave", ...place_here() }));
   return (page.desertfox_leave_watch = {
     listen_: (listener) => void listeners.add(listener),
     quiet_: (is_quiet) => void (quiet_since = is_quiet ? now() : -Infinity),
