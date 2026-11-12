@@ -37,7 +37,7 @@ function select_all_then(field: HTMLElement, action: "copy" | "cut" | "paste"): 
   // The focus check comes with the clipboard command. An editor that did not take focus loses only a selection.
   field.focus();
   const modifier = /Mac/.test(navigator.platform) ? "metaKey" : "ctrlKey";
-  if (send_key(field, { key: "a", keyCode: 65, [modifier]: true })) throw new RuntimeRefusal("The editor did not select all");
+  if (send_key(field, { key: "a", code: "KeyA", keyCode: 65, [modifier]: true })) throw new RuntimeRefusal("The editor did not select all");
   // The untrusted paste event that `page.clipboard` falls back to is left out: with `clipboardRead` a paste through `execCommand` fires, or the page refused it.
   if (!exec_clipboard_command(page_document, field, action)) throw new RuntimeRefusal(`The page did not take ${action}`);
 }
@@ -48,10 +48,10 @@ const collapse_selection = (field: HTMLElement): void => void send_key(field, { 
 // A copy that did nothing leaves the clipboard as it was, which would open the old clipboard text as the document. A fresh marker tells the two apart.
 async function copy_whole_text(field: HTMLElement): Promise<string> {
   const marker = `desertfox-marker-${crypto.randomUUID()}`;
-  if (!(await copy_text(clipboard, marker))) throw new RuntimeRefusal("Could not write the clipboard");
+  if (!(await copy_text(clipboard, marker))) throw new RuntimeRefusal("Could not write to the clipboard");
   select_all_then(field, "copy");
   const copied = await clipboard.readText();
-  if (copied === marker) throw new RuntimeRefusal("The editor copied nothing");
+  if (copied === marker) throw new RuntimeRefusal("The editor did not copy its text");
   return copied;
 }
 
@@ -71,7 +71,7 @@ async function copy_covering_drawn(field: HTMLElement): Promise<string> {
   const squeeze = (text: string) => text.replace(/\s+/g, "");
   const whole = squeeze(copied);
   let at = 0;
-  if (!drawn.every((line) => (at = whole.indexOf(squeeze(line), at)) >= 0)) throw new RuntimeRefusal("The copy misses drawn lines");
+  if (!drawn.every((line) => (at = whole.indexOf(squeeze(line), at)) >= 0)) throw new RuntimeRefusal("The copy misses lines the editor shows");
   return copied;
 }
 
@@ -101,7 +101,7 @@ export const copy_through_clipboard = (field: HTMLElement): Promise<string> =>
     } catch (error) {
       why = (error as Error).message;
     }
-    throw new RuntimeRefusal(`This editor shows only part of its text, and copying it failed: ${why}`);
+    throw new RuntimeRefusal(`This editor shows only part of its text, and its clipboard copy failed: ${why}`);
   });
 
 // The same stale check as a plain field: the result goes in only while the editor still holds the text it opened with. An empty result is a cut, because pasting nothing leaves the selection in place.
