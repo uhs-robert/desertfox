@@ -97,5 +97,6 @@ test("a reverse that cannot be used is refused", () => {
   assert.match(reverse_problem("(?:a)?(x)")!, /quantifier on a group/);
   assert.match(reverse_problem("|(a)\\")!, /valid/);
   assert.equal(reverse_problem("a\\)+([^)]+)"), undefined);
+  for (const safe of ["([^/]+)\\/?", "([^/]+)[/]?", "(x)[)]*"]) assert.equal(reverse_problem(safe), undefined, safe);
   assert.equal(reverse_problem("https://x\\.example/([^/]+)"), undefined);
 });

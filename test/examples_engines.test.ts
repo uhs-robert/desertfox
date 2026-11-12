@@ -77,14 +77,19 @@ test("the sample engines give a few engines a keyword, all unique", () => {
   assert.equal(new Set(keywords).size, keywords.length);
 });
 
-test("every shipped engine reads back the query it was filled with, and the page's owner reads it too", () => {
-  const page = { url: "https://github.com/foo/bar", title: "t" };
+test("every shipped engine reads back the query it was filled with, and owns its own results page", () => {
+  const pages = { github: "https://github.com/foo/bar", reddit: "https://www.reddit.com/r/rust/", youtube: "https://www.youtube.com/@chan" };
+  const query = "a b&c/é+d";
   for (const [name, engine] of Object.entries(engines)) {
+    // An engine whose query slot falls back to the page reads nothing back.
     if (/\{query\|/.test(engine.url)) continue;
-    const filled = fill_template(engine.url, { query: "a b&c/é+d", page });
-    if (!filled.ok) continue;
-    const want = "a b&c/é+d";
-    assert.equal(read_query(engine, filled.url), want, name);
-    assert.equal(engine_of_page(engines, filled.url)?.query, want, `${name} owner`);
+    const page = { url: engine.slots?.includes("subreddit") ? pages.reddit : engine.slots?.includes("channel") ? pages.youtube : pages.github, title: "t" };
+    const filled = fill_template(engine.url, { query, page });
+    assert.ok(filled.ok, `${name} fills on its page`);
+    assert.equal(read_query(engine, filled.url), query, name);
+    const owner = engine_of_page(engines, filled.url);
+    assert.equal(owner?.query, query, `${name} owner query`);
+    // A child with the same address as its parent is read by the parent, which sorts first.
+    assert.equal(engines[owner!.name]?.url.split("{")[0], engine.url.split("{")[0], `${name} owner ${owner?.name}`);
   }
 });

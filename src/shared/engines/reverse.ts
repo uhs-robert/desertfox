@@ -9,7 +9,8 @@ import { parse_template } from "./fill.ts";
 // A quantifier on a group is the shape of every nested-repeat blowup, so the rule needs no case analysis. Escapes and character classes are removed first, so `\)` and `[)]` do not count.
 export const REVERSE_MAX_CHARS = 200;
 const QUANTIFIED_GROUP = /\)[*+?{]/;
-const without_escapes_and_classes = (text: string): string => text.replace(/\\./g, "").replace(/\[[^\]]*\]/g, "");
+// One placeholder each, so removing them cannot join a `)` to the quantifier of the next token: `([^/]+)\/?` is safe.
+const without_escapes_and_classes = (text: string): string => text.replace(/\\.|\[[^\]]*\]/g, "x");
 
 // The problem with a `reverse` text, or undefined when it can be used.
 export function reverse_problem(text: string): string | undefined {
@@ -60,6 +61,10 @@ function part_regex(text: string, capture: string): string | undefined {
 // The template up to its first slot: what ranks two engines that both read a page.
 const literal_start = (template: string): string => template.slice(0, template.search(/\{|%s/) === -1 ? undefined : template.search(/\{|%s/));
 
+// The path of a template with no query in it: literals as they are, every slot as any text. A raw slot (`{channel:raw}`) can hold a slash.
+const path_without_query = (path: string): string =>
+  parse_template(path).map((piece) => ("literal" in piece ? literal_regex(piece.literal) : piece.expression.raw ? ".*?" : OTHER_SLOT)).join("");
+
 type Reader = { read: (page: URL) => string | undefined; prefix_length: number; constraints: number };
 
 const TEMPLATE_START = /^(https?):\/\/([^/?#{]+)([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/;
@@ -87,7 +92,7 @@ function template_reader(template: string): Reader | undefined {
   const in_fragment = fragment === undefined ? undefined : part_regex(fragment, "(.*)");
   if (in_path === undefined && query_pair === undefined && in_fragment === undefined) return undefined;
 
-  const path_regex = new RegExp(`^${path === "" ? "/?" : (in_path ?? literal_regex(path))}${path_ends_on_query ? "(?:/.*)?" : ""}$`);
+  const path_regex = new RegExp(`^${path === "" ? "/?" : (in_path ?? path_without_query(path))}${path_ends_on_query ? "(?:/.*)?" : ""}$`);
   const read = (page: URL): string | undefined => {
     if (page.protocol !== `${scheme}:` || page.host !== host.toLowerCase()) return undefined;
     const path_match = path_regex.exec(page.pathname === "" ? "/" : page.pathname);
