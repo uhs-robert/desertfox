@@ -177,6 +177,14 @@ Measured with a real Escape in the key test session (Firefox 160):
 - `browser.fullscreen.exit_on_escape` and `dom.keyboard_lock.enabled` do not exist in Firefox 160, and `navigator.keyboard` is undefined. Nothing found lets a page or an extension keep DOM fullscreen on Escape.
 - So an Escape pressed on the line in media mode ends the fullscreen, not the line. The extension closes the line when the fullscreen ends and keeps the frame in media mode (`test/key/p29_media_mode.mjs`). The fullscreen itself ends.
 
+## Fullscreen requests per key press (media-hls-player)
+
+Measured with a real key press in the key test session (Firefox 160):
+
+- One key press allows one fullscreen request. A second `requestFullscreen()` on an inner element, in the same task or later, is denied with `TypeError: Fullscreen request denied`. It worked only with `full-screen-api.allow-trusted-requests-only` off, which a user does not have.
+- A click on the site's own fullscreen button inside the key press works, because the site's handler makes the one request.
+- So when no site fullscreen button is found, `F` fullscreens the player box and stops. A fixed-height style on an element inside the box can leave the video short of full screen. The extension cannot step inward to fix it.
+
 ## Frame focus and the tab's mode (google-docs-focus)
 
 Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a public Google Doc in view mode, in headless Firefox 160.
