@@ -14,7 +14,7 @@ import type { FindView } from "./find_mode.ts";
 import { create_find, read_find_colors } from "./find_session.ts";
 import { select_object } from "./text_object.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
-import { apply_selection_colors, clear_selection_colors } from "./selection_colors.ts";
+import { apply_selection_colors, clear_selection_colors, keep_selection_colors } from "./selection_colors.ts";
 
 import { is_visual, line_span, retarget, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { CaretMode, Cursor, Span } from "./selection_state.ts";
@@ -123,6 +123,7 @@ function paint(open: Session): void {
     owner.getSelection()?.addRange(range);
   });
   open.painted_ = selections.map((selection) => ({ selection, ends: ends_of(selection) }));
+  keep_selection_colors(open.model_.trees);
   scroll_to_index(open.model_, open.cursor.caret);
 }
 
