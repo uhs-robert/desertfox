@@ -27,65 +27,9 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 - **It checks what you give it.** Every command is defined once, with typed arguments. A key, a typed command and a config line all pass the same check, so a typo is an error with a message and never a silent no-op. A config file error names the file, line and column.
 - **It stays light on every page.** The script DesertFox loads into each page is 18 KB, and the build fails if it grows past 18.5 KB. Hints, caret mode and the command line load on first use.
 - **It is always ready.** DesertFox runs on a background page that stays loaded, and keeps its state in storage. A page gets its keys within milliseconds of starting to load.
-- **It does more in one tool.** Macros, registers, marks and `.` repeat sit beside caret and visual mode, containers, tab sessions, media keys and per-site keys and settings.
+- **It grows with you.** The first day needs five keys: `j`, `k`, `f`, `:` and `g?`. Macros, registers, marks, per-site rules and your own commands wait until you want them, and the popup teaches each one when you reach it. See [Features](#-features).
 - **It is safe by design.** DesertFox never evaluates text as code. The optional helper program outside Firefox takes a fixed set of requests and cannot run a shell command.
 - **It is tested with real key presses.** A test suite presses real keys in a real Firefox, on top of the unit tests.
-
-## ✨ Features
-
-### Move and click
-
-- Click anything: press `f`, then type the short label next to a link, button, input or image. `F` opens a link in a background tab.
-- Narrow the labels by link text: press `/` in hint mode and type part of the text.
-- Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, or focus a frame.
-- Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
-- Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`.
-
-### Find, select and copy
-
-- Search the page: `/` finds text as you type, with regular expressions, and `n` and `N` move between matches.
-- Select text without the mouse: `v` puts a caret in the page and `V` starts a selection, both with Vim motions.
-- Copy the page address with `yy`, or every link on the page with `yL`. Tracking parameters are dropped from copied addresses.
-- Keep text in registers: `"ay` copies into register `a`, and `"app` opens it.
-
-### Tabs and windows
-
-- Switch, move, pin, mute, close and reopen tabs. `T` lists your tabs and filters as you type.
-- Find anything: `,,` searches open tabs, bookmarks, history, quickmarks and closed tabs in one list.
-- Save and reopen sets of tabs: `ts` saves the window as a named session and `tS` opens one.
-- Free memory: unload tabs you are not using and load them again later.
-- Reopen a page in a Firefox container, with keys you bind to your own containers.
-
-### Commands and search
-
-- Run commands by name: `:` opens a line that completes commands, flags, tabs, bookmarks, history and search engines.
-- Open a page or search with `o`, or in a new tab with `O`.
-- Search the web: bind a key to any search engine. An engine can read the page you are on, for example to search inside the current GitHub repository.
-- Open bookmarks, add them and file them in folders from the keyboard.
-
-### Repeat and remember
-
-- Repeat the last command or typed text with `.`.
-- Record a macro with `q` and a letter, and replay it with `@`.
-- Mark a place on a page with `m` and return with `'`. A capital letter marks a page you can jump to from any tab.
-- Save a page under one key with `M`, and open it with `go` or `gn`.
-
-### Media
-
-- Play, pause, seek, change speed and volume, toggle captions, fullscreen and picture-in-picture from the keyboard.
-- Press `aa` for a media mode with one-key controls. It starts by itself when a video goes fullscreen.
-- Pick the video quality on sites whose player DesertFox knows.
-
-### Make it yours
-
-- Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site.
-- Change settings in the browser with `:set` or on the settings page.
-- Keep your keys, search engines and settings in TOML files. DesertFox checks them and applies an edit with one key, with no restart.
-- Add your own commands as snippets of page code.
-- Pick one of the built-in color themes, write your own, or restyle every surface with CSS.
-- Use the new tab page for a clock, links, recent tabs and bookmarks.
-
-[docs/keymap.md](docs/keymap.md) lists every default key.
 
 ## 🔍 How it compares
 
@@ -126,6 +70,90 @@ Sources, read in November 2026: each project's documentation, source code and sh
 - You want keys on every page, with no exception. Only a browser built for the keyboard, such as qutebrowser, gives that. An extension cannot run on Firefox's own pages.
 - You want to run shell commands or your own scripting language from the browser. Tridactyl allows both. DesertFox leaves them out on purpose.
 - You want zero setup and a small set of keys. Vimium is the simplest of the five.
+
+## ✨ Features
+
+- Click anything with `f`, and scroll, search and select text without the mouse.
+- Run any command by name with `:`, with completion for every flag and value.
+- Manage tabs, bookmarks, history, containers and tab sessions.
+- Repeat yourself with `.`, macros, registers and marks.
+- Control video and audio from the keyboard.
+- Set keys and settings per site, and keep your config in files.
+
+Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every default key.
+
+<details>
+<summary><b>Move and click</b></summary>
+
+- Click anything: press `f`, then type the short label next to a link, button, input or image. `F` opens a link in a background tab.
+- Narrow the labels by link text: press `/` in hint mode and type part of the text.
+- Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, or focus a frame.
+- Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
+- Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`.
+
+</details>
+
+<details>
+<summary><b>Find, select and copy</b></summary>
+
+- Search the page: `/` finds text as you type, with regular expressions, and `n` and `N` move between matches.
+- Select text without the mouse: `v` puts a caret in the page and `V` starts a selection, both with Vim motions.
+- Copy the page address with `yy`, or every link on the page with `yL`. Tracking parameters are dropped from copied addresses.
+- Keep text in registers: `"ay` copies into register `a`, and `"app` opens it.
+
+</details>
+
+<details>
+<summary><b>Tabs and windows</b></summary>
+
+- Switch, move, pin, mute, close and reopen tabs. `T` lists your tabs and filters as you type.
+- Find anything: `,,` searches open tabs, bookmarks, history, quickmarks and closed tabs in one list.
+- Save and reopen sets of tabs: `ts` saves the window as a named session and `tS` opens one.
+- Free memory: unload tabs you are not using and load them again later.
+- Reopen a page in a Firefox container, with keys you bind to your own containers.
+
+</details>
+
+<details>
+<summary><b>Commands and search</b></summary>
+
+- Run commands by name: `:` opens a line that completes commands, flags, tabs, bookmarks, history and search engines.
+- Open a page or search with `o`, or in a new tab with `O`.
+- Search the web: bind a key to any search engine. An engine can read the page you are on, for example to search inside the current GitHub repository.
+- Open bookmarks, add them and file them in folders from the keyboard.
+
+</details>
+
+<details>
+<summary><b>Repeat and remember</b></summary>
+
+- Repeat the last command or typed text with `.`.
+- Record a macro with `q` and a letter, and replay it with `@`.
+- Mark a place on a page with `m` and return with `'`. A capital letter marks a page you can jump to from any tab.
+- Save a page under one key with `M`, and open it with `go` or `gn`.
+
+</details>
+
+<details>
+<summary><b>Media</b></summary>
+
+- Play, pause, seek, change speed and volume, toggle captions, fullscreen and picture-in-picture from the keyboard.
+- Press `aa` for a media mode with one-key controls. It starts by itself when a video goes fullscreen.
+- Pick the video quality on sites whose player DesertFox knows.
+
+</details>
+
+<details>
+<summary><b>Make it yours</b></summary>
+
+- Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site.
+- Change settings in the browser with `:set` or on the settings page.
+- Keep your keys, search engines and settings in TOML files. DesertFox checks them and applies an edit with one key, with no restart.
+- Add your own commands as snippets of page code.
+- Pick one of the built-in color themes, write your own, or restyle every surface with CSS.
+- Use the new tab page for a clock, links, recent tabs and bookmarks.
+
+</details>
 
 ## 📦 Install
 
