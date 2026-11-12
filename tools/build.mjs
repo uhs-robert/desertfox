@@ -6,8 +6,8 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   "content.js": 18.5 * 1024,
-  // 46.5 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB.
-  "hints.js": 46.5 * 1024,
+  // 47 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB.
+  "hints.js": 47 * 1024,
   "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
