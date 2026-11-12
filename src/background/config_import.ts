@@ -9,6 +9,7 @@ import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { AUTOCONFIG_FILE, KNOWN_TOP_LEVEL, type ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ImportSource, PreviewConfigImport, SnippetPreview } from "../shared/messages.ts";
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
+import { css_limit_breaches } from "./css_limits.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
@@ -32,7 +33,7 @@ function is_import_source(source: unknown): source is ImportSource {
   return candidate.kind === "folder" && Array.isArray(candidate.entries);
 }
 
-// Every import path goes through the zip guards: paths, junk, duplicates, entry count and sizes.
+// Every import path goes through the zip guards: paths, junk, duplicates, entry count and sizes, and then the CSS limits.
 export async function read_import_source(source: unknown): Promise<ConfigFiles> {
   if (!is_import_source(source)) throw refuse("The import names no zip and no folder.");
   let read: Map<string, string>;
@@ -45,7 +46,10 @@ export async function read_import_source(source: unknown): Promise<ConfigFiles> 
   const files = strip_top_folder(read);
   // Hidden folders are skipped, so a zip made from the home folder (`.config/desertfox/...`) reads as nothing.
   if (files.size === 0) throw refuse(`The ${source.kind} holds no config files. Pick the desertfox config folder itself, or a zip of it.`);
-  return Object.fromEntries(files);
+  const read_files = Object.fromEntries(files);
+  const [breach] = css_limit_breaches(read_files);
+  if (breach) throw refuse(`${breach.file} line ${breach.line} holds ${breach.what}. Imported CSS may not load anything but data: addresses. Remove it from the file and import again.`);
+  return read_files;
 }
 
 const is_snippet_path = (path: string) => path.startsWith(SNIPPETS_PREFIX);

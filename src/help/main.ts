@@ -11,6 +11,7 @@ import type { HelpModel } from "./model.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
 import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
+import { create_user_css_gate } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { parse_route } from "./route.ts";
 
@@ -25,7 +26,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
   const transfer_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-transfer") : null;
-  if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message));
+  if (!transfer_box) set_user_css_held("import_review", false);
+  if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message), set_user_css_held);
   if (cause === "refresh") return;
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));
@@ -81,6 +83,6 @@ window.addEventListener("keydown", close_drawer_on_escape, true);
 window.addEventListener("blur", close_drawer_on_window_blur);
 window.addEventListener("hashchange", () => current && show_route(current.model_, current.guide, current.engines, "moved"));
 follow_theme(":root, .desertfox-help");
-follow_user_css();
+const set_user_css_held = create_user_css_gate(follow_user_css());
 follow_settings(draw);
-mount_grant_panel();
+mount_grant_panel(set_user_css_held);
