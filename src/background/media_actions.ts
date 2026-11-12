@@ -96,7 +96,7 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
   return best;
 }
 
-// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible. Audible and playing media count only when big enough (see `PLAYING_MIN_SHARE`), else the largest visible video acts. A frame with only audio has no video area and always counts.
+// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible. Audible and playing media count only when big enough (see `PLAYING_MIN_SHARE`), else the largest visible video acts. A frame with no video always counts.
 export function choose_frames(scans: FrameScan[], action: MediaAction, pin_frame?: number): FramePlan[] {
   // An open picture-in-picture window goes first, even from an unpinned video, so `p` closes it. Firefox has one window at a time.
   const pip_window = action === "pip" ? scans.find((scan) => scan.pip_open) : undefined;
@@ -104,23 +104,23 @@ export function choose_frames(scans: FrameScan[], action: MediaAction, pin_frame
   // The pinned video acts for every key of the mode, until it leaves the page. Then the rule below picks again.
   if (scans.some((scan) => scan.frame_id === pin_frame && scan.pinned)) return [{ frame_id: pin_frame!, target: "pinned" }];
   const largest_area = Math.max(0, ...scans.map((scan) => scan.video_area));
-  const big_enough = (area: number) => area === 0 || area >= largest_area * PLAYING_MIN_SHARE;
+  const big_enough = (scan: FrameScan, area: number) => !scan.has_video || area >= largest_area * PLAYING_MIN_SHARE;
   if (action === "pip" || action === "fullscreen") {
     const is_open = (scan: FrameScan) => (action === "pip" ? scan.pip_open : scan.fullscreen_open);
     // A fullscreen video in a child frame leaves the top document fullscreen too, so the frame that holds media is the one to ask.
     const open = scans.find((scan) => is_open(scan) && scan.count > 0) ?? scans.find(is_open);
     if (open) return [{ frame_id: open.frame_id, target: "largest" }];
     const audible = largest_by(scans, (scan) => scan.audible_video_area);
-    if (audible && big_enough(audible.audible_video_area)) return [{ frame_id: audible.frame_id, target: "audible" }];
+    if (audible && big_enough(audible, audible.audible_video_area)) return [{ frame_id: audible.frame_id, target: "audible" }];
     const playing = largest_by(scans, (scan) => scan.playing_video_area);
-    if (playing && big_enough(playing.playing_video_area)) return [{ frame_id: playing.frame_id, target: "playing" }];
+    if (playing && big_enough(playing, playing.playing_video_area)) return [{ frame_id: playing.frame_id, target: "playing" }];
     const shown = largest_by(scans, (scan) => scan.video_area);
     return shown ? [{ frame_id: shown.frame_id, target: "largest" }] : [];
   }
-  const audible = scans.filter((scan) => scan.audible > 0 && big_enough(scan.audible_video_area));
+  const audible = scans.filter((scan) => scan.audible > 0 && big_enough(scan, scan.audible_video_area));
   // A pause takes every playing element on the tab, a muted preview too, so the next ap finds nothing playing and resumes in one press. Size does not limit it.
   const pauses_all = action === "play_pause" && audible.length > 0;
-  const playing = scans.filter((scan) => scan.playing > 0 && (pauses_all || big_enough(scan.playing_video_area)));
+  const playing = scans.filter((scan) => scan.playing > 0 && (pauses_all || big_enough(scan, scan.playing_video_area)));
   if (audible.length > 0 && !pauses_all) return audible.map((scan) => ({ frame_id: scan.frame_id, target: "audible" }));
   if (playing.length > 0) return playing.map((scan) => ({ frame_id: scan.frame_id, target: "playing" }));
   const shown = largest_by(scans, (scan) => scan.video_area) ?? scans.find((scan) => scan.count > 0);
