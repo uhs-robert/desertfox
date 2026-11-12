@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -27,6 +28,19 @@ class EditorCase(ConfigDirCase):
             patch.start()
             self.addCleanup(patch.stop)
         self.children = []
+        # The host drops its Popen on purpose (the editor outlives the one-shot host). Keeping the objects here
+        # lets reap wait on them, so their finalizers have no running child to warn about.
+        self.popens = []
+        popens = self.popens
+
+        class RecordingPopen(subprocess.Popen):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                popens.append(self)
+
+        patch = mock.patch.object(host.subprocess, "Popen", RecordingPopen)
+        patch.start()
+        self.addCleanup(patch.stop)
         self.addCleanup(self.reap)
 
     def reap(self):
@@ -39,6 +53,9 @@ class EditorCase(ConfigDirCase):
                 os.waitpid(pid, 0)
             except OSError:
                 pass
+        for popen in self.popens:
+            popen.kill()
+            popen.wait()
 
     def stub(self, body):
         """An editor script (python) that gets the scratch file path as its last argument."""

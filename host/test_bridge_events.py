@@ -10,7 +10,7 @@ import time
 import unittest
 
 from host_under_test import load_host
-from test_bridge import MODE, PRIVATE_MODE, BridgeTestCase, Client
+from test_bridge import LIVENESS_S, MODE, PRIVATE_MODE, BridgeTestCase, Client
 
 ACTIVATED = {"verb": "event", "event": "tab_activated", "tab_id": 10, "window_id": 1}
 UPDATED = {"verb": "event", "event": "tab_updated", "tab_id": 10, "window_id": 1, "title": "Mail", "url": "https://mail.example/"}
@@ -50,7 +50,7 @@ class Stream:
             pass
         self.ended.set()
 
-    def wait_lines(self, count, timeout=5):
+    def wait_lines(self, count, timeout=LIVENESS_S):
         deadline = time.monotonic() + timeout
         while len(self.lines) < count and time.monotonic() < deadline:
             time.sleep(0.01)
@@ -156,7 +156,7 @@ class SubscribeTest(BridgeTestCase):
         self.assertTrue(extra.ended.wait(5))
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
         streams[0].close()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + LIVENESS_S
         while True:
             late = self.stream()
             if late.wait_lines(1)[0] == {"ok": True}:
@@ -278,7 +278,7 @@ class HubTest(unittest.TestCase):
         self.module.WRITE_TIMEOUT_S = 30
         _, _, blocked = self.streaming()
         _, reader, _ = self.streaming()
-        reader.settimeout(5)
+        reader.settimeout(LIVENESS_S)
         reader.recv(100)
         started = time.monotonic()
         for _ in range(40):
@@ -297,7 +297,7 @@ class HubTest(unittest.TestCase):
         self.hub.close()
         thread.join(5)
         self.assertFalse(thread.is_alive())
-        client.settimeout(5)
+        client.settimeout(LIVENESS_S)
         received = b""
         while chunk := client.recv(100):
             received += chunk
@@ -324,7 +324,7 @@ class HubTest(unittest.TestCase):
 
         churner = threading.Thread(target=churn, daemon=True)
         churner.start()
-        steady.settimeout(5)
+        steady.settimeout(LIVENESS_S)
         received = b""
         for count in range(300):
             self.hub.publish({"event": "tab_activated", "tab_id": count, "window_id": 1})
