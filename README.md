@@ -175,14 +175,14 @@ DesertFox works without it. The native host is a small helper program outside Fi
 - Keep your keys, search engines and settings in TOML files in `~/.config/desertfox/`, and DesertFox reads them.
 - Edit a text field in your own editor with `<C-o>` in insert mode, once you add an `editor.toml` file.
 - Open Firefox pages such as settings, add-ons and downloads with the `,f` keys.
-- Update the host and DesertFox's own files with `:native.update`, checked against hashes in the signed extension.
-- Run commands from scripts and desktop programs, and read the current mode and its changes as they happen.
-- List, activate, close and capture tabs from scripts, if you turn on `bridge_share_tabs`. Private windows never show up.
+- Update the host, the bridge, the `desertfox` command and the manifests with `:native.update`, checked against hashes in the signed extension.
+- Run commands from scripts and desktop programs, and read the current mode and its changes as they happen. This needs `bridge = true` and the permission granted on the `:native.install` page.
+- List, activate, close and capture tabs from scripts, with `bridge_share_tabs` turned on as well. Private windows never show up.
 - Follow the desktop's color palette with the `desktop` theme.
 
 Run `:native.install` in DesertFox for the steps.
 
-Without the host, change settings with `:set` or on the settings page. Bring in keys, search engines and themes as a zip or a folder from that page. The editor key and the bridge do not work.
+Without the host, change settings with `:set` or on the settings page. Bring in keys, search engines and themes as a zip or a folder from that page. The `,f` keys copy the page address instead. The editor key, `:native.update` and the bridge do not work.
 
 ### From source
 
