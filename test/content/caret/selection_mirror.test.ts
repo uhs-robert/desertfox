@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { create_selection_mirror } from "../../../src/content/caret/selection_mirror.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
-type FakeNode = { nodeType: number; ownerDocument: FakeDocument; base: number };
+// `order` is the place of the node in its document, which `getRangeAt` sorts by.
+type FakeNode = { nodeType: number; ownerDocument: FakeDocument; base: number; order: number };
 
 class FakeRange {
   startContainer!: FakeNode;
@@ -24,6 +25,7 @@ class FakeRange {
   }
 }
 
+// `ranges` is in the order they were added, and the anchor and focus come from the last one, as in Firefox. `getRangeAt` answers in document order.
 // Forward unless `setBaseAndExtent` says otherwise. `collapse` reuses the first range in place, the worst a browser may do to a range it holds. A removed frame's selection throws on every read, as a dead object does in Firefox.
 class FakeSelection {
   ranges: FakeRange[] = [];
@@ -56,7 +58,8 @@ class FakeSelection {
     return last ? (this.backward ? last.startOffset : last.endOffset) : 0;
   }
   getRangeAt(at: number) {
-    return this.live()[at]!;
+    const place = (range: FakeRange) => range.startContainer.order * 1000 + range.startOffset;
+    return [...this.live()].sort((one, other) => place(one) - place(other))[at]!;
   }
   addRange(range: FakeRange) {
     this.live().push(range);
@@ -90,10 +93,11 @@ function fake_document(): FakeDocument {
 }
 
 // The text "abcdef": "abc" in one text node of `first`, "def" in one of `second`. `second` is a shadow root of the first document, or a frame document of its own.
+// The shadow host comes before "abc" in the document, so document order and text order differ, as with a host slotted after its light text.
 function fake_model(top: FakeDocument, second: "shadow_root" | FakeDocument) {
-  const first_node: FakeNode = { nodeType: 3, ownerDocument: top, base: 0 };
+  const first_node: FakeNode = { nodeType: 3, ownerDocument: top, base: 0, order: 1 };
   const second_owner = second === "shadow_root" ? top : second;
-  const second_node: FakeNode = { nodeType: 3, ownerDocument: second_owner, base: 3 };
+  const second_node: FakeNode = { nodeType: 3, ownerDocument: second_owner, base: 3, order: 0 };
   const second_tree = second === "shadow_root" ? { nodeType: 11, host: { isConnected: true }, ownerDocument: top } : second;
   const node_at = (index: number) => (index < 3 ? first_node : second_node);
   const model = {
@@ -219,6 +223,18 @@ test("paint clears its last paint in a frame the new model no longer reads, and 
   frame.selection.dead = true;
   mirror.paint(top_only, { from: 1, to: 2 });
   assert.deepEqual(ends(top.selection), [[1, 2]]);
+});
+
+test("clear empties its last paint in a frame the model no longer reads, and a frame that died does not stop it", () => {
+  const { top, frame, model, mirror } = setup("frame");
+  const top_only = fake_model(top, fake_document()).model;
+  mirror.paint(model, { from: 2, to: 5 });
+  mirror.clear(top_only);
+  assert.deepEqual(ends(frame.selection), [], "the old paint stayed in the frame");
+  mirror.paint(model, { from: 4, to: 5 });
+  frame.selection.dead = true;
+  mirror.clear(top_only);
+  assert.deepEqual(ends(top.selection), []);
 });
 
 test("clear empties every selection of the model and of this window, and spares a focused contenteditable's caret", () => {

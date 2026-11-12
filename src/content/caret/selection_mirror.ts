@@ -68,10 +68,16 @@ export function create_selection_mirror(deps = { focused_element_: deepest_focus
       keep_selection_colors(model.trees);
     },
 
-    // Runs `measure_layout` (`Selection.modify`, which moves a selection of the model to ask layout where a line goes), then puts the ranges of every selection of the model back. In a session that is the last paint.
-    // Each range comes back forward, as a paint draws it. `setBaseAndExtent` would keep a backward drag's direction, but the spec has it ignore a node in a shadow root, and every caller takes a drag before it measures.
+    // Runs `measure_layout` (`Selection.modify`, which moves a selection of the model to ask layout where a line goes), then puts the ranges of every selection of the model back, even when it throws. Most often that is the last paint.
+    // Firefox takes the anchor and focus from the range added last, and `getRangeAt` answers in document order, so the anchor's range goes back last. A paint's ends then come back the same, and no mark reads the measure as an outside move.
+    // Each range comes back forward, so a backward drag loses its direction until the paint that follows each measure draws over it. `setBaseAndExtent` keeps a direction, but the spec has it ignore a node in a shadow root.
     measure<Answer>(model: TextModel, measure_layout: () => Answer): Answer {
-      const saved = selections_of(model).map((selection) => ({ selection, ranges: Array.from({ length: selection.rangeCount }, (_, at) => selection.getRangeAt(at).cloneRange()) }));
+      const saved = selections_of(model).map((selection) => {
+        const ranges = Array.from({ length: selection.rangeCount }, (_, at) => selection.getRangeAt(at).cloneRange());
+        const { anchorNode: node, anchorOffset: offset } = selection;
+        const holds_anchor = (range: Range) => (range.startContainer === node && range.startOffset === offset) || (range.endContainer === node && range.endOffset === offset);
+        return { selection, ranges: [...ranges.filter((range) => !holds_anchor(range)), ...ranges.filter(holds_anchor)] };
+      });
       try {
         return measure_layout();
       } finally {
@@ -105,10 +111,15 @@ export function create_selection_mirror(deps = { focused_element_: deepest_focus
 
     set_mode_colors_: (mode: CaretMode): Promise<void> => apply_selection_colors(mode),
 
-    // Ends the session's selection in `model` and in this document. A focused contenteditable field keeps its own caret in the document selection.
+    // Ends the session's selection in `model`, in this document and wherever the last paint left it, such as a frame that lost its text. A focused contenteditable field keeps its own caret in the document selection.
     clear(model: TextModel | undefined): void {
       const focused = deps.focused_element_();
-      for (const selection of [...(model ? selections_of(model) : []), getSelection()]) if (selection && !in_focused_editable(selection, focused)) selection.removeAllRanges();
+      for (const selection of [...painted.map((record) => record.selection), ...(model ? selections_of(model) : []), getSelection()]) {
+        // A frame that left the page throws on any read of its selection.
+        try {
+          if (selection && !in_focused_editable(selection, focused)) selection.removeAllRanges();
+        } catch {}
+      }
       painted = [];
       clear_selection_colors();
     },
