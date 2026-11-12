@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 from host_under_test import load_host
+from test_bridge import LIVENESS_S
 from test_host import ConfigDirCase
 
 host = load_host()
@@ -253,7 +254,7 @@ class CollectTest(EditorCase):
 
         def failing_open(path, *args, **kwargs):
             if os.path.basename(path).startswith("job-"):
-                deadline = time.monotonic() + 5
+                deadline = time.monotonic() + LIVENESS_S
                 while not os.path.exists(pid_file) and time.monotonic() < deadline:
                     time.sleep(0.02)
                 raise OSError(28, "No space left on device")

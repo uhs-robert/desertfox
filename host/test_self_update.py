@@ -22,6 +22,7 @@ import urllib.request
 from unittest import mock
 
 from host_under_test import HOST_DIR, load_host
+from test_bridge import LIVENESS_S
 
 host = load_host()
 
@@ -400,7 +401,7 @@ class RunningBridgeTest(UpdateCase):
         self.assertTrue(self.update()["updated"])
         self.assertEqual(self.read(self.paths["desertfox-bridge"]), self.new_scripts["desertfox-bridge"])
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
+            client.settimeout(LIVENESS_S)
             client.connect(os.path.join(self.runtime, "desertfox", "bridge.sock"))
             client.sendall(b'{"verb": "ping"}\n')
             self.assertEqual(json.loads(client.makefile().readline()), {"ok": True})
