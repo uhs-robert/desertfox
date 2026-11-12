@@ -43,8 +43,9 @@ export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindo
     pending = is_top && is_move && !stays_on_page && place_here();
   });
   // An app that intercepts a link (`event.intercept()`) commits here too, though its `navigate` named another document.
-  navigation?.addEventListener("currententrychange", () => {
-    const left = pending;
+  // A change with no navigation (`updateCurrentEntry()`) has no `navigationType`, and must not commit a read a navigation that never loaded left held.
+  navigation?.addEventListener("currententrychange", (event) => {
+    const left = (event as unknown as { navigationType: string | null }).navigationType && pending;
     pending = false;
     const is_quiet = now() - quiet_since < LEAVE_QUIET_MS;
     if (!left || page.document.hidden || is_quiet) return;

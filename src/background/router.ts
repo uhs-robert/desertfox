@@ -92,7 +92,6 @@ export async function read_place_in_time(read: Promise<PageOffset | undefined>, 
   return offset && place_in_tab(offset, tab_url);
 }
 
-
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.
 function outcome_of_reply(reply: unknown): Outcome {
   const outcome = reply as Outcome | undefined;
