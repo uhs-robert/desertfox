@@ -102,10 +102,10 @@ export function create_hint_frames(deps: HintFramesDeps) {
     }
   }
 
-  // A newer run can start while this one's injection runs. Its frames keep the latest ask only, so an ask for a session that has ended must not go out after the newer one.
+  // A newer run can start while this one's injection runs. Its frames keep the latest ask only, so an ask for a session that has ended must not go out after the newer one. An injection that answers after the deadline asks nobody, because the labels are out.
   async function ask_frames(tab_id: number, session_id: string, args: Record<string, unknown>): Promise<void> {
     const session = await in_turn(() => read(tab_id));
-    if (session?.session_id !== session_id) return;
+    if (!waits.has(session_id) || session?.session_id !== session_id) return;
     void send_quietly(tab_id, { type: "hint_frames_collect", session_id, args });
     wake_when_all_reported(session);
   }

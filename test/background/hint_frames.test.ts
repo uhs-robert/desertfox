@@ -23,6 +23,8 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
   let next_session = 0;
   // The keyboard frame sends its count with the start and ignores the collect.
   let keyboard_frame: number | undefined;
+  // Every send from then on stays unanswered, as one to a navigating frame can.
+  let sends_hang = false;
   const sent: Sent[] = [];
   let current: HintFrames;
   const deps: HintFramesDeps = {
@@ -35,6 +37,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
     send: async (tab_id, message, frame_id) => {
       assert.equal(tab_id, TAB);
       sent.push({ frame_id, message });
+      if (sends_hang) return new Promise(() => {});
       if (frame_id !== undefined && frames[frame_id]?.gone) throw new Error("Could not establish connection. Receiving end does not exist.");
       if (message.type === "hint_frames_collect") {
         for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void current.report(TAB, Number(id), message.session_id, frame.count);
@@ -62,6 +65,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
       };
     },
     restart: () => (current = create_hint_frames(deps)),
+    hang_sends: () => void (sends_hang = true),
     fire_timers: () => [...timers.values()].forEach((fire) => fire()),
     of_type: (type: HintFramesMessage["type"]) => sent.filter((entry) => entry.message.type === type),
   };
@@ -292,4 +296,31 @@ test("the keyboard frame's own count is in before the wait, so a slow top page k
   await flush();
   fake.fire_timers();
   assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a", "s", "d"], own_labels: ["a", "s"] });
+});
+
+test("an injection that answers after the deadline sends no collect, because the labels are out", async () => {
+  let injected!: (count: number) => void;
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1 } }, { inject: () => new Promise<number>((resolve) => (injected = resolve)) });
+  const pending = fake.hints.start(TAB, 0, START);
+  await flush();
+  fake.fire_timers();
+  assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a"], own_labels: ["a"] });
+  injected(2);
+  await flush();
+  assert.deepEqual(fake.of_type("hint_frames_collect"), []);
+});
+
+test("sends that never settle hold neither the start answer nor a typed relay", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1 } });
+  const answer = await fake.hints.start(TAB, 0, START);
+  assert.equal(answer.ok, true);
+  fake.hang_sends();
+  const second = fake.hints.start(TAB, 0, START);
+  await flush();
+  fake.fire_timers();
+  const settled = await Promise.race([second, new Promise((resume) => setTimeout(() => resume("pending"), 50))]);
+  assert.deepEqual(settled, { ok: true, session_id: "s2", labels: ["a"], own_labels: ["a"] });
+  const typed = await Promise.race([fake.hints.typed(TAB, 0, "s2", "a").then(() => "done"), new Promise((resume) => setTimeout(() => resume("pending"), 50))]);
+  assert.equal(typed, "done");
+  await fake.hints.end(TAB, 0, "s2");
 });
