@@ -92,6 +92,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     // The player stays silent until the test sets its ready flag. A manual choice now is refused.
     await run_line("media quality min");
     await poll_until("the refusal", async () => (await read_toast()) === "The player has no quality levels yet");
+    // The rule stops looking for the player 10 s after page load (RULE_GIVE_UP_MS, src/content/quality/rule.ts), so the flag must be set inside that window.
     await in_active_tab('document.documentElement.dataset.ready = "1"; 0');
     await wait_event(mark, on_set("p26_slow", (event) => event.low === "hd1080"), "the rule at 1080p once the player plays", 8000);
     expect(!events.slice(mark).some(on_set("p26_slow", (event) => event.low === "large")), "the refused choice set a level");
