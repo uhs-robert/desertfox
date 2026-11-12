@@ -61,18 +61,17 @@ test("a chord typed before the keymap is read waits if the default keymap binds 
   assert.deepEqual(ran, ["page.jump"]);
 });
 
-test("DEFAULT_CHORDS matches every chord of the default keymap and no other chord", () => {
+test("DEFAULT_CHORDS matches every normal-mode and browser chord of the default keymap and no other chord", () => {
   const bound = new Set<string>();
-  for (const bindings of Object.values(DEFAULT_KEYMAP)) {
-    if (typeof bindings !== "object" || bindings === null) continue;
-    for (const sequence of Object.keys(bindings)) for (const token of parse_sequence(sequence).tokens ?? []) if (is_chord(token)) bound.add(token);
+  for (const bindings of [DEFAULT_KEYMAP.normal, DEFAULT_KEYMAP.browser]) {
+    for (const sequence of Object.keys(bindings ?? {})) for (const token of parse_sequence(sequence).tokens ?? []) if (is_chord(token)) bound.add(token);
   }
-  for (const token of bound) assert.ok(DEFAULT_CHORDS.test(token), `${token} is bound by default but DEFAULT_CHORDS misses it`);
+  for (const token of bound) assert.ok(DEFAULT_CHORDS.test(token), `${token} is bound in normal mode or the browser table but DEFAULT_CHORDS misses it`);
   const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789,.[]/;'-=\\`", "Space", "Escape", "Enter", "Tab", "ArrowDown", "ArrowUp", "ArrowLeft", "Backspace", "F5"];
   for (const mods of ["C", "A", "M", "CS", "AS", "AC"]) {
     for (const key of keys) {
       const token = `<${mods}-${key}>`;
-      if (DEFAULT_CHORDS.test(token)) assert.ok(bound.has(token), `${token} matches DEFAULT_CHORDS but the default keymap does not bind it`);
+      if (DEFAULT_CHORDS.test(token)) assert.ok(bound.has(token), `${token} matches DEFAULT_CHORDS but normal mode and the browser table do not bind it`);
     }
   }
 });
