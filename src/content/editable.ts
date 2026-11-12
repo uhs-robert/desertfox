@@ -1,3 +1,4 @@
+import type { FrameSiteValues } from "../shared/prefix_tree.ts";
 import { shadow_root_of } from "./shadow.ts";
 
 // Which focused elements take typed text, so insert mode can follow focus.
@@ -13,13 +14,27 @@ export function takes_typing(tag_name: string, input_type: string, is_content_ed
   return tag === "INPUT" && !NON_TEXT_INPUT_TYPES.has(input_type.toLowerCase());
 }
 
-// Google Sheets keeps its cell editor focused while a cell is only selected, parked off screen and empty, so it has no width. For an edit Sheets moves it over the cell and gives it the cell's width. No focus event marks either end, so the key listeners re-read the focus.
-// The id stands for the site, because only Sheets uses it. A rule on zero width alone would also catch the hidden field a web terminal types into.
-const is_parked_sheets_cell_editor = (element: HTMLElement): boolean => element.id === "waffle-rich-text-editor" && element.offsetWidth < 1;
+// The frame's per-site rules for what counts as a field, set from the page keymap reply. `editable_remove_unsized` limits `editable_remove` to elements with no width: Sheets keeps its cell editor focused while a cell is only selected, parked off screen with no width, and gives it the cell's width for an edit. No focus event marks either end, so the key listeners re-read the focus.
+let rules: FrameSiteValues<"editable_add" | "editable_remove" | "editable_remove_unsized"> = {};
+
+export const set_editable_rules = (values: typeof rules = {}): void => {
+  rules = values;
+};
+
+// A selector that does not parse matches nothing, so one bad entry leaves the rest working.
+const matches_any = (element: Element, selectors: string[] = []): boolean =>
+  selectors.some((selector) => {
+    try {
+      return element.matches(selector);
+    } catch {
+      return false;
+    }
+  });
 
 export function is_editable_element(target: EventTarget | Element | null): boolean {
-  if (!(target instanceof HTMLElement) || is_parked_sheets_cell_editor(target)) return false;
-  return takes_typing(target.tagName, target instanceof HTMLInputElement ? target.type : "", target.isContentEditable);
+  if (!(target instanceof HTMLElement)) return false;
+  if ((!rules.editable_remove_unsized || target.offsetWidth < 1) && matches_any(target, rules.editable_remove)) return false;
+  return matches_any(target, rules.editable_add) || takes_typing(target.tagName, target instanceof HTMLInputElement ? target.type : "", target.isContentEditable);
 }
 
 // Focus inside a shadow root shows on the host only, so the walk goes down to the inner element.

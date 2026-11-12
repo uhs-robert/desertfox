@@ -7,7 +7,7 @@ export const areas = ["keys", "config", "ui", "bundles"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 const shipped = DEFAULT_SITE_ROWS[0].row;
-const ROW = ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=sv_*"', `bind = ${toml(shipped.bind)}`, `modes.visual = ${toml(shipped.modes.visual)}`, 'pass = "<C-a> <C-x> <C-v>"', ""].join("\n");
+const ROW = ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=sv_*"', `bind = ${toml(shipped.bind)}`, `modes.visual = ${toml(shipped.modes.visual)}`, 'pass = "<C-a> <C-x> <C-v>"', `editable_remove = ${toml(shipped.editable_remove)}`, "editable_remove_unsized = true", ""].join("\n");
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, in_background, poll_until, expect, sleep }) {
   await setup("load the shipped Sheets binds as a row for the grid", async () => {

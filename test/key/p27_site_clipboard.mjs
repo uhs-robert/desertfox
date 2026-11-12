@@ -10,7 +10,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   await setup("load a config with a clipboard row", async () => {
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=clip_*"', `bind = { x = ${clip("cut")}, p = ${clip("paste")}, y = ${clip("copy")} }`, 'pass = "<C-v>"', ""].join("\n"));
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=clip_*"', 'editable_remove = ["#waffle-rich-text-editor"]', "editable_remove_unsized = true", `bind = { x = ${clip("cut")}, p = ${clip("paste")}, y = ${clip("copy")} }`, 'pass = "<C-v>"', ""].join("\n"));
     await load_config_dir(dir);
   });
 
