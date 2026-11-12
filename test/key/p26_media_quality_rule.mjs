@@ -89,9 +89,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await run_case("a player that answers unknown until it plays gets the level once it plays, and a refused manual choice does not end the rule", async () => {
     const mark = events.length;
     await open_page("quality", "p26_slow", { new_tab: true });
-    // The player is silent for 2 s. A manual choice now is refused.
+    // The player stays silent until the test sets its ready flag. A manual choice now is refused.
     await run_line("media quality min");
     await poll_until("the refusal", async () => (await read_toast()) === "The player has no quality levels yet");
+    await in_active_tab('document.documentElement.dataset.ready = "1"; 0');
     await wait_event(mark, on_set("p26_slow", (event) => event.low === "hd1080"), "the rule at 1080p once the player plays", 8000);
     expect(!events.slice(mark).some(on_set("p26_slow", (event) => event.low === "large")), "the refused choice set a level");
   });
