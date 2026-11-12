@@ -33,6 +33,15 @@ class FakeHTMLInputElement extends FakeHTMLElement {
   }
 }
 class FakeHTMLTextAreaElement extends FakeHTMLElement {}
+// A single-line input drops line breaks, as a real one does.
+class FakeSingleLineInput extends FakeHTMLInputElement {
+  override set value(text: string) {
+    this.stored = text.replaceAll("\n", "");
+  }
+  override get value() {
+    return this.stored;
+  }
+}
 class FakeEditableDiv extends FakeHTMLElement {
   override tagName = "DIV";
   override isContentEditable = true;
@@ -239,4 +248,15 @@ test("a result that arrives before the answer to the open still finds its edit",
   await run();
   (globals.browser as { runtime: { sendMessage: unknown } }).runtime.sendMessage = original;
   assert.equal(field.value, "fast");
+});
+
+test("a field that sanitizes the value counts as refusing it: the result goes to the register and no event fires", async () => {
+  reset();
+  const field = Object.assign(new FakeSingleLineInput(), { value: "draft" });
+  focus(field);
+  await run();
+  await done("line one\nline two");
+  assert.deepEqual(field.events, []);
+  assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "line one\nline two" });
+  assert.match(toasts[0] ?? "", /did not take the edited text/);
 });

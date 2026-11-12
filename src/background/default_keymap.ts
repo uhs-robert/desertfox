@@ -388,7 +388,7 @@ const BASE_SECTIONS: KeymapConfig = {
   insert: {
     "<Escape>": { id: "mode.escape" },
     "<C-r>": { id: "register.paste", label: "Paste register" },
-    "<C-i>": { id: "text.edit_external", label: "Edit the field in the external editor" },
+    "<C-i>": { id: "text.edit_external", label: "Edit the field in the external editor (takes Ctrl+I from italic)" },
     "<A-Escape>": { id: "page.send_key", args: { key: "Escape", key_code: 27 }, label: "Send Escape to the page" },
   },
   ignore: {

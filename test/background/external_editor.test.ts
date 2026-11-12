@@ -10,7 +10,7 @@ const request = (token = "t1"): EditorOpen => ({ type: "editor_open", token, tex
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 const forever = () => new Promise<EditorCollectReply>(() => {});
 
-type Options = { store?: Record<string, unknown>; start?: () => Promise<string>; tabs?: number[]; now?: () => number; pause?: (ms: number) => Promise<void>; delivered?: boolean; save?: () => Promise<void> };
+type Options = { store?: Record<string, unknown>; start?: () => Promise<string>; tabs?: number[]; now?: () => number; pause?: (ms: number) => Promise<void>; delivered?: boolean; save?: () => Promise<void>; private_window?: boolean };
 
 function make(collect: (job: string) => Promise<EditorCollectReply>, options: Options = {}) {
   const store = options.store ?? {};
@@ -29,6 +29,7 @@ function make(collect: (job: string) => Promise<EditorCollectReply>, options: Op
     },
     toast: async (_tab, _frame, message) => void log.toasts.push(message),
     tab_exists: async (tab_id) => (options.tabs ?? [1]).includes(tab_id),
+    private_window_open: async () => options.private_window ?? true,
     now: options.now ?? (() => 0),
     pause: options.pause ?? (async () => {}),
   });
@@ -76,10 +77,10 @@ test("a host refusal at the start comes back as its error and stores no job", as
 
 test("a collect that fails mid-loop clears the job and toasts the error, and the next press starts again", async () => {
   let fail = true;
-  const { open, log } = make(() => (fail ? Promise.reject(new NativeHostError("host_failed", "unknown job")) : forever()));
+  const { open, log } = make(() => (fail ? Promise.reject(new NativeHostError("host_failed", "unknown editor job")) : forever()));
   await open(1, 2);
   await settle();
-  assert.deepEqual(log.toasts, ["unknown job"]);
+  assert.deepEqual(log.toasts, ["unknown editor job"]);
   assert.deepEqual(log.done, []);
   fail = false;
   assert.equal((await open(1, 2, "again")).ok, true);
@@ -183,4 +184,41 @@ test("the extension comes from the site row, else the global value, and the empt
   assert.equal(await probe("txt", "https://other.example/a"), "txt");
   assert.equal(await probe("", "https://other.example/a"), undefined);
   assert.equal(await probe(undefined, "https://other.example/a"), undefined);
+});
+
+test("a private result with no private window open any more is dropped with a toast", async () => {
+  const { editor, log } = make(async () => ({ done: true, changed: true, text: "secret" }), { delivered: false, private_window: false });
+  await editor.open(1, 0, request(), undefined, true);
+  await settle();
+  assert.deepEqual(log.saved, []);
+  assert.match(log.toasts[0] ?? "", /private window was gone.*dropped/);
+});
+
+test("a failed collect is tried again, and a later answer still delivers", async () => {
+  let call = 0;
+  const pauses: number[] = [];
+  const { open, log } = make(async () => (++call < 3 ? Promise.reject(new NativeHostError("host_failed", "spawn failed")) : { done: true, changed: true, text: "ok" }), { pause: async (ms) => void pauses.push(ms) });
+  await open(1, 0);
+  await settle();
+  assert.equal(call, 3);
+  assert.deepEqual(pauses, [1000, 1000]);
+  assert.deepEqual(log.toasts, []);
+  assert.equal(log.done.length, 1);
+});
+
+test("three failed collects in a row give up and the toast names the folder that keeps the text", async () => {
+  const { open, log, store } = make(() => Promise.reject(new NativeHostError("host_failed", "spawn failed")));
+  await open(1, 0);
+  await settle();
+  assert.equal(log.collects, 3);
+  assert.match(log.toasts[0] ?? "", /spawn failed.*~\/\.cache\/desertfox\/editor/);
+  assert.deepEqual(store.desertfox_editor_jobs, {});
+});
+
+test("the host's unknown-job refusal gives up at once, with no retry and no folder", async () => {
+  const { open, log } = make(() => Promise.reject(new NativeHostError("host_failed", "The DesertFox native host refused: unknown editor job: its text was already taken")));
+  await open(1, 0);
+  await settle();
+  assert.equal(log.collects, 1);
+  assert.doesNotMatch(log.toasts[0] ?? "", /\.cache/);
 });
