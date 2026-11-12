@@ -9,7 +9,7 @@ import { build_updates } from "../../tools/write_updates_json.ts";
 
 const script = new URL("../../tools/write_updates_json.ts", import.meta.url).pathname;
 const REPO = "uhs-robert/desertfox";
-const manifest = { version: "0.1.23.2", browser_specific_settings: { gecko: { id: "desertfox@uhs-robert", strict_min_version: "140.0" } } };
+const manifest = { version: "0.1.23.2", browser_specific_settings: { gecko: { id: "desertfox@uhs-robert", strict_min_version: "153.0" } } };
 const xpi_bytes = Buffer.from("signed xpi bytes");
 const input = { tag: "v0.1.23.2", xpi_name: "desertfox-0.1.23.2.xpi", xpi_bytes, manifest, repo: REPO };
 
@@ -23,7 +23,7 @@ test("updates.json has Firefox's update manifest shape with one entry", () => {
     version: "0.1.23.2",
     update_link: `https://github.com/${REPO}/releases/download/v0.1.23.2/desertfox-0.1.23.2.xpi`,
     update_hash: `sha256:${createHash("sha256").update(xpi_bytes).digest("hex")}`,
-    applications: { gecko: { strict_min_version: "140.0" } },
+    applications: { gecko: { strict_min_version: "153.0" } },
   });
   assert.match(entries[0]!.update_hash, /^sha256:[0-9a-f]{64}$/);
   assert.ok(entries[0]!.update_link.startsWith("https://"));
