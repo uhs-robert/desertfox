@@ -325,7 +325,8 @@ test("a step that Firefox refuses to open leaves no mark, so the page's next lea
   await fakes.go(-1);
   const leave = create_jump_leave({ store: fakes.store, tab_now: async () => ({ url: "https://other.test/", status: "loading" }) });
   await leave.leave({ type: "jump_leave", x: 0, y: 40 }, fakes.sender(), HERE);
-  assert.deepEqual((await fakes.list())?.entries.at(-1), { url: HERE, x: 0, y: 40 });
+  // A skipped leave would leave the list as the step left it: both places, the cursor on the first.
+  assert.deepEqual(await fakes.list(), { entries: [{ url: HERE, x: 0, y: 40 }], cursor: 1 });
 });
 
 test("a late pushed request of an older step does not take a newer step's arrival at the same tab", async () => {
