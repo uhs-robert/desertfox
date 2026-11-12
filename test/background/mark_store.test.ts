@@ -319,3 +319,50 @@ test("remove in a private window leaves the normal marks alone", async () => {
   await assert.rejects(store.remove("a", "https://a.test/p", true), /No mark a/);
   assert.equal((await store.items("https://a.test/p", false)).length, 1);
 });
+
+test("clear page drops this page, its previous slot and the globals, and keeps other pages", async () => {
+  const { store } = make();
+  await store.run(set("a", 10), false);
+  await store.run(set("b", 20, "https://b.test/q"), false);
+  await store.run(jump("a", 99), false);
+  await store.run({ type: "mark_set", key: "G", url: "https://a.test/p", x: 1, y: 2 }, false);
+  await store.clear("page", "https://a.test/p#x", false);
+  assert.deepEqual(await store.items("https://a.test/p", false), []);
+  assert.deepEqual(await store.items("https://b.test/q", false), [{ key: "b", x: 0, y: 20 }]);
+});
+
+test("clear all drops every page and every global mark", async () => {
+  const { store } = make();
+  await store.run(set("a", 10), false);
+  await store.run(set("b", 20, "https://b.test/q"), false);
+  await store.run({ type: "mark_set", key: "G", url: "https://a.test/p", x: 1, y: 2 }, false);
+  await store.clear("all", "https://a.test/p", false);
+  assert.deepEqual(await store.items("https://a.test/p", false), []);
+  assert.deepEqual(await store.items("https://b.test/q", false), []);
+});
+
+test("clear in a private window leaves the normal marks alone, and the reverse", async () => {
+  const { store } = make();
+  await store.run(set("a", 10), false);
+  await store.run(set("a", 30), true);
+  await store.clear("all", "https://a.test/p", true);
+  assert.equal((await store.items("https://a.test/p", true)).length, 0);
+  assert.equal((await store.items("https://a.test/p", false)).length, 1);
+});
+
+test("clear refuses when there is nothing to drop, and keeps the quickmarks", async () => {
+  const { store, local } = make();
+  await assert.rejects(store.clear("page", "https://a.test/p", false), /No marks to clear/);
+  await assert.rejects(store.clear("all", "https://a.test/p", false), /No marks to clear/);
+  local.values.set("desertfox_quickmarks", { g: "https://g.test" });
+  await store.run(set("a", 10), false);
+  await store.clear("all", "https://a.test/p", false);
+  assert.deepEqual(local.values.get("desertfox_quickmarks"), { g: "https://g.test" });
+});
+
+test("a clear waits for the sets queued before it", async () => {
+  const { store } = make(true);
+  const writes = [store.run(set("a", 10), false), store.run(set("b", 20), false), store.clear("page", "https://a.test/p", false), store.run(set("c", 30), false)];
+  await Promise.all(writes);
+  assert.deepEqual((await store.items("https://a.test/p", false)).map((item) => item.key), ["c"]);
+});

@@ -14,6 +14,8 @@ type GlobalMark = { url: string; x: number; y: number };
 type StoredMarks = { v: 1; pages: Record<string, MarkPage>; globals?: Record<string, GlobalMark> };
 type MarksValue = { v: 1; pages: Record<string, MarkPage>; globals: Record<string, GlobalMark> };
 
+export type MarkClearScope = "page" | "all";
+
 export type MarkArea = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 
 export type MarkStoreDeps = {
@@ -119,6 +121,18 @@ export function create_mark_store(deps: MarkStoreDeps) {
         if (is_global_mark(key) ? !all.globals[key] : !page?.marks[key]) throw new RuntimeRefusal(`No mark ${key}`);
         if (is_global_mark(key)) delete all.globals[key];
         else if (page) delete page.marks[key];
+        await area_of(is_private).set({ [key_of(is_private)]: all });
+      }),
+    // Drops the marks of `scope`: this page's local marks (its `'` slot too) and every global mark, or every page and every global mark. Quickmarks live elsewhere. Nothing to drop refuses.
+    clear: (scope: MarkClearScope, url: string, is_private: boolean) =>
+      in_turn(async () => {
+        const all = await read_all(is_private);
+        const address = mark_page_url(url);
+        const has_pages = scope === "all" ? Object.keys(all.pages).length > 0 : Object.keys(all.pages[address]?.marks ?? {}).length > 0;
+        if (!has_pages && Object.keys(all.globals).length === 0) throw new RuntimeRefusal("No marks to clear");
+        if (scope === "all") all.pages = {};
+        else delete all.pages[address];
+        all.globals = {};
         await area_of(is_private).set({ [key_of(is_private)]: all });
       }),
     // The global mark of one key, or nothing.

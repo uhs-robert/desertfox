@@ -15,6 +15,7 @@ function make(items: MarkItem[] = ITEMS) {
     items: async () => items,
     jump: async (_ctx, key) => void calls.push(`jump ${key}`),
     remove: async (_ctx, key) => void calls.push(`remove ${key}`),
+    clear: async (_ctx, scope) => void calls.push(`clear ${scope}`),
     toast: async (_ctx, kind, message) => void calls.push(`toast ${kind} ${message}`),
   });
   return { calls, handlers };
@@ -41,4 +42,19 @@ test("the schema takes one mark letter and the delete needs it", () => {
   assert.equal(check_args(list!, { mark: "A" }).ok, true);
   assert.equal(check_args(list!, { mark: "ab" }).ok, false);
   assert.equal(check_args(remove!, {}).ok, false);
+});
+
+test("clear drops the scope and says so", async () => {
+  const { calls, handlers } = make();
+  await handlers.clear(ctx, { scope: "page" });
+  await handlers.clear(ctx, { scope: "all" });
+  assert.deepEqual(calls, ["clear page", "toast success Marks of this page and the global marks cleared", "clear all", "toast success All marks cleared"]);
+});
+
+test("clear takes page or all and nothing else", () => {
+  const clear = registry.get("mark.clear")!;
+  assert.equal(check_args(clear, { scope: "page" }).ok, true);
+  assert.equal(check_args(clear, { scope: "all" }).ok, true);
+  assert.equal(check_args(clear, { scope: "some" }).ok, false);
+  assert.equal(check_args(clear, {}).ok, false);
 });
