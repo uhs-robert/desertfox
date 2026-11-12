@@ -2,7 +2,7 @@
 
 import type { CompiledKeymap, SiteBind, SiteRule, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { resolve_site_columns } from "../shared/match_pattern.ts";
-import { normal_tree_for, site_columns_for, site_rules_matching, type PageSiteColumns } from "./page_keymap.ts";
+import { hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, type PageSiteColumns } from "./page_keymap.ts";
 
 // One column a row sets, shown as text. `shadowed` means an earlier matching row already decides it.
 export type RuleColumn = { name: string; value: string; shadowed: boolean };
@@ -18,10 +18,13 @@ const KEY_RULE_NAMES = ["pass", "only"] as const;
 
 const leaf_text = (leaf: TreeLeaf): string => leaf.label ?? leaf.intent ?? leaf.steps.map((step) => step.invocation.id).join(", ");
 
-// The keymap's own meaning of a key sequence: a binding's label, a group's name, or nothing.
+// The keymap's own meaning of a key sequence: a binding's label, a group's name, or nothing. A shorter key that is a binding on the way (`h` for `hq`) is what the sequence loses, so its label counts.
 function keymap_meaning(normal: TreeNode | undefined, tokens: readonly string[]): string | undefined {
   let node: TreeNode | undefined = normal;
-  for (const token of tokens) node = node?.kind === "branch" ? node.children[token] : undefined;
+  for (const token of tokens) {
+    if (node?.kind === "leaf") return leaf_text(node);
+    node = node?.children[token];
+  }
   if (node === undefined) return undefined;
   return node.kind === "leaf" ? leaf_text(node) : `keys starting with ${tokens.join("")}`;
 }
@@ -61,7 +64,7 @@ function dead_bind(key: string, { tokens, leaf }: SiteBind, earlier: boolean, pa
   if (page.all_off) return "off for this page";
   if (earlier) return EARLIER_ROW;
   if (node_at(page.tree, tokens) === leaf) return undefined;
-  const shorter = Object.values(page.columns.bind ?? {}).find((other) => other.tokens.length < tokens.length && other.tokens.every((token, index) => tokens[index] === token));
+  const shorter = hiding_bind(Object.values(page.columns.bind ?? {}), { tokens, leaf });
   if (shorter) return `${shorter.tokens.join("")} is a complete bind and hides longer keys under it`;
   if (page.columns.keys !== undefined) return "pass" in page.columns.keys ? "freed by pass" : "dropped by only";
   return `${key} is replaced by another bind`;
@@ -95,7 +98,10 @@ function row_view(rule: SiteRule, earlier: PageSiteColumns, page: PageState, nor
   changes.push(...bind_changes(rule.bind, normal, (key, bind) => dead_bind(key, bind, shadowed.bind(key), page)));
   for (const [name, mode] of Object.entries(rule.modes ?? {})) {
     columns.push({ name: `mode ${name}`, value: mode.label, shadowed: shadowed.mode(name) });
-    changes.push(...bind_changes(mode.bind, normal, () => (page.all_off ? "off for this page" : shadowed.mode(name) ? EARLIER_ROW : undefined), name));
+    // A mode lays over the page tree, so what a mode key replaces is read there, after pass and only.
+    const hides = (bind: SiteBind) => hiding_bind(Object.values(mode.bind), bind);
+    const dead = (_key: string, bind: SiteBind) => (page.all_off ? "off for this page" : shadowed.mode(name) ? EARLIER_ROW : hides(bind) ? `${hides(bind)!.tokens.join("")} is a complete bind and hides longer keys under it` : undefined);
+    changes.push(...bind_changes(mode.bind, page.tree, dead, name));
   }
   return { origin: rule.origin, ...(rule.origin === "default" ? { name: rule.name } : {}), site: rule.site, columns, changes };
 }

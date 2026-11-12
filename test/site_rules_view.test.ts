@@ -114,3 +114,23 @@ test("an earlier complete bind of g hides a later row's gx", () => {
   assert.equal(dead_of(rows, 0, "g"), undefined);
   assert.equal(dead_of(rows, 1, "gx"), "g is a complete bind and hides longer keys under it");
 });
+
+test("a longer bind under a single-key binding names the binding it takes away", () => {
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", bind: { hq: STOP } }] }), "https://a.test/");
+  assert.equal(rows[0]!.changes[0]!.replaces, "Scroll left");
+});
+
+test("a mode bind hidden by a shorter bind of the same mode is not live", () => {
+  const modes = { m: { label: "M", bind: { g: STOP, gq: RELOAD } } };
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", modes }] }, ['site_rules: skipped bind "gq": "g" is already a complete bind for the same site']), "https://a.test/");
+  assert.equal(dead_of(rows, 0, "g", "m"), undefined);
+  assert.equal(dead_of(rows, 0, "gq", "m"), "g is a complete bind and hides longer keys under it");
+});
+
+test("a mode bind replaces what the page tree holds, so a freed key replaces nothing", () => {
+  const modes = { m: { label: "M", bind: { j: STOP, k: STOP } } };
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", pass: "j", modes }] }), "https://a.test/");
+  const change = (keys: string) => rows[0]!.changes.find((each) => each.keys === keys && each.mode === "m")!;
+  assert.equal(change("j").replaces, undefined);
+  assert.equal(change("k").replaces, "Scroll up");
+});
