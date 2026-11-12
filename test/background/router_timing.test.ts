@@ -21,7 +21,7 @@ function deps(run: () => Promise<unknown>, timings: [string, number][]): RouterD
     read_clipboard: async () => "",
     bookmark_title: noop_async,
     has_permission: async () => true,
-    send_to_tab: async () => ({ ok: true, cancelled: true }),
+    send_to_tab: async () => ({ ok: true }),
     open_cmdline: noop_async,
     show_refusal: noop_async,
     is_disabled: async () => false,
@@ -50,6 +50,6 @@ test("a throwing handler and a content command leave no row", async () => {
   const response = await throwing.run({ invocations: [{ id: "x.ok" }], mode: "normal" });
   assert.equal(response.ok, false);
   const content = await throwing.run({ invocations: [{ id: "x.content" }], mode: "normal" });
-  assert.deepEqual(content, { ok: true, cancelled: true });
+  assert.deepEqual(content, { ok: true });
   assert.deepEqual(timings, []);
 });

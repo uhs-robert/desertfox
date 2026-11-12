@@ -138,6 +138,8 @@ export function create_router(deps: RouterDeps): Router {
   }
 
   async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, is_first: boolean): Promise<Outcome> {
+    // Before the tab read, permission checks and validation, so a slow preflight shows in the time.
+    const started_ms = performance.now();
     const { active, context } = await read_now(request, is_first);
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
@@ -179,7 +181,6 @@ export function create_router(deps: RouterDeps): Router {
 
     // Only background commands are timed. A content command can wait on the user (hint mode, find, caret, visual), the registry cannot say which, and the wait would read as a slow command.
     if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request);
-    const started_ms = performance.now();
     for (let time = 0; time < counted.times; time++) {
       const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
