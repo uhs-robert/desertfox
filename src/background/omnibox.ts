@@ -7,6 +7,9 @@ import type { RunResponse, Refusal } from "../shared/messages.ts";
 import { parse_command_line } from "../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../shared/registry/index.ts";
 import type { RouteRequest, ActiveTab } from "./router.ts";
+import type { Completion } from "../cmdline/completion/sources.ts";
+
+export type OmniboxSuggestion = { content: string; description: string };
 
 export type OmniboxDisposition = "currentTab" | "newForegroundTab" | "newBackgroundTab";
 
@@ -19,6 +22,8 @@ export type OmniboxDeps = {
   mode_of: (tab_id: number | undefined) => Promise<Mode>;
   run: (request: RouteRequest) => Promise<RunResponse>;
   show_refusal: (tab_id: number | undefined, refusal: Refusal) => Promise<unknown>;
+  // The command line's completer over the loaded config, and the keys column. It has no live source, so no tab, bookmark or history rows appear, in any window.
+  completer: () => Promise<{ complete: (text: string, caret: number) => Completion; keys: ReadonlyMap<string, string> }>;
   record_history: (text: string, from_private_window: boolean) => Promise<unknown>;
 };
 
@@ -26,6 +31,9 @@ export const OMNIBOX_HINT = "Type a DesertFox command, for example tab.next";
 
 // Enter opens in this tab, so only a modified Enter changes where a command that has a `where` param opens.
 const WHERE_OF: Record<OmniboxDisposition, string | undefined> = { currentTab: undefined, newForegroundTab: "tab", newBackgroundTab: "background" };
+
+// The address bar shows 10 rows and the default suggestion takes one (measured by `test/key/p31_omnibox.mjs`).
+export const MAX_SUGGESTIONS = 9;
 
 export function create_omnibox(deps: OmniboxDeps) {
   async function entered(text: string, disposition: OmniboxDisposition): Promise<void> {
@@ -50,5 +58,22 @@ export function create_omnibox(deps: OmniboxDeps) {
     await deps.record_history(line, active?.incognito === true);
   }
 
-  return { entered };
+  // An answer that finishes after a newer keystroke is dropped, because Firefox shows whatever `suggest` was last called with.
+  let latest_input = 0;
+  async function changed(text: string, suggest: (results: OmniboxSuggestion[]) => void): Promise<void> {
+    const input = ++latest_input;
+    const { complete, keys } = await deps.completer();
+    if (input !== latest_input) return;
+    const completion = complete(text, text.length);
+    suggest(
+      completion.rows.slice(0, MAX_SUGGESTIONS).map((row) => {
+        const key_text = row.id === undefined ? "" : (keys.get(row.id) ?? "");
+        const detail = [row.description, key_text].filter((part) => part !== "").join("  ");
+        // Plain text: Firefox 160 shows the description as written, so markup or an entity would appear literally.
+        return { content: text.slice(0, completion.start) + row.insert, description: detail === "" ? row.name : `${row.name}  ${detail}` };
+      }),
+    );
+  }
+
+  return { entered, changed };
 }

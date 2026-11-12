@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { create_omnibox } from "../../src/background/omnibox.ts";
+import { create_omnibox, MAX_SUGGESTIONS } from "../../src/background/omnibox.ts";
+import { create_completer } from "../../src/cmdline/completion/sources.ts";
+import type { Completion, Row } from "../../src/cmdline/completion/sources.ts";
 import { create_router } from "../../src/background/router.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 import { command_meta } from "../../src/shared/registry/index.ts";
@@ -10,7 +12,9 @@ import { make_fake } from "./fakes.ts";
 
 const WHERE = ["here", "tab", "background"] as const;
 
-function make(options: { disabled?: boolean; incognito?: boolean } = {}) {
+type Completer = Parameters<typeof create_omnibox>[0]["completer"];
+
+function make(options: { disabled?: boolean; incognito?: boolean; completer?: Completer } = {}) {
   const ran: string[] = [];
   const history: string[] = [];
   const { deps, registry, log } = make_fake(
@@ -43,6 +47,13 @@ function make(options: { disabled?: boolean; incognito?: boolean } = {}) {
     mode_of: async () => "normal",
     run: router.run,
     show_refusal: deps.show_refusal,
+    completer:
+      options.completer ??
+      (async () => {
+        const commands = registry.list().map(command_meta);
+        const aliases = { nx: "tab.next", qzv: "tab.next" };
+        return { complete: create_completer(create_word_lookup(commands, aliases), commands, aliases, { search_engines: [], containers: [] }), keys: new Map([["tab.next", "<A-l>"]]) };
+      }),
     record_history: async (text, from_private_window) => void (from_private_window || history.push(text)),
   });
   return { omnibox, ran, history, log, registry, deps };
@@ -119,4 +130,72 @@ test("a parsed command is recorded in the history, a private window's is not, a 
   const p = make({ incognito: true });
   await p.omnibox.entered("next", "currentTab");
   assert.deepEqual(p.history, []);
+});
+
+const row = (name: string, insert: string, description = "", id?: string): Completion["rows"][number] => ({ name, insert, description, args: "", also_named: [], keywords: [], usage: "", positions: [], ...(id === undefined ? {} : { id }) }) as Row & { positions: number[] };
+const completion = (rows: Completion["rows"], start = 0): Completion => ({ rows, start, end: start, listing: true });
+
+test("suggestions come from the completer: full command text as content, summary and keys as description", async () => {
+  const t = make();
+  let shown: { content: string; description: string }[] = [];
+  await t.omnibox.changed("tab.ne", (results) => (shown = results));
+  const next = shown.find((result) => result.content === "next");
+  assert.ok(next, JSON.stringify(shown));
+  assert.match(next.description, /^next {2}.*<A-l>$/);
+});
+
+test("a configured alias is suggested", async () => {
+  const t = make();
+  let shown: { content: string; description: string }[] = [];
+  await t.omnibox.changed("qzv", (results) => (shown = results));
+  assert.ok(shown.some((result) => result.content === "next"), JSON.stringify(shown));
+});
+
+test("the content keeps the typed words before the one that completes", async () => {
+  const t = make({ completer: async () => ({ complete: () => completion([row("--tab", "--tab ")], 5), keys: new Map() }) });
+  let shown: { content: string; description: string }[] = [];
+  await t.omnibox.changed("open --t", (results) => (shown = results));
+  assert.equal(shown[0]?.content, "open --tab ");
+});
+
+test("suggestions are capped", async () => {
+  const many = Array.from({ length: MAX_SUGGESTIONS + 15 }, (_, index) => row(`c${index}`, `c${index} `));
+  const t = make({ completer: async () => ({ complete: () => completion(many), keys: new Map() }) });
+  let shown: unknown[] = [];
+  await t.omnibox.changed("", (results) => (shown = results));
+  assert.equal(shown.length, MAX_SUGGESTIONS);
+});
+
+test("the description is plain text: config text is shown as written, with no markup added", async () => {
+  const t = make({ completer: async () => ({ complete: () => completion([row("<b>x</b>", "x ", "a & b", "snip.x")]), keys: new Map([["snip.x", "<C-&>"]]) }) });
+  let shown: { content: string; description: string }[] = [];
+  await t.omnibox.changed("x", (results) => (shown = results));
+  assert.equal(shown[0]?.description, "<b>x</b>  a & b  <C-&>");
+});
+
+test("a stale answer is dropped", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let calls = 0;
+  const t = make({
+    completer: async () => {
+      if (calls++ === 0) await gate;
+      return { complete: (text) => completion([row(`answer-${text}`, `${text} `)]), keys: new Map() };
+    },
+  });
+  const seen: string[] = [];
+  const first = t.omnibox.changed("a", (results) => seen.push(...results.map((result) => result.content)));
+  await t.omnibox.changed("ab", (results) => seen.push(...results.map((result) => result.content)));
+  release();
+  await first;
+  assert.deepEqual(seen, ["ab "]);
+});
+
+test("no history, tab or bookmark rows appear, in a private window or not", async () => {
+  for (const incognito of [false, true]) {
+    const t = make({ incognito });
+    let shown: unknown[] = ["unset"];
+    await t.omnibox.changed("open ", (results) => (shown = results));
+    assert.deepEqual(shown, [], `incognito ${incognito}`);
+  }
 });
