@@ -19,6 +19,8 @@ function deps(run: () => Promise<unknown>, timings: [string, number][]): RouterD
     ask_selection: noop_async,
     runs_with_empty: async () => false,
     read_clipboard: async () => "",
+    read_offset: async () => undefined,
+    record_jump: async () => undefined,
     search_query: async () => undefined,
     bookmark_title: noop_async,
     has_permission: async () => true,

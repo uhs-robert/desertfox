@@ -810,6 +810,7 @@ test("@search_query typed outside a results page refuses with a message", async 
   const response = await create_router(deps).run({ invocations: [{ id: "open.go", args: { q: { from: "search_query" } } }], mode: "normal" });
   assert.equal(response.ok, false);
   assert.match(JSON.stringify(response) + log.join(), /search_query is not available here/);
+});
 
 // A command that moves the view and says so, next to one that does not. The content ones answer through `send_to_tab`.
 const jump_commands = {
