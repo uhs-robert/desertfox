@@ -284,11 +284,10 @@ function discovery(options: { delay_ms?: number; fullscreen?: boolean } = {}) {
   return { discover, opened };
 }
 
-test("the panel opens when the top frame reports the media mode, every time", async () => {
+test("the panel opens when the top frame enters the media mode", async () => {
   const { discover, opened } = discovery();
   await discover.reported(7, 0, "media");
-  await discover.reported(7, 0, "media");
-  assert.deepEqual(opened, [7, 7]);
+  assert.deepEqual(opened, [7]);
 });
 
 test("the panel does not open for a child frame, another mode, full screen or a delay of 0", async () => {
@@ -302,4 +301,43 @@ test("the panel does not open for a child frame, another mode, full screen or a 
     await test_case.discover.reported(7, frame_id, mode);
     assert.deepEqual(test_case.opened, [], name);
   }
+});
+
+test("a repeated media report from the top frame (a refocus) opens nothing, a return from a hint or the line does", async () => {
+  const { discover, opened } = discovery();
+  await discover.reported(7, 0, "media");
+  await discover.reported(7, 0, "media");
+  assert.deepEqual(opened, [7]);
+  await discover.reported(7, 0, "hint");
+  await discover.reported(7, 0, "media");
+  await discover.reported(7, 0, "cmdline");
+  await discover.reported(7, 0, "media");
+  assert.deepEqual(opened, [7, 7, 7]);
+  await discover.reported(7, 0, "normal");
+  await discover.reported(7, 0, "media");
+  assert.equal(opened.length, 4);
+});
+
+test("a child frame's report does not count as the top frame leaving media", async () => {
+  const { discover, opened } = discovery();
+  await discover.reported(7, 0, "media");
+  await discover.reported(7, 2, "normal");
+  await discover.reported(7, 0, "media");
+  assert.deepEqual(opened, [7]);
+});
+
+test("a panel is not opened when the mode changed while the checks were pending", async () => {
+  const opened: number[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const discover = create_media_discovery({
+    which_key_delay_ms: async () => (await gate, 300),
+    top_in_fullscreen: async () => false,
+    open_panel: async (tab_id) => void opened.push(tab_id),
+  });
+  const pending = discover.reported(7, 0, "media");
+  await discover.reported(7, 0, "normal");
+  release();
+  await pending;
+  assert.deepEqual(opened, []);
 });

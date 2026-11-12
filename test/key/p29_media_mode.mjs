@@ -1,6 +1,6 @@
 // The media mode. aa and the ;M hint start it, an element fullscreen starts it too, and it ends on Escape, on the end of the fullscreen and on a page change, in every frame of the tab.
 // The page /media_mode has a large video in a player box, a small one, a field and tall filler. Its videos report each change, so a key's effect reads from the page.
-// The badge hides in the media mode, so a badge label of "" is the mode, and NORMAL is the way out. The mode of a frame also shows in whether j scrolls it.
+// Outside fullscreen the badge reads MEDIA, in fullscreen it hides (a label of ""), and NORMAL is the way out. The mode of a frame also shows in whether j scrolls it.
 
 export const areas = ["media", "keys", "hints"];
 
@@ -19,6 +19,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await clear_toast();
   };
   const hidden = (mark, page_id) => wait_event(mark, indicator(page_id, ""), `the badge of ${page_id} to hide`);
+  const shown = (mark, page_id) => wait_event(mark, indicator(page_id, "MEDIA"), `the badge of ${page_id} to read MEDIA`);
   const normal = (mark, page_id) => wait_event(mark, indicator(page_id, "NORMAL"), `the badge of ${page_id} to read NORMAL`);
   // j changes the volume of the main video in the media mode and scrolls the page in normal mode.
   const j_is_media = async (page_id, volume) => {
@@ -31,7 +32,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await open_page("media_mode", id, { new_tab: true });
     const mark = events.length;
     await press_keys("a", "a");
-    await hidden(mark, id);
+    await shown(mark, id);
   };
   const focus_frame = async (host_id) => {
     const mark = events.length;
@@ -46,12 +47,12 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_takes_keys(host_id);
   };
 
-  await run_case("aa enters the mode with no fullscreen and the badge hides, and every key changes the main video", async () => {
+  await run_case("aa enters the mode with no fullscreen and the badge reads MEDIA, and every key changes the main video", async () => {
     const id = "p29_keys";
     await open_page("media_mode", id, { new_tab: true });
     const start = events.length;
     await press_keys("a", "a");
-    await hidden(start, id);
+    await shown(start, id);
     let mark = events.length;
     await press_keys("l");
     await wait_event(mark, media(id, "seeked", "big", (event) => Math.round(event.time) === 10), "the large video at 10 s");
@@ -175,7 +176,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await normal(mark, id);
     mark = events.length;
     await press_keys("a", "a");
-    await hidden(mark, id);
+    await shown(mark, id);
     mark = events.length;
     await press_keys("m");
     await wait_event(mark, media(id, "volumechange", "big", (event) => event.muted === true), "the large video muted after a new start");
@@ -212,7 +213,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await open_page("media_mode", id, { new_tab: true });
     const start = events.length;
     await press_keys("a", "a", "l");
-    await hidden(start, id);
+    await shown(start, id);
     const mark = events.length;
     await press_keys("0");
     await wait_event(mark, media(id, "seeked", "big", (event) => event.time < 0.5), "0 goes to the start, so the mode holds");
@@ -223,7 +224,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     const mark = events.length;
     await press_keys("a", "a");
     await wait_toast(/^No video on this page$/);
-    await expect_absent(mark, "p29_none", indicator("p29_none", ""), "the badge hid");
+    await expect_absent(mark, "p29_none", indicator("p29_none", "MEDIA"), "the badge showed MEDIA");
   });
 
   await run_case("F fullscreens the player box and the mode stays, and F again leaves it and the mode returns to normal at once", async () => {
@@ -277,7 +278,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await focus_top(id);
     let mark = events.length;
     await press_keys("a", "a");
-    await hidden(mark, id);
+    await shown(mark, id);
     await focus_frame(id);
     await j_is_media(`${id}_inner`, 0.9);
     await focus_top(id);
@@ -297,7 +298,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await open_page("media_mode_host", id, { new_tab: true });
     const mark = events.length;
     await press_keys("a", "a");
-    await hidden(mark, id);
+    await shown(mark, id);
     await focus_frame(id);
     await j_scrolls(`${id}_inner`);
     await focus_top(id);
@@ -311,7 +312,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await focus_top(id);
     let mark = events.length;
     await press_keys("a", "a");
-    await hidden(mark, id);
+    await shown(mark, id);
     mark = events.length;
     await press_keys("F");
     await wait_event(mark, (event) => event.page_id === `${id}_inner` && event.type === "media_fullscreen" && event.element === "player", "the framed player to go fullscreen");

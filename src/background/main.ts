@@ -88,7 +88,7 @@ const record_step: RecordStep = async (steps, outcome, origin) => {
 const media_discovery = create_media_discovery({
   which_key_delay_ms: async () => effective_settings((await get_config()).settings).which_key_delay_ms,
   top_in_fullscreen: async (tab_id) => (await browser.tabs.executeScript(tab_id, { code: "!!document.fullscreenElement", frameId: 0, runAt: "document_start" }))[0] === true,
-  open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "help.whichkey", args: {}, bundle: "whichkey" }] }, 0),
+  open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "help.whichkey", args: { only_in_mode: "media" }, bundle: "whichkey" }] }, 0),
 });
 const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
 const router = create_router(router_deps);
@@ -381,6 +381,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
   void tab_media.forget(tab_id).catch(() => undefined);
+  media_discovery.forget(tab_id);
   return tab_modes.forget(tab_id);
 });
 
