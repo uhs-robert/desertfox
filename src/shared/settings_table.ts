@@ -72,6 +72,8 @@ export const SETTINGS_TABLE = {
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
+  // A name, or a prefix before a final `*`, compared in lowercase. An empty list turns the stripping off. Global only: the copy paths run in bundles that do not receive per-site values.
+  strip_tracking_params: { kind: "text_list", expectation: "a list of query parameter names", default: ["utm_*", "fbclid", "gclid", "dclid", "msclkid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "mkt_tok"] },
   // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
   zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
   // The quality rule for site players (see `src/background/media_quality.ts`): `off` leaves the site alone, `auto` hands the choice to the site, `max` and `min` take an end, a height takes the highest level at or below it.

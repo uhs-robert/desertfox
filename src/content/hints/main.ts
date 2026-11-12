@@ -32,7 +32,9 @@ import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
 import { focus_field } from "./focus_fields.ts";
 import type { FieldDirection } from "./focus_fields.ts";
 import type { FollowDirection } from "./follow_links.ts";
-import { DEFAULT_SETTINGS } from "../../shared/default_settings.ts";
+import { read_strip_patterns } from "../strip_setting.ts";
+import { strip_tracking } from "../strip_tracking.ts";
+import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
 
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element };
@@ -116,11 +118,15 @@ async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_
 
 const yank_deps = (register: string | undefined): YankDeps => ({
   find: all_links,
+  strip_patterns: read_strip_patterns,
   keep_present_: keep_present_found,
   keep_in_view_: (found) => keep_visible_ones(found, "links"),
   copy: (text) => copy_yank(navigator.clipboard, text, register),
   show_message_: (message) => create_view().show_message_(message),
 });
+
+// Read when the hints are built, because a pick copies without waiting.
+let strip_patterns: readonly string[] = DEFAULT_STRIP_TRACKING_PARAMS;
 
 async function read_setting(name: string): Promise<unknown> {
   const stored = await browser.storage.local.get(CONFIG_STATUS_STORAGE_KEY);
@@ -234,7 +240,7 @@ const perform_pick = (current: Session, element: HTMLElement) => {
   if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
   return result;
 };
-const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), image_action, start_caret_, inspect_ };
+const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -289,7 +295,8 @@ function register(host: BundleHostApi): void {
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, key_line_setting, visible] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect")]);
+    const [letters, key_line_setting, visible, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect"), read_strip_patterns()]);
+    strip_patterns = patterns;
     if (current.cancelled) return;
     const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
     if (found.length === 0) {

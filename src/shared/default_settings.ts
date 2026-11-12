@@ -15,6 +15,7 @@ export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_DEFAULT_SITE_ROWS_OFF: Settings["default_site_rows_off"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
 export const DEFAULT_PREV_PATTERNS: Settings["prev_patterns"] = ["prev","previous","older","<","‹","←","«","≪","<<"];
+export const DEFAULT_STRIP_TRACKING_PARAMS: Settings["strip_tracking_params"] = ["utm_*","fbclid","gclid","dclid","msclkid","mc_eid","igshid","yclid","_hsenc","_hsmi","mkt_tok"];
 export const DEFAULT_MEDIA_QUALITY: Settings["media_quality"] = "max";
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
 export const DEFAULT_PALETTE: Settings["palette"] = "oasis_moonlight";
@@ -54,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   default_site_rows_off: DEFAULT_DEFAULT_SITE_ROWS_OFF,
   next_patterns: DEFAULT_NEXT_PATTERNS,
   prev_patterns: DEFAULT_PREV_PATTERNS,
+  strip_tracking_params: DEFAULT_STRIP_TRACKING_PARAMS,
   media_quality: DEFAULT_MEDIA_QUALITY,
   mode_indicator: DEFAULT_MODE_INDICATOR,
   palette: DEFAULT_PALETTE,
