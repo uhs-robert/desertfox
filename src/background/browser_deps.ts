@@ -91,8 +91,8 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     has_content_script,
     ask_selection: (tab_id, frame_id) => ask_selection(selection_ask_deps, tab_id, frame_id),
     read_offset: async (tab_id) => {
-      const answer = (await ask_page_bundle(jump_offset_ask_deps, tab_id, 0)) as { x?: unknown; y?: unknown } | undefined;
-      return typeof answer?.x === "number" && typeof answer.y === "number" ? { x: answer.x, y: answer.y } : undefined;
+      const answer = (await ask_page_bundle(jump_offset_ask_deps, tab_id, 0)) as { x?: unknown; y?: unknown; url?: unknown } | undefined;
+      return typeof answer?.x === "number" && typeof answer.y === "number" && typeof answer.url === "string" ? { x: answer.x, y: answer.y, url: answer.url } : undefined;
     },
     record_jump: (window_id, is_private, entry) => browser_jump_store.push(window_id, is_private, entry),
     runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),

@@ -44,7 +44,7 @@ if (!page.desertfox_page_ready && host) {
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
   // Returns nothing for every other message, so the listener in content.js answers those.
   browser.runtime.onMessage.addListener((message: BackgroundToContent) => {
-    if (message.type === "get_jump_offset") return Promise.resolve(offset_of(host));
+    if (message.type === "get_jump_offset") return Promise.resolve({ ...offset_of(host), url: location.href });
     return message.type === "get_selection" ? Promise.resolve(selected_text()) : undefined;
   });
   // The background records the place if the tab goes to another address. Only the top frame's report counts.
