@@ -34,6 +34,7 @@ test("a background that starts with the flag set restores the grey icon", async 
 
 test("the empty keymap matches no key and hides the badge", () => {
   assert.deepEqual(OFF_KEYMAP.modes, {});
+  assert.equal(OFF_KEYMAP.off, true);
   assert.equal(OFF_KEYMAP.mode_indicator, "off");
   assert.equal(OFF_KEYMAP.site_rules, undefined);
   for (const mode of ["normal", "insert", "hint", "cmdline"]) assert.equal(create_matcher(OFF_KEYMAP).feed(mode, "j").kind, "no_match");

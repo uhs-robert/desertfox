@@ -85,6 +85,16 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
 
   const site_request = (page_id, action) => send_from_popup({ type: "toolbar_site", url: url_of("page", page_id), action });
 
+  await run_case("in ignore mode the page gets the keyup of a press whose keydown went to another frame", async () => {
+    const id = "rule_off_title_input_shift_moves_focus";
+    await open_page("hidden_input_frame", id, { new_tab: true, keys_page_id: `${id}_frame` });
+    await poll_until("the IGNORE badge", async () => badge_of(id) === "IGNORE");
+    const mark = events.length;
+    // The frame moves the focus to the title field on the Shift keydown, so the keyup lands in the top page alone.
+    await press_keys("-M", "shift", "-m", "shift");
+    await wait_event(mark, (event) => event.page_id === id && event.type === "keyup" && event.key === "Shift", "the top page to get the keyup of a Shift whose keydown went to the frame");
+  });
+
   await run_case("a rule edit reaches the open page at once, the rule's ignore mode ends with it, and a manual leave stays", async () => {
     await open_page("page", "rule_live", { new_tab: true });
     try {
