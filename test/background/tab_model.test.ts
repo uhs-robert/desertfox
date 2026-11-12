@@ -1295,4 +1295,32 @@ describe("native tab groups", () => {
     const last = (p.messages as unknown as TabModelMessage[]).at(-1);
     assert.equal(last?.type === "snapshot" && last.groups.map((g) => g.id).join(), "7");
   });
+
+  test("a tab update that names a group before its event reads the rows again once the event arrives", async () => {
+    const f = make([tab(1, 1, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onUpdated", 1, { groupId: 9 }, tab(1, 1, 0, { groupId: 9 }));
+    f.set_tabs([tab(1, 1, 0, { groupId: 9 })]);
+    f.set_groups([group(9, 1)]);
+    const calls = f.query_calls();
+    f.fire("groups.onCreated", group(9, 1));
+    await tick();
+    f.run_timers();
+    assert.equal(f.query_calls(), calls + 1);
+    const patch = patch_of((p.messages as unknown as TabModelMessage[]).at(-1));
+    assert.deepEqual(patch.upserts.map((row) => [row.id, row.group_id]), [[1, 9]]);
+  });
+
+  test("group events with no skipped tab update read no rows again", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 })], { groups: [group(7, 1)] });
+    await f.model.start();
+    await f.connect_port();
+    await tick();
+    const calls = f.query_calls();
+    f.fire("groups.onUpdated", group(7, 1, { title: "x" }));
+    for (const id of [11, 12, 13, 14]) f.fire("groups.onCreated", group(id, 1));
+    await tick();
+    assert.equal(f.query_calls(), calls);
+  });
 });
