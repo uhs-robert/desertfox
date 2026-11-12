@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_open_help, help_name_choices, help_name_url, plan_help_tab } from "../../src/background/open_help.ts";
+import { create_open_help, help_name_choices, help_name_url, key_command_id, plan_help_tab } from "../../src/background/open_help.ts";
 
 // The line's frame in each opener tab.
 const LINE_FRAME = 3;
@@ -71,4 +71,33 @@ test("a page whose address only starts like the help page opens a new tab", () =
 
 test("no asking tab opens a plain new tab", () => {
   assert.deepEqual(plan_help_tab(HELP, HELP, { id: undefined, window_id: undefined, url: undefined }), { kind: "create", url: HELP });
+});
+
+const step = (id: string) => ({ invocation: { id }, runs_in: "content" as const, count_rule: "ignore" as const });
+const keymap = {
+  modes: {
+    normal: {
+      kind: "branch",
+      children: {
+        j: { kind: "leaf", steps: [step("scroll.lines")] },
+        ",": { kind: "branch", children: { r: { kind: "leaf", steps: [step("page.reload")] }, x: { kind: "leaf", steps: [step("a.b")] } } },
+        m: { kind: "branch", children: { "": { kind: "leaf", steps: [step("mark.set")] } } },
+        "<A-j>": { kind: "leaf", steps: [step("tab.next")] },
+      },
+    },
+  },
+} as never;
+
+test("key_command_id follows a leader sequence, a chord and a capture key to the command", () => {
+  assert.deepEqual(key_command_id(keymap, "j"), { id: "scroll.lines" });
+  assert.deepEqual(key_command_id(keymap, ",r"), { id: "page.reload" });
+  assert.deepEqual(key_command_id(keymap, "<A-j>"), { id: "tab.next" });
+  assert.deepEqual(key_command_id(keymap, "m"), { id: "mark.set" });
+});
+
+test("key_command_id says why a sequence names no command", () => {
+  assert.match(key_command_id(keymap, "z").error!, /bound to nothing/);
+  assert.match(key_command_id(keymap, ",").error!, /start of longer keys/);
+  assert.match(key_command_id(undefined, "j").error!, /bound to nothing/);
+  assert.match(key_command_id(keymap, "<A-").error ?? "x", /./);
 });

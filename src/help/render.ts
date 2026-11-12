@@ -3,10 +3,10 @@
 import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
-import { STYLE_CLASSES, STYLE_VARIABLES } from "./model.ts";
+import { advanced_count, STYLE_CLASSES, STYLE_VARIABLES, visible_commands_model } from "./model.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
-import { PAGES } from "./route.ts";
+import { ADVANCED_SUFFIX, PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
 
 export type Child = Node | string;
@@ -181,10 +181,22 @@ function home_page(model: HelpModel): HTMLElement[] {
   return [block_node(model.tip), el("h2", undefined, "Warnings"), warnings];
 }
 
-function commands_page(model: HelpModel): HTMLElement[] {
+// The toggle lives in the hash, so a reload, a link and the back button keep it. It shows the count, which the shown model no longer holds.
+function advanced_toggle(advanced: boolean, count: number): HTMLElement {
+  const button = el("button", "desertfox-help-advanced-toggle", advanced ? "Hide advanced commands" : `Show advanced commands (${count})`) as HTMLButtonElement;
+  button.type = "button";
+  button.setAttribute("aria-pressed", String(advanced));
+  button.addEventListener("click", () => {
+    location.hash = PAGES.find((page) => page.id === "commands")!.hash + (advanced ? "" : ADVANCED_SUFFIX);
+  });
+  return el("p", undefined, button);
+}
+
+function commands_page(model: HelpModel, advanced: boolean, hidden_count: number): HTMLElement[] {
   const sections = page_sections("commands", model);
   return [
     block_node(model.tip),
+    ...(hidden_count > 0 || advanced ? [advanced_toggle(advanced, hidden_count)] : []),
     ...model.groups.flatMap((group, index) => [section_heading("commands", sections[index]!), ...group.commands.map(command_card)]),
   ];
 }
@@ -239,13 +251,13 @@ function settings_page(model: HelpModel): HTMLElement[] {
   ];
 }
 
-function page_body(route: Route, model: HelpModel, guide: Block[]): HTMLElement[] {
+function page_body(route: Route, model: HelpModel, guide: Block[], advanced_total: number): HTMLElement[] {
   switch (route.page) {
     case "home": return home_page(model);
     case "settings": return settings_page(model);
     case "quick-start": return quick_start_page(model.quick_start);
     case "search-engines": return search_engines_page(guide, model);
-    case "commands": return commands_page(model);
+    case "commands": return commands_page(model, route.advanced === true, advanced_total);
     case "styling": return styling_page();
   }
 }
@@ -322,13 +334,13 @@ function section_heading(page: PageId, section: Section, level = 2): HTMLElement
 
 export const section_hash = (page: PageId, slug: string): string => `#section=${page}/${encodeURIComponent(slug)}`;
 
-function section_list(page: PageId, sections: Section[], expanded: boolean): HTMLElement {
+function section_list(page: PageId, sections: Section[], expanded: boolean, keep_advanced = false): HTMLElement {
   const list = el("div", "desertfox-help-sections");
   list.id = `desertfox-help-sections-${page}`;
   list.hidden = !expanded;
   for (const { title, slug } of sections) {
     const link = el("a", undefined, title);
-    const hash = section_hash(page, slug);
+    const hash = section_hash(page, slug) + (keep_advanced ? ADVANCED_SUFFIX : "");
     link.setAttribute("href", hash);
     // The same hash fires no hashchange, so a click would not scroll back from where the reader moved.
     link.addEventListener("click", () => {
@@ -388,7 +400,7 @@ function brand(): HTMLElement {
 }
 
 // The current page's group is open unless the reader toggled it on this page. Going to a page drops its stored toggle, so a menu click always opens it. Other groups keep what the reader set, closed at first. Each toggle works alone.
-function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement {
+function sidebar(current: PageId, model: HelpModel, guide: Block[], advanced: boolean): HTMLElement {
   if (current !== last_page) group_open.delete(current);
   last_page = current;
   const entries = PAGES.map((page): HTMLElement => {
@@ -397,7 +409,7 @@ function sidebar(current: PageId, model: HelpModel, guide: Block[]): HTMLElement
     if (page.id === current) link.setAttribute("aria-current", "page");
     const sections = page_sections(page.id, model, guide);
     if (sections.length === 0) return link;
-    const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current);
+    const list = section_list(page.id, sections, group_open.get(page.id) ?? page.id === current, page.id === "commands" && advanced);
     const toggle = section_toggle(page.id, page.title, list);
     // A click on the current page's entry fires no hashchange and so no render, and a click from one of its sections renders on the same page. Neither reaches the reset above, so the click does it.
     link.addEventListener("click", () => {
@@ -472,16 +484,18 @@ export function close_drawer_on_escape(event: KeyboardEvent): void {
   menu_toggle.focus();
 }
 
-export function render_help(root: HTMLElement, model: HelpModel, route: Route, guide: Block[]): void {
+export function render_help(root: HTMLElement, full_model: HelpModel, route: Route, guide: Block[]): void {
+  const model = visible_commands_model(full_model, route.advanced === true, route.command);
+  const advanced_total = advanced_count(full_model);
   const title = PAGES.find((page) => page.id === route.page)?.title ?? "Home";
   const heading = el("h1", undefined, title);
   heading.tabIndex = -1;
   // The home header holds the keycap above the title, so the logo stays with the title and not with the tip below.
   const header = route.page === "home" ? el("header", "desertfox-help-home-header", home_keycap(), heading) : heading;
-  const page = el("main", "desertfox-help-page", header, ...page_body(route, model, guide));
+  const page = el("main", "desertfox-help-page", header, ...page_body(route, model, guide, advanced_total));
   // The sidebar scrolls on its own, so a fresh one starts at the top. Scroll is set after it is in the tree because a detached element ignores it.
   const old_scroll_top = root.querySelector(".desertfox-help-sidebar")?.scrollTop ?? 0;
-  const sidebar_node = sidebar(route.page, model, guide);
+  const sidebar_node = sidebar(route.page, model, guide, route.advanced === true);
   sidebar_node.id = SIDEBAR_ID;
   const menu_toggle = el("button", "desertfox-help-menu-toggle", menu_icon());
   menu_toggle.setAttribute("type", "button");

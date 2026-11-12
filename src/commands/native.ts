@@ -17,6 +17,7 @@ define("native.install", {
   label: "Install native host",
   intent: "Open the page that installs the native host. It has the permission button, the install command and the button that lets the host keep itself updated. After this one install the host updates itself.",
   bridge: false,
+  advanced: true,
   runs_in: "background",
   repeatable: false,
   run: (ctx) => open_grant_panel(ctx, "nativeMessaging"),
@@ -26,6 +27,7 @@ define("native.update", {
   label: "Update native host",
   intent: "Update the native host to the version of this extension. It checks the files against SHA-256 hashes in the signed extension. The host must have been installed once with native.install.",
   bridge: false,
+  advanced: true,
   runs_in: "background",
   repeatable: false,
   run: async (ctx) => {

@@ -36,4 +36,12 @@ export async function run_cases({ run_case, press_keys, poll_until, wait_tab_qui
     expect((await tab_count()) === before, "the tab count changed");
     await close_help_tabs();
   });
+
+  await run_case("`:helpkey gg` opens the card of the command gg runs", async () => {
+    await close_help_tabs();
+    await open_page("page", "p13_help", { new_tab: true });
+    await run_line(":helpkey gg");
+    await poll_until("the help tab at the scroll.to card", async () => is_help_at_card(await help_urls()), { timeout_ms: 8000 });
+    await close_help_tabs();
+  });
 }
