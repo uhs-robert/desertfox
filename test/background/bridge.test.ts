@@ -157,6 +157,10 @@ test("the label is empty only for modes with no label, whatever mode_indicator s
   visual.modes.set(11, "visual");
   await visual.connect_and_ready();
   assert.equal(modes_of(visual.port())[0]!.label, "VISUAL");
+  const media = make();
+  media.modes.set(11, "media");
+  await media.connect_and_ready();
+  assert.equal(modes_of(media.port())[0]!.label, "MEDIA");
 });
 
 test("publish points: mode change of the active tab, window focus, tab activation", async () => {
@@ -166,6 +170,9 @@ test("publish points: mode change of the active tab, window focus, tab activatio
   port.posted.length = 0;
   await test_case.bridge.mode_changed({ id: 11, windowId: 1, active: true }, "visual");
   assert.deepEqual(port.posted, [{ ...NORMAL_MESSAGE, id: "visual", label: "VISUAL" }]);
+  port.posted.length = 0;
+  await test_case.bridge.mode_changed({ id: 11, windowId: 1, active: true }, "media");
+  assert.deepEqual(port.posted, [{ ...NORMAL_MESSAGE, id: "media", label: "MEDIA" }]);
   port.posted.length = 0;
   test_case.windows.set(2, { id: 2, focused: true, private: false });
   test_case.windows.set(1, { id: 1, focused: false, private: false });

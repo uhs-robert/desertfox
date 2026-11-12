@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 407 (normal 205, media 47, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 408 (normal 205, media 48, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -305,6 +305,7 @@ Which-key group names:
 | `:` | bound | `cmdline.open` | Command line |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
+| `?` | bound | `help.whichkey` | Show the keys |  |
 | `F` | bound | `media fullscreen` | Toggle fullscreen |  |
 | `h` | bound | `media seek down` | Seek back |  |
 | `l` | bound | `media seek up` | Seek forward |  |

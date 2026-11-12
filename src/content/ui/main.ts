@@ -16,6 +16,8 @@ if (!page.desertfox_ui_ready) {
   page.desertfox_host.register_handler_("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
     const { mode, pass_next, setting, recording, site_label } = args as unknown as BadgeState;
+    // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.
+    if (mode === "media" && document.fullscreenElement) return show_mode_label(undefined);
     show_mode_label(mode_label(mode, pass_next, setting, recording, site_label), pass_next ? undefined : site_label === undefined ? mode : "site");
   });
 }

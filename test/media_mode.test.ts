@@ -6,11 +6,14 @@ import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
-import { create_tab_media } from "../src/background/tab_media.ts";
+import { create_media_discovery, create_tab_media } from "../src/background/tab_media.ts";
 import { create_mode_state, fullscreen_step } from "../src/content/mode_state.ts";
 import type { Mode } from "../src/shared/command.ts";
 import { MODES } from "../src/shared/command.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
+import { panel_after_prefix } from "../src/background/list_keys.ts";
+import { mode_label } from "../src/content/ui/mode_label.ts";
+import { badge_state } from "../src/content/badge_state.ts";
 import { check_args } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 
@@ -67,7 +70,7 @@ function compiled() {
 
 test("the media section holds the media keys and, of normal mode, only f, : and the hint group", () => {
   const media = compiled().modes.media!;
-  for (const key of ["F", "h", "l", "0", "^", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";"]) assert.ok(media.children[key], key);
+  for (const key of ["F", "h", "l", "0", "^", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";", "?"]) assert.ok(media.children[key], key);
   const normal = compiled().modes.normal!;
   const shared = Object.keys(media.children).filter((key) => normal.children[key] && JSON.stringify(normal.children[key]) === JSON.stringify(media.children[key]));
   assert.deepEqual(shared.sort(), [":", ";", "<C-[>", "<Escape>", "f"].sort());
@@ -255,4 +258,48 @@ test("a Firefox shortcut that leaves out the count param is skipped, since a sho
   const with_shortcut = { ...DEFAULT_KEYMAP, browser: { "<A-5>": { id: "media.act", args: { action: "seek", value: "percent" } } } };
   const { warnings } = compile_config({ config: empty_config(), default_keymap: with_shortcut, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
   assert.ok(warnings.some((warning) => warning.startsWith('browser: skipped "<A-5>"')), JSON.stringify(warnings));
+});
+
+test("? in the media mode runs help.whichkey", () => {
+  const leaf = compiled().modes.media!.children["?"] as { steps: { invocation: { id: string } }[] };
+  assert.equal(leaf.steps[0]!.invocation.id, "help.whichkey");
+});
+
+test("the media panel lists the media keys, and the badge says MEDIA", () => {
+  const rows = panel_after_prefix(compiled().modes.media, [], (id) => registry.get(id)).rows;
+  for (const key of ["?", "F", "h", "l", "m"]) assert.ok(rows.some((row) => row.keys === key), key);
+  assert.equal(mode_label("media", false, "always"), "MEDIA");
+  assert.equal(mode_label("media", false, "not_normal"), "MEDIA");
+  assert.deepEqual(badge_state("media", false, "always", undefined), { mode: "media", pass_next: false, setting: "always", recording: undefined, site_label: undefined });
+  assert.equal(badge_state("media", false, "off", undefined), undefined);
+});
+
+function discovery(options: { delay_ms?: number; fullscreen?: boolean } = {}) {
+  const opened: number[] = [];
+  const discover = create_media_discovery({
+    which_key_delay_ms: async () => options.delay_ms ?? 300,
+    top_in_fullscreen: async () => options.fullscreen ?? false,
+    open_panel: async (tab_id) => void opened.push(tab_id),
+  });
+  return { discover, opened };
+}
+
+test("the panel opens when the top frame reports the media mode, every time", async () => {
+  const { discover, opened } = discovery();
+  await discover.reported(7, 0, "media");
+  await discover.reported(7, 0, "media");
+  assert.deepEqual(opened, [7, 7]);
+});
+
+test("the panel does not open for a child frame, another mode, full screen or a delay of 0", async () => {
+  for (const [name, test_case, frame_id, mode] of [
+    ["child frame", discovery(), 3, "media"],
+    ["normal mode", discovery(), 0, "normal"],
+    ["hint mode", discovery(), 0, "hint"],
+    ["full screen", discovery({ fullscreen: true }), 0, "media"],
+    ["delay 0", discovery({ delay_ms: 0 }), 0, "media"],
+  ] as const) {
+    await test_case.discover.reported(7, frame_id, mode);
+    assert.deepEqual(test_case.opened, [], name);
+  }
 });

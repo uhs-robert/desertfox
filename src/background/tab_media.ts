@@ -77,3 +77,23 @@ export function create_tab_media(deps: TabMediaDeps) {
 }
 
 export type TabMedia = ReturnType<typeof create_tab_media>;
+
+export type MediaDiscoveryDeps = {
+  // 0 turns which-key off.
+  which_key_delay_ms: () => Promise<number>;
+  // Whether the top document is in full screen. A video in a child frame in full screen counts, because it makes the top document's `fullscreenElement` its frame element.
+  top_in_fullscreen: (tab_id: number) => Promise<boolean>;
+  // Runs `help.whichkey` in the top frame.
+  open_panel: (tab_id: number) => Promise<unknown>;
+};
+
+// Opens the which-key panel of the media mode when the top frame enters or returns to it, so the keys can be found. Media mode is set in every frame, so only the top frame's report counts. Full screen shows the video alone, and a delay of 0 means no panel unasked.
+export function create_media_discovery(deps: MediaDiscoveryDeps) {
+  return {
+    reported: async (tab_id: number, frame_id: number, mode: Mode): Promise<void> => {
+      if (frame_id !== 0 || mode !== "media") return;
+      if ((await deps.which_key_delay_ms()) === 0 || (await deps.top_in_fullscreen(tab_id))) return;
+      await deps.open_panel(tab_id);
+    },
+  };
+}
