@@ -7,7 +7,7 @@ import type { HintFramesCollect, HintFramesEnd, HintFramesLabels, HintFramesPick
 import { HINT_FRAMES_STORAGE_PREFIX } from "./storage_keys.ts";
 
 // Slow ad frames answer late, and a frame that has not reported by then gets no labels. The labels already drawn are never redrawn for it.
-export const HINT_FRAMES_WAIT_MS = 300;
+export const HINT_FRAMES_WAIT_MS = 500;
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 

@@ -276,7 +276,7 @@ const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandO
   return result;
 };
 
-// The background answers within its 300 ms wait. Past this, it is gone or stuck, and the frame keeps its own labels.
+// The background answers within its 500 ms wait. Past this, it is gone or stuck, and the frame keeps its own labels.
 const ACROSS_START_WAIT_MS = 2000;
 
 // Across frames every frame runs the bundle, and a parent that can read a frame (same origin, about:blank) already labels it with its own walk. Such a frame labels nothing itself, so no element gets two labels. A frame of another site reads null here.
