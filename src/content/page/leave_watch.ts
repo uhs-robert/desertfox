@@ -1,5 +1,6 @@
 // Tells the background where the top page stood when the user left it, for the jump list: as the page hides (`jump_leave`), and as a single-page app changes its address in place (`jump_push`).
 // The `page` and `hints` bundles both arm it, so a page only scrolled with `j` still reports once a hint follow leaves it. The first arm in a document wins and the window holds the watch.
+// Each push or traverse committed within the document also feeds `listen_`, in any frame, for code that must react to it (hint mode ends on it).
 
 import type { JumpLeave, JumpPush } from "../../shared/messages.ts";
 import { mark_page_url } from "../../shared/mark_names.ts";
@@ -17,6 +18,7 @@ export const scroll_offset = (host: BundleHostApi) => {
 };
 
 export type LeaveWatch = {
+  listen_: (listener: () => void) => void;
   // Quiet: a jump or step just scrolled the page, so the address change it sets off is no move. Not quiet: the user acts now (a hint pick), so the change it makes is one.
   quiet_: (is_quiet: boolean) => void;
 };
@@ -26,6 +28,7 @@ export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindo
   const armed = page.desertfox_leave_watch;
   if (armed) return armed;
   const is_top = page === page.top;
+  const listeners: (() => void)[] = [];
   let quiet_since = -Infinity;
   const now = () => page.performance.now();
   const navigation = page.navigation;
@@ -45,8 +48,11 @@ export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindo
   // An app that intercepts a link (`event.intercept()`) commits here too, though its `navigate` named another document.
   // A change with no navigation (`updateCurrentEntry()`) has no `navigationType`, and must not commit a read a navigation that never loaded left held.
   navigation?.addEventListener("currententrychange", (event) => {
-    const left = (event as unknown as { navigationType: string | null }).navigationType && pending;
+    const type = (event as unknown as { navigationType: string | null }).navigationType;
+    const left = type && pending;
     pending = false;
+    // `replace` keeps the view the user is on.
+    if (/^(push|traverse)$/.test(type!)) for (const listener of listeners) listener();
     const is_quiet = now() - quiet_since < LEAVE_QUIET_MS;
     if (!left || page.document.hidden || is_quiet) return;
     quiet_since = now();
@@ -55,6 +61,7 @@ export function arm_leave_watch(host: BundleHostApi, page = window as WatchWindo
   // Only the top frame's report counts.
   if (is_top) page.addEventListener("pagehide", () => send({ type: "jump_leave", ...place_here() }));
   return (page.desertfox_leave_watch = {
+    listen_: (listener) => void listeners.push(listener),
     quiet_: (is_quiet) => void (quiet_since = is_quiet ? now() : -Infinity),
   });
 }

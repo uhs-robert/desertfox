@@ -160,3 +160,49 @@ test("a change of the current entry with no navigation does not commit a read he
   navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: null }));
   assert.deepEqual(sent, []);
 });
+
+test("a listener hears a push or a traverse that commits, and a change an app intercepts", () => {
+  const { watch, navigate } = make();
+  let heard = 0;
+  watch.listen_(() => heard++);
+  navigate("https://app.test/inbox#a");
+  navigate("https://app.test/mail/1", "push", "intercept");
+  navigate(HERE, "traverse");
+  assert.equal(heard, 3);
+});
+
+test("a listener in a child frame hears the change though the frame records nothing", () => {
+  const { watch, navigate } = make({ is_top: false });
+  let heard = 0;
+  watch.listen_(() => heard++);
+  navigate("https://app.test/a");
+  assert.equal(heard, 1);
+  assert.deepEqual(sent, []);
+});
+
+test("a listener hears no cancelled change, no replace and no change that loads another document", () => {
+  const { watch, navigate } = make();
+  let heard = 0;
+  watch.listen_(() => heard++);
+  navigate("https://app.test/a", "push", "cancel");
+  navigate("https://app.test/b", "push", "load");
+  navigate("https://app.test/inbox?sorted", "replace");
+  assert.equal(heard, 0);
+});
+
+test("a change with no navigation (updateCurrentEntry) is not heard", () => {
+  const { watch, navigation } = make();
+  let heard = 0;
+  watch.listen_(() => heard++);
+  navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: null }));
+  assert.equal(heard, 0);
+});
+
+test("arming twice keeps one listener per document", () => {
+  const { watch, page, host, navigate } = make();
+  let heard = 0;
+  watch.listen_(() => heard++);
+  arm_leave_watch(host, page as unknown as Window).listen_(() => heard++);
+  navigate("https://app.test/a");
+  assert.equal(heard, 2);
+});

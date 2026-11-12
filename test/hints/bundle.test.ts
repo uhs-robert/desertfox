@@ -44,3 +44,18 @@ test("a bundle that runs before the content script's host waits for the host, so
   assert.equal(page.desertfox_hints_ready, true);
   assert.ok(registered.includes("hint.run"));
 });
+
+test("a same-document change with no hint session ends no mode, and the watch is armed once however often the bundle loads", async () => {
+  const modes: string[] = [];
+  const navigation = new EventTarget();
+  const host = { register_sink_: () => {}, register_handler_: () => {}, set_mode_: (mode: string) => void modes.push(mode), escape_: () => {} };
+  const page: Record<string, unknown> = { desertfox_host: host, navigation, location: { href: "https://app.test/a" }, document: { hidden: false }, performance: { now: () => 1 }, addEventListener: () => {} };
+  page.top = page;
+  (globalThis as Record<string, unknown>).window = page;
+  (globalThis as Record<string, unknown>).browser = { runtime: { onMessage: { addListener: () => {} }, sendMessage: async () => undefined } };
+  const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
+  await import(`${bundle_url}?armed_once`);
+  await import(`${bundle_url}?armed_twice`);
+  navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: "push" }));
+  assert.deepEqual(modes, []);
+});
