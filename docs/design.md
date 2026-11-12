@@ -622,6 +622,7 @@ Two channels exist, stable and beta. The `update_url` in the installed build's m
 - Trust. The owner's AMO key sits in the `beta-signing` environment, and only the sign job sees it. The other jobs build and publish from the signed output.
 - Moving from a beta to a lower stable build. The host keeps the newer one, because it never downgrades. Use the stable build from AMO only after it passes the beta.
 - Policy pin. `tools/install_policy.sh beta` pins the https URL of the latest beta in the policy file. The pin only seeds the first install: the `update_url` carries every update after that. The stable pin is a `file://` URL to the local xpi, and it replaces a beta whenever the local xpi ranks higher, so it is not for a beta machine.
+- Manual beta. `just beta` starts the beta workflow on `main` and watches the run. To go back to beta after `just release`, run `bash tools/install_policy.sh beta`, because `just release` installs the stable build and repoints the policy.
 - Local installs. On a beta machine, never run `just install` or `just release`. Both overwrite the beta with a local build.
 
 ## Scope

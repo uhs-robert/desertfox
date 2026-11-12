@@ -55,6 +55,33 @@ install_deps:
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} {{flags}}
 
+# Build main as pushed and publish it as a beta, by starting the CI beta workflow and watching its run. A failed run is not rerun: start `just beta` again. Needs gh, logged in.
+beta:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "beta: gh is not installed. Install the GitHub CLI first." >&2
+        exit 1
+    fi
+    if ! gh auth status >/dev/null 2>&1; then
+        echo "beta: gh is not logged in. Run 'gh auth login' first." >&2
+        exit 1
+    fi
+    # Runs of this workflow that exist before the dispatch are skipped by their id, so the watch never follows an older run. Run ids only grow.
+    last_id=$(gh run list --workflow beta.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+    gh workflow run beta.yml --ref main
+    run_id=""
+    for _ in $(seq 1 30); do
+        run_id=$(gh run list --workflow beta.yml --event workflow_dispatch --branch main --limit 5 --json databaseId --jq "[.[] | select(.databaseId > $last_id)] | max_by(.databaseId) | .databaseId // empty")
+        if [ -n "$run_id" ]; then break; fi
+        sleep 2
+    done
+    if [ -z "$run_id" ]; then
+        echo "beta: the workflow was started but its run did not show up within 60 s. Look at 'gh run list --workflow beta.yml'." >&2
+        exit 1
+    fi
+    gh run watch "$run_id" --exit-status
+
 # Python unit tests of the native host and its install script. The install tests use a temporary HOME and a stubbed curl.
 host-test:
     python3 -m unittest discover -s host -p 'test_*.py'
