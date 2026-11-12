@@ -178,36 +178,46 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          current_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - 2>/dev/null | jq -r '.addons | to_entries[0].value.updates[0].version // empty' 2>/dev/null || true)
-          if [ -n "$current_version" ] && [ "$(printf '%s\n%s\n' "$current_version" "$VERSION" | sort -V | tail -n 1)" = "$current_version" ]; then
-            echo "updates.json already names $current_version, which is not older than $VERSION, so it stays."
-            exit 0
+          release_api="repos/$REPOSITORY/releases/tags/$UPDATES_TAG"
+          # Only a 404 means "missing". Any other failure stops the step, so an API error never reads as an empty channel.
+          if ! release_json=$(gh api "$release_api" 2>&1); then
+            grep -q 'HTTP 404' <<<"$release_json" || { echo "Could not read the $UPDATES_TAG release: $release_json" >&2; exit 1; }
+            gh release create "$UPDATES_TAG" --repo "$REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" --title "Beta channel" --notes "Holds updates.json, which every beta build reads to find the next beta. Do not delete this release: its URL is built into each beta."
+            release_json=$(gh api "$release_api")
+          fi
+          asset_id() { jq -r --arg name "$1" '.assets[] | select(.name == $name) | .id' <<<"$release_json"; }
+          if [ -n "$(asset_id updates.json)" ]; then
+            current_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - | jq -r '.addons | to_entries[0].value.updates[0].version // empty')
+            if [ -n "$current_version" ] && [ "$(printf '%s\n%s\n' "$current_version" "$VERSION" | sort -V | tail -n 1)" = "$current_version" ]; then
+              echo "updates.json already names $current_version, which is not older than $VERSION, so it stays."
+              exit 0
+            fi
           fi
           temp_name="updates-new-$VERSION.json"
           node tools/write_updates_json.ts --tag "v$VERSION" --xpi "release-assets/desertfox-$VERSION.xpi" --manifest dist/manifest.json --repo "$REPOSITORY" --out "$temp_name"
-          if ! gh release view "$UPDATES_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$UPDATES_TAG" --repo "$REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" --title "Beta channel" --notes "Holds updates.json, which every beta build reads to find the next beta. Do not delete this release: its URL is built into each beta."
-          fi
-          asset_id() { gh api "repos/$REPOSITORY/releases/tags/$UPDATES_TAG" --jq ".assets[] | select(.name == \"$1\") | .id"; }
           # A temporary asset left by an earlier failed run would block the rename.
-          for leftover in $(gh api "repos/$REPOSITORY/releases/tags/$UPDATES_TAG" --jq '.assets[] | select(.name | test("^updates-new-.*\\.json$")) | .name'); do
+          for leftover in $(jq -r '.assets[] | select(.name | test("^updates-new-.*\\.json$")) | .name' <<<"$release_json"); do
             gh release delete-asset "$UPDATES_TAG" "$leftover" --repo "$REPOSITORY" --yes
           done
           gh release upload "$UPDATES_TAG" "$temp_name" --repo "$REPOSITORY"
+          release_json=$(gh api "$release_api")
           new_id=$(asset_id "$temp_name")
           [ -n "$new_id" ] || { echo "The uploaded $temp_name is not on the $UPDATES_TAG release." >&2; exit 1; }
           if [ -n "$(asset_id updates.json)" ]; then
             gh release delete-asset "$UPDATES_TAG" updates.json --repo "$REPOSITORY" --yes
           fi
           gh api -X PATCH "repos/$REPOSITORY/releases/assets/$new_id" -f name=updates.json >/dev/null
+      # Keeps the 20 highest versions, by version and not by date, and never the one updates.json names. A failed read of updates.json stops the prune.
       - name: Prune old beta prereleases
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release list --repo "$REPOSITORY" --limit 1000 --json tagName,isPrerelease,createdAt \
-            --jq '[.[] | select(.isPrerelease and (.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$")))] | sort_by(.createdAt) | reverse | .[20:] | .[].tagName' |
-            while read -r tag; do
-              gh release delete "$tag" --repo "$REPOSITORY" --cleanup-tag --yes
+          channel_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - | jq -r '.addons | to_entries[0].value.updates[0].version // empty')
+          gh release list --repo "$REPOSITORY" --limit 1000 --json tagName,isPrerelease \
+            --jq '.[] | select(.isPrerelease and (.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tagName | ltrimstr("v")' |
+            sort -V -r | tail -n +21 | { grep -vxF "$channel_version" || true; } |
+            while read -r version; do
+              gh release delete "v$version" --repo "$REPOSITORY" --cleanup-tag --yes
             done

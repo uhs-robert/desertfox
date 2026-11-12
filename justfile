@@ -42,7 +42,8 @@ test: install_deps
 
 [private]
 install_deps:
-    @test -d node_modules || npm install --no-audit --no-fund
+    # web-ext is checked too: a checkout that installed before web-ext was locked has node_modules without it, and sign would fail late.
+    @test -x node_modules/.bin/web-ext || npm install --no-audit --no-fund
 
 # Lint the config directory (default ~/.config/desertfox): build it in memory and print problems. Writes nothing Firefox reads, but the build prerequisite rewrites dist/ because the lint reads dist/commands.json. Extra flags (such as --schemas) go to the CLI.
 build-config dir="" *flags="": build
@@ -345,6 +346,8 @@ release:
     #!/usr/bin/env bash
     set -euo pipefail
     just release_guard
+    # Before the bump, so a missing dependency never leaves a bump behind.
+    just install_deps
     # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
     command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
     gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
