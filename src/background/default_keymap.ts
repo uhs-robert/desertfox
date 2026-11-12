@@ -400,6 +400,7 @@ const MEDIA_KEYS: ModeBindings = {
   ...keys_kept_in_media,
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
+  "?": { id: "help.whichkey", label: "Show the keys" },
   F: media_action("fullscreen", undefined, "Toggle fullscreen"),
   h: media_action("seek", "down", "Seek back"),
   l: media_action("seek", "up", "Seek forward"),

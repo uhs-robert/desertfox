@@ -343,7 +343,17 @@ function start(): void {
     if (next) bundles.set_mode_(next);
   };
   // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
-  listen("fullscreenchange", () => media_step(!!document.fullscreenElement), false, document);
+  // The badge and an open which-key panel follow the change even when the mode stays media.
+  listen(
+    "fullscreenchange",
+    () => {
+      media_step(!!document.fullscreenElement);
+      refresh_mode_indicator();
+      key_flow.reset_sequence_();
+    },
+    false,
+    document,
+  );
 
   page_mode.listen_display_(refresh_mode_indicator);
 

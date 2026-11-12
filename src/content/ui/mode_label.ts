@@ -2,7 +2,7 @@
 
 import type { Mode, ModeIndicator } from "../../shared/index.ts";
 
-const MODE_LABELS: Partial<Record<Mode, string>> = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE" };
+const MODE_LABELS: Partial<Record<Mode, string>> = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE", media: "MEDIA" };
 
 export type BadgeState = { mode: Mode; pass_next: boolean; setting: ModeIndicator; recording: string | undefined; site_label?: string | undefined };
 
