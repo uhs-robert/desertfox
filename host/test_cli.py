@@ -176,14 +176,14 @@ class CliTest(unittest.TestCase):
         host.send({"verb": "event", "event": "tab_activated", "tab_id": 4, "window_id": 1})
         # The CLI may subscribe after that event, so the test sends events until one arrives.
         line = ""
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + test_bridge.LIVENESS_S
         while not line and time.monotonic() < deadline:
             host.send({"verb": "event", "event": "tab_activated", "tab_id": 5, "window_id": 1})
             if select.select([events.stdout], [], [], 0.2)[0]:
                 line = events.stdout.readline()
         self.assertEqual({name: value for name, value in json.loads(line).items() if name != "seq"}, {"event": "tab_activated", "tab_id": 5, "window_id": 1})
         host.close_stdin()
-        self.assertEqual(events.wait(10), 0)
+        self.assertEqual(events.wait(test_bridge.LIVENESS_S), 0)
         events.stdout.close()
         self.assertEqual(events.stderr.read(), "")
         events.stderr.close()
@@ -322,7 +322,7 @@ class CliTest(unittest.TestCase):
         self.assertIsNone(process.poll())
         self.assertFalse(os.path.exists(self.theme_path()))
         fcntl.flock(lock, fcntl.LOCK_UN)
-        self.assertEqual(process.wait(10), 0)
+        self.assertEqual(process.wait(test_bridge.LIVENESS_S), 0)
         with open(self.theme_path(), encoding="utf-8") as kept:
             self.assertEqual(json.load(kept), {"palette": "oasis_dune"})
         process.stdout.close()
@@ -334,7 +334,7 @@ class CliTest(unittest.TestCase):
         time.sleep(0.5)
         self.assertIsNone(process.poll())
         bridge = self.serve({"ok": True})
-        self.assertEqual(process.wait(10), 0)
+        self.assertEqual(process.wait(test_bridge.LIVENESS_S), 0)
         self.assertEqual(bridge.requests, [{"verb": "theme", "palette": "oasis_dune"}])
         self.assertFalse(os.path.exists(self.theme_path()))
         process.stdout.close()

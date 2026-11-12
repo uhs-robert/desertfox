@@ -503,7 +503,7 @@ class LocalTlsServer:
 
     def answer(self, connection):
         try:
-            connection.settimeout(10)
+            connection.settimeout(LIVENESS_S)
             with self.context.wrap_socket(connection, server_side=True) as tls:
                 head = b""
                 while b"\r\n\r\n" not in head:
