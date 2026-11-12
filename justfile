@@ -412,19 +412,7 @@ release_install:
     fi
     just install
 
-# Start the beta workflow on main after a release, so the matching x.y.z.N beta follows. Dispatch only, with no watch. A failure warns and exits 0, because the stable release is already out.
-[private]
-release_dispatch_beta:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    if ! run_id=$(just beta_dispatch); then
-        echo "warning: the beta workflow did not start. Run 'just beta' to start it." >&2
-        exit 0
-    fi
-    url=$(gh run view "$run_id" --json url --jq .url 2>/dev/null || true)
-    echo "Started the beta workflow: ${url:-see 'gh run list --workflow beta.yml'}"
-
-# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts, then start the beta workflow on main without watching it. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
+# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts. The matching beta comes after the release PR merges: the nightly builds it because main changed, or run `just beta` for it at once. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -468,7 +456,6 @@ release:
     xpi=$(ls web-ext-artifacts/*.xpi)
     just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
-    just release_dispatch_beta
 
 # Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
 [private]

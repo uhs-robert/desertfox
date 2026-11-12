@@ -471,22 +471,6 @@ class ReleaseStepTest(InstallCase):
         self.assertNotIn("on beta", done.stdout)
         self.assertIn("install_policy.sh", done.stderr)
 
-    def test_release_dispatches_the_beta_workflow_without_watching(self):
-        done = self.just("release_dispatch_beta")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        with open(self.gh_log) as file:
-            logged = file.read()
-        self.assertIn("workflow run beta.yml --ref main", logged)
-        self.assertNotIn("run watch", logged)
-        self.assertIn("Started the beta workflow", done.stdout)
-
-    def test_a_failed_beta_dispatch_only_warns(self):
-        with open(os.path.join(self.stub_bin, "gh"), "w") as file:
-            file.write("#!/bin/sh\n[ \"$1 $2\" = \"auth status\" ] && exit 0\nexit 1\n")
-        done = self.just("release_dispatch_beta")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("warning", done.stderr)
-
     def test_stamp_writes_the_version_into_both_hosts_before_hashing(self):
         self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
         version = self.package_version()
