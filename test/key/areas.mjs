@@ -123,8 +123,8 @@ export function read_piece_areas() {
   return pieces;
 }
 
-// A change to these runs every piece: they are the test machinery and the build the pieces load.
-const harness_globs = ["test/key/{harness,run,server,rdp,timings,areas,session}.mjs", "test/key/{launch_firefox.sh,user.js,keyboard.py,us.xkb}", "test/key/config/**", "tools/{build,write_commands_json}.mjs", "tools/render_docs.ts"];
+// A change to these runs every piece: they are the test machinery and the build the pieces load. The harness installs the config host, and every piece loads its config through it.
+const harness_globs = ["host/{desertfox-host,install.sh}", "test/key/{harness,run,server,rdp,timings,areas,session}.mjs", "test/key/{launch_firefox.sh,user.js,keyboard.py,us.xkb}", "test/key/config/**", "tools/{build,write_commands_json}.mjs", "tools/render_docs.ts"];
 const harness_patterns = harness_globs.map(glob_to_regex);
 
 // Pieces to run for a list of changed paths. A changed piece file selects that piece, a harness file selects every piece, and so does an unplaced src file (the safe side). Other paths are ignored.
@@ -147,7 +147,7 @@ function git(...args) {
 function changed_paths_since(base, head) {
   if (head) return git("diff", "--name-only", "--no-renames", `${base}...${head}`);
   const merge_base = git("merge-base", base, "HEAD")[0];
-  return [...git("diff", "--name-only", "--no-renames", merge_base), ...git("ls-files", "--others", "--exclude-standard", "--", "src", "test/key", "tools")];
+  return [...git("diff", "--name-only", "--no-renames", merge_base), ...git("ls-files", "--others", "--exclude-standard", "--", "src", "test/key", "tools", "host")];
 }
 
 // node test/key/areas.mjs <base> [head]: prints the choice on stderr and the comma-separated pieces on stdout (empty for none).

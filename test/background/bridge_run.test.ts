@@ -222,7 +222,7 @@ test("a never-listed built-in command does not say yes", () => {
 
 test("the never-list and the open-address list name real commands", () => {
   const ids = new Set(built_in.list().map((command) => command.id));
-  const page_ids = ["page.reload", "page.save_pdf", "hint.run", "hint.key", "visual.act", "open.clipboard", "command.repeat", "macro.play"];
+  const page_ids = ["page.reload", "page.save_pdf", "hint.run", "hint.key", "visual.act", "open.clipboard", "command.repeat", "macro.play", "browser.open_firefox_page"];
   for (const id of page_ids) assert.ok(ids.has(id), id);
   for (const group of ["config", "settings", "session", "copy", "register", "debug", "native", "permissions"]) assert.ok([...ids].some((id) => id.startsWith(`${group}.`)), group);
   const opens = [...ids].filter(opens_url);
@@ -332,4 +332,9 @@ test("every repeat of a named run reads the named tab, not the focused window", 
   const test_case = pinned_case({ tabs: [tab], windows: [NORMAL_WINDOW, PRIVATE_WINDOW], count: 3 });
   assert.deepEqual(await test_case.bridge_run.run("next", 42), { ok: true });
   assert.deepEqual(test_case.ran, ["tab.next in 42", "tab.next in 42", "tab.next in 42"]);
+});
+
+test("the Firefox page command never runs through the bridge", () => {
+  assert.equal(never_listed("browser.open_firefox_page"), true);
+  assert.equal(built_in.get("browser.open_firefox_page")?.bridge, false);
 });

@@ -775,7 +775,7 @@ FIREFOX_PAGES = {
     "crashes": "about:crashes",
     "protections": "about:protections",
 }
-FIREFOX_BINARY_NAMES = {"firefox", "firefox-bin"}
+FIREFOX_BINARY_NAMES = {"firefox", "firefox-bin", "firefox-esr", "firefox-esr-bin"}
 # A package upgrade under a running Firefox leaves this on the link of its exe.
 DELETED_EXE_SUFFIX = " (deleted)"
 PROFILE_LOCK_NAME = ".parentlock"
@@ -783,8 +783,9 @@ CRASH_EVENTS_SUFFIX = os.path.join("crashes", "events")
 # The remote client hands the URL over and exits within about a second.
 FIREFOX_REMOTE_TIMEOUT_S = 10
 # The crash reporter and startup variables belong to the parent Firefox, not to the short-lived remote client.
+# MOZ_NO_REMOTE and MOZ_NEW_INSTANCE tell a client not to hand the URL over, so it would start a second Firefox instead.
 DROPPED_ENV_PREFIXES = ("MOZ_CRASHREPORTER_", "XRE_")
-DROPPED_ENV_NAMES = {"MOZ_LAUNCHED_CHILD", "MOZ_APP_SILENT_START"}
+DROPPED_ENV_NAMES = {"MOZ_LAUNCHED_CHILD", "MOZ_APP_SILENT_START", "MOZ_NO_REMOTE", "MOZ_NEW_INSTANCE"}
 STDERR_TAIL_BYTES = 4096
 
 

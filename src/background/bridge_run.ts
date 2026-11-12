@@ -14,8 +14,8 @@ export type BridgeAnswer = { ok: true } | { ok: false; message: string };
 // the clipboard (`copy`, `register`), debugging, the native hosts and permission grants.
 const NEVER_GROUPS: readonly string[] = ["config", "settings", "session", "copy", "register", "debug", "native", "permissions"];
 // Single commands that never run: `page.reload` can clear cookies and site data, `page.save_pdf` and the hint picker can download or copy.
-// `visual.act` copies the selection and `open.clipboard` reads the clipboard. `command.repeat` and `macro.play` replay stored steps through the main router, so they could run a never-listed command.
-const NEVER_IDS: readonly string[] = ["page.reload", "page.save_pdf", "hint.run", "hint.key", "visual.act", "open.clipboard", "command.repeat", "macro.play"];
+// `visual.act` copies the selection and `open.clipboard` reads the clipboard. `browser.open_firefox_page` starts a process through the native host and, without it, writes the clipboard. `command.repeat` and `macro.play` replay stored steps through the main router, so they could run a never-listed command.
+const NEVER_IDS: readonly string[] = ["page.reload", "page.save_pdf", "hint.run", "hint.key", "visual.act", "open.clipboard", "command.repeat", "macro.play", "browser.open_firefox_page"];
 // Commands that open an address. A private window gets none of them from outside, because the page would join a private session without the user asking.
 const OPENS_URL_IDS: readonly string[] = [
   "open.url", "open.search", "open.anything", "open.clipboard", "tab.load", "bookmark.open", "bookmark.open_folder", "history.open", "quickmark.open", "tab.reopen_in_container", "window.new", "url.increment", "url.parent", "url.root",
