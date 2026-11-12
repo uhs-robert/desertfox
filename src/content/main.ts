@@ -20,7 +20,7 @@ import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
-import { fullscreen_step } from "./mode_state.ts";
+import { fullscreen_step, takes_media_step } from "./mode_state.ts";
 import { site_mode } from "./site_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
@@ -385,7 +385,7 @@ function start(): void {
       replaying = true;
       bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
-    else if (message.type === "media") media_step(message.on);
+    else if (message.type === "media" && takes_media_step(message, browser.runtime.getFrameId(window))) media_step(message.on);
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
       bundles.set_mode_(message.mode);
       sync_mode_to_focus();

@@ -14,7 +14,7 @@ export const media_reports = create_media_reports();
 export const tab_media = create_tab_media({
   // Read at call time: Node tools import this module, where there is no `browser`.
   storage: { get: (keys) => browser.storage.session.get(keys), set: (items) => browser.storage.session.set(items), remove: (keys) => browser.storage.session.remove(keys) },
-  send_step: (tab_id, on, frame_id) => browser.tabs.sendMessage(tab_id, { type: "media", on } satisfies MediaStep, frame_id === undefined ? {} : { frameId: frame_id }),
+  send_step: (tab_id, on, frame_id, from) => browser.tabs.sendMessage(tab_id, { type: "media", on, from } satisfies MediaStep, frame_id === undefined ? {} : { frameId: frame_id }),
   frame_alive: (tab_id, frame_id) => browser.tabs.sendMessage(tab_id, { type: "ping" } satisfies Ping, { frameId: frame_id }).then(Boolean),
   now: () => Date.now(),
 });

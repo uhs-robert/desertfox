@@ -1,10 +1,14 @@
 // The mode of this frame and the one-shot "pass the next key" flag. Pure, so the transitions are testable.
 
 import type { Mode } from "../shared/index.ts";
+import type { MediaStep } from "../shared/messages.ts";
 import { is_caret_mode } from "../shared/command.ts";
 
 // The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Only normal mode starts the media mode, so insert, ignore, hint and the reading modes win, and only the media mode ends with the fullscreen.
 export const fullscreen_step = (mode: Mode, has_fullscreen_element: boolean): Mode | undefined => (has_fullscreen_element ? (mode === "normal" ? "media" : undefined) : mode === "media" ? "normal" : undefined);
+
+// A frame skips the step that its own report of the mode caused. That step can arrive after the frame left the mode (a site key that ends its fullscreen at once), and would put it back.
+export const takes_media_step = (step: MediaStep, frame_id: number): boolean => step.from !== frame_id;
 
 // Hint and command line mode, the two that return to where they began.
 const is_line = (mode: Mode): boolean => mode === "hint" || mode === "cmdline";

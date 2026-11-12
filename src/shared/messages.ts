@@ -501,6 +501,8 @@ export type SetMode = {
 export type MediaStep = {
   type: "media";
   on: boolean;
+  // The frame whose own report started the mode. It is in the mode already, so it skips the step: a step that reaches it after it left the mode would put it back.
+  from?: number | undefined;
 };
 
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.

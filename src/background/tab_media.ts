@@ -13,8 +13,8 @@ export type MediaHold = { frames: number[]; pin_frame?: number; stepped_on?: tru
 
 export type TabMediaDeps = {
   storage: SessionStorage;
-  // The `MediaStep` message, to one frame or, with no frame, to every frame of the tab that runs the content script.
-  send_step: (tab_id: number, on: boolean, frame_id?: number) => Promise<unknown>;
+  // The `MediaStep` message, to one frame or, with no frame, to every frame of the tab that runs the content script. `from` names the reporter that the step skips.
+  send_step: (tab_id: number, on: boolean, frame_id?: number, from?: number) => Promise<unknown>;
   // Whether the frame still runs the content script: a frame removed with its line open never reports again.
   frame_alive: (tab_id: number, frame_id: number) => Promise<boolean>;
   now: () => number;
@@ -41,7 +41,7 @@ export function create_tab_media(deps: TabMediaDeps) {
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
-  // The reporter gets no step off. A late step on would put it back in the mode, its report would start a new hold whose step on comes after that step off, and the two would repeat without end.
+  // The reporter gets no step off, because it left the mode already. No step on reaches a frame of the hold late: each frame joins by reporting the mode, so its step came first, and the step of a first report skips the reporter (`from`).
   const end = async (tab_id: number, hold: MediaHold, except?: number) => {
     await deps.storage.remove(key_of(tab_id));
     await Promise.all(hold.frames.filter((frame_id) => frame_id !== except).map((frame_id) => deps.send_step(tab_id, false, frame_id).catch(() => undefined)));
@@ -100,8 +100,8 @@ export function create_tab_media(deps: TabMediaDeps) {
           if (hold?.frames.includes(frame_id)) return;
           const { stepped_on, ...rest } = hold ?? { frames: [] };
           await write(tab_id, { ...rest, frames: [...rest.frames, frame_id] });
-          // No list of frames reaches the background, so the step goes to every frame, the reporter too, which is in media already and stays.
-          if (rest.frames.length === 0 && !stepped_on) await deps.send_step(tab_id, true).catch(() => undefined);
+          // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
+          if (rest.frames.length === 0 && !stepped_on) await deps.send_step(tab_id, true, undefined, frame_id).catch(() => undefined);
           return;
         }
         if (!hold?.frames.includes(frame_id)) return;
