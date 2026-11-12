@@ -18,7 +18,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     expect((await scroll_delta_by_press(page_id, ["j"])) > 0, `j did not scroll after ${what}`);
   };
 
-  await run_case("reload ends hint mode", async () => {
+  await run_case("after a reload the page is in normal mode with no labels", async () => {
     await start_hints("hn_reload");
     const mark = events.length;
     await in_active_tab(`setTimeout(() => location.reload(), 0); true`);
@@ -27,7 +27,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await expect_keys_work("hn_reload", "the reload");
   });
 
-  await run_case("navigation to a new page in the same tab ends hint mode", async () => {
+  await run_case("after a navigation to a new page the tab is in normal mode with no labels", async () => {
     await start_hints("hn_new_page");
     const mark = events.length;
     await in_active_tab(`setTimeout(() => location.assign("/page?id=hn_target"), 0); true`);
@@ -36,14 +36,15 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await expect_keys_work("hn_target", "the navigation");
   });
 
-  await run_case("coming back to a page from history ends hint mode, also from the page cache", async () => {
+  await run_case("after going back in history the page is in normal mode with no labels", async () => {
     await start_hints("hn_back");
     const mark = events.length;
     await in_active_tab(`setTimeout(() => location.assign("/page?id=hn_away"), 0); true`);
     await wait_event(mark, loaded("hn_away"), "the other page to load");
     const back_mark = events.length;
     await in_active_tab(`setTimeout(() => history.back(), 0); true`);
-    await wait_event(back_mark, (event) => event.page_id === "hn_back", "the first page to show again");
+    // Measured here (Firefox 160): the page is reloaded on the way back, not restored from the back-forward cache, so only the reload path is proven. A restore would report the page visible again, a reload reports tree_read. A late hidden report of the old page matches neither.
+    await wait_event(back_mark, (event) => event.page_id === "hn_back" && (event.type === "tree_read" || (event.type === "visibility" && event.state === "visible")), "the first page to show again");
     await expect_normal("the way back");
     await expect_keys_work("hn_back", "the way back");
   });
@@ -52,11 +53,10 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await run_case(`${name} keeps hint mode, because the document stays`, async () => {
       await start_hints("hn_same_document");
       await in_active_tab(`${change}; true`);
-      await in_active_tab(`new Promise((done) => setTimeout(done, 500))`);
-      expect((await hint_label_count()) > 0, `${name} removed the hint labels`);
       const mark = events.length;
       await press_keys("j");
       await expect_no_scroll(mark, "hn_same_document");
+      expect((await hint_label_count()) > 0, `${name} removed the hint labels`);
       await press_keys("-k", "Escape");
       await expect_normal("Escape");
     });
