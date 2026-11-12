@@ -95,7 +95,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     expect(shown.cross.some((label) => label.active), `Tab never made the cross-origin label active: ${JSON.stringify(shown)}`);
     const mark = events.length;
     await press_keys("-k", "Return");
-    await wait_event(mark, (event) => event.type === "visibility" && event.page_id.startsWith("fh_text_cross_"), "the cross-origin frame to follow the link text mode picked");
+    await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "fh_text_cross_one", "the cross-origin frame to follow the link text mode picked");
     await wait_for_no_labels("the labels of every frame to go after the pick");
   });
 }
