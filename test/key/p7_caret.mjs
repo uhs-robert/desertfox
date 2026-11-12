@@ -556,7 +556,7 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
   });
 
-  await run_case("t after fx repeats the find, and Escape then tx starts a till find that keeps the lit matches while it waits", async () => {
+  await run_case("t after fx repeats the find, and Escape then tx starts a till find and lights its matches", async () => {
     await open_page("caret_ft", "ft_till", { new_tab: true });
     await press_and_wait_for_move("ft_till", "gV", "the caret");
     await press_keys("fx");
@@ -568,6 +568,7 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await press_keys("t");
     // The key waits in the key layer and takes any printable key as its target, so no barrier key can prove the wait.
     await sleep(300);
+    expect(lit(await in_active_tab(READ_FT)) === 0, "the wait for a till target lit matches");
     await press_keys("x");
     await wait_ft((state) => current_row(state) === 2 && lit(state) > 0, "the x of row 2 current after tx");
     await press_keys(";");
@@ -623,12 +624,14 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
   });
 
-  for (const [mode_keys, name] of [["v", "visual"], ["V", "line visual"]]) {
+  for (const [mode_keys, name, badge] of [["v", "visual", "VISUAL"], ["V", "line visual", "V-LINE"]]) {
     await run_case(`a live find repeats and reverses in ${name} mode`, async () => {
       const page_id = `ft_${name.replace(" ", "_")}`;
       await open_page("caret_ft", page_id, { new_tab: true });
       await press_and_wait_for_move(page_id, "gV", "the caret");
+      const mark_mode = events.length;
       await press_keys(mode_keys);
+      await wait_event(mark_mode, badge_is(page_id, badge), `the ${badge} badge after ${mode_keys}`);
       await press_keys("fx");
       await wait_ft((state) => current_row(state) === 0, `${name} fx to row 0`);
       await press_keys("f");
@@ -648,8 +651,9 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     let mark = events.length;
     await press_keys("q", "a");
     await wait_event(mark, badge_is("ft_macro", "NORMAL recording @a"), "the recording badge after qa");
+    const mark_caret = events.length;
     await press_keys("gV");
-    await wait_ft((state) => lit(state) === 0, "gV in caret mode");
+    await wait_event(mark_caret, badge_is("ft_macro", "CARET recording @a"), "the CARET badge after gV");
     await press_keys("fx");
     await wait_ft((state) => current_row(state) === 0, "row 0 current while recording");
     await press_keys("f");

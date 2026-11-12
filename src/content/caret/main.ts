@@ -253,8 +253,8 @@ const sink_for = (mode: CaretMode) => ({
     page.desertfox_host.set_mode_("caret");
     return "handled";
   },
-  // Between caret and the visual modes the highlight stays. Every other way out clears it.
   live_: find_mode.is_live_,
+  // Between caret and the visual modes the highlight stays. Every other way out clears it.
   exit: (destination: ExitDestination) => {
     const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
     find_mode.end();

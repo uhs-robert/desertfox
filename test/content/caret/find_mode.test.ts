@@ -157,7 +157,7 @@ test("; keeps the find alive", async () => {
   assert.equal(page.find_mode.is_live_(), true);
 });
 
-test("a new find after Escape keeps the view listener of a find that is gone and starts a fresh one", async () => {
+test("a new find after Escape starts a fresh find with a view listener of its own", async () => {
   const page = make_page();
   await page.start_find();
   page.press("<Escape>", "t", "y");
@@ -256,7 +256,7 @@ test("a key that binds nothing in the caret keymap keeps the find", async () => 
   assert.equal(page.find_mode.is_live_(), true);
 });
 
-test("a first find is not live in the gap between the target key and the handler, so a second f there still waits for a target", async () => {
+test("a first find is not live in the gap between the target key and the handler", async () => {
   const page = make_page();
   await page.start_caret();
   page.press("f", "x");
