@@ -552,3 +552,59 @@ test("a key that runs in a child frame in media mode closes the panel of the top
   await discover.key_ran(7, 3, "normal");
   assert.deepEqual(closed, [7, 7]);
 });
+
+const hold_frames = (store: Map<string, unknown>): number[] | undefined => [...store.values()].map((hold) => (hold as { frames: number[] }).frames)[0];
+
+test("join: a frame that starts while frames are in the mode, or after aa, joins it and is written into the hold in the same turn", async () => {
+  const frames_in = fake_tab_media();
+  await frames_in.media.reported(7, 0, "media", false);
+  assert.equal(await frames_in.media.join(7, 3), true);
+  assert.deepEqual(hold_frames(frames_in.store), [0, 3]);
+  const after_aa = fake_tab_media();
+  await after_aa.media.enter(7, 0);
+  assert.equal(await after_aa.media.join(7, 3), true);
+  assert.deepEqual(hold_frames(after_aa.store), [3]);
+});
+
+test("join: a pin with no frame in the mode, no hold, an ended hold and a new load do not join", async () => {
+  const pinned = fake_tab_media();
+  await pinned.media.pin(7, 2);
+  assert.equal(await pinned.media.join(7, 3), false);
+  assert.deepEqual(hold_frames(pinned.store), []);
+  assert.equal(await fake_tab_media().media.join(7, 3), false);
+  const ended = fake_tab_media();
+  await ended.media.enter(7, 0);
+  await ended.media.reported(7, 0, "media", false);
+  await ended.media.reported(7, 0, "normal", true);
+  assert.equal(await ended.media.join(7, 3), false);
+  const loaded = fake_tab_media();
+  await loaded.media.enter(7, 0);
+  await loaded.media.navigated(7, { status: "loading" });
+  assert.equal(await loaded.media.join(7, 3), false);
+});
+
+test("join: a hold that ends after the join sends the joined frame the step off, and the hold is gone", async () => {
+  const { media, sent, store } = fake_tab_media();
+  await media.enter(7, 0);
+  await media.reported(7, 0, "media", false);
+  await media.join(7, 3);
+  await media.reported(7, 0, "normal", true);
+  assert.deepEqual(sent, [[7, "all", "on"], [7, 3, "off"]]);
+  assert.equal(store.size, 0);
+});
+
+test("join: the joined frame's own report sends no second step on", async () => {
+  const { media, sent } = fake_tab_media();
+  await media.enter(7, 0);
+  await media.reported(7, 0, "media", false);
+  await media.join(7, 3);
+  await media.reported(7, 3, "media", false);
+  assert.deepEqual(sent, [[7, "all", "on"]]);
+});
+
+test("join: two frames joining together are both kept", async () => {
+  const { media, store } = fake_tab_media();
+  await media.enter(7, 0);
+  assert.deepEqual(await Promise.all([media.join(7, 3), media.join(7, 4)]), [true, true]);
+  assert.deepEqual(hold_frames(store), [3, 4]);
+});

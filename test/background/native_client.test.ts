@@ -93,3 +93,20 @@ test("the client and the real host agree on both requests", { skip: spawnSync("p
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("editor_start sends the text with only the fields given and answers the job", async () => {
+  const { client, sent } = client_with(async () => ({ ok: true, job: "j1" }));
+  assert.equal(await client.editor_start({ text: "hi", ext: "md", insert: true }), "j1");
+  assert.deepEqual(sent, [{ cmd: "editor_start", text: "hi", ext: "md", insert: true }]);
+  assert.equal(await failure_of(() => client_with(async () => ({ ok: true })).client.editor_start({ text: "" })), "bad_reply");
+});
+
+test("editor_collect tells pending, done unchanged and done with text, and a refusal throws", async () => {
+  assert.deepEqual(await client_with(async () => ({ ok: true, pending: true })).client.editor_collect("j"), { pending: true });
+  assert.deepEqual(await client_with(async () => ({ ok: true, done: true, changed: false })).client.editor_collect("j"), { done: true, changed: false });
+  assert.deepEqual(await client_with(async () => ({ ok: true, done: true, changed: true, text: "x" })).client.editor_collect("j"), { done: true, changed: true, text: "x" });
+  const { client, sent } = client_with(async () => ({ ok: false, error: "unknown job" }));
+  await assert.rejects(client.editor_collect("j"), (error: unknown) => error instanceof NativeHostError && error.message.includes("unknown job"));
+  assert.deepEqual(sent, [{ cmd: "editor_collect", job: "j" }]);
+  assert.equal(await failure_of(() => client_with(async () => ({ ok: true, done: true, changed: true })).client.editor_collect("j")), "bad_reply");
+});

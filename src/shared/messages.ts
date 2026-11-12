@@ -231,6 +231,10 @@ export type RegisterWrite = { type: "register_write"; name: string; text: string
 export type RegisterYank = { type: "register_yank"; name: string; text: string };
 export type RegisterRequest = RegisterRead | RegisterWrite | RegisterYank;
 
+// From the `editor` bundle: the focused field's text to edit outside the browser. `token` names this page's pending edit, `ext` is the command's own extension (else the background resolves the site's `editor_ext`). The answer is `EditorAnswer`.
+export type EditorOpen = { type: "editor_open"; token: string; text: string; ext?: string; insert: boolean };
+export type EditorAnswer = { ok: true } | { ok: false; message: string };
+
 // From the content script when a leaf of content commands ends: the steps and how they ended. The background checks it like any page message,
 // because the sender is a page script, then hands it to `record_step`. A held key sends the first press only.
 export type RecordStep = {
@@ -251,6 +255,8 @@ export type OpenHelp = {
 // A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
 export type ReadKeymap = {
   type: "read_keymap";
+  // Set on a frame's first ask only, when it starts in normal mode with no editable focus: only such a frame may join a hold. A re-ask, or a frame in another mode, must not be written into one.
+  join: boolean;
 };
 
 // Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
@@ -410,7 +416,7 @@ export type MediaPin = { type: "media_pin" };
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest;
+export type ContentToBackground = RecordTiming | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -482,7 +488,10 @@ export type Ping = {
   type: "ping";
 };
 
-export type BackgroundToContent = RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+// To the frame that opened an edit, when the editor ends. `text` is present only when the file changed. A frame with another `token` (a new page) ignores it.
+export type EditorDone = { type: "editor_done"; token: string; text?: string };
+
+export type BackgroundToContent = EditorDone | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

@@ -36,6 +36,16 @@ Phase 0 answered three questions before design work: where plain keys and Firefo
 - The content script also catches the chords, so a page that cancels keys cannot block them where the content script runs.
 - Firefox adds no startup delay of its own. A slow key listener comes from what the extension loads before it listens.
 
+### Address bar keyword (omnibox)
+
+Measured on Firefox 160 with the key test `test/key/p31_omnibox.mjs`, which types into the real address bar. The add-on registers the manifest keyword `df`.
+
+- Typing `df tab.next` and Enter runs the command on `about:license`, where no content script and no plain key reach DesertFox. It also runs on an http page. The background receives `omnibox.onInputEntered` whatever the page shows. Adding the key needs no permission.
+- With only a default suggestion set, the address bar shows one row, the default suggestion's text followed by the typed text: "Type a DesertFox command, for example tab.next df tab.next". The row is there as soon as the keyword and a space are typed, and it stays while the command is typed.
+- Plain Enter arrives with the disposition `currentTab`. DesertFox changes `where` only for the other two dispositions.
+- A refused line (`df rust`) runs nothing and the tab stays where it was.
+- The headless test cannot judge the look of the row, a clash with the user's own address bar keywords, or the private window case.
+
 ### Managed storage
 
 A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extension id>.json` again after an edit. The extension read `browser.storage.managed` every second.

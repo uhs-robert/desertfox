@@ -104,10 +104,15 @@ function with_stop_for_record(node: TreeBranch): TreeBranch {
   return { ...node, children };
 }
 
+// The mode a frame that starts late joins. Insert wins: media entry leaves a frame in insert alone too. Media is asked only when insert is not held, so its join writes the frame into the hold only when the frame joins it.
+// Only a frame's first ask joins: a re-ask (config reload, macro recording) from a frame in another mode must not write it into a hold.
+export const join_mode = async (first_ask: boolean, insert_held: () => Promise<boolean>, media_held: () => Promise<boolean>): Promise<"insert" | "media" | undefined> => (!first_ask ? undefined : (await insert_held()) ? "insert" : (await media_held()) ? "media" : undefined);
+
 // `recording` is the register a macro is being recorded into, or undefined.
-export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join_insert?: () => Promise<boolean>): Promise<PageKeymap | undefined> {
+export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<"insert" | "media" | undefined>): Promise<PageKeymap | undefined> {
   const trimmed = await trimmed_keymap_for(storage, addresses);
-  const reply = trimmed && !trimmed.all_off && (await join_insert?.()) ? { ...trimmed, insert: true as const } : trimmed;
+  const joined = trimmed && !trimmed.all_off ? await join?.() : undefined;
+  const reply = trimmed && joined ? { ...trimmed, join: joined } : trimmed;
   if (!reply || recording === undefined) return reply;
   const normal = reply.keymap.modes.normal;
   // A mode tree meets the stop key too: a mode bind under the record key would otherwise hide it.
@@ -131,7 +136,7 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.
-export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join_insert?: () => Promise<boolean>): Promise<string | undefined> => {
-  const reply = await page_keymap_for(storage, addresses, recording, join_insert);
+export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<"insert" | "media" | undefined>): Promise<string | undefined> => {
+  const reply = await page_keymap_for(storage, addresses, recording, join);
   return reply && JSON.stringify(reply);
 };

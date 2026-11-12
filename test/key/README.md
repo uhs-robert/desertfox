@@ -72,6 +72,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 | `ui` | `content/ui`, toast, surface, mode indicator |
 | `toolbar` | `popup/`, `background/toolbar.ts`, the on/off switch and the toolbar shortcut |
 | `media` | `content/media`, the media command and its frame fan-out |
+| `omnibox` | `background/omnibox.ts`, the `df` address bar keyword |
 
 - The table in `areas.mjs` is `area_rules`. The first matching rule wins, so order matters.
 - A rule with no areas (README files, icons) selects nothing.

@@ -264,7 +264,8 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") bundles.set_mode_("ignore");
-  else if (first_install && reply?.insert) bundles.set_mode_("insert");
+  // A field that took the focus while the ask was pending already put the frame in insert mode, and media must not overwrite it.
+  else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) bundles.set_mode_(reply.join);
   else {
     if (step === "leave") bundles.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
@@ -293,7 +294,7 @@ function publish_timing(): void {
 }
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {
-  return (browser.runtime.sendMessage({ type: "read_keymap" } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
+  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
 function start(): void {

@@ -1,8 +1,8 @@
-// Scripts loaded on first use, not at page load. `ui` holds the badge and the toast. `page` holds the rare page commands. `text` records typed text and writes it back for `.`. `site_actions` holds the handlers of commands that site rows bind to keys. Each name is a file `<name>.js` in the extension.
+// Scripts loaded on first use, not at page load. `ui` holds the badge and the toast. `page` holds the rare page commands. `text` records typed text and writes it back for `.`. `editor` hands a field's text to the external editor and writes the result back. `site_actions` holds the handlers of commands that site rows bind to keys. Each name is a file `<name>.js` in the extension.
 
 import type { Mode } from "./command.ts";
 
-export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "site_actions"] as const;
+export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "editor", "site_actions"] as const;
 export type BundleName = (typeof BUNDLE_NAMES)[number];
 
 // The modes whose keys go to a sink, and the bundle that registers it.

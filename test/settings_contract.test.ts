@@ -26,6 +26,7 @@ const EXPECTATIONS: Record<string, string> = {
   strip_tracking_params: "a list of query parameter names",
   zoom: "a number, from 0.3 to 5",
   media_quality: '"off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160 or 4320',
+  editor_ext: "a file extension of up to 10 letters or digits, without a dot, or empty for none",
   mode_indicator: '"always", "not_normal" or "off"',
   palette: "a theme name",
   light_intensity: "a whole number from 1 to 5",
@@ -113,6 +114,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   strip_tracking_params: [[], ["utm_*", "fbclid"]],
   zoom: [0.3, 1, 1.25, 5],
   media_quality: ["off", "auto", "max", "min", 144, 480, 720, 1080, 4320],
+  editor_ext: ["", "md", "py", "txt", "Mp4", "abcdefghij"],
   mode_indicator: ["always", "not_normal", "off"],
   palette: ["oasis_moonlight", "no_such_theme"],
   light_intensity: [1, 5],
@@ -161,6 +163,7 @@ const REFUSES: Record<string, unknown[]> = {
   strip_tracking_params: ["utm_*", [""], [1]],
   zoom: [0.2, 5.5, Number.NaN, "1.5"],
   media_quality: ["", "high", "1080", "1080p", "Max", 0, 500, 1081, -720, 1.5, Number.NaN, true, ["max"]],
+  editor_ext: [1, true, ["md"], ".md", "../x", "abcdefghijk", "m d"],
   mode_indicator: ["normal", true],
   palette: ["", 1],
   light_intensity: [0, 6, 2.5, "3"],
@@ -258,6 +261,7 @@ test("the defaults stay the same", () => {
     palette: "oasis_moonlight",
     light_intensity: 3,
     media_quality: "max",
+    editor_ext: "",
     search_prefixes: { here: "s", tab: "S" },
     container_prefixes: { reopen: "c", tab: "C" },
     default_engine: "duck",
@@ -320,6 +324,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

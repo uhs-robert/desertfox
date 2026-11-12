@@ -44,3 +44,6 @@ zoom = 1.5
 [[site_rules]]
 site = "*://127.0.0.1/quality?id=p23_quality*"
 media_quality = "off"
+
+[[site_rules]]
+site = "*://127.0.0.1/media_mode?id=p29_host_late_off_inner"  # p29_media_mode: the frame that starts after aa is all off

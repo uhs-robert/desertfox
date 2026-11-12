@@ -15,6 +15,7 @@ const MAX_BYTES = {
   // 5 KB: the page copy reads the strip list and drops tracking parameters. The bundle loads on first use, not on every page.
   "page.js": 5 * 1024,
   "text.js": 4 * 1024,
+  "editor.js": 4 * 1024,
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
   "media.js": 5.5 * 1024,
   // 4.5 KB: the YouTube driver gained the captions toggle and its state read. The bundle loads on first use.
@@ -59,6 +60,7 @@ const minified_entries = {
   ui: "src/content/ui/main.ts",
   page: "src/content/page/main.ts",
   text: "src/content/text/main.ts",
+  editor: "src/content/editor/main.ts",
   site_actions: "src/content/site_actions/main.ts",
   // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
   media: "src/content/media/main.ts",
