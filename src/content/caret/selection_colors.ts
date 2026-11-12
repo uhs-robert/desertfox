@@ -11,6 +11,8 @@ import type { TextTree } from "./text_model.ts";
 import type { CaretMode } from "./selection_state.ts";
 
 const sheets = create_sheet_set();
+// The text of the sheets in use, so a repaint can adopt them again without a storage read. Undefined outside a session.
+let current_css: string | undefined;
 // A read that finishes after a newer call or after clear_selection_colors is dropped.
 let latest_call = 0;
 
@@ -37,16 +39,23 @@ export async function apply_selection_colors(mode: CaretMode, trees: TextTree[])
   const this_call = ++latest_call;
   const theme = await stored_theme();
   if (this_call !== latest_call || !theme) return;
-  const css = `${rule(mode, theme.dark)}@media(prefers-color-scheme:light){${rule(mode, theme.light)}}`;
+  current_css = `${rule(mode, theme.dark)}@media(prefers-color-scheme:light){${rule(mode, theme.light)}}`;
+  keep_selection_colors(trees);
+}
+
+// The page may replace its adopted sheets at any time, so each paint of the selection checks that ours is still there.
+export function keep_selection_colors(trees: TextTree[]): void {
+  if (current_css === undefined) return;
   for (const tree of trees) {
     // A tree that died during the await throws on any use, and the later trees still need their sheet.
     try {
-      sheets.set(tree, css);
+      sheets.set(tree, current_css);
     } catch {}
   }
 }
 
 export function clear_selection_colors(): void {
   latest_call++;
+  current_css = undefined;
   sheets.clear();
 }

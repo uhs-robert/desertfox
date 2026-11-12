@@ -70,6 +70,17 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     await escape_to_normal("caret_enter");
   });
 
+  await run_case("a page that drops the adopted sheets mid-session gets the selection colors back with the next motion", async () => {
+    await open_page("caret", "caret_sheets_dropped", { new_tab: true });
+    await press_and_wait_for_move("caret_sheets_dropped", "gV", "the caret");
+    await wait_for_selection_css("the caret color", (css) => css.includes(CARET_BACKGROUND));
+    await in_active_tab("document.adoptedStyleSheets = []; 0");
+    await wait_for_selection_css("the page to have dropped the sheet", no_style);
+    await press_and_wait_for_move("caret_sheets_dropped", "w", "w to move the caret");
+    await wait_for_selection_css("the caret color after the next motion", (css) => css.includes(CARET_BACKGROUND));
+    await escape_to_normal("caret_sheets_dropped");
+  });
+
   await run_case("switching tabs away from caret mode clears the highlight, and V works after coming back", async () => {
     await open_page("caret", "caret_tab", { new_tab: true });
     const mark = events.length;
@@ -79,10 +90,11 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     // Caret mode binds no tab key, so the switch is Firefox's own Ctrl+Page Down.
     await press_keys("-M", "ctrl", "-k", "Next", "-m", "ctrl");
     await wait_event(mark_switch, selection_is("caret_tab", ""), "an empty selection after the tab switch");
-    await wait_for_selection_css("no selection colors after the tab switch", no_style);
     await press_keys("-M", "ctrl", "-k", "Prior", "-m", "ctrl");
     await wait_active_tab("caret_tab", "the page to come back to the front");
     await settle_focus();
+    // The active tab is the one that held caret mode again, so an empty read is not the destination's.
+    await wait_for_selection_css("no selection colors on the tab that held caret mode", no_style);
     const again = events.length;
     await press_keys("gV");
     await wait_event(again, selection_is("caret_tab", "c"), "the caret after coming back");
