@@ -5,11 +5,11 @@ import type { QualityReport } from "../../src/shared/quality.ts";
 
 const web = "https://video.test/watch";
 
-function make({ off = false, inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined } = {}) {
+function make({ off = false as boolean | (() => boolean), inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined } = {}) {
   const injected: number[] = [];
   const about_blank: number[] = [];
   const quality = create_media_quality({
-    is_off: async () => off,
+    is_off: async () => (typeof off === "function" ? off() : off),
     inject_all: (tab_id) => (injected.push(tab_id), inject(tab_id)),
     inject_about_blank: async (tab_id) => void about_blank.push(tab_id),
     wait,
@@ -136,4 +136,24 @@ test("the reply to a report carries the resolved rule for a frame with a video, 
   assert.equal(reads, 1);
   assert.equal(await rule_for_report(report(false), reads_of(false)), undefined);
   assert.equal(reads, 1, "a frame with no video reads nothing");
+});
+
+test("a settings change that turns the rule from off to on injects the open web tabs, once", async () => {
+  let off = true;
+  const { quality, injected } = make({ off: () => off });
+  const tabs = async () => [{ id: 1, url: web }, { id: 2, url: "about:blank" }, { id: 3, url: "https://other.test/" }, { id: undefined, url: web }];
+  await quality.settings_changed(tabs);
+  assert.deepEqual(injected, [], "the first read only records the state");
+  await quality.settings_changed(tabs);
+  assert.deepEqual(injected, [], "still off");
+  off = false;
+  await quality.settings_changed(tabs);
+  assert.deepEqual(injected, [1, 3]);
+  await quality.settings_changed(tabs);
+  assert.deepEqual(injected, [1, 3], "on to on injects nothing");
+  off = true;
+  await quality.settings_changed(tabs);
+  off = false;
+  await quality.settings_changed(tabs);
+  assert.deepEqual(injected, [1, 3, 1, 3], "extension off then on again");
 });

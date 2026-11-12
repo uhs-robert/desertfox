@@ -99,7 +99,7 @@ export function create_rule(deps: RuleDeps) {
   async function look_again(): Promise<void> {
     while (look_left_ms > 0) {
       await deps.sleep(RULE_BACKUP_MS);
-      // A report that got a rule, or `stop`, emptied the time while this slept.
+      // A report that got a rule emptied the time while this slept. A frame that unloads takes its timers with it, so no stop is needed.
       if (look_left_ms <= 0) break;
       look_left_ms -= RULE_BACKUP_MS;
       if (deps.has_media()) {
@@ -115,6 +115,9 @@ export function create_rule(deps: RuleDeps) {
     const value = await deps.report();
     if (mine !== asked) return;
     if (value === undefined) {
+      // A navigation that finds no video (a site that swaps its video) still ends a manual choice, and frees the frame for the next video's wake.
+      if (wanted) manual = false;
+      if (!polling) level = undefined;
       wanted = undefined;
       // A look-again loop that still sleeps carries on with the full time.
       const sleeping = look_left_ms > 0;
@@ -135,9 +138,9 @@ export function create_rule(deps: RuleDeps) {
       polling = false;
       manual = true;
     },
-    // Each run of the bundle: reports, then applies the answer. A frame with no video starts nothing and looks again for a while.
+    // Each run of the bundle: reports, then applies the answer. A frame with no video starts nothing and looks again for a while. A run that is not a navigation in a frame that already has a rule only reports: a media command injects the bundle too, and must not restart the rule over a level chosen since.
     start(navigated: boolean): Promise<void> {
-      return report(navigated, false);
+      return report(navigated, !navigated && level !== undefined);
     },
     // The settings changed. Only a frame that has a video asks again.
     async refresh(): Promise<void> {
@@ -146,10 +149,6 @@ export function create_rule(deps: RuleDeps) {
     // A media event reached the document. A start that waits for its answer, or a frame that got a rule (it has a video), ignores them, because a `play` after every pause must not undo a choice made in the site's menu.
     wake(): void {
       if (level === undefined && wanted === undefined) void report(false, false);
-    },
-    // The frame is going away.
-    stop(): void {
-      look_left_ms = 0;
     },
   };
 }

@@ -374,17 +374,6 @@ test("the look-again check ends on schedule at 10 s, and a later video is not fo
   assert.equal(frame.reports, 1);
 });
 
-test("the look-again check ends when the frame unloads", async () => {
-  const { rule, frame, clock } = idle_frame();
-  await rule.start(true);
-  await clock.tick();
-  rule.stop();
-  frame.video = true;
-  await clock.tick();
-  assert.equal(clock.waiting(), 0);
-  assert.equal(frame.reports, 1);
-});
-
 test("a second run of the bundle in a frame that had no video leaves one look-again timer, not two", async () => {
   const { rule, frame, clock } = idle_frame();
   await rule.start(true);
@@ -436,4 +425,52 @@ test("a settings change reaches an idle frame with no video only through its nex
   await new Promise((resolve) => setTimeout(resolve, 0));
   while (player.state.playing !== 360 && clock.waiting() > 0) await clock.tick();
   assert.equal(player.state.playing, 360);
+});
+
+test("a run that is not a navigation, in a frame that already has a rule, only reports: a level chosen in the site's menu stays", async () => {
+  const { rule, frame, player, clock } = idle_frame();
+  frame.video = true;
+  void rule.start(true);
+  await run_out(clock);
+  assert.equal(player.state.playing, 1080);
+  // The user picks 720p in the site's own menu. A media command then injects the bundle again.
+  player.state.playing = 720;
+  const picks = player.state.picks.length;
+  void rule.start(false);
+  await run_out(clock);
+  assert.equal(frame.reports, 2);
+  assert.equal(player.state.picks.length, picks, "the rule set a level again");
+  assert.equal(player.state.playing, 720);
+});
+
+test("a `media quality` request that races the report of a repeat run is not preceded by a rule pick", async () => {
+  const { rule, frame, player, clock } = idle_frame();
+  frame.video = true;
+  void rule.start(true);
+  await run_out(clock);
+  const picks = player.state.picks.length;
+  const repeat = rule.start(false);
+  rule.manual_choice();
+  player.state.playing = 480;
+  await repeat;
+  await run_out(clock);
+  assert.equal(player.state.picks.length, picks);
+  assert.equal(player.state.playing, 480);
+});
+
+test("a navigation that finds no video keeps its end of a manual choice, so the next video gets the rule", async () => {
+  const { rule, frame, player, clock } = idle_frame();
+  frame.video = true;
+  void rule.start(true);
+  await run_out(clock);
+  rule.manual_choice();
+  player.state.playing = 480;
+  // An in-site navigation: the site removes its video for a moment.
+  frame.video = false;
+  await rule.start(true);
+  frame.video = true;
+  player.state.playing = 720;
+  rule.wake();
+  await run_out(clock);
+  assert.equal(player.state.playing, 1080, "the new video was not taken to the rule's level");
 });
