@@ -10,6 +10,7 @@ import { mark_page_url } from "../shared/mark_names.ts";
 import type { JumpLeave } from "../shared/messages.ts";
 import type { JumpStore, Leaving, LeavingVerdict } from "./jump_store.ts";
 import type { MarkSender } from "./mark_store.ts";
+import { place_in_tab, url_origin } from "./router.ts";
 
 // The tab's address and load status now. Undefined once the tab is gone: a page's report can arrive after its tab closed.
 export type TabNow = { url: string | undefined; status: string | undefined };
@@ -35,10 +36,13 @@ export function create_jump_leave(deps: JumpLeaveDeps) {
   return {
     forget: async (tab_id: number): Promise<void> => void (await Promise.all([false, true].map((is_private) => deps.store.forget_tab(tab_id, is_private)))),
     // The page says where it was as it hides. The tab is read after the hold, so an address change that came before the hold shows in the read, and one after it finds the hold.
+    // The page names its address, because `document_url` (the sender's) stays the one the document loaded at after a `pushState`, and a step mark names the address shown.
     leave: async (request: JumpLeave, sender: MarkSender | undefined, document_url: string): Promise<void> => {
       if (sender?.frame_id !== 0 || sender.id === undefined || sender.window_id === undefined) return;
+      const entry = place_in_tab(request, document_url, url_origin);
+      if (!entry) return;
       const is_private = sender.incognito === true;
-      await deps.store.hold_leaving(sender.id, is_private, { window_id: sender.window_id, entry: { url: mark_page_url(document_url), x: request.x, y: request.y } });
+      await deps.store.hold_leaving(sender.id, is_private, { window_id: sender.window_id, entry });
       await settle(sender.id, is_private, await deps.tab_now(sender.id));
     },
     // The tab's address changed, or a load ended.

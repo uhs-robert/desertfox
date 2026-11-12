@@ -2,9 +2,9 @@
 // The cases record places with the keys themselves (gg, G and a navigation), as a user does. Only the case about a chord held during a bundle load stores a place by a `jump_push` message from the page's tab, because the page bundle is already loaded by any key that records.
 // A private window keeps its own list, and the harness has no private window helper, so only the unit tests cover that.
 
-export const areas = ["scroll", "keys", "tabs", "bundles"];
+export const areas = ["scroll", "keys", "tabs", "bundles", "hints"];
 
-export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, wait_active_tab, scroll_of, last_scroll_y, expect, expect_no_scroll, in_active_tab, in_background, sleep, settle_focus }) {
+export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, wait_active_tab, scroll_of, last_scroll_y, expect, expect_no_scroll, in_active_tab, in_background, sleep, settle_focus, hint_label_count }) {
   const near = (at, y) => Math.abs(at - y) <= 1;
   const to_y = async (page_id, keys, y, what) => {
     const mark = events.length;
@@ -18,7 +18,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
   const reset_list = () => in_background(`browser.storage.session.remove("desertfox_jumps")`);
   const list_of_window = () => in_background(`(async () => { const window_id = (await browser.windows.getLastFocused()).id; const stored = await browser.storage.session.get("desertfox_jumps"); return stored.desertfox_jumps?.windows?.[window_id] ?? null; })()`);
   const push_here = async () => {
-    const answer = await in_active_tab(`browser.runtime.sendMessage({ type: "jump_push", x: scrollX, y: scrollY })`);
+    const answer = await in_active_tab(`browser.runtime.sendMessage({ type: "jump_push", url: location.href, x: scrollX, y: scrollY })`);
     expect(answer?.ok === true, `jump_push answered ${JSON.stringify(answer)}`);
   };
   const go_to_bottom = async (page_id) => {
@@ -183,5 +183,88 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await press_keys("^");
     await sleep(300);
     expect((await list_of_window()) === null, `$ and ^ recorded ${JSON.stringify(await list_of_window())}`);
+  });
+
+  // Runs in the page's own world, as a single-page app's script does, not in the extension's.
+  const page_script = (code) => in_active_tab(`(() => { const script = document.createElement("script"); script.textContent = ${"CODE"}; document.body.append(script); script.remove(); return true; })()`.replace("CODE", JSON.stringify(code)));
+  const entries_of = async () => (await list_of_window())?.entries ?? [];
+  // A change within the quiet window after a jump or step records nothing, so a case waits it out before the change it means to record.
+  const past_quiet_window = () => sleep(1100);
+  const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
+
+  await run_case("a hint follow from a page only scrolled with j records the place, and <C-o> comes back to it", async () => {
+    await reset_list();
+    await open_page("hints", "p9j_hint", { new_tab: true });
+    await press_keys("j");
+    await poll_until("the page to move down", async () => last_scroll_y("p9j_hint") > 0);
+    const left_y = last_scroll_y("p9j_hint");
+    const mark = events.length;
+    await press_keys("f");
+    await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await wait_event(mark, loaded("hint_one"), "the first link to load");
+    await poll_until("the page left to be in the list", async () => (await entries_of()).some((entry) => entry.url.includes("id=p9j_hint") && near(entry.y, left_y)));
+    await settle_focus();
+    const back = events.length;
+    await press_keys(...older);
+    await wait_event(back, (event) => scroll_of("p9j_hint")(event) && near(event.y, left_y), "<C-o> to scroll the page back to where the hint follow left it");
+  });
+
+  await run_case("a pushState to another address records the place left, and <C-o> returns to it", async () => {
+    await reset_list();
+    await open_page("aligned", "p9j_spa", { new_tab: true });
+    const bottom = await go_to_bottom("p9j_spa");
+    await past_quiet_window();
+    // As an app does: the address changes, then the new view scrolls to its top.
+    await page_script(`history.pushState(null, "", location.pathname + location.search + "&view=2"); scrollTo(0, 0)`);
+    await poll_until("the page to show its new view", async () => last_scroll_y("p9j_spa") === 0);
+    await poll_until("the place left to be in the list", async () => (await entries_of()).some((entry) => !entry.url.includes("view=2") && near(entry.y, bottom)));
+    expect((await entries_of()).length === 2, `the list after G and the push: ${JSON.stringify(await list_of_window())}`);
+    const mark = events.length;
+    await press_keys(...older);
+    await wait_event(mark, (event) => scroll_of("p9j_spa")(event) && near(event.y, bottom), "<C-o> to return to the bottom of the address left");
+    expect(!(await in_active_tab(`location.href`)).includes("view=2"), "<C-o> did not return to the address left");
+  });
+
+  await run_case("replaceState and a hash change record nothing", async () => {
+    await reset_list();
+    await open_page("aligned", "p9j_replace", { new_tab: true });
+    await go_to_bottom("p9j_replace");
+    await past_quiet_window();
+    await page_script(`history.replaceState(null, "", location.pathname + location.search + "&sorted=1")`);
+    await page_script(`location.hash = "part"`);
+    await sleep(300);
+    const list = await list_of_window();
+    expect(list?.entries.length === 1, `the list after replaceState and a hash change: ${JSON.stringify(list)}`);
+  });
+
+  await run_case("on a page that changes its address as it scrolls, G, gg, <C-o> and <C-i> work and the scroll pushes add no place", async () => {
+    await reset_list();
+    await open_page("aligned", "p9j_sections", { new_tab: true });
+    // The address names the half of the page in view, as a long document with sections does.
+    await page_script(`addEventListener("scroll", () => {
+      const section = scrollY > document.documentElement.scrollHeight / 2 - innerHeight ? "2" : "1";
+      const url = new URL(location.href);
+      if (url.searchParams.get("section") === section) return;
+      url.searchParams.set("section", section);
+      history.pushState(null, "", url);
+    })`);
+    const bottom = await go_to_bottom("p9j_sections");
+    await go_to_top("p9j_sections");
+    const after_jumps = await list_of_window();
+    expect(after_jumps?.entries.length === 2, `the list after G and gg: ${JSON.stringify(after_jumps)}`);
+    // The place G left has no section yet. The one gg left is in section 2, so the step back loads that address again.
+    const back = events.length;
+    await press_keys(...older);
+    await wait_event(back, (event) => scroll_of("p9j_sections")(event) && near(event.y, bottom), "<C-o> to return to the bottom");
+    await settle_focus();
+    const forward = events.length;
+    await press_keys(...newer);
+    // The top of a fresh load is the place itself, so no scroll shows: the load of the section 1 address does.
+    await wait_event(forward, (event) => loaded("p9j_sections")(event) && event.search.includes("section=1"), "<C-i> to load the top's address");
+    await poll_until("the page to stand at the top", async () => (await in_active_tab(`scrollY`)) === 0);
+    await sleep(300);
+    const after_steps = await list_of_window();
+    expect(after_steps?.entries.length === 3, `the list after <C-o> and <C-i>: ${JSON.stringify(after_steps)}`);
   });
 }
