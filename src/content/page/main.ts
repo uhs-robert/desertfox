@@ -23,7 +23,7 @@ async function ask_at_scroll(host: BundleHostApi, watch: LeaveWatch, message: { 
   if (!answer.ok) throw new RuntimeRefusal(answer.message);
   if (message.type === "mark_set" || answer.x === undefined) return;
   box.scrollTo({ left: answer.x, top: answer.y, behavior: "instant" });
-  watch.quiet_now_();
+  watch.quiet_(true);
 }
 
 // A second run would register the handlers again for nothing.
@@ -46,7 +46,7 @@ if (!page.desertfox_page_ready && host) {
   browser.runtime.onMessage.addListener((message: BackgroundToContent) => {
     // The router asks before a command that jumps, so an address change the jump's scroll sets off is not a move of its own.
     if (message.type === "get_jump_offset") {
-      watch.quiet_now_();
+      watch.quiet_(true);
       return Promise.resolve({ ...scroll_offset(host), url: location.href });
     }
     return message.type === "get_selection" ? Promise.resolve(selected_text()) : undefined;
