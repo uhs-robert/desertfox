@@ -1,6 +1,6 @@
 // The `quality` bundle seen from the background: one request to one site player of a tab, and the completion rows of `media quality `.
 
-import type { QualityAnswer, QualityReport, QualityRequest } from "../shared/quality.ts";
+import type { QualityAnswer, QualityReport, QualityRequest, QualityRuleStart } from "../shared/quality.ts";
 import type { RegisterItem } from "../shared/messages.ts";
 
 // The reports that frames push when the bundle runs in them. A request listens for its tab while it waits, so a report that arrives with no request waiting is dropped.
@@ -84,8 +84,20 @@ export async function ask_quality(deps: QualityDeps, tab_id: number, request: Qu
 
 export const quality_reports = create_quality_reports();
 
-// The rule's injection (`media_quality.ts`) runs on every load, and leaves out `matchAboutBlank`. With it, a load-time injection made a frame under an all-off site rule leave ignore mode when the tab's insert hold ended (the p22 key test).
-export const inject_quality_for_rule = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, runAt: "document_start" });
+// How long after a load the rule's second pass waits, so each frame has settled on its real document first.
+const ABOUT_BLANK_SETTLE_MS = 1000;
+
+// The rule's injection (`media_quality.ts`) runs on every load. Its first pass leaves out `matchAboutBlank`, because with it at load a frame under an all-off site rule left ignore mode when the tab's insert hold ended (the p22 key test, #466). The cause inside the bundle is not known. A second pass with the flag waits until the frames settle, which keeps p22 green and lets the rule reach a player in an about:blank frame.
+// The second pass starts the rule itself, since the caller's start went out before it. `navigated` is false: a frame that already ran the rule only polls again, and a manual choice stands.
+export function inject_quality_for_rule(tab_id: number): Promise<unknown> {
+  setTimeout(() => void inject_into_about_blank_frames(tab_id).catch(() => undefined), ABOUT_BLANK_SETTLE_MS);
+  return browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, runAt: "document_start" });
+}
+
+async function inject_into_about_blank_frames(tab_id: number): Promise<void> {
+  await browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" });
+  await browser.tabs.sendMessage(tab_id, { type: "quality_rule", navigated: false } satisfies QualityRuleStart);
+}
 
 export const ask_quality_in_tab = (tab_id: number, request: QualityRequest, prefer_frame?: number): Promise<QualityAnswer | undefined> =>
   ask_quality(

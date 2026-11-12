@@ -103,6 +103,12 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect(!events.slice(mark).some(on_set("p26_frame_yt_inner", (event) => event.low === "hd1080")), "the framed player got the global max");
   });
 
+  await run_case("a player in an about:blank frame gets the rule", async () => {
+    const mark = events.length;
+    await open_page("quality", "p26_blank", { new_tab: true });
+    await wait_event(mark, on_set("p26_blank", (event) => event.low === "hd1080"), "the player of the about:blank frame at 1080p", 8000);
+  });
+
   await run_case("an hls.js player is taken to its top level", async () => {
     const mark = events.length;
     await open_page("quality", "p26_hls", { new_tab: true });
