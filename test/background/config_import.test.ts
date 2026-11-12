@@ -241,17 +241,24 @@ test("autoconfig.toml alone is not a config import, and an import never stores i
 
 test("an import drops the consent settings, says so in the review, and keeps the other settings", async () => {
   const { startup, local } = await started("consent");
-  const source = zip_of({ "settings.toml": 'hint_letters = "xy"\nbridge = true\nbridge_share_tabs = true\nhost_auto_update = true\n', "settings.d/50-more.toml": "bridge = true\n" });
+  const source = zip_of({ "settings.toml": 'hint_letters = "xy"\nbridge = true\nbridge_share_tabs = true\nhost_auto_update = true\n', "settings.d/50-more.toml": "bridge = true\n", "settings.d/60-table.toml": "[host_auto_update]\nx = 1\n" });
   const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
   assert.deepEqual(preview.warnings, [
     "settings.toml: bridge is not imported. Set it on this machine.",
     "settings.toml: bridge_share_tabs is not imported. Set it on this machine.",
     "settings.toml: host_auto_update is not imported. Set it on this machine.",
     "settings.d/50-more.toml: bridge is not imported. Set it on this machine.",
+    "settings.d/60-table.toml: host_auto_update is not imported. Set it on this machine.",
   ]);
   await startup.import_config(source, {});
   const files = slot_of(local).source.files;
   assert.match(files["settings.toml"]!, /hint_letters = "xy"/);
   assert.doesNotMatch(files["settings.toml"]!, /bridge|host_auto_update/);
   assert.doesNotMatch(files["settings.d/50-more.toml"]!, /bridge/);
+  assert.doesNotMatch(files["settings.d/60-table.toml"]!, /host_auto_update/);
+  const built = (await startup.get_config()).settings;
+  assert.equal(built.hint_letters, "xy");
+  assert.notEqual(built.bridge, true);
+  assert.notEqual(built.bridge_share_tabs, true);
+  assert.notEqual(built.host_auto_update, true);
 });
