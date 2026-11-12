@@ -11,7 +11,7 @@ import { JUMP_PRIVATE_STORAGE_KEY, JUMP_STORAGE_KEY } from "./storage_keys.ts";
 type JumpList = { entries: JumpEntry[]; cursor: number };
 // A page that went away leaves its last offset here, per tab, until the tab shows another page or the page loads again.
 export type Leaving = { window_id: number; entry: JumpEntry };
-// What `settle_leaving` does with a held offset: wait for the tab to tell more, forget it, or take it to record.
+// What `settle_leaving` does with a held offset: wait for the tab to tell more, forget it, or record it.
 export type LeavingVerdict = "wait" | "drop" | "record";
 // `steps` holds, per tab, the page a jump step took the tab away from, until that page's report is settled.
 type JumpsValue = { v: 1; windows: Record<string, JumpList>; leaving?: Record<string, Leaving>; steps?: Record<string, string> };
@@ -119,18 +119,18 @@ export function create_jump_store(deps: JumpStoreDeps) {
         all.steps = { ...all.steps, [tab_id]: page_url };
         await deps.session().set({ [key_of(is_private)]: all });
       }),
-    // Judges the tab's held offset against the step mark, in one turn so no other event takes it meanwhile. Any verdict but `wait` ends both the offset and the mark. Answers the offset to record.
-    settle_leaving: (tab_id: number, is_private: boolean, judge: (leaving: Leaving, step_from: string | undefined) => LeavingVerdict): Promise<Leaving | undefined> =>
+    // Judges the tab's held offset against the step mark and records it, all in one turn, so no other event takes the offset and no step moves the cursor in between. Any verdict but `wait` ends both the offset and the mark.
+    settle_leaving: (tab_id: number, is_private: boolean, judge: (leaving: Leaving, step_from: string | undefined) => LeavingVerdict): Promise<void> =>
       in_turn(async () => {
         const all = await read_all(is_private);
         const leaving = all.leaving?.[tab_id];
-        if (!leaving || !is_entry(leaving.entry)) return undefined;
+        if (!leaving || !is_entry(leaving.entry)) return;
         const verdict = judge(leaving, all.steps?.[tab_id]);
-        if (verdict === "wait") return undefined;
+        if (verdict === "wait") return;
         delete all.leaving![tab_id];
         if (all.steps) delete all.steps[tab_id];
+        if (verdict === "record") all.windows[leaving.window_id] = pushed(all.windows[leaving.window_id] ?? empty, leaving.entry);
         await deps.session().set({ [key_of(is_private)]: all });
-        return verdict === "record" ? leaving : undefined;
       }),
     // A closed tab, or a step that never left its page: drops the held offset and the step mark.
     forget_tab: (tab_id: number, is_private: boolean) =>

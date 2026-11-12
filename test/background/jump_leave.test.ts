@@ -204,3 +204,14 @@ test("the report and the address change handled at once record once", async () =
     assert.deepEqual(await places(), LEFT_A, report_first ? "report first" : "address change first");
   }
 });
+
+test("a step that comes while a leave records sees the recorded place, so the push cannot cut the step's list", async () => {
+  const { store, report, tab_at, tab_quietly_at, places } = make();
+  await store.push(1, false, { url: C, x: 0, y: 100 });
+  tab_quietly_at(A, "loading");
+  await report();
+  // The address change records A, and a step from B is asked for right behind it.
+  const [, stepped] = await Promise.all([tab_at(B, "loading"), store.step(1, false, -1, { url: B, x: 0, y: 0 })]);
+  assert.deepEqual(stepped, { url: A, x: 0, y: 700 });
+  assert.deepEqual(await places(), [{ url: C, x: 0, y: 100 }, { url: A, x: 0, y: 700 }, { url: B, x: 0, y: 0 }]);
+});
