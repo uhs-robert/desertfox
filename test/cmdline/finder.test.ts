@@ -208,10 +208,12 @@ test("speed: ranking 1000 history rows, 3000 bookmarks and 300 tabs per key", as
   await new Promise((resolve) => setTimeout(resolve, 0));
   const text = "anything read topic";
   const runs = 20;
-  const started = performance.now();
+  const started = process.cpuUsage();
   for (let run = 0; run < runs; run++) complete(text.slice(0, 10 + (run % 9)), 10 + (run % 9));
-  const per_key = (performance.now() - started) / runs;
-  console.log(`finder per-key rank time: ${per_key.toFixed(2)} ms`);
+  // CPU time, not wall clock: a loaded machine stretches the wall clock but not the work.
+  const used = process.cpuUsage(started);
+  const per_key = (used.user + used.system) / 1000 / runs;
+  console.log(`finder per-key rank cpu time: ${per_key.toFixed(2)} ms`);
   assert.ok(per_key < 100, `${per_key} ms per key`);
 });
 
