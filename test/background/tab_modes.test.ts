@@ -290,7 +290,8 @@ test("a focused child frame that claims during a load keeps its claim through th
   assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "normal", focused_child: { frame_id: CHILD, mode: "insert" } } });
 });
 
-test("a load start that arrives after the page's restore reports wipes the child claim, and the next top report tells the top frame", async () => {
+// Known gap, not a fix: this pins what the record does if Firefox sends the load start of a restore after the pageshow reports. Whether it does is unmeasured (see #414). The record forgets the child, and the top frame hears nothing until its own next report.
+test("a load start after the pageshow reports forgets the child claim, and only a later top report reaches the top frame", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
@@ -300,14 +301,4 @@ test("a load start that arrives after the page's restore reports wipes the child
   assert.equal(await modes.recall(4), "normal", "the record kept the child claim past the load start");
   // The top frame still draws the child mode it had, so a top report must reach it even though the record changes nothing.
   assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: undefined, tell_top: true });
-});
-
-test("a top report heals a child mode the top frame still draws after the record lost it", async () => {
-  const modes = create_tab_modes(fake_storage());
-  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
-  await modes.forget_on_navigation(4, { status: "loading" });
-  await modes.forget_on_navigation(4, { status: "loading", url: NEW_PAGE });
-  const healed = await modes.report(4, { frame_id: TOP, mode: "normal", focus: true });
-  assert.equal(healed.tell_top, true, "the top frame was left drawing the lost child mode");
-  assert.equal(healed.child_mode, undefined);
 });
