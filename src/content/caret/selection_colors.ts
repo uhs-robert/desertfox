@@ -6,11 +6,11 @@ import { THEME_STORAGE_KEY } from "../../shared/theme/apply.ts";
 import type { StoredTheme } from "../../shared/theme/apply.ts";
 import type { RoleColors } from "../../shared/theme/roles.ts";
 import type { FindColors } from "./find_paint.ts";
+import { create_sheet_set } from "./adopted_sheets.ts";
 import type { TextTree } from "./text_model.ts";
 import type { CaretMode } from "./selection_state.ts";
 
-// A document rule does not reach into a shadow root or a frame, so each tree with text gets its own style.
-const styles = new Map<TextTree, HTMLStyleElement>();
+const sheets = create_sheet_set();
 // A read that finishes after a newer call or after clear_selection_colors is dropped.
 let latest_call = 0;
 
@@ -37,26 +37,16 @@ export async function apply_selection_colors(mode: CaretMode, trees: TextTree[])
   const this_call = ++latest_call;
   const theme = await stored_theme();
   if (this_call !== latest_call || !theme) return;
+  const css = `${rule(mode, theme.dark)}@media(prefers-color-scheme:light){${rule(mode, theme.light)}}`;
   for (const tree of trees) {
-    // A tree that died during the await throws on any use, and the later trees still need their style.
+    // A tree that died during the await throws on any use, and the later trees still need their sheet.
     try {
-      const in_document = tree.nodeType === Node.DOCUMENT_NODE;
-      const style = styles.get(tree) ?? (in_document ? (tree as Document) : (tree as ShadowRoot).ownerDocument).createElement("style");
-      style.setAttribute("data-desertfox", "");
-      style.textContent = `${rule(mode, theme.dark)}@media(prefers-color-scheme:light){${rule(mode, theme.light)}}`;
-      (in_document ? (tree as Document).documentElement : tree).append(style);
-      styles.set(tree, style);
+      sheets.set(tree, css);
     } catch {}
   }
 }
 
 export function clear_selection_colors(): void {
   latest_call++;
-  // The style of a removed frame is a dead object, and its remove() throws.
-  for (const style of styles.values()) {
-    try {
-      style.remove();
-    } catch {}
-  }
-  styles.clear();
+  sheets.clear();
 }

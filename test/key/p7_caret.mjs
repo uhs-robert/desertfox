@@ -1,5 +1,5 @@
 // Key cases of the caret and visual piece. run.mjs calls run_cases with its helpers.
-// The pages report each change of their selection, and the highlight style the bundle puts on the document.
+// The pages report each change of their selection. The selection colors sit in a sheet the bundle adopts, which the page cannot report, so the cases read it from the content script world.
 
 import { mkdirSync } from "node:fs";
 
@@ -7,12 +7,13 @@ export const areas = ["caret", "find"];
 
 export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
-  // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts).
-  const CARET_BACKGROUND = "#f0e68c";
-  const VISUAL_BACKGROUND = "#24364d";
+  // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts). The sheet text reads back with the colors as rgb().
+  const CARET_BACKGROUND = "rgb(240, 230, 140)";
+  const VISUAL_BACKGROUND = "rgb(36, 54, 77)";
 
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
-  const style_is = (page_id, has) => (event) => event.type === "selection_style" && event.page_id === page_id && has(event.css);
+  const selection_css = () => in_active_tab(`[...document.adoptedStyleSheets].flatMap((sheet) => [...sheet.cssRules]).map((rule) => rule.cssText).filter((text) => text.includes("::selection")).join("")`);
+  const wait_for_selection_css = (what, accept) => poll_until(what, async () => accept(await selection_css()));
   const no_style = (css) => css === "";
 
   // The last selection report after the mark, once it passes `accept`. A count such as 120j moves the caret in one step, so its report is the last one.
@@ -56,13 +57,13 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     const mark = events.length;
     await press_keys("gV");
     await wait_event(mark, selection_is("caret_enter", "c"), "the caret on the first character");
-    await wait_event(mark, style_is("caret_enter", (css) => css.includes(CARET_BACKGROUND)), "the caret color");
+    await wait_for_selection_css("the caret color", (css) => css.includes(CARET_BACKGROUND));
     await press_keys("v");
-    await wait_event(mark, style_is("caret_enter", (css) => css.includes(VISUAL_BACKGROUND)), "the visual color");
+    await wait_for_selection_css("the visual color", (css) => css.includes(VISUAL_BACKGROUND));
     const mark_escape = events.length;
     await escape_to_normal("caret_enter");
     await wait_event(mark_escape, selection_is("caret_enter", ""), "an empty selection after Escape");
-    await wait_event(mark_escape, style_is("caret_enter", no_style), "no highlight style after Escape");
+    await wait_for_selection_css("no selection colors after Escape", no_style);
     const mark_again = events.length;
     await press_keys("gV");
     await wait_event(mark_again, selection_is("caret_enter", "c"), "the caret again after leaving");
@@ -78,7 +79,7 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     // Caret mode binds no tab key, so the switch is Firefox's own Ctrl+Page Down.
     await press_keys("-M", "ctrl", "-k", "Next", "-m", "ctrl");
     await wait_event(mark_switch, selection_is("caret_tab", ""), "an empty selection after the tab switch");
-    await wait_event(mark_switch, style_is("caret_tab", no_style), "no highlight style after the tab switch");
+    await wait_for_selection_css("no selection colors after the tab switch", no_style);
     await press_keys("-M", "ctrl", "-k", "Prior", "-m", "ctrl");
     await wait_active_tab("caret_tab", "the page to come back to the front");
     await settle_focus();
