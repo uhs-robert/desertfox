@@ -15,6 +15,7 @@ export type MarkListDeps = {
   // Runs `mark.jump` in the top frame of the command's tab, like the arrival of a global jump.
   jump: (ctx: CommandContext, key: string) => Promise<void>;
   remove: (ctx: CommandContext, key: string) => Promise<void>;
+  clear: (ctx: CommandContext, scope: "page" | "all") => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
@@ -30,6 +31,10 @@ export function make_mark_list_handlers(deps: MarkListDeps) {
       await deps.remove(ctx, args.mark.trim());
       await deps.toast(ctx, "success", `Mark ${args.mark.trim()} deleted`);
     },
+    clear: async (ctx: CommandContext, args: { scope: "page" | "all" }) => {
+      await deps.clear(ctx, args.scope);
+      await deps.toast(ctx, "success", args.scope === "all" ? "All marks cleared" : "Marks of this page and the global marks cleared");
+    },
   };
 }
 
@@ -41,6 +46,7 @@ export const browser_mark_list_deps: MarkListDeps = {
     if (reply?.ok === false) throw new RuntimeRefusal(reply.message ?? "Mark jump failed");
   },
   remove: async (ctx, key) => browser_mark_store.remove(key, await current_tab_url(ctx), await is_private_context(ctx)),
+  clear: async (ctx, scope) => browser_mark_store.clear(scope, await current_tab_url(ctx), await is_private_context(ctx)),
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "mark", message, kind),
 };
 
@@ -67,4 +73,15 @@ define("mark.delete", {
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => handlers.delete(ctx, args as { mark: string }),
+});
+
+// No default key and no confirmation: typing the command is the confirmation. Not repeatable, so `.` never replays `all`.
+define("mark.clear", {
+  label: "Clear marks",
+  intent: "Clear this page's marks and the global marks, or every mark.",
+  params: [{ name: "scope", type: "enum", values: ["page", "all"], description: { page: "Clear this page's marks and the global marks.", all: "Clear every page's marks and the global marks." } }],
+  bridge: false,
+  runs_in: "background",
+  repeatable: false,
+  run: (ctx, args) => handlers.clear(ctx, args as { scope: "page" | "all" }),
 });

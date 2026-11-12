@@ -53,6 +53,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "quickmark.delete": [/is not saved/],
   "mark.list": [/No marks?/],
   "mark.delete": [/No mark/],
+  "mark.clear": [/No marks to clear/],
   // The stub browser has no add-on to read the install type from.
   "native.update": [/Host update failed/],
   "media.act": [/No video or audio on this page/, /No quality control on this page/, /No next video/, /needs Firefox 153 or newer/, /No video on this page/],
