@@ -134,3 +134,8 @@ test("a mode bind replaces what the page tree holds, so a freed key replaces not
   assert.equal(change("j").replaces, undefined);
   assert.equal(change("k").replaces, "Scroll up");
 });
+
+test("the editable and scroll target columns show through the generic path", () => {
+  const [row] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", editable_add: [".ed"], editable_remove: [".no"], editable_remove_unsized: true, scroll_selector: ".pane" }] }), "https://a.test/").rows;
+  assert.deepEqual(row!.columns.map(({ name, value }) => [name, value]), [["editable_add", ".ed"], ["editable_remove", ".no"], ["editable_remove_unsized", "true"], ["scroll_selector", ".pane"]]);
+});
