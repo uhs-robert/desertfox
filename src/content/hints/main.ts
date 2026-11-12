@@ -2,7 +2,7 @@
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
 import type { HintFramesMessage } from "../../background/hint_frames.ts";
-import type { HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages.ts";
+import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
@@ -292,10 +292,17 @@ const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_co
 
 const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_caret_, inspect_ };
 
+// A mode that starts in the frame that owns the pick, where the keys typed ahead have nothing to do.
+const starts_mode_in_owner = (action: HintAction): boolean => starts_caret(action) || action === "enter_media";
+
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
   // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode as Escape does, so hints opened from media mode return to it.
   arm_leave_watch(host).listen_(() => session && !picking && host.escape_());
+  // The pick of another frame's hover, until its answer is in. Escape releases the hover in that frame, so it waits for the answer.
+  let hover_across: Promise<void> | undefined;
+  // The ids an end reached while this frame waited for its start answer. The end can overtake the answer, which would then show hint mode on a dead session.
+  const ended_ids = new Set<string>();
 
   function end_session(): void {
     const session_id = session?.ready?.session_id_;
@@ -337,10 +344,15 @@ function register(host: BundleHostApi): void {
   // Keys typed while the build ran never reached a mode. They run in normal mode, in order, once the mode change has ended the session.
   // `after_leaving` runs the pick. A pick that focuses a field gets the keys as text, which a replay in insert mode would drop.
   // Insert mode after the pick means the pick focused the field: Escape leaves insert mode without a blur, so a field focused earlier is not a target.
-  function leave_with_keys(current: Session, after_leaving?: () => void): void {
+  // For a pick of another frame, `left` is what that frame did not type, and the keys replay once it answers.
+  function leave_with_keys(current: Session, after_leaving?: () => void, owner_left?: Promise<string[]>): void {
     const keys = current.waiting_tokens_.splice(0);
     host.escape_();
     after_leaving?.();
+    if (owner_left) {
+      void owner_left.then((rest) => rest.length > 0 && host.hold_keys_until_(Promise.resolve(rest)));
+      return;
+    }
     const focused_a_field = after_leaving && host.get_mode() === "insert";
     if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });
     const left = focused_a_field ? insert_into_focused_field(keys) : keys;
@@ -360,7 +372,7 @@ function register(host: BundleHostApi): void {
       starting--;
     }
     // An end answer means another frame started a run, so this frame's own labels would overlap its labels.
-    if (answer && !answer.ok) return undefined;
+    if (answer && (!answer.ok || ended_ids.delete(answer.session_id))) return undefined;
     if (!answer) return single_frame(found, letters);
     if (current.cancelled) send_across({ type: "hint_frames_end", session_id: answer.session_id });
     const first_own = answer.labels.indexOf(answer.own_labels[0]!);
@@ -369,11 +381,15 @@ function register(host: BundleHostApi): void {
   }
 
   // A pick of another frame's label goes out before hint mode ends here, so the background routes it before the end. The owner's answer is the pick's.
-  function pick_run(current: Session, labeled: Labeled, index: number): () => unknown {
+  // The keys typed ahead go with it, for the owner to type into the field it focuses. A mode that starts there drops them.
+  function pick_run(current: Session, labeled: Labeled, index: number): { run: () => unknown; left?: Promise<string[]> } {
     const own = labeled.own_of_(index);
-    if (own !== undefined) return () => perform_pick(current, labeled.found[own]!.element as HTMLElement);
-    const answer: Promise<HintFramesPickAnswer | undefined> = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_, label: labeled.labels[index] });
-    return () => answer.then((reply) => (reply && "text" in reply ? (current.action === "prompt" ? open_line_(reply.text) : copy_of_pick(current)(reply.text, reply.what)) : reply));
+    if (own !== undefined) return { run: () => perform_pick(current, labeled.found[own]!.element as HTMLElement) };
+    const keys = current.rapid || current.waiting_tokens_.length === 0 ? undefined : [...current.waiting_tokens_];
+    const answer: Promise<HintFramesPickAnswer | undefined> = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_!, label: labeled.labels[index]!, ...(keys && { keys }) } satisfies HintFramesPick);
+    if (current.action === "hover") hover_across = answer.then(() => undefined, () => undefined);
+    const left = answer.then((reply) => (starts_mode_in_owner(current.action) ? [] : reply?.left ?? keys ?? []), () => keys ?? []);
+    return { run: () => answer.then((reply) => (reply && "text" in reply ? (current.action === "prompt" ? open_line_(reply.text) : copy_of_pick(current)(reply.text, reply.what)) : reply)), left };
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
@@ -400,9 +416,9 @@ function register(host: BundleHostApi): void {
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
     if (first_build && current.lower_text_ !== undefined && labels.length === 1) {
-      const run = pick_run(current, labeled, 0);
+      const { run, left } = pick_run(current, labeled, 0);
       const performed = begin_pick(current);
-      leave_with_keys(current, () => performed(run));
+      leave_with_keys(current, () => performed(run), left);
       return;
     }
     const view = create_view();
@@ -436,10 +452,10 @@ function register(host: BundleHostApi): void {
   function pick(current: Session, index: number): void {
     const ready = current.ready!;
     delete current.settling_;
-    const run = pick_run(current, ready, index);
+    const { run, left } = pick_run(current, ready, index);
     const performed = begin_pick(current);
     if (!current.rapid) {
-      leave_with_keys(current, () => performed(run));
+      leave_with_keys(current, () => performed(run), left);
       return;
     }
     // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
@@ -489,7 +505,12 @@ function register(host: BundleHostApi): void {
     return message === undefined ? done : { ok: false, message };
   });
   host.register_handler_("copy.links", (args) => yank_links(args.scope as "page" | "viewport", args.format as LinkFormat, yank_deps(args.register as string | undefined)));
-  host.register_handler_("hint.unhover", () => unhover());
+  host.register_handler_("hint.unhover", () => {
+    unhover();
+    const pending = hover_across;
+    hover_across = undefined;
+    void pending?.then(() => send_across({ type: "hint_frames_unhover" }));
+  });
   // The sink takes these keys while a session is open. A key that gets here found no session, so there is nothing to do.
   host.register_handler_("hint.key", () => done);
 
@@ -543,6 +564,7 @@ function register(host: BundleHostApi): void {
   }
 
   answer_across((session_id) => {
+    if (starting > 0) ended_ids.add(session_id);
     if (session?.ready?.session_id_ === session_id) host.escape_();
   });
 
@@ -592,7 +614,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
   }
 
   // The answer of a pick is the action's outcome, which the keyboard frame shows. A copy or a prompt answers with its text, which the keyboard frame copies or opens.
-  function pick_here(current: Across, label: string): Promise<HintFramesPickAnswer> {
+  function pick_here(current: Across, label: string, keys?: string[]): Promise<HintFramesPickAnswer> {
     const index = current.labels?.indexOf(label) ?? -1;
     const element = current.found?.[index]?.element as HTMLElement | undefined;
     clear();
@@ -602,10 +624,18 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     let handed: { text: string; what: string | undefined } | undefined;
     const hand_over: HandOver = (text, what) => void (handed = { text, what });
     // The keyboard focus is in another frame. Gecko keeps an element's focus() out of a frame of another site that does not hold it, and the window's focus() brings it in.
-    if (pick_args.action === "focus" || takes_typing(element)) window.focus();
+    if (pick_args.action === "focus" || starts_mode_in_owner(pick_args.action) || takes_typing(element)) window.focus();
+    // Only a pick that focuses a field takes the keys typed ahead. The keyboard frame replays the rest.
+    const types_ahead = keys && (pick_args.action === "here" || pick_args.action === "focus") && takes_typing(element);
+    const answered = (answer: HintFramesPickAnswer): HintFramesPickAnswer => {
+      if (!keys) return answer;
+      if (!types_ahead) return { ...answer, left: keys };
+      mark_text_entry({ id: "hint.run", args });
+      return { ...answer, left: insert_into_focused_field(keys) };
+    };
     return Promise.resolve()
       .then(() => perform_pick(pick_args, element, hand_over))
-      .then((result): HintFramesPickAnswer => (handed ? { ok: true, text: handed.text, ...(handed.what !== undefined && { what: handed.what }) } : ((result as Outcome | undefined) ?? done)), (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
+      .then((result) => answered(handed ? { ok: true, text: handed.text, ...(handed.what !== undefined && { what: handed.what }) } : ((result as Outcome | undefined) ?? done)), (error: unknown) => answered({ ok: false, message: String((error as Error)?.message ?? error) }));
   }
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
@@ -618,6 +648,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
       void collect_here(across);
       return undefined;
     }
+    if (message.type === "hint_frames_unhover") return void unhover();
     const current = across;
     if (!message.type?.startsWith("hint_frames_") || current?.session_id !== message.session_id) return undefined;
     if (message.type === "hint_frames_labels" && current.found) {
@@ -631,7 +662,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
       current.typed = message.typed;
       current.text_mode = message.matches && { matches: message.matches, active: message.active };
       if (current.labels) show_typed(current);
-    } else if (message.type === "hint_frames_pick") return pick_here(current, message.label);
+    } else if (message.type === "hint_frames_pick") return pick_here(current, message.label, message.keys);
     else if (message.type === "hint_frames_end") clear();
     return undefined;
   });
