@@ -76,7 +76,7 @@ test("the scan counts playing media and the largest video areas, audio aside", (
     { player: ended_video, area: 2000 },
     { player: playing_audio, area: 0 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false, fullscreen_open: false, pinned: false, has_video: true });
+  assert.deepEqual(scan_frame(view), { count: 4, playing: 2, audible: 2, playing_audio: 1, audible_audio: 1, video_area: 2000, playing_video_area: 100, audible_video_area: 100, pip_open: false, fullscreen_open: false, pinned: false, has_video: true });
 });
 
 test("a playing target changes every playing element and leaves the paused ones", async () => {
@@ -111,7 +111,7 @@ test("a muted preview that plays beside a paused main video takes the playing ta
     { player: preview, area: 100 },
     { player: main, area: 5000 },
   ]);
-  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: true });
+  assert.deepEqual(scan_frame(view), { count: 2, playing: 1, audible: 0, playing_audio: 0, audible_audio: 0, video_area: 5000, playing_video_area: 100, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: true });
 });
 
 test("speed, volume and seek with no value write nothing, since even an equal currentTime seeks", async () => {
