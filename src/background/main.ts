@@ -21,7 +21,7 @@ import { start_bridge } from "./bridge_browser.ts";
 import { strip_patterns_for } from "./strip_patterns.ts";
 import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
-import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
+import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
@@ -300,7 +300,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;
-    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
+    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
   if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(() => undefined);

@@ -159,3 +159,8 @@ export function make_editor_ext_for(local: Pick<typeof browser.storage.local, "g
     return site_value(site_columns_for(keymap, addresses), "editor_ext", (await global_ext()) ?? "") || undefined;
   };
 }
+
+// The binding compiles an unset optional param to the empty text, so an empty `ext` from a page means "not given", the same as no `ext` at all.
+export async function ext_of_request(requested: string | undefined, site_ext: () => Promise<string | undefined>): Promise<string | undefined> {
+  return requested || site_ext();
+}
