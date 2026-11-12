@@ -395,4 +395,9 @@ test("the preview shows the saved count: a prefix for a repeat rule, the arg for
   assert.equal(await preview([{ id: "x.scroll", count: 1 }]), ":scroll");
   assert.equal(await preview([{ id: "x.nth", count: 5 }]), ":nth 5");
   assert.equal(await preview([{ id: "x.plain", count: 5 }]), ":plain");
+  defs["x.nameless_nth"] = { id: "x.nameless_nth", label: "Nameless nth", params: [{ name: "n", type: "int", default: 0 }], count: { param: "n" } };
+  defs["x.nameless_scroll"] = { id: "x.nameless_scroll", label: "Nameless scroll", params: [], count: "repeat" };
+  assert.equal(await preview([{ id: "x.nameless_nth", count: 5 }]), "5\u00d7 Nameless nth");
+  assert.equal(await preview([{ id: "x.nameless_scroll", count: 5 }]), "5\u00d7 Nameless scroll");
+  assert.equal(await preview([{ id: "x.nameless_nth" }]), "Nameless nth");
 });
