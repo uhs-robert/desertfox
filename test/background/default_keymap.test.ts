@@ -68,6 +68,11 @@ test("i enters insert mode with no field and I focuses the first field", () => {
   assert.deepEqual(DEFAULT_KEYMAP.insert?.["<Escape>"], { id: "mode.escape" });
 });
 
+test("insert <C-o> opens the external editor and insert <C-i> is unbound", () => {
+  assert.deepEqual(DEFAULT_KEYMAP.insert?.["<C-o>"], { id: "text.edit_external", label: "Edit the field in the external editor" });
+  assert.equal(DEFAULT_KEYMAP.insert?.["<C-i>"], undefined);
+});
+
 test("the , group holds the DesertFox commands", () => {
   const { warnings, compiled } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
