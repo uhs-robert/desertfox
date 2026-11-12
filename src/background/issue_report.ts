@@ -20,7 +20,9 @@ export type IssueReport = { title: string; body: string };
 
 // Warnings word-for-word, minus the config folder path, at most MAX_WARNINGS and MAX_WARNINGS_BYTES of them (the count of the cut ones is stated).
 export function warning_lines(warnings: string[], config_dir: string): { lines: string[]; cut: number } {
-  const scrub = (text: string) => (config_dir === "" ? text : text.split(config_dir.replace(/\/+$/, "")).join(CONFIG_DIR_PLACEHOLDER));
+  const folder = config_dir.replace(/\/+$/, "");
+  // Only an absolute path longer than "/" is a folder to hide. A label such as "import" is no path, and "/" would split every character.
+  const scrub = (text: string) => (folder.startsWith("/") ? text.split(folder).join(CONFIG_DIR_PLACEHOLDER) : text);
   const lines: string[] = [];
   let bytes = 0;
   for (const warning of warnings.slice(0, MAX_WARNINGS)) {
@@ -32,12 +34,16 @@ export function warning_lines(warnings: string[], config_dir: string): { lines: 
   return { lines, cut: warnings.length - lines.length };
 }
 
-export function issue_report(facts: IssueFacts): IssueReport {
+// The warning text reaches GitHub only through the clipboard report, which the user reads before pasting.
+// A query string loads on GitHub's servers before any review, so the form URL carries the count and no text.
+export type ReportKind = "form" | "copy";
+
+export function issue_report(facts: IssueFacts, kind: ReportKind): IssueReport {
   const { lines, cut } = warning_lines(facts.warnings, facts.config_dir);
-  const warnings_section =
-    facts.warnings.length === 0
-      ? "Config warnings: none"
-      : [`Config warnings (${facts.warnings.length}):`, ...lines.map((line) => `- ${line}`), ...(cut > 0 ? [`(${cut} more not shown)`] : [])].join("\n");
+  const count = facts.warnings.length;
+  let warnings_section = "Config warnings: none";
+  if (count > 0 && kind === "form") warnings_section = `Config warnings: ${count} (run \`issue --copy\` to include their text)`;
+  if (count > 0 && kind === "copy") warnings_section = [`Config warnings (${count}):`, ...lines.map((line) => `- ${line}`), ...(cut > 0 ? [`(${cut} more not shown)`] : [])].join("\n");
   const body = [
     "**What happened**",
     "",
