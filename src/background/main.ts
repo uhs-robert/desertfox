@@ -20,6 +20,7 @@ import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { hint_selectors_reply, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
+import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
@@ -49,10 +50,10 @@ import { create_tab_insert } from "./tab_insert.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { has_content_script, send_to_tab } from "./browser_deps.ts";
+import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_global_mark_jump } from "./global_mark_jump.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, set_desktop_palette, snippets } from "./startup.ts";
+import { native_host, change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -259,6 +260,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
   if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, global_mark_jump);
+  if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
+    const tab_id = sender.tab.id;
+    const frame_id = sender.frameId;
+    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender)))));
+  }
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -358,6 +364,16 @@ const site_zoom = create_site_zoom({
   set_zoom: (tab_id, level) => browser.tabs.setZoom(tab_id, level),
 });
 
+const external_editor = create_external_editor({
+  session: browser.storage.session,
+  client: native_host,
+  send_done: (tab_id, frame_id, message) => browser.tabs.sendMessage(tab_id, message, { frameId: frame_id }),
+  toast: (tab_id, frame_id, message) => show_toast_on_tab({ tab_id, frame_id }, "text.edit_external", message, "error"),
+  tab_exists: (tab_id) => browser.tabs.get(tab_id).then(() => true, () => false),
+});
+const editor_ext_for = make_editor_ext_for(browser.storage.local, async () => effective_settings((await get_config()).settings).editor_ext);
+void external_editor.resume().catch(() => undefined);
+
 const media_quality = create_media_quality({
   is_disabled: read_disabled,
   inject_all: inject_quality_for_rule,
@@ -371,6 +387,7 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
+  if (change.status === "loading") void external_editor.forget(tab_id).catch(() => undefined);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   return tab_modes.forget_on_navigation(tab_id, change);
 });
@@ -387,6 +404,7 @@ void history_cache.start();
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
+  void external_editor.forget(tab_id).catch(() => undefined);
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);

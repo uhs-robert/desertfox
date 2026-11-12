@@ -174,6 +174,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "editor_ext",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a file extension of 1 to 10 letters or digits, without a dot",
+    "values": []
+  },
+  {
     "name": "mode_indicator",
     "settable": true,
     "is_toggle": false,

@@ -30,6 +30,10 @@ export type HostWatch = {
 export type SelfUpdateRequest = { version: string; sha256: Record<string, string> };
 export type SelfUpdateReply = { updated: boolean; version: string };
 
+export type EditorStartRequest = { text: string; ext?: string; insert?: boolean };
+// `pending` while the editor runs. `done` with `changed` and, only when changed, the edited `text`.
+export type EditorCollectReply = { pending: true } | { done: true; changed: false } | { done: true; changed: true; text: string };
+
 export type ConfigFilesReply = { config_dir: string; config_dir_exists: boolean; files: Record<string, string> };
 
 const INSTALL_HINT = "Run :native.install and follow the steps on the page.";
@@ -87,6 +91,20 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
         throw new NativeHostError("bad_reply", "The DesertFox native host answered the update in a way that is not understood. Run the command from :native.install.");
       }
       return { updated: reply.updated, version: reply.version };
+    },
+    // Opens the user's editor on `text`, as the host's config says. Answers the job id to collect with.
+    editor_start: async (request: EditorStartRequest): Promise<string> => {
+      const reply = await call({ cmd: "editor_start", ...request });
+      if (typeof reply.job !== "string" || reply.job === "") throw new NativeHostError("bad_reply", "The DesertFox native host started the editor but named no job. Update it with :native.update.");
+      return reply.job;
+    },
+    // Waits on the host (about 20 s) for the editor of `job` to end. Both a failure and an unknown job throw, so the caller clears the job.
+    editor_collect: async (job: string): Promise<EditorCollectReply> => {
+      const reply = await call({ cmd: "editor_collect", job });
+      if (reply.pending === true) return { pending: true };
+      if (reply.done === true && reply.changed === false) return { done: true, changed: false };
+      if (reply.done === true && reply.changed === true && typeof reply.text === "string") return { done: true, changed: true, text: reply.text };
+      throw new NativeHostError("bad_reply", "The DesertFox native host answered the editor in a way that is not understood. Update it with :native.update.");
     },
     // Mirrors the saved edits (TOML text) into autoconfig.toml. The host writes no other file.
     write_autoconfig: async (toml: string): Promise<void> => {

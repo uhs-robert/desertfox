@@ -516,6 +516,7 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-r>` | bound | `register.paste` | Paste register |  |
+| `<C-i>` | bound | `text.edit_external` | Edit the field in the external editor |  |
 | `<A-Escape>` | bound | `page.send_key --key=Escape --key_code=27` | Send Escape to the page |  |
 
 ### ignore
