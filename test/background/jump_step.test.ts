@@ -36,6 +36,8 @@ function make(tabs: MarkTab[]) {
     navigate: async (tab_id, url) => {
       log.push(`navigate ${tab_id} ${url}`);
       if (state.navigate_fails) throw new Error("Illegal URL");
+      // The tab now shows the address, so a later step finds it there and not at its old one.
+      state.tabs = state.tabs.map((tab) => (tab.id === tab_id ? { ...tab, url } : tab));
     },
     watch: (tab_id) => {
       log.push(`watch ${tab_id}`);
@@ -150,9 +152,9 @@ test("a step the user pressed before the pushed one arrives is a step of its own
   await fakes.go(-1);
   fakes.watches[0]!.resolve("ready");
   await fakes.flush();
-  // The user's step was a real step: from the entry the step chose, newer is the place the first step left, which is this tab.
+  // The user's step was a real step: from the entry the step chose, newer is the place the first step left. This tab now shows FAR, so the step opens HERE in it again.
   assert.deepEqual(user, { ok: true });
-  assert.deepEqual(fakes.log.filter((line) => line.startsWith("activate")), ["activate 1"]);
+  assert.deepEqual(fakes.log.filter((line) => line.startsWith("navigate") || line.startsWith("activate")), [`navigate 1 ${FAR}`, `navigate 1 ${HERE}`]);
   // The pushed request found its arrival replaced and did not step a third time.
   assert.deepEqual(fakes.pushes(), ["push 1 -1 arrival"]);
 });
