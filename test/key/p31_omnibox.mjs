@@ -79,4 +79,20 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, ev
     expect((await notification_count()) === 0, "the refusal also raised a notification");
     expect((await active_url()) === before, "the active tab stayed");
   });
+
+  await run_case("typing a command word lists the registry's commands, at most the rows Firefox shows", async () => {
+    await focus_address_bar();
+    await type_in_address_bar("df tab.ne");
+    await poll_until("the next command to be suggested", async () => (await bar_rows()).some((row) => /^(tab\.)?next /.test(row)));
+    // The default suggestion row and at most nine suggestions fill the ten rows of the address bar.
+    expect((await bar_rows()).length <= 10, "more than ten rows");
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("a short word fills all ten rows", async () => {
+    await focus_address_bar();
+    await type_in_address_bar("df t");
+    await poll_until("ten rows", async () => (await bar_rows()).length === 10);
+    await press_keys("-k", "Escape");
+  });
 }
