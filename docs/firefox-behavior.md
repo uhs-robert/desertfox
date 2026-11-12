@@ -399,3 +399,12 @@ Measured in Firefox 160 in the key test (`test/key/p32_tab_groups.mjs`).
 
 - `browser.tabGroups` is absent from the background page when the manifest lacks the `tabGroups` permission, so the permission is required.
 - Not measured: whether the permission adds an install prompt line, whether the active tab of a collapsed group keeps the group open, and whether groups exist in private windows. These need a person.
+
+## The Navigation API in a content script (jump-list)
+
+Measured in Firefox 160 in the key test, with a throwaway piece that listened from the content script world (`executeScript`) on same-origin test pages.
+
+- `navigation` exists in a content script, and its `navigate` event reaches a listener there with `navigationType`, `destination.url`, `destination.sameDocument` and `hashChange` readable.
+- `navigate` fires for every navigation the page starts: a link click, a form submit, `location.href`, `location.reload()`, `history.pushState` and `replaceState` (`sameDocument` true), a hash change (`hashChange` true) and `history.back()`. It also fires for `tabs.goBack` (`traverse`).
+- It does not fire for a navigation the browser starts: an address typed in the address bar, F5, `tabs.reload` and `tabs.update` with a `url`. Only `pagehide` shows those. So the page cannot classify its own leave, and the jump list judges leaves in the background (`src/background/jump_leave.ts`).
+- On the new page, `navigation.activation` names the way it arrived (`push`, `reload`, `traverse`) and, for a same-origin arrival, the page it came from, for browser-started navigations too.

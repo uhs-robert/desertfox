@@ -16,7 +16,7 @@ export type JumpStepDeps = Omit<AddressDeps, "failed_text"> & {
   push_jump: (tab_id: number, steps: number, arrival?: true) => Promise<unknown>;
 };
 
-export type JumpAnswerer = ((request: JumpRequest, tab: MarkSender | undefined) => Promise<JumpAnswer>) & { is_stepping: (tab_id: number) => boolean };
+export type JumpAnswerer = (request: JumpRequest, tab: MarkSender | undefined) => Promise<JumpAnswer>;
 
 export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
   const arrivals = create_address_arrivals<JumpEntry>({ ...deps, failed_text: "Jump failed" });
@@ -51,11 +51,16 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
     }
     const from = { id: tab_id, window_id, incognito: tab.incognito };
     // A tab in another window has another list, so a step back from there could not come forward again: that address opens here.
-    await arrivals.go(from, await arrivals.find_tab(entry.url, from, true), entry.url, entry, push_arrival);
+    const found = await arrivals.find_tab(entry.url, from, true);
+    // Marked before the navigation starts, so the report of the page this tab leaves finds the mark whenever it comes.
+    if (!found) await deps.store.mark_step(tab_id, tab.incognito, here.url);
+    await arrivals.go(from, found, entry.url, entry, push_arrival).catch(async (error: unknown) => {
+      if (!found) await deps.store.forget_tab(tab_id, tab.incognito);
+      throw error;
+    });
     return { ok: true };
   }
 
   // The sender is a page script, so a bad request answers as a refusal and never throws into the listener.
-  const reply: JumpAnswerer = Object.assign((request: JumpRequest, tab: MarkSender | undefined) => answer(request, tab).catch((error: unknown) => ({ ok: false as const, message: error instanceof Error ? error.message : String(error) })), { is_stepping: arrivals.is_arriving });
-  return reply;
+  return (request, tab) => answer(request, tab).catch((error: unknown) => ({ ok: false as const, message: error instanceof Error ? error.message : String(error) }));
 }
