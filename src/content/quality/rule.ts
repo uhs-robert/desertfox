@@ -115,8 +115,12 @@ export function create_rule(deps: RuleDeps) {
     const value = await deps.report();
     if (mine !== asked) return;
     if (value === undefined) {
-      // A navigation that finds no video (a site that swaps its video) still ends a manual choice, and frees the frame for the next video's wake.
-      if (wanted) manual = false;
+      // A navigation that finds no video (a site that swaps its video) still ends a manual choice and the old poll, and frees the frame for the next video's wake.
+      if (wanted) {
+        manual = false;
+        generation++;
+        polling = false;
+      }
       if (!polling) level = undefined;
       wanted = undefined;
       // A look-again loop that still sleeps carries on with the full time.
@@ -134,6 +138,9 @@ export function create_rule(deps: RuleDeps) {
   return {
     // A `media quality` choice stands: it ends the poll, and a start that is not a navigation leaves it alone.
     manual_choice(): void {
+      // A report still waiting for its answer must not clear the choice or start a poll when it arrives.
+      asked++;
+      wanted = undefined;
       generation++;
       polling = false;
       manual = true;

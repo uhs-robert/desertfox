@@ -443,19 +443,24 @@ test("a run that is not a navigation, in a frame that already has a rule, only r
   assert.equal(player.state.playing, 720);
 });
 
-test("a `media quality` request that races the report of a repeat run is not preceded by a rule pick", async () => {
-  const { rule, frame, player, clock } = idle_frame();
-  frame.video = true;
-  void rule.start(true);
-  await run_out(clock);
-  const picks = player.state.picks.length;
-  const repeat = rule.start(false);
+test("a manual choice drops a report still waiting for its answer, so a late reply neither clears the choice nor starts a poll", async () => {
+  const release: ((value: string) => void)[] = [];
+  const player = fake_player(480);
+  const clock = manual_clock();
+  const rule = create_rule({ report: () => new Promise<string>((resolve) => release.push(resolve)), has_media: () => true, probe: () => player.driver, sleep: clock.sleep, now: () => clock.now });
+  const first = rule.start(true);
+  // `media quality 480` injected the bundle, and its request won the race against the report.
   rule.manual_choice();
-  player.state.playing = 480;
-  await repeat;
+  release[0]!("max");
+  await first;
   await run_out(clock);
-  assert.equal(player.state.picks.length, picks);
+  assert.deepEqual(player.state.picks, []);
   assert.equal(player.state.playing, 480);
+  // The frame stays manual: a later media event reports again, and still starts nothing.
+  rule.wake();
+  release[1]!("max");
+  await run_out(clock);
+  assert.deepEqual(player.state.picks, []);
 });
 
 test("a navigation that finds no video keeps its end of a manual choice, so the next video gets the rule", async () => {
@@ -473,4 +478,25 @@ test("a navigation that finds no video keeps its end of a manual choice, so the 
   rule.wake();
   await run_out(clock);
   assert.equal(player.state.playing, 1080, "the new video was not taken to the rule's level");
+});
+
+test("a navigation that finds no video ends the old poll and the old rule, so a new player gets the new address's rule", async () => {
+  const { rule, frame, player, clock } = idle_frame("max");
+  frame.video = true;
+  player.state.listed = false;
+  void rule.start(true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(clock.waiting(), 1, "the poll waits for a player that lists levels");
+  // The site navigates and drops its video. The new address has another rule.
+  frame.video = false;
+  frame.value = "min";
+  await rule.start(true);
+  // The new player appears while the old poll's timer is still pending.
+  frame.video = true;
+  player.state.listed = true;
+  await clock.tick();
+  assert.deepEqual(player.state.picks, [], "the old poll set a level with the old rule");
+  rule.wake();
+  await run_out(clock);
+  assert.equal(player.state.playing, 360, "the new video got the new rule");
 });
