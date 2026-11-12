@@ -50,12 +50,13 @@ function make(tabs: MarkTab[]) {
   const refusals: { tab_id: number; message: string }[] = [];
   // The places put in the jump list, as `window: url x y`.
   const records: string[] = [];
-  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, read_top_offset: async (): Promise<{ x: number; y: number } | undefined> => ({ x: 7, y: 77 }) };
+  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, activate_gate: undefined as Promise<void> | undefined, read_top_offset: async (): Promise<{ x: number; y: number } | undefined> => ({ x: 7, y: 77 }) };
   const global_jump = create_global_mark_jump({
     store: real,
     list_tabs: async () => state.tabs,
     activate_tab: async (tab_id) => {
       log.push(`activate ${tab_id}`);
+      await state.activate_gate;
       if (state.activate_fails) throw new Error("no tab");
     },
     focus_window: async (window_id) => {
@@ -304,4 +305,25 @@ test("a top frame that never answers the offset read does not hold a child frame
   assert.deepEqual(await jumping, { ok: true });
   assert.deepEqual(fakes.log, ["watch 2", "activate 2"]);
   assert.deepEqual(fakes.records, []);
+});
+
+test("a jump that a newer one superseded before its switch records nothing", async () => {
+  const fakes = make([tab(1, "https://sender.test/"), tab(2, MARK_URL, { window_id: 2 }), tab(3, "https://b.test/", { window_id: 3 }), tab(4, "https://c.test/", { window_id: 4 })]);
+  for (const [key, url] of [["A", MARK_URL], ["B", "https://b.test/"], ["C", "https://c.test/"]] as const) {
+    await answer_mark_request(fakes.store, { type: "mark_set", key, url: "ignored", x: 0, y: 300 }, { incognito: false, id: 9, window_id: 1, url, frame_id: 0 }, fakes.global_jump);
+  }
+  let open_gate = () => {};
+  fakes.state.activate_gate = new Promise((resolve) => (open_gate = resolve));
+  // A's switch waits in Firefox. B queues behind it, and C supersedes B before B's switch runs.
+  const to_a = fakes.global_jump(fakes.jump("A"), fakes.sender());
+  await fakes.flush();
+  const to_b = fakes.global_jump(fakes.jump("B"), fakes.sender());
+  await fakes.flush();
+  const to_c = fakes.global_jump(fakes.jump("C"), fakes.sender());
+  await fakes.flush();
+  fakes.state.activate_gate = undefined;
+  open_gate();
+  await Promise.all([to_a, to_b, to_c]);
+  assert.deepEqual(fakes.log.filter((line) => line.startsWith("activate")), ["activate 2", "activate 4"]);
+  assert.deepEqual(fakes.records.map((line) => line.split(":")[0]), ["2", "4"], "B never switched, so window 3 got no place");
 });

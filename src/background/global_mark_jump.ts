@@ -58,8 +58,8 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
       return answer;
     }
     const left = await place_left(request, tab);
-    await arrivals.go(from, found, mark.url, request.key, push);
-    await record(found?.window_id ?? window_id, tab.incognito, left);
+    // A newer jump superseded this one before it switched, so it left nothing.
+    if (await arrivals.go(from, found, mark.url, request.key, push)) await record(found?.window_id ?? window_id, tab.incognito, left);
     return { ok: true };
   };
 }

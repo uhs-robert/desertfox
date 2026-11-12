@@ -94,7 +94,8 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       void run_push(tab_id, own, push);
     },
     // Goes to the found tab, or opens `url` in the sender's tab when none was found, and returns when that has started. A refusal of the switch or the open throws.
-    go: async (from: TabOrigin, found: MarkTab | undefined, url: string, data: Data, push: PushToTab<Data>): Promise<void> => {
+    // Answers false when a newer step superseded this one before its switch ran, so the switch never happened.
+    go: async (from: TabOrigin, found: MarkTab | undefined, url: string, data: Data, push: PushToTab<Data>): Promise<boolean> => {
       const target_id = found?.id ?? from.id;
       const next: Arrival<Data> = { data, armed: false };
       // A new step supersedes the unfinished one of this tab, of the target tab and of the tab the origin's last step went to.
@@ -111,30 +112,40 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       switches.set(from.id, own_switch);
       // The ended step's target goes, so the map holds no address of a tab that closed.
       const end_target = () => targets.get(from.id)?.arrival === next && targets.delete(from.id);
-      try {
-        await own_switch;
-      } catch (error) {
+      const stop_waiting = () => {
         watch.stop();
         if (arrivals.get(target_id) === next) arrivals.delete(target_id);
         end_target();
+      };
+      let started: boolean;
+      try {
+        started = await own_switch;
+      } catch (error) {
+        stop_waiting();
         throw error;
+      }
+      if (!started) {
+        stop_waiting();
+        return false;
       }
       // A discarded tab reads `complete` until it loads, so it waits for the load like a navigation.
       void arrive(target_id, next, watch, !found || found.discarded, push).finally(end_target);
+      return true;
     },
   };
 
-  // The switch or the navigation of one step. A step that a newer one superseded does nothing.
-  async function switch_to(from: TabOrigin, found: MarkTab | undefined, url: string, own: Arrival<Data>): Promise<void> {
-    if (arrivals.get(found?.id ?? from.id) !== own) return;
+  // The switch or the navigation of one step. A step that a newer one superseded does nothing and answers false.
+  async function switch_to(from: TabOrigin, found: MarkTab | undefined, url: string, own: Arrival<Data>): Promise<boolean> {
+    if (arrivals.get(found?.id ?? from.id) !== own) return false;
     if (found) {
       await deps.activate_tab(found.id);
       // A compositor may refuse to raise a window. The tab is active in its window anyway.
       if (found.window_id !== from.window_id) await deps.focus_window(found.window_id).catch(() => undefined);
-      return;
+      return true;
     }
     await deps.navigate(from.id, url).catch(() => {
       throw new RuntimeRefusal(`Firefox does not let extensions open ${url}`);
     });
+    return true;
   }
 }
