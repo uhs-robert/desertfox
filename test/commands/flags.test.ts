@@ -90,3 +90,11 @@ test("the search keys run in caret and visual mode too, and the registry lets th
     }
   }
 });
+
+test("a jump list step and a global mark jump leave the router no place to record", () => {
+  // A router record before a step pushes the present place and puts the cursor back at the present, so <C-i> then finds nothing.
+  assert.equal(registry.get("page.jump")!.jumps, undefined);
+  // A global mark records in global_mark_jump.ts, in the window it lands in. A router record goes to the sender's window.
+  const mark_jumps = registry.get("mark.jump")!.jumps as (args: Record<string, unknown>) => boolean;
+  assert.equal(mark_jumps({ key: "A" }), false);
+});
