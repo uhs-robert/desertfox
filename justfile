@@ -59,6 +59,14 @@ build-config dir="" *flags="": build
 beta:
     #!/usr/bin/env bash
     set -euo pipefail
+    run_id=$(just beta_dispatch)
+    gh run watch "$run_id" --exit-status
+
+# Start the beta workflow on main and print the id of the run it started on stdout. Run ids only grow, so the id recorded before the dispatch tells this run from older ones.
+[private]
+beta_dispatch:
+    #!/usr/bin/env bash
+    set -euo pipefail
     if ! command -v gh >/dev/null 2>&1; then
         echo "beta: gh is not installed. Install the GitHub CLI first." >&2
         exit 1
@@ -67,9 +75,8 @@ beta:
         echo "beta: gh is not logged in. Run 'gh auth login' first." >&2
         exit 1
     fi
-    # Runs of this workflow that exist before the dispatch are skipped by their id, so the watch never follows an older run. Run ids only grow.
     last_id=$(gh run list --workflow beta.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-    gh workflow run beta.yml --ref main
+    gh workflow run beta.yml --ref main >&2
     run_id=""
     for _ in $(seq 1 30); do
         run_id=$(gh run list --workflow beta.yml --event workflow_dispatch --branch main --limit 5 --json databaseId --jq "[.[] | select(.databaseId > $last_id)] | max_by(.databaseId) | .databaseId // empty")
@@ -80,7 +87,7 @@ beta:
         echo "beta: the workflow was started but its run did not show up within 60 s. Look at 'gh run list --workflow beta.yml'." >&2
         exit 1
     fi
-    gh run watch "$run_id" --exit-status
+    echo "$run_id"
 
 # Python unit tests of the native host and its install script. The install tests use a temporary HOME and a stubbed curl.
 host-test:
@@ -389,7 +396,35 @@ release_publish version xpi:
     "${gh_command[@]}"
     echo "created GitHub release v$version"
 
-# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile and create the GitHub release with the same stamped hosts. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
+# Install the signed add-on, unless the machine's policy follows the beta: the stable install would replace the beta pin. Beta means the policy's install_url for the add-on is an https URL, as `install_policy.sh beta` writes it.
+[private]
+release_install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    policies_file="${DESERTFOX_POLICIES_FILE:-/etc/firefox/policies/policies.json}"
+    install_url=""
+    if [ -f "$policies_file" ]; then
+        install_url=$(jq -r '.policies.ExtensionSettings["desertfox@uhs-robert"].install_url // ""' "$policies_file" 2>/dev/null || true)
+    fi
+    if [[ "$install_url" == https://* ]]; then
+        echo "Skipped the local install because this machine is on beta. The policy keeps the beta."
+        exit 0
+    fi
+    just install
+
+# Start the beta workflow on main after a release, so the matching x.y.z.N beta follows. Dispatch only, with no watch. A failure warns and exits 0, because the stable release is already out.
+[private]
+release_dispatch_beta:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    if ! run_id=$(just beta_dispatch); then
+        echo "warning: the beta workflow did not start. Run 'just beta' to start it." >&2
+        exit 0
+    fi
+    url=$(gh run view "$run_id" --json url --jq .url 2>/dev/null || true)
+    echo "Started the beta workflow: ${url:-see 'gh run list --workflow beta.yml'}"
+
+# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts, then start the beta workflow on main without watching it. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -428,11 +463,12 @@ release:
         exit 1
     fi
     just sign
-    just install
+    just release_install
     just release_commit_push
     xpi=$(ls web-ext-artifacts/*.xpi)
     just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
+    just release_dispatch_beta
 
 # Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
 [private]
