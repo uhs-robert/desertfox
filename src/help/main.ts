@@ -1,5 +1,5 @@
 import { load_commands_file } from "../shared/load_commands.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { build_config_status, load_effective_config } from "../background/config_load.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
@@ -57,7 +57,7 @@ async function load_inputs(): Promise<Inputs> {
   const { config, source, edits, config_settings } = await load_effective_config();
   const model = build_help_model(
     commands_file.commands,
-    stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined,
+    current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined),
     (stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? [],
     { search_engines: Object.keys(config.search_engines) },
     config.search_engines,
