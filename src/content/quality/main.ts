@@ -54,7 +54,6 @@ if (!quality_window.desertfox_quality_ready) {
   quality_window.desertfox_quality_ready = true;
   // Media events do not bubble, but a capture listener on the document sees them. A video that comes later wakes the rule here with no timer running.
   for (const type of ["loadstart", "loadedmetadata", "play"]) document.addEventListener(type, () => rule.wake(), true);
-  addEventListener("pagehide", () => rule.stop());
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const request = raw as QualityRequest | { type: "tree_updated" };
     if (request.type === "tree_updated") return void rule.refresh();

@@ -114,6 +114,12 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await wait_event(mark, on_set("p26_lazyframe_yt_inner", (event) => event.low === "hd1080"), "the late framed player at 1080p", 9000);
   });
 
+  await run_case("a video inside an open shadow root, found by the look-again check, gets the rule", async () => {
+    const mark = events.length;
+    await open_page("quality", "p26_lazyshadow", { new_tab: true });
+    await wait_event(mark, on_set("p26_lazyshadow", (event) => event.low === "hd1080"), "the player beside the shadow-root video at 1080p", 12000);
+  });
+
   await run_case("a navigation's watch outlasts the second injection: a reset 6 s after the navigation is still caught", async () => {
     let mark = events.length;
     await open_page("quality", "p26_late", { new_tab: true });

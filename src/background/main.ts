@@ -455,6 +455,11 @@ const media_quality = create_media_quality({
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => void media_quality.tab_updated(tab_id, change, tab.url), { properties: ["url", "status"] });
+const media_quality_settings_changed = () => void media_quality.settings_changed(() => browser.tabs.query({})).catch(() => undefined);
+media_quality_settings_changed();
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
+});
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.

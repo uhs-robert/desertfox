@@ -439,7 +439,18 @@ function make_movie_player(levels, start) {
   return player;
 }
 function add_movie_player() { document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720")); }
-if (kind.includes("lazy")) {
+if (kind.includes("shadow")) {
+  // The video comes inside an open shadow root at 4 s, where no media event reaches the document. The site player comes at 5.5 s, so the rule must find the video by looking again.
+  setTimeout(() => {
+    const host = document.createElement("div");
+    const video = document.createElement("video");
+    video.src = "/tone.wav";
+    video.loop = true;
+    host.attachShadow({ mode: "open" }).append(video);
+    document.body.append(host);
+  }, 4000);
+  setTimeout(add_movie_player, 5500);
+} else if (kind.includes("lazy")) {
   setTimeout(() => {
     const video = document.createElement("video");
     video.src = "/tone.wav";
