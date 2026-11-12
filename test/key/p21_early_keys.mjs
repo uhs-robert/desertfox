@@ -30,7 +30,22 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, e
     }
   });
 
-  // Presses `keys` while the body is held, then reads the scroll position once the page is in. A number in `keys` is a pause in ms. With `keymap_late` the keys are held for the keymap and replay after it lands, still before the body. A chord is never held for the keymap, so the Ctrl case leaves the keymap alone. `tail_ms` also holds the page's last script after the content.
+  await run_case("an unbound chord pressed before the keymap loads reaches the page at once", async () => {
+    await delay_keymap_reads(true);
+    try {
+      const mark = events.length;
+      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "early_chord"))}, active: true }).then((tab) => tab.id)`);
+      await sleep(900);
+      await press_keys("-M", "ctrl", "k", "-m", "ctrl");
+      const seen = await wait_event(mark, (event) => event.type === "keydown" && event.key === "k" && event.page_id === "early_chord", "the page to see Ctrl+K", KEYMAP_DELAY_MS + 4000);
+      const opened = events.slice(mark).find((event) => event.type === "visibility" && event.page_id === "early_chord");
+      expect(seen.at_ms - opened.at_ms < KEYMAP_DELAY_MS - 300, `Ctrl+K reached the page ${seen.at_ms - opened.at_ms} ms after the open, so the keymap delay held it`);
+    } finally {
+      await delay_keymap_reads(false);
+    }
+  });
+
+  // Presses `keys` while the body is held, then reads the scroll position once the page is in. A number in `keys` is a pause in ms. With `keymap_late` the keys are held for the keymap and replay after it lands, still before the body. A Ctrl chord the default keymap binds is held like any key, and the Ctrl+D case leaves the keymap alone. `tail_ms` also holds the page's last script after the content.
   const press_on_slow_body = async (id, keys, { keymap_late = true, tail_ms = 0 } = {}) => {
     await delay_keymap_reads(keymap_late);
     try {

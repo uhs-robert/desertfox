@@ -12,6 +12,9 @@ import { is_chord } from "../shared/keys/token.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
+// The chords the default keymap binds. Content has no keymap before the first read, and a chord outside this set passes at once so Firefox keeps its shortcut (Ctrl+L). A test checks it against DEFAULT_KEYMAP. A chord the user binds beyond the defaults reaches Firefox if typed in the first moments of a page.
+export const DEFAULT_CHORDS = /^<(?:C-(?:[abdfhinopruvx[]|Space)|A-(?:[,cjkmpux]|Arrow(?:Down|Up)|Escape)|AC-(?:Escape|`))>$/;
+
 // Runs when a held key is replayed and the keymap does not take it, so the page can still get the key.
 export type OnReplayPass = () => void;
 
@@ -123,7 +126,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const mode = deps.get_mode_();
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
     if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
-    // Before the keymap is read nothing is known to bind, so every key waits, chords too: a default chord such as <C-o> would otherwise reach Firefox's own shortcut (Open File). An unbound chord replays as a synthetic key and loses its Firefox action, which only a chord in the first moments of a page meets.
+    // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
+    if (!matcher && is_chord(token) && !DEFAULT_CHORDS.test(token)) return "pass";
     if (!matcher || browser_chord_in(mode, token) || waits_for_replay(matcher, mode, token)) {
       held_keys.push({ token, on_replay_pass_, repeat });
       return "cancel";
