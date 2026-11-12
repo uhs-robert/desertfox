@@ -29,10 +29,12 @@ export type RunRequest = {
 };
 
 // `focus` says whether the frame's own document holds the keyboard focus. The tab shows the mode of the frame that does.
+// `step` says that a media step or a join reply put the frame in the media mode, so the report must not start a hold (`tab_media.ts`).
 export type ModeChanged = {
   type: "mode_changed";
   mode: Mode;
   focus: boolean;
+  step: boolean;
 };
 
 // Escape in a frame that holds insert mode from `i`: the background returns the tab's switched frames to normal.

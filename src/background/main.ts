@@ -269,7 +269,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(() => undefined);
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
-    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus).catch(() => undefined);
+    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true).catch(() => undefined);
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
       // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.

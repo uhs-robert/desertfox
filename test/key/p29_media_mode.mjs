@@ -37,11 +37,11 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await shown(mark, id);
     await panel_up(`the media panel of ${id}`);
   };
-  const focus_frame = async (host_id) => {
+  const focus_frame = async (host_id, element_id = "frame", page_id = `${host_id}_inner`) => {
     const mark = events.length;
-    await in_active_tab('document.getElementById("frame").contentWindow.focus(); 0');
-    await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === `${host_id}_inner`, `${host_id}_inner to take the focus`);
-    await wait_takes_keys(`${host_id}_inner`);
+    await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
+    await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === page_id, `${page_id} to take the focus`);
+    await wait_takes_keys(page_id);
   };
   const focus_top = async (host_id) => {
     const mark = events.length;
@@ -286,6 +286,31 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await press_keys("e");
     await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "", "the page's own exit");
     await normal(mark, id);
+    await j_scrolls(id);
+  });
+
+  // The site key enters and leaves fullscreen in one frame while a second frame is busy, so the second frame takes the step on after the mode ended. Its report of the mode must start nothing.
+  await run_case("a fullscreen that ends before a second frame takes its step on leaves every frame in normal mode", async () => {
+    const id = "p29_pair_late_step";
+    const slow_id = `${id}_slow`;
+    await open_page("media_mode_pair", id, { new_tab: true });
+    // Each frame starts its content script on its first focus.
+    await focus_frame(id, "slow", slow_id);
+    await focus_frame(id);
+    const busy_mark = events.length;
+    let mark = busy_mark;
+    await in_active_tab('document.getElementById("slow").contentWindow.postMessage({ busy: 3000 }, "*"); 0');
+    await press_keys("e");
+    await wait_event(mark, (event) => event.page_id === `${id}_inner` && event.type === "media_fullscreen" && event.element === "player", "the framed player to go fullscreen");
+    mark = events.length;
+    await press_keys("e");
+    await wait_event(mark, (event) => event.page_id === `${id}_inner` && event.type === "media_fullscreen" && event.element === "", "the framed fullscreen to end");
+    await wait_event(busy_mark, (event) => event.page_id === slow_id && event.type === "busy_done", "the busy frame to run again", 8000);
+    await focus_frame(id, "slow", slow_id);
+    await j_scrolls(slow_id);
+    await focus_frame(id);
+    await j_scrolls(`${id}_inner`);
+    await focus_top(id);
     await j_scrolls(id);
   });
 

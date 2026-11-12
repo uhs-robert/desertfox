@@ -272,7 +272,10 @@ function install_matcher(reply: PageKeymap | undefined): void {
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") bundles.set_mode_("ignore");
   // A field that took the focus while the ask was pending already put the frame in insert mode, and media must not overwrite it.
-  else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) bundles.set_mode_(reply.join);
+  else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) {
+    media_by_step = true;
+    bundles.set_mode_(reply.join);
+  }
   else {
     if (step === "leave") bundles.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
@@ -306,6 +309,9 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
   return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
+// The media mode of this frame came from another frame (a step, or the join reply of a late frame), not from its own fullscreen or a ;M pick. The background then knows that the report it causes may belong to a hold that already ended.
+let media_by_step = false;
+
 function start(): void {
   (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element });
   listen("keydown", on_keydown);
@@ -328,11 +334,12 @@ function start(): void {
   // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
   const report_mode = () => {
     setTimeout(hand_focus_to_parent);
-    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document), step: media_by_step });
   };
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
+    if (mode !== "media") media_by_step = false;
     key_flow.reset_sequence_();
     site_mode.set_();
     bundles.enter_mode_(mode);
@@ -349,7 +356,10 @@ function start(): void {
   // A fullscreen change in this frame and the media mode of another frame take the same step.
   const media_step = (on: boolean, own?: boolean) => {
     const next = on ? fullscreen_step(page_mode.get_mode_(), true) : page_mode.media_ended_(own);
-    if (next) bundles.set_mode_(next);
+    if (next) {
+      media_by_step = !own;
+      bundles.set_mode_(next);
+    }
   };
   // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
   // The badge and an open which-key panel follow the change even when the mode stays media.
