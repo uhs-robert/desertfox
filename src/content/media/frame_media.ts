@@ -110,13 +110,11 @@ function targets_of(view: FrameView, request: Extract<MediaRequest, { type: "med
     // A frame holds one picture-in-picture window or fullscreen element at most, and the key closes it whatever the target.
     const open = request.action === "pip" ? view.pip_element() : view.fullscreen_element() && found.find(({ player }) => is_video(player))?.player;
     if (open) return [open as Player];
-    const video = largest(found.filter(({ player }) => is_video(player) && in_target(player, request.target)));
-    // The frame can hold a small playing ad beside a large video that waits, and the large one is the player.
-    const biggest = largest(found.filter(({ player }) => is_video(player)));
-    const area_of = (player: Player | undefined) => found.find((entry) => entry.player === player)?.area ?? 0;
-    const small = video !== undefined && area_of(video) < area_of(biggest) * PLAYING_MIN_SHARE;
-    const chosen = small ? biggest : video;
-    return chosen ? [chosen] : [];
+    const videos = found.filter(({ player }) => is_video(player));
+    // A small playing ad beside a large video that waits is not the player.
+    const floor = Math.max(0, ...videos.map(({ area }) => area)) * PLAYING_MIN_SHARE;
+    const video = largest(videos.filter(({ player, area }) => in_target(player, request.target) && area >= floor)) ?? largest(videos);
+    return video ? [video] : [];
   }
   if (request.target !== "largest") return found.filter(({ player }) => in_target(player, request.target)).map(({ player }) => player);
   const chosen = largest(found);
