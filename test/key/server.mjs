@@ -623,6 +623,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const tick = `<script>let ticks = 0; setInterval(() => { document.getElementById("clock").textContent = String(++ticks); }, 50);</script>`;
       return response.end(page(`caret_ticking ${id}`, `<p>alpha beta gamma</p><p>delta epsilon</p><p>clock <span id="clock">0</span></p>${tick}`));
     }
+    if (url.pathname === "/caret_emptied") {
+      // Once the test arms it, the page removes all its text at the next selection change and reports emptied.
+      const empty = `<script>document.addEventListener("selectionchange", () => { if (document.body.dataset.empty !== "armed") return; document.body.dataset.empty = "done"; document.querySelectorAll("h1, p").forEach((node) => node.remove()); send("emptied"); });</script>`;
+      return response.end(page(`caret_emptied ${id}`, `<p>foo one</p><p>foo two</p>${empty}`));
+    }
     if (url.pathname === "/caret_nav_frame") {
       // A same-origin frame that the test navigates to new text under an open session.
       const frame = `<iframe id="nav" srcdoc="<p>first inner</p>" style="width:300px;height:60px"></iframe>`;
