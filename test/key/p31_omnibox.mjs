@@ -4,7 +4,7 @@ import { evaluate_in_background, evaluate_in_chrome } from "./rdp.mjs";
 
 export const areas = ["omnibox"];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, poll_until, type_in_address_bar, wait_active_tab, wait_tab_quiet }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, expect, events, wait_event, open_page, press_keys, poll_until, type_in_address_bar, wait_active_tab, wait_tab_quiet }) {
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const active_url = () => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.url)`);
   const tab_count = () => in_background(`browser.tabs.query({}).then((tabs) => tabs.length)`);
@@ -47,20 +47,36 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, op
     await poll_until("the active tab to leave about:license", async () => (await active_url()) !== "about:license");
   });
 
-  await run_case("df tab.prev typed on a normal page runs too", async () => {
-    const before = await active_url();
+  const clear_notifications = () => in_background(`browser.notifications.getAll().then((all) => Promise.all(Object.keys(all).map((id) => browser.notifications.clear(id))))`);
+  const notification_count = async () => Object.keys((await in_background(`browser.notifications.getAll()`)) ?? {}).length;
+
+  await run_case("df tab.prev typed on a normal page runs and returns to about:license", async () => {
+    expect((await active_url()) !== "about:license", "the previous case left a normal page active");
     await type_command("df tab.prev");
     await press_keys("-k", "Return");
-    await poll_until("the active tab to change", async () => (await active_url()) !== before);
+    await poll_until("about:license to be active", async () => (await active_url()) === "about:license");
   });
 
-  await run_case("a refused line runs nothing and shows a notification", async () => {
-    const before = await active_url();
-    await in_background(`browser.notifications.getAll().then((all) => Promise.all(Object.keys(all).map((id) => browser.notifications.clear(id))))`);
+  await run_case("a refused line on about:license runs nothing and shows a notification", async () => {
+    await clear_notifications();
     await type_command("df rust");
     await press_keys("-k", "Return");
     // The protected page has no toast, so the refusal arrives as a notification. That proves the keyword fired.
-    await poll_until("the refusal notification", async () => Object.keys((await in_background(`browser.notifications.getAll()`)) ?? {}).length > 0);
+    await poll_until("the refusal notification", async () => (await notification_count()) > 0);
+    expect((await active_url()) === "about:license", "the active tab stayed");
+  });
+
+  await run_case("a refused line on a normal page shows a page toast and no notification", async () => {
+    await clear_notifications();
+    await type_command("df tab.next");
+    await press_keys("-k", "Return");
+    await poll_until("a normal page to be active", async () => (await active_url()) !== "about:license");
+    const before = await active_url();
+    const mark = events.length;
+    await type_command("df rust");
+    await press_keys("-k", "Return");
+    await wait_event(mark, (event) => event.type === "toast", "the refusal toast on the page");
+    expect((await notification_count()) === 0, "the refusal also raised a notification");
     expect((await active_url()) === before, "the active tab stayed");
   });
 }
