@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { create_omnibox, MAX_SUGGESTIONS } from "../../src/background/omnibox.ts";
+import { build_completer, create_omnibox, engines_only_live, MAX_SUGGESTIONS } from "../../src/background/omnibox.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import type { Completion, Row } from "../../src/cmdline/completion/sources.ts";
+import { registry as built_in } from "../../src/shared/registry/builtin.ts";
 import { create_router } from "../../src/background/router.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 import { command_meta } from "../../src/shared/registry/index.ts";
@@ -191,11 +192,22 @@ test("a stale answer is dropped", async () => {
   assert.deepEqual(seen, ["ab "]);
 });
 
-test("no history, tab or bookmark rows appear, in a private window or not", async () => {
-  for (const incognito of [false, true]) {
-    const t = make({ incognito });
-    let shown: unknown[] = ["unset"];
-    await t.omnibox.changed("open ", (results) => (shown = results));
-    assert.deepEqual(shown, [], `incognito ${incognito}`);
+const built_in_completer = (search_engines: Record<string, { url: string; label: string }>) =>
+  build_completer({ commands: built_in.list().map(command_meta), command_aliases: {}, sources: { search_engines: Object.keys(search_engines), containers: [] }, search_engines, keymap: undefined });
+
+test("the engine word of search is completed from the configured engines", () => {
+  const { complete } = built_in_completer({ arch: { url: "https://arch.example/?q={query}", label: "Arch" }, wiki: { url: "https://wiki.example/?q={query}", label: "Wiki" } });
+  for (const text of ["search ", "search --engine="]) {
+    const names = complete(text, text.length).rows.map((row) => row.name);
+    assert.ok(names.includes("arch") && names.includes("wiki"), `${text}: ${names.join(",")}`);
   }
+});
+
+test("tabs, bookmarks and history read empty, so the address bar shows none of them", () => {
+  const live = engines_only_live({ arch: { url: "https://arch.example/?q={query}", label: "Arch" } });
+  assert.deepEqual(live.read("tabs"), { loading: false, items: [] });
+  assert.deepEqual(live.read("bookmarks"), { loading: false, items: { rows: [], folders: [] } });
+  assert.deepEqual(live.read("history"), { loading: false, items: { rows: [], max: 0 } });
+  const { complete } = built_in_completer({});
+  for (const text of ["open ", "bookmark ", "history ", "tab "]) assert.deepEqual(complete(text, text.length).rows.filter((row) => row.tag !== undefined || row.tab !== undefined), [], text);
 });

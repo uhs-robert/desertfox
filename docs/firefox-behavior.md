@@ -45,7 +45,7 @@ Measured on Firefox 160 with the key test `test/key/p31_omnibox.mjs`, which type
 - Plain Enter arrives with the disposition `currentTab`. DesertFox changes `where` only for the other two dispositions.
 - A refused line (`df rust`) runs nothing and the tab stays where it was.
 - Suggestions from `onInputChanged` fill the rows below the default one. The address bar showed 10 rows in all, so nine suggestions fit beside the default row, and DesertFox sends at most nine. A user's `browser.urlbar.maxRichResults` can lower that.
-- The description is plain text. Firefox 160 showed `<dim>` tags and `&lt;` entities literally, so DesertFox sends neither, although the API documentation says the markup works.
+- The description is plain text. Firefox 160 showed `<dim>` tags and `&lt;` entities literally, so DesertFox sends neither (the key test checks that a keys column such as `<A-p>` shows as written), although the API documentation says the markup works.
 - The headless test cannot judge the look of the row, a clash with the user's own address bar keywords, or the private window case.
 
 ### Managed storage
