@@ -27,7 +27,8 @@ define("hint.run", {
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
-        enter_media: { filter: ["media"] },
+        // The pin and the media keys are not shown to follow focus into a frame of another site, unlike the caret.
+        enter_media: { filter: ["media"], frames: ["same_origin"] },
         double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
         // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.
         inspect: { frames: ["same_origin"] },

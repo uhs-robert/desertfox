@@ -48,8 +48,11 @@ test("inspect is refused across frames, because the devtools eval runs in the to
   for (const action of ["here", "tab", "copy", "copy_html", "hover", "double_click", "focus", "prompt"]) assert.equal(check_args(hint, { action, filter: "all", frames: "all_frames" }).ok, true, action);
 });
 
-test("caret, visual and enter_media run across frames, because the owner frame starts the mode", () => {
-  for (const [action, filter] of [["caret", "prose"], ["visual", "prose"], ["enter_media", "media"]] as const) assert.equal(check_args(hint, { action, filter, frames: "all_frames" }).ok, true, action);
+test("caret and visual run across frames, because the owner frame starts the mode, and enter_media stays refused", () => {
+  for (const action of ["caret", "visual"] as const) assert.equal(check_args(hint, { action, filter: "prose", frames: "all_frames" }).ok, true, action);
+  const result = check_args(hint, { action: "enter_media", filter: "media", frames: "all_frames" });
+  assert.equal(result.ok ? "" : result.error, "action enter_media needs frames same_origin");
+  assert.equal(check_args(hint, { action: "enter_media", filter: "media" }).ok, true);
 });
 
 test("double_click is refused for the links filter", () => {

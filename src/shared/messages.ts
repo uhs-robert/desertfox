@@ -488,9 +488,10 @@ export type HintFramesEnd = {
   session_id: string;
 };
 
-// The keyboard frame's Escape after a hover pick of another frame. The background passes it on to every frame of the tab, and the frame that holds the hover releases it. It names no session, because the pick ended its session.
+// The keyboard frame's Escape after a hover pick of another frame. The background passes it on to every frame of the tab. `session_id` is the session of that pick, which ended with it, and the frame whose hover that pick made releases it. A frame hovered by a later pick keeps its hover.
 export type HintFramesUnhover = {
   type: "hint_frames_unhover";
+  session_id: string;
 };
 
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.

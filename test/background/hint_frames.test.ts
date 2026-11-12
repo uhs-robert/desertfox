@@ -405,6 +405,6 @@ test("a frame that navigates while its pick is in flight answers gone, with no l
 
 test("an unhover goes to every frame of the tab and needs no session", async () => {
   const fake = harness({ 0: { count: 1 }, 2: { count: 1 } });
-  await fake.hints.unhover(TAB);
-  assert.deepEqual(fake.of_type("hint_frames_unhover"), [{ frame_id: undefined, message: { type: "hint_frames_unhover" } }]);
+  await fake.hints.unhover(TAB, "s1");
+  assert.deepEqual(fake.of_type("hint_frames_unhover"), [{ frame_id: undefined, message: { type: "hint_frames_unhover", session_id: "s1" } }]);
 });
