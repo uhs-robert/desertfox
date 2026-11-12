@@ -1,4 +1,4 @@
-// What imported CSS may not load. Imported CSS may reference no address but `data:` ones, so an import cannot make a page fetch from a remote host.
+// What imported CSS may not load. Imported CSS may reference only `data:` addresses and `#` fragment references, so an import cannot make a page fetch from a remote host.
 // CSS in the user's own folder or typed in the files editor is never checked: only the import path calls this.
 
 import { css_sources } from "../shared/config_build/source_files.ts";
@@ -44,9 +44,9 @@ function decode(joined: string): { text: string; origin: number[] } {
 }
 
 // `image-set(` and `src(` take strings that load, so they are refused whole. A `url(` is let through when it holds a `data:` address or only a
-// fragment (`#f` or `%23f`), which names a place in the same document. The optional group is read after the match: a lookahead would let `\s*`
+// fragment (`#f`), which names a place in the same document. The optional group is read after the match: a lookahead would let `\s*`
 // back off and see the space before a quote instead.
-const LIMITED = /@import\b|@font-face\b|\bimage-set\(|\bsrc\(|\burl\(\s*["']?(data:|#|%23)?/gi;
+const LIMITED = /@import\b|@font-face\b|\bimage-set\(|\bsrc\(|\burl\(\s*["']?(data:|#)?/gi;
 
 function what_of(match: string): string {
   const keyword = match.toLowerCase();
