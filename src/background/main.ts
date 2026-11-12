@@ -358,7 +358,10 @@ if (browser.omnibox) {
   const omnibox = create_omnibox({
     registry,
     // The command line's own word lookup, so a configured alias works here too. Built after the config has loaded.
-    lookup: async () => create_word_lookup(registry.list().map(command_meta), (await get_config()).command_aliases),
+    lookup: async () => {
+      const config = await get_config();
+      return create_word_lookup(registry.list().map(command_meta), config.command_aliases);
+    },
     get_enum_sources: async () => (await get_config(), router_deps.get_enum_sources()),
     active_tab: router_deps.active_tab,
     mode_of: async (tab_id) => (tab_id === undefined ? "normal" : tab_modes.recall(tab_id)),
@@ -367,7 +370,7 @@ if (browser.omnibox) {
     record_history: cmdline.record,
   });
   browser.omnibox.setDefaultSuggestion({ description: OMNIBOX_HINT });
-  browser.omnibox.onInputEntered.addListener((text, disposition) => omnibox.entered(text, disposition).catch((error: unknown) => void router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) })));
+  browser.omnibox.onInputEntered.addListener((text, disposition) => omnibox.entered(text, disposition).catch((error: unknown) => router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) }).catch(() => undefined)));
 }
 
 const site_zoom = create_site_zoom({
