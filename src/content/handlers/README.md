@@ -3,7 +3,7 @@
 The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object with a `run(args, repeat)` function. `repeat` is true when an auto-repeat keydown started the run and false for every other source. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
 
 - `types.ts`: the `ContentHandler` type.
-- `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`).
+- `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`). The `scroll_selector` site setting picks the target first.
 - `page.ts`: `page.blur`. It holds `blur_focused_element` and remembers the last blurred field, which the bundles read through the host. It also holds `hand_focus_to_parent`, the hand-off of a hidden input frame (`../hidden_frame.ts`).
 - `mode.ts`, `stop.ts`: the mode and stop commands.
 - `align.ts`, `copy.ts`, `focus_input.ts`: the code of `scroll.align`, `copy.url` and `page.focus_input`. These are plain functions, not `ContentHandler` objects. The `page` bundle (`../page/main.ts`) registers them.

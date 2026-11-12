@@ -25,8 +25,25 @@ function focus_chain(): ScrollCandidate<Element>[] {
   return chain;
 }
 
+let scroll_selector = "";
+
+export const set_scroll_selector = (selector = ""): void => {
+  scroll_selector = selector;
+};
+
+// A selector that does not parse selects nothing.
+function site_candidate(): ScrollCandidate<Element> | undefined {
+  try {
+    const element = scroll_selector && document.querySelector(scroll_selector);
+    return element ? candidate_of(element) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function scroll_target(axis: ScrollAxis): Element {
   const target = pick_scroll_target(
+    site_candidate(),
     focus_chain(),
     page_candidate(),
     () => Array.from(document.querySelectorAll("*"), (element) => candidate_of(element)),

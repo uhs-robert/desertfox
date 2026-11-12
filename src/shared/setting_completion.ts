@@ -137,6 +137,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "scroll_selector",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a CSS selector, or empty for none",
+    "values": []
+  },
+  {
     "name": "site_rules",
     "settable": true,
     "is_toggle": false,

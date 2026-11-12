@@ -12,14 +12,16 @@ export type ScrollCandidate<Ref> = {
 const can_scroll = (candidate: ScrollCandidate<unknown>, axis: ScrollAxis) =>
   axis === "x" ? candidate.can_scroll_x_ : candidate.can_scroll_y_;
 
-// Order: a scrollable ancestor of the focused element, then the page, then the largest scrollable
-// element. `all_candidates` is lazy because it walks the whole document.
+// Order: the site's selected element, a scrollable ancestor of the focused element, then the page,
+// then the largest scrollable element. `all_candidates` is lazy because it walks the whole document.
 export function pick_scroll_target<Ref>(
+  site_candidate: ScrollCandidate<Ref> | undefined,
   focus_chain: readonly ScrollCandidate<Ref>[],
   page: ScrollCandidate<Ref> | undefined,
   all_candidates: () => readonly ScrollCandidate<Ref>[],
   axis: ScrollAxis,
 ): Ref | undefined {
+  if (site_candidate && can_scroll(site_candidate, axis)) return site_candidate.ref;
   const from_focus = focus_chain.find((candidate) => can_scroll(candidate, axis));
   if (from_focus) return from_focus.ref;
   if (page && can_scroll(page, axis)) return page.ref;

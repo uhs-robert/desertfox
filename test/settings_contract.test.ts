@@ -23,6 +23,7 @@ const EXPECTATIONS: Record<string, string> = {
   editable_remove: "a list of CSS selectors",
   editable_remove_unsized: "true or false",
   escape_to_page: "true or false",
+  scroll_selector: "a CSS selector, or empty for none",
   site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands, an optional "modes" of modes that each have a label plus a bind and any per-site setting',
   default_site_rows_off: 'a list of "sheets" with no repeat',
   next_patterns: "a list of link texts",
@@ -116,7 +117,8 @@ const ACCEPTS: Record<string, unknown[]> = {
   editable_remove: [[], ["#editor"]],
   editable_remove_unsized: [true, false],
   escape_to_page: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", editable_add: ["div"], editable_remove: ["#e"], editable_remove_unsized: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }], [{ site: "*://a.com/*", media_quality: "auto" }, { site: "*://b.com/*", media_quality: 720 }]],
+  scroll_selector: ["", "#pane", ".kix-appview-editor"],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", scroll_selector: "#pane" }], [{ site: "*://a.com/*", editable_add: ["div"], editable_remove: ["#e"], editable_remove_unsized: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }], [{ site: "*://a.com/*", media_quality: "auto" }, { site: "*://b.com/*", media_quality: 720 }]],
   default_site_rows_off: [[], ["sheets"]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
@@ -167,8 +169,9 @@ const REFUSES: Record<string, unknown[]> = {
   editable_remove: ["div", [""], [1]],
   editable_remove_unsized: ["true", 1],
   escape_to_page: ["true", 1],
+  scroll_selector: [1, true, ["#a"]],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", editable_add: [""] }], [{ site: "a", editable_remove: "x" }], [{ site: "a", editable_remove_unsized: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }], [{ site: "a", media_quality: "high" }], [{ site: "a", media_quality: 500 }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", scroll_selector: 1 }], [{ site: "a", editable_add: [""] }], [{ site: "a", editable_remove: "x" }], [{ site: "a", editable_remove_unsized: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }], [{ site: "a", media_quality: "high" }], [{ site: "a", media_quality: 500 }],
   ],
   default_site_rows_off: ["sheets", ["other"], ["sheets", "sheets"], [1]],
   next_patterns: ["next", [""], [1]],
@@ -269,6 +272,7 @@ test("the defaults stay the same", () => {
     editable_remove: [],
     editable_remove_unsized: false,
     escape_to_page: false,
+    scroll_selector: "",
     site_rules: [],
     default_site_rows_off: [],
     next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
@@ -341,6 +345,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });
