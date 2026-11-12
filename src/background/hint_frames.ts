@@ -198,7 +198,7 @@ export function browser_hint_frames_deps(): HintFramesDeps {
   return {
     storage: browser.storage.session,
     // Document start runs the bundle at once, so a frame that still loads reports instead of holding the labels until it is idle. The bundle registers once per page, so a frame that has it already only counts.
-    // Trap: this skips the bundle host's load map. The bundle sets its ready flag before it registers, so in a frame with no host yet it throws and never registers there later.
+    // This skips the bundle host's load map. In a frame the user never entered, the bundle starts the waiting content script first, so the frame answers too.
     inject_all: async (tab_id) => (await browser.tabs.executeScript(tab_id, { file: "hints.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" })).length,
     send: (tab_id, message, frame_id) => browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id }),
     new_session_id: () => crypto.randomUUID(),

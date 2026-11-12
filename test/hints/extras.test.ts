@@ -93,7 +93,8 @@ class FakeHtmlInputElement extends FakeHtmlElement {}
 let import_count = 0;
 
 // Builds a page of links with the given texts and loads the hints bundle against it.
-async function page_with(texts: string[], settings: Record<string, unknown> = {}) {
+// `unfocused` is a subframe the user never entered: its content script waits for the first focus, so the host is not there yet.
+async function page_with(texts: string[], settings: Record<string, unknown> = {}, { unfocused = false } = {}) {
   const document_root = new FakeNode();
   const links: Link[] = [];
   const active_listeners = new Set<string>();
@@ -206,6 +207,16 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   };
   links.push(...texts.map(make_link));
   const globals = globalThis as Record<string, unknown>;
+  if (unfocused) {
+    const frame = win as Record<string, unknown>;
+    const host = frame.desertfox_host;
+    delete frame.desertfox_host;
+    // As `start_content_once` in `src/content/handlers/focus.ts`: the flag holds the start until the frame starts.
+    frame.desertfox_content_loaded = () => {
+      frame.desertfox_host = host;
+      frame.desertfox_content_loaded = true;
+    };
+  }
   globals.window = win;
   globals.document = doc;
   // The one-match path asks whether a field has focus, which tests `instanceof HTMLElement` and `HTMLInputElement`.
@@ -1258,17 +1269,64 @@ test("across frames Escape before the labels come ends the session the backgroun
   assert.equal(page.labels().length, 0);
 });
 
-test("across frames rapid starts a new session after each pick", async () => {
+test("across frames rapid starts a new session after each pick, and the keys and the end go to the new one", async () => {
   const page = await page_with(["one", "two"]);
-  page.answer_start(across_answer(["a", "s", "d"], ["a", "s"]));
+  let starts = 0;
+  page.answer_start(() => ({ ok: true, session_id: `s${++starts}`, labels: ["a", "s", "d"], own_labels: ["a", "s"] }));
   void page.run({ action: "background", rapid: true, frames: "all_frames" });
   await settle();
   page.type("d");
   await settle();
   assert.deepEqual(types_sent(page), ["hint_frames_start", "hint_frames_typed", "hint_frames_pick", "hint_frames_start"]);
   assert.equal(page.mode(), "hint");
+  page.type("d");
+  await settle();
+  assert.deepEqual(page.sent.slice(4, 6), [{ type: "hint_frames_typed", session_id: "s2", typed: "d" }, { type: "hint_frames_pick", session_id: "s2", label: "d" }]);
   page.escape();
-  assert.equal(types_sent(page).at(-1), "hint_frames_end");
+  assert.deepEqual(page.sent.at(-1), { type: "hint_frames_end", session_id: "s3" });
+});
+
+test("across frames a frame with no hints of its own still asks the other frames, and picks theirs", async () => {
+  const page = await page_with([]);
+  page.answer_start(across_answer(["a", "s"], []));
+  const answer = page.run({ frames: "all_frames" });
+  await settle();
+  assert.deepEqual(page.sent[0], { type: "hint_frames_start", letters: "asdfghjkl", args: { action: "here", filter: "links", rapid: false, frames: "all_frames" }, count: 0 });
+  assert.equal(page.mode(), "hint");
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.sent.at(-2), { type: "hint_frames_pick", session_id: "s1", label: "s" });
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("across frames with no hints in any frame shows the notice", async () => {
+  const page = await page_with([]);
+  page.answer_start(across_answer([], []));
+  assert.deepEqual(await page.run({ frames: "all_frames" }), { ok: false, message: "No hints on this page" });
+  assert.equal(page.mode(), "normal");
+});
+
+test("across frames a start the background never answers gives up after its wait, keeps this frame's labels and takes collects again", async () => {
+  const page = await page_with(["one", "two"]);
+  page.answer_start(() => new Promise(() => {}));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  assert.equal(page.labels().length, 0);
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  assert.deepEqual(page.labels(), ["a", "s"]);
+  page.escape();
+  page.deliver({ type: "hint_frames_collect", session_id: "s9", args: { action: "here", filter: "links" } });
+  await settle();
+  assert.deepEqual(page.sent.at(-1), { type: "hint_frames_report", session_id: "s9", count: 2 });
+});
+
+test("a frame the user never entered starts its content script for the bundle, and draws its labels", async () => {
+  const page = await page_with(["one", "two"], {}, { unfocused: true });
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
+  await settle();
+  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 2 }]);
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["d", "f"] });
+  assert.deepEqual(page.labels(), ["d", "f"]);
 });
 
 test("another frame reports its count, takes a prefix before its labels, and runs the pick it owns", async () => {

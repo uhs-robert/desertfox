@@ -36,7 +36,8 @@ import type { FollowDirection } from "./follow_links.ts";
 import { DEFAULT_SETTINGS } from "../../shared/default_settings.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
 
-type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element };
+// `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
+type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element; desertfox_content_loaded?: true | (() => void) };
 const page = window as unknown as HintsWindow;
 
 const done: Outcome = { ok: true };
@@ -253,6 +254,9 @@ const perform_pick = (current: PickArgs, element: HTMLElement) => {
   if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
   return result;
 };
+// The background answers within its 300 ms wait. Past this, it is gone or stuck, and the frame keeps its own labels.
+const ACROSS_START_WAIT_MS = 2000;
+
 // While this frame starts hints across frames, it ignores the collect: the start carries its count.
 let starting = 0;
 
@@ -317,8 +321,15 @@ function register(host: BundleHostApi): void {
   // Hands this frame's count to the background and waits for the labels of every frame. A background that does not answer leaves this frame's own labels.
   async function label_across(current: Session, found: Found[], letters: string[]): Promise<Labeled> {
     starting++;
-    const answer = (await browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length } satisfies HintFramesStart).catch(() => undefined)) as HintFramesStartAnswer | undefined;
-    starting--;
+    let answer: HintFramesStartAnswer | undefined;
+    try {
+      const asked = browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length } satisfies HintFramesStart).catch(() => undefined);
+      answer = (await Promise.race([asked, new Promise((resolve) => setTimeout(resolve, ACROSS_START_WAIT_MS))])) as HintFramesStartAnswer | undefined;
+      // A late answer drew labels in the other frames, which this frame no longer picks from.
+      if (!answer) void asked.then((late: HintFramesStartAnswer | undefined) => late?.ok && send_across({ type: "hint_frames_end", session_id: late.session_id }));
+    } finally {
+      starting--;
+    }
     if (!answer?.ok) return single_frame(found, letters);
     if (current.cancelled) send_across({ type: "hint_frames_end", session_id: answer.session_id });
     const first_own = answer.labels.indexOf(answer.own_labels[0]!);
@@ -475,7 +486,8 @@ function register(host: BundleHostApi): void {
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys.
     const text = (args.text as string | undefined) || undefined;
-    if (candidates.length === 0) return { ok: false, message: none_message(text) };
+    // Across frames the other frames can still have hints, and the build gives the notice when no frame has one.
+    if (candidates.length === 0 && args.frames !== "all_frames") return { ok: false, message: none_message(text) };
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
@@ -567,7 +579,9 @@ function answer_across(): void {
   });
 }
 
-// A second run would register a second copy and orphan the first copy's labels. The background injects the bundle into every frame for hints across frames, also into a frame whose content script has not started: the flag waits for the host, so a later load there still registers.
+// The background injects the bundle into every frame for hints across frames. A frame the user never entered has not started its content script, so the bundle starts it, which sets the host.
+if (typeof page.desertfox_content_loaded === "function") page.desertfox_content_loaded();
+// A second run would register a second copy and orphan the first copy's labels. Without a host (no content script at all) the flag stays unset, so a later load still registers.
 if (!page.desertfox_hints_ready && page.desertfox_host) {
   page.desertfox_hints_ready = true;
   register(page.desertfox_host);
