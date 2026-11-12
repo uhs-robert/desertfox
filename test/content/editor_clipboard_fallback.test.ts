@@ -167,7 +167,7 @@ test("an empty result clears the editor with a cut, because pasting nothing leav
 test("a copy that leaves the marker on the clipboard keeps the refusal, restores the clipboard and sends nothing", async () => {
   reset();
   editor("draft").copies = false;
-  await assert.rejects(run(), /only part of its text.*copying it failed: The editor copied nothing/);
+  await assert.rejects(run(), /only part of its text.*its clipboard copy failed: The editor did not copy its text/);
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(sent.length, 0);
   // The editor ignores the copy: its page never sees the event.
@@ -283,7 +283,7 @@ test("an editor that cancels Ctrl+A but runs another command (a vim or emacs key
   const field = editor("line 1\nline 2\nline 3");
   field.drawn_lines = ["line 1", "line 2", "line 3"];
   field.ctrl_a_selects = false;
-  await assert.rejects(run(), /misses drawn lines/);
+  await assert.rejects(run(), /misses lines the editor shows/);
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(sent.length, 0);
 });
@@ -391,7 +391,7 @@ test("a caret-line copy at least as long as the drawn lines is still refused, be
   const field = editor("a much longer first line at the caret\nline 2\nline 3");
   field.drawn_lines = ["line 2", "line 3"];
   field.ctrl_a_selects = false;
-  await assert.rejects(run(), /misses drawn lines/);
+  await assert.rejects(run(), /misses lines the editor shows/);
   assert.equal(sent.length, 0);
   assert.equal(clipboard.text, "saved by the user");
 });
