@@ -417,6 +417,12 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   }
   const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, resolve, settings, label_sources, warnings);
   const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || is_default_value(name, settings[name]) ? [] : [[name, settings[name]]])));
+  const which_key_skip = (settings.which_key_skip ?? []).flatMap((entry) => {
+    const { tokens, error } = parse_sequence(entry);
+    if (error === undefined) return [tokens.join("")];
+    warnings.push(`which_key_skip: skipped "${entry}": ${error}`);
+    return [];
+  });
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
@@ -427,6 +433,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     ...(Object.keys(frame_site_globals).length > 0 ? { frame_site_globals } : {}),
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
+    ...(which_key_skip.length > 0 ? { which_key_skip } : {}),
   };
   return { compiled, warnings };
 }

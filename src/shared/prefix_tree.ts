@@ -75,6 +75,8 @@ export type CompiledKeymap = {
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
   which_key_delay_ms: number;
+  // Typed-key strings (tokens joined) of the prefixes that open no panel by themselves. Absent when none.
+  which_key_skip?: string[];
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;
 };

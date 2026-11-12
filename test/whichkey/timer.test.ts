@@ -23,7 +23,7 @@ const keymap: CompiledKeymap = {
 };
 
 // The wiring main.ts does: key flow, timer, and a mode change that resets the sequence.
-function make_page(delay_ms: number | undefined) {
+function make_page(delay_ms: number | undefined, skip?: string[]) {
   const state = create_mode_state();
   const shown: string[] = [];
   const hidden: boolean[] = [];
@@ -41,6 +41,7 @@ function make_page(delay_ms: number | undefined) {
         drawn();
       });
     },
+    () => skip,
   );
   const flow = create_key_flow({
     get_mode_: state.get_mode_,
@@ -245,4 +246,48 @@ test("a prefix whose answer is pending or draws nothing leaves the next prefix o
   follow({ mode: "normal", typed: ["g", "x", "x"] });
   await sleep(DELAY_MS / 3);
   assert.deepEqual(asked, ["g", "gx", "gxx"]);
+});
+
+test("a prefix on the skip list opens no panel by itself, and only an exact match counts", async () => {
+  const page = make_page(DELAY_MS, ["g"]);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, []);
+  page.flow.handle_token_("x");
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:gx"]);
+});
+
+test("a skipped prefix still finishes its sequence", async () => {
+  const page = make_page(DELAY_MS, ["g"]);
+  page.flow.handle_token_("g");
+  page.flow.handle_token_("g");
+  assert.deepEqual(page.ran, [["top", undefined]]);
+});
+
+test("an entry of a longer prefix leaves the shorter one on the delay", async () => {
+  const page = make_page(DELAY_MS, ["gx"]);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:g"]);
+});
+
+test("Backspace still shows the parent group when that group is on the skip list", async () => {
+  const page = make_page(DELAY_MS, ["g"]);
+  page.flow.handle_token_("g");
+  page.flow.handle_token_("x");
+  await sleep(DELAY_MS + 40);
+  assert.deepEqual(page.shown, ["normal:gx"]);
+  page.flow.handle_token_("<Backspace>");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, ["normal:gx", "normal:g"]);
+});
+
+test("a panel that is up follows the next prefix key even when that prefix is on the skip list", async () => {
+  const page = make_page(DELAY_MS, ["gx"]);
+  page.flow.handle_token_("g");
+  await sleep(DELAY_MS + 40);
+  page.flow.handle_token_("x");
+  await sleep(DELAY_MS / 3);
+  assert.deepEqual(page.shown, ["normal:g", "normal:gx"]);
 });

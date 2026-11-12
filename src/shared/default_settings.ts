@@ -6,6 +6,7 @@ import type { Settings } from "./settings_table.ts";
 export const DEFAULT_WHICH_KEY_DELAY_MS: Settings["which_key_delay_ms"] = 300;
 export const DEFAULT_WHICH_KEY_REPEAT: Settings["which_key_repeat"] = true;
 export const DEFAULT_WHICH_KEY_BORDER: Settings["which_key_border"] = "square";
+export const DEFAULT_WHICH_KEY_SKIP: Settings["which_key_skip"] = [];
 export const DEFAULT_HINT_LETTERS: Settings["hint_letters"] = "asdfghjkl";
 export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
 export const DEFAULT_HINT_ADD: Settings["hint_add"] = [];
@@ -48,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: DEFAULT_WHICH_KEY_DELAY_MS,
   which_key_repeat: DEFAULT_WHICH_KEY_REPEAT,
   which_key_border: DEFAULT_WHICH_KEY_BORDER,
+  which_key_skip: DEFAULT_WHICH_KEY_SKIP,
   hint_letters: DEFAULT_HINT_LETTERS,
   hint_key_line: DEFAULT_HINT_KEY_LINE,
   hint_add: DEFAULT_HINT_ADD,

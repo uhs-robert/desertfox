@@ -29,7 +29,8 @@ export type SettingRow = (
   | { kind: "text"; expectation: string; default?: string }
   // Text on one line, its length counted in code points. `suggestions` are what the command line offers, not a limit.
   | { kind: "line"; min_length: number; max_length: number; suggestions: readonly string[]; default: string }
-  | { kind: "text_list"; expectation: string; default: readonly string[] }
+  // `key_sequences` makes each entry a key sequence in keymap notation, checked with the key parser.
+  | { kind: "text_list"; expectation: string; key_sequences?: true; default: readonly string[] }
   // Each value at most once, in any order.
   | { kind: "enum_list"; values: readonly string[]; default: readonly string[] }
   // A table of exactly these keys, each a non-empty string.
@@ -52,6 +53,8 @@ export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
   which_key_repeat: { kind: "boolean", default: true },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
+  // Global only: the compiled keymap carries it, and the content script compares the typed keys with it. An exact match skips the delayed open, so a prefix that also has a longer reach (`g` of `gg`) does not open its panel after the delay. An instant redraw still shows it.
+  which_key_skip: { kind: "text_list", expectation: "a list of key prefixes in keymap notation", key_sequences: true, default: [] },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   hint_key_line: { kind: "boolean", default: true },
   // CSS selectors. Each frame resolves them against its own address. A selector that does not parse is skipped with a notice when hints start.

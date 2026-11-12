@@ -45,6 +45,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "which_key_skip",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of key prefixes in keymap notation",
+    "values": []
+  },
+  {
     "name": "hint_letters",
     "settable": true,
     "is_toggle": false,
