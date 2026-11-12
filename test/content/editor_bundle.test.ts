@@ -257,6 +257,7 @@ test("a field that sanitizes the value counts as refusing it: the result goes to
   await run();
   await done("line one\nline two");
   assert.deepEqual(field.events, []);
+  assert.equal(field.value, "draft", "the field is put back to the text it had");
   assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "line one\nline two" });
   assert.match(toasts[0] ?? "", /did not take the edited text/);
 });
