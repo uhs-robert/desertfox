@@ -120,8 +120,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean): KeyDecision => {
     const mode = deps.get_mode_();
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
-    if (deps.in_editable_field_() || (is_chord(token) && !matcher?.binds_after_(mode, held_tokens(), token) && !browser_chords?.children[token])) return "pass";
-    // Before the keymap is read nothing is known to bind, so every plain key waits.
+    if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chords?.children[token])) return "pass";
+    // Before the keymap is read nothing is known to bind, so every key waits, chords too: a default chord such as <C-o> would otherwise reach Firefox's own shortcut (Open File). An unbound chord replays as a synthetic key and loses its Firefox action, which only a chord in the first moments of a page meets.
     if (!matcher || browser_chords?.children[token] || waits_for_replay(matcher, mode, token)) {
       held_keys.push({ token, on_replay_pass_, repeat });
       return "cancel";

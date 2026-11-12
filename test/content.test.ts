@@ -291,9 +291,9 @@ test("browser chords run in normal and insert mode and are cancelled", () => {
   assert.deepEqual(ran, ["next_tab", "next_tab"]);
 });
 
-test("startup holds plain keys outside fields and, with no page callback, lets what matches nothing go", () => {
+test("startup holds keys and chords outside fields and, with no page callback, lets what matches nothing go", () => {
   const { ran, flow } = make_flow();
-  assert.equal(flow.handle_token_("<A-j>"), "pass");
+  assert.equal(flow.handle_token_("<A-j>"), "cancel");
   assert.equal(flow.handle_token_("x"), "cancel");
   assert.equal(flow.handle_token_("j"), "cancel");
   flow.set_matcher_(create_matcher(keymap));
