@@ -16,10 +16,7 @@ define("hint.run", {
       values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "prompt"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
-        // These need the keyboard in the frame of the pick, and across frames it stays in the frame that ran the hint.
-        prompt: { filter: HAS_ADDRESS, frames: ["same_origin"] },
-        caret: { frames: ["same_origin"] },
-        visual: { frames: ["same_origin"] },
+        prompt: { filter: HAS_ADDRESS },
         tab: { filter: HAS_ADDRESS },
         background: { filter: HAS_ADDRESS },
         window: { filter: HAS_ADDRESS },
@@ -30,6 +27,7 @@ define("hint.run", {
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
+        // The pin and the media keys are not shown to follow focus into a frame of another site, unlike the caret.
         enter_media: { filter: ["media"], frames: ["same_origin"] },
         double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
         // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.

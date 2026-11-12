@@ -9,7 +9,7 @@ import { PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { mark_text, shorten_address } from "../shared/mark_text.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import { UNNAMED_REGISTER } from "../shared/register_names.ts";
-import { ANY_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
+import { ANY_KEY, LIVE_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
@@ -57,6 +57,7 @@ export function panel_after_prefix(root: TreeBranch | undefined, prefix: string[
   }
   if (node?.kind !== "branch") return { title: [], rows: [], border };
   const rows = Object.entries(node.children)
+    .filter(([token]) => token !== LIVE_KEY)
     .map(([token, child]) => row_of(token, child, find_command))
     .sort(compare_rows);
   return { title: chain.length === 0 ? ["keys"] : chain, rows, border };

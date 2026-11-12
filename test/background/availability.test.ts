@@ -79,7 +79,7 @@ test("a snippet requirement comes from its requires list", () => {
 });
 
 test("list_keys filters the panel by the page it is given", async () => {
-  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300 };
+  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300, toast_ms: 3000, toast_error_ms: 6000 };
   const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } as never;
   const keys = async (page: { url: string }) => (await list_keys(storage, () => undefined, { mode: "normal", prefix: ["s"] }, { availability: availability(page) })).rows.map((row) => row.keys);
   assert.deepEqual(await keys(OTHER_PAGE), ["d", "r"]);

@@ -9,6 +9,7 @@ class FakeHTMLElement {
   autocomplete = "";
   events: string[] = [];
   focus_handler: (() => void) | undefined;
+  event_handler: ((type: string) => void) | undefined;
   focus() {
     this.focus_handler?.();
   }
@@ -19,6 +20,7 @@ class FakeHTMLElement {
   inside: string[] = [];
   dispatchEvent(event: Event) {
     this.events.push(event.type);
+    this.event_handler?.(event.type);
     return true;
   }
 }
@@ -102,13 +104,14 @@ test("no focused field and a password field refuse before anything is sent", asy
   assert.equal(sent.length, 0);
 });
 
-test("a virtualized editor (CodeMirror 6 content, a hidden textarea of CM5, Ace or Monaco) is refused before anything is sent", async () => {
+// The whole clipboard path is in editor_clipboard_fallback.test.ts. Here the page has no clipboard, so the copy fails.
+test("a virtualized editor (CodeMirror 6 content, a hidden textarea of CM5, Ace or Monaco) goes through the clipboard, and a failed copy is refused before anything is sent", async () => {
   reset();
   for (const name of [".cm-editor", ".CodeMirror", ".monaco-editor", ".ace_editor"]) {
     focus(Object.assign(div("slice"), { inside: [name] }));
-    await assert.rejects(run(), /only part of its text/, name);
+    await assert.rejects(run(), /only part of its text, and its clipboard copy failed/, name);
     focus(Object.assign(input("slice"), { inside: [name] }));
-    await assert.rejects(run(), /only part of its text/, name);
+    await assert.rejects(run(), /only part of its text, and its clipboard copy failed/, name);
   }
   assert.equal(sent.length, 0);
 });
@@ -260,4 +263,18 @@ test("a field that sanitizes the value counts as refusing it: the result goes to
   assert.equal(field.value, "draft", "the field is put back to the text it had");
   assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "line one\nline two" });
   assert.match(toasts[0] ?? "", /did not take the edited text/);
+});
+
+test("a page handler that puts its own value back during input or change makes the write refused, and the result goes to the register", async () => {
+  for (const event_type of ["input", "change"]) {
+    reset();
+    const field = input("draft");
+    focus(field);
+    await run();
+    field.event_handler = (type) => type === event_type && (field.value = "draft");
+    await done("final");
+    assert.equal(field.value, "draft", `the page keeps the value it set during ${event_type}`);
+    assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "final" });
+    assert.match(toasts[0] ?? "", /did not take the edited text/);
+  }
 });

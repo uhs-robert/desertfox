@@ -5,7 +5,7 @@
 
 export const areas = ["scroll", "keys", "whichkey", "tabs"];
 
-export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, wait_active_tab, scroll_of, last_scroll_y, scroll_delta_by_press, expect, expect_no_scroll, in_active_tab, in_background, which_key_delay_ms, sleep, settle_focus }) {
+export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, wait_active_tab, scroll_of, last_scroll_y, scroll_delta_by_press, expect, expect_no_scroll, expect_absent, barrier, badge_is, in_active_tab, in_background, which_key_delay_ms, sleep, settle_focus }) {
   const to_y = async (page_id, keys, y, what) => {
     const mark = events.length;
     await press_keys(...keys);
@@ -68,7 +68,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
       await press_keys(...keys);
       await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9m_missing", `a toast after ${keys.join("")}`);
       await expect_no_scroll(mark, "p9m_missing");
-      await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === "p9m_missing"));
+      await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === "p9m_missing"), { timeout_ms: 8000 });
     }
   });
 
@@ -227,5 +227,33 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9q_wk" && event.value === "", "the panel to close");
     await sleep(which_key_delay_ms);
+  });
+
+  // The Escape drops the pending key argument and nothing else. The next key is a fresh start, so it is no mark name, no jump target and no macro register.
+  await run_case("Escape after m, ', q or @ drops the argument, and the next key is a fresh start", async () => {
+    const page_id = "p9m_escape";
+    await open_page("aligned", page_id, { new_tab: true });
+    const bottom = await go_to_bottom(page_id);
+    await press_keys("m", "-k", "Escape");
+    await press_keys("a");
+    await barrier(page_id);
+    expect((await stored_y(page_id, "a")) == null, "m, Escape, a stored a mark a");
+    // A mark to jump to, and the jump after an Escape must not go there.
+    await set_mark("b");
+    await poll_until("the mark to be stored", async () => (await stored_y(page_id, "b")) != null);
+    await scroll_delta_by_press(page_id, ["g", "g"]);
+    await poll_until("the page to reach the top", async () => last_scroll_y(page_id) === 0);
+    const mark_jump = events.length;
+    await press_keys("'", "-k", "Escape");
+    await press_keys("b");
+    await expect_no_scroll(mark_jump, page_id);
+    expect(last_scroll_y(page_id) === 0, `', Escape, b scrolled the page to ${last_scroll_y(page_id)}, the mark b is at ${bottom}`);
+    const mark = events.length;
+    await press_keys("q", "-k", "Escape");
+    await press_keys("a");
+    await expect_absent(mark, page_id, (event) => event.type === "indicator" && event.page_id === page_id && /recording/.test(event.label), "a recording badge after q, Escape, a");
+    await press_keys("@", "-k", "Escape");
+    await press_keys("a");
+    await barrier(page_id);
   });
 }

@@ -1,0 +1,4 @@
+# Character finds on other keys, for the live repeat that follows the binding (p7_caret).
+[caret]
+"_f" = "caret.find"
+"_F" = "caret.find --direction=back"

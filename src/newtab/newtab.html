@@ -6,7 +6,8 @@
 <style>
   /* Declared only on this page, so no other page or script pulls the font. Until it loads, swap shows the digits in monospace. */
   @font-face { font-family: "DSEG7 Classic"; src: url("DSEG7Classic-Regular.ttf") format("truetype"); font-display: swap; }
-  html { font-size: 14px; }
+  /* color-scheme makes Firefox paint a canvas that matches the system before the theme loads. The Canvas fallback keeps that canvas until the theme sets the token, so a light system never shows the dark default first. */
+  html { font-size: 14px; color-scheme: light dark; background: var(--desertfox-bg-core, Canvas); }
   html, body { margin: 0; height: 100%; }
   /* The body is the column: the page fills it, and the nav under the page keeps the bottom, so nothing overlaps at any height. */
   body { display: flex; flex-direction: column; }

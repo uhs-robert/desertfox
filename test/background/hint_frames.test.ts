@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assign_labels, create_hint_frames, HINT_FRAMES_WAIT_MS, type HintFrames, type HintFramesDeps, type HintFramesMessage } from "../../src/background/hint_frames.ts";
+import { assign_labels, create_hint_frames, HINT_FRAMES_PICK_MS, HINT_FRAMES_WAIT_MS, type HintFrames, type HintFramesDeps, type HintFramesMessage } from "../../src/background/hint_frames.ts";
 import { make_labels } from "../../src/content/hints/labels.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "../../src/background/storage_keys.ts";
 
@@ -9,9 +9,9 @@ const KEY = HINT_FRAMES_STORAGE_PREFIX + TAB;
 const LETTERS = "asdfghjkl";
 
 // A fake frame. `count` is what it reports to a collect, `silent` never reports, `gone` rejects every message (removed or navigated with no script), and `pick` answers a pick.
-type FakeFrame = { count: number; texts?: string[]; silent?: boolean; gone?: boolean; pick?: (label: string) => unknown };
+type FakeFrame = { count: number; texts?: string[]; silent?: boolean; gone?: boolean; pick?: (label: string, keys?: string[]) => unknown };
 type StartRequest = { letters: string; args: Record<string, unknown>; count?: number; texts?: string[] };
-type Sent = { frame_id: number | undefined; message: HintFramesMessage };
+type Sent = { frame_id: number | undefined; message: HintFramesMessage & { session_id?: string } };
 
 const flush = () => new Promise((resume) => setImmediate(resume));
 
@@ -42,13 +42,14 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
       if (message.type === "hint_frames_collect") {
         for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void current.report(TAB, Number(id), message.session_id, frame.count, frame.texts ?? Array.from({ length: frame.count }, (_, index) => `${id}:${index}`));
       }
-      if (message.type === "hint_frames_pick") return frames[frame_id!]?.pick?.(message.label);
+      if (message.type === "hint_frames_pick") return frames[frame_id!]?.pick?.(message.label, message.keys);
       return undefined;
     },
     new_session_id: () => `s${++next_session}`,
     set_timer: (callback) => (timers.set(next_timer, callback), next_timer++),
     clear_timer: (handle) => void timers.delete(handle as number),
     wait_ms: HINT_FRAMES_WAIT_MS,
+    pick_ms: HINT_FRAMES_PICK_MS,
   };
   current = create_hint_frames(deps);
   return {
@@ -146,6 +147,28 @@ test("a frame that navigated away loses its pick, and the typed prefix still rea
   assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "d"), { ok: false, message: "The frame of that hint is gone" });
   assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: true });
   assert.deepEqual(fake.of_type("hint_frames_pick").at(-1), { frame_id: 2, message: { type: "hint_frames_pick", session_id: "s1", label: "s" } });
+});
+
+test("a pick the owner frame never answers ends at its deadline as a gone frame", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => ({ ok: true }) } });
+  const started = fake.hints.start(TAB, 0, START);
+  fake.fire_timers();
+  await started;
+  fake.hang_sends();
+  const picked = fake.hints.pick(TAB, 0, "s1", "s");
+  await flush();
+  assert.equal(fake.timers.size, 1);
+  fake.fire_timers();
+  assert.deepEqual(await picked, { ok: false, message: "The frame of that hint is gone" });
+});
+
+test("a pick that is answered clears its deadline", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => ({ ok: true }) } });
+  const started = fake.hints.start(TAB, 0, START);
+  fake.fire_timers();
+  await started;
+  assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: true });
+  assert.equal(fake.timers.size, 0);
 });
 
 test("a frame id reused by a new page answers no outcome to a pick, which reads as a gone frame", async () => {
@@ -361,4 +384,50 @@ test("the typed relay passes the text mode matches and the active label to the o
     [3, { type: "hint_frames_typed", session_id: "s1", typed: "/", matches: ["d"], active: "d" }],
     [3, { type: "hint_frames_typed", session_id: "s1", typed: "a" }],
   ]);
+});
+
+test("the owner's text answer to a pick reaches the keyboard frame unchanged", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => ({ ok: true, text: "https://other.test/x", what: "selector" }) } });
+  await fake.hints.start(TAB, 0, START);
+  assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: true, text: "https://other.test/x", what: "selector" });
+});
+
+test("a pick carries the keys typed ahead to the owner, and the owner's leftovers come back unchanged", async () => {
+  const seen: unknown[] = [];
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: (_label, keys) => (seen.push(keys), { ok: true, left: ["x"] }) } });
+  await fake.hints.start(TAB, 0, START);
+  assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s", ["a", "x"]), { ok: true, left: ["x"] });
+  assert.deepEqual(seen, [["a", "x"]]);
+  await fake.hints.pick(TAB, 0, "s1", "s");
+  assert.equal(seen[1], undefined);
+});
+
+test("an end that races a pick in flight still delivers the owner's answer, and drops the session", async () => {
+  let answer!: (reply: unknown) => void;
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => new Promise((resolve) => (answer = resolve)) } });
+  await fake.hints.start(TAB, 0, START);
+  const picked = fake.hints.pick(TAB, 0, "s1", "s");
+  await flush();
+  await fake.hints.end(TAB, 0, "s1");
+  assert.equal(fake.data[KEY], undefined);
+  assert.equal(fake.of_type("hint_frames_end").length, 1);
+  answer({ ok: true, left: [] });
+  assert.deepEqual(await picked, { ok: true, left: [] });
+  assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: false, message: "The hints of the other frames have ended" });
+});
+
+test("a frame that navigates while its pick is in flight answers gone, with no leftovers for the keyboard frame to lose", async () => {
+  let fail!: (error: Error) => void;
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => new Promise((_resolve, reject) => (fail = reject)) } });
+  await fake.hints.start(TAB, 0, START);
+  const picked = fake.hints.pick(TAB, 0, "s1", "s", ["a"]);
+  await flush();
+  fail(new Error("Could not establish connection. Receiving end does not exist."));
+  assert.deepEqual(await picked, { ok: false, message: "The frame of that hint is gone" });
+});
+
+test("an unhover goes to every frame of the tab and needs no session", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1 } });
+  await fake.hints.unhover(TAB, "s1");
+  assert.deepEqual(fake.of_type("hint_frames_unhover"), [{ frame_id: undefined, message: { type: "hint_frames_unhover", session_id: "s1" } }]);
 });

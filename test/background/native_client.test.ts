@@ -110,3 +110,24 @@ test("editor_collect tells pending, done unchanged and done with text, and a ref
   assert.deepEqual(sent, [{ cmd: "editor_collect", job: "j" }]);
   assert.equal(await failure_of(() => client_with(async () => ({ ok: true, done: true, changed: true })).client.editor_collect("j")), "bad_reply");
 });
+
+test("open_firefox_page sends only the page key", async () => {
+  const { client, sent } = client_with(async () => ({ ok: true, page: "settings" }));
+  await client.open_firefox_page("settings");
+  assert.deepEqual(sent, [{ cmd: "open_firefox_page", page: "settings" }]);
+});
+
+test("open_firefox_page on a host from before the verb says to update the host", async () => {
+  const { client } = client_with(async () => ({ ok: false, error: "unknown cmd: 'open_firefox_page'" }));
+  await assert.rejects(client.open_firefox_page("settings"), (error: unknown) => error instanceof NativeHostError && error.failure === "host_outdated" && /unknown cmd/.test(error.message) && /:native\.update/.test(error.message));
+});
+
+test("open_firefox_page keeps the host's own refusal", async () => {
+  const { client } = client_with(async () => ({ ok: false, error: "Firefox did not take the request within 10 s" }));
+  await assert.rejects(client.open_firefox_page("settings"), (error: unknown) => error instanceof NativeHostError && error.failure === "host_failed" && /did not take the request/.test(error.message));
+});
+
+test("open_firefox_page without the host names the install page", async () => {
+  const { client } = client_with(async () => Promise.reject(new Error("No such native application desertfox_host")));
+  await assert.rejects(client.open_firefox_page("settings"), (error: unknown) => error instanceof NativeHostError && error.failure === "host_missing" && /:native\.install/.test(error.message));
+});

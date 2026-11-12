@@ -200,3 +200,17 @@ test("a count that reaches past the oldest entry of a full list refuses and keep
   const after = values.get("desertfox_jumps") as { windows: Record<string, { cursor: number }> };
   assert.ok(Object.values(after.windows).every((list) => list.cursor >= 0));
 });
+
+// A command that jumps records through the router, and the address change its scroll sets off can record the same place again through the page's leave watch.
+test("a router push and a page push of the same place leave one entry, also after a step back", async () => {
+  const { store, values } = make();
+  const list = () => (values.get("desertfox_jumps") as { windows: Record<string, unknown> }).windows["1"];
+  await store.push(1, false, at(A, 0));
+  await store.push(1, false, at(A, 2));
+  assert.deepEqual(list(), { entries: [at(A, 2)], cursor: 1 });
+  await store.push(1, false, at(B, 100));
+  await store.step(1, false, -1, at(B, 300));
+  await store.push(1, false, at(B, 100));
+  await store.push(1, false, at(B, 101));
+  assert.deepEqual(list(), { entries: [at(A, 2), at(B, 101)], cursor: 2 });
+});

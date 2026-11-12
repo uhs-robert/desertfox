@@ -37,7 +37,7 @@ test("a prefix that leads nowhere, or ends at a key, has no rows", () => {
 });
 
 test("list_keys reads the compiled keymap of the asked mode from storage", async () => {
-  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300 };
+  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300, toast_ms: 3000, toast_error_ms: 6000 };
   const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } as never;
   assert.equal((await list_keys(storage, find_command, { mode: "normal", prefix: ["g"] })).rows.length, 3);
   assert.deepEqual((await list_keys(storage, find_command, { mode: "caret", prefix: ["g"] })).rows, []);
@@ -81,7 +81,7 @@ test("the title names the chain of groups, each part by its name or else its key
 });
 
 test("the panel carries the border style, square when the keymap has none", async () => {
-  const stored = (which_key_border?: "round") => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300, ...(which_key_border ? { which_key_border } : {}) } }) }) as never;
+  const stored = (which_key_border?: "round") => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: root }, mode_indicator: "always", which_key_delay_ms: 300, toast_ms: 3000, toast_error_ms: 6000, ...(which_key_border ? { which_key_border } : {}) } }) }) as never;
   assert.equal((await list_keys(stored(), find_command, { mode: "normal", prefix: ["g"] })).border, "square");
   assert.equal((await list_keys(stored("round"), find_command, { mode: "normal", prefix: ["g"] })).border, "round");
 });

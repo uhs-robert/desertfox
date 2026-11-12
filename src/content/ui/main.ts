@@ -13,7 +13,7 @@ const page = window as unknown as UiWindow;
 // A second run would hold fresh badge and toast state and leave the first copy's surfaces on the page.
 if (!page.desertfox_ui_ready) {
   page.desertfox_ui_ready = true;
-  page.desertfox_host.register_handler_("ui.toast", (args) => show_toast(args.message as string, args.kind as ToastKind | undefined));
+  page.desertfox_host.register_handler_("ui.toast", (args) => show_toast(args.message as string, args.duration_ms as number, args.kind as ToastKind | undefined));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
     const { mode, pass_next, setting, recording, site_label } = args as unknown as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.

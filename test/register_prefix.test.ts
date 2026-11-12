@@ -100,11 +100,11 @@ test("the prefix names every kind of register the special registers", () => {
 test("the prefix reports its keys beside the typed ones, so which-key and Backspace can read it", () => {
   const matcher = create_matcher(tree());
   const waiting = matcher.feed("normal", '"');
-  assert.deepEqual(waiting.kind === "pending" && [waiting.typed, waiting.register_keys], [[], '"']);
+  assert.deepEqual(waiting.kind === "pending" && [waiting.typed_, waiting.register_keys_], [[], '"']);
   const named = matcher.feed("normal", "a");
-  assert.deepEqual(named.kind === "pending" && [named.typed, named.register_keys], [[], '"a']);
+  assert.deepEqual(named.kind === "pending" && [named.typed_, named.register_keys_], [[], '"a']);
   const inside = matcher.feed("normal", "g");
-  assert.deepEqual(inside.kind === "pending" && [inside.typed, inside.register_keys], [["g"], '"a']);
+  assert.deepEqual(inside.kind === "pending" && [inside.typed_, inside.register_keys_], [["g"], '"a']);
 });
 
 test("an invalid name or a key with no binding ends the prefix, and the key gets its one retry as a first key", () => {
@@ -125,7 +125,7 @@ test("an invalid name or a key with no binding ends the prefix, and the key gets
   // A digit is no register name, so it starts a count on its retry.
   matcher.feed("normal", '"');
   const digit = matcher.feed("normal", "1");
-  assert.deepEqual(digit.kind === "pending" && [digit.count, digit.register_keys], [1, undefined]);
+  assert.deepEqual(digit.kind === "pending" && [digit.count, digit.register_keys_], [1, undefined]);
 });
 
 test("a mode change between the register and the command drops the register", () => {
@@ -176,7 +176,7 @@ function make_flow(keymap = tree()) {
     is_loading_: () => false,
     loading_sink_bundles_: () => [],
     sink_of_: () => undefined,
-    on_prefix_: (prefix) => void prefixes.push(prefix?.typed),
+    on_prefix_: (prefix) => void prefixes.push(prefix?.typed_),
   });
   flow.set_matcher_(create_matcher(keymap));
   return { flow, ran, prefixes, state };
@@ -205,12 +205,14 @@ test("key flow: insert mode with no field passes the insert keys and leaves on E
   assert.equal(state.get_mode_(), "normal");
 });
 
-test("key flow: Escape ends a pending prefix, hides the panel and runs the Escape binding", () => {
+test("key flow: Escape after the register prefix hides the panel and drops only the prefix, and a second Escape runs the Escape binding", () => {
   const { flow, ran, prefixes } = make_flow();
   flow.handle_token_('"');
   flow.handle_token_("<Escape>");
-  assert.deepEqual(ran, ["test.down::"]);
+  assert.deepEqual(ran, []);
   assert.equal(prefixes.at(-1), undefined);
+  flow.handle_token_("<Escape>");
+  assert.deepEqual(ran, ["test.down::"]);
 });
 
 test("key flow: a bad name or a key with no binding cancels the prefix and passes the key", () => {

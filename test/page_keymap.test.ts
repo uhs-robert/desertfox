@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONFIG_STATUS_STORAGE_KEY } from "../src/background/storage_keys.ts";
-import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_is_off, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
@@ -174,6 +174,16 @@ test("the strip rule is the global list on by default, none where a site row tur
   assert.deepEqual(await strip_patterns_for({ get: async () => ({}) } as never, "https://a.test/"), shipped);
   assert.deepEqual(compile_keymap(KEYMAP, { strip_tracking: false }, resolve).compiled.frame_site_globals, { strip_tracking: false });
   assert.equal("frame_site_globals" in compile_keymap(KEYMAP, {}, resolve).compiled, false);
+});
+
+test("the rule is off everywhere only when the global value is off and no site row sets one", async () => {
+  const is_off = (settings: Record<string, unknown>) => media_quality_is_off(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled));
+  assert.equal(await is_off({}), false);
+  assert.equal(await is_off({ media_quality: "off" }), true);
+  assert.equal(await is_off({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: "off" }] }), false, "a row that sets a value, even off, still injects so the reply can decide");
+  assert.equal(await is_off({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: 720 }] }), false);
+  assert.equal(await is_off({ media_quality: "off", site_rules: [{ site: "https://a.test/*", off: true }] }), true);
+  assert.equal(await media_quality_is_off(storage_of(undefined)), false);
 });
 
 test("the media_quality rule is max by default, a site value overrides the global one, and off is a value", async () => {

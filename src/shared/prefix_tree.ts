@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 8;
+export const COMPILED_KEYMAP_VERSION = 10;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -39,6 +39,9 @@ export type TreeLeaf = {
 
 // The child key of a branch whose leaf waits for one key press. The press is the leaf's `key` param, so the branch binds no token of its own.
 export const ANY_KEY = "";
+
+// The second child of a character find's branch: the key flow takes it instead of waiting for a target while the sink reports a live find, so the find key repeats it. No key press names it, because a token is one character or `<name>`.
+export const LIVE_KEY = "live";
 
 // How a key listing writes a token: the capture child reads `<key>`, so `m` then any key lists as `m<key>`.
 export const token_label = (token: string): string => (token === ANY_KEY ? "<key>" : token);
@@ -79,6 +82,9 @@ export type CompiledKeymap = {
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
   which_key_delay_ms: number;
+  // How long the ui bundle keeps a toast: `toast_error_ms` for an error, `toast_ms` for every other kind.
+  toast_ms: number;
+  toast_error_ms: number;
   // Typed-key strings (tokens joined) of the prefixes that open no panel by themselves. Absent when none.
   which_key_skip?: string[];
   // A tree stored before this setting has none, and the panel keeps square corners.
@@ -96,7 +102,7 @@ export const PAGE_REPLY_SITE_SETTINGS = ["blur_on_load", "editable_add", "editab
 export const HINT_SITE_SETTINGS = ["hint_add", "hint_remove"] as const satisfies readonly PerSiteName[];
 // The page, hints and background copy paths ask for the strip rule (`read_strip_patterns`).
 export const STRIP_SITE_SETTINGS = ["strip_tracking"] as const satisfies readonly PerSiteName[];
-// The quality bundle asks for its own (`read_media_quality`).
+// The background answers the quality bundle's report with its own (`quality_report`).
 export const QUALITY_SITE_SETTINGS = ["media_quality"] as const satisfies readonly PerSiteName[];
 // A literal, not a spread of the lists: the bundler keeps an unused spread in content.js.
 export const FRAME_SITE_SETTINGS = ["blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "media_quality", "strip_tracking"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS, ...typeof QUALITY_SITE_SETTINGS, ...typeof STRIP_SITE_SETTINGS];

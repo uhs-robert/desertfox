@@ -112,7 +112,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
-  let sends_held: (() => Promise<unknown>) | undefined;
+  let sends_held: ((message: unknown) => Promise<unknown>) | undefined;
   let holds = 0;
   // Keys and Escapes that arrived during a hold, in order.
   const held_input: (string | (() => void))[] = [];
@@ -247,11 +247,11 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     if ((message as { type?: string }).type === "hint_frames_start") return sent.push(message), start_answer(message);
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
     if ((message as { type?: string }).type === "record_timing") return void timings.push(message);
-    if ((message as { type?: string }).type === "read_strip_patterns") return [];
+    if ((message as { type?: string }).type === "read_strip_patterns") return settings.strip_tracking_params ?? ["utm_*"];
     if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
-    return is_record ? undefined : sends_held?.();
+    return is_record ? undefined : sends_held?.(message);
   } } };
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void copied.push(text) } }, configurable: true });
   await import(`${new URL("../../src/content/hints/main.ts", import.meta.url).href}?extras${import_count++}`);
@@ -282,11 +282,12 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     hide_all: () => void (intersecting = false),
     // The next opened link answers when this promise settles.
     refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
-    hold_sends: (held: () => Promise<unknown>) => void (sends_held = held),
+    hold_sends: (held: (message: unknown) => Promise<unknown>) => void (sends_held = held),
     mode: () => mode,
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
+    unhover: () => handlers.get("hint.unhover")!({}),
     type: (token: string) => (holds > 0 ? (held_input.push(token), "handled") : sink!.on_token_(token)),
     escape: () => (holds > 0 ? void held_input.push(() => set_mode("normal")) : set_mode("normal")),
     // What the background answers to `read_hint_selectors`.
@@ -1329,6 +1330,14 @@ test("across frames a background that does not answer leaves the frame its own l
   assert.deepEqual(types_sent(page), ["hint_frames_start", "run"]);
 });
 
+test("across frames an ended answer cancels the run and draws no labels of its own", async () => {
+  const page = await page_with(["one", "two"]);
+  page.answer_start(() => ({ ok: false, reason: "ended" }));
+  assert.deepEqual(await page.run({ frames: "all_frames" }), { ok: true, cancelled: true });
+  assert.equal(page.labels().length, 0);
+  assert.equal(page.mode(), "normal");
+});
+
 test("across frames Escape before the labels come ends the session the background then answers", async () => {
   const page = await page_with(["one"]);
   let answer_start!: (answer: unknown) => void;
@@ -1419,6 +1428,26 @@ test("another frame reports its count, takes a prefix before its labels, and run
   assert.equal(page.active_listeners.size, 0);
 });
 
+test("another frame copies with the stored strip_tracking_params, not the shipped list", async () => {
+  const page = await page_with(["one?utm_source=x"], { strip_tracking_params: [] });
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "copy", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a"] });
+  assert.deepEqual(await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" }), { ok: true, text: "https://example.com/one?utm_source=x" });
+});
+
+test("the end of the session the keyboard frame holds leaves hint mode there, and the end of another session does not", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a"], ["a"]));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.deliver({ type: "hint_frames_end", session_id: "s0" });
+  assert.equal(page.mode(), "hint");
+  page.deliver({ type: "hint_frames_end", session_id: "s1" });
+  assert.equal(page.mode(), "normal");
+  assert.equal(page.labels().length, 0);
+});
+
 test("another frame ignores every message of another session, and the end of its own clears its labels", async () => {
   const page = await page_with(["one", "two"]);
   page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
@@ -1477,4 +1506,339 @@ test("another frame focuses its window before a focus pick, and not before a lin
   page.deliver({ type: "hint_frames_labels", session_id: "s2", labels: ["a", "s"] });
   await page.deliver({ type: "hint_frames_pick", session_id: "s2", label: "s" });
   assert.equal(page.window_focuses(), 1);
+});
+
+// The background's answer to a pick of the other frame's label: the text its owner handed over.
+const answer_picks_with = (page: { hold_sends: (held: (message: unknown) => Promise<unknown>) => void }, answers: Record<string, unknown>) =>
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? answers[(message as { label: string }).label] : undefined));
+
+test("across frames a rapid copy joins the picks of both frames into one list, and the toast draws here", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true, text: "two" } });
+  void page.run({ action: "copy_text", rapid: true, frames: "all_frames" });
+  await settle();
+  page.type("a");
+  await settle();
+  assert.deepEqual(page.copied, ["one"]);
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.copied, ["one", "one\ntwo"]);
+  assert.deepEqual(page.messages().at(-1), "Copied 2 texts");
+  assert.equal(page.mode(), "hint");
+  page.type("s");
+  await settle();
+  assert.equal(page.copied.at(-1), "one\ntwo");
+  assert.equal(page.messages().at(-1), "Copied 2 texts");
+});
+
+test("across frames a copy of another frame goes through this frame's register and names its kind in the toast", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true, text: "div > a", what: "selector" } });
+  void page.run({ action: "copy_selector", frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.copied, ["div > a"]);
+  assert.equal(page.messages().at(-1), "Copied selector");
+  assert.equal(page.mode(), "normal");
+});
+
+test("across frames prompt opens the line here with the text its owner handed over", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true, text: "open https://other.test/x" } });
+  const answer = page.run({ action: "prompt", frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.lines, ["open https://other.test/x"]);
+  assert.equal(await peek(answer), undefined);
+  page.close_line();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("the owner frame answers a copy with its text and copies nothing, tracking parameters stripped", async () => {
+  const page = await page_with(["one", "two"]);
+  page.links[1]!.href = "https://example.com/two?utm_source=x&id=7";
+  const args = { action: "copy", filter: "links" };
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  assert.deepEqual(await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s" }), { ok: true, text: "https://example.com/two?id=7" });
+  assert.deepEqual(page.copied, []);
+  assert.deepEqual(page.messages(), []);
+});
+
+test("the owner frame answers a prompt with the line and opens nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "prompt", filter: "links", command: "open --tab" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  assert.deepEqual(await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" }), { ok: true, text: "open --tab https://example.com/one" });
+  assert.deepEqual(page.lines, []);
+});
+
+test("the owner frame names an HTML copy for the toast", async () => {
+  const page = await page_with(["one"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "copy_html", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a"] });
+  const answer = (await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" })) as { ok: boolean; what?: string };
+  assert.equal(answer.what, "HTML");
+});
+
+// The keys typed before the labels showed. The first one picks, and the rest wait on the session as the typeahead.
+async function pick_with_typeahead(page: Awaited<ReturnType<typeof page_with>>, args: Record<string, unknown>, typed: string[]): Promise<void> {
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  void page.run({ frames: "all_frames", ...args });
+  await settle();
+  for (const token of typed) page.type(token);
+  answer_start(across_answer(["a", "s"], ["a"])());
+  await settle();
+}
+
+const picks_sent = (page: { sent: unknown[] }) => page.sent.filter((message) => (message as { type: string }).type === "hint_frames_pick");
+
+test("across frames the keys typed ahead go with the pick of another frame, and what its owner left replays here", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: true, left: ["y"] } });
+  await pick_with_typeahead(page, {}, ["s", "x", "y"]);
+  assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s", keys: ["x", "y"] }]);
+  assert.deepEqual(page.held_key_batches, [["y"]]);
+});
+
+test("across frames keys typed while a pick is in flight run in normal mode, and the replay holds only what the owner left", async () => {
+  const page = await page_with(["one"]);
+  let answer!: (reply: unknown) => void;
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? new Promise((resolve) => (answer = resolve)) : undefined));
+  await pick_with_typeahead(page, {}, ["s", "x"]);
+  assert.equal(page.mode(), "normal");
+  assert.equal(page.type("j"), "pass");
+  assert.deepEqual(page.held_key_batches, []);
+  answer({ ok: true, left: [] });
+  await settle();
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("across frames a frame that is gone mid-pick leaves every key typed ahead to replay here", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: false, message: "The frame of that hint is gone" } });
+  await pick_with_typeahead(page, {}, ["s", "x", "y"]);
+  assert.deepEqual(page.held_key_batches, [["x", "y"]]);
+});
+
+test("across frames a pick whose request fails replays the keys typed ahead here", async () => {
+  const page = await page_with(["one"]);
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? Promise.reject(new Error("closed")) : undefined));
+  await pick_with_typeahead(page, {}, ["s", "x"]);
+  assert.deepEqual(page.held_key_batches, [["x"]]);
+});
+
+test("across frames a mode that starts in the owner drops the keys typed ahead", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: true, left: ["x"] } });
+  await pick_with_typeahead(page, { action: "caret" }, ["s", "x"]);
+  assert.deepEqual(page.held_key_batches, []);
+});
+
+test("across frames a pick with no keys typed ahead sends none", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true } });
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s" }]);
+});
+
+test("the owner frame hands back the keys typed ahead when its pick focuses no field", async () => {
+  const page = await page_with(["one", "two"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  const answer = await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s", keys: ["x", "y"] });
+  assert.deepEqual((answer as { left: string[] }).left, ["x", "y"]);
+});
+
+test("the owner frame takes the window focus and starts the mode for a caret pick", async () => {
+  const page = await page_with(["one", "two"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "caret", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  const focuses = page.window_focuses();
+  await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s" });
+  assert.equal(page.window_focuses(), focuses + 1);
+  assert.equal(page.mode(), "caret");
+  assert.equal(page.caret_target().desertfox_caret_target, page.links[1]);
+});
+
+test("Escape after a hover of another frame releases the hover in every frame", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true } });
+  void page.run({ action: "hover", frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  page.unhover();
+  await settle();
+  assert.deepEqual(types_sent(page).filter((type) => type === "hint_frames_unhover"), ["hint_frames_unhover"]);
+  page.unhover();
+  await settle();
+  assert.equal(types_sent(page).filter((type) => type === "hint_frames_unhover").length, 1);
+});
+
+test("Escape that races the hover answer waits for it, so the owner has hovered before it releases", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  let answer!: (reply: unknown) => void;
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? new Promise((resolve) => (answer = resolve)) : undefined));
+  void page.run({ action: "hover", frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  page.unhover();
+  await settle();
+  assert.equal(types_sent(page).includes("hint_frames_unhover"), false);
+  answer({ ok: true });
+  await settle();
+  assert.equal(types_sent(page).at(-1), "hint_frames_unhover");
+});
+
+test("a hover of this frame sends no release to the others", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  void page.run({ action: "hover", frames: "all_frames" });
+  await settle();
+  page.type("a");
+  await settle();
+  page.unhover();
+  await settle();
+  assert.equal(types_sent(page).includes("hint_frames_unhover"), false);
+});
+
+test("the frame that holds a hover releases it when the release arrives, with no session", async () => {
+  const page = await page_with(["one"]);
+  assert.equal(page.deliver({ type: "hint_frames_unhover", session_id: "s1" }), undefined);
+});
+
+test("across frames an end that reaches the frame before the start answer ends the run on that session", async () => {
+  const page = await page_with(["one"]);
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  const answer = page.run({ frames: "all_frames" });
+  await settle();
+  page.deliver({ type: "hint_frames_end", session_id: "s1" });
+  answer_start(across_answer(["a"], ["a"])());
+  await settle();
+  assert.equal(page.mode(), "normal");
+  assert.equal(page.labels().length, 0);
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
+});
+
+test("across frames an end for another session does not end the run", async () => {
+  const page = await page_with(["one"]);
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.deliver({ type: "hint_frames_end", session_id: "s0" });
+  answer_start(across_answer(["a"], ["a"])());
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.deepEqual(page.labels(), ["a"]);
+});
+
+test("across frames a mode that fails to start in the owner leaves the keys typed ahead to replay here", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: false, message: "Could not load caret mode", left: ["x"] } });
+  await pick_with_typeahead(page, { action: "caret" }, ["s", "x"]);
+  assert.deepEqual(page.held_key_batches, [["x"]]);
+});
+
+test("across frames a rapid run with one text match in another frame sends the keys typed ahead and replays what comes back", async () => {
+  const page = await page_with(["one"]);
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  answer_picks_with(page, { s: { ok: true, left: ["x", "y"] } });
+  void page.run({ frames: "all_frames", rapid: true, text: "two" });
+  await settle();
+  page.type("x");
+  page.type("y");
+  answer_start(across_answer(["s"], [])());
+  await settle();
+  assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s", keys: ["x", "y"] }]);
+  assert.deepEqual(page.held_key_batches, [["x", "y"]]);
+});
+
+test("across frames an end noted during one start does not end a later run that gets the same session id", async () => {
+  const page = await page_with(["one"]);
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.deliver({ type: "hint_frames_end", session_id: "s0" });
+  answer_start({ ...across_answer(["a"], ["a"])(), session_id: "s1" });
+  await settle();
+  page.escape();
+  void page.run({ frames: "all_frames" });
+  await settle();
+  answer_start({ ...across_answer(["a"], ["a"])(), session_id: "s0" });
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.deepEqual(page.labels(), ["a"]);
+});
+
+test("across frames Escape releases each pending remote hover with the session of its own pick, once the answer is in", async () => {
+  const page = await page_with(["one"]);
+  let next = 0;
+  page.answer_start(() => ({ ...across_answer(["a", "s"], ["a"])(), session_id: `h${++next}` }));
+  const answers: ((reply: unknown) => void)[] = [];
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? new Promise((resolve) => answers.push(resolve)) : undefined));
+  void page.run({ action: "hover", rapid: true, frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  page.type("s");
+  await settle();
+  page.unhover();
+  answers[1]!({ ok: true });
+  await settle();
+  const released = () => page.sent.filter((message) => (message as { type: string }).type === "hint_frames_unhover");
+  assert.deepEqual(released(), [{ type: "hint_frames_unhover", session_id: "h2" }]);
+  answers[0]!({ ok: true });
+  await settle();
+  assert.deepEqual(released(), [{ type: "hint_frames_unhover", session_id: "h2" }, { type: "hint_frames_unhover", session_id: "h1" }]);
+});
+
+test("the owner frame lets go of a hover only for the release that names the pick that made it", async () => {
+  const events: string[] = [];
+  const stub = class {
+    type: string;
+    constructor(type: string) {
+      this.type = type;
+    }
+  };
+  Object.assign(globalThis, { PointerEvent: stub, MouseEvent: stub });
+  try {
+    const page = await page_with(["one", "two"]);
+    Object.assign(page.links[1]!, { dispatchEvent: (event: { type: string }) => (events.push(event.type), true) });
+    page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "hover", filter: "links" } });
+    await settle();
+    page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+    await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s" });
+    assert.ok(events.includes("mouseover"));
+    events.length = 0;
+    page.deliver({ type: "hint_frames_unhover", session_id: "s0" });
+    assert.equal(events.length, 0);
+    page.deliver({ type: "hint_frames_unhover", session_id: "s1" });
+    assert.ok(events.includes("mouseleave"));
+  } finally {
+    delete (globalThis as { PointerEvent?: unknown }).PointerEvent;
+    delete (globalThis as { MouseEvent?: unknown }).MouseEvent;
+  }
 });

@@ -2,6 +2,7 @@
 
 import type { CommandDef } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
+import { apply_count } from "./count.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { REPEAT_PRIVATE_STORAGE_KEY, REPEAT_STORAGE_KEY } from "./storage_keys.ts";
 
@@ -59,15 +60,23 @@ export const as_stored = ({ id, args, count }: BoundInvocation): BoundInvocation
 
 const PREVIEW_CHARS = 48;
 
-// What `.` would run, as the command line that does the same, or the label for a command with no name to type. Steps join with ` | `.
+// What `.` would run, as the command line that does the same (a count the command line cannot spell shows as a `5× ` prefix), or the label, with the same prefix, for a command with no name to type. Steps join with ` | `.
 // Reads the normal slot only: a private window's step stays out of the panel, which any page in the tab can ask for.
 export async function repeat_preview(memory: Pick<RepeatMemory, "load">, find_command: (id: string) => CommandDef | undefined): Promise<string | undefined> {
   const steps = await memory.load(false);
   if (!steps?.length) return undefined;
   const line = steps
-    .map(({ id, args }) => {
-      const command = find_command(id);
-      return command?.name === undefined ? (command?.label ?? id) : `:${print_command(command, args ?? {}, { flags: "long" })}`;
+    .map((step) => {
+      const command = find_command(step.id);
+      if (command === undefined) return step.id;
+      if (command.name === undefined) {
+        // A label has no argument slot, so a count that maps to an arg shows as the same prefix.
+        const count = typeof command.count === "object" ? step.count : apply_count(command, step).times;
+        return count !== undefined && count > 1 ? `${count}\u00d7 ${command.label}` : command.label;
+      }
+      const { args, times } = apply_count(command, step);
+      const text = `:${print_command(command, args ?? {}, { flags: "long" })}`;
+      return times > 1 ? `${times}\u00d7 ${text}` : text;
     })
     .join(" | ")
     .replace(/\s+/g, " ");

@@ -382,3 +382,22 @@ test("the preview answer is empty for a private tab and with the setting off", a
   assert.equal(await answer_repeat_preview({ is_private: true, enabled: true }, memory, find), undefined);
   assert.equal(await answer_repeat_preview({ is_private: false, enabled: false }, memory, find), undefined);
 });
+
+test("the preview shows the saved count: a prefix for a repeat rule, the arg for a param rule, nothing for ignore", async () => {
+  const defs: Record<string, unknown> = {
+    "x.scroll": { id: "x.scroll", name: "scroll", label: "Scroll", params: [], count: "repeat" },
+    "x.nth": { id: "x.nth", name: "nth", label: "Nth", params: [{ name: "n", type: "int", default: 0 }], count: { param: "n" } },
+    "x.plain": { id: "x.plain", name: "plain", label: "Plain", params: [] },
+  };
+  const find = (id: string) => defs[id] as never;
+  const preview = (steps: BoundInvocation[]) => answer_repeat_preview({ is_private: false, enabled: true }, { load: async () => steps }, find);
+  assert.equal(await preview([{ id: "x.scroll", count: 5 }]), "5× :scroll");
+  assert.equal(await preview([{ id: "x.scroll", count: 1 }]), ":scroll");
+  assert.equal(await preview([{ id: "x.nth", count: 5 }]), ":nth 5");
+  assert.equal(await preview([{ id: "x.plain", count: 5 }]), ":plain");
+  defs["x.nameless_nth"] = { id: "x.nameless_nth", label: "Nameless nth", params: [{ name: "n", type: "int", default: 0 }], count: { param: "n" } };
+  defs["x.nameless_scroll"] = { id: "x.nameless_scroll", label: "Nameless scroll", params: [], count: "repeat" };
+  assert.equal(await preview([{ id: "x.nameless_nth", count: 5 }]), "5\u00d7 Nameless nth");
+  assert.equal(await preview([{ id: "x.nameless_scroll", count: 5 }]), "5\u00d7 Nameless scroll");
+  assert.equal(await preview([{ id: "x.nameless_nth" }]), "Nameless nth");
+});

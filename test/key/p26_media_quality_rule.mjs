@@ -89,9 +89,11 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await run_case("a player that answers unknown until it plays gets the level once it plays, and a refused manual choice does not end the rule", async () => {
     const mark = events.length;
     await open_page("quality", "p26_slow", { new_tab: true });
-    // The player is silent for 2 s. A manual choice now is refused.
+    // The player stays silent until the test sets its ready flag. A manual choice now is refused.
     await run_line("media quality min");
     await poll_until("the refusal", async () => (await read_toast()) === "The player has no quality levels yet");
+    // The rule stops looking for the player 10 s after page load (RULE_GIVE_UP_MS, src/content/quality/rule.ts), so the flag must be set inside that window.
+    await in_active_tab('document.documentElement.dataset.ready = "1"; 0');
     await wait_event(mark, on_set("p26_slow", (event) => event.low === "hd1080"), "the rule at 1080p once the player plays", 8000);
     expect(!events.slice(mark).some(on_set("p26_slow", (event) => event.low === "large")), "the refused choice set a level");
   });
@@ -101,6 +103,21 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_page("quality_frame", "p26_frame", { new_tab: true });
     await wait_event(mark, on_set("p26_frame_yt_inner", (event) => event.low === "large"), "the framed player at the min row's 480p");
     expect(!events.slice(mark).some(on_set("p26_frame_yt_inner", (event) => event.low === "hd1080")), "the framed player got the global max");
+  });
+
+  await run_case("a video and player that appear 4 s after the load still reach the level, on a plain page and in a frame", async () => {
+    let mark = events.length;
+    await open_page("quality", "p26_lazy_yt", { new_tab: true });
+    await wait_event(mark, on_set("p26_lazy_yt", (event) => event.low === "hd1080"), "the late player at 1080p", 9000);
+    mark = events.length;
+    await open_page("quality_frame", "p26_lazyframe", { new_tab: true });
+    await wait_event(mark, on_set("p26_lazyframe_yt_inner", (event) => event.low === "hd1080"), "the late framed player at 1080p", 9000);
+  });
+
+  await run_case("a video inside an open shadow root, found by the look-again check, gets the rule", async () => {
+    const mark = events.length;
+    await open_page("quality", "p26_lazyshadow", { new_tab: true });
+    await wait_event(mark, on_set("p26_lazyshadow", (event) => event.low === "hd1080"), "the player beside the shadow-root video at 1080p", 17000);
   });
 
   await run_case("a navigation's watch outlasts the second injection: a reset 6 s after the navigation is still caught", async () => {

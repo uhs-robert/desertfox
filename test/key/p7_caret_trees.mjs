@@ -5,7 +5,7 @@
 export const areas = ["caret"];
 
 export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event, in_active_tab, badge_is, escape_to_normal, hint_label_count, run_line }) {
-  const selection_styles = `document.querySelectorAll("style").length && [...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
+  const selection_styles = `[document, ...[...document.querySelectorAll("*")].map((element) => element.shadowRoot), ...[...document.querySelectorAll("iframe")].map((frame) => frame.contentDocument)].filter(Boolean).flatMap((tree) => [...tree.adoptedStyleSheets]).filter((sheet) => [...sheet.cssRules].some((rule) => rule.cssText.includes("::selection"))).length`;
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const last_selection = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id).at(-1)?.text;
 
@@ -28,6 +28,29 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_keys(key);
     await wait_event(mark, (event) => event.type === "selection" && event.page_id.startsWith(page_id), what);
   };
+
+  // The caret colors move into adopted sheets, so first prove that `::selection` works from one in a shadow root and in a frame.
+  await run_case("an adopted sheet with a ::selection rule colors the selection in an open shadow root and in a frame", async () => {
+    await open_page("caret_shadow", "adopted_shadow", { new_tab: true });
+    const in_root = await in_active_tab(`(() => {
+      const root = document.getElementById("open_host").shadowRoot;
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync("::selection{background:rgb(1, 2, 3) !important}");
+      root.adoptedStyleSheets.push(sheet);
+      return getComputedStyle(root.getElementById("open_text"), "::selection").backgroundColor;
+    })()`);
+    expect(in_root === "rgb(1, 2, 3)", `the open shadow root selection color is ${in_root}`);
+    await open_page("caret_frames", "adopted_frame", { new_tab: true });
+    const in_frame = await in_active_tab(`(() => {
+      const frame_window = document.getElementById("frame").contentWindow;
+      const frame_document = frame_window.document;
+      const sheet = new frame_window.CSSStyleSheet();
+      sheet.replaceSync("::selection{background:rgb(1, 2, 3) !important}");
+      frame_document.adoptedStyleSheets.push(sheet);
+      return getComputedStyle(frame_document.querySelector("p"), "::selection").backgroundColor;
+    })()`);
+    expect(in_frame === "rgb(1, 2, 3)", `the frame selection color is ${in_frame}`);
+  });
 
   await run_case("hint --caret starts in an open shadow root, a closed one and one nested inside it", async () => {
     for (const [target, first] of [["#open_text", "b"], ["#closed_text", "g"], ["#nested_text", "d"]]) {

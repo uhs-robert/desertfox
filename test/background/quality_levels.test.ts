@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { ask_quality, choose_player, create_quality_reports, quality_rows, type QualityDeps } from "../../src/background/quality_levels.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
@@ -21,7 +21,7 @@ test("every completion value passes the quality schema, whatever label the site 
   for (const row of rows) assert.equal(check_args(media, { action: "quality", value: row.name, ...(["up", "down"].includes(row.name) ? { times: 1 } : {}) }).ok, true, row.name);
 });
 
-const report = (player: boolean, ready: boolean): QualityReport => ({ type: "quality_report", player, ready });
+const report = (player: boolean, ready: boolean): QualityReport => ({ type: "quality_report", player, ready, has_video: player });
 
 test("one player is chosen: a ready one first, then the top frame, then the lowest frame id", () => {
   assert.equal(choose_player([]), undefined);
@@ -35,7 +35,7 @@ const list: QualityRequest = { type: "quality_apply", op: "list", value: undefin
 const skip: QualityRequest = { type: "quality_apply", op: "skip", value: "next", times: 1 };
 
 // `frames` are the reports each frame pushes after the injection. `inject` can reject or stall.
-function fake(frames: Record<number, QualityReport>, { inject = async (count: number) => count, answer = (): QualityAnswer => ({ levels: [] }), timeout_ms = 40 } = {}) {
+function fake(frames: Record<number, QualityReport>, { inject = async (count: number) => count, answer = (): QualityAnswer => ({ levels: [] }), timeout_ms = 5000 } = {}) {
   const reports = create_quality_reports();
   const sent: { frame_id: number; request: QualityRequest }[] = [];
   const deps: QualityDeps = {
@@ -77,15 +77,22 @@ test("a request that timed out sends nothing when the injection finishes late", 
 });
 
 test("a frame that never answers cannot hold the list for ever", async () => {
-  const tab = fake({ 0: report(true, true) });
+  const tab = fake({ 0: report(true, true) }, { timeout_ms: 40 });
   tab.deps.send = () => new Promise(() => {});
   assert.equal(await ask_quality(tab.deps, 1, list), undefined);
 });
 
-test("the whole request keeps one deadline, however the injection and the answer share it", async () => {
+test("the whole request keeps one deadline, however the injection and the answer share it", async (context) => {
+  // Fake clock: a correct 100 ms deadline settles by tick 100, a deadline restarted after the 50 ms injection only at 150.
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   const tab = fake({ 0: report(true, true) }, { inject: (count) => new Promise((resolve) => setTimeout(() => resolve(count), 50)), timeout_ms: 100 });
   tab.deps.send = () => new Promise(() => {});
-  const started = Date.now();
-  assert.equal(await ask_quality(tab.deps, 1, list), undefined);
-  assert.ok(Date.now() - started < 160, `took ${Date.now() - started} ms`);
+  let settled = false;
+  const asked = ask_quality(tab.deps, 1, list).then((answer) => ((settled = true), answer));
+  for (let elapsed = 0; elapsed < 100; elapsed += 10) {
+    context.mock.timers.tick(10);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.ok(settled, "still waiting at 100 ms");
+  assert.equal(await asked, undefined);
 });

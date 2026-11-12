@@ -6,20 +6,20 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   "content.js": 18.5 * 1024,
-  // 44.5 KB: hints.js loads on the first hint command, not on every page, and the filters keep growing it. Hints across frames add the frame side of `src/background/hint_frames.ts`, and the strip of tracking parameters adds the copy action and its setting read.
-  "hints.js": 44.5 * 1024,
+  // 47 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB.
+  "hints.js": 47 * 1024,
   "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
-  // 5 KB: the page copy reads the strip list and drops tracking parameters. The bundle loads on first use, not on every page.
-  "page.js": 5 * 1024,
+  // 5.5 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. The bundle loads on first use, not on every page.
+  "page.js": 5.5 * 1024,
   "text.js": 4 * 1024,
-  "editor.js": 4 * 1024,
+  "editor.js": 6.5 * 1024, // 6.5 KB: the clipboard fallback for CodeMirror, Ace and Monaco, with its copy checks and paste read-back. The bundle loads on first use.
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
   "media.js": 5.5 * 1024,
-  // 4.5 KB: the YouTube driver gained the captions toggle and its state read. The bundle loads on first use.
-  "quality.js": 4.5 * 1024,
+  // 5 KB: the YouTube driver gained the captions toggle and its state read, and the rule answers a frame without a video by waiting for a media event and looking again for 10 s, inside open shadow roots too. The bundle loads on first use.
+  "quality.js": 5 * 1024,
   "site_actions.js": 4 * 1024,
   // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking.
   "cmdline_page.js": 57 * 1024,

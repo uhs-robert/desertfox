@@ -15,13 +15,16 @@ in the same framing to stdout and exits. It has five verbs and no others:
   {"cmd": "editor_collect", "job": "<job from editor_start>"}
       -> {"ok": true, ..., "pending": true}  while the editor runs (after a wait of 20 s at most), or
          {"ok": true, ..., "done": true, "changed": true, "text": "<edited text>"}  (`text` only when `changed`)
+  {"cmd": "open_firefox_page", "page": "settings"}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "page": "settings"}
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
 file there, autoconfig.toml. It never edits the user's own files, and it parses no config of the extension: the extension owns that TOML. Only editor.toml, which the extension never sees, is parsed here.
 `self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
-reply ever carries. Stdout carries only protocol bytes.
+reply ever carries. `open_firefox_page` asks the Firefox that started the host to open one page of a fixed table (see
+`open_firefox_page`). Stdout carries only protocol bytes.
 """
 import contextlib
 import fcntl
@@ -756,6 +759,144 @@ def editor_collect(request, wait_s=COLLECT_WAIT_S):
     return collect_result(record, scratch_path, claim_job(job_path))
 
 
+# The request names a key, never a URL, so the host opens only these pages.
+FIREFOX_PAGES = {
+    "settings": "about:preferences",
+    "addons": "about:addons",
+    "downloads": "about:downloads",
+    "config": "about:config",
+    "profiles": "about:profiles",
+    "support": "about:support",
+    "debugging": "about:debugging#/runtime/this-firefox",
+    "logins": "about:logins",
+    "processes": "about:processes",
+    "memory": "about:memory",
+    "policies": "about:policies",
+    "crashes": "about:crashes",
+    "protections": "about:protections",
+}
+FIREFOX_BINARY_NAMES = {"firefox", "firefox-bin", "firefox-esr", "firefox-esr-bin"}
+# A package upgrade under a running Firefox leaves this on the link of its exe.
+DELETED_EXE_SUFFIX = " (deleted)"
+PROFILE_LOCK_NAME = ".parentlock"
+CRASH_EVENTS_SUFFIX = os.path.join("crashes", "events")
+# The remote client hands the URL over and exits within about a second.
+FIREFOX_REMOTE_TIMEOUT_S = 10
+# The crash reporter and startup variables belong to the parent Firefox, not to the short-lived remote client.
+# MOZ_NO_REMOTE and MOZ_NEW_INSTANCE tell a client not to hand the URL over, so it would start a second Firefox instead.
+DROPPED_ENV_PREFIXES = ("MOZ_CRASHREPORTER_", "XRE_")
+DROPPED_ENV_NAMES = {"MOZ_LAUNCHED_CHILD", "MOZ_APP_SILENT_START", "MOZ_NO_REMOTE", "MOZ_NEW_INSTANCE"}
+STDERR_TAIL_BYTES = 4096
+
+
+def firefox_binary(proc_dir):
+    """The exe of the parent process, which must be a Firefox binary. A run by hand or by another program is refused."""
+    try:
+        exe = os.readlink(os.path.join(proc_dir, "exe"))
+    except OSError as error:
+        raise HostError(f"cannot read the program that started the host: {error.strerror or error}") from error
+    exe = exe.removesuffix(DELETED_EXE_SUFFIX)
+    if os.path.basename(exe) not in FIREFOX_BINARY_NAMES:
+        raise HostError(f"the host was not started by Firefox but by {exe}, so it cannot open a Firefox page")
+    if not os.access(exe, os.X_OK):
+        raise HostError(f"the Firefox program {exe} is gone or cannot run, probably replaced by an update. Restart Firefox, then try again.")
+    return exe
+
+
+def profile_from_lock(proc_dir):
+    """The folder of the `.parentlock` the parent holds open, or None. Only the main process holds it."""
+    fd_dir = os.path.join(proc_dir, "fd")
+    try:
+        names = os.listdir(fd_dir)
+    except OSError:
+        return None
+    for name in names:
+        try:
+            target = os.readlink(os.path.join(fd_dir, name))
+        except OSError:
+            continue
+        if os.path.basename(target) == PROFILE_LOCK_NAME:
+            return os.path.dirname(target)
+    return None
+
+
+def profile_from_env(environ):
+    events = environ.get("MOZ_CRASHREPORTER_EVENTS_DIRECTORY", "")
+    head, tail = os.path.split(events.rstrip("/"))
+    head, middle = os.path.split(head)
+    if os.path.join(middle, tail) != CRASH_EVENTS_SUFFIX:
+        return None
+    return head
+
+
+def firefox_profile(proc_dir, environ):
+    """The profile folder of the parent Firefox. Without `--profile` the remote would go to the default profile."""
+    from_lock, from_env = profile_from_lock(proc_dir), profile_from_env(environ)
+    if from_lock is None and from_env is None:
+        raise HostError("cannot find the profile of the Firefox that started the host: it holds no .parentlock open and MOZ_CRASHREPORTER_EVENTS_DIRECTORY is unset")
+    if from_lock is not None and from_env is not None and os.path.realpath(from_lock) != os.path.realpath(from_env):
+        raise HostError(f"the profile of the Firefox that started the host is unclear: its lock is in {from_lock}, its crash reporter in {from_env}")
+    profile = from_lock if from_lock is not None else from_env
+    if not os.path.isabs(profile):
+        raise HostError(f"the profile path {profile!r} is not absolute")
+    if not os.path.isfile(os.path.join(profile, PROFILE_LOCK_NAME)):
+        raise HostError(f"the profile {profile} holds no {PROFILE_LOCK_NAME}, so it is not the profile of a running Firefox")
+    return profile
+
+
+def firefox_remote_env(environ):
+    return {
+        name: value for name, value in environ.items()
+        if not name.startswith(DROPPED_ENV_PREFIXES) and name not in DROPPED_ENV_NAMES
+    }
+
+
+def run_firefox_remote(argv, env):
+    """Runs the remote client in a session of its own and waits at most FIREFOX_REMOTE_TIMEOUT_S.
+
+    Stdin and stdout are the protocol pipe of the host, so the child gets /dev/null for both. Stderr goes to a temporary
+    file, not a pipe: a grandchild that keeps a pipe open would block a read until it exits. When the remote finds no
+    running Firefox to take the URL, it starts a whole second browser, and that one waits on a dialog forever. So a
+    timeout kills the whole process group."""
+    with tempfile.TemporaryFile() as stderr_file:
+        try:
+            process = subprocess.Popen(
+                argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=stderr_file,
+                env=env, close_fds=True, start_new_session=True,
+            )
+        except OSError as error:
+            raise HostError(f"cannot start {argv[0]}: {error.strerror or error}") from error
+        try:
+            returncode = process.wait(timeout=FIREFOX_REMOTE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(OSError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            raise HostError(f"Firefox did not take the request within {FIREFOX_REMOTE_TIMEOUT_S} s") from None
+        if returncode == 0:
+            return
+        stderr_file.seek(max(0, os.fstat(stderr_file.fileno()).st_size - STDERR_TAIL_BYTES))
+        lines = stderr_file.read().decode("utf-8", errors="replace").strip().splitlines()
+        reason = lines[-1].strip() if lines else "no message"
+        raise HostError(f"Firefox refused to open the page (exit {returncode}): {reason}")
+
+
+def open_firefox_page(request, parent_pid=None, proc_root="/proc", environ=None):
+    """Asks the Firefox that started the host to open one page of FIREFOX_PAGES in a new tab.
+
+    The program and the profile come from the kernel's view of the parent process, never from the request."""
+    checked_fields(request, {"page"}, "open_firefox_page")
+    page = request.get("page")
+    if not isinstance(page, str) or page not in FIREFOX_PAGES:
+        raise HostError(f"unknown Firefox page {page!r}. Known pages: {', '.join(FIREFOX_PAGES)}")
+    environ = os.environ if environ is None else environ
+    proc_dir = os.path.join(proc_root, str(os.getppid() if parent_pid is None else parent_pid))
+    exe = firefox_binary(proc_dir)
+    profile = firefox_profile(proc_dir, environ)
+    run_firefox_remote([exe, "--profile", profile, FIREFOX_PAGES[page]], firefox_remote_env(environ))
+    return {"page": page}
+
+
 def handle(request):
     if not isinstance(request, dict):
         raise HostError("the request must be a JSON object")
@@ -770,6 +911,8 @@ def handle(request):
         return editor_start(request)
     if cmd == "editor_collect":
         return editor_collect(request)
+    if cmd == "open_firefox_page":
+        return open_firefox_page(request)
     raise HostError(f"unknown cmd: {cmd!r}")
 
 

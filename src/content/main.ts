@@ -13,11 +13,11 @@ import { deepest_focused_element, is_editable_element, set_editable_rules } from
 import { set_scroll_selector } from "./handlers/scroll.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
-import { create_key_flow } from "./key_flow.ts";
+import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
+import { follow_which_key } from "./whichkey/gate.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
-import { create_which_key_timer } from "./which_key_timer.ts";
 import { badge_state } from "./badge_state.ts";
-import { show_mode_label, show_toast } from "./ui_proxy.ts";
+import { set_toast_durations, show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { fullscreen_step, takes_media_step } from "./mode_state.ts";
@@ -58,12 +58,8 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
 let which_key_skip: readonly string[] | undefined;
-// Hiding asks only once the bundle has loaded, because before that there is no panel.
-const follow_prefix = create_which_key_timer(
-  () => which_key_delay_ms,
-  (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
-  () => which_key_skip,
-);
+// The timer lives in the `whichkey` bundle, so the first panel may appear late by the load.
+const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => follow_which_key(bundles, prefix, at_once, which_key_delay_ms, which_key_skip);
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
@@ -149,7 +145,7 @@ function on_keydown(event: KeyboardEvent): void {
   follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
-  const press: HeldPress = { keyup_seen: false };
+  const press: HeldPress = { keyup_seen_: false };
   // A replayed key the keymap passes ends the site mode after the page has the key, because ending it replays the keys behind.
   const decision = key_flow.handle_token_(token, event.repeat, () => {
     target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init));
@@ -254,6 +250,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  set_toast_durations(keymap);
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
@@ -272,7 +269,10 @@ function install_matcher(reply: PageKeymap | undefined): void {
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") bundles.set_mode_("ignore");
   // A field that took the focus while the ask was pending already put the frame in insert mode, and media must not overwrite it.
-  else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) bundles.set_mode_(reply.join);
+  else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) {
+    media_by_step = true;
+    bundles.set_mode_(reply.join);
+  }
   else {
     if (step === "leave") bundles.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
@@ -306,6 +306,9 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
   return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
+// The media mode of this frame came from another frame (a step, or the join reply of a late frame), not from its own fullscreen or a ;M pick. The background then knows that the report it causes may belong to a hold that already ended.
+let media_by_step = false;
+
 function start(): void {
   (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element });
   listen("keydown", on_keydown);
@@ -328,11 +331,12 @@ function start(): void {
   // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
   const report_mode = () => {
     setTimeout(hand_focus_to_parent);
-    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document) });
+    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document), step: media_by_step });
   };
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
+    if (mode !== "media") media_by_step = false;
     key_flow.reset_sequence_();
     site_mode.set_();
     bundles.enter_mode_(mode);
@@ -349,7 +353,10 @@ function start(): void {
   // A fullscreen change in this frame and the media mode of another frame take the same step.
   const media_step = (on: boolean, own?: boolean) => {
     const next = on ? fullscreen_step(page_mode.get_mode_(), true) : page_mode.media_ended_(own);
-    if (next) bundles.set_mode_(next);
+    if (next) {
+      media_by_step = !own;
+      bundles.set_mode_(next);
+    }
   };
   // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
   // The badge and an open which-key panel follow the change even when the mode stays media.

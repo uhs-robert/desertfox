@@ -627,3 +627,81 @@ test("join: two frames joining together are both kept", async () => {
   assert.deepEqual(await Promise.all([media.join(7, 3), media.join(7, 4)]), [true, true]);
   assert.deepEqual(hold_frames(store), [3, 4]);
 });
+
+// Issue 527. A frame's report of the mode says whether a step or a join reply caused it (`by_step`). Such a report found no hold when the hold had ended before the frame took the step, and started a new one whose step on put every other frame back in the mode.
+test("a site key that enters and leaves fullscreen in one frame: the second frame's late report starts nothing and goes back to normal", async () => {
+  const { media, sent, store } = fake_tab_media();
+  await media.reported(7, 5, "media", false);
+  await media.reported(7, 5, "normal", true);
+  await media.reported(7, 0, "media", false, true);
+  assert.deepEqual(sent, [[7, "all", "on"], [7, 0, "off"]]);
+  assert.equal(store.size, 0);
+});
+
+test("aa then a fast Escape in the key's frame: a frame that takes aa's step late starts nothing and goes back to normal", async () => {
+  const { media, sent, store } = fake_tab_media();
+  await media.enter(7, 0);
+  await media.reported(7, 0, "media", false, true);
+  await media.reported(7, 0, "normal", true);
+  await media.reported(7, 4, "media", false, true);
+  assert.deepEqual(sent, [[7, "all", "on"], [7, 4, "off"]]);
+  assert.equal(store.size, 0);
+});
+
+// The top frame sees the fullscreen of its child frame as its own, so it enters and leaves by itself, and the step of the child's report can reach it after it left.
+test("an ancestor frame that takes the step after its own fullscreen ended starts nothing and goes back to normal", async () => {
+  const { media, sent, store } = fake_tab_media();
+  await media.reported(7, 5, "media", false);
+  await media.reported(7, 0, "media", false);
+  await media.reported(7, 5, "normal", true);
+  await media.reported(7, 0, "normal", false);
+  await media.reported(7, 0, "media", false, true);
+  assert.deepEqual(sent, [[7, "all", "on"], [7, 0, "off"], [7, 0, "off"]]);
+  assert.equal(store.size, 0);
+});
+
+test("join: a frame that missed the step off before it applied the join reply starts nothing and goes back to normal", async () => {
+  const { media, sent, store } = fake_tab_media();
+  await media.enter(7, 0);
+  assert.equal(await media.join(7, 9), true);
+  await media.reported(7, 0, "media", false, true);
+  await media.reported(7, 0, "normal", true);
+  await media.reported(7, 9, "media", false, true);
+  assert.deepEqual(sent, [[7, "all", "on"], [7, 9, "off"], [7, 9, "off"]]);
+  assert.equal(store.size, 0);
+});
+
+test("a real fullscreen in the second frame after a late step still starts the mode in every frame", async () => {
+  const { media, sent } = fake_tab_media();
+  await media.reported(7, 5, "media", false);
+  await media.reported(7, 5, "normal", true);
+  await media.reported(7, 0, "media", false, true);
+  await media.reported(7, 0, "normal", false);
+  await media.reported(7, 0, "media", false);
+  assert.deepEqual(sent.at(-1), [7, "all", "on"]);
+  await media.reported(7, 5, "media", false, true);
+  await media.reported(7, 5, "normal", false);
+  assert.deepEqual(sent.at(-1), [7, 0, "off"]);
+});
+
+test("a late step's report joins a live hold, even one that started after the step, and its end sends that frame the step off", async () => {
+  const { media, sent } = fake_tab_media();
+  await media.reported(7, 5, "media", false);
+  await media.reported(7, 5, "normal", true);
+  await media.reported(7, 5, "media", false);
+  await media.reported(7, 0, "media", false, true);
+  assert.equal(sent.length, 2);
+  await media.reported(7, 5, "normal", true);
+  assert.deepEqual(sent.at(-1), [7, 0, "off"]);
+});
+
+// A pin alone is no live hold: joining it would leave the ;M frame's first report without its step on.
+test("a late step's report with only a pin stored leaves the ;M frame's step on to every frame", async () => {
+  const { media, sent } = fake_tab_media();
+  await media.pin(7, 3);
+  await media.reported(7, 0, "media", false, true);
+  assert.deepEqual(sent, [[7, 0, "off"]]);
+  await media.reported(7, 3, "media", false);
+  assert.deepEqual(sent.at(-1), [7, "all", "on"]);
+  assert.equal(await media.pin_of(7), 3);
+});

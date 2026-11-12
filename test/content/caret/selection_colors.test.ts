@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { read_find_colors } from "../../../src/content/caret/find_session.ts";
-import { find_colors_of } from "../../../src/content/caret/selection_colors.ts";
+import { apply_selection_colors, clear_selection_colors, find_colors_of, keep_selection_colors } from "../../../src/content/caret/selection_colors.ts";
+import type { TextTree } from "../../../src/content/caret/text_model.ts";
 import { THEME_STORAGE_KEY } from "../../../src/shared/theme/apply.ts";
 import { load_theme } from "../../../src/shared/theme/load.ts";
 
@@ -21,4 +22,31 @@ test("the find colors come from the stored theme, and fall back to moonlight whe
   const other = load_theme("oasis_cactus", 3)!;
   stored[THEME_STORAGE_KEY] = other;
   assert.deepEqual(await read_find_colors(), find_colors_of(other));
+});
+
+class FakeSheet {
+  css = "";
+  replaceSync(css: string) {
+    this.css = css;
+  }
+}
+const fake_tree = () => ({ nodeType: 9, defaultView: { CSSStyleSheet: FakeSheet }, adoptedStyleSheets: [] as FakeSheet[] }) as unknown as TextTree & { adoptedStyleSheets: FakeSheet[] };
+
+// R8: the session reads the page again while the theme read is in flight, and paints the new trees before the read settles.
+test("a theme read that settles after a rebuild colors the trees of the last paint", async () => {
+  let settle_read = () => {};
+  const gate = new Promise<void>((resume) => (settle_read = resume));
+  Object.assign(globalThis, { browser: { storage: { local: { get: async (key: string) => (await gate, { [key]: moonlight }) } } } });
+  const old_tree = fake_tree();
+  const new_tree = fake_tree();
+  keep_selection_colors([old_tree]);
+  const reading = apply_selection_colors("visual");
+  keep_selection_colors([new_tree]);
+  settle_read();
+  await reading;
+  assert.equal(new_tree.adoptedStyleSheets.length, 1);
+  assert.match(new_tree.adoptedStyleSheets[0]!.css, /::selection/);
+  assert.equal(old_tree.adoptedStyleSheets.length, 0, "the tree that left the model got the sheet");
+  clear_selection_colors();
+  assert.equal(new_tree.adoptedStyleSheets.length, 0);
 });

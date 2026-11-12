@@ -106,6 +106,17 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
       if (reply.done === true && reply.changed === true && typeof reply.text === "string") return { done: true, changed: true, text: reply.text };
       throw new NativeHostError("bad_reply", "The DesertFox native host answered the editor in a way that is not understood. Update it with :native.update.");
     },
+    // Asks the Firefox that runs the host to open one page of the host's fixed table. A host from before the verb answers `unknown cmd`, and a `dev` host never reports outdated, so that reply says to update.
+    open_firefox_page: async (page: string): Promise<void> => {
+      try {
+        await call({ cmd: "open_firefox_page", page });
+      } catch (error) {
+        if (error instanceof NativeHostError && error.failure === "host_failed" && /unknown cmd/.test(error.message)) {
+          throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
+        }
+        throw error;
+      }
+    },
     // Mirrors the saved edits (TOML text) into autoconfig.toml. The host writes no other file.
     write_autoconfig: async (toml: string): Promise<void> => {
       await call({ cmd: "write_autoconfig", toml });

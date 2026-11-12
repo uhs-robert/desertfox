@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -9,6 +10,7 @@ import unittest
 from unittest import mock
 
 from host_under_test import load_host
+from test_bridge import LIVENESS_S
 from test_host import ConfigDirCase
 
 host = load_host()
@@ -27,6 +29,19 @@ class EditorCase(ConfigDirCase):
             patch.start()
             self.addCleanup(patch.stop)
         self.children = []
+        # The host drops its Popen on purpose (the editor outlives the one-shot host). Keeping the objects here
+        # lets reap wait on them, so their finalizers have no running child to warn about.
+        self.popens = []
+        popens = self.popens
+
+        class RecordingPopen(subprocess.Popen):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                popens.append(self)
+
+        patch = mock.patch.object(host.subprocess, "Popen", RecordingPopen)
+        patch.start()
+        self.addCleanup(patch.stop)
         self.addCleanup(self.reap)
 
     def reap(self):
@@ -39,6 +54,9 @@ class EditorCase(ConfigDirCase):
                 os.waitpid(pid, 0)
             except OSError:
                 pass
+        for popen in self.popens:
+            popen.kill()
+            popen.wait()
 
     def stub(self, body):
         """An editor script (python) that gets the scratch file path as its last argument."""
@@ -236,7 +254,7 @@ class CollectTest(EditorCase):
 
         def failing_open(path, *args, **kwargs):
             if os.path.basename(path).startswith("job-"):
-                deadline = time.monotonic() + 5
+                deadline = time.monotonic() + LIVENESS_S
                 while not os.path.exists(pid_file) and time.monotonic() < deadline:
                     time.sleep(0.02)
                 raise OSError(28, "No space left on device")
@@ -316,7 +334,7 @@ class CollectTest(EditorCase):
         self.configure(self.stub(f"while not os.path.exists({gate!r}): time.sleep(0.02)\nopen(path, 'w').write('later')\n"))
         from test_host import frame, unframe
         from host_under_test import HOST_PATH
-        run = subprocess.run([sys.executable, HOST_PATH], input=frame({"cmd": "editor_start", "text": "t"}), capture_output=True, timeout=10)
+        run = subprocess.run([sys.executable, HOST_PATH], input=frame({"cmd": "editor_start", "text": "t"}), capture_output=True, timeout=LIVENESS_S)
         job = unframe(run.stdout)["job"]
         self.children.append(self.job_record(job)["pid"])
         self.assertEqual(self.collect(job, wait_s=0.2), {"pending": True})

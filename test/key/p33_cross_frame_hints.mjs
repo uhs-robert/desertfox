@@ -12,7 +12,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     const code = `(() => { const host = [...document.documentElement.children].find((child) => child.getAttribute("data-desertfox-layer") === "${HINTS_LAYER}"); return { href: location.href, labels: [...(host?.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map(${read_label}) }; })()`;
     const frames = await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { allFrames: true, matchAboutBlank: true, code: ${JSON.stringify(code)} }); })()`);
     const by_name = { top: [], same: [], blank: [], cross: [], below: [] };
-    const name_of = (href = "") => (href === "about:blank" ? "blank" : href.includes("/frame_links") ? ["below", "same", "cross"].find((name) => href.endsWith(`_${name}`)) : "top");
+    const name_of = (href = "") => (href === "about:blank" ? "blank" : href.includes("/frame_links") ? ["below", "same", "cross"].find((name) => href.endsWith(`_${name}`)) : href.includes("/frame_field") ? "cross" : "top");
     for (const frame of Array.isArray(frames) ? frames : []) by_name[name_of(frame?.href)] = frame?.labels ?? [];
     return by_name;
   };
@@ -33,6 +33,11 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await open_page("frames_hints", page_id, { new_tab: true });
     await run_line("hint --links --all-frames");
     return wait_for_labels("the labels of the top page and the cross-origin frame", 6);
+  };
+  // run_in_console answers {error} when the promise rejects, so a clipboard that is busy reads as empty and the poll goes on.
+  const clipboard_text = async () => {
+    const text = await in_background("navigator.clipboard.readText()");
+    return typeof text === "string" ? text : "";
   };
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;
 
@@ -97,5 +102,46 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await press_keys("-k", "Return");
     await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "fh_text_cross_one", "the cross-origin frame to follow the link text mode picked");
     await wait_for_no_labels("the labels of every frame to go after the pick");
+  });
+
+  await run_case("a rapid copy of text joins the picks of the cross-origin frame and the top page into one clipboard list", async () => {
+    await open_page("frames_hints", "fh_rapid", { new_tab: true });
+    await in_background(`navigator.clipboard.writeText("seed").then(() => true)`);
+    await run_line("hint --links --all-frames --rapid --copy-text");
+    let labels = await wait_for_labels("the labels of every frame", 6);
+    // A pick in the cross-origin frame, then one in the top page: the rapid list lives in the keyboard frame and takes both.
+    await press_keys(labels.cross[0]);
+    labels = await wait_for_labels("the labels again after the cross-origin pick", 6);
+    await press_keys(labels.top[0]);
+    let lines = [];
+    await poll_until("the clipboard to hold two lines", async () => (lines = (await clipboard_text()).split("\n")).length === 2);
+    expect(lines[0] !== lines[1] && lines[0] !== "seed", `the clipboard holds ${JSON.stringify(lines)}, expected two different picks`);
+    await press_keys("-k", "Escape");
+    await wait_for_no_labels("the labels to go after Escape");
+  });
+
+  await run_case("a pick of a field in the cross-origin frame focuses it there, and the keys typed after it reach the field", async () => {
+    await open_page("frames_field", "fh_field", { new_tab: true });
+    await run_line("hint --inputs --all-frames");
+    const labels = await wait_for_labels("the label of the field in the cross-origin frame", 1);
+    const mark = events.length;
+    await press_keys(labels.cross[0]);
+    await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === "fh_field_cross", "the cross-origin frame to take the window focus");
+    await press_keys("h", "i");
+    await wait_event(mark, (event) => event.type === "input" && event.page_id === "fh_field_cross" && event.value === "hi", "the typed text in the cross-origin field");
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("hint --caret across frames starts the caret in the cross-origin frame, and its keys move it there", async () => {
+    await open_page("frames_field", "fh_caret", { new_tab: true });
+    await run_line("hint --caret --all-frames --custom --selector=#cross_text");
+    const labels = await wait_for_labels("the label of the text in the cross-origin frame", 1);
+    const mark = events.length;
+    await press_keys(labels.cross[0]);
+    await wait_event(mark, (event) => event.type === "selection" && event.page_id === "fh_caret_cross", "the caret to start in the cross-origin frame");
+    const moved = events.length;
+    await press_keys("w");
+    await wait_event(moved, (event) => event.type === "selection" && event.page_id === "fh_caret_cross" && event.text === "i", "w to move the caret onto the next word in the cross-origin frame");
+    await press_keys("-k", "Escape");
   });
 }

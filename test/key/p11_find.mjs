@@ -549,6 +549,25 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     expect(!state.text.includes("find_words bb"), `N left the selection at ${JSON.stringify(state.text)}`);
   });
 
+  await run_case("caret n and N move the caret between matches", async () => {
+    const page_id = "find_caret_nN";
+    await open_page("find_words", page_id, { new_tab: true });
+    const mark = events.length;
+    await press_keys("gV");
+    await wait_event(mark, selection_is(page_id, "f"), "the caret on the f of find_words");
+    await press_keys("/");
+    await type_in_line("find_words");
+    await press_enter_and_wait_for_close();
+    await wait_read(on_match("aa"), "Enter to put the caret on aa");
+    await press_keys("n");
+    await wait_read(on_match("bb"), "n to put the caret on bb");
+    await press_keys("N");
+    const state = await wait_read(on_match("aa"), "N to put the caret back on aa");
+    expect(state.text === "f", `the caret is on ${JSON.stringify(state.text)}, expected a single character`);
+    expect(mode_badge(page_id) === "CARET", `the badge is ${mode_badge(page_id)}`);
+    await escape_to_normal(page_id);
+  });
+
   await run_case("visual N with the anchor after the match flips the selection and includes the match's first character, and n wraps with the selection following", async () => {
     const page_id = "find_vis_flip";
     await open_page("find_words", page_id, { new_tab: true });

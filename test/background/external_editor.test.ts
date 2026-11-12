@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_external_editor, make_editor_ext_for } from "../../src/background/external_editor.ts";
+import { create_external_editor, ext_of_request, make_editor_ext_for } from "../../src/background/external_editor.ts";
 import type { EditorCollectReply } from "../../src/background/native_client.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -221,4 +221,12 @@ test("the host's unknown-job refusal gives up at once, with no retry and no fold
   await settle();
   assert.equal(log.collects, 1);
   assert.doesNotMatch(log.toasts[0] ?? "", /\.cache/);
+});
+
+test("an empty ext from the page means not given, so the site's extension applies", async () => {
+  const site = async () => "md";
+  assert.equal(await ext_of_request("", site), "md");
+  assert.equal(await ext_of_request(undefined, site), "md");
+  assert.equal(await ext_of_request("", async () => undefined), undefined);
+  assert.equal(await ext_of_request("txt", site), "txt");
 });

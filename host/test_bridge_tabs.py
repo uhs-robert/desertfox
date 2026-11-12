@@ -7,7 +7,7 @@ import time
 import unittest
 
 from host_under_test import load_host
-from test_bridge import BridgeTestCase, Client
+from test_bridge import LIVENESS_S, BridgeTestCase, Client
 
 JPEG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0 fake image").decode()
 MAIL = {"tab_id": 10, "window_id": 1, "title": "Mail", "url": "https://mail.example/", "active": True, "audible": False, "discarded": False, "last_accessed": 5, "pinned": False, "hidden": False, "fav_icon_url": ""}
@@ -129,7 +129,7 @@ class ActivateAndCloseTest(BridgeTestCase):
         host.close_stdin()
         for client in clients:
             self.assertEqual(client.result(), {"ok": False, "message": "the extension disconnected"})
-        self.assertLess(time.monotonic() - started, 5)
+        self.assertLess(time.monotonic() - started, LIVENESS_S)
         self.assertEqual(host.wait(), 0)
 
     def test_run_with_a_tab_id_forwards_it(self):
@@ -396,8 +396,13 @@ class FaviconTest(BridgeTestCase):
         keys = ["%064x" % number for number in range(5)]
         started = time.monotonic()
         client = self.list_tabs(host, [dict(MAIL, tab_id=number, fav_icon_key=key) for number, key in enumerate(keys)])
+        first = host.read_request()
+        self.assertEqual(first["verb"], "favicon")
         reply = client.result()
-        self.assertLess(time.monotonic() - started, 6)
+        # The count proves the budget stopped the fills; the time bound only catches a hang, so it has room for a loaded machine.
+        self.assertLess(time.monotonic() - started, 13)
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
         self.assertEqual([tab["fav_icon_path"] for tab in reply["tabs"]], [""] * 5)
 
 

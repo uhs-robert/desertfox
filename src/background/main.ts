@@ -19,9 +19,9 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { strip_patterns_for } from "./strip_patterns.ts";
-import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_is_off, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
-import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
+import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
@@ -45,7 +45,7 @@ import { reply_after_hold } from "./hold_on_arrival.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
-import { create_media_quality } from "./media_quality.ts";
+import { create_media_quality, rule_for_report } from "./media_quality.ts";
 import { ask_quality_in_tab, inject_quality_about_blank, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
 import { media_reports, tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
@@ -269,7 +269,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
     void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(() => undefined);
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
-    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus).catch(() => undefined);
+    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true).catch(() => undefined);
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
       // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
@@ -277,7 +277,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
     });
   }
-  if (request?.type === "quality_report") return void quality_reports.receive(sender.tab?.id, sender.frameId, request);
+  if (request?.type === "quality_report") {
+    quality_reports.receive(sender.tab?.id, sender.frameId, request);
+    return rule_for_report(request, { is_disabled: read_disabled, value_for_frame: () => media_quality_reply(browser.storage.local, sender.url) });
+  }
   if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
   if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
@@ -290,8 +293,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (request.type === "hint_frames_start") return hint_frames.start(tab_id, frame_id, request);
     if (request.type === "hint_frames_report") return hint_frames.report(tab_id, frame_id, request.session_id, request.count, request.texts);
     if (request.type === "hint_frames_typed") return hint_frames.typed(tab_id, frame_id, request.session_id, request.typed, request.matches && { matches: request.matches, active: request.active });
-    if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label);
+    if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label, request.keys);
     if (request.type === "hint_frames_end") return hint_frames.end(tab_id, frame_id, request.session_id);
+    if (request.type === "hint_frames_unhover") return hint_frames.unhover(tab_id, request.session_id);
   }
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
@@ -299,7 +303,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;
-    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
+    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
   if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(() => undefined);
@@ -311,7 +315,6 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
   if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender.url);
   if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
-  if (request?.type === "read_media_quality") return read_disabled().then((is_disabled) => (is_disabled ? "off" : media_quality_reply(browser.storage.local, sender.url)));
   if (request?.type === "read_keymap") {
     const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));
     return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
@@ -444,16 +447,21 @@ const editor_ext_for = make_editor_ext_for(browser.storage.local, async () => ef
 void external_editor.resume().catch(() => undefined);
 
 const media_quality = create_media_quality({
-  is_disabled: read_disabled,
+  is_off: async () => (await read_disabled()) || media_quality_is_off(browser.storage.local),
   inject_all: inject_quality_for_rule,
   inject_about_blank: inject_quality_about_blank,
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   settle_ms: 1000,
-  start: (tab_id, message) => browser.tabs.sendMessage(tab_id, message),
+});
+
+browser.tabs.onUpdated.addListener((tab_id, change, tab) => void media_quality.tab_updated(tab_id, change, tab.url), { properties: ["url", "status"] });
+const media_quality_settings_changed = () => void media_quality.settings_changed(() => browser.tabs.query({})).catch(() => undefined);
+media_quality_settings_changed();
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
-  void media_quality.tab_updated(tab_id, change, tab.url);
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
   if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(() => undefined);
   // A new tab's first load reports only `status`, with the address already on the tab.

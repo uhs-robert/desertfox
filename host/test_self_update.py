@@ -22,6 +22,7 @@ import urllib.request
 from unittest import mock
 
 from host_under_test import HOST_DIR, load_host
+from test_bridge import LIVENESS_S
 
 host = load_host()
 
@@ -400,7 +401,7 @@ class RunningBridgeTest(UpdateCase):
         self.assertTrue(self.update()["updated"])
         self.assertEqual(self.read(self.paths["desertfox-bridge"]), self.new_scripts["desertfox-bridge"])
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
+            client.settimeout(LIVENESS_S)
             client.connect(os.path.join(self.runtime, "desertfox", "bridge.sock"))
             client.sendall(b'{"verb": "ping"}\n')
             self.assertEqual(json.loads(client.makefile().readline()), {"ok": True})
@@ -502,7 +503,7 @@ class LocalTlsServer:
 
     def answer(self, connection):
         try:
-            connection.settimeout(10)
+            connection.settimeout(LIVENESS_S)
             with self.context.wrap_socket(connection, server_side=True) as tls:
                 head = b""
                 while b"\r\n\r\n" not in head:
@@ -617,11 +618,11 @@ class SourceTest(unittest.TestCase):
             self.assertEqual(repo_bytes(name).count(b'\nRELEASE_VERSION = "dev"\n'), 1, name)
         self.assertEqual(host.RELEASE_VERSION, "dev")
 
-    def test_the_host_runs_no_shell_and_starts_one_process_only_for_the_editor(self):
+    def test_the_host_runs_no_shell_and_starts_processes_only_for_the_editor_and_the_firefox_remote(self):
         source = repo_bytes("desertfox-host").decode()
         for needle in ("os.system", "os.popen", "os.exec", "shell=", "eval(", "exec(", "subprocess.run", "subprocess.call", "check_output", "subprocess.getoutput", "subprocess.getstatusoutput", "os.spawn", "posix_spawn", "import pty", "pty."):
             self.assertNotIn(needle, source)
-        self.assertEqual(source.count("subprocess.Popen("), 1)
+        self.assertEqual(source.count("subprocess.Popen("), 2)
 
     def test_the_reply_too_large_for_firefox_carries_the_release_version(self):
         data = json.dumps({"cmd": "read_config"}).encode()

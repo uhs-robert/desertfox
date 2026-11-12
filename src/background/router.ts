@@ -10,8 +10,7 @@ import { print_command } from "../shared/registry/print_command.ts";
 import { apply_count } from "./count.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import { create_step_recorder, type RecordStep } from "./record_step.ts";
-import type { JumpEntry } from "../shared/jump_names.ts";
-import { mark_page_url } from "../shared/mark_names.ts";
+import { place_in_tab, type JumpEntry } from "../shared/jump_names.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined; incognito?: boolean };
 
@@ -90,8 +89,7 @@ export async function read_place_in_time(read: Promise<PageOffset | undefined>, 
     timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
   });
   const offset = await Promise.race([read.catch(() => undefined), waited]).finally(() => clearTimeout(timer));
-  const url = mark_page_url(tab_url);
-  return offset && mark_page_url(offset.url) === url ? { url, x: offset.x, y: offset.y } : undefined;
+  return offset && place_in_tab(offset, tab_url);
 }
 
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.

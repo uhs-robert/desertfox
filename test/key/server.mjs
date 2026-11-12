@@ -24,7 +24,6 @@ addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
 // The indicator host is in the page, its text is in a closed shadow root, so the label is an attribute.
 let last_indicator = "";
-let last_css = "";
 // The toast host is found by its layer, because its text sits in a closed shadow root.
 // LAYERS.toast in src/shared/layers.ts. The page script cannot import it.
 const TOAST_Z_INDEX = "2147483645";
@@ -43,8 +42,6 @@ new MutationObserver(() => {
     last_whichkey_shape = panel_shape;
     send("whichkey_shape", { dropped: Number(panel_host?.getAttribute("data-desertfox-whichkey-dropped")), width: Number(panel_host?.getAttribute("data-desertfox-whichkey-width") ?? 0), viewport: window.innerWidth });
   }
-  const css = root.querySelector(":scope > style:not([data-desertfox-backdrop-reset])")?.textContent ?? "";
-  if (css !== last_css) send("selection_style", { css: (last_css = css) });
   const toast_now = Boolean(toast_host());
   if (toast_now !== toast_shown) send(toast_now ? "toast" : "toast_gone");
   toast_shown = toast_now;
@@ -221,6 +218,12 @@ export function start_server() {
       const blank = `<iframe id="blank" style="display:block;width:300px;height:60px"></iframe><script>document.getElementById("blank").contentDocument.body.innerHTML = '<a href="/page?id=${id}_blank">blank</a>';</script>`;
       return response.end(page(`frames_hints ${id}`, `<a href="/page?id=${id}_top">top</a>${frame("same", "", "")}${blank}${frame("cross", `http://localhost:${port}`, "")}${frame("below", `http://localhost:${port}`, "margin-top:3000px")}` + tall_filler));
     }
+    if (url.pathname === "/frame_field") return response.end(page(`frame_field ${id}`, `<input id="cross_field" type="text"> <p id="cross_text">words in a frame</p>`));
+    if (url.pathname === "/frames_field") {
+      // A text field and a paragraph in a frame of another origin, for picks across frames that focus a field or start the caret.
+      const port = request.socket.localPort;
+      return response.end(page(`frames_field ${id}`, `<iframe id="cross" src="http://localhost:${port}/frame_field?id=${id}_cross" style="display:block;width:300px;height:200px"></iframe>` + tall_filler));
+    }
     if (url.pathname === "/hidden_input_frame") {
       // A stand-in for the Google Docs editor: on load the page writes a contenteditable into an offscreen same-origin frame and focuses it.
       // The frame is made the way Docs makes it, with `src="javascript:undefined"`, so its content script starts in the written document.
@@ -368,12 +371,24 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
         for (const video of document.querySelectorAll("video")) report_media(video, (type, data) => send(type, { ...data, video: video.id }));
         document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement?.id ?? "" }));
         addEventListener("keydown", (event) => { if (event.key === "e") document.fullscreenElement ? document.exitFullscreen() : document.getElementById("player").requestFullscreen(); });
+        // A message { busy: ms } blocks this frame's thread, so a message from the background waits until the block ends.
+        addEventListener("message", (event) => {
+          if (!event.data?.busy) return;
+          const end_ms = Date.now() + event.data.busy;
+          while (Date.now() < end_ms);
+          send("busy_done");
+        });
       </script>`;
       return response.end(page(`media_mode ${id}`, videos + tall_filler + script, MEDIA_REPORTER));
     }
     if (url.pathname === "/media_mode_host") {
       // The /media_mode page in a same-origin frame under tall filler, so the mode of each frame shows in whether j scrolls it.
       return response.end(page(`media_mode_host ${id}`, `<iframe id="frame" src="/media_mode?id=${id}_inner" style="display:block;width:340px;height:300px"></iframe>${tall_filler}`));
+    }
+    if (url.pathname === "/media_mode_pair") {
+      // The /media_mode page twice: a same-origin frame, and a frame from another origin (localhost is not 127.0.0.1), which runs in a process of its own, so blocking its thread leaves the first frame running.
+      const frame = (element_id, origin, suffix) => `<iframe id="${element_id}" src="${origin}/media_mode?id=${id}_${suffix}" style="display:block;width:340px;height:300px"></iframe>`;
+      return response.end(page(`media_mode_pair ${id}`, frame("frame", "", "inner") + frame("slow", `http://localhost:${request.socket.localPort}`, "slow") + tall_filler));
     }
     if (url.pathname === "/media_frames") {
       // A large paused video on top, and a frame from another origin (localhost is not 127.0.0.1) whose small muted video plays in a closed shadow root. Beside them a sandboxed frame and an about:blank frame, where a script may be refused.
@@ -400,19 +415,20 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       return response.end(page(`quality_frame ${id}`, `<iframe id="inner" src="/quality?id=${id}_yt_inner" style="display:block;width:320px;height:200px"></iframe>`, MEDIA_REPORTER));
     }
     if (url.pathname === "/quality") {
-      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" for its first two seconds. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
-      const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button><button id="navigate">navigate</button>';
+      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" until a test sets data-ready on the document element. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
+      const buttons = '<button id="replace">replace</button><button id="navigate">navigate</button>';
+      // "lazy": the video and its player appear 4 s after the load, as on a page that builds its player late.
+      const video = id.includes("lazy") ? buttons : '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video>' + buttons;
       const script = `<script>
 const kind = ${JSON.stringify(id)};
-let ready = !kind.includes("slow");
-if (kind.includes("slow")) setTimeout(() => (ready = true), 2000);
+const is_ready = () => !kind.includes("slow") || document.documentElement.dataset.ready === "1";
 function make_movie_player(levels, start) {
   let current = start;
   const player = document.createElement("div");
   player.id = "movie_player";
   player.getAvailableQualityLevels = () => levels.map((entry) => entry[0]);
   player.getAvailableQualityData = () => levels.map(([quality, qualityLabel]) => ({ quality, qualityLabel, isPlayable: true }));
-  player.getPlaybackQuality = () => (ready ? current : "unknown");
+  player.getPlaybackQuality = () => (is_ready() ? current : "unknown");
   player.setPlaybackQualityRange = (low, high) => { current = low; document.documentElement.dataset.level = low; send("quality_set", { low, high }); };
   player.toggleSubtitles = () => send("quality_captions", {});
   player.nextVideo = () => send("quality_skip", { to: "next" });
@@ -422,7 +438,27 @@ function make_movie_player(levels, start) {
   player.start_over = () => { current = start; document.documentElement.dataset.level = start; };
   return player;
 }
-if (kind.includes("yt") || kind.includes("slow") || kind.includes("late")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+function add_movie_player() { document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720")); }
+if (kind.includes("shadow")) {
+  // The video comes inside an open shadow root at 4 s, where no media event reaches the document. The site player comes at 12.5 s, after the look-again time of a frame with no video has run out, so only a poll that the shadow-root hit started at about 4 s still finds it.
+  setTimeout(() => {
+    const host = document.createElement("div");
+    const video = document.createElement("video");
+    video.src = "/tone.wav";
+    video.loop = true;
+    host.attachShadow({ mode: "open" }).append(video);
+    document.body.append(host);
+  }, 4000);
+  setTimeout(add_movie_player, 12500);
+} else if (kind.includes("lazy")) {
+  setTimeout(() => {
+    const video = document.createElement("video");
+    video.src = "/tone.wav";
+    video.loop = true;
+    document.body.append(video);
+    add_movie_player();
+  }, 4000);
+} else if (kind.includes("yt") || kind.includes("slow") || kind.includes("late")) add_movie_player();
 // "blank": the player lives in a frame with no address, as on some hls.js-based sites.
 if (kind.includes("blank")) {
   const blank = document.createElement("iframe");
@@ -573,6 +609,35 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       // The text arrives after the caret session has read the page, so it is newer than the session's model.
       const added = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { if (document.getElementById("added")) return; document.body.insertAdjacentHTML("beforeend", "<p id=added>zebra words</p>"); send("text_added"); }, 500), { once: true });</script>`;
       return response.end(page(`caret_added ${id}`, `<p>foo bar</p>${added}`));
+    }
+    if (url.pathname === "/caret_replaced") {
+      // After the first selection report the page swaps its text for new text and reports text_replaced. With replace_paragraph in the id only the heading, which holds the caret, is swapped.
+      const swap = id.includes("replace_paragraph")
+        ? `document.querySelector("h1").replaceWith(Object.assign(document.createElement("h1"), { textContent: "fresh heading" }));`
+        : `document.querySelectorAll("h1, p").forEach((node) => node.remove()); document.body.insertAdjacentHTML("afterbegin", "<p>quartz words</p><p>zebra stripes</p>");`;
+      const replace = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { ${swap} send("text_replaced"); }, 500), { once: true });</script>`;
+      return response.end(page(`caret_replaced ${id}`, `<p>foo bar</p>${replace}`));
+    }
+    if (url.pathname === "/caret_ticking") {
+      // A clock below the text changes every 50 ms, as a timer or a feed does, so each key meets a page that changed since the last one.
+      const tick = `<script>let ticks = 0; setInterval(() => { document.getElementById("clock").textContent = String(++ticks); }, 50);</script>`;
+      return response.end(page(`caret_ticking ${id}`, `<p>alpha beta gamma</p><p>delta epsilon</p><p>clock <span id="clock">0</span></p>${tick}`));
+    }
+    if (url.pathname === "/caret_emptied") {
+      // Once the test arms it, the page removes all its text at the next selection change and reports emptied.
+      const empty = `<script>document.addEventListener("selectionchange", () => { if (document.body.dataset.empty !== "armed") return; document.body.dataset.empty = "done"; document.querySelectorAll("h1, p").forEach((node) => node.remove()); send("emptied"); });</script>`;
+      return response.end(page(`caret_emptied ${id}`, `<p>foo one</p><p>foo two</p>${empty}`));
+    }
+    if (url.pathname === "/caret_nav_frame") {
+      // A same-origin frame that the test navigates to new text under an open session.
+      const frame = `<iframe id="nav" srcdoc="<p>first inner</p>" style="width:300px;height:60px"></iframe>`;
+      return response.end(page(`caret_nav_frame ${id}`, `<p>top words</p>${frame}<p>bottom words</p>`));
+    }
+    if (url.pathname === "/caret_clip_frame") {
+      // The frame is 100px tall. "zebra hidden" sits 300px down in it, outside the frame's own viewport but inside the top one. The page is scrolled so its title is off screen and the frame is the first text in view.
+      const inner = "<body style='margin:0'><p>shown words</p><div style='height:300px'></div><p id='hidden_text'>zebra hidden</p></body>";
+      const frame = `<div style="height:600px"></div><iframe id="clip" srcdoc="${inner}" style="width:400px;height:100px;border:0;display:block"></iframe><div style="height:2000px"></div>`;
+      return response.end(page(`caret_clip_frame ${id}`, frame, "<script>addEventListener('load', () => scrollTo(0, 500))</script>"));
     }
     if (url.pathname === "/caret_wrap") {
       // Each word fills a screen line: the column is 6 characters wide and the words are 3.

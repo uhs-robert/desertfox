@@ -108,6 +108,8 @@ test("compiler builds the tree with steps, runs_in and label", () => {
   assert.ok(compiled.modes.browser!.children["<A-j>"]);
   assert.equal(compiled.modes.insert, undefined);
   assert.equal(compiled.which_key_delay_ms, 300);
+  assert.equal(compiled.toast_ms, 3000);
+  assert.equal(compiled.toast_error_ms, 6000);
   assert.equal(compiled.mode_indicator, "always");
 });
 

@@ -13,7 +13,7 @@
 # A waiting step: the pick resumes the sequence, so the scroll runs after the pick, and Escape cancels the rest.
 "\\h" = ["hint.run --action=background", "scroll.pixels --dy=300"]
 # find.next with no earlier search fails and stops the sequence.
-",f" = ["find.next", "scroll.pixels --dy=300"]
+",g" = ["find.next", "scroll.pixels --dy=300"]
 # The command line opens and the scroll waits for Enter or Escape.
 ",o" = ["cmdline.open", "scroll.pixels --dy=300"]
 

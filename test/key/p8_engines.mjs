@@ -130,9 +130,8 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
     await press_keys("sk");
     await wait_cmdline((line) => line.open, "the command line to open for sk");
     const mark = events.length;
-    await press_keys("j");
-    // The j in the line value is the proof that the key went to the line and not to the page.
-    await wait_cmdline((line) => line.open && line.value.endsWith("j"), "j to land in the command line");
+    // The line is open before it takes keys, and a j pressed in that gap is lost. type_in_line waits until the line takes keys, and the j in the line value is the proof that the key went to the line and not to the page.
+    await type_in_line("j");
     expect(!find_event(mark, (event) => event.type === "scroll" && event.page_id === "eng_prompt"), "j scrolled the page while the line was open");
     await press_keys("-M", "ctrl", "u", "-m", "ctrl");
     await close_cmdline();

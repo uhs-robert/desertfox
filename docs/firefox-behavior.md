@@ -142,21 +142,21 @@ Result:
 - `inspect()` switches the toolbox from the Console tab to the Inspector. It does not open the split console, and it leaves an open split console open.
 - After `inspect()`, keyboard focus is in the Inspector panel and the page reports `document.hasFocus() === false`. So the native Inspector keys work at once. This holds from the Console tab, the Inspector tab and with the split console open.
 - Back to the page takes two keys: F6 then Escape, or F6 twice. Escape alone opens the split console. Ctrl+Shift+C leaves focus in the Inspector. Ctrl+Shift+I was not tried.
-- `devtools.panels.elements.onSelectionChanged` fires once per `inspect()` call. Only Firefox 159 was run, so the 140 boundary is untested.
+- `devtools.panels.elements.onSelectionChanged` fires once per `inspect()` call. Only Firefox 159 was run, so the 153 minimum is untested.
 - Not measured: whether the Ctrl+Shift+C picker reaches an element under an overlay, in a closed shadow root or in an iframe. The key test cannot assert toolbox state either, so it checks the page property and the toast.
 
 ## browsingData hostnames (reload-clear)
 
 Question: does `browsingData.remove({ hostnames })` clear one host's data, so a per-site clear needs no page script?
 
-Setup: Firefox 160 in the key test session (the harness Firefox, not the 140 minimum). A local HTTP server answered with `cache-control: max-age=3600` and counted requests. Hosts were `127.0.0.1`, `localhost`, `sub.localhost` and `desertfox-probe.test`, which `network.dns.localDomains` resolved to the loopback server. localStorage was set in a tab on the host.
+Setup: Firefox 160 in the key test session (the harness Firefox, not the 153 minimum). A local HTTP server answered with `cache-control: max-age=3600` and counted requests. Hosts were `127.0.0.1`, `localhost`, `sub.localhost` and `desertfox-probe.test`, which `network.dns.localDomains` resolved to the loopback server. localStorage was set in a tab on the host.
 
 Result:
 - `cookies` clear by `hostnames`, with a `cookieStoreId`.
 - The cache is not cleared by `hostnames`: the call returns ok and the next fetch is still served from the cache, for every host above. `remove({}, { cache: true })` clears it.
 - localStorage is not cleared by `hostnames`, with or without `cookieStoreId`: the call returns ok and the value survives, even after a reload.
 - A `cookieStoreId` with `cache` rejects the whole call.
-- Not measured: Firefox 140, a real public host name, `serviceWorkers` and `indexedDB` with `hostnames`.
+- Not measured: Firefox 153, a real public host name, `serviceWorkers` and `indexedDB` with `hostnames`.
 
 Follow-up on `indexedDB` (Firefox 160, same setup):
 - `browsingData.remove({ hostnames, cookieStoreId }, { indexedDB: true })` returns ok but clears nothing: a database with no open connection stayed too. So `hostnames` is ignored for IndexedDB as well, and it cannot stand in for the page's own delete.
@@ -407,4 +407,38 @@ Measured in Firefox 160 in the key test, with a throwaway piece that listened fr
 - `navigation` exists in a content script, and its `navigate` event reaches a listener there with `navigationType`, `destination.url`, `destination.sameDocument` and `hashChange` readable.
 - `navigate` fires for every navigation the page starts: a link click, a form submit, `location.href`, `location.reload()`, `history.pushState` and `replaceState` (`sameDocument` true), a hash change (`hashChange` true) and `history.back()`. It also fires for `tabs.goBack` (`traverse`).
 - It did not fire for these navigations that the browser starts: an address typed in the address bar, F5, `tabs.reload` and `tabs.update` with a `url`. Only `pagehide` shows those. `tabs.goBack` above shows that a browser-started navigation can still fire it, so treat this list as measured cases, not a rule. So the page cannot classify its own leave, and the jump list judges leaves in the background (`src/background/jump_leave.ts`).
+- A `pushState` the page's own script makes (an inline script, an `onclick` attribute) fires `navigate` for the content script's listener too (jump-gaps, Firefox 160). At that moment `scrollY` still reads the offset from before the change: a page that pushes and then scrolls in the same task reports the old offset. `history.back()` and `forward()` within the document fire it as `traverse` with `sameDocument` true, and a hash change set by `location.hash` as `push` with `hashChange` true.
+- `currententrychange` follows `navigate` for every change that commits in the document, with its `navigationType`: `pushState`, a hash change, back and forward, and a link the page intercepts with `event.intercept()`, whose `navigate` reported `sameDocument` false (jump-gaps, Firefox 160). A `pushState` the page cancels with `preventDefault()` fires `navigateerror` and no `currententrychange`, keeps the address and does not throw.
 - On the new page, `navigation.activation` names the way it arrived (`push`, `reload`, `traverse`) and, for a same-origin arrival, the page it came from, for browser-started navigations too.
+
+## Firefox pages from outside (firefox-page-keys)
+
+Question: how can a key open `about:preferences`, `about:config` and the other privileged pages, which `tabs.create` refuses with "Illegal URL"?
+
+Setup: Firefox 160.0 in a nested headless labwc with a temporary profile, on Wayland, on X11 (Xwayland) and with `-no-remote`. A probe add-on called a probe native host. Firefox 153, the manifest minimum, was not run.
+
+Results:
+- `firefox --profile <the running profile> <url>` exits 0 within about a second. The running Firefox opens the URL as a new, selected tab in its most recent browser window, with no new window. Run from a native host as `/proc/<ppid>/exe`, it behaves the same.
+- `-no-remote` does not turn off the remote server in Firefox 160, so the key test session drives the route end to end.
+- The host gets no profile in its argv. Its parent is the Firefox main process, which holds `<profile>/.parentlock` open, and its environment carries `MOZ_CRASHREPORTER_EVENTS_DIRECTORY=<profile>/crashes/events`.
+- These open from the command line: `about:preferences` (and any pane hash such as `#privacy`), `about:addons`, `about:downloads`, `about:config`, `about:profiles`, `about:support`, `about:debugging` (it becomes `#/setup`), `about:debugging#/runtime/this-firefox`, `about:logins`, `about:processes`, `about:memory`, `about:policies`, `about:crashes` and `about:protections`.
+- The add-on shortcuts view and the add-on update check have no URL. `about:addons` picks its first view from `history.state` or the `extensions.ui.lastCategory` pref and never reads the hash: `about:addons#shortcuts` opened the discover view. Both are one gear-menu click from `about:addons`.
+- No route without the host: `tabs.create`, `tabs.update` and `windows.create` refuse the URLs, and an extension page cannot navigate to them.
+- Focus: on X11 the window with the new tab was the active window. On Wayland it was not measured, because headless labwc has no input. Hyprland grants a focus request only with `misc:focus_on_activate`.
+- A private window: not measured. Firefox opens command-line URLs in a normal window.
+
+## Cost of the `media_quality` rule on a page with no video (quality-rule-load)
+
+Counted from the unit tests (`test/quality_load.test.ts`) against a fake background, not measured in Firefox. One hard load: an address change, the load finishing, then the about:blank pass 1 s later. Per frame, the counts are the same for a page of 5 frames and one of 200.
+
+| Message or work, per frame | Before | After |
+| --- | --- | --- |
+| `quality.js` injections | 3 | 3 |
+| `quality_report` messages | 3 | 3 |
+| `quality_rule` messages | 3 | 0 (the message is gone) |
+| `read_media_quality` messages | 11 | 0 (the message is gone) |
+| Keymap reads in the background | 11 | 0 |
+| Driver probes | 100 | 0 |
+| Timers that wait | one poll for 10 s | one 2 s look-again timer for 10 s |
+
+The off check reads the keymap once per trigger, about 3 reads per hard load for the whole tab, not per frame. With the rule `off` everywhere (the global value `off`, no site row sets one) the count is 0 injections. A frame with a video costs one keymap read per report, which is 3 per load. Each report that comes from a frame with a video carries the rule in its answer. The 200-frame page that cost about 2,200 `read_media_quality` messages in 10 s now costs none.

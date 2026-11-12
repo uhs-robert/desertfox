@@ -10,7 +10,7 @@ import time
 import unittest
 
 from host_under_test import load_host
-from test_bridge import MODE, PRIVATE_MODE, BridgeTestCase, Client
+from test_bridge import LIVENESS_S, MODE, PRIVATE_MODE, BridgeTestCase, Client
 
 ACTIVATED = {"verb": "event", "event": "tab_activated", "tab_id": 10, "window_id": 1}
 UPDATED = {"verb": "event", "event": "tab_updated", "tab_id": 10, "window_id": 1, "title": "Mail", "url": "https://mail.example/"}
@@ -50,7 +50,7 @@ class Stream:
             pass
         self.ended.set()
 
-    def wait_lines(self, count, timeout=5):
+    def wait_lines(self, count, timeout=LIVENESS_S):
         deadline = time.monotonic() + timeout
         while len(self.lines) < count and time.monotonic() < deadline:
             time.sleep(0.01)
@@ -153,10 +153,10 @@ class SubscribeTest(BridgeTestCase):
             stream.wait_lines(1)
         extra = self.stream()
         self.assertEqual(extra.wait_lines(1), [{"ok": False, "message": "too many subscribers"}])
-        self.assertTrue(extra.ended.wait(5))
+        self.assertTrue(extra.ended.wait(LIVENESS_S))
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
         streams[0].close()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + LIVENESS_S
         while True:
             late = self.stream()
             if late.wait_lines(1)[0] == {"ok": True}:
@@ -198,7 +198,7 @@ class SubscribeTest(BridgeTestCase):
             reader.wait_lines(1 + sent)
             self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
         self.assertEqual([line["seq"] for line in reader.lines[1:]], list(range(1, sent + 1)))
-        stuck.connection.settimeout(10)
+        stuck.connection.settimeout(LIVENESS_S)
         received = b""
         while True:
             chunk = stuck.connection.recv(1 << 20)
@@ -215,7 +215,7 @@ class SubscribeTest(BridgeTestCase):
         host.close_stdin()
         self.assertEqual(host.wait(), 0)
         for stream in streams:
-            self.assertTrue(stream.ended.wait(5))
+            self.assertTrue(stream.ended.wait(LIVENESS_S))
 
     def test_a_subscriber_line_after_subscribe_is_ignored(self):
         host = self.start()
@@ -238,7 +238,7 @@ class HubTest(unittest.TestCase):
         self.threads = []
         self.addCleanup(lambda: [end.close() for pair in self.pairs for end in pair])
         # Runs first: the writers end before their sockets close under them.
-        self.addCleanup(lambda: [thread.join(5) for thread in self.threads])
+        self.addCleanup(lambda: [thread.join(LIVENESS_S) for thread in self.threads])
         self.addCleanup(self.hub.close)
 
     def pair(self):
@@ -270,7 +270,7 @@ class HubTest(unittest.TestCase):
         _, _, thread = self.streaming()
         for _ in range(40):
             self.hub.publish({"event": "x", "pad": "p" * 100_000})
-        thread.join(5)
+        thread.join(LIVENESS_S)
         self.assertFalse(thread.is_alive())
         self.assertEqual(self.hub.subscribers, set())
 
@@ -278,7 +278,7 @@ class HubTest(unittest.TestCase):
         self.module.WRITE_TIMEOUT_S = 30
         _, _, blocked = self.streaming()
         _, reader, _ = self.streaming()
-        reader.settimeout(5)
+        reader.settimeout(LIVENESS_S)
         reader.recv(100)
         started = time.monotonic()
         for _ in range(40):
@@ -289,15 +289,15 @@ class HubTest(unittest.TestCase):
         while received.count(b"\n") < 40:
             received += reader.recv(1 << 20)
         self.hub.close()
-        blocked.join(5)
+        blocked.join(LIVENESS_S)
         self.assertFalse(blocked.is_alive(), "closing the hub did not wake the blocked writer")
 
     def test_closing_the_hub_ends_an_idle_writer_and_refuses_new_subscribers(self):
         _, client, thread = self.streaming()
         self.hub.close()
-        thread.join(5)
+        thread.join(LIVENESS_S)
         self.assertFalse(thread.is_alive())
-        client.settimeout(5)
+        client.settimeout(LIVENESS_S)
         received = b""
         while chunk := client.recv(100):
             received += chunk
@@ -308,7 +308,7 @@ class HubTest(unittest.TestCase):
     def test_a_client_that_closes_while_idle_is_removed(self):
         subscriber, client, thread = self.streaming()
         client.close()
-        thread.join(5)
+        thread.join(LIVENESS_S)
         self.assertFalse(thread.is_alive())
         self.assertNotIn(subscriber, self.hub.subscribers)
 
@@ -320,11 +320,11 @@ class HubTest(unittest.TestCase):
             while not stop.is_set():
                 _, client, thread = self.streaming()
                 client.close()
-                thread.join(5)
+                thread.join(LIVENESS_S)
 
         churner = threading.Thread(target=churn, daemon=True)
         churner.start()
-        steady.settimeout(5)
+        steady.settimeout(LIVENESS_S)
         received = b""
         for count in range(300):
             self.hub.publish({"event": "tab_activated", "tab_id": count, "window_id": 1})
@@ -332,7 +332,7 @@ class HubTest(unittest.TestCase):
                 while received.count(b"\n") < count + 2:
                     received += steady.recv(1 << 16)
         stop.set()
-        churner.join(5)
+        churner.join(LIVENESS_S)
         while received.count(b"\n") < 301:
             received += steady.recv(1 << 16)
         events = [json.loads(line) for line in received.splitlines()[1:]]

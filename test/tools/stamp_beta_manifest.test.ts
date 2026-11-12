@@ -8,7 +8,7 @@ import { stamp_beta_manifest } from "../../tools/stamp_beta_manifest.ts";
 
 const script = new URL("../../tools/stamp_beta_manifest.ts", import.meta.url).pathname;
 const UPDATE_URL = "https://github.com/uhs-robert/desertfox/releases/download/beta-channel/updates.json";
-const manifest = { name: "DesertFox", version: "0.1.22", browser_specific_settings: { gecko: { id: "desertfox@uhs-robert", strict_min_version: "140.0" } } };
+const manifest = { name: "DesertFox", version: "0.1.22", browser_specific_settings: { gecko: { id: "desertfox@uhs-robert", strict_min_version: "153.0" } } };
 
 test("stamps the version and update_url and keeps the other fields", () => {
   const stamped = stamp_beta_manifest(manifest, "0.1.23.1", UPDATE_URL) as typeof manifest;
