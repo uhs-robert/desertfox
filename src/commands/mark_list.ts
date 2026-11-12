@@ -2,6 +2,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import { show_toast_on_tab, send_to_tab } from "../background/browser_deps.ts";
 import { browser_mark_store } from "../background/mark_store.ts";
+import type { MarkClearScope } from "../background/mark_store.ts";
 import { is_private_context } from "../background/register_store.ts";
 import { MARK_ADD_KEY } from "../shared/mark_names.ts";
 import { listed_marks } from "../shared/mark_text.ts";
@@ -15,7 +16,7 @@ export type MarkListDeps = {
   // Runs `mark.jump` in the top frame of the command's tab, like the arrival of a global jump.
   jump: (ctx: CommandContext, key: string) => Promise<void>;
   remove: (ctx: CommandContext, key: string) => Promise<void>;
-  clear: (ctx: CommandContext, scope: "page" | "all") => Promise<void>;
+  clear: (ctx: CommandContext, scope: MarkClearScope) => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
 };
 
@@ -31,7 +32,7 @@ export function make_mark_list_handlers(deps: MarkListDeps) {
       await deps.remove(ctx, args.mark.trim());
       await deps.toast(ctx, "success", `Mark ${args.mark.trim()} deleted`);
     },
-    clear: async (ctx: CommandContext, args: { scope: "page" | "all" }) => {
+    clear: async (ctx: CommandContext, args: { scope: MarkClearScope }) => {
       await deps.clear(ctx, args.scope);
       await deps.toast(ctx, "success", args.scope === "all" ? "All marks cleared" : "Marks of this page and the global marks cleared");
     },
@@ -83,5 +84,5 @@ define("mark.clear", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.clear(ctx, args as { scope: "page" | "all" }),
+  run: (ctx, args) => handlers.clear(ctx, args as { scope: MarkClearScope }),
 });

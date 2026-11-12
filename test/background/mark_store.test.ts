@@ -366,3 +366,18 @@ test("a clear waits for the sets queued before it", async () => {
   await Promise.all(writes);
   assert.deepEqual((await store.items("https://a.test/p", false)).map((item) => item.key), ["c"]);
 });
+
+test("clear refuses after the last mark was deleted, though an empty page record is left", async () => {
+  const { store } = make();
+  await store.run(set("a", 10), false);
+  await store.remove("a", "https://a.test/p", false);
+  await assert.rejects(store.clear("all", "https://a.test/p", false), /No marks to clear/);
+  await assert.rejects(store.clear("page", "https://a.test/p", false), /No marks to clear/);
+});
+
+test("clear page on a page with no marks still drops the globals", async () => {
+  const { store } = make();
+  await store.run({ type: "mark_set", key: "G", url: "https://a.test/p", x: 1, y: 2 }, false);
+  await store.clear("page", "https://b.test/none", false);
+  assert.deepEqual(await store.items("https://b.test/none", false), []);
+});
