@@ -76,15 +76,19 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
   await run_case("a reloaded page keeps its stored tab mode through its next address change", async () => {
     const mark = events.length;
     // A reload of the same address may send no `url`, so the sequence is recorded to prove which path the case takes: a load start with no `url`, then a `complete` with none.
-    const listening = await in_background(`(() => { window.p15_updates = []; browser.tabs.onUpdated.addListener((tab_id, change) => window.p15_updates.push({ status: change.status ?? null, has_url: change.url !== undefined })); return true; })()`);
+    const listening = await in_background(`(() => { window.p15_on_updated = (tab_id, change) => window.p15_updates.push({ status: change.status ?? null, has_url: change.url !== undefined }); window.p15_updates = []; browser.tabs.onUpdated.addListener(window.p15_on_updated); return true; })()`);
     expect(listening === true, "the update recorder did not start in the background");
+    const recorded_updates = async () => JSON.parse((await in_background(`JSON.stringify(window.p15_updates)`)) ?? "null") ?? [];
     await active_tab(`(tab) => browser.tabs.reload(tab.id)`);
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "p15_load_4", "the reloaded page to start");
-    await poll_until("the reload to complete", async () => (await active_tab(`(tab) => tab.status`)) === "complete");
-    const updates = JSON.parse((await in_background(`JSON.stringify(window.p15_updates)`)) ?? "null") ?? [];
+    await poll_until("the reload to complete", async () => (await recorded_updates()).some((update) => update.status === "complete"));
+    const updates = await recorded_updates();
+    await in_background(`browser.tabs.onUpdated.removeListener(window.p15_on_updated)`);
+    // Measured: a reload sends a load start with no address, then an update with the address (the new page taking over, which forgets the record), then `complete`. The report at the end of the load is what puts the mode back.
     const load_start = updates.findIndex((update) => update.status === "loading" && !update.has_url);
-    const load_end = updates.findIndex((update, index) => index > load_start && update.status === "complete" && !update.has_url);
-    expect(load_start >= 0 && load_end > load_start, `the reload did not send a load start and a complete with no address: ${JSON.stringify(updates)}`);
+    const took_over = updates.findIndex((update, index) => index > load_start && update.status === "loading" && update.has_url);
+    const load_end = updates.findIndex((update, index) => index > took_over && update.status === "complete" && !update.has_url);
+    expect(load_start >= 0 && took_over > load_start && load_end > took_over, `the reload did not send a load start, the new page's address and a complete: ${JSON.stringify(updates)}`);
     await in_active_tab(`history.replaceState(null, "", location.href + "&replaced=1")`);
     await poll_until("the page to change its address", () => active_tab(`(tab) => tab.url.endsWith("replaced=1")`));
     expect((await stored_tab_mode()) === "normal", `the stored tab mode after the address change is ${await stored_tab_mode()}`);
@@ -342,16 +346,18 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await open_page("frames", "p15_frames", { new_tab: false });
     await expect_badge_and_mode("NORMAL");
     await in_active_tab(`document.getElementById("cross").focus()`);
-    // The frame's script starts on this focus and reports its start. That report alone must not make the frame the tab's focused child.
-    await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "p15_frames_cross", "the cross-origin frame to start on focus");
-    await sleep(300);
-    expect((await focused_child())?.mode !== "insert", `the start report of the cross-origin frame claimed insert mode: ${JSON.stringify(await focused_child())}`);
+    // The frame's script starts on this focus. Its start report claims the focus in normal mode, so the insert claim below must replace that claim and not be the first one.
+    let start_claim;
+    await poll_until("the cross-origin frame's start report to claim the focus in normal mode", async () => (start_claim = await focused_child())?.frame_id > 0 && start_claim.mode === "normal", { timeout_ms: 3000, expected_timeout: true }).catch(() =>
+      expect(false, `the start report of the cross-origin frame left the focused child as ${JSON.stringify(start_claim)}`),
+    );
     await expect_badge_and_mode("NORMAL");
     // The top page cannot reach into the other site's frame, so the field is added from the extension.
     const focus_field_in_cross_frame = `if (location.search.includes("p15_frames_cross")) { const field = document.querySelector("input") ?? document.body.insertBefore(document.createElement("input"), document.body.firstChild); field.focus(); }`;
     await active_tab(`(tab) => browser.tabs.executeScript(tab.id, { allFrames: true, code: ${JSON.stringify(focus_field_in_cross_frame)} }).then(() => true)`);
     await expect_badge_and_mode("INSERT");
-    await poll_until("the cross-origin frame to be the focused child", async () => ((await focused_child())?.frame_id ?? 0) > 0);
+    const insert_claim = await focused_child();
+    expect(insert_claim?.mode === "insert" && insert_claim.frame_id === start_claim.frame_id, `the insert claim ${JSON.stringify(insert_claim)} does not name the frame of the start claim ${JSON.stringify(start_claim)}`);
     await in_active_tab(blur_frame);
     await expect_badge_and_mode("NORMAL");
   });
