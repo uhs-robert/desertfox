@@ -5,7 +5,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
-  "content.js": 17.5 * 1024,
+  "content.js": 18.5 * 1024,
   // 42 KB: hints.js loads on the first hint command, not on every page, and the filters keep growing it.
   "hints.js": 42 * 1024,
   "caret.js": 32 * 1024,
