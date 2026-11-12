@@ -17,7 +17,7 @@ export function create_which_key_session(
 
   async function show(prefix: PendingPrefix, is_current: () => boolean, drawn?: () => void): Promise<void> {
     if (!MODES_WITH_PANEL.includes(prefix.mode)) return;
-    const panel = await fetch_panel(prefix.mode, prefix.typed);
+    const panel = await fetch_panel(prefix.mode, prefix.typed_);
     // The next key may have arrived while the background answered.
     if (is_current() && panel.rows.length > 0) (draw(panel), drawn?.());
   }
@@ -27,7 +27,7 @@ export function create_which_key_session(
     // The command lists the first keys of the normal keymap, with no prefix typed.
     show_manual_: (mode: Mode) => {
       const mine = ++manual_epoch;
-      return show({ mode, typed: [] }, () => mine === manual_epoch);
+      return show({ mode, typed_: [] }, () => mine === manual_epoch);
     },
     hide: () => {
       manual_epoch++;

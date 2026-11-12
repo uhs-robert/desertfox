@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_key_flow } from "../../src/content/key_flow.ts";
 import type { PendingPrefix } from "../../src/content/key_flow.ts";
 import { create_mode_state } from "../../src/content/mode_state.ts";
-import { create_which_key_timer } from "../../src/content/which_key_timer.ts";
+import { create_which_key_timer } from "../../src/content/whichkey/timer.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../../src/shared/prefix_tree.ts";
@@ -36,7 +36,7 @@ function make_page(delay_ms: number | undefined, skip?: string[]) {
       // The bundle answers later, like the background does.
       void Promise.resolve().then(() => {
         if (!is_current()) return;
-        shown.push(`${prefix.mode}:${prefix.typed.join("")}`);
+        shown.push(`${prefix.mode}:${prefix.typed_.join("")}`);
         panel_up = true;
         drawn();
       });
@@ -145,7 +145,7 @@ test("a delay of zero or none turns which-key off", async () => {
 test("an answer that arrives after the next key finds its prefix no longer current", () => {
   const asked: (() => boolean)[] = [];
   const follow = create_which_key_timer(() => 1, (prefix, is_current) => void (prefix && asked.push(is_current)));
-  follow({ mode: "normal", typed: ["g"] });
+  follow({ mode: "normal", typed_: ["g"] });
   return sleep(10).then(() => {
     assert.equal(asked[0]?.(), true);
     follow(undefined);
@@ -231,19 +231,19 @@ test("a prefix whose answer is pending or draws nothing leaves the next prefix o
   const asked: string[] = [];
   const follow = create_which_key_timer(() => DELAY_MS, (prefix, _is_current, drawn) => {
     if (!prefix) return;
-    asked.push(prefix.typed.join(""));
+    asked.push(prefix.typed_.join(""));
     drawn_of.push(drawn);
   });
-  follow({ mode: "normal", typed: ["g"] });
+  follow({ mode: "normal", typed_: ["g"] });
   await sleep(DELAY_MS + 40);
   // The answer never drew, so the ask is still pending or came back empty.
-  follow({ mode: "normal", typed: ["g", "x"] });
+  follow({ mode: "normal", typed_: ["g", "x"] });
   await sleep(DELAY_MS / 3);
   assert.deepEqual(asked, ["g"]);
   await sleep(DELAY_MS + 40);
   assert.deepEqual(asked, ["g", "gx"]);
   drawn_of[1]?.();
-  follow({ mode: "normal", typed: ["g", "x", "x"] });
+  follow({ mode: "normal", typed_: ["g", "x", "x"] });
   await sleep(DELAY_MS / 3);
   assert.deepEqual(asked, ["g", "gx", "gxx"]);
 });

@@ -6,11 +6,13 @@ import type { ListKeys, ReadRepeatPreview, WhichKeyPanel } from "../../shared/me
 import { MEDIA_PANEL_HANDLER, media_panel_admitted } from "./media_panel.ts";
 import { hide_panel, show_panel } from "./panel.ts";
 import { create_which_key_session } from "./session.ts";
+import { create_which_key_timer } from "./timer.ts";
 
 type WhichKeyWindow = { desertfox_host: BundleHostApi; desertfox_whichkey_ready?: true };
 const page = window as unknown as WhichKeyWindow;
 
-type ShowArgs = { prefix?: PendingPrefix; is_current_: () => boolean; drawn_: () => void };
+// What content.js sends on each prefix change: the setting values ride along because the timer here has no keymap.
+type PrefixArgs = { prefix?: PendingPrefix; at_once?: boolean; delay_ms?: number; skip?: readonly string[] };
 
 const session = create_which_key_session(
   async (mode, typed) => {
@@ -23,13 +25,21 @@ const session = create_which_key_session(
 );
 const ignore_failure = () => undefined;
 
+let delay_ms: number | undefined;
+let skip: readonly string[] | undefined;
+const follow_prefix = create_which_key_timer(
+  () => delay_ms,
+  (prefix, is_current, drawn) => (prefix ? void session.show_prefix_(prefix, is_current, drawn).catch(ignore_failure) : session.hide()),
+  () => skip,
+);
+
 // A second run would register a second copy of the handler.
 if (!page.desertfox_whichkey_ready) {
   page.desertfox_whichkey_ready = true;
   page.desertfox_host.register_handler_("whichkey", (args) => {
-    const { prefix, is_current_, drawn_ } = args as ShowArgs;
-    if (!prefix) return session.hide();
-    void session.show_prefix_(prefix, is_current_, drawn_).catch(ignore_failure);
+    const call = args as PrefixArgs;
+    ({ delay_ms, skip } = call);
+    follow_prefix(call.prefix, call.at_once);
   });
   page.desertfox_host.register_handler_("help.whichkey", () => void session.show_manual_(page.desertfox_host.get_mode()).catch(ignore_failure));
   // Not a command: only the background asks for it, so there is no argument to check.

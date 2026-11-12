@@ -1,6 +1,6 @@
 // Starts the which-key panel after a pause in a half-typed sequence. The next key, a reset or a mode change cancels it.
 
-import type { PendingPrefix } from "./key_flow.ts";
+import type { PendingPrefix } from "../key_flow.ts";
 
 // A prefix shows the panel for it, no prefix hides the panel. `is_current_` turns false once a later key came, because the bundle may answer after that.
 // `drawn` tells the timer a nonempty panel is up, so the next prefix key may redraw it without the delay.
@@ -21,7 +21,7 @@ export function create_which_key_timer(get_delay_ms: () => number | undefined, a
     const drawn = () => void (shown = is_current());
     ask(undefined, is_current, drawn);
     const delay_ms = get_delay_ms();
-    if (prefix && delay_ms && (instant || !get_skip?.()?.includes(prefix.typed.join(""))))
+    if (prefix && delay_ms && (instant || !get_skip?.()?.includes(prefix.typed_.join(""))))
       timer = setTimeout(() => ask(prefix, is_current, drawn), instant ? 0 : delay_ms);
   };
 }

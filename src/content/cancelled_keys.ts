@@ -3,7 +3,7 @@
 // A page that listens only on its own window is left with no key it saw go down, because it gets a keydown only after this frame's listener does. A same-origin page that also listens on a child frame's window is not safe: it sees the keydown in the child and loses the keyup that lands in its own frame.
 
 // One cancelled keydown that may reach the page later, on replay.
-export type HeldPress = { keyup_seen: boolean };
+export type HeldPress = { keyup_seen_: boolean };
 
 export function create_cancelled_keys() {
   const codes = new Set<string>();
@@ -28,14 +28,14 @@ export function create_cancelled_keys() {
     // `keys_off` is ignore mode or DesertFox switched off: the page then gets the keyup of a key it never saw go down here, because no key of ours began that press. A cancelled key still swallows its keyup.
     take_keyup_: (code: string, keys_off?: boolean) => {
       const press = presses.get(code);
-      if (press) press.keyup_seen = true;
+      if (press) press.keyup_seen_ = true;
       presses.delete(code);
       const was_cancelled = codes.delete(code);
       return (!seen_down.delete(code) && !keys_off) || was_cancelled;
     },
     // The press goes back to the page. Returns whether its keyup was already swallowed, so the caller sends one. Otherwise the key is still down, and its real keyup must reach the page.
     release_for_replay_: (code: string, press: HeldPress): boolean => {
-      if (press.keyup_seen) return true;
+      if (press.keyup_seen_) return true;
       if (presses.get(code) === press) {
         presses.delete(code);
         codes.delete(code);

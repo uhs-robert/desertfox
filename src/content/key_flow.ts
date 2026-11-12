@@ -19,10 +19,10 @@ export const DEFAULT_CHORDS = /^<(?:C-[abdfiouvx[]|A-[,jkmp]|AC-(?:Escape|`))>$/
 export type OnReplayPass = () => void;
 
 // A key waiting for replay. Keys handed back by the command line have no way to reach the page again.
-type HeldKey = { token: string; on_replay_pass_?: OnReplayPass | undefined; repeat?: boolean | undefined };
+type HeldKey = { token_: string; on_replay_pass_?: OnReplayPass | undefined; repeat?: boolean | undefined };
 
 // The keys typed so far in a half-typed sequence. Which-key reads it.
-export type PendingPrefix = { mode: Mode; typed: string[] };
+export type PendingPrefix = { mode: Mode; typed_: string[] };
 
 export type Matcher = {
   feed: (mode: string, token: string) => MatchResult;
@@ -111,7 +111,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return true;
   };
 
-  const held_tokens = () => held_keys.map((held) => held.token);
+  const held_tokens = () => held_keys.map((held) => held.token_);
 
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
@@ -119,7 +119,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     !!deps.sink_of_(mode) ||
     token === "<Backspace>" ||
     (mode === "insert" && token === "<Escape>") ||
-    held_keys.some((held) => held.token === "<Backspace>" || held.token === "<Escape>") ||
+    held_keys.some((held) => held.token_ === "<Backspace>" || held.token_ === "<Escape>") ||
     active.binds_after_(mode, held_tokens(), token);
 
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean): KeyDecision => {
@@ -129,12 +129,12 @@ export function create_key_flow(deps: KeyFlowDeps) {
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
     if (!matcher && is_chord(token) && !DEFAULT_CHORDS.test(token)) return "pass";
     if (!matcher || browser_chord_in(mode, token) || waits_for_replay(matcher, mode, token)) {
-      held_keys.push({ token, on_replay_pass_, repeat });
+      held_keys.push({ token_: token, on_replay_pass_, repeat });
       return "cancel";
     }
-    const last_held = held_keys.at(-1)?.token;
+    const last_held = held_keys.at(-1)?.token_;
     if (last_held === undefined) reset_sequence_();
-    else if (last_held !== SEQUENCE_BREAK) held_keys.push({ token: SEQUENCE_BREAK });
+    else if (last_held !== SEQUENCE_BREAK) held_keys.push({ token_: SEQUENCE_BREAK });
     return !matcher.passes_(mode, token) && cancels_unbound_key(mode, token, false) ? "cancel" : "pass";
   };
 
@@ -154,15 +154,15 @@ export function create_key_flow(deps: KeyFlowDeps) {
       reset_sequence_();
       for (const key of kept) step(active, key, false);
       const shown = listed(typed);
-      deps.on_prefix_(shown.length > 0 ? { mode, typed: shown } : undefined, true);
+      deps.on_prefix_(shown.length > 0 ? { mode, typed_: shown } : undefined, true);
       return "cancel";
     }
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
-    if (result.kind === "pending") ({ typed, keys, register_keys: register } = result);
+    if (result.kind === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);
-    deps.on_prefix_(result.kind === "pending" && listing.length > 0 ? { mode, typed: listing } : undefined);
+    deps.on_prefix_(result.kind === "pending" && listing.length > 0 ? { mode, typed_: listing } : undefined);
     if (result.kind === "match") {
       deps.run_leaf_(result.leaf, result.count, repeat);
       return "cancel";
@@ -185,7 +185,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
   // A replayed key can start another load, and the keys behind it wait for that load too.
   const replay = () => {
     while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
-      const { token, on_replay_pass_, repeat } = held_keys.shift()!;
+      const { token_: token, on_replay_pass_, repeat } = held_keys.shift()!;
       if (token === SEQUENCE_BREAK) reset_sequence_();
       else if (decide(matcher, token, repeat === true) === "pass") on_replay_pass_?.();
     }
@@ -211,7 +211,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     },
     release: replay,
     // Keys typed before the ones held, which reached another document: the command line frame hands back the keys it got after the line ended.
-    hold_first_: (tokens: readonly string[]) => void held_keys.unshift(...tokens.map((token) => ({ token }))),
+    hold_first_: (tokens: readonly string[]) => void held_keys.unshift(...tokens.map((token) => ({ token_: token }))),
     // A macro replay failed or was stopped, so the keys typed during it never run, as vim flushes typeahead.
     drop_held_: () => void (held_keys.length = 0),
   };

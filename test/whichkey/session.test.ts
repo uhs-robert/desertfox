@@ -37,7 +37,7 @@ test("a manual show with no key in between is drawn", async () => {
 test("a prefix show stays tied to the timer's own is_current_ check", async () => {
   const { session, drawn, answer } = make_session();
   let current = true;
-  const shown = session.show_prefix_({ mode: "normal", typed: ["g"] }, () => current);
+  const shown = session.show_prefix_({ mode: "normal", typed_: ["g"] }, () => current);
   current = false;
   answer(0);
   await shown;
