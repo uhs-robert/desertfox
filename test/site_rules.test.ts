@@ -261,3 +261,13 @@ test("a bind under another bind of the same site warns, and only the shorter bin
   assert.equal(step_id(compiled, "https://a.test/", ["g"]), "b.g:{}");
   assert.equal(step_id(compiled, "https://a.test/", ["g", "x"]), undefined);
 });
+
+test("a bind under a shorter bind of a row with another pattern warns unless the hosts differ", () => {
+  const rows = (site: string) => [{ site: "https://*.a.test/*", bind: { g: { id: "b.g" } } }, { site, bind: { gx: { id: "b.gx" } } }];
+  const { compiled, warnings } = compile(rows("https://www.a.test/docs/*"));
+  assert.deepEqual(warnings, ['site_rules: skipped bind "gx" of "https://www.a.test/docs/*": "g" is already a complete bind of "https://*.a.test/*", which can match the same pages']);
+  assert.equal(step_id(compiled, "https://www.a.test/docs/", ["g", "x"]), undefined);
+  assert.deepEqual(compile(rows("https://b.test/*")).warnings, []);
+  assert.deepEqual(compile(rows("https://a.test.evil/*")).warnings, []);
+  assert.equal(compile([{ site: "<all_urls>", bind: { g: { id: "b.g" } } }, { site: "https://b.test/*", bind: { gx: { id: "b.gx" } } }]).warnings.length, 1);
+});
