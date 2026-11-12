@@ -1,4 +1,4 @@
-import type { PageHostApi } from "../bundle_host.ts";
+import { is_editable_in_frame } from "../text/host_editable.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { type_at_caret } from "../text/field_writer.ts";
 
@@ -6,7 +6,7 @@ import { type_at_caret } from "../text/field_writer.ts";
 // Queued hint keys are single characters, so each one is its own text.
 // It takes nothing unless every key is a plain printable character, which keeps the whole batch in one place.
 export function insert_into_focused_field(keys: string[]): string[] {
-  if (!(window as unknown as { desertfox_host: PageHostApi }).desertfox_host.is_editable_(deepest_focused_element())) return keys;
+  if (!is_editable_in_frame(deepest_focused_element())) return keys;
   if (!keys.every((key) => /^[^\p{Cc}]$/u.test(key))) return keys;
   for (const [index, key] of keys.entries()) {
     if (!type_at_caret(key)) return keys.slice(index);

@@ -7,7 +7,7 @@ export const areas = ["keys", "config"];
 
 const CELL_EDITOR_ROW = '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=p15_*"\neditable_remove = ["#waffle-rich-text-editor"]\neditable_remove_unsized = true\n';
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
+export async function run_cases({ in_background, config_copy, load_config_dir, setup, run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
   const page_id = "p15_cell_editor";
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const editor_text = () => in_active_tab(`document.getElementById("waffle-rich-text-editor").textContent`);
@@ -41,6 +41,14 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect(await editor_holds_focus(), "the cell editor does not hold the focus after load");
     await expect_badge("NORMAL");
     await expect_j_scrolls("while the editor is parked");
+  });
+
+  await run_case("an editor the page focused before the keymap reply arrived leaves insert mode once the rule is known", async () => {
+    // The page builds and focuses the editor in its head, before any reply can come, so the frame enters insert mode on empty rules.
+    await open_page("cell_editor_early", page_id + "_early", { new_tab: true });
+    expect(await editor_holds_focus(), "the cell editor does not hold the focus after load");
+    await expect_badge("NORMAL");
+    await open_page("cell_editor", page_id, { new_tab: true });
   });
 
   await run_case("the key that starts an edit switches to insert mode on its keyup", async () => {

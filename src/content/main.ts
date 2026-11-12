@@ -256,6 +256,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
+  const was_in_field = is_editable_element(deepest_focused_element());
   set_editable_rules(reply?.site_values);
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
@@ -274,6 +275,8 @@ function install_matcher(reply: PageKeymap | undefined): void {
     if (step === "leave") bundles.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
   }
+  // A page that focused its field before the rules arrived, or a rule edit, changes what the focus is. Only a change resyncs, so a manual mode stays.
+  if (is_editable_element(deepest_focused_element()) !== was_in_field) sync_mode_to_focus();
   if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
   install_tree();

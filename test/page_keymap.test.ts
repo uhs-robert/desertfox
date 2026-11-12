@@ -410,6 +410,13 @@ test("default_site_rows_off turns off both sheets rows", async () => {
   assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 2);
 });
 
+test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
+  const off = with_defaults({ default_site_rows_off: ["sheets"] });
+  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.equal((await ask(off, url))?.site_values, undefined, url);
+  const user = with_defaults({ site_rules: [{ site: "https://docs.google.com/spreadsheets/*", editable_remove: [".other"] }] });
+  assert.deepEqual((await ask(user, SHEETS))!.site_values, { escape_to_page: true, editable_remove: [".other"], editable_remove_unsized: true });
+});
+
 test("a user bind for one key beats the shipped key and the other shipped keys stay", async () => {
   const user = { site: "https://docs.google.com/spreadsheets/*", bind: { j: { id: "page.send_key", args: { key: "PageDown", key_code: 34 } } } };
   const compiled = with_defaults({ site_rules: [user] });
