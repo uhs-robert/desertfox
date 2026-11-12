@@ -87,6 +87,15 @@ test("a place within a few pixels of the last one is the same place", async () =
   assert.deepEqual(list.entries, [at(A, 502), at(B, 502), at(B, 700)]);
 });
 
+test("a place at the same height but far to the side is another place", async () => {
+  const { store, values } = make();
+  await store.push(1, false, { url: A, x: 1000, y: 0 });
+  await store.push(1, false, { url: A, x: 1002, y: 0 });
+  assert.deepEqual(await store.step(1, false, -1, { url: A, x: 0, y: 0 }), { url: A, x: 1002, y: 0 }, "<C-o> from x 0 returns to x 1000");
+  const list = (values.get("desertfox_jumps") as { windows: Record<string, { entries: unknown[] }> }).windows["1"]!;
+  assert.equal(list.entries.length, 2);
+});
+
 test("a step from the present on the last place does not add it twice", async () => {
   const { store } = make();
   await store.push(1, false, at(A, 500));
