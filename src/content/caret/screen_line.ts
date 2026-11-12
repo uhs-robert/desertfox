@@ -1,7 +1,7 @@
 // Motions along the screen line, answered by Firefox's Selection.modify because only layout knows where text wraps.
 // The text model lets us ask from any character and read the answer back as a character.
 
-import type { Motion } from "./motion.ts";
+import type { Direction, ScreenMotion } from "./motion.ts";
 import { scroll_delta } from "./scroll_delta.ts";
 import type { TextModel, TreeRun } from "./text_model.ts";
 
@@ -73,7 +73,7 @@ export function scroll_to_index(model: TextModel, index: number, options: { bott
 }
 
 // `goal_x_` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
-export function screen_line_target(model: TextModel, from: number, motion: Motion, goal_x?: number): { index: number; goal_x_: number | undefined } {
+export function screen_line_target(model: TextModel, from: number, motion: ScreenMotion, goal_x?: number): { index: number; goal_x_: number | undefined } {
   const modified = modify_target(model, from, motion);
   const target = motion.unit === "line" ? line_target(model, from, modified, motion.direction) : modified;
   if (motion.unit !== "line" || target === from) return { index: target, goal_x_: undefined };
@@ -87,7 +87,7 @@ const same_row = (model: TextModel, one: number, other: number): boolean => {
 };
 
 // The start of the model's line after or before the one holding `from`, or `from` itself at the end of the text.
-function adjacent_line_start(text: string, from: number, direction: Motion["direction"]): number {
+function adjacent_line_start(text: string, from: number, direction: Direction): number {
   if (direction === "forward") {
     const line_end = text.indexOf("\n", from);
     return line_end >= 0 && line_end + 1 < text.length ? line_end + 1 : from;
@@ -108,7 +108,7 @@ export function crosses_frame_or_block_host(runs: TreeRun[]): boolean {
 }
 
 // Where Selection.modify stalls or leaves its document, the next or previous line of the model stands in.
-export function line_target(model: TextModel, from: number, modified: number, direction: Motion["direction"]): number {
+export function line_target(model: TextModel, from: number, modified: number, direction: Direction): number {
   const crossed = crosses_frame_or_block_host(model.tree_runs_(Math.min(from, modified), Math.max(from, modified) + 1));
   const stalled = modified === from || same_row(model, from, modified);
   return crossed || stalled ? adjacent_line_start(model.text, from, direction) : modified;
@@ -131,7 +131,7 @@ function nearest_on_line(model: TextModel, target: number, x: number): number {
   return best;
 }
 
-function modify_target(model: TextModel, from: number, motion: Motion): number {
+function modify_target(model: TextModel, from: number, motion: ScreenMotion): number {
   const start = model.point_at_(from);
   const selection = start.node.ownerDocument!.getSelection()!;
   selection.collapse(start.node, start.offset);

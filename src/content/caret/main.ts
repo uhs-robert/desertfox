@@ -3,8 +3,8 @@
 
 import type { Outcome, RunResponse } from "../../shared/messages.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
-import { find_char_hit, find_char_matches, move_once, SCREEN_LINE_UNITS } from "./motion.ts";
-import type { CharFind, Motion } from "./motion.ts";
+import { find_char_hit, find_char_matches, is_screen_unit, move_once } from "./motion.ts";
+import type { CharFind, Direction, MotionUnit, ScreenMotion } from "./motion.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { yank_text } from "./copy_text.ts";
 import { create_find_mode, is_escape } from "./find_mode.ts";
@@ -91,8 +91,8 @@ function ends_of(selection: Selection): unknown[] {
   return [first.startContainer, first.startOffset, last.endContainer, last.endOffset, selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset];
 }
 
-const SCREEN_LINE_START: Motion = { unit: "line_start", direction: "back", big: false };
-const SCREEN_LINE_END: Motion = { unit: "line_end", direction: "forward", big: false };
+const SCREEN_LINE_START: ScreenMotion = { unit: "line_start", direction: "back" };
+const SCREEN_LINE_END: ScreenMotion = { unit: "line_end", direction: "forward" };
 
 // Measured with `Selection.modify`, which moves the page selection, so only paint calls it.
 function span_of(open: Session): Span {
@@ -312,14 +312,15 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
     find_mode.refresh();
     return;
   }
-  const motion: Motion = { unit: args.unit as Motion["unit"], direction: (args.direction as Motion["direction"] | undefined) ?? "forward", big: args.big === true };
+  const unit = args.unit as MotionUnit;
+  const direction = (args.direction as Direction | undefined) ?? "forward";
   let caret: number;
-  if (SCREEN_LINE_UNITS.includes(motion.unit)) {
-    const target = screen_line_target(open.model_, open.cursor.caret, motion, open.goal_x_);
+  if (is_screen_unit(unit)) {
+    const target = screen_line_target(open.model_, open.cursor.caret, { unit, direction }, open.goal_x_);
     caret = target.index;
     open.goal_x_ = target.goal_x_;
   } else {
-    caret = move_once(open.model_.text, open.cursor.caret, motion);
+    caret = move_once(open.model_.text, open.cursor.caret, { unit, direction, big: args.big === true });
     open.goal_x_ = undefined;
   }
   open.cursor = with_caret(open.cursor, caret, is_visual(open.mode));

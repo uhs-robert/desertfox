@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { find_char, find_char_hit, find_char_matches, move_once } from "../src/content/caret/motion.ts";
-import type { Motion, MotionUnit } from "../src/content/caret/motion.ts";
+import type { TextMotion } from "../src/content/caret/motion.ts";
 import { selected_span, selected_text, swap_ends, with_caret } from "../src/content/caret/selection_state.ts";
 
 // Indexes: "foo bar.baz" is 0-10, its "\n" is 11, the empty line is 12, "  qux quux" is 13-22, "\n" is 23, "last" is 24-27.
 const TEXT = "foo bar.baz\n\n  qux quux\nlast";
 
-const motion = (unit: MotionUnit, flags: Partial<Motion> = {}): Motion => ({ unit, direction: "forward", big: false, ...flags });
+const motion = (unit: TextMotion["unit"], flags: Partial<TextMotion> = {}): TextMotion => ({ unit, direction: "forward", big: false, ...flags });
 
-function after(from: number, steps: Motion[]): number {
+function after(from: number, steps: TextMotion[]): number {
   return steps.reduce((at, step) => move_once(TEXT, at, step), from);
 }
 
