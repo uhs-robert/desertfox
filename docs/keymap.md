@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 435 (normal 228, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 436 (normal 229, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -103,6 +103,7 @@ bound: 435 (normal 228, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `tS` | bound | `session.open` (prompts) | Open tab session |  |
 | `td` | bound | `tab.duplicate` | Duplicate tab |  |
 | `tm` | bound | `tab.move` (prompts) | Move tab |  |
+| `tM` | bound | `cmdline.open --text='tab.move --offset='` | Move tab by an offset |  |
 | `tn` | bound | `tab.next` | Next tab |  |
 | `tp` | bound | `tab.prev` | Previous tab |  |
 | `ta` | bound | `tab.goto_audible` | Go to audible tab |  |

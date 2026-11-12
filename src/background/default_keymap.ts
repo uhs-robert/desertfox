@@ -182,6 +182,7 @@ const BASE_SECTIONS: KeymapConfig = {
     tS: { id: "session.open", prompt: { param: "name" } },
     td: { id: "tab.duplicate" },
     tm: { id: "tab.move", prompt: { param: "tab" } },
+    tM: { id: "cmdline.open", args: { text: "tab.move --offset=" }, label: "Move tab by an offset" },
     tn: { id: "tab.next" },
     tp: { id: "tab.prev" },
     ta: { id: "tab.goto_audible" },

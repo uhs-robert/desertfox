@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
+import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { panel_after_prefix } from "../src/background/list_keys.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
@@ -267,4 +268,12 @@ test("the router refuses a key the pattern rejects, repeats a content command by
   const one = { id: "test.paint", args: { slot: "x" } };
   assert.deepEqual(log.slice(1), [`send 7 ${JSON.stringify({ type: "run_in_content", invocations: [one, one, one] })}`]);
   assert.equal((await run(["p", "X"])).ok, false);
+});
+
+test("the default keymap binds tM to the command line prefilled with tab.move --offset=", () => {
+  assert.deepEqual(DEFAULT_KEYMAP.normal!.tM, {
+    id: "cmdline.open",
+    args: { text: "tab.move --offset=" },
+    label: "Move tab by an offset",
+  });
 });
