@@ -103,6 +103,42 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
   assert.equal(bundles.is_loading_(), false);
 });
 
+test("a bound chord typed during a bundle load waits and runs after it, and an unbound chord still goes to the browser", async () => {
+  const events: string[] = [];
+  const asked: string[] = [];
+  const shown: string[] = [];
+  const state = create_mode_state();
+  const jump = { kind: "leaf" as const, steps: [{ invocation: { id: "page.jump", args: { direction: "older" }, bundle: "page" as const }, runs_in: "content" as const, count_rule: "ignore" as const, bundle: "page" as const }] };
+  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, mode_indicator: "always", which_key_delay_ms: 0, modes: { normal: { kind: "branch", children: { "<C-o>": jump } } } };
+  const flow = create_key_flow({
+    get_mode_: state.get_mode_,
+    take_pass_next_: state.take_pass_next_,
+    in_editable_field_: () => false,
+    escape_to_page_: () => false,
+    is_loading_: bundles.is_loading_,
+    loading_sink_bundles_: bundles.loading_sink_bundles_,
+    sink_of_: bundles.sink_of_,
+    on_prefix_: () => {},
+    leave_insert_: () => state.escape(),
+    run_leaf_: (matched) => void run_content_steps(matched.steps, undefined).then((outcome) => outcome.ok || shown.push(outcome.message)),
+  });
+  flow.set_matcher_(create_matcher(keymap));
+  let finish_load: () => void = () => {};
+  connect(asked, shown, flow.release, () => new Promise<boolean>((resolve) => (finish_load = () => resolve(true))));
+
+  // The first press runs and starts the load. An unbound chord goes on to the browser, a bound one waits.
+  assert.equal(flow.handle_token_("<C-o>"), "cancel");
+  assert.equal(flow.handle_token_("<C-q>"), "pass");
+  assert.equal(flow.handle_token_("<C-o>"), "cancel");
+  assert.equal(events.length, 0);
+  bundles.api.register_handler_("page.jump", () => void events.push("page.jump"));
+  finish_load();
+  for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(asked, ["page"]);
+  assert.deepEqual(events, ["page.jump", "page.jump"]);
+  assert.deepEqual(shown, []);
+});
+
 test("every content command without a bundle has a handler in the content script", () => {
   const missing = registry.list().filter((command) => command.runs_in === "content" && !command.bundle && !content_handlers[command.id]).map((command) => command.id);
   assert.deepEqual(missing, []);
