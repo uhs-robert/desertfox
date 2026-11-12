@@ -110,19 +110,31 @@ test("the driver reads the page again for each call, so a player the site replac
 });
 
 function hls_page(levels: unknown, current = 1) {
-  const hls = { levels, currentLevel: current, nextLevel: current };
+  const hls = {
+    levels,
+    loadLevel: current,
+    nextLevel: current,
+    currentLevel: -1,
+    current_writes: 0,
+  };
+  // Like the site's player: a write to currentLevel flushes the buffer, so it is counted.
+  Object.defineProperty(hls, "currentLevel", { get: () => -1, set: () => void hls.current_writes++ });
+  Object.defineProperty(hls, "nextLevel", {
+    get: () => hls.loadLevel,
+    set: (value: number) => void (hls.loadLevel = value),
+  });
   return { page: { html5player: { hlsobj: hls } }, hls };
 }
 const hls_levels = [{ height: 240 }, { height: 480 }, { height: 720 }];
 
-test("hls lists the levels by height, sets current and next level, and auto is -1", () => {
+test("hls lists the levels by height, switches with nextLevel only, and auto is -1", () => {
   const { page, hls } = hls_page(hls_levels);
   const driver = hls_driver(page)!;
   assert.deepEqual(driver.levels().map(({ label, active }) => [label, active]), [["240p", false], ["480p", true], ["720p", false]]);
   assert.equal(apply_quality(driver, request("set", "max")).chosen, "720p");
-  assert.deepEqual([hls.currentLevel, hls.nextLevel], [2, 2]);
+  assert.deepEqual([hls.loadLevel, hls.current_writes], [2, 0]);
   apply_quality(driver, request("set", "auto"));
-  assert.deepEqual([hls.currentLevel, hls.nextLevel], [-1, -1]);
+  assert.deepEqual([hls.loadLevel, hls.current_writes], [-1, 0]);
 });
 
 test("hls offers no skip, and no handle or an empty levels list gives no driver or no levels", () => {
@@ -136,7 +148,7 @@ test("hls offers no skip, and no handle or an empty levels list gives no driver 
 test("a list request reads the levels and changes nothing", () => {
   const { page, hls } = hls_page(hls_levels);
   assert.deepEqual(apply_quality(hls_driver(page)!, request("list")).levels.map(({ label }) => label), ["240p", "480p", "720p"]);
-  assert.deepEqual([hls.currentLevel, hls.nextLevel], [1, 1]);
+  assert.deepEqual([hls.loadLevel, hls.current_writes], [1, 0]);
 });
 
 test("a hostile page cannot hang the bundle or pass a prototype key as a level", () => {

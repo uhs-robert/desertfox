@@ -412,8 +412,10 @@ document.getElementById("replace").addEventListener("click", () => {
 });
 if (kind.includes("hls")) {
   const hls = { levels: [{ height: 240 }, { height: 480 }, { height: 720 }], level: 1 };
-  Object.defineProperty(hls, "currentLevel", { get: () => hls.level, set: (value) => { hls.level = value; send("quality_set", { current: value }); } });
-  Object.defineProperty(hls, "nextLevel", { get: () => hls.level, set: (value) => send("quality_set", { next: value }) });
+  // Like a player that has buffered nothing yet: currentLevel reads -1, and a write to it flushes the buffer, so the page reports it.
+  Object.defineProperty(hls, "currentLevel", { get: () => -1, set: (value) => send("quality_set", { current: value }) });
+  Object.defineProperty(hls, "loadLevel", { get: () => hls.level });
+  Object.defineProperty(hls, "nextLevel", { get: () => hls.level, set: (value) => { hls.level = value; send("quality_set", { next: value }); } });
   window.html5player = { hlsobj: hls };
 }
 </script>`;

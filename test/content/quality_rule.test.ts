@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { RULE_GIVE_UP_MS, RULE_HOLD_MS, RULE_RECHECK_MS, create_rule } from "../../src/content/quality/rule.ts";
+import { hls_driver } from "../../src/content/quality/hls.ts";
 import type { Driver } from "../../src/content/quality/driver.ts";
 
 // A player with levels 360, 720 and 1080. `listed` is false while it answers like YouTube's `unknown`. `reset_to` models a new video that starts at the site's own level.
@@ -249,4 +250,16 @@ test("a player that scripts build after the load-finish start still gets the rul
   never.player.state.listed = false;
   await never.rule.start(false);
   assert.equal(never.clock.now, RULE_GIVE_UP_MS);
+});
+
+test("a rule poll on an hls.js player that has buffered nothing writes the level once", async () => {
+  const writes: string[] = [];
+  const hls = { levels: [{ height: 360 }, { height: 720 }], loadLevel: 0 };
+  // currentLevel reads -1 until a fragment is buffered, and each write to it flushes the buffer.
+  Object.defineProperty(hls, "currentLevel", { get: () => -1, set: () => void writes.push("current") });
+  Object.defineProperty(hls, "nextLevel", { get: () => hls.loadLevel, set: (value: number) => void (writes.push("next"), (hls.loadLevel = value)) });
+  const driver = hls_driver({ html5player: { hlsobj: hls } })!;
+  const { rule } = setup("max", { state: fake_player().state, driver });
+  await rule.start(false);
+  assert.deepEqual(writes, ["next"]);
 });
