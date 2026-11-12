@@ -34,6 +34,17 @@ The native-messaging hosts (the config host and the bridge host) and the script 
 - Release stamp: `just release_stamp <version>` copies the scripts into `release-assets/` (`RELEASE_ASSETS_DIR` replaces it), writes that version (the `src/manifest.json` one) into both hosts as `release_version`, then hashes the stamped files into a `.sha256` per script and `host_sha256.json`. The extension build copies that file into `dist/` when its version matches the manifest, so the signed build carries the hashes. `just release_publish <version> <xpi>` uploads the same stamped files and the signed xpi as `desertfox-<version>.xpi`, as a prerelease for a four-number `x.y.z.N` version, and refuses any file whose hash differs from `host_sha256.json`.
 - `test_host.py`, `test_editor.py` (a stub editor script under a temporary cache and config folder: lifecycle, races, forged jobs, config errors), `test_firefox_page.py` (a stub Firefox under a fake `/proc`: the page table, the parent and profile checks, the environment, the inherited descriptors and the timeout kill), `test_install.py`, `test_cli.py`, `test_self_update.py`, `host_under_test.py`: run them with `just host-test`. The install tests use a temporary HOME and a stubbed `curl`, and never touch the real home folder or the network. `test_self_update.py` drives the updater through an injected fetch under a temporary HOME. `test_install.py` also runs `just release_stamp` and `just release_publish` against a stubbed `gh`, and `just release_commit_push` against a local bare remote. `just release` commits and pushes the bump first, so the release tag targets that commit.
 
+## Features that need the host
+
+The root README lists them in plain words. The details:
+
+- Config files: the host reads the TOML files in `~/.config/desertfox/`. The settings page and `:set` work without it.
+- Editor: `<C-o>` in insert mode needs `editor.toml`, see External editor above.
+- `,f` keys: see Firefox pages above. Without the host, DesertFox copies the address.
+- `:native.update`: see `self_update` above. It replaces the host, the bridge, the `desertfox` command and the two manifests, and checks each script against the hashes in the signed extension (`dist/host_sha256.json`).
+- Bridge: set `bridge = true` (in `settings.toml` or with `:set bridge true`) and grant the `nativeMessaging` permission on the page that `:native.install` opens. Tab commands also need `bridge_share_tabs`. Private windows are never shared.
+- Desktop theme: set `palette = "desktop"`, then run `desertfox theme <name>`. This needs the bridge, and only built-in theme names work.
+
 ## Bridge host
 
 - `desertfox-bridge`: Python 3.9+, stdlib only, native name `desertfox_bridge`. Unlike the config host it stays alive on a `connectNative` port while the extension has `bridge = true` and the `nativeMessaging` permission. It takes the lock, then says `{"ready": true, "host_version": 1, "release_version": "<version>"}` once, and the extension trusts the port only after that. It takes three verbs from the extension, `mode`, `reply` (the answer to a request the host sent) and `event` (a tab event for subscribers), and skips a malformed or oversized message.

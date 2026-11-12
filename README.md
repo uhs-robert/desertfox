@@ -170,19 +170,27 @@ A beta build is signed by Mozilla, built nightly from `main` and updates itself.
 
 ### Native host (optional)
 
-DesertFox works without it. The native host is a small helper program outside Firefox. With it:
+The native host is a small helper program on your computer. Firefox does not let extensions read files or start programs, so DesertFox uses the host for the features that need them. Linux only.
 
-- Keep your keys, search engines and settings in TOML files in `~/.config/desertfox/`, and DesertFox reads them.
-- Edit a text field in your own text editor, like Neovim, with `<C-o>` in insert mode, once you add an `editor.toml` file.
-- Open Firefox pages such as settings, add-ons and downloads with the `,f` keys.
-- Update the host, the bridge, the `desertfox` command and the manifests with `:native.update`, checked against hashes in the signed extension.
-- Run commands from scripts and desktop programs, and read the current mode and its changes as they happen. This needs `bridge = true` and the permission granted on the `:native.install` page.
-- List, activate, close and capture tabs from scripts, with `bridge_share_tabs` turned on as well. Private windows never show up.
-- Follow the theme your desktop pushes with `desertfox theme <name>`. Set `palette = "desktop"` to use it. It needs `bridge = true`, and only built-in theme names work.
+With it you can:
 
-Run `:native.install` in DesertFox for the steps.
+- Edit text in your own editor: press `<C-o>` in insert mode to edit a text field in an editor such as Neovim. You name the editor in an `editor.toml` file.
+- Open Firefox pages: the `,f` keys open settings, add-ons and downloads.
+- Keep your setup in files: store keys, search engines and settings in TOML files in `~/.config/desertfox/`.
+- Update from the command line: `:native.update` updates the host and checks the download against hashes in the signed extension.
+- Use scripts: the bridge (a second helper, off by default) lets scripts run DesertFox commands, read the current mode and follow your desktop theme.
 
-Without the host, change settings with `:set` or on the settings page. Bring in keys, search engines and themes as a zip or a folder from that page. The `,f` keys copy the page address instead. The editor key, `:native.update` and the bridge do not work.
+Without the host, almost everything works. Change settings with `:set` or on the settings page, and bring in keys, search engines and themes there as a zip or a folder. Only the features above need the host. The `,f` keys copy the page address instead, so you can paste it.
+
+To install it, run `:native.install` in DesertFox. It shows one command to paste in a terminal. See [host/README.md](host/README.md) for the steps, the bridge setup and every detail.
+
+What the host can and cannot do:
+
+- It has a fixed list of actions: read the config files, write one file for your saved edits, update itself, edit text, open a Firefox page and, with the bridge, pass commands to DesertFox. It has no shell and no way to run a command that someone sends it.
+- A web page cannot give it an address. The `,f` keys pick a page from a fixed table, not a URL.
+- Text from a web page goes only into a temporary file for your editor. The editor program comes from your own `editor.toml`.
+- The updater downloads only from this project's GitHub releases over HTTPS, and refuses a file that does not match the hashes in the signed extension.
+- With the bridge on, DesertFox itself decides which commands a script can run, and private windows stay hidden.
 
 ### From source
 
