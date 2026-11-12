@@ -40,6 +40,16 @@ test("a failing store never rejects a record", async () => {
   await log.record("a", 1);
 });
 
+test("a record after a failed write still writes", async () => {
+  const storage = slow_storage();
+  let failing = true;
+  const log = create_timing_log({ get: storage.get, set: async (items) => (failing ? Promise.reject(new Error("quota")) : storage.set(items)) }, "t");
+  await log.record("a", 1);
+  failing = false;
+  await log.record("b", 2);
+  assert.deepEqual(await log.read(), [["b", 2]]);
+});
+
 test("summary gives count, median, p95 and max per name", () => {
   const timings = Array.from({ length: 20 }, (_, index): [string, number] => ["x", index + 1]);
   const [row] = summarize_timings([...timings, ["y", 7]]);
