@@ -227,7 +227,8 @@ export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: un
 // From the `page` bundle, for the jump list of the sender's window. `x` and `y` are the scroll offset now, and the page is the sender tab's address.
 // A push records the place a big jump left. A step moves the cursor of the list by `step` (older when negative) and answers the entry there: with `x` the page scrolls to it, without `x` the background switched to another tab or opened the address and scrolls from there.
 export type JumpPush = { type: "jump_push"; x: number; y: number };
-export type JumpStep = { type: "jump_step"; step: number; x: number; y: number };
+// `arrival` marks the step the background pushed into the tab it went to. Only that request takes the entry the step already chose.
+export type JumpStep = { type: "jump_step"; step: number; x: number; y: number; arrival?: true };
 export type JumpRequest = JumpPush | JumpStep;
 export type JumpAnswer = MarkAnswer;
 

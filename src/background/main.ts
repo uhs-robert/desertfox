@@ -139,7 +139,7 @@ const jump_step = create_jump_step({
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
   navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
   watch: watch_tab,
-  push_jump: (tab_id, steps) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps) }, bundle: "page" }] }, 0),
+  push_jump: (tab_id, steps, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps), ...(arrival && { arrival }) }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "page.jump", message }, 0),
 });
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;

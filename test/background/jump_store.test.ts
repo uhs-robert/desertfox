@@ -176,3 +176,18 @@ test("a damaged stored value reads as an empty list, and a bad entry is refused"
   await assert.rejects(store.push(1, false, { url: "x".repeat(3000), x: 0, y: 0 }), /too long/);
   await assert.rejects(store.push(1, false, { url: A, x: NaN, y: 0 }), /scroll position/);
 });
+
+test("a count that reaches past the oldest entry of a full list refuses and keeps every list", async () => {
+  const { store, values } = make();
+  for (let index = 0; index < MAX_JUMPS; index++) await store.push(1, false, at(A, index * 100));
+  await store.push(2, false, at(B, 100));
+  await assert.rejects(store.step(1, false, -MAX_JUMPS, at(B, 0)), /No older jump/);
+  const stored = values.get("desertfox_jumps") as { windows: Record<string, { entries: unknown[]; cursor: number }> };
+  assert.equal(stored.windows["1"]!.entries.length, MAX_JUMPS);
+  assert.equal(stored.windows["1"]!.cursor, MAX_JUMPS);
+  assert.deepEqual(await store.step(2, false, -1, at(B, 0)), at(B, 100));
+  // The oldest place that is still reachable once the place you are on has joined the list.
+  assert.deepEqual(await store.step(1, false, -(MAX_JUMPS - 1), at(B, 0)), at(A, 100));
+  const after = values.get("desertfox_jumps") as { windows: Record<string, { cursor: number }> };
+  assert.ok(Object.values(after.windows).every((list) => list.cursor >= 0));
+});

@@ -46,19 +46,19 @@ function pushed(list: JumpList, entry: JumpEntry): JumpList {
   return trimmed({ entries, cursor: entries.length });
 }
 
-// The entry `delta` places from the cursor, and the list with the cursor there. At the present the place `here` joins the list first, so `<C-i>` can come back to it. Past either end refuses and leaves the list as it was.
+// The entry `delta` places from the cursor, and the list with the cursor there. At the present the place `here` joins the list first, so `<C-i>` can come back to it. The list is trimmed before the target is picked, so the entry answered is one the stored list still holds. Past either end refuses and leaves the list as it was.
 function stepped(list: JumpList, delta: number, here: JumpEntry): { list: JumpList; entry: JumpEntry } {
-  let { entries, cursor } = list;
-  if (cursor >= entries.length) {
+  let current = list;
+  if (current.cursor >= current.entries.length) {
     if (delta > 0) throw new RuntimeRefusal("No newer jump");
-    const last = entries.at(-1);
-    if (!last || !same_place(last, here)) entries = [...entries, here];
-    cursor = entries.length - 1;
+    const last = current.entries.at(-1);
+    const entries = last && same_place(last, here) ? current.entries : [...current.entries, here];
+    current = trimmed({ entries, cursor: entries.length - 1 });
   }
-  const target = cursor + delta;
-  const entry = entries[target];
+  const target = current.cursor + delta;
+  const entry = current.entries[target];
   if (!entry) throw new RuntimeRefusal(delta < 0 ? "No older jump" : "No newer jump");
-  return { list: trimmed({ entries, cursor: target }), entry };
+  return { list: { entries: current.entries, cursor: target }, entry };
 }
 
 export function create_jump_store(deps: JumpStoreDeps) {

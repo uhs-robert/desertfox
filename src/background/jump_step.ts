@@ -12,8 +12,8 @@ import type { MarkSender } from "./mark_store.ts";
 
 export type JumpStepDeps = Omit<AddressDeps, "failed_text"> & {
   store: JumpStore;
-  // Runs `page.jump` in the top frame of the tab, for a step that a frame asked for or a tab the step arrived in. The reply is the content script's.
-  push_jump: (tab_id: number, steps: number) => Promise<unknown>;
+  // Runs `page.jump` in the top frame of the tab, for a step that a frame asked for or, with `arrival`, for the tab the step went to. The reply is the content script's.
+  push_jump: (tab_id: number, steps: number, arrival?: true) => Promise<unknown>;
 };
 
 export type JumpAnswerer = (request: JumpRequest, tab: MarkSender | undefined) => Promise<JumpAnswer>;
@@ -21,7 +21,7 @@ export type JumpAnswerer = (request: JumpRequest, tab: MarkSender | undefined) =
 export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
   const arrivals = create_address_arrivals<JumpEntry>({ ...deps, failed_text: "Jump failed" });
   // The pushed `page.jump` of an arrival asks for its own entry. Its direction does not matter, the entry is already chosen.
-  const push_arrival = (tab_id: number) => deps.push_jump(tab_id, -1);
+  const push_arrival = (tab_id: number) => deps.push_jump(tab_id, -1, true);
 
   async function answer(request: JumpRequest, tab: MarkSender | undefined): Promise<JumpAnswer> {
     if (!tab || tab.id === undefined || tab.window_id === undefined || tab.url === undefined) throw new RuntimeRefusal("No page to jump from");
@@ -31,9 +31,12 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
       await deps.store.push(window_id, tab.incognito, { url: mark_page_url(tab.url), x: request.x, y: request.y });
       return { ok: true };
     }
-    // The page that was sent here asks again, and gets the entry the step chose, whatever address it ended on.
-    const arrived = arrivals.claim_armed(tab_id, () => true);
-    if (arrived) return { ok: true, x: arrived.data.x, y: arrived.data.y };
+    // The page that was sent here asks again, and gets the entry the step chose, whatever address it ended on. Only the pushed request does that: a key the user pressed meanwhile is a step of its own.
+    if (request.arrival) {
+      const arrived = arrivals.claim_armed(tab_id, () => true);
+      // The arrival was superseded or its tab left, so the pushed request has nothing to do.
+      return arrived ? { ok: true, x: arrived.data.x, y: arrived.data.y } : { ok: true };
+    }
     // The frame would scroll its own box, so the top frame steps instead, from its own offset.
     if (tab.frame_id !== 0) {
       const reply = (await deps.push_jump(tab_id, request.step)) as { ok?: boolean; message?: string } | undefined;
@@ -47,7 +50,8 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
       return { ok: true, x: entry.x, y: entry.y };
     }
     const from = { id: tab_id, window_id, incognito: tab.incognito };
-    await arrivals.go(from, await arrivals.find_tab(entry.url, from), entry.url, entry, push_arrival);
+    // A tab in another window has another list, so a step back from there could not come forward again: that address opens here.
+    await arrivals.go(from, await arrivals.find_tab(entry.url, from, true), entry.url, entry, push_arrival);
     return { ok: true };
   }
 

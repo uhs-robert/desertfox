@@ -50,12 +50,12 @@ function make(tabs: MarkTab[]) {
         done: (_timeout, options) => ((entry.requires_navigation = options?.requires_navigation), done),
       } satisfies PageWatch;
     },
-    push_jump: async (tab_id, steps) => (log.push(`push ${tab_id} ${steps}`), await state.during_push?.(), state.push_reply),
+    push_jump: async (tab_id, steps, arrival) => (log.push(`push ${tab_id} ${steps}${arrival ? " arrival" : ""}`), await state.during_push?.(), state.push_reply),
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
   });
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: HERE, frame_id: 0, ...extra });
   const push = (y: number, url = FAR, window_id = 1, incognito = false) => step({ type: "jump_push", x: 0, y }, sender(9, { url, window_id, incognito }));
-  const go = (delta: number, y = 40, extra = {}, id = 1): Promise<unknown> => step({ type: "jump_step", step: delta, x: 0, y } as JumpRequest, sender(id, extra));
+  const go = (delta: number, y = 40, extra = {}, id = 1, arrival = false): Promise<unknown> => step({ type: "jump_step", step: delta, x: 0, y, ...(arrival && { arrival: true }) } as JumpRequest, sender(id, extra));
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const pushes = () => log.filter((line) => line.startsWith("push"));
   return { store, step, log, watches, refusals, state, sender, push, go, flush, pushes };
@@ -83,14 +83,14 @@ test("the hash is not part of the place", async () => {
 });
 
 test("a step to a place in another tab switches, answers at once and pushes once the page is ready", async () => {
-  const fakes = make([tab(1, HERE), tab(2, FAR, { window_id: 2 })]);
+  const fakes = make([tab(1, HERE), tab(2, FAR)]);
   await fakes.push(500);
   assert.deepEqual(await fakes.go(-1), { ok: true });
-  assert.deepEqual(fakes.log, ["watch 2", "activate 2", "focus 2"]);
+  assert.deepEqual(fakes.log, ["watch 2", "activate 2"]);
   assert.equal(fakes.watches[0]!.requires_navigation, false);
   fakes.watches[0]!.resolve("ready");
   await fakes.flush();
-  assert.equal(fakes.log.at(-1), "push 2 -1");
+  assert.equal(fakes.log.at(-1), "push 2 -1 arrival");
   assert.equal(fakes.watches[0]!.stopped, true);
 });
 
@@ -102,7 +102,7 @@ test("a step with no tab on the address opens it in the current tab and waits fo
   assert.equal(fakes.watches[0]!.requires_navigation, true);
   fakes.watches[0]!.resolve("ready");
   await fakes.flush();
-  assert.equal(fakes.log.at(-1), "push 1 -1");
+  assert.equal(fakes.log.at(-1), "push 1 -1 arrival");
 });
 
 test("a step that Firefox refuses to open answers a refusal and leaves no wait behind", async () => {
@@ -122,7 +122,7 @@ test("the page the push reaches gets the chosen entry and moves the cursor no fu
   let arrival: unknown;
   fakes.state.during_push = async () => {
     // The tab redirected, so its address is neither the entry's nor the tab's old one.
-    arrival = await fakes.go(-1, 0, { url: "https://login.test/" });
+    arrival = await fakes.go(-1, 0, { url: "https://login.test/" }, 1, true);
   };
   await fakes.go(-1);
   fakes.watches[0]!.resolve("ready");
@@ -132,6 +132,40 @@ test("the page the push reaches gets the chosen entry and moves the cursor no fu
   // The entry is spent: the next step moves the cursor on, to the older place.
   fakes.state.tabs = [tab(1, "https://login.test/")];
   assert.deepEqual(await fakes.go(-1, 0, { url: FAR }), { ok: true, x: 0, y: 500 });
+});
+
+test("a step the user pressed before the pushed one arrives is a step of its own, and the pushed one then takes the arrival", async () => {
+  const fakes = make([tab(1, HERE)]);
+  await fakes.push(500);
+  await fakes.push(900);
+  let user: unknown;
+  fakes.state.during_push = async () => {
+    // The user pressed newer in the target tab before the pushed request got to the background.
+    user = await fakes.go(1, 0, { url: FAR });
+  };
+  await fakes.go(-1);
+  fakes.watches[0]!.resolve("ready");
+  await fakes.flush();
+  // The user's step was a real step: from the entry the step chose, newer is the place the first step left, which is this tab.
+  assert.deepEqual(user, { ok: true });
+  assert.deepEqual(fakes.log.filter((line) => line.startsWith("activate")), ["activate 1"]);
+  // The pushed request found its arrival replaced and did not step a third time.
+  assert.deepEqual(fakes.pushes(), ["push 1 -1 arrival"]);
+});
+
+test("a pushed request with no arrival waiting does not step", async () => {
+  const fakes = make([tab(1, HERE)]);
+  await fakes.push(500, HERE);
+  assert.deepEqual(await fakes.go(-1, 0, {}, 1, true), { ok: true });
+  // The list was not touched: the older place is still ahead of the cursor.
+  assert.deepEqual(await fakes.go(-1, 0), { ok: true, x: 0, y: 500 });
+});
+
+test("a place whose tab is in another window opens in the current tab, since that window keeps another list", async () => {
+  const fakes = make([tab(1, HERE), tab(2, FAR, { window_id: 2 })]);
+  await fakes.push(500);
+  assert.deepEqual(await fakes.go(-1), { ok: true });
+  assert.deepEqual(fakes.log, ["watch 1", `navigate 1 ${FAR}`]);
 });
 
 test("a tab closed while it loads is silent, pushes nothing and clears the entry", async () => {

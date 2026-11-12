@@ -77,10 +77,12 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await press_keys(...older);
     await press_keys(...older);
     expect(middle !== bottom, "the two places are one place");
-    await sleep(1200);
+    await poll_until("both steps to land", async () => {
+      const list = await list_of_window();
+      return list?.cursor === 0 && near(await in_active_tab(`scrollY`), bottom);
+    });
     const list = await list_of_window();
-    const at = await in_active_tab(`scrollY`);
-    expect(near(at, bottom) && list?.entries.length === 3 && list.cursor === 0, `after two steps the page is at ${at}, wanted ${bottom}, the list is ${JSON.stringify(list)}`);
+    expect(list.entries.length === 3, `the list after two steps: ${JSON.stringify(list)}`);
   });
 
   await run_case("<C-o> from another tab switches to the tab of the place without opening a tab, and <C-i> comes back", async () => {
