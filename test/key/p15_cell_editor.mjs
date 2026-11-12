@@ -5,7 +5,9 @@ import { join } from "node:path";
 
 export const areas = ["keys", "config"];
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
+const CELL_EDITOR_ROW = '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=p15_*"\neditable_remove = ["#waffle-rich-text-editor"]\neditable_remove_unsized = true\n';
+
+export async function run_cases({ in_background, config_copy, load_config_dir, setup, run_case, press_keys, open_page, expect, poll_until, in_active_tab, events, wait_event, expect_no_scroll, scroll_delta_by_press, scroll_of }) {
   const page_id = "p15_cell_editor";
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const editor_text = () => in_active_tab(`document.getElementById("waffle-rich-text-editor").textContent`);
@@ -26,6 +28,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until(`the editor to hold the typed j ${when}`, async () => (await editor_text()) === "j");
     await expect_no_scroll(mark, page_id);
   }
+
+  // The shipped sheets rows match docs.google.com only, so the stand-in pages get the same rule as a row of their own.
+  await setup("load a config with the parked cell editor rule for the p15_ pages", async () => {
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), CELL_EDITOR_ROW);
+    await load_config_dir(dir);
+  });
 
   await run_case("a parked cell editor that holds the focus leaves the page in normal mode", async () => {
     await open_page("cell_editor", page_id, { new_tab: true });
@@ -87,7 +96,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // escape_to_page: the pages with this id prefix get the row, the page above gets none.
   await setup("load a config with an escape_to_page row for the p15_escape_ pages", async () => {
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=p15_escape_*"\nescape_to_page = true\n');
+    appendFileSync(join(dir, "settings.toml"), CELL_EDITOR_ROW + '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=p15_escape_*"\nescape_to_page = true\n');
     await load_config_dir(dir);
   });
 
@@ -138,5 +147,17 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await wait_event(mark, (event) => event.type === "keydown" && event.key === "Escape" && event.page_id === page_id, "the page to get the sent Escape");
     await expect_badge("NORMAL");
     expect((await in_active_tab(`document.getElementById("box").style.top`)) === "-10000px", "the sent Escape did not end the edit");
+  });
+
+  await run_case("without the rule, a parked cell editor that holds the focus puts the page in insert mode", async () => {
+    await open_page("cell_editor", "q15_no_rule", { new_tab: true });
+    await expect_badge("INSERT");
+  });
+
+  await run_case("smoke check: an editor built and focused in the page head leaves the page in normal mode", async () => {
+    // A smoke check, not a regression test for the resync: it passes without the resync too, because the stale mode needs the focus to land before the reply and this page cannot force that order.
+    await open_page("cell_editor_early", page_id + "_early", { new_tab: true });
+    expect(await editor_holds_focus(), "the cell editor does not hold the focus after load");
+    await expect_badge("NORMAL");
   });
 }

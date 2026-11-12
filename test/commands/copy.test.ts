@@ -37,7 +37,7 @@ test("copy.url answers done after the write and failed, without its own toast, w
     document: { title: "A", querySelector: () => null },
   });
   const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
-  Object.defineProperty(globalThis, "browser", { value: { runtime: { sendMessage: async () => ({ ok: true }) } }, configurable: true });
+  Object.defineProperty(globalThis, "browser", { value: { runtime: { sendMessage: async () => ({ ok: true }) }, storage: { local: { get: async () => ({}) } } }, configurable: true });
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
   assert.deepEqual(await copy_page_url("plain", undefined, (message) => void toasts.push(message)), undefined);
   assert.deepEqual(toasts, ["Copied https://a.com/"]);
@@ -52,4 +52,22 @@ test("copy.url into the black hole shows no toast", async () => {
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
   assert.deepEqual(await copy_page_url("plain", "_", (message) => void toasts.push(message)), undefined);
   assert.deepEqual(toasts, []);
+});
+
+test("copy.url drops the tracking parameters of the shipped list, and an empty list keeps them", async () => {
+  const globals = globalThis as Record<string, unknown>;
+  const written: string[] = [];
+  Object.assign(globals, {
+    location: { href: "https://a.com/p?utm_source=x&id=5#frag" },
+    document: { title: "A", querySelector: () => null },
+  });
+  const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
+  const { CONFIG_STATUS_STORAGE_KEY } = await import("../../src/background/storage_keys.ts");
+  const stored = (settings: object) => ({ runtime: { sendMessage: async () => ({ ok: true }) }, storage: { local: { get: async () => ({ [CONFIG_STATUS_STORAGE_KEY]: { settings } }) } } });
+  Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void written.push(text) } }, configurable: true });
+  Object.defineProperty(globalThis, "browser", { value: stored({}), configurable: true });
+  await copy_page_url("plain", undefined, () => {});
+  Object.defineProperty(globalThis, "browser", { value: stored({ strip_tracking_params: [] }), configurable: true });
+  await copy_page_url("plain", undefined, () => {});
+  assert.deepEqual(written, ["https://a.com/p?id=5#frag", "https://a.com/p?utm_source=x&id=5#frag"]);
 });

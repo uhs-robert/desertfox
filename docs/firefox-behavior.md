@@ -36,6 +36,18 @@ Phase 0 answered three questions before design work: where plain keys and Firefo
 - The content script also catches the chords, so a page that cancels keys cannot block them where the content script runs.
 - Firefox adds no startup delay of its own. A slow key listener comes from what the extension loads before it listens.
 
+### Address bar keyword (omnibox)
+
+Measured on Firefox 160 with the key test `test/key/p31_omnibox.mjs`, which types into the real address bar. The add-on registers the manifest keyword `df`.
+
+- Typing `df tab.next` and Enter runs the command on `about:license`, where no content script and no plain key reach DesertFox. It also runs on an http page. The background receives `omnibox.onInputEntered` whatever the page shows. Adding the key needs no permission.
+- With only a default suggestion set, the address bar shows one row, the default suggestion's text followed by the typed text: "Type a DesertFox command, for example tab.next df tab.next". The row is there as soon as the keyword and a space are typed, and it stays while the command is typed.
+- Plain Enter arrives with the disposition `currentTab`. DesertFox changes `where` only for the other two dispositions.
+- A refused line (`df rust`) runs nothing and the tab stays where it was.
+- Suggestions from `onInputChanged` fill the rows below the default one. The address bar showed 10 rows in all, so nine suggestions fit beside the default row, and DesertFox sends at most nine. A user's `browser.urlbar.maxRichResults` can lower that.
+- The description is plain text. Firefox 160 showed `<dim>` tags and `&lt;` entities literally, so DesertFox sends neither (the key test checks that a keys column such as `<A-p>` shows as written), although the API documentation says the markup works.
+- The headless test cannot judge the look of the row, a clash with the user's own address bar keywords, or the private window case.
+
 ### Managed storage
 
 A second test checked whether Firefox reads `~/.mozilla/managed-storage/<extension id>.json` again after an edit. The extension read `browser.storage.managed` every second.
@@ -212,6 +224,7 @@ Measured on Google's public sample sheet in view mode, in headless Firefox 160, 
 - Enter or F2 starts an edit. Sheets then sets `left`, `top` and `min-width` inline on the box, so the editor sits over the cell with the cell's width. The key that ends the edit clears the inline style and the text.
 - No focus event fires at either end of an edit.
 - Sheets cancels an edit on an Escape keydown that reaches its handler. Not measured on a sheet with edit rights: the shipped rows turn on `escape_to_page` on the assumption that it does, and the owner check on a real sheet confirms it.
+- The shipped `sheets` rows read these facts as `editable_remove = ["#waffle-rich-text-editor"]` with `editable_remove_unsized`: the editor counts as a field only while it has width. The id stands for the site, because a rule on zero width alone would also catch the hidden field a web terminal types into.
 - The class `editable` is no signal: Sheets adds it at the first edit and never removes it. In view mode `contenteditable` turns `false` at the first edit and stays so.
 
 ## Permissions (optional-permissions)
@@ -379,3 +392,10 @@ Times in ms from the background's `tabs.update` call, median (min to max). Local
 - `tabs.reload` on a discarded tab loads it and leaves it inactive. The call returns in 5.3 ms, the content script starts at 59.7 ms (53.4 to 67.6) and has its keymap at 68.7 (62.4 to 80.2). A later switch costs 4.1 ms (3.4 to 4.6). `tabs.warmup` takes 4.6 ms in the background.
 - Early j, in the headed key test with the body delayed 3 s and j pressed at 445 ms: 6 of 6 runs showed no scroll, the page saw no keydown, and a second j after the body arrived scrolled 50 px. A held scroll that finds no height is used up.
 - On Linux, discarded tabs come from session restore (`browser.sessionstore.restore_on_demand`, default true) and explicit unloads. `browser.tabs.unloadOnLowMemory` is false on Linux.
+
+## Tab groups (native-tab-groups)
+
+Measured in Firefox 160 in the key test (`test/key/p32_tab_groups.mjs`).
+
+- `browser.tabGroups` is absent from the background page when the manifest lacks the `tabGroups` permission, so the permission is required.
+- Not measured: whether the permission adds an install prompt line, whether the active tab of a collapsed group keeps the group open, and whether groups exist in private windows. These need a person.

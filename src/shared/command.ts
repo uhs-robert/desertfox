@@ -17,9 +17,10 @@ export const is_caret_mode = (mode: Mode): boolean => CARET_MODES.includes(mode)
 
 export type RunsIn = "background" | "content";
 
-export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title";
+export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title" | "search_query";
 
-export type ContextSource = { from: ContextSourceName };
+// `then` is read when `from` has nothing: `{ from: "selection", then: "search_query" }` is the selection, else the query of the results page. A command's default and a snippet header (`default=selection,search_query`) carry it.
+export type ContextSource = { from: ContextSourceName; then?: ContextSourceName };
 
 export type ParamValue = string | number | boolean;
 
@@ -35,9 +36,9 @@ export type PatternArm = { pattern: string; when: ParamWhen };
 // A plain value, a context source, or an ordered list of arms with an optional plain value last. The first arm that holds wins, else the last value applies, else the param has no default and is required.
 export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | ParamValue)[];
 
-// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers`, `folders`, `marks`, `quickmarks` and `saved_quickmarks` go on a string param and
+// Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers`, `folders`, `marks`, `quickmarks`, `saved_quickmarks` and `groups` go on a string param and
 // only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.
-export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything" };
+export type DynamicValues = { from: "search_engines" | "containers" | "tabs" | "bookmarks" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "anything" | "groups" };
 
 export type ParamDef = {
   name: string;
@@ -72,8 +73,8 @@ export type ParamDef = {
   pattern_arms?: readonly PatternArm[];
   // A `string` param with a static `values` list accepts only those values, compared exactly like an enum value. Without it the list is for completion only.
   strict?: boolean;
-  // A `string` param whose text must be an absolute address, as `URL.canParse` reads it. An optional param may still be empty.
-  format?: "url";
+  // A `string` param whose text must be an absolute address, as `URL.canParse` reads it (`url`), or a key sequence in config notation, as `parse_sequence` reads it (`keys`). An optional param may still be empty.
+  format?: "url" | "keys";
   // A `string` param that holds the value of the setting named by the sibling param of this name. `check_args` checks it with that setting's entry in `SETTING_SPECS`. An empty value passes.
   value_of?: string;
   // Exactly one key, so `{ param: [values] }`.
@@ -130,6 +131,8 @@ type CommandCommon = {
   repeatable?: boolean | ((args: CheckedArgs) => boolean);
   // True lets a program outside the browser run the command through the bridge socket. Absent means false. Built-in commands must say it: `define` in `registry/builtin.ts` requires it. A hard-coded never-list in `background/bridge_run.ts` wins over a true here.
   bridge?: boolean;
+  // Rarely used. The help Commands page hides the card until its "Show advanced commands" toggle is on. Completion and keys are unaffected.
+  advanced?: true;
 };
 
 export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run: CommandRun; bundle?: undefined };
@@ -147,7 +150,7 @@ export type CommandDef = BackgroundCommandDef | ContentCommandDef;
 // A `commands.json` entry: the definition without the handler and the router fields.
 export type CommandMeta = Pick<
   CommandDef,
-  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "repeat_limit" | "modes" | "completion"
+  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "repeat_limit" | "modes" | "completion" | "advanced"
 >;
 
 export type CommandsFile = {

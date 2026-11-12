@@ -29,7 +29,8 @@ export type SettingRow = (
   | { kind: "text"; expectation: string; default?: string }
   // Text on one line, its length counted in code points. `suggestions` are what the command line offers, not a limit.
   | { kind: "line"; min_length: number; max_length: number; suggestions: readonly string[]; default: string }
-  | { kind: "text_list"; expectation: string; default: readonly string[] }
+  // `key_sequences` makes each entry a key sequence in keymap notation, checked with the key parser.
+  | { kind: "text_list"; expectation: string; key_sequences?: true; default: readonly string[] }
   // Each value at most once, in any order.
   | { kind: "enum_list"; values: readonly string[]; default: readonly string[] }
   // A table of exactly these keys, each a non-empty string.
@@ -50,7 +51,10 @@ export type SettingRow = (
 
 export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
+  which_key_repeat: { kind: "boolean", default: true },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
+  // Global only: the compiled keymap carries it, and the content script compares the typed keys with it. An exact match skips the delayed open, so a prefix that also has a longer reach (`g` of `gg`) does not open its panel after the delay. An instant redraw still shows it.
+  which_key_skip: { kind: "text_list", expectation: "a list of key prefixes in keymap notation", key_sequences: true, default: [] },
   hint_letters: { kind: "custom", schema: { type: "string", minLength: 2 }, default: "asdfghjkl" },
   hint_key_line: { kind: "boolean", default: true },
   // CSS selectors. Each frame resolves them against its own address. A selector that does not parse is skipped with a notice when hints start.
@@ -58,6 +62,10 @@ export const SETTINGS_TABLE = {
   hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
+  // CSS selectors for what counts as a text field in a frame, so insert mode follows focus there. `editable_add` makes matches count, `editable_remove` makes them not count and wins. With `editable_remove_unsized` the removal holds only while the element has no width.
+  editable_add: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
+  editable_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
+  editable_remove_unsized: { kind: "boolean", default: false, per_site: true },
   // Each frame resolves it against its own address. Set it only for sites whose editor handles Escape itself: in a field, insert mode then keeps Escape for the page and ends when the page drops the field.
   escape_to_page: { kind: "boolean", default: false, per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
@@ -72,10 +80,14 @@ export const SETTINGS_TABLE = {
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
   next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
+  // A name, or a prefix before a final `*`, compared in lowercase. An empty list turns the stripping off. Global only: the copy paths run in bundles that do not receive per-site values.
+  strip_tracking_params: { kind: "text_list", expectation: "a list of query parameter names", default: ["utm_*", "fbclid", "gclid", "dclid", "msclkid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "mkt_tok"] },
   // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
   zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
   // The quality rule for site players (see `src/background/media_quality.ts`): `off` leaves the site alone, `auto` hands the choice to the site, `max` and `min` take an end, a height takes the highest level at or below it.
   media_quality: { kind: "enum", values: ["off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160, 4320], default: "max", per_site: true },
+  // The file extension of the scratch file `text.edit_external` opens, so the editor picks a filetype. The empty default means the file has no extension.
+  editor_ext: { kind: "custom", schema: { type: "string", pattern: "^[A-Za-z0-9]{0,10}$" }, default: "", per_site: true },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
   // The theme names are examples, not an enum: a theme file in the config directory takes any name. `desktop` follows the palette the desktop pushed over the bridge.
   palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: [DESKTOP_PALETTE, ...BUILT_IN_THEME_NAMES] }, default: "oasis_moonlight" },

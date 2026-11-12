@@ -12,15 +12,17 @@ const MAX_BYTES = {
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
-  "page.js": 4 * 1024,
+  // 5 KB: the page copy reads the strip list and drops tracking parameters. The bundle loads on first use, not on every page.
+  "page.js": 5 * 1024,
   "text.js": 4 * 1024,
+  "editor.js": 4 * 1024,
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
   "media.js": 5.5 * 1024,
   // 4.5 KB: the YouTube driver gained the captions toggle and its state read. The bundle loads on first use.
   "quality.js": 4.5 * 1024,
   "site_actions.js": 4 * 1024,
-  // 56 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them.
-  "cmdline_page.js": 56 * 1024,
+  // 56 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text.
+  "cmdline_page.js": 56.5 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,
 };
@@ -58,6 +60,7 @@ const minified_entries = {
   ui: "src/content/ui/main.ts",
   page: "src/content/page/main.ts",
   text: "src/content/text/main.ts",
+  editor: "src/content/editor/main.ts",
   site_actions: "src/content/site_actions/main.ts",
   // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
   media: "src/content/media/main.ts",

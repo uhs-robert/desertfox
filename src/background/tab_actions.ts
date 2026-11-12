@@ -1,3 +1,5 @@
+import { RuntimeRefusal } from "../shared/command.ts";
+
 // The one place that mutes, pins, moves and reopens tabs. Callers choose the ids: the tab commands now, the tab list
 // selection later. Each function takes a list, and a single tab is a list of one.
 
@@ -9,6 +11,20 @@ export type TabActionDeps = {
   // `active` is true when left out.
   open_tab: (open: { window_id: number; url: string; index: number; pinned: boolean; cookie_store_id: string; active?: boolean }) => Promise<void>;
   remove: (tab_ids: number[]) => Promise<void>;
+};
+
+// What the group actions read of a tab before they act. `group_id` is -1 for a tab in no group, as Firefox reports it.
+export type GroupTabInfo = { id: number; window_id: number; pinned: boolean; group_id: number };
+export type GroupProps = { title?: string; collapsed?: boolean };
+
+export type GroupDeps = {
+  tab_infos: (tab_ids: number[]) => Promise<GroupTabInfo[]>;
+  // The window of a group, or undefined when it is gone.
+  group_window: (group_id: number) => Promise<number | undefined>;
+  // Without `group_id` the tabs form a new group. Answers the group id.
+  group: (tab_ids: number[], group_id: number | undefined) => Promise<number>;
+  ungroup: (tab_ids: number[]) => Promise<void>;
+  update_group: (group_id: number, props: GroupProps) => Promise<void>;
 };
 
 export type ReopenTab = { id: number; index: number; pinned: boolean; url: string | undefined; cookie_store_id?: string | undefined };
@@ -65,6 +81,42 @@ export async function reopen_tabs_in_container(
   }
   return reopened;
 }
+
+// Firefox allows no pinned tab in a group and keeps a group inside one window, so both cases fail here with a clear message instead of
+// Firefox's own error or a silent move.
+export async function group_tabs(deps: GroupDeps, tab_ids: number[], target?: { group_id?: number; title?: string }): Promise<number> {
+  const infos = await deps.tab_infos(tab_ids);
+  if (infos.some((info) => info.pinned)) throw new RuntimeRefusal("a pinned tab cannot join a group");
+  const windows = new Set(infos.map((info) => info.window_id));
+  if (windows.size > 1) throw new RuntimeRefusal("the tabs are in different windows, and a group stays in one window");
+  if (target?.group_id !== undefined) {
+    const group_window = await deps.group_window(target.group_id);
+    if (group_window === undefined) throw new RuntimeRefusal("the group is gone");
+    if (!windows.has(group_window)) throw new RuntimeRefusal("the group is in another window");
+  }
+  const group_id = await deps.group(tab_ids, target?.group_id);
+  if (target?.group_id === undefined && target?.title) await deps.update_group(group_id, { title: target.title });
+  return group_id;
+}
+
+export async function ungroup_tabs(deps: Pick<GroupDeps, "ungroup">, tab_ids: number[]): Promise<void> {
+  if (tab_ids.length > 0) await deps.ungroup(tab_ids);
+}
+
+export async function set_group(deps: Pick<GroupDeps, "update_group">, group_id: number, props: GroupProps): Promise<void> {
+  await deps.update_group(group_id, props);
+}
+
+export const browser_group_deps: GroupDeps = {
+  tab_infos: async (tab_ids) => {
+    const tabs = await Promise.all(tab_ids.map((id) => browser.tabs.get(id)));
+    return tabs.map((tab) => ({ id: tab.id!, window_id: tab.windowId!, pinned: tab.pinned, group_id: tab.groupId ?? -1 }));
+  },
+  group_window: async (group_id) => (await browser.tabGroups.get(group_id).catch(() => undefined))?.windowId,
+  group: (tab_ids, group_id) => browser.tabs.group({ tabIds: tab_ids, ...(group_id === undefined ? {} : { groupId: group_id }) }),
+  ungroup: (tab_ids) => browser.tabs.ungroup(tab_ids),
+  update_group: async (group_id, props) => void (await browser.tabGroups.update(group_id, props)),
+};
 
 export const browser_tab_action_deps: TabActionDeps = {
   set_muted: async (tab_ids, muted) => void (await Promise.all(tab_ids.map((id) => browser.tabs.update(id, { muted })))),

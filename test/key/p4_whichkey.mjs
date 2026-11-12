@@ -31,6 +31,21 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a finished sequence");
   });
 
+  await run_case("a prefix on the skip list waits past the delay and shows no panel", async () => {
+    await run_line(":set -t which_key_skip g");
+    try {
+      await sleep(500);
+      const mark = events.length;
+      await press_keys("g");
+      await sleep(which_key_delay_ms + 400);
+      expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a skipped prefix");
+      await press_keys("-k", "Escape");
+    } finally {
+      await run_line(":unset -t which_key_skip");
+      await sleep(500);
+    }
+  });
+
   await run_case("g? opens the help page", async () => {
     const help_tab_count = `(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes("/home.html")).length)()`;
     const before = await evaluate_in_background(rdp, extension_id, help_tab_count);
@@ -117,6 +132,16 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await panel_value(mark, (value) => value === "", "the panel to close");
     await sleep(which_key_delay_ms + 200);
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
+  });
+
+  // The panel root is closed and the footer text is the user's command, so the page cannot read it: the case saves a shot for a person to look at.
+  await run_case("a panel opened after a repeatable step still opens, with the repeat line in its footer", async () => {
+    expect(await scroll_delta_by_press("wk", ["j"]) > 0, "j did not scroll the page");
+    const mark = events.length;
+    await press_keys("g");
+    await panel_value(mark, (value) => value !== "", "the g panel");
+    if (process.env.DESERTFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/repeat-footer.png`); }
+    await close_panel();
   });
 
   await run_case("a comma then a pause shows the DesertFox panel, and comma then j still scrolls", async () => {

@@ -2,6 +2,7 @@
 
 import { title_for_address } from "./bookmark_title.ts";
 import type { MergedConfig } from "../shared/config.ts";
+import { engine_of_page } from "../shared/engines/index.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import type { BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
@@ -12,6 +13,7 @@ import { create_bundle_loader } from "./bundle_loader.ts";
 import type { BundleLoaderDeps } from "./bundle_loader.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
+import { browser_timing_log } from "./timing_browser.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "./storage_keys.ts";
@@ -90,12 +92,14 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),
     read_clipboard: () => navigator.clipboard.readText(),
     bookmark_title: async (url) => (url === undefined ? undefined : title_for_address(await browser.bookmarks.search({ url }), url)),
+    search_query: async (url) => (url === undefined ? undefined : engine_of_page((await get_config()).search_engines, url)?.query),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,
     open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id),
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
     is_disabled: read_disabled,
     repeat_memory,
+    record_timing: (command_id, ms) => void browser_timing_log.record(command_id, ms),
   };
 }
 

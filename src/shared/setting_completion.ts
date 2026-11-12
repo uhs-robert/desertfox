@@ -22,6 +22,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "which_key_repeat",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "which_key_border",
     "settable": true,
     "is_toggle": false,
@@ -32,6 +43,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
       "round",
       "chamfer"
     ]
+  },
+  {
+    "name": "which_key_skip",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of key prefixes in keymap notation",
+    "values": []
   },
   {
     "name": "hint_letters",
@@ -70,6 +89,33 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
   },
   {
     "name": "blur_on_load",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "editable_add",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "editable_remove",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "editable_remove_unsized",
     "settable": true,
     "is_toggle": true,
     "is_list": false,
@@ -125,6 +171,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "strip_tracking_params",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of query parameter names",
+    "values": []
+  },
+  {
     "name": "zoom",
     "settable": true,
     "is_toggle": false,
@@ -153,6 +207,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
       "2160",
       "4320"
     ]
+  },
+  {
+    "name": "editor_ext",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a file extension of up to 10 letters or digits, without a dot, or empty for none",
+    "values": []
   },
   {
     "name": "mode_indicator",

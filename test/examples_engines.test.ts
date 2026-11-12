@@ -3,7 +3,7 @@ import { copyFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { fill_template } from "../src/shared/engines/index.ts";
+import { engine_of_page, fill_template, read_query } from "../src/shared/engines/index.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 
 const SAMPLE = join(import.meta.dirname, "..", "examples", "engines.toml");
@@ -75,4 +75,21 @@ test("the sample engines give a few engines a keyword, all unique", () => {
   assert.equal(engines["google"]?.keyword, "g");
   assert.ok(keywords.length >= 3);
   assert.equal(new Set(keywords).size, keywords.length);
+});
+
+test("every shipped engine reads back the query it was filled with, and owns its own results page", () => {
+  const pages = { github: "https://github.com/foo/bar", reddit: "https://www.reddit.com/r/rust/", youtube: "https://www.youtube.com/@chan" };
+  const query = "a b&c/é+d";
+  for (const [name, engine] of Object.entries(engines)) {
+    // An engine whose query slot falls back to the page reads nothing back.
+    if (/\{query\|/.test(engine.url)) continue;
+    const page = { url: engine.slots?.includes("subreddit") ? pages.reddit : engine.slots?.includes("channel") ? pages.youtube : pages.github, title: "t" };
+    const filled = fill_template(engine.url, { query, page });
+    assert.ok(filled.ok, `${name} fills on its page`);
+    assert.equal(read_query(engine, filled.url), query, name);
+    const owner = engine_of_page(engines, filled.url);
+    assert.equal(owner?.query, query, `${name} owner query`);
+    // A child with the same address as its parent is read by the parent, which sorts first.
+    assert.equal(engines[owner!.name]?.url.split("{")[0], engine.url.split("{")[0], `${name} owner ${owner?.name}`);
+  }
 });

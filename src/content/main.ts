@@ -7,9 +7,9 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { all_off_step } from "./site_rule.ts";
 import { create_keymap_asks } from "./ask_keymap.ts";
 import { message_of } from "./bundle_host.ts";
-import type { BundleHostApi } from "./bundle_host.ts";
+import type { PageHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
-import { deepest_focused_element, is_editable_element } from "./editable.ts";
+import { deepest_focused_element, is_editable_element, set_editable_rules } from "./editable.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
@@ -56,10 +56,12 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
+let which_key_skip: readonly string[] | undefined;
 // Hiding asks only once the bundle has loaded, because before that there is no panel.
 const follow_prefix = create_which_key_timer(
   () => which_key_delay_ms,
   (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
+  () => which_key_skip,
 );
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
@@ -163,7 +165,7 @@ function on_keypress(event: KeyboardEvent): void {
 
 function on_keyup(event: KeyboardEvent): void {
   follow_field_change();
-  if (cancels_keyup(event, cancelled_keys)) cancel(event);
+  if (cancels_keyup(event, cancelled_keys, page_mode.get_mode_() === "ignore" || page_reply?.keymap.off)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);
@@ -251,8 +253,11 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
+  const was_in_field = is_editable_element(deepest_focused_element());
+  set_editable_rules(reply?.site_values);
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
@@ -264,11 +269,14 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
   if (step === "enter") bundles.set_mode_("ignore");
-  else if (first_install && reply?.insert) bundles.set_mode_("insert");
+  // A field that took the focus while the ask was pending already put the frame in insert mode, and media must not overwrite it.
+  else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) bundles.set_mode_(reply.join);
   else {
     if (step === "leave") bundles.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
   }
+  // A page that focused its field before the rules arrived, or a rule edit, changes what the focus is. Only a change resyncs, so a manual mode stays.
+  if (is_editable_element(deepest_focused_element()) !== was_in_field) sync_mode_to_focus();
   if (keymap) was_all_off = all_off;
   refresh_mode_indicator();
   install_tree();
@@ -293,11 +301,11 @@ function publish_timing(): void {
 }
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {
-  return (browser.runtime.sendMessage({ type: "read_keymap" } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
+  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
 function start(): void {
-  (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);

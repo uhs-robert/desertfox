@@ -1,6 +1,8 @@
-import { help_name_choices, help_name_url } from "../background/open_help.ts";
-import { HELP_PAGE_FILE } from "../help/route.ts";
+import { help_name_choices, help_name_url, key_command_id_on_page } from "../background/open_help.ts";
+import { command_help_url, HELP_PAGE_FILE } from "../help/route.ts";
 import { open_help_url } from "./help_tab.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap, type CompiledKeymap } from "../shared/prefix_tree.ts";
 import { define, registry } from "../shared/registry/builtin.ts";
 
 define("help.whichkey", {
@@ -14,7 +16,7 @@ define("help.whichkey", {
 });
 
 // Defined after every other command module has run (see command_modules.ts), so the choices cover every command.
-const command_ids = new Set([...registry.list().map((command) => command.id), "help.open"]);
+const command_ids = new Set([...registry.list().map((command) => command.id), "help.open", "help.key"]);
 
 define("help.open", {
   name: "help",
@@ -29,5 +31,26 @@ define("help.open", {
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
     const url = help_name_url(help_page_url, name, command_ids) as string; // `strict` limits name to the choices that resolve
     await open_help_url(ctx, help_page_url, url);
+  },
+});
+
+define("help.key", {
+  name: "helpkey",
+  label: "Help for a key",
+  intent: "Open the help card of the command a normal mode key runs. Give the keys as in the config, such as gg, <C-d> or ,r. A count or register prefix is ignored. A key bound to several steps shows the first step. Quote a key the command line reads itself, such as a backslash or a quote.",
+  params: [{ name: "keys", type: "string", main: true, format: "keys" }],
+  bridge: false,
+  runs_in: "background",
+  repeatable: false,
+  run: async (ctx, args) => {
+    const keys = args.keys as string;
+    const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
+    // A tab the command has no hold of (none, or gone) gets the global tree.
+    const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+    const found = key_command_id_on_page(current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined), tab?.url, keys);
+    if (found.error !== undefined) throw new RuntimeRefusal(found.error);
+    if (!command_ids.has(found.id)) throw new RuntimeRefusal(`${keys} runs ${found.id}, which has no help card`);
+    const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
+    await open_help_url(ctx, help_page_url, command_help_url(help_page_url, found.id));
   },
 });

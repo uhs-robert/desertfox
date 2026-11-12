@@ -58,6 +58,20 @@ Add `keyword = "g"` to an engine to give it a short word. A keyword is one to ei
 google = { url = "https://www.google.com/search?q=%s", label = "Google", keyword = "g" }
 ```
 
+### Reading the query back
+
+On a search results page, `s<x>` with nothing selected opens the command line with `search <x> <query on the page>` typed in. Press Enter to search, or edit the text first. This is the default of the `query` param of `search`: the selection, and when there is none, `@search_query`, the query of the results page. A non-empty selection always wins and searches at once. An engine that runs with an empty query (`archive`, which takes the page) never takes the page query. Off a results page the key opens the line empty, as before. You can also type `search arch @search_query` or bind it. A chain is written `@selection,search_query`.
+
+DesertFox reads the query from the page address with the engine's own `url`, in reverse. The page matches an engine when scheme, host and path equal the template's, every fixed query pair of the template is on the page (`type=issues`), and the `{query}` part has a value. The value is decoded, with `+` and `%20` as a space. So every engine with a plain `{query}` reads its own pages and needs nothing more. An engine that uses `{query|url}` or `{query:raw}` reads nothing.
+
+When two engines read the same page, the one whose template has the longest fixed start owns it. A tie goes to the engine with more fixed query pairs, then to the first by name. The built-in `site` engine never owns a page.
+
+For an address the template cannot describe, add `reverse`: a JavaScript regular expression with exactly one capture group, matched against the whole address (it is anchored at both ends for you). It is at most 200 characters, and `just build-config` rejects a bad pattern or one with a quantifier on a group: `)` followed by `*`, `+`, `?` or `{` (a group written once is fine). A child does not inherit it.
+
+```toml
+wiki = { url = "https://wiki.example/search/%s/results", label = "Wiki", reverse = "https://wiki\\.example/find/([^/]+)" }
+```
+
 ### Trees
 
 A table inside an engine is a child, named with a dot. `search github.repo.issues foo` runs the `issues` child of `github.repo`.
@@ -66,7 +80,7 @@ A table inside an engine is a child, named with a dot. `search github.repo.issue
 - A label is the chain of labels on the path, such as "GitHub: this repo: issues".
 - A param declared on the parent with `children = true` makes one child per value. The example builds `github.issues`, `github.prs` and the rest from one `type` param.
 - A value can name a slot with `{name}`, so a scope can say `repo:{repo} `.
-- A child cannot be named `url`, `label`, `params`, `fallback`, `hosts` or `keyword`, or like a field or param of its parent.
+- A child cannot be named `url`, `label`, `params`, `fallback`, `hosts`, `keyword` or `reverse`, or like a field or param of its parent.
 
 ```toml
 [github]

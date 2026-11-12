@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 
-export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "help", "newtab", "tabs", "scroll", "config", "engines", "bundles", "keys", "ui", "toolbar", "media"];
+export const area_names = ["hints", "caret", "find", "whichkey", "cmdline", "help", "newtab", "tabs", "scroll", "config", "engines", "bundles", "keys", "ui", "toolbar", "media", "omnibox"];
 
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
@@ -29,13 +29,16 @@ export const area_rules = [
   { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
   // The hand-off of a hidden input frame, which p15_frame_mode tests, and the `gi` search that returns into it.
   { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
+  { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts"], areas: ["hints", "bundles"] },
   { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles"] },
-  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
+  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
+  // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
+  { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
@@ -58,7 +61,7 @@ export const area_rules = [
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
   { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
   {
-    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open}.ts", "src/shared/{tab_model_port,container_store}.ts"],
+    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
     areas: ["tabs"],
   },
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },
@@ -76,6 +79,7 @@ export const area_rules = [
   },
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{default_keymap,default_site_rows,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
+  { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },
   { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },

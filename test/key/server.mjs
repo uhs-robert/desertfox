@@ -279,6 +279,11 @@ export function start_server() {
       return response.end(page(`body_editor_frame ${id}`, frame + focus_body));
     }
     if (url.pathname === "/body_editor") return response.end(page(`body_editor ${id}`, `${tall_filler}<script>${url.searchParams.get("turn_on")}</script>`));
+    if (url.pathname === "/cell_editor_early") {
+      // The Sheets editor focused while the document is still parsing, so the content script has no rules yet.
+      const build = `<script>const box = document.createElement("div"); box.style.cssText = "position:absolute;top:-10000px;left:0"; const editor = document.createElement("div"); editor.id = "waffle-rich-text-editor"; editor.contentEditable = "true"; box.append(editor); document.documentElement.append(box); editor.focus();</script>`;
+      return response.end(page(`cell_editor_early ${id}`, "", build));
+    }
     if (url.pathname === "/cell_editor" || url.pathname === "/grid") {
       // /grid is the same page that also records, in `data-grid`, the key code of each arrow keydown the editor gets, with an s after it when Shift was held, so a test sees what a site mode sent.
       // A stand-in for the Google Sheets cell editor: one contenteditable that holds the focus from load on. While a cell is only selected it is parked off screen, empty and with no width.

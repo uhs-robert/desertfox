@@ -3,6 +3,7 @@
 
 import type { CommandDef, DefaultArm, ParamDef, PatternArm, ParamValue } from "../command.ts";
 import { MODES } from "../command.ts";
+import { parse_sequence } from "../keys/notation.ts";
 import { always_default, arm_conditions, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";
 import { is_setting_name } from "../settings_schema.ts";
 import { description_problem } from "./summary.ts";
@@ -261,7 +262,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
     if (new Set(list).size !== list.length) fail(`${at}.values`, "has a repeated value");
   } else if (is_dynamic_values(param.values)) {
     const from = (param.values as { from: unknown }).from;
-    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything") fail(`${at}.values`, `unknown source "${String(from)}"`);
+    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything" && from !== "groups") fail(`${at}.values`, `unknown source "${String(from)}"`);
   }
   check_rules(param, at, fail);
   check_value_labels(param, at, fail);
@@ -275,6 +276,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
   } else if (param.default !== undefined) {
     if (is_context_source(param.default)) {
       if (param.type !== "string") fail(`${at}.default`, "a context source fits only a string param");
+      if (param.default.then === param.default.from) fail(`${at}.default`, "`then` repeats `from`, so it can never add a value");
     } else {
       const problem = value_problem(param, param.default);
       if (problem) fail(`${at}.default`, problem);
@@ -305,7 +307,7 @@ function check_rules(param: ParamDef, at: string, fail: Fail): void {
       fail(`${at}.pattern`, `${JSON.stringify(param.pattern)} is not a regular expression`);
     }
   }
-  if (param.format !== undefined && (param.type !== "string" || param.format !== "url")) fail(`${at}.format`, 'only a string param takes the format "url"');
+  if (param.format !== undefined && (param.type !== "string" || (param.format !== "url" && param.format !== "keys"))) fail(`${at}.format`, 'only a string param takes the format "url" or "keys"');
   if (param.value_of !== undefined && param.type !== "string") fail(`${at}.value_of`, "only a string param can hold a setting value");
   if (param.strict !== undefined && (param.type !== "string" || !static_values(param))) {
     fail(`${at}.strict`, "only a string param with a fixed value list can be strict");
@@ -360,6 +362,7 @@ function value_problem(param: ParamDef, value: unknown): string | null {
   if (param.type === "int" && param.max !== undefined && (value as number) > param.max) return `${JSON.stringify(value)} is above the maximum ${param.max}`;
   if ((param.type === "string" || param.type === "key") && param.pattern !== undefined && !new RegExp(param.pattern).test(value as string)) return `${JSON.stringify(value)} does not match ${param.pattern}`;
   if (param.type === "string" && param.format === "url" && !URL.canParse(value as string)) return `${JSON.stringify(value)} is not an address`;
+  if (param.type === "string" && param.format === "keys" && parse_sequence(value as string).error !== undefined) return `${JSON.stringify(value)} is not a key sequence`;
   if (param.type === "string" && param.strict && list && !list.includes(value as string)) return `${JSON.stringify(value)} is not one of ${list.join(", ")}`;
   return null;
 }

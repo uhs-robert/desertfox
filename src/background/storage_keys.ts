@@ -40,6 +40,9 @@ export const TAB_MODE_STORAGE_PREFIX = "desertfox_tab_mode_";
 // The last bundle injections with their times. The key test reads it.
 export const BUNDLE_LOADS_STORAGE_KEY = "desertfox_bundle_loads";
 
+// The last command round trips and hint builds with their times, in `storage.session`. `debug.perf` summarizes them.
+export const TIMINGS_STORAGE_KEY = "desertfox_timings";
+
 // The command line history, oldest first. Capped, and never filled from a private window.
 export const CMDLINE_HISTORY_STORAGE_KEY = "desertfox_cmdline_history";
 
@@ -107,3 +110,5 @@ export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";
 
 // The cross-frame hint session of a tab, in `storage.session`. See `hint_frames.ts`.
 export const HINT_FRAMES_STORAGE_PREFIX = "desertfox_hint_frames_";
+// The open external-editor jobs, `{ [job]: { job, tab_id, token, frame_id, is_private, orphaned? } }`, in `storage.session`, so a restarted background resumes collecting. See `external_editor.ts`.
+export const EDITOR_JOBS_STORAGE_KEY = "desertfox_editor_jobs";

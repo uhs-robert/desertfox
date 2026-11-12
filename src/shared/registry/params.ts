@@ -3,13 +3,17 @@
 
 import type { CommandDef, ContextSource, DefaultArm, DynamicValues, ParamDef, ParamValue } from "../command.ts";
 
-export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard", "bookmark_title"] as const;
+export const CONTEXT_SOURCE_NAMES = ["current_url", "selection", "clipboard", "bookmark_title", "search_query"] as const;
 
 export function is_context_source(value: unknown): value is ContextSource {
   if (typeof value !== "object" || value === null) return false;
-  const from = (value as { from?: unknown }).from;
-  return CONTEXT_SOURCE_NAMES.some((name) => name === from);
+  const { from, then } = value as { from?: unknown; then?: unknown };
+  const is_name = (name: unknown) => CONTEXT_SOURCE_NAMES.some((known) => known === name);
+  return is_name(from) && (then === undefined || is_name(then));
 }
+
+// A source as the command line writes it: `@selection`, or the chain `@selection,search_query`.
+export const source_text = (source: ContextSource): string => `@${source.from}${source.then === undefined ? "" : `,${source.then}`}`;
 
 export type DefaultList = Extract<NonNullable<ParamDef["default"]>, readonly unknown[]>;
 
@@ -81,7 +85,7 @@ export function literal_default(param: ParamDef): ParamValue | undefined {
 export function describe_default(param: ParamDef): string {
   const declared = declared_default(param);
   if (declared === undefined) return "";
-  if (is_context_source(declared)) return `from ${declared.from}`;
+  if (is_context_source(declared)) return `from ${declared.from}${declared.then === undefined ? "" : `, then ${declared.then}`}`;
   if (!is_default_list(declared)) return String(declared);
   const { arms, fallback } = split_default(declared);
   const shown = (value: ParamValue) => (value === "" ? '""' : String(value));

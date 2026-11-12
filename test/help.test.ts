@@ -226,3 +226,25 @@ test("the help home and new tab pages load page.js by tag, because executeScript
     assert.ok(html.indexOf('<script src="page.js"></script>') > html.indexOf('<script src="content.js"></script>'), file);
   }
 });
+
+test("an advanced command is hidden from the Commands page until the route asks, and a named card stays", async () => {
+  const { visible_commands_model, advanced_count } = await import("../src/help/model.ts");
+  const registry = create_registry();
+  registry.define("scroll.lines", { label: "Scroll", intent: "x", runs_in: "content" });
+  registry.define("debug.restart", { label: "Restart", intent: "x", runs_in: "background", advanced: true, run: () => {} });
+  registry.define("native.install", { label: "Install", intent: "x", runs_in: "background", advanced: true, run: () => {} });
+  const model = build_help_model(build_commands_file(registry).commands, undefined, []);
+  assert.equal(advanced_count(model), 2);
+  const ids = (shown: typeof model) => shown.groups.flatMap((group) => group.commands.map((command) => command.id));
+  assert.deepEqual(ids(visible_commands_model(model, false)), ["scroll.lines"]);
+  assert.deepEqual(visible_commands_model(model, false).groups.map((group) => group.name), ["scroll"]);
+  assert.deepEqual(ids(visible_commands_model(model, true)), ["debug.restart", "native.install", "scroll.lines"]);
+  assert.deepEqual(ids(visible_commands_model(model, false, "debug.restart")), ["debug.restart", "scroll.lines"]);
+});
+
+test("the advanced flag in the hash rides on every route form", () => {
+  assert.deepEqual(parse_route("#/commands?advanced"), { page: "commands", advanced: true });
+  assert.deepEqual(parse_route("#section=commands/debug?advanced"), { page: "commands", section: "debug", advanced: true });
+  assert.deepEqual(parse_route("#command=debug.restart?advanced"), { page: "commands", command: "debug.restart", advanced: true });
+  assert.deepEqual(parse_route("#/commands"), { page: "commands" });
+});

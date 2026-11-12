@@ -63,3 +63,13 @@ test("the build refuses two engines with one keyword and names the first", () =>
 test("a child cannot be named keyword", () => {
   assert.match(problems_of(`[a]\n${URL}\n[a.keyword]\n${URL}`), /reserved/);
 });
+
+test("reverse is kept per engine, not inherited, and a bad pattern is refused", () => {
+  const engines = build(`[a]\n${URL}\nreverse = "https://a\\\\.example/([^/]+)"\n[a.sub]\nlabel = "sub"`);
+  assert.equal(engines.a?.reverse, "https://a\\.example/([^/]+)");
+  assert.equal(engines["a.sub"]?.reverse, undefined);
+  assert.match(engines.a?.origins?.reverse ?? "", /\[a\]/);
+  for (const reverse of ['"(unclosed"', '"no group"', '"(a+)+(b)"']) {
+    assert.match(problems_of(`[a]\n${URL}\nreverse = ${reverse}`), /reverse/, reverse);
+  }
+});

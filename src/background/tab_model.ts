@@ -5,7 +5,7 @@
 // because a port sees only the tabs of its own privacy and a global count would show it gaps. A client that sees a gap sends `resync`.
 // A patch applies `removed` first, then `upserts`. Upserts carry every row whose index shifted, so a client never recomputes indexes.
 
-import type { TabModelMessage, TabModelRequest, TabRow } from "../shared/messages.ts";
+import type { GroupRow, TabModelMessage, TabModelRequest, TabRow } from "../shared/messages.ts";
 import { site_key } from "../shared/site_key.ts";
 import { TAB_MODEL_PORT_NAME, TAB_MODEL_PORT_NORMAL, TAB_MODEL_PORT_PRIVATE } from "../shared/tab_model_port.ts";
 import { listed_favicon, numbered_windows, read_container_identities } from "./complete_items.ts";
@@ -18,6 +18,7 @@ const RECONCILE_ATTEMPTS = 3;
 
 type Entry = { row: TabRow; incognito: boolean };
 type Tab = browser.tabs.Tab;
+type Group = browser.tabGroups.TabGroup;
 type Listener<Args extends unknown[]> = { addListener: (listener: (...args: Args) => void) => void };
 type Containers = ReadonlyMap<string, ContainerIdentity>;
 // Window id to its number, as `numbered_windows` counts them.
@@ -43,6 +44,9 @@ export type TabModelDeps = {
     onDetached: Listener<[number, { oldWindowId: number; oldPosition: number }]>;
     onActivated: Listener<[{ tabId: number; windowId: number; previousTabId?: number | undefined }]>;
   };
+  // Rejects when the browser has no tab groups. The model then holds none.
+  groups: () => Promise<Group[]>;
+  group_events?: { onCreated: Listener<[Group]>; onUpdated: Listener<[Group]>; onRemoved: Listener<[Group]>; onMoved: Listener<[Group]> } | undefined;
   windows: () => Promise<WindowLike[]>;
   window_events: { onCreated: Listener<[unknown]>; onRemoved: Listener<[number]> };
   // Rejects or answers empty when containers are off.
@@ -87,12 +91,15 @@ function entry_of(tab: Tab, window_numbers: WindowNumbers, containers: Container
       container_name: container?.name ?? "",
       container_color: container?.color ?? "",
       container_icon: container?.icon ?? "",
+      group_id: tab.groupId ?? -1,
     },
   };
 }
 
+const group_row_of = (group: Group): GroupRow => ({ id: group.id, window_id: group.windowId, title: group.title ?? "", color: group.color, collapsed: group.collapsed });
+
 // The fields an update may change. Position, `active`, `previous` and `window_number` stay the model's own, because their events arrive in order and the tab object in an update can be stale.
-const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container", "container_name", "container_color", "container_icon"] as const;
+const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container", "container_name", "container_color", "container_icon", "group_id"] as const;
 // A tab unloaded while it still loads reads about:blank with no title. The row keeps the address it had.
 const ADDRESS_FIELDS: ReadonlySet<keyof TabRow> = new Set(["title", "url", "site"]);
 const is_unloaded_blank = (row: TabRow) => row.discarded && row.url === "about:blank";
@@ -118,6 +125,12 @@ export function create_tab_model(deps: TabModelDeps) {
   // The batch waiting for the flush. `created` holds the ids no port has heard of yet, so create then remove sends nothing.
   let upserts = new Set<number>();
   let removed = new Map<number, boolean>();
+  // The groups table, and the group changes waiting for the flush. A removed group maps to the privacy of its window, undefined when no row of that window is left to tell.
+  const groups = new Map<number, GroupRow>();
+  let group_upserts = new Set<number>();
+  let groups_removed = new Map<number, boolean | undefined>();
+  // Group ids a tab update named before the group was in the table.
+  const skipped_groups = new Set<number>();
   let created = new Set<number>();
   let timer: unknown;
 
@@ -143,15 +156,26 @@ export function create_tab_model(deps: TabModelDeps) {
       ports.delete(state);
     }
   };
-  const send_snapshot = (state: PortState) => send(state, { type: "snapshot", rev: state.rev, tabs: rows_for(state.incognito) });
+  // A group has no privacy of its own: it takes its window's, read from the window's tabs.
+  const window_privacy = (window_id: number): boolean | undefined => [...entries.values(), ...detached.values()].find((entry) => entry.row.window_id === window_id)?.incognito;
+  const group_rows_for = (incognito: boolean | undefined, ids: Iterable<number> = groups.keys()): GroupRow[] =>
+    [...ids].flatMap((id) => {
+      const group = groups.get(id);
+      return group && window_privacy(group.window_id) === incognito ? [group] : [];
+    });
+  const send_snapshot = (state: PortState) => send(state, { type: "snapshot", rev: state.rev, tabs: rows_for(state.incognito), groups: group_rows_for(state.incognito) });
 
   const flush = () => {
     if (timer !== undefined) deps.clear_timer(timer);
     timer = undefined;
-    const batch = { upserts, removed, created };
+    const batch = { upserts, removed, created, group_upserts, groups_removed };
     upserts = new Set();
     removed = new Map();
     created = new Set();
+    group_upserts = new Set();
+    groups_removed = new Map();
+    // A group of a window with no tab row has no privacy yet. It waits for the flush after its first tab row.
+    for (const id of batch.group_upserts) if (groups.has(id) && window_privacy(groups.get(id)!.window_id) === undefined) group_upserts.add(id);
     for (const state of [...ports]) {
       if (!state.ready) continue;
       const rows = [...batch.upserts].flatMap((id) => {
@@ -159,9 +183,11 @@ export function create_tab_model(deps: TabModelDeps) {
         return entry && entry.incognito === state.incognito ? [entry.row] : [];
       });
       const gone = [...batch.removed].filter(([, incognito]) => incognito === state.incognito).map(([id]) => id);
-      if (rows.length === 0 && gone.length === 0) continue;
+      const group_rows = group_rows_for(state.incognito, batch.group_upserts);
+      const groups_gone = [...batch.groups_removed].filter(([, incognito]) => incognito === undefined || incognito === state.incognito).map(([id]) => id);
+      if (rows.length === 0 && gone.length === 0 && group_rows.length === 0 && groups_gone.length === 0) continue;
       state.rev += 1;
-      send(state, { type: "patch", rev: state.rev, upserts: rows, removed: gone });
+      send(state, { type: "patch", rev: state.rev, upserts: rows, removed: gone, ...(group_rows.length > 0 ? { groups: group_rows } : {}), ...(groups_gone.length > 0 ? { groups_removed: groups_gone } : {}) });
     }
   };
   const schedule = () => {
@@ -169,6 +195,25 @@ export function create_tab_model(deps: TabModelDeps) {
   };
   const touch = (id: number) => {
     upserts.add(id);
+    schedule();
+  };
+  const touch_group = (group: Group, from_event = true) => {
+    const row = group_row_of(group);
+    const current = groups.get(row.id);
+    // A tab update that named this group before its event arrived was ignored, so the rows are read again, once per such group.
+    if (!current && from_event && skipped_groups.delete(row.id)) void reconcile();
+    if (current && (Object.keys(row) as (keyof GroupRow)[]).every((field) => current[field] === row[field])) return;
+    groups.set(row.id, row);
+    group_upserts.add(row.id);
+    schedule();
+  };
+  const forget_group = (id: number) => {
+    const current = groups.get(id);
+    if (!current) return;
+    groups.delete(id);
+    group_upserts.delete(id);
+    groups_removed.set(id, window_privacy(current.window_id));
+    for (const entry of entries.values()) if (entry.row.group_id === id) set_field(entry, "group_id", -1);
     schedule();
   };
   const forget = (id: number, incognito: boolean) => {
@@ -253,9 +298,10 @@ export function create_tab_model(deps: TabModelDeps) {
           let tabs: Tab[];
           let windows: WindowLike[];
           let loaded_containers: Containers;
+          let loaded_groups: Group[];
           let previous_by_window: Map<number, number | undefined>;
           try {
-            [tabs, windows, loaded_containers] = await Promise.all([deps.query(), deps.windows(), deps.containers().catch((): Containers => new Map())]);
+            [tabs, windows, loaded_containers, loaded_groups] = await Promise.all([deps.query(), deps.windows(), deps.containers().catch((): Containers => new Map()), deps.groups().catch((): Group[] => [])]);
             const window_ids = windows.flatMap((window) => (window.id === undefined ? [] : [window.id]));
             previous_by_window = new Map(await Promise.all(window_ids.map(async (id) => [id, await deps.previous_of(id).catch(() => undefined)] as const)));
           } catch (error) {
@@ -268,6 +314,8 @@ export function create_tab_model(deps: TabModelDeps) {
           containers = loaded_containers;
           entries.clear();
           detached.clear();
+          groups.clear();
+          for (const group of loaded_groups) groups.set(group.id, group_row_of(group));
           for (const tab of tabs) {
             const entry = entry_of(tab, window_numbers, containers);
             if (!entry) continue;
@@ -277,6 +325,8 @@ export function create_tab_model(deps: TabModelDeps) {
           upserts = new Set();
           removed = new Map();
           created = new Set();
+          group_upserts = new Set();
+          groups_removed = new Map();
           loaded = true;
           for (const state of ports) {
             state.ready = true;
@@ -296,6 +346,11 @@ export function create_tab_model(deps: TabModelDeps) {
   const same_entry = (a: Entry, b: Entry) => a.incognito === b.incognito && (Object.keys(a.row) as (keyof TabRow)[]).every((field) => a.row[field] === b.row[field]);
   // The event handlers shift indexes by hand, so one stale or missed event leaves rows wrong until Firefox is asked again.
   // The diff goes through `touch` and `forget`, so ports get patches, not snapshots. `previous` stays the model's own, as in `UPDATABLE`.
+  const repair_groups = (fresh: Group[]) => {
+    const live = new Set(fresh.map((group) => group.id));
+    for (const id of [...groups.keys()]) if (!live.has(id)) forget_group(id);
+    for (const group of fresh) touch_group(group, false);
+  };
   const repair_from = (tabs: Tab[]) => {
     const fresh = new Map<number, Entry>();
     for (const tab of tabs) {
@@ -327,10 +382,11 @@ export function create_tab_model(deps: TabModelDeps) {
       for (let attempt = 0; attempt < RECONCILE_ATTEMPTS; attempt += 1) {
         const seen = events_seen;
         // Windows and containers too, so a missed window or container event heals the labels as well.
-        const [tabs, numbers, read_containers] = await Promise.all([
+        const [tabs, numbers, read_containers, read_groups] = await Promise.all([
           deps.query().catch(() => undefined),
           deps.windows().then(number_windows, () => undefined),
           deps.containers().catch((): Containers => new Map()),
+          deps.groups().catch(() => undefined),
         ]);
         if (call !== reconciles) return newest_reconcile;
         if (tabs === undefined) return;
@@ -338,6 +394,8 @@ export function create_tab_model(deps: TabModelDeps) {
         if (numbers) window_numbers = numbers;
         containers = read_containers;
         repair_from(tabs);
+        // A rejected read says nothing about the groups, so it repairs none.
+        if (read_groups) repair_groups(read_groups);
         // `repair_from` labels the listed rows. This reaches the detached ones.
         relabel_rows();
         return;
@@ -379,6 +437,11 @@ export function create_tab_model(deps: TabModelDeps) {
       const unloaded_blank = is_unloaded_blank(fresh.row);
       for (const field of UPDATABLE) {
         if (unloaded_blank && ADDRESS_FIELDS.has(field)) continue;
+        // A stale tab object can still carry a group that was removed.
+        if (field === "group_id" && fresh.row.group_id !== -1 && !groups.has(fresh.row.group_id)) {
+          skipped_groups.add(fresh.row.group_id);
+          continue;
+        }
         if (current.row[field] !== fresh.row[field]) {
           (current.row as Record<string, unknown>)[field] = fresh.row[field];
           changed = true;
@@ -445,6 +508,17 @@ export function create_tab_model(deps: TabModelDeps) {
     when_loaded(({ tabId, windowId, previousTabId }) => {
       if (entries.has(tabId)) activate(windowId, tabId);
       mark_previous(windowId, previousTabId);
+    }),
+  );
+  const group_events = deps.group_events;
+  group_events?.onCreated.addListener(when_loaded((group) => touch_group(group)));
+  group_events?.onUpdated.addListener(when_loaded((group) => touch_group(group)));
+  group_events?.onRemoved.addListener(when_loaded((group) => forget_group(group.id)));
+  // A group that moves carries its tabs, and Firefox may report that as tab moves or not, so the indexes come from a fresh read.
+  group_events?.onMoved.addListener(
+    when_loaded((group) => {
+      touch_group(group, false);
+      void reconcile();
     }),
   );
   // A window opening or closing shifts the numbers of the windows after it.
@@ -531,6 +605,8 @@ export function browser_tab_model_deps(from_services: Pick<TabModelDeps, "previo
     events: browser.tabs as unknown as TabModelDeps["events"],
     windows: () => browser.windows.getAll(),
     window_events: browser.windows as unknown as TabModelDeps["window_events"],
+    groups: () => browser.tabGroups.query({}),
+    group_events: browser.tabGroups as unknown as TabModelDeps["group_events"],
     containers: () => read_container_identities(() => browser.contextualIdentities.query({})),
     container_events: browser.contextualIdentities as unknown as TabModelDeps["container_events"],
     on_connect: browser.runtime.onConnect as unknown as TabModelDeps["on_connect"],

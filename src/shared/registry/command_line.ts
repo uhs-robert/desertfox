@@ -260,9 +260,14 @@ function bare_word_values(param: ParamDef, sources: EnumSources): readonly strin
 }
 
 // An unquoted `@name` is a context source the router fills in when the key is pressed.
-function value_of(text: string, unquoted: boolean): string | { from: ContextSourceName } | { error: string } {
+// `@a,b` is a chain: `a`, else `b`.
+function value_of(text: string, unquoted: boolean): string | { from: ContextSourceName; then?: ContextSourceName } | { error: string } {
   if (!unquoted || !text.startsWith("@")) return text;
-  const source = CONTEXT_SOURCE_NAMES.find((name) => name === text.slice(1));
-  if (source) return { from: source };
+  const [first, second, ...rest] = text.slice(1).split(",");
+  const named = (word: string | undefined) => CONTEXT_SOURCE_NAMES.find((name) => name === word);
+  const source = named(first);
+  if (source && second === undefined) return { from: source };
+  const then = named(second);
+  if (source && then && rest.length === 0 && then !== source) return { from: source, then };
   return { error: `unknown source "${text}" (known: ${CONTEXT_SOURCE_NAMES.map((name) => `@${name}`).join(", ")}), quote text that starts with @` };
 }

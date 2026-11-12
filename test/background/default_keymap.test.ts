@@ -196,6 +196,7 @@ test("a search binding on the selection opens the command line when nothing is s
     runs_with_empty: async () => false,
     read_clipboard: async () => "",
     bookmark_title: async () => undefined,
+    search_query: async () => undefined,
     has_permission: async () => true,
     send_to_tab: async () => undefined,
     open_cmdline: async (_tab, _frame, text) => void log.push(text),

@@ -4,18 +4,25 @@ import type { Settings } from "./settings_table.ts";
 
 // One constant per setting, so a bundle that reads one default (the content script) carries only that one.
 export const DEFAULT_WHICH_KEY_DELAY_MS: Settings["which_key_delay_ms"] = 300;
+export const DEFAULT_WHICH_KEY_REPEAT: Settings["which_key_repeat"] = true;
 export const DEFAULT_WHICH_KEY_BORDER: Settings["which_key_border"] = "square";
+export const DEFAULT_WHICH_KEY_SKIP: Settings["which_key_skip"] = [];
 export const DEFAULT_HINT_LETTERS: Settings["hint_letters"] = "asdfghjkl";
 export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
 export const DEFAULT_HINT_ADD: Settings["hint_add"] = [];
 export const DEFAULT_HINT_REMOVE: Settings["hint_remove"] = [];
 export const DEFAULT_BLUR_ON_LOAD: Settings["blur_on_load"] = false;
+export const DEFAULT_EDITABLE_ADD: Settings["editable_add"] = [];
+export const DEFAULT_EDITABLE_REMOVE: Settings["editable_remove"] = [];
+export const DEFAULT_EDITABLE_REMOVE_UNSIZED: Settings["editable_remove_unsized"] = false;
 export const DEFAULT_ESCAPE_TO_PAGE: Settings["escape_to_page"] = false;
 export const DEFAULT_SITE_RULES: Settings["site_rules"] = [];
 export const DEFAULT_DEFAULT_SITE_ROWS_OFF: Settings["default_site_rows_off"] = [];
 export const DEFAULT_NEXT_PATTERNS: Settings["next_patterns"] = ["next","more","newer",">","›","→","»","≫",">>"];
 export const DEFAULT_PREV_PATTERNS: Settings["prev_patterns"] = ["prev","previous","older","<","‹","←","«","≪","<<"];
+export const DEFAULT_STRIP_TRACKING_PARAMS: Settings["strip_tracking_params"] = ["utm_*","fbclid","gclid","dclid","msclkid","mc_eid","igshid","yclid","_hsenc","_hsmi","mkt_tok"];
 export const DEFAULT_MEDIA_QUALITY: Settings["media_quality"] = "max";
+export const DEFAULT_EDITOR_EXT: Settings["editor_ext"] = "";
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
 export const DEFAULT_PALETTE: Settings["palette"] = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: Settings["light_intensity"] = 3;
@@ -43,18 +50,25 @@ export const DEFAULT_NEWTAB_LINKS: Settings["newtab_links"] = [];
 
 export const DEFAULT_SETTINGS: Settings = {
   which_key_delay_ms: DEFAULT_WHICH_KEY_DELAY_MS,
+  which_key_repeat: DEFAULT_WHICH_KEY_REPEAT,
   which_key_border: DEFAULT_WHICH_KEY_BORDER,
+  which_key_skip: DEFAULT_WHICH_KEY_SKIP,
   hint_letters: DEFAULT_HINT_LETTERS,
   hint_key_line: DEFAULT_HINT_KEY_LINE,
   hint_add: DEFAULT_HINT_ADD,
   hint_remove: DEFAULT_HINT_REMOVE,
   blur_on_load: DEFAULT_BLUR_ON_LOAD,
+  editable_add: DEFAULT_EDITABLE_ADD,
+  editable_remove: DEFAULT_EDITABLE_REMOVE,
+  editable_remove_unsized: DEFAULT_EDITABLE_REMOVE_UNSIZED,
   escape_to_page: DEFAULT_ESCAPE_TO_PAGE,
   site_rules: DEFAULT_SITE_RULES,
   default_site_rows_off: DEFAULT_DEFAULT_SITE_ROWS_OFF,
   next_patterns: DEFAULT_NEXT_PATTERNS,
   prev_patterns: DEFAULT_PREV_PATTERNS,
+  strip_tracking_params: DEFAULT_STRIP_TRACKING_PARAMS,
   media_quality: DEFAULT_MEDIA_QUALITY,
+  editor_ext: DEFAULT_EDITOR_EXT,
   mode_indicator: DEFAULT_MODE_INDICATOR,
   palette: DEFAULT_PALETTE,
   light_intensity: DEFAULT_LIGHT_INTENSITY,

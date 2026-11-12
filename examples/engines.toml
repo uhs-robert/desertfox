@@ -12,7 +12,7 @@
 # A table inside an engine is a child, named with a dot: `search github.repo.issues foo`. A child inherits every field
 # and overrides by name. A param is declared on the parent with its values, and children = true makes one child per
 # value. A value names a slot with `{name}`, so a scope can say "repo:{repo} ".
-# A child cannot be named url, label, params, fallback, hosts or keyword, or like a field or param of its parent.
+# A child cannot be named url, label, params, fallback, hosts, keyword or reverse, or like a field or param of its parent.
 #
 # hosts = ["github.com"] ties an engine, and the children that inherit it, to a site. It gates only the generated s/ and S/ keys,
 # which list the engines of the page you are on. A host matches itself only: list www. and other subdomains you want.
@@ -21,6 +21,8 @@
 #   i = ["github.issues", "gitlab.issues"]     # s/i searches issues on GitHub or GitLab
 #   I = ["github.repo.issues"]                 # s/I searches the issues of this repo
 # keyword = "g" gives an engine a short word, one to eight lower case letters or digits, unique across engines. A child does not inherit it.
+# Every engine reads its own results page back from its url, so s<x> on a results page searches the query on the page when nothing is selected.
+# reverse = "https://example.com/find/([^/]+)" is only for an address the url cannot describe: one capture group, matched against the whole address. A child does not inherit it.
 # s// searches the current site with the built-in "site" engine (the default engine plus site:<host>). It needs no entry.
 
 # Flat engines: one line each, "%s" stands for the query.

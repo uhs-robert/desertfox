@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hint_selectors_reply, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
@@ -387,12 +387,12 @@ test("the shipped sheets rows bind x and p to cut and paste on the grid editor, 
   assert.equal(plain.modes.normal?.children["p"]?.kind, "branch");
 });
 
-test("the shipped sheets rows turn escape_to_page on, a user row beats it, and no other page gets it", async () => {
+test("the shipped sheets rows turn escape_to_page and the parked cell editor rule on, a user row beats it, and no other page gets it", async () => {
   const compiled = with_defaults({});
-  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.deepEqual((await ask(compiled, url))!.site_values, { escape_to_page: true }, url);
+  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.deepEqual((await ask(compiled, url))!.site_values, { escape_to_page: true, editable_remove: ["#waffle-rich-text-editor"], editable_remove_unsized: true }, url);
   assert.equal((await ask(compiled, "https://docs.google.com/document/d/abc/edit"))!.site_values, undefined);
   const user = with_defaults({ site_rules: [{ site: "https://docs.google.com/spreadsheets/*", escape_to_page: false }] });
-  assert.equal((await ask(user, SHEETS))!.site_values, undefined);
+  assert.deepEqual((await ask(user, SHEETS))!.site_values, { editable_remove: ["#waffle-rich-text-editor"], editable_remove_unsized: true });
   assert.equal(await key_at(user, SHEETS, "j"), "ArrowDown");
 });
 
@@ -408,6 +408,13 @@ test("default_site_rows_off turns off both sheets rows", async () => {
   assert.equal(compiled.site_rules, undefined);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
   assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 2);
+});
+
+test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
+  const off = with_defaults({ default_site_rows_off: ["sheets"] });
+  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.equal((await ask(off, url))?.site_values, undefined, url);
+  const user = with_defaults({ site_rules: [{ site: "https://docs.google.com/spreadsheets/*", editable_remove: [".other"] }] });
+  assert.deepEqual((await ask(user, SHEETS))!.site_values, { escape_to_page: true, editable_remove: [".other"], editable_remove_unsized: true });
 });
 
 test("a user bind for one key beats the shipped key and the other shipped keys stay", async () => {
@@ -445,4 +452,30 @@ test("the shipped sheets rows bind G to Ctrl+End then Home, labeled, on both add
   }
   assert.equal(await key_at(with_defaults({}), "https://example.org/", "G"), "scroll.to");
   assert.equal(await key_at(with_defaults({ default_site_rows_off: ["sheets"] }), SHEETS, "G"), "scroll.to");
+});
+
+test("the reply carries the mode a frame joins, insert beats media, and an all-off frame gets none", async () => {
+  const on = compile([]);
+  const storage = storage_of(on);
+  const join_of = async (join: () => Promise<"insert" | "media" | undefined>, compiled = storage) => (await page_keymap_for(compiled, ["https://a.test/"], undefined, join))?.join;
+  assert.equal(await join_of(async () => "media"), "media");
+  assert.equal(await join_of(async () => "insert"), "insert");
+  assert.equal(await join_of(async () => undefined), undefined);
+  let asked = 0;
+  const counted = async () => (asked++, "media" as const);
+  assert.equal(await join_of(counted, storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+  assert.equal(await join_of(counted, storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+  assert.equal(asked, 0, "join is never asked for an all-off frame");
+});
+
+test("join_mode: insert beats media, media is not asked when insert holds, and a re-ask asks nothing", async () => {
+  let asked = 0;
+  const media = async () => (asked++, true);
+  assert.equal(await join_mode(true, async () => true, media), "insert");
+  assert.equal(asked, 0);
+  assert.equal(await join_mode(true, async () => false, media), "media");
+  assert.equal(await join_mode(true, async () => false, async () => false), undefined);
+  asked = 0;
+  assert.equal(await join_mode(false, async () => (asked++, true), media), undefined);
+  assert.equal(asked, 0);
 });

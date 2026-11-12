@@ -77,7 +77,7 @@ A beta build is signed by Mozilla, built nightly from `main` and updates itself.
 
 ## 🚀 Try it
 
-After you install DesertFox, press `g?`, `,h` or `<F1>` on a normal page. The help page opens. A short pause after a key shows the keys that can follow.
+After you install DesertFox, press `g?`, `,h` or `<F1>` on a normal page. The help page opens. A short pause after a key shows the keys that can follow. On a page where keys never reach DesertFox, such as an `about:` page or the PDF viewer, type `df`, a space and a command in the address bar, for example `df tab.next`.
 
 The Quick Start page opens on first install and sits in the help sidebar. It teaches scrolling, hints, the command line, page search, caret and visual mode, with the keys read from your keymap.
 

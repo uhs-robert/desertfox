@@ -13,13 +13,22 @@ export const PAGES = [
 
 export type PageId = (typeof PAGES)[number]["id"];
 
-export type Route = { page: PageId; engine?: string; command?: string; section?: string };
+export type Route = { page: PageId; engine?: string; command?: string; section?: string; advanced?: true };
 
 // `engine.show <name>` opens `#engine=<name>`, which stays valid and lands on the Search Engines page.
 // `#section=<page>/<slug>` lands on that page at that section, the same way, for every page with sections.
 // `#command=<id>` lands on the Commands page at that command's card.
+// A trailing `?advanced` on any of them also shows the Commands page cards flagged `advanced`.
 // An unknown hash shows Home.
 export function parse_route(hash: string): Route {
+  const advanced = hash.endsWith(ADVANCED_SUFFIX);
+  const route = parse_route_without_flag(advanced ? hash.slice(0, -ADVANCED_SUFFIX.length) : hash);
+  return advanced ? { ...route, advanced: true } : route;
+}
+
+export const ADVANCED_SUFFIX = "?advanced";
+
+function parse_route_without_flag(hash: string): Route {
   let text = hash;
   try {
     text = decodeURIComponent(hash);

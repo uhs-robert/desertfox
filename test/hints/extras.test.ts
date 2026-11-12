@@ -6,6 +6,7 @@ import { check_args } from "../../src/shared/registry/check_args.ts";
 import type { Outcome } from "../../src/shared/messages.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { KEY_LINE_LABELS, KEY_LINE_TEXT } from "../../src/content/hints/view.ts";
+import { is_editable_element } from "../../src/content/editable.ts";
 
 class FakeNode {
   children: FakeNode[] = [];
@@ -101,6 +102,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   const links: Link[] = [];
   const active_listeners = new Set<string>();
   const sent: unknown[] = [];
+  const timings: unknown[] = [];
   const repeat_records: unknown[] = [];
   const yanked: unknown[] = [];
   const copied: string[] = [];
@@ -153,6 +155,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
         if (left_hint) sink?.exit();
       },
       get_mode: () => mode,
+      is_editable_: is_editable_element,
       escape_: () => win.desertfox_host.set_mode_("normal"),
       // The caret bundle's `caret.mode` sets the caret mode it is asked for.
       run_command_: async (id: string, _name: string, args: Record<string, unknown>) => {
@@ -242,6 +245,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   globals.browser = { storage: { local: { get: async () => ({ desertfox_config_status: { settings } }) }, onChanged: { addListener: () => {} } }, runtime: { onMessage: { addListener: (listener: (message: unknown) => unknown) => void message_listeners.push(listener) }, sendMessage: async (message: unknown) => {
     if ((message as { type?: string }).type === "hint_frames_start") return sent.push(message), start_answer(message);
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
+    if ((message as { type?: string }).type === "record_timing") return void timings.push(message);
     if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
@@ -263,6 +267,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   return {
     links,
     sent,
+    timings,
     repeat_records,
     yanked,
     copied,
@@ -823,6 +828,18 @@ test("hint.run waits until a label is picked, then answers done and the mode cha
   page.type(page.labels()[0]!.toLowerCase());
   assert.deepEqual(await answer, { ok: true });
   assert.equal(page.mode(), "normal");
+});
+
+test("the first build and a rapid rebuild each report a hint.build time", async () => {
+  const page = await page_with(["one", "two"]);
+  void page.run({ action: "background", rapid: true });
+  await settle();
+  assert.equal(page.timings.length, 1);
+  const [timing] = page.timings as { type: string; name: string; ms: number }[];
+  assert.deepEqual([timing!.type, timing!.name, timing!.ms >= 0], ["record_timing", "hint.build", true]);
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.timings.length, 2);
 });
 
 test("hint.run answers cancelled when the mode ends with no pick, and a later exit changes nothing", async () => {

@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 411 (normal 205, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 3, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 420 (normal 213, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 3 | dropped: 5
 
 ### normal
 
@@ -110,6 +110,13 @@ bound: 411 (normal 205, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `tU` | bound | `tab.load` | Load tab |  |
 | `tH` | bound | `tab.unload --all-before` | Unload tabs before this one |  |
 | `tL` | bound | `tab.unload --all-after` | Unload tabs after this one |  |
+| `tga` | bound | `tabgroup.add` (prompts) | Add tab to a group |  |
+| `tgA` | bound | `tabgroup.add` | Add tab to a new group |  |
+| `tgd` | bound | `tabgroup.remove` | Remove tab from group |  |
+| `tgn` | bound | `tabgroup.name` (prompts) | Name tab group |  |
+| `tgc` | bound | `tabgroup.collapse` | Collapse tab group |  |
+| `tge` | bound | `tabgroup.expand` | Expand tab group |  |
+| `tgt` | bound | `tabgroup.toggle` | Toggle tab group |  |
 | `W` | bound | `window.new` (prompts) | New window, edit current URL |  |
 | `ww` | bound | `window.new` (prompts) | New window, edit current URL |  |
 | `wo` | bound | `window.new` (prompts) | New window, enter URL |  |
@@ -130,6 +137,7 @@ bound: 411 (normal 205, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `yt` | bound | `copy --title` | Copy URL |  |
 | `yL` | bound | `copylinks` | Copy page links |  |
 | `yl` | bound | `copylinks --viewport` | Copy links in view |  |
+| `yT` | bound | `copytabs` | Copy tab links |  |
 | `gu` | bound | `url.parent` | Parent URL |  |
 | `gU` | bound | `url.root` | Root URL |  |
 | `<C-a>` | bound | `url.increment --up` | Change URL number |  |
@@ -256,6 +264,7 @@ Which-key group names:
 - `p`: Page
 - `>`: Move tab
 - `t`: Tabs
+- `tg`: Tab groups
 - `w`: Windows
 - `y`: Copy
 - `b`: Bookmark
@@ -508,6 +517,7 @@ Which-key group names:
 | --- | --- | --- | --- | --- |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-r>` | bound | `register.paste` | Paste register |  |
+| `<C-i>` | bound | `text.edit_external` | Edit the field in the external editor (takes Ctrl+I from italic) |  |
 | `<A-Escape>` | bound | `page.send_key --key=Escape --key_code=27` | Send Escape to the page |  |
 
 ### ignore

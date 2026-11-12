@@ -53,8 +53,14 @@ export type ListKeys = {
   prefix: string[];
 };
 
+// Asks what `.` would repeat, for the which-key panel footer. The answer is the step as text, or undefined when there is none, the setting is off or the tab is private.
+export type ReadRepeatPreview = {
+  type: "read_repeat_preview";
+};
+
 // What the panel shows: the chain of group names that leads here (empty when there is no panel) and the keys that can follow.
-export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder };
+// `repeat` is the step `.` would run. The background leaves it out of this answer: the panel bundle adds it from a `read_repeat_preview` answer.
+export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder; repeat?: string };
 
 // One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
 export type WhichKeyRow = {
@@ -225,6 +231,10 @@ export type RegisterWrite = { type: "register_write"; name: string; text: string
 export type RegisterYank = { type: "register_yank"; name: string; text: string };
 export type RegisterRequest = RegisterRead | RegisterWrite | RegisterYank;
 
+// From the `editor` bundle: the focused field's text to edit outside the browser. `token` names this page's pending edit, `ext` is the command's own extension (else the background resolves the site's `editor_ext`). The answer is `EditorAnswer`.
+export type EditorOpen = { type: "editor_open"; token: string; text: string; ext?: string; insert: boolean };
+export type EditorAnswer = { ok: true } | { ok: false; message: string };
+
 // From the content script when a leaf of content commands ends: the steps and how they ended. The background checks it like any page message,
 // because the sender is a page script, then hands it to `record_step`. A held key sends the first press only.
 export type RecordStep = {
@@ -245,6 +255,8 @@ export type OpenHelp = {
 // A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
 export type ReadKeymap = {
   type: "read_keymap";
+  // Set on a frame's first ask only, when it starts in normal mode with no editable focus: only such a frame may join a hold. A re-ask, or a frame in another mode, must not be written into one.
+  join: boolean;
 };
 
 // Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
@@ -443,7 +455,10 @@ export type HintFramesEnd = {
   session_id: string;
 };
 
-export type ContentToBackground = HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest;
+// From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
+export type RecordTiming = { type: "record_timing"; name: string; ms: number };
+
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -529,7 +544,10 @@ export type HintFramesLabels = {
   labels: string[];
 };
 
-export type BackgroundToContent = HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+// To the frame that opened an edit, when the editor ends. `text` is present only when the file changed. A frame with another `token` (a new page) ignores it.
+export type EditorDone = { type: "editor_done"; token: string; text?: string };
+
+export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 
@@ -555,7 +573,15 @@ export type TabRow = {
   container_name: string;
   container_color: string;
   container_icon: string;
+  // The native tab group of the tab, -1 for none, as Firefox reports it. The group's own fields are in the groups table.
+  group_id: number;
 };
 
-export type TabModelMessage = { type: "snapshot"; rev: number; tabs: TabRow[] } | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[] };
+// A native tab group. `color` is Firefox's own color name.
+export type GroupRow = { id: number; window_id: number; title: string; color: string; collapsed: boolean };
+
+// A patch names groups only when some changed. The group lists follow the same privacy rule as the tabs.
+export type TabModelMessage =
+  | { type: "snapshot"; rev: number; tabs: TabRow[]; groups: GroupRow[] }
+  | { type: "patch"; rev: number; upserts: TabRow[]; removed: number[]; groups?: GroupRow[]; groups_removed?: number[] };
 export type TabModelRequest = { type: "resync" };

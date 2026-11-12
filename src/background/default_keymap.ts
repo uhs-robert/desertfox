@@ -81,6 +81,7 @@ const BASE_SECTIONS: KeymapConfig = {
     p: "Page",
     ">": "Move tab",
     t: "Tabs",
+    tg: "Tab groups",
     w: "Windows",
     y: "Copy",
     b: "Bookmark",
@@ -188,6 +189,15 @@ const BASE_SECTIONS: KeymapConfig = {
     tH: { id: "tab.unload", args: { side: "all_before" }, label: "Unload tabs before this one" },
     tL: { id: "tab.unload", args: { side: "all_after" }, label: "Unload tabs after this one" },
 
+    // The tg group works on the tab's native tab group.
+    tga: { id: "tabgroup.add", prompt: { param: "group" }, label: "Add tab to a group" },
+    tgA: { id: "tabgroup.add", label: "Add tab to a new group" },
+    tgd: { id: "tabgroup.remove" },
+    tgn: { id: "tabgroup.name", prompt: { param: "title" } },
+    tgc: { id: "tabgroup.collapse" },
+    tge: { id: "tabgroup.expand" },
+    tgt: { id: "tabgroup.toggle" },
+
     // The w group works on windows.
     W: { id: "window.new", prompt: { param: "url", prefill: { from: "current_url" } }, label: "New window, edit current URL" },
     ww: { id: "window.new", prompt: { param: "url", prefill: { from: "current_url" } }, label: "New window, edit current URL" },
@@ -210,6 +220,7 @@ const BASE_SECTIONS: KeymapConfig = {
     yt: { id: "copy.url", args: { format: "title" } },
     yL: { id: "copy.links", args: { scope: "page", format: "markdown" }, label: "Copy page links" },
     yl: { id: "copy.links", args: { scope: "viewport", format: "markdown" }, label: "Copy links in view" },
+    yT: { id: "copy.tabs", args: { scope: "window", format: "markdown" }, label: "Copy tab links" },
     gu: { id: "url.parent" },
     gU: { id: "url.root" },
     "<C-a>": { id: "url.increment", args: { direction: "up" } },
@@ -378,6 +389,7 @@ const BASE_SECTIONS: KeymapConfig = {
   insert: {
     "<Escape>": { id: "mode.escape" },
     "<C-r>": { id: "register.paste", label: "Paste register" },
+    "<C-i>": { id: "text.edit_external", label: "Edit the field in the external editor (takes Ctrl+I from italic)" },
     "<A-Escape>": { id: "page.send_key", args: { key: "Escape", key_code: 27 }, label: "Send Escape to the page" },
   },
   ignore: {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check_args, create_registry, parse_command_line, tokenize, usage_line } from "../../src/shared/registry/index.ts";
+import { check_args, create_registry, parse_command_line, print_command, tokenize, usage_line } from "../../src/shared/registry/index.ts";
 import type { EnumSources, Token } from "../../src/shared/registry/index.ts";
 import "../../src/commands/hint.ts";
 import "../../src/background/command_modules.ts";
@@ -219,7 +219,7 @@ test("@source words are context sources, unquoted only", () => {
   assert.deepEqual(parsed(`open "@selection"`).args, { url: "@selection" });
   assert.deepEqual(parsed(`open --url="@selection"`).args, { url: "@selection" });
   assert.deepEqual(parsed(`open a@b.example`).args, { url: "a@b.example" });
-  assert.match(error_of("open @nope"), /unknown source "@nope" \(known: @current_url, @selection, @clipboard, @bookmark_title\), quote text that starts with @/);
+  assert.match(error_of("open @nope"), /unknown source "@nope" \(known: @current_url, @selection, @clipboard, @bookmark_title, @search_query\), quote text that starts with @/);
 });
 
 test("shell quoting", () => {
@@ -442,4 +442,21 @@ test("a leading number belongs to the main value when the command has one", () =
   assert.deepEqual(unload("tab.load 3 GitHub"), { tab: "3 GitHub" });
   assert.deepEqual(unload("tab.unload --count=2 3 GitHub"), { count: "2", tab: "3 GitHub" });
   assert.deepEqual(unload("tab.unload --count=2"), { count: "2" });
+});
+
+test("@a,b is a chain of two sources, and a repeated or unknown one is refused", () => {
+  const command = { id: "x", params: [{ name: "q", type: "string", main: true }] } as never;
+  const parse = (text: string) => parse_command_line({ find: () => command }, text, {});
+  assert.deepEqual((parse("x @selection,search_query") as { invocation: { args: unknown } }).invocation.args, { q: { from: "selection", then: "search_query" } });
+  assert.equal(parse("x @selection,selection").kind, "error");
+  assert.equal(parse("x @selection,nope").kind, "error");
+});
+
+test("a chained default prints as @a,b and reads back as the same chain", () => {
+  const search = real_registry.get("open.search")!;
+  const args = { query: { from: "selection", then: "search_query" } };
+  const text = print_command(search, args, { sources: search_sources });
+  assert.match(text, /@selection,search_query/);
+  const parsed = parse_command_line({ find: () => search }, text, search_sources);
+  assert.deepEqual(parsed.kind === "invocation" ? parsed.invocation.args : undefined, args);
 });

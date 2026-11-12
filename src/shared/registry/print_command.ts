@@ -1,11 +1,11 @@
 // The inverse of `parse_command_line`: an invocation back to command line text, for a prompt to start from.
 // It writes the shortest form that reads back as the same args: the engine first, flags in param order, the subject last.
 
-import type { CommandDef, ParamDef } from "../command.ts";
+import type { CommandDef, ContextSource, ParamDef } from "../command.ts";
 import type { EnumSources } from "./check_args.ts";
 import { single_quote } from "./single_quote.ts";
 import { parse_command_line } from "./command_line.ts";
-import { bare_word_param, default_of, is_context_source, is_dynamic_values, positional_params, static_values, subject_param } from "./params.ts";
+import { bare_word_param, default_of, is_context_source, is_dynamic_values, positional_params, source_text, static_values, subject_param } from "./params.ts";
 
 type Printable = Pick<CommandDef, "id" | "name" | "params">;
 
@@ -25,7 +25,7 @@ const PLAIN_WORD = /^[A-Za-z0-9_./:%+,~-]+$/;
 const quoted = (text: string): string => (PLAIN_WORD.test(text) ? text : single_quote(text));
 
 function value_text(value: unknown): string {
-  return is_context_source(value) ? `@${value.from}` : quoted(String(value));
+  return is_context_source(value) ? source_text(value) : quoted(String(value));
 }
 
 const dashed = (word: string): string => word.replaceAll("_", "-");
@@ -98,7 +98,7 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
   return words.join(" ");
 }
 
-const unquoted_text = (value: unknown): string => (is_context_source(value) ? `@${value.from}` : String(value));
+const unquoted_text = (value: unknown): string => (is_context_source(value) ? source_text(value) : String(value));
 
 // Reads back as the same args. A value that would be misread (a source, a flag, an engine name) fails this.
 function reads_back(command: Printable, args: Record<string, unknown>, options: PrintOptions, text: string): boolean {
@@ -117,7 +117,7 @@ function reads_back(command: Printable, args: Record<string, unknown>, options: 
   const got = Object.fromEntries(Object.entries(parsed.invocation.args ?? {}).filter(([, value]) => value !== ""));
   if (Object.keys(got).length !== given.length) return false;
   return given.every(([name, value]) =>
-    is_context_source(value) ? is_context_source(got[name]) && (got[name] as { from: string }).from === value.from : got[name] === (value === true ? true : String(value)),
+    is_context_source(value) ? is_context_source(got[name]) && source_text(got[name] as ContextSource) === source_text(value) : got[name] === (value === true ? true : String(value)),
   );
 }
 
