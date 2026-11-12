@@ -2,7 +2,7 @@
 // The cases record places with the keys themselves (gg, G and a navigation), as a user does. Only the case about a chord held during a bundle load stores a place by a `jump_push` message from the page's tab, because the page bundle is already loaded by any key that records.
 // A private window keeps its own list, and the harness has no private window helper, so only the unit tests cover that.
 
-export const areas = ["scroll", "keys", "tabs"];
+export const areas = ["scroll", "keys", "tabs", "bundles"];
 
 export async function run_cases({ run_case, open_page, press_keys, poll_until, events, wait_event, wait_active_tab, scroll_of, last_scroll_y, expect, expect_no_scroll, in_active_tab, in_background, sleep, settle_focus }) {
   const near = (at, y) => Math.abs(at - y) <= 1;
