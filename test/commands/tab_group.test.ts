@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { make_tab_group_handlers } from "../../src/commands/tab_group.ts";
-import type { GroupInfo, TabGroupDeps } from "../../src/commands/tab_group.ts";
+import { GROUP_COLORS, make_tab_group_handlers, pick_group_stop } from "../../src/commands/tab_group.ts";
+import type { GroupInfo, GroupedTab, TabGroupDeps } from "../../src/commands/tab_group.ts";
 import type { GroupTabInfo } from "../../src/background/tab_actions.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 
-function make(tab: GroupTabInfo, groups: GroupInfo[]) {
+function make(tab: GroupTabInfo, groups: GroupInfo[], window_tabs: GroupedTab[] = []) {
   const log: string[] = [];
   const deps: TabGroupDeps = {
     tab_infos: async () => [tab],
@@ -20,6 +20,8 @@ function make(tab: GroupTabInfo, groups: GroupInfo[]) {
     ungroup: async (ids) => void log.push(`ungroup ${ids.join(",")}`),
     update_group: async (id, props) => void log.push(`update ${id} ${JSON.stringify(props)}`),
     groups_in_window: async () => groups,
+    tabs_in_window: async () => window_tabs,
+    activate: async (id) => void log.push(`activate ${id}`),
   };
   return { handlers: make_tab_group_handlers(deps), log };
 }
@@ -88,4 +90,58 @@ test("the schema accepts a bare call and a free-text name for each command", () 
     assert.equal(check_args(command, { [command.params![0]!.name]: "Some title" }, { search_engines: [], containers: [] }).ok, true, id);
   }
   for (const id of ["tabgroup.remove", "tabgroup.collapse", "tabgroup.expand", "tabgroup.toggle"]) assert.equal(check_args(registry.get(id)!, {}, { search_engines: [], containers: [] }).ok, true, id);
+});
+
+test("color sets the color of the group of the tab, and a tab in no group refuses", async () => {
+  const inside = make(tab({ group_id: 7 }), [{ id: 7, title: "Work", collapsed: false }]);
+  await inside.handlers.color(ctx, { color: "red" });
+  assert.deepEqual(inside.log, ['update 7 {"color":"red"}']);
+  await assert.rejects(make(tab(), []).handlers.color(ctx, { color: "red" }), refused(/no group/));
+});
+
+test("the color param holds the Firefox colors, and the validator rejects another", () => {
+  const command = registry.get("tabgroup.color")!;
+  const sources = { search_engines: [], containers: [] };
+  for (const color of GROUP_COLORS) assert.equal(check_args(command, { color }, sources).ok, true, color);
+  assert.equal(check_args(command, { color: "mauve" }, sources).ok, false);
+  assert.equal(check_args(command, {}, sources).ok, false);
+});
+
+// Strip: a(1) a(2) loose(3) b(4) b(5) loose(6) c(7)
+const strip: GroupedTab[] = [
+  { id: 1, index: 0, group_id: 10 }, { id: 2, index: 1, group_id: 10 }, { id: 3, index: 2, group_id: -1 },
+  { id: 4, index: 3, group_id: 20 }, { id: 5, index: 4, group_id: 20 }, { id: 6, index: 5, group_id: -1 }, { id: 7, index: 6, group_id: 30 },
+];
+const stops = strip.filter((t) => t.group_id !== -1 && strip.find((o) => o.group_id === t.group_id) === t);
+const picked = (current: number, steps: number) => pick_group_stop(stops, strip[current - 1]!, steps)?.id;
+
+test("pick_group_stop moves between groups, wraps, and starts from a tab in no group", () => {
+  assert.equal(picked(2, 1), 4);
+  assert.equal(picked(5, 2), 1);
+  assert.equal(picked(1, -1), 7);
+  assert.equal(picked(3, 1), 4);
+  assert.equal(picked(3, -1), 1);
+  assert.equal(picked(6, 1), 7);
+  assert.equal(picked(6, -2), 1);
+  assert.equal(pick_group_stop([], strip[0]!, 1), undefined);
+});
+
+test("next and prev focus the first tab of the target group, and expand a collapsed one", async () => {
+  const groups = [{ id: 10, title: "", collapsed: false }, { id: 20, title: "", collapsed: true }, { id: 30, title: "", collapsed: false }];
+  const next = make(tab({ id: 1, group_id: 10 }), groups, strip);
+  await next.handlers.next(ctx, { count: 1 });
+  assert.deepEqual(next.log, ['update 20 {"collapsed":false}', "activate 4"]);
+  const prev = make(tab({ id: 1, group_id: 10 }), groups, strip);
+  await prev.handlers.prev(ctx, { count: 1 });
+  assert.deepEqual(prev.log, ["activate 7"]);
+});
+
+test("next with a count skips groups, and a window with no group refuses", async () => {
+  const groups = [{ id: 10, title: "", collapsed: false }, { id: 20, title: "", collapsed: false }, { id: 30, title: "", collapsed: false }];
+  const { handlers, log } = make(tab({ group_id: 10 }), groups, strip);
+  await handlers.next(ctx, { count: 2 });
+  assert.deepEqual(log, ["activate 7"]);
+  const none = make(tab(), [], [{ id: 1, index: 0, group_id: -1 }]);
+  await assert.rejects(none.handlers.next(ctx, { count: 1 }), refused(/no tab groups/));
+  await assert.rejects(none.handlers.prev(ctx, { count: 1 }), refused(/no tab groups/));
 });

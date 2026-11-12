@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 422 (normal 215, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 425 (normal 218, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -119,6 +119,9 @@ bound: 422 (normal 215, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `tgc` | bound | `tabgroup.collapse` | Collapse tab group |  |
 | `tge` | bound | `tabgroup.expand` | Expand tab group |  |
 | `tgt` | bound | `tabgroup.toggle` | Toggle tab group |  |
+| `tgl` | bound | `tabgroup.color` (prompts) | Color tab group |  |
+| `tgj` | bound | `tabgroup.next` | Next tab group |  |
+| `tgk` | bound | `tabgroup.prev` | Previous tab group |  |
 | `W` | bound | `window.new` (prompts) | New window, edit current URL |  |
 | `ww` | bound | `window.new` (prompts) | New window, edit current URL |  |
 | `wo` | bound | `window.new` (prompts) | New window, enter URL |  |
