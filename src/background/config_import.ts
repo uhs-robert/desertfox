@@ -6,7 +6,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
-import { AUTOCONFIG_FILE, KNOWN_TOP_LEVEL, type ConfigFiles } from "../shared/config_build/source_files.ts";
+import { AUTOCONFIG_FILE, KNOWN_TOP_LEVEL, labeled_path, type ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ImportSource, PreviewConfigImport, SnippetPreview } from "../shared/messages.ts";
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
 import { css_limit_breaches } from "./css_limits.ts";
@@ -115,9 +115,9 @@ export function imports_nothing(incoming: ConfigFiles, accepted: Record<string, 
   return Object.keys(split_files(incoming).config_files).length === 0 && Object.keys(accepted).length === 0;
 }
 
-export function preview_snippet(path: string, code: string, current: ConfigFiles): SnippetPreview {
+export function preview_snippet(path: string, code: string, current: ConfigFiles, dir_label: string = IMPORT_DIR_LABEL): SnippetPreview {
   const problems: string[] = [];
-  const entry = parse_snippet(`${IMPORT_DIR_LABEL}/${path}`, code, problems);
+  const entry = parse_snippet(labeled_path(dir_label, path), code, problems);
   return {
     path,
     code,

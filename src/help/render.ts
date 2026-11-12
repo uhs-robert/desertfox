@@ -245,7 +245,7 @@ function settings_page(model: HelpModel): HTMLElement[] {
     el("p", undefined, "Export the config as a zip in the layout of ", el("code", undefined, "~/.config/desertfox/"), ", with your saved edits in it. Snippets go in a second zip. An import takes a zip or a folder, replaces the config files, keeps your installed snippets and asks before it stores any snippet it carries."),
     el("div", "desertfox-transfer"),
     el("h2", undefined, "Config files"),
-    el("p", undefined, "Edit the config files stored in the browser. A save rebuilds the config at once. When the build fails, the files and the config stay as they were. What you save here counts as your own config: no import check runs, so paste only text you trust."),
+    el("p", undefined, "Edit the config files stored in the browser. A save rebuilds the config at once. When the build fails, the files and the config stay as they were. What you save here counts as your own config: no import check runs, so paste only text you trust. With the native host installed, the config folder replaces these files at the next start, for now."),
     el("div", "desertfox-files"),
     el("div", "desertfox-settings", ...page_sections("settings", []).flatMap((section, index) => {
       const group = el("div", "desertfox-settings-group");

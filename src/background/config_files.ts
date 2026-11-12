@@ -18,6 +18,7 @@ export async function answer_config_files(request: ConfigFilesRequest, deps: Con
       // The host writes autoconfig.toml and the build never reads it, so the editor does not list it.
       return { ok: true, files: Object.fromEntries(Object.entries(await deps.read_files()).filter(([path]) => path !== AUTOCONFIG_FILE)) };
     }
+    if (request.op !== "save") return { ok: false, message: "The request names no known operation." };
     if (typeof request.path !== "string" || !(typeof request.base === "string" || request.base === null) || !(typeof request.text === "string" || request.text === null) || !(request.accepted === undefined || typeof request.accepted === "string")) {
       return { ok: false, message: "The save names no path and text." };
     }

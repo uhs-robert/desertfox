@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
+import { template_for } from "../../src/help/file_templates.ts";
 import { answer_config_files } from "../../src/background/config_files.ts";
 import { ConfigRefusal } from "../../src/background/config_reload.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "../../src/background/storage_keys.ts";
@@ -154,4 +155,23 @@ test("a stored file with CRLF line ends saves when the editor sends the raw stor
   // The textarea shows the text with LF, but the base is the stored text as read.
   assert.equal(((await save("keymap.toml", "[normal]\n# b\n", undefined, crlf)) as { ok: boolean }).ok, true);
   assert.equal(slot_of(local).files!["keymap.toml"], "[normal]\n# b\n");
+});
+
+test("every template builds as it is, and the snippet one goes through consent", async () => {
+  const { save } = await started("templates");
+  const paths = ["keymap.toml", "search_engines.toml", "command_aliases.toml", "quickmarks.toml", "settings.toml", "themes/mine.toml", "style.css", "snippets/mine.js", "keymap.d/10-mine.toml"];
+  for (const path of paths) {
+    const text = template_for(path);
+    const answer = (await save(path, text, path.startsWith("snippets/") ? text : undefined, null)) as { ok: boolean; message: string; problems?: string[] };
+    assert.equal(answer.ok, true, `${path}: ${answer.message} ${answer.problems?.join("; ")}`);
+  }
+});
+
+test("an unknown op is refused, and editor builds name files by their stored path", async () => {
+  const { answer, save, local } = await started("label");
+  const refused = await answer({ type: "config_files", op: "write", path: "keymap.toml", text: "x", base: null } as never);
+  assert.equal(refused.ok, false);
+  assert.equal(slot_of(local).files, undefined);
+  const consent = (await save("snippets/bad.js", "// id: nope\n")) as { consent?: { problems: string[] } };
+  assert.match(consent.consent?.problems[0] ?? "", /^snippets\/bad\.js/);
 });

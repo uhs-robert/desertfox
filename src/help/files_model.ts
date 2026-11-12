@@ -2,7 +2,7 @@
 // The background decides. A refused save keeps the draft here, shows every problem and leaves the stored files alone.
 
 import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages.ts";
-import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
+import { edit_problem } from "../shared/config_file_path.ts";
 import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { template_for } from "./file_templates.ts";
 
@@ -23,6 +23,7 @@ export type FilesDeps = { send: (message: ConfigFilesRequest) => Promise<unknown
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+// The session outlives the settings route: the page rebuilds its sections on every hash change, and `attach` points the session at the new view and the new CSS hold, so a draft or a running save survives the rebuild.
 export function create_files_session(deps: FilesDeps) {
   const state: FilesState = { files: {}, busy: false, problems: [], accepted: false };
   const set = (change: Partial<FilesState>) => {
@@ -34,9 +35,15 @@ export function create_files_session(deps: FilesDeps) {
   const ask = (message: Parameters<FilesDeps["send"]>[0]) =>
     deps.send(message).then((answer) => answer as ConfigFilesAnswer, (error: unknown) => ({ ok: false, message: message_of(error) }) as ConfigFilesAnswer);
 
+  // Rereads the stored files. A file that changed under an unedited draft is loaded into it, with its new base. An edited draft stays, and the base check refuses its save with the reopen message.
   async function load(): Promise<void> {
     const answer = await ask({ type: "config_files", op: "read" });
-    if (answer.ok && "files" in answer) set({ files: answer.files });
+    if (answer.ok && "files" in answer) {
+      const { open: editing } = state;
+      const stored = editing === undefined || editing.is_new ? undefined : (answer.files[editing.path] ?? null);
+      const follows = editing !== undefined && stored !== undefined && stored !== editing.base && editing.text === editing.base;
+      set({ files: answer.files, ...(follows && { open: { ...editing, text: stored ?? editing.text, base: stored }, consent: undefined, accepted: false }) });
+    }
     else set({ message: { ok: false, text: `The config files could not be loaded: ${"message" in answer ? answer.message : ""}` } });
   }
 
@@ -103,14 +110,20 @@ export function create_files_session(deps: FilesDeps) {
 
   async function remove(path: string): Promise<void> {
     if (state.busy || !Object.hasOwn(state.files, path)) return;
-    if (await send_save(path, null) && state.open?.path === path) set({ open: undefined });
+    if (await send_save(path, null) && state.open?.path === path) set({ open: undefined, consent: undefined, accepted: false });
   }
 
   function close(): void {
     set({ open: undefined, consent: undefined, accepted: false, problems: [], message: undefined });
   }
 
-  return { state, load, open, start_new, edit, accept, save, remove, close, needs_consent: () => state.open !== undefined && is_snippet_file(state.open.path) };
+  function attach(on_change: () => void, user_css_hold: UserCssHold): void {
+    deps.on_change = on_change;
+    deps.user_css_hold = user_css_hold;
+    user_css_hold.set(state.consent !== undefined);
+  }
+
+  return { state, load, open, start_new, edit, accept, save, remove, close, attach };
 }
 
 export type FilesSession = ReturnType<typeof create_files_session>;
