@@ -100,11 +100,11 @@ test("the prefix names every kind of register the special registers", () => {
 test("the prefix reports its keys beside the typed ones, so which-key and Backspace can read it", () => {
   const matcher = create_matcher(tree());
   const waiting = matcher.feed("normal", '"');
-  assert.deepEqual(waiting.kind === "pending" && [waiting.typed, waiting.register_keys], [[], '"']);
+  assert.deepEqual(waiting.kind === "pending" && [waiting.typed_, waiting.register_keys_], [[], '"']);
   const named = matcher.feed("normal", "a");
-  assert.deepEqual(named.kind === "pending" && [named.typed, named.register_keys], [[], '"a']);
+  assert.deepEqual(named.kind === "pending" && [named.typed_, named.register_keys_], [[], '"a']);
   const inside = matcher.feed("normal", "g");
-  assert.deepEqual(inside.kind === "pending" && [inside.typed, inside.register_keys], [["g"], '"a']);
+  assert.deepEqual(inside.kind === "pending" && [inside.typed_, inside.register_keys_], [["g"], '"a']);
 });
 
 test("an invalid name or a key with no binding ends the prefix, and the key gets its one retry as a first key", () => {
@@ -125,7 +125,7 @@ test("an invalid name or a key with no binding ends the prefix, and the key gets
   // A digit is no register name, so it starts a count on its retry.
   matcher.feed("normal", '"');
   const digit = matcher.feed("normal", "1");
-  assert.deepEqual(digit.kind === "pending" && [digit.count, digit.register_keys], [1, undefined]);
+  assert.deepEqual(digit.kind === "pending" && [digit.count, digit.register_keys_], [1, undefined]);
 });
 
 test("a mode change between the register and the command drops the register", () => {
@@ -176,7 +176,7 @@ function make_flow(keymap = tree()) {
     is_loading_: () => false,
     loading_sink_bundles_: () => [],
     sink_of_: () => undefined,
-    on_prefix_: (prefix) => void prefixes.push(prefix?.typed),
+    on_prefix_: (prefix) => void prefixes.push(prefix?.typed_),
   });
   flow.set_matcher_(create_matcher(keymap));
   return { flow, ran, prefixes, state };

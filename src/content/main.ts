@@ -145,7 +145,7 @@ function on_keydown(event: KeyboardEvent): void {
   follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
-  const press: HeldPress = { keyup_seen: false };
+  const press: HeldPress = { keyup_seen_: false };
   // A replayed key the keymap passes ends the site mode after the page has the key, because ending it replays the keys behind.
   const decision = key_flow.handle_token_(token, event.repeat, () => {
     target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init));

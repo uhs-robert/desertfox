@@ -392,7 +392,7 @@ test("keys handed back by the command line are replayed to the keymap but not to
 
 test("a held key replayed to the page clears its cancelled code, and the real keyup then reaches the page", () => {
   const keys = create_cancelled_keys();
-  const press = { keyup_seen: false };
+  const press = { keyup_seen_: false };
   keys.saw_keydown_("Space");
   keys.record_keydown_("Space", "cancel", press);
   assert.equal(keys.release_for_replay_("Space", press), false);
@@ -402,7 +402,7 @@ test("a held key replayed to the page clears its cancelled code, and the real ke
 
 test("a keyup that came before the replay was swallowed, so replay reports it and leaves no state", () => {
   const keys = create_cancelled_keys();
-  const press = { keyup_seen: false };
+  const press = { keyup_seen_: false };
   keys.record_keydown_("Space", "cancel", press);
   assert.equal(keys.take_keyup_("Space"), true);
   assert.equal(keys.release_for_replay_("Space", press), true);
@@ -411,8 +411,8 @@ test("a keyup that came before the replay was swallowed, so replay reports it an
 
 test("replaying an early press does not clear the code of a later press of the same key that is still down", () => {
   const keys = create_cancelled_keys();
-  const first = { keyup_seen: false };
-  const second = { keyup_seen: false };
+  const first = { keyup_seen_: false };
+  const second = { keyup_seen_: false };
   keys.record_keydown_("Space", "cancel", first);
   keys.take_keyup_("Space");
   keys.saw_keydown_("Space");
@@ -433,7 +433,7 @@ const make_event = (type: string, init: KeyboardEventInit) => ({ type, init }) a
 
 test("a replayed key goes to the target as a keydown with every field of the press", () => {
   const keys = create_cancelled_keys();
-  const press = { keyup_seen: false };
+  const press = { keyup_seen_: false };
   keys.record_keydown_("Space", "cancel", press);
   const { seen, target } = make_target();
   replay_key_to_page(key_fields, target, press, keys, make_event);
@@ -443,7 +443,7 @@ test("a replayed key goes to the target as a keydown with every field of the pre
 
 test("a replayed key also gets a keyup when the real keyup was swallowed", () => {
   const keys = create_cancelled_keys();
-  const press = { keyup_seen: false };
+  const press = { keyup_seen_: false };
   keys.record_keydown_("Space", "cancel", press);
   keys.take_keyup_("Space");
   const { seen, target } = make_target();
@@ -453,7 +453,7 @@ test("a replayed key also gets a keyup when the real keyup was swallowed", () =>
 
 test("a replayed key to an element that left the page sends nothing and still clears the cancelled code", () => {
   const keys = create_cancelled_keys();
-  const press = { keyup_seen: false };
+  const press = { keyup_seen_: false };
   keys.record_keydown_("Space", "cancel", press);
   const { seen, target } = make_target(false);
   replay_key_to_page(key_fields, target, press, keys, make_event);
@@ -463,7 +463,7 @@ test("a replayed key to an element that left the page sends nothing and still cl
 
 test("auto-repeat during the hold gives one keydown per press and a single keyup", () => {
   const keys = create_cancelled_keys();
-  const presses = [{ keyup_seen: false }, { keyup_seen: false }, { keyup_seen: false }];
+  const presses = [{ keyup_seen_: false }, { keyup_seen_: false }, { keyup_seen_: false }];
   for (const press of presses) keys.record_keydown_("Space", "cancel", press);
   keys.take_keyup_("Space");
   const { seen, target } = make_target();
@@ -480,7 +480,7 @@ test("the press target is the first element of the composed path, else the event
 
 test("keypress and keyup guards ignore untrusted events and leave the cancelled code alone", () => {
   const keys = create_cancelled_keys();
-  keys.record_keydown_("Space", "cancel", { keyup_seen: false });
+  keys.record_keydown_("Space", "cancel", { keyup_seen_: false });
   assert.equal(cancels_keypress({ isTrusted: false, code: "Space" }, keys), false);
   assert.equal(cancels_keyup({ isTrusted: false, code: "Space" }, keys), false);
   assert.equal(cancels_keypress({ isTrusted: true, code: "Space" }, keys), true);

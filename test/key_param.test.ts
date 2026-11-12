@@ -179,7 +179,7 @@ function make_flow() {
     is_loading_: () => false,
     loading_sink_bundles_: () => [],
     sink_of_: () => undefined,
-    on_prefix_: (prefix) => void prefixes.push(prefix?.typed),
+    on_prefix_: (prefix) => void prefixes.push(prefix?.typed_),
   });
   flow.set_matcher_(create_matcher(capture_tree()));
   return { flow, ran, prefixes };

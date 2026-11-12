@@ -21,7 +21,7 @@ export function create_which_key_timer(get_delay_ms: () => number | undefined, a
     const drawn = () => void (shown = is_current());
     ask(undefined, is_current, drawn);
     const delay_ms = get_delay_ms();
-    if (prefix && delay_ms && (instant || !get_skip?.()?.includes(prefix.typed.join(""))))
+    if (prefix && delay_ms && (instant || !get_skip?.()?.includes(prefix.typed_.join(""))))
       timer = setTimeout(() => ask(prefix, is_current, drawn), instant ? 0 : delay_ms);
   };
 }
