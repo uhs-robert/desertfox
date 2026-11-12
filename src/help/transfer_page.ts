@@ -2,7 +2,7 @@
 // The consent screen shows each snippet's full code, `matches` and `requires`. A snippet is stored only when its box is ticked and Import is pressed.
 
 import { el } from "./render.ts";
-import type { SetUserCssHeld } from "./user_css_gate.ts";
+import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { create_transfer_session, can_commit, read_folder_files, read_zip_file, SNIPPET_WARNING } from "./transfer_model.ts";
 import type { ExportFile, PickedFile, Review, TransferSession } from "./transfer_model.ts";
 import type { InstalledSnippet, SnippetPreview } from "../shared/messages.ts";
@@ -92,7 +92,7 @@ function installed_row(snippet: InstalledSnippet, session: TransferSession): HTM
 }
 
 // Fills `container` and redraws it on every change of the session. Returns the session for tests and for the caller.
-export function mount_transfer(container: HTMLElement, send: TransferDeps["send"], set_user_css_held: SetUserCssHeld = () => {}): TransferSession {
+export function mount_transfer(container: HTMLElement, send: TransferDeps["send"], user_css_hold: UserCssHold = NO_USER_CSS_HOLD): TransferSession {
   const message = el("div", "desertfox-settings-message");
   message.setAttribute("role", "status");
   const tools = el("div", "desertfox-settings-body");
@@ -100,7 +100,7 @@ export function mount_transfer(container: HTMLElement, send: TransferDeps["send"
   const installed_box = el("div", undefined);
   const draw = () => {
     const { state } = session;
-    set_user_css_held("import_review", state.review !== undefined);
+    user_css_hold.set(state.review !== undefined);
     message.textContent = state.message?.text ?? "";
     message.classList.toggle("desertfox-settings-error", state.message?.ok === false);
     review_box.replaceChildren(...(state.review ? [review_view(state.review, session)] : []));

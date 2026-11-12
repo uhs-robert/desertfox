@@ -11,11 +11,13 @@ import type { HelpModel } from "./model.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
 import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
-import { create_user_css_gate } from "./user_css_gate.ts";
+import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { parse_route } from "./route.ts";
 
 let stop_settings: (() => void) | undefined;
+// The hold of the mounted import section. A new mount replaces it, and the old one can no longer change the gate.
+let transfer_hold: UserCssHold = NO_USER_CSS_HOLD;
 
 // `refresh` draws the same route again after a settings change. The caller keeps scroll and focus, so the route's own scroll and focus rules stay out.
 function show_route(model: HelpModel, guide: Block[], engines: string[], cause: "first" | "moved" | "refresh"): void {
@@ -26,8 +28,9 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
   const transfer_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-transfer") : null;
-  if (!transfer_box) set_user_css_held("import_review", false);
-  if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message), set_user_css_held);
+  transfer_hold.dispose();
+  transfer_hold = open_user_css_hold();
+  if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message), transfer_hold);
   if (cause === "refresh") return;
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));
@@ -83,6 +86,6 @@ window.addEventListener("keydown", close_drawer_on_escape, true);
 window.addEventListener("blur", close_drawer_on_window_blur);
 window.addEventListener("hashchange", () => current && show_route(current.model_, current.guide, current.engines, "moved"));
 follow_theme(":root, .desertfox-help");
-const set_user_css_held = create_user_css_gate(follow_user_css());
+const open_user_css_hold = create_user_css_gate(follow_user_css());
 follow_settings(draw);
-mount_grant_panel(set_user_css_held);
+mount_grant_panel(open_user_css_hold());
