@@ -21,7 +21,7 @@ test("every completion value passes the quality schema, whatever label the site 
   for (const row of rows) assert.equal(check_args(media, { action: "quality", value: row.name, ...(["up", "down"].includes(row.name) ? { times: 1 } : {}) }).ok, true, row.name);
 });
 
-const report = (player: boolean, ready: boolean): QualityReport => ({ type: "quality_report", player, ready });
+const report = (player: boolean, ready: boolean): QualityReport => ({ type: "quality_report", player, ready, has_video: player });
 
 test("one player is chosen: a ready one first, then the top frame, then the lowest frame id", () => {
   assert.equal(choose_player([]), undefined);

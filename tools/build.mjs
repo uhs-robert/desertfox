@@ -18,8 +18,8 @@ const MAX_BYTES = {
   "editor.js": 6.5 * 1024, // 6.5 KB: the clipboard fallback for CodeMirror, Ace and Monaco, with its copy checks and paste read-back. The bundle loads on first use.
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
   "media.js": 5.5 * 1024,
-  // 4.5 KB: the YouTube driver gained the captions toggle and its state read. The bundle loads on first use.
-  "quality.js": 4.5 * 1024,
+  // 5 KB: the YouTube driver gained the captions toggle and its state read, and the rule answers a frame without a video by waiting for a media event and looking again for 10 s, inside open shadow roots too. The bundle loads on first use.
+  "quality.js": 5 * 1024,
   "site_actions.js": 4 * 1024,
   // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking.
   "cmdline_page.js": 57 * 1024,

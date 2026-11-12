@@ -105,6 +105,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect(!events.slice(mark).some(on_set("p26_frame_yt_inner", (event) => event.low === "hd1080")), "the framed player got the global max");
   });
 
+  await run_case("a video and player that appear 4 s after the load still reach the level, on a plain page and in a frame", async () => {
+    let mark = events.length;
+    await open_page("quality", "p26_lazy_yt", { new_tab: true });
+    await wait_event(mark, on_set("p26_lazy_yt", (event) => event.low === "hd1080"), "the late player at 1080p", 9000);
+    mark = events.length;
+    await open_page("quality_frame", "p26_lazyframe", { new_tab: true });
+    await wait_event(mark, on_set("p26_lazyframe_yt_inner", (event) => event.low === "hd1080"), "the late framed player at 1080p", 9000);
+  });
+
   await run_case("a navigation's watch outlasts the second injection: a reset 6 s after the navigation is still caught", async () => {
     let mark = events.length;
     await open_page("quality", "p26_late", { new_tab: true });

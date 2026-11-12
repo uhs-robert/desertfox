@@ -50,12 +50,20 @@ export async function hint_selectors_reply(storage: KeymapStorage, frame_address
   return (keymap && frame_site_values_for(keymap, frame_address, HINT_SITE_SETTINGS)) ?? {};
 }
 
-// Answers the quality bundle's `read_media_quality` with the rule for the frame's own address: a `media quality` value (a height as text) or `off`. A page with no stored keymap (nothing compiled yet) keeps the global default.
+// Answers the quality bundle's `quality_report` (from a frame with a video) with the rule for the frame's own address: a `media quality` value (a height as text) or `off`. A page with no stored keymap (nothing compiled yet) keeps the global default.
 export async function media_quality_reply(storage: KeymapStorage, frame_address: string | undefined): Promise<string> {
   const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
   const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
   const value = (keymap && frame_site_values_for(keymap, frame_address, QUALITY_SITE_SETTINGS)?.media_quality) ?? DEFAULT_SETTINGS.media_quality;
   return String(value);
+}
+
+// True when no page can have a rule to apply: the global value is `off` and no site row sets one. A page with no stored keymap keeps the global default, so it is not off.
+export async function media_quality_is_off(storage: KeymapStorage): Promise<boolean> {
+  const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
+  const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+  const global = keymap?.frame_site_globals?.media_quality ?? DEFAULT_SETTINGS.media_quality;
+  return global === "off" && !(keymap?.site_rules ?? []).some(({ values }) => values !== undefined && Object.hasOwn(values, "media_quality"));
 }
 
 // The bind among `all` whose keys are a proper prefix of this bind's keys. It is a complete binding, so it hides this bind.

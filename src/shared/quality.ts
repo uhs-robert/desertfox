@@ -9,8 +9,5 @@ export type QualityLevel = { label: string; height: number; active: boolean };
 // `levels` is empty while the player does not know its levels yet (YouTube answers "unknown" until it plays). `chosen` is the label that `set` picked, or "auto". `skipped` tells whether the site player took a skip, `toggled` whether it took a captions toggle and `captions` the state afterwards, when the player says it.
 export type QualityAnswer = { levels: QualityLevel[]; chosen?: string; skipped?: boolean; toggled?: boolean; captions?: "on" | "off" };
 
-// What each frame pushes to the background when the bundle runs in it, so the background picks one player to act on. `ready` means the player lists its levels.
-export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean };
-
-// From the background to every frame of a tab after it injected the bundle, to start the `media_quality` rule. `navigated` is set when the address changed, which ends a manual `media quality` choice in the frame. A finished load alone leaves that choice standing.
-export type QualityRuleStart = { type: "quality_rule"; navigated: boolean };
+// What each frame pushes to the background when the bundle runs in it, so the background picks one player to act on. `ready` means the player lists its levels. `has_video` means the frame holds a video element (open shadow roots included) or a known player. The background answers a report that has a video with the `media_quality` rule for the frame's address (`max`, `min`, `auto`, a height as text or `off`), and a report without one with nothing.
+export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean; has_video: boolean };
