@@ -10,7 +10,7 @@ const small = { width: 1402, height: 516 };
 function setup(fills_in: string, button?: { class_name: string; in_box: string }) {
   const requests: string[] = [];
   const stack: Fake[] = [];
-  const doc: Fake = { body: { id: "body", parentElement: null, parentNode: null }, documentElement: { id: "root" }, get fullscreenElement() { return stack.at(-1) ?? null; } };
+  const doc: Fake = { addEventListener: () => undefined, removeEventListener: () => undefined, body: { id: "body", parentElement: null, parentNode: null }, documentElement: { id: "root" }, get fullscreenElement() { return stack.at(-1) ?? null; } };
   doc.body.ownerDocument = doc;
   const make = (id: string, parent: Fake | null): Fake => ({
     id,
@@ -20,6 +20,7 @@ function setup(fills_in: string, button?: { class_name: string; in_box: string }
     children: [] as Fake[],
     getBoundingClientRect: () => small,
     getAttribute: (name: string) => (name === "class" ? "" : null),
+    closest: () => null,
     contains(other: Fake) { for (let up = other; up; up = up.parentElement) if (up === this) return true; return false; },
     querySelectorAll() { return this.children.flatMap((child: Fake) => [child, ...child.querySelectorAll()]); },
     async requestFullscreen() { requests.push(id); stack.push(this); },
@@ -40,7 +41,7 @@ function setup(fills_in: string, button?: { class_name: string; in_box: string }
     found.children.push(click);
   }
   Object.assign(globalThis, { document: Object.assign(doc, { exitFullscreen: async () => void stack.pop() }), innerWidth: screen.width, innerHeight: screen.height });
-  return { video, requests, stack };
+  return { video, requests, stack, html5 };
 }
 
 test("a fullscreen button inside the player box is clicked, and nothing else is requested", async () => {
@@ -48,6 +49,37 @@ test("a fullscreen button inside the player box is clicked, and nothing else is 
   await enter_fullscreen(video as unknown as Element);
   assert.deepEqual(requests, []);
   assert.equal(stack.at(-1)?.id, "player");
+});
+
+test("a match that is an svg icon inside a button clicks the button", async () => {
+  const { video, requests, stack, html5 } = setup("player");
+  const control = Object.assign(Object.create(null), { id: "control", click: () => stack.push(html5), getAttribute: () => "" });
+  const icon: Fake = { id: "icon", ownerDocument: html5.ownerDocument, parentElement: control, getBoundingClientRect: () => small, getAttribute: (name: string) => (name === "class" ? "fullscreen-icon" : null), contains: () => false, closest: () => control, querySelectorAll: () => [] };
+  html5.children.push(icon);
+  await enter_fullscreen(video as unknown as Element);
+  assert.deepEqual(requests, []);
+  assert.equal(stack.at(-1)?.id, "html5");
+});
+
+test("a click that throws falls back to the box request", async () => {
+  const { video, requests } = setup("bg", { class_name: "fullscreen-toggle", in_box: "html5" });
+  const button = (video as Fake).parentElement.parentElement.children.at(-1);
+  button.click = () => {
+    throw new Error("site handler");
+  };
+  await enter_fullscreen(video as unknown as Element);
+  assert.deepEqual(requests, ["bg"]);
+});
+
+test("a fullscreen that starts anyway hides a refused fallback request", async () => {
+  const { video, stack } = setup("bg");
+  const box = (video as Fake).parentElement.parentElement.parentElement;
+  box.requestFullscreen = async () => {
+    stack.push(box);
+    throw new TypeError("denied");
+  };
+  await enter_fullscreen(video as unknown as Element);
+  assert.equal(stack.length, 1);
 });
 
 test("with no button the box goes fullscreen and nothing else is requested", async () => {

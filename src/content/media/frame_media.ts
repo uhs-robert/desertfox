@@ -83,6 +83,8 @@ export function scan_frame(view: FrameView): MediaScan {
     has_video: found.some(({ player }) => is_video(player)),
     playing: playing.length,
     audible: audible.length,
+    playing_audio: playing.filter(({ player }) => !is_video(player)).length,
+    audible_audio: audible.filter(({ player }) => !is_video(player)).length,
     video_area: video_areas(found),
     playing_video_area: video_areas(playing),
     audible_video_area: video_areas(audible),

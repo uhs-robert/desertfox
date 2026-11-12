@@ -19,7 +19,7 @@ export type MediaRequest =
   | { type: "media_apply"; target: MediaTarget; action: MediaAction; value: string | undefined; times: number };
 
 // One frame's media. The areas are in CSS pixels inside the frame's own viewport, videos only.
-export type MediaScan = { count: number; has_video: boolean; playing: number; audible: number; video_area: number; playing_video_area: number; audible_video_area: number; pip_open: boolean; fullscreen_open: boolean; pinned: boolean };
+export type MediaScan = { count: number; has_video: boolean; playing: number; audible: number; playing_audio: number; audible_audio: number; video_area: number; playing_video_area: number; audible_video_area: number; pip_open: boolean; fullscreen_open: boolean; pinned: boolean };
 
 // The first acted-on element after the change. `duration` is null for a live stream.
 export type MediaState = { rate: number; volume: number; muted: boolean; position: number; duration: number | null; paused: boolean; pip: boolean; loop: boolean; fullscreen: boolean };

@@ -6,12 +6,12 @@ import type { QualityAnswer, QualityRequest } from "../../src/shared/quality.ts"
 import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src/shared/media.ts";
 
 const ctx: CommandContext = { tab_id: 4, window_id: 1, frame_id: 0, mode: "normal" };
-const empty: MediaScan = { count: 0, playing: 0, audible: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: false };
+const empty: MediaScan = { count: 0, playing: 0, audible: 0, playing_audio: 0, audible_audio: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: false };
 const scan = (frame_id: number, fields: Partial<MediaScan>): FrameScan => ({ ...empty, count: 1, has_video: true, ...fields, frame_id });
 const state: MediaState = { rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false, loop: false, fullscreen: false };
 
 test("every frame with playing media acts, even beside a larger idle video", () => {
-  const scans = [scan(0, { video_area: 90_000 }), scan(3, { playing: 1, has_video: false }), scan(5, { playing: 2, has_video: false })];
+  const scans = [scan(0, { video_area: 90_000 }), scan(3, { playing: 1, playing_audio: 1, has_video: false }), scan(5, { playing: 2, playing_audio: 2, has_video: false })];
   assert.deepEqual(choose_frames(scans, "speed"), [
     { frame_id: 3, target: "playing" },
     { frame_id: 5, target: "playing" },
@@ -56,13 +56,19 @@ test("size beats playing: a small playing ad does not outrank a large video that
 });
 
 test("a playing audio-only frame still acts beside a large idle video", () => {
-  const scans = [scan(0, { video_area: 700_000 }), scan(3, { playing: 1, audible: 1, has_video: false })];
+  const scans = [scan(0, { video_area: 700_000 }), scan(3, { playing: 1, audible: 1, playing_audio: 1, audible_audio: 1, has_video: false })];
   assert.deepEqual(choose_frames(scans, "volume"), [{ frame_id: 3, target: "audible" }]);
 });
 
 test("a playing video that is hidden or off screen does not beat the visible player", () => {
   const scans = [scan(0, { video_area: 700_000 }), scan(3, { playing: 1, audible: 1, has_video: true, playing_video_area: 0, audible_video_area: 0, video_area: 0 })];
   for (const action of ["fullscreen", "volume"] as const) assert.deepEqual(choose_frames(scans, action), [{ frame_id: 0, target: "largest" }], action);
+});
+
+test("playing audio beside a hidden video in the same frame still acts, and the hidden video alone does not", () => {
+  const with_audio = [scan(0, { video_area: 700_000 }), scan(3, { playing: 2, audible: 2, playing_audio: 1, audible_audio: 1, video_area: 0 })];
+  assert.deepEqual(choose_frames(with_audio, "volume"), [{ frame_id: 3, target: "audible" }]);
+  assert.deepEqual(choose_frames(with_audio, "fullscreen"), [{ frame_id: 0, target: "largest" }]);
 });
 
 test("the notice names the new value, the player count and a live stream's position alone", () => {
