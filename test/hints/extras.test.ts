@@ -112,7 +112,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
   let mode = "normal";
-  let sends_held: (() => Promise<unknown>) | undefined;
+  let sends_held: ((message: unknown) => Promise<unknown>) | undefined;
   let holds = 0;
   // Keys and Escapes that arrived during a hold, in order.
   const held_input: (string | (() => void))[] = [];
@@ -251,7 +251,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
-    return is_record ? undefined : sends_held?.();
+    return is_record ? undefined : sends_held?.(message);
   } } };
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async (text: string) => void copied.push(text) } }, configurable: true });
   await import(`${new URL("../../src/content/hints/main.ts", import.meta.url).href}?extras${import_count++}`);
@@ -282,7 +282,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     hide_all: () => void (intersecting = false),
     // The next opened link answers when this promise settles.
     refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
-    hold_sends: (held: () => Promise<unknown>) => void (sends_held = held),
+    hold_sends: (held: (message: unknown) => Promise<unknown>) => void (sends_held = held),
     mode: () => mode,
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
@@ -1432,8 +1432,7 @@ test("another frame copies with the stored strip_tracking_params, not the shippe
   page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "copy", filter: "links" } });
   await settle();
   page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a"] });
-  await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" });
-  assert.deepEqual(page.copied, ["https://example.com/one?utm_source=x"]);
+  assert.deepEqual(await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" }), { ok: true, text: "https://example.com/one?utm_source=x" });
 });
 
 test("the end of the session the keyboard frame holds leaves hint mode there, and the end of another session does not", async () => {
@@ -1506,4 +1505,85 @@ test("another frame focuses its window before a focus pick, and not before a lin
   page.deliver({ type: "hint_frames_labels", session_id: "s2", labels: ["a", "s"] });
   await page.deliver({ type: "hint_frames_pick", session_id: "s2", label: "s" });
   assert.equal(page.window_focuses(), 1);
+});
+
+// The background's answer to a pick of the other frame's label: the text its owner handed over.
+const answer_picks_with = (page: { hold_sends: (held: (message: unknown) => Promise<unknown>) => void }, answers: Record<string, unknown>) =>
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? answers[(message as { label: string }).label] : undefined));
+
+test("across frames a rapid copy joins the picks of both frames into one list, and the toast draws here", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true, text: "two" } });
+  void page.run({ action: "copy_text", rapid: true, frames: "all_frames" });
+  await settle();
+  page.type("a");
+  await settle();
+  assert.deepEqual(page.copied, ["one"]);
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.copied, ["one", "one\ntwo"]);
+  assert.deepEqual(page.messages().at(-1), "Copied 2 texts");
+  assert.equal(page.mode(), "hint");
+  page.type("s");
+  await settle();
+  assert.equal(page.copied.at(-1), "one\ntwo");
+  assert.equal(page.messages().at(-1), "Copied 2 texts");
+});
+
+test("across frames a copy of another frame goes through this frame's register and names its kind in the toast", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true, text: "div > a", what: "selector" } });
+  void page.run({ action: "copy_selector", frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.copied, ["div > a"]);
+  assert.equal(page.messages().at(-1), "Copied selector");
+  assert.equal(page.mode(), "normal");
+});
+
+test("across frames prompt opens the line here with the text its owner handed over", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a", "s"], ["a"]));
+  answer_picks_with(page, { s: { ok: true, text: "open https://other.test/x" } });
+  const answer = page.run({ action: "prompt", frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  assert.deepEqual(page.lines, ["open https://other.test/x"]);
+  assert.equal(await peek(answer), undefined);
+  page.close_line();
+  assert.deepEqual(await answer, { ok: true });
+});
+
+test("the owner frame answers a copy with its text and copies nothing, tracking parameters stripped", async () => {
+  const page = await page_with(["one", "two"]);
+  page.links[1]!.href = "https://example.com/two?utm_source=x&id=7";
+  const args = { action: "copy", filter: "links" };
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  assert.deepEqual(await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s" }), { ok: true, text: "https://example.com/two?id=7" });
+  assert.deepEqual(page.copied, []);
+  assert.deepEqual(page.messages(), []);
+});
+
+test("the owner frame answers a prompt with the line and opens nothing", async () => {
+  const page = await page_with(["one", "two"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "prompt", filter: "links", command: "open --tab" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  assert.deepEqual(await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" }), { ok: true, text: "open --tab https://example.com/one" });
+  assert.deepEqual(page.lines, []);
+});
+
+test("the owner frame names a selector copy for the toast", async () => {
+  const page = await page_with(["one"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "copy_html", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a"] });
+  const answer = (await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" })) as { ok: boolean; what?: string };
+  assert.equal(answer.what, "HTML");
 });
