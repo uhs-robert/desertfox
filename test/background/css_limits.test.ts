@@ -33,6 +33,17 @@ test("css limits: nothing hides a loader, not strings, comments, escapes or line
   assert.deepEqual(breaches_of("a {}\r\nb {}\rc {}\fd { background: url(x.png) }"), ["4 url() that is not data:"]);
 });
 
+test("css limits: escapes and rules read across files in the order the build joins them", () => {
+  const found = css_limit_breaches({ "style.css": "a { background: \\75", "style.d/a.css": "rl(x.png) }", "style.d/b.css": "\n\nb { background: url(y.png) }" });
+  assert.deepEqual(found.map(({ file, line }) => `${file} ${line}`), ["style.css 1", "style.d/b.css 3"]);
+});
+
+test("css limits: a fragment reference passes, also inside a data: url", () => {
+  assert.deepEqual(breaches_of("a { filter: url(#f) } b { filter: url( '#f' ) } c { filter: url(%23f) }"), []);
+  assert.deepEqual(breaches_of("a { background: url(\"data:image/svg+xml,<svg><g fill='url(#g)'/></svg>\") }"), []);
+  assert.deepEqual(breaches_of("a { background: url(x.svg#f) }"), ["1 url() that is not data:"]);
+});
+
 test("css limits: a 1 MB file with many breaches finishes fast", () => {
   const css = "a {}\nb { background: url(x.png) }\n".repeat(30_000);
   const started = performance.now();
@@ -40,6 +51,13 @@ test("css limits: a 1 MB file with many breaches finishes fast", () => {
   assert.equal(found.length, 30_000);
   assert.equal(found.at(-1)!.line, 60_000);
   assert.ok(performance.now() - started < 1000);
+});
+
+test("css limits: a 1 MB single-line file with many breaches finishes fast", () => {
+  const started = performance.now();
+  const found = css_limit_breaches({ "style.css": "@import;".repeat(125_000) });
+  assert.equal(found.length, 125_000);
+  assert.ok(performance.now() - started < 1500);
 });
 
 test("css limits: style.d files count, other files do not", () => {
@@ -66,14 +84,30 @@ test("an import reads a style.css with data: urls", async () => {
 test("the user css gate holds while any consent view is held, also when the text is set meanwhile", () => {
   // Like a style element: setting the text makes a new, enabled sheet, and `media` stays.
   const sheet = { media: "", disabled: false, set text(_: string) { this.disabled = false; } };
-  const set_held = create_user_css_gate(sheet);
-  set_held("grant_panel", true);
+  const open_hold = create_user_css_gate(sheet);
+  const panel = open_hold();
+  const review = open_hold();
+  panel.set(true);
   sheet.text = "a { color: red }";
   assert.equal(sheet.media, "not all");
-  set_held("import_review", true);
-  set_held("import_review", true);
-  set_held("grant_panel", false);
+  review.set(true);
+  panel.set(false);
   assert.equal(sheet.media, "not all");
-  set_held("import_review", false);
+  review.set(false);
+  assert.equal(sheet.media, "");
+});
+
+test("the user css gate: a mount that is gone cannot release the hold of the mount that replaced it", () => {
+  const sheet = { media: "" };
+  const open_hold = create_user_css_gate(sheet);
+  const old_mount = open_hold();
+  old_mount.set(true);
+  old_mount.dispose();
+  const new_mount = open_hold();
+  new_mount.set(true);
+  old_mount.set(false);
+  assert.equal(sheet.media, "not all");
+  old_mount.set(true);
+  new_mount.set(false);
   assert.equal(sheet.media, "");
 });

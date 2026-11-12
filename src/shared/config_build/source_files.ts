@@ -99,6 +99,14 @@ function parse_text_dir(files: ConfigFiles, dir_label: string, dir: string, exte
   return parsed;
 }
 
+// `style.css`, then `style.d/*.css`: the order the build joins them in.
+export function css_sources(files: ConfigFiles, dir_label: string, problems: string[]): SourceFiles["css_files"] {
+  const css_files: SourceFiles["css_files"] = [];
+  if (is_file_entry(files, "", "style.css")) css_files.push({ file: labeled_path(dir_label, "style.css"), text: files["style.css"]! });
+  css_files.push(...parse_text_dir(files, dir_label, "style.d", ".css", problems));
+  return css_files;
+}
+
 export function parse_source_files(files: ConfigFiles, dir_label: string, problems: string[]): SourceFiles {
   for (const name of entry_names(files, "").filter((entry) => entry !== AUTOCONFIG_FILE)) {
     const label = labeled_path(dir_label, name);
@@ -114,9 +122,7 @@ export function parse_source_files(files: ConfigFiles, dir_label: string, proble
     DATA_KINDS.map((kind) => [kind, parse_data_layers(files, dir_label, kind, problems)]),
   ) as Record<DataKind, DataLayer[]>;
 
-  const css_files: SourceFiles["css_files"] = [];
-  if (is_file_entry(files, "", "style.css")) css_files.push({ file: labeled_path(dir_label, "style.css"), text: files["style.css"]! });
-  css_files.push(...parse_text_dir(files, dir_label, "style.d", ".css", problems));
+  const css_files = css_sources(files, dir_label, problems);
 
   return { layers, snippet_files: parse_text_dir(files, dir_label, "snippets", ".js", problems), css_files };
 }
