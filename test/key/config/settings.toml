@@ -23,6 +23,12 @@ site = "*://127.0.0.1/page?id=rule_off*"  # also covers rule_off_switch
 [[site_rules]]
 site = "*://127.0.0.1/hidden_input_frame?id=rule_off_title_input_shift_moves_focus*"  # the keyup case below
 
+# p13_help_command: `:help site_rules` lists this row for the page it was run from.
+[[site_rules]]
+site = "*://127.0.0.1/page?id=p13_site_rules*"
+pass = "j"
+hint_add = [".p13-marker"]
+
 # Each column resolves on its own: off = false keeps rule_keep on under the bare row below, and the pass row between them still applies.
 [[site_rules]]
 site = "*://127.0.0.1/page?id=rule_keep*"

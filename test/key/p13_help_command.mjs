@@ -44,4 +44,16 @@ export async function run_cases({ run_case, press_keys, poll_until, wait_tab_qui
     await poll_until("the help tab at the scroll.to card", async () => is_help_at_card(await help_urls()), { timeout_ms: 8000 });
     await close_help_tabs();
   });
+
+  await run_case("`:help site_rules` lists the rows that fit the page it was run from", async () => {
+    await close_help_tabs();
+    await open_page("page", "p13_site_rules", { new_tab: true });
+    await run_line(":help site_rules");
+    await poll_until("the help tab at the Site Rules page", async () => (await help_urls()).some((url) => url.includes("#/site-rules?address=")), { timeout_ms: 8000 });
+    const page_text = () => in_background(`(() => { const view = ${extension_view("home.html")}; return view?.document.querySelector(".desertfox-help-page")?.textContent ?? ""; })()`);
+    await poll_until("the row of the page to be drawn", async () => /Your row/.test(await page_text()), { timeout_ms: 8000 });
+    const text = await page_text();
+    expect(text.includes("p13_site_rules") && /pass\s*j/.test(text) && /hint_add\s*\.p13-marker/.test(text), `the Site Rules page read: ${text.slice(0, 400)}`);
+    await close_help_tabs();
+  });
 }

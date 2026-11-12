@@ -50,8 +50,15 @@ test("help_name_url maps a command id to its card and a page name to its page", 
   assert.equal(help_name_url(base, "nope", ids), undefined);
 });
 
+test("help_name_url hands the Site Rules page the address, encoded as one value, and none when there is no address", () => {
+  const address = "https://a.test/p?x=1&y=%20#top";
+  assert.equal(help_name_url(base, "site_rules", ids, address), `${base}#/site-rules?address=${encodeURIComponent(address)}`);
+  assert.equal(help_name_url(base, "site_rules", ids), `${base}#/site-rules`);
+  assert.equal(help_name_url(base, "commands", ids, address), `${base}#/commands`);
+});
+
 test("help_name_choices lists the pages, then the commands, and no Quick Start section", () => {
-  assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "settings", "quick_start", "commands", "search_engines", "styling", "scroll.top"]);
+  assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "settings", "quick_start", "commands", "search_engines", "styling", "site_rules", "scroll.top"]);
 });
 
 const HELP = "moz-extension://x/home.html";

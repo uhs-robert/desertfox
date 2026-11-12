@@ -2,6 +2,7 @@
 
 import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
+import type { RuleColumn, KeyChange, SiteRuleRowView } from "../background/site_rules_view.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { advanced_count, STYLE_CLASSES, STYLE_VARIABLES, visible_commands_model } from "./model.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
@@ -251,6 +252,31 @@ function settings_page(model: HelpModel): HTMLElement[] {
   ];
 }
 
+const SHADOWED_CLASS = "desertfox-help-shadowed";
+const shadow_note = (shadowed: boolean): HTMLElement | string => (shadowed ? el("span", undefined, "an earlier row decides this") : "");
+const table_of = (heads: string[], rows: (HTMLElement | string)[][], shadowed: boolean[]): HTMLElement =>
+  el("table", "desertfox-help-params", el("tr", undefined, ...heads.map((name) => el("th", undefined, name))), ...rows.map((cells, index) => el("tr", shadowed[index] ? SHADOWED_CLASS : undefined, ...cells.map((cell) => el("td", undefined, cell)))));
+
+// Columns are name and value pairs, so a per-site setting added later shows with no code here.
+const columns_table = (columns: RuleColumn[]): HTMLElement => table_of(["column", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadow_note(shadowed)]), columns.map(({ shadowed }) => shadowed));
+const changes_table = (changes: KeyChange[]): HTMLElement =>
+  table_of(["key", "mode", "does", "instead of", ""], changes.map(({ keys, mode, action, replaces, shadowed }) => [el("kbd", undefined, keys), mode ?? "", action, replaces ?? el("span", "desertfox-help-muted", "nothing"), shadow_note(shadowed)]), changes.map(({ shadowed }) => shadowed));
+
+function site_rule_row(row: SiteRuleRowView): HTMLElement {
+  const source = row.origin === "default" ? `Shipped row ${row.name}` : "Your row";
+  return el("section", "desertfox-help-command", el("h3", undefined, source, " ", el("code", "desertfox-help-muted", row.site)), row.columns.length > 0 ? columns_table(row.columns) : el("p", "desertfox-help-muted", "This row sets no column."), row.changes.length > 0 ? changes_table(row.changes) : "");
+}
+
+// The list is for the tab's own address. A frame of another site resolves its rows against its own address, so it can differ.
+function site_rules_page(model: HelpModel, address: string | undefined): HTMLElement[] {
+  if (address === undefined) return [el("p", undefined, "Run ", el("code", undefined, ":help site_rules"), " on a web page to list the site rows that fit it and the keys they change.")];
+  const { rows } = model.site_rules_for(address);
+  return [
+    el("p", undefined, "Rows that fit ", el("code", undefined, address), ", in table order. For each column the first row that sets it decides. A bind decides key by key. Frames of other sites match their own address, so this list is for the tab's address only."),
+    ...(rows.length === 0 ? [el("p", undefined, "No site row fits this address.")] : rows.map(site_rule_row)),
+  ];
+}
+
 function page_body(route: Route, model: HelpModel, guide: Block[], advanced_total: number): HTMLElement[] {
   switch (route.page) {
     case "home": return home_page(model);
@@ -259,6 +285,7 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
     case "search-engines": return search_engines_page(guide, model);
     case "commands": return commands_page(model, route.advanced === true, advanced_total);
     case "styling": return styling_page();
+    case "site-rules": return site_rules_page(model, route.address);
   }
 }
 
@@ -322,6 +349,7 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);
     case "styling": return STYLING_SECTIONS;
+    case "site-rules": return [];
   }
 }
 
