@@ -120,10 +120,9 @@ test("a percent key with no count is refused when it runs, since the count fills
 
 const LOAD_START = { status: "loading" };
 
-function fake_tab_media() {
-  const store = new Map<string, unknown>();
+// `store`, `sent` and `clock` passed in from an earlier fake stand for a background that restarted.
+function fake_tab_media({ store = new Map<string, unknown>(), sent = [] as [number, number | "all", string][], clock = { now_ms: 0 }, gone = new Set<number>() } = {}) {
   // `set_mode` media as the mode, and a `MediaStep` as "on" or "off", with "all" for no frame.
-  const sent: [number, number | "all", string][] = [];
   const media = create_tab_media({
     storage: {
       get: async (key: string) => (typeof key === "string" && store.has(key) ? { [key]: store.get(key) } : {}),
@@ -132,8 +131,10 @@ function fake_tab_media() {
     } as never,
     send_mode: async (tab_id, frame_id, mode) => void sent.push([tab_id, frame_id, mode]),
     send_step: async (tab_id, on, frame_id) => void sent.push([tab_id, frame_id ?? "all", on ? "on" : "off"]),
+    frame_alive: async (_tab_id, frame_id) => !gone.has(frame_id),
+    now: () => clock.now_ms,
   });
-  return { media, sent, store };
+  return { media, sent, store, clock, gone };
 }
 
 test("the frame that sees the end reports it, and every other frame of the hold goes to normal, not the reporter", async () => {
@@ -238,6 +239,96 @@ test("an address change the page makes keeps the hold and drops the pin, and a n
   await media.reported(6, 2, "hint");
   await media.navigated(6, LOAD_START);
   assert.deepEqual(sent.slice(1).sort(), [[6, 0, "off"], [6, 2, "off"]]);
+});
+
+// The player sits in frame 5, the top frame 0 is in the mode too, and the fullscreen ends while frame `line_frame` has a hint or the line open. Each frame of the fullscreen sees the end: the line's frame closes it back to the mode, the others report normal, in any order.
+async function framed_hold(line_mode: Mode, line_frame = 5) {
+  const fake = fake_tab_media();
+  await fake.media.reported(7, 0, "media");
+  await fake.media.reported(7, 5, "media");
+  await fake.media.reported(7, line_frame, line_mode);
+  fake.sent.length = 0;
+  return fake;
+}
+
+const OTHER_FRAME = { 0: 5, 5: 0 } as const;
+
+for (const line_mode of ["cmdline", "hint"] as const) {
+  for (const line_frame of [5, 0] as const) {
+    const other = OTHER_FRAME[line_frame];
+    test(`${line_mode} in frame ${line_frame}: the other frame reports normal first, keeps the hold and goes back to the mode when the ${line_mode} closes`, async () => {
+      const { media, sent, store } = await framed_hold(line_mode, line_frame);
+      await media.reported(7, other, "normal");
+      assert.deepEqual(sent, []);
+      await media.reported(7, line_frame, "media");
+      assert.deepEqual(sent, [[7, other, "on"]]);
+      await media.reported(7, other, "media");
+      assert.deepEqual(sent, [[7, other, "on"]]);
+      assert.deepEqual((store.get("desertfox_tab_media_7") as { frames: number[] }).frames, [0, 5]);
+    });
+
+    test(`${line_mode} in frame ${line_frame}: the ${line_mode} closes first, and the other frame's normal right after goes back to the mode`, async () => {
+      const { media, sent, clock } = await framed_hold(line_mode, line_frame);
+      await media.reported(7, line_frame, "media");
+      clock.now_ms += 200;
+      await media.reported(7, other, "normal");
+      assert.deepEqual(sent, [[7, other, "on"]]);
+    });
+  }
+}
+
+test("a normal report long after a line closed back to the mode ends the hold, as a plain Escape does", async () => {
+  const { media, sent, clock } = await framed_hold("cmdline");
+  await media.reported(7, 5, "media");
+  clock.now_ms += 1000;
+  await media.reported(7, 0, "normal");
+  assert.deepEqual(sent, [[7, 5, "off"]]);
+});
+
+test("the line's own frame leaving the mode ends the hold, and the frame that left meanwhile gets the step off too", async () => {
+  const { media, sent, store } = await framed_hold("cmdline");
+  await media.reported(7, 0, "normal");
+  await media.reported(7, 0, "normal");
+  // The frame's own `mode.set normal`, or its new document after a navigation, reports normal.
+  await media.reported(7, 5, "normal");
+  assert.deepEqual(sent, [[7, 0, "off"]]);
+  assert.equal(store.size, 0);
+});
+
+test("a frame removed while its line is open keeps nothing, so a normal report ends the hold", async () => {
+  const { media, sent, gone } = await framed_hold("cmdline");
+  gone.add(5);
+  await media.reported(7, 0, "normal");
+  assert.deepEqual(sent, [[7, 5, "off"]]);
+});
+
+test("every frame of a nested fullscreen that leaves goes back, before and after the line closes", async () => {
+  const { media, sent, clock } = fake_tab_media();
+  for (const frame_id of [0, 3, 5]) await media.reported(7, frame_id, "media");
+  await media.reported(7, 5, "cmdline");
+  sent.length = 0;
+  await media.reported(7, 0, "normal");
+  await media.reported(7, 5, "media");
+  clock.now_ms += 300;
+  await media.reported(7, 3, "normal");
+  assert.deepEqual(sent, [[7, 0, "on"], [7, 3, "on"]]);
+});
+
+test("a background that restarts between the reports still keeps the hold", async () => {
+  const first = await framed_hold("cmdline");
+  await first.media.reported(7, 0, "normal");
+  const { media, sent } = fake_tab_media({ store: first.store, sent: first.sent, clock: first.clock });
+  await media.reported(7, 5, "media");
+  assert.deepEqual(sent, [[7, 0, "on"]]);
+});
+
+test("a pin and an address change keep the open line", async () => {
+  const { media, sent } = await framed_hold("hint");
+  await media.pin(7, 5);
+  await media.navigated(7, { url: "https://example.com/next" });
+  await media.reported(7, 0, "normal");
+  await media.reported(7, 5, "media");
+  assert.deepEqual(sent, [[7, 0, "on"]]);
 });
 
 test("a media mode that ends in another frame while hint or the line is open sends the escape to normal", () => {

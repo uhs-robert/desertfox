@@ -346,6 +346,36 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, scroll_of(`${id}_inner`), "j to scroll the frame, which the mode left");
   });
 
+  // The fullscreen ends in both frames. The frame without the line reports normal, which must not end the mode the line returns to.
+  const line_escape_in_framed_fullscreen = async (id, line_frame) => {
+    await open_page("media_mode_host", id, { new_tab: true });
+    await focus_frame(id);
+    await focus_top(id);
+    let mark = events.length;
+    await press_keys("a", "a");
+    await shown(mark, id);
+    if (line_frame === "frame") await focus_frame(id);
+    mark = events.length;
+    await press_keys("F");
+    await wait_event(mark, (event) => event.page_id === `${id}_inner` && event.type === "media_fullscreen" && event.element === "player", "the framed player to go fullscreen");
+    await press_keys(":");
+    await wait_cmdline((line) => line.open && line.ready, "the line to open");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.page_id === `${id}_inner` && event.type === "media_fullscreen" && event.element === "", "the framed fullscreen to end");
+    await wait_cmdline((line) => !line.open, "the line to close with the fullscreen");
+    // The barrier key reaches the frame that holds the focus, and the top frame draws the badge.
+    await expect_absent(mark, line_frame === "frame" ? `${id}_inner` : id, indicator(id, "NORMAL"), "the mode ended with the fullscreen");
+    // The focus stays in the frame of the line, so the other frame takes the second key.
+    await j_is_media(`${id}_inner`, 0.9);
+    await (line_frame === "frame" ? focus_top : focus_frame)(id);
+    await j_is_media(`${id}_inner`, 0.8);
+  };
+
+  await run_case("Escape on the line of the framed player's frame in fullscreen keeps the mode in every frame", () => line_escape_in_framed_fullscreen("p29_host_line_frame", "frame"));
+
+  await run_case("Escape on the line of the top frame while a framed player is fullscreen keeps the mode in every frame", () => line_escape_in_framed_fullscreen("p29_host_line_top", "top"));
+
   await run_case("a pushState keeps the mode and drops the pin so the keys act on the main video, and a load of another page ends it", async () => {
     const id = "p29_nav";
     await open_page("media_mode", id, { new_tab: true });
