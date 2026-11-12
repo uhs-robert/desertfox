@@ -1,13 +1,41 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_find, is_page_change, page_watcher } from "../../../src/content/caret/find_session.ts";
+import { create_find } from "../../../src/content/caret/find_session.ts";
 import type { FindDeps } from "../../../src/content/caret/find_session.ts";
+import { create_page_text } from "../../../src/content/caret/page_text.ts";
 import type { ScanRegex } from "../../../src/content/caret/find_match.ts";
 import { scan_regex } from "../../../src/background/regex_scan.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
+// A MutationObserver whose records wait until the test delivers them, as the browser's wait for a microtask checkpoint.
+function fake_observer() {
+  const observers: FakeObserver[] = [];
+  class FakeObserver {
+    targets: unknown[] = [];
+    pending: MutationRecord[] = [];
+    callback: MutationCallback;
+    constructor(callback: MutationCallback) {
+      this.callback = callback;
+      observers.push(this);
+    }
+    observe = (target: unknown) => void this.targets.push(target);
+    disconnect = () => void ((this.targets = []), (this.pending = []));
+    takeRecords = () => this.pending.splice(0);
+  }
+  const queue = (record: MutationRecord) => observers.forEach((observer) => observer.targets.length > 0 && observer.pending.push(record));
+  const deliver = () =>
+    observers.forEach((observer) => {
+      const records = observer.takeRecords();
+      if (records.length > 0) observer.callback(records, observer as unknown as MutationObserver);
+    });
+  return { observer_class: FakeObserver as unknown as typeof MutationObserver, queue, deliver, watched: () => observers.flatMap((observer) => observer.targets) };
+}
+
+const page_record = { type: "characterData", target: {}, addedNodes: [], removedNodes: [] } as unknown as MutationRecord;
+
 // A page of "ab ab ab": matches of "ab" start at 0, 3 and 6.
 function fake_page(page_text = "ab ab ab") {
+  (globalThis as { document?: unknown }).document = { name: "page" };
   const painted_: { current: number; count: number }[] = [];
   const toasts: string[] = [];
   const registers = new Map<string, string>();
@@ -15,16 +43,16 @@ function fake_page(page_text = "ab ab ab") {
   let clears = 0;
   let selection = ["start"];
   let clock = 0;
-  const watchers: (() => void)[] = [];
-  let retargets = 0;
+  const observer = fake_observer();
   let builds = 0;
   const pending_hosts_: unknown[] = [];
   // The background scan, answered in place after one gate, so a newer keystroke can arrive while it runs.
   let background: ScanRegex = async (text, { source, flags }) => ({ ok: true, ...scan_regex({ text, source, flags }) });
   const make_model = (): TextModel =>
     (builds++, { text: page_text, trees: [], empty_trees_: [], pending_hosts_: [...pending_hosts_], frames: [], point_at_: (index: number) => ({ node: { index }, offset: 0 }), index_of_: (node: { index: number }) => node.index }) as unknown as TextModel;
+  const shared_text = create_page_text({ build_model_: make_model, observer_class: observer.observer_class });
   const deps: FindDeps = {
-    build_model_: make_model,
+    page_text: shared_text,
     start_index_: () => 0,
     painter: {
       paint: (_model, matches, current) => (painted_.push({ current, count: matches.from.length }), 0),
@@ -41,7 +69,6 @@ function fake_page(page_text = "ab ab ab") {
       return background(text, regex);
     },
     selection_key_: () => selection,
-    watch_page_: (on_change) => (watchers.push(on_change), () => void retargets++),
   };
   const settle = async () => {
     for (let round = 0; round < 30; round++) {
@@ -49,7 +76,11 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise((resume) => setImmediate(resume));
     }
   };
-  return { deps, pending_hosts_, retargets: () => retargets, builds: () => builds, change_page: () => watchers.forEach((notify) => notify()), painted_, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast_: (message: string) => void toasts.push(message) } };
+  const change_page = () => {
+    observer.queue(page_record);
+    observer.deliver();
+  };
+  return { deps, make_model, pending_hosts_, builds: () => builds, change_page, painted_, toasts, registers, settle, clears: () => clears, set_selection: (next: string[]) => (selection = next), set_background: (next: ScanRegex) => (background = next), host: { show_toast_: (message: string) => void toasts.push(message) } };
 }
 
 test("a search begun while Enter waits for the old scan keeps its own state", async () => {
@@ -105,7 +136,7 @@ test("a caret session starts at the match until a later selection takes its plac
   find.update("ab", () => {});
   await page.settle();
   await find.end(true);
-  const model = page.deps.build_model_();
+  const model = page.make_model();
   assert.equal(find.position(model), 0);
   page.set_selection(["clicked"]);
   assert.equal(find.position(model), undefined);
@@ -163,7 +194,7 @@ test("a search that finds nothing, or ends with Escape, does not keep the old ma
   find.update("ab", () => {});
   await page.settle();
   await find.end(true);
-  const model = page.deps.build_model_();
+  const model = page.make_model();
   assert.equal(find.position(model), 0);
   find.begin("forward");
   find.update("zz", () => {});
@@ -221,7 +252,7 @@ test("Enter on a costly pattern scans its characters as text instead of leaving 
   await page.settle();
   await ending;
   assert.equal(page.painted_.length, 1);
-  assert.equal(find.position(page.deps.build_model_()), 2);
+  assert.equal(find.position(page.make_model()), 2);
 });
 
 test("a change to the page makes the next n read the model again, and no change keeps it", async () => {
@@ -294,16 +325,6 @@ test("a rebuild during typing keeps the origin of a search that began at a point
   assert.equal(reports.at(-1), "3 of 3");
 });
 
-test("the watcher is pointed at the trees of each model the search reads", async () => {
-  const page = fake_page();
-  const find = create_find(page.host, page.deps);
-  find.begin("forward");
-  page.change_page();
-  find.update("ab", () => {});
-  await page.settle();
-  assert.equal(page.retargets(), 2);
-});
-
 test("a step from a caret goes on from the caret and not from the last match", async () => {
   const page = fake_page();
   const find = create_find(page.host, page.deps);
@@ -319,16 +340,6 @@ test("a step from a caret goes on from the caret and not from the last match", a
   await page.settle();
   await backward;
   assert.equal(page.toasts.at(-1), "1 of 3");
-});
-
-test("nodes that DesertFox adds are not a page change, wherever they sit", () => {
-  const page_target = { nodeType: 1 };
-  const own = (name: string) => ({ nodeType: 1, hasAttribute: (asked: string) => asked === name });
-  const page_node = { nodeType: 1, hasAttribute: () => false };
-  const record = (added: unknown[], removed: unknown[] = []) => ({ type: "childList", target: page_target, addedNodes: added, removedNodes: removed }) as unknown as MutationRecord;
-  assert.equal(is_page_change(record([own("data-desertfox-layer")], [own("data-desertfox-layer")])), false);
-  assert.equal(is_page_change(record([own("data-desertfox-layer"), page_node])), true);
-  assert.equal(is_page_change({ type: "characterData", target: page_target, addedNodes: [], removedNodes: [] } as unknown as MutationRecord), true);
 });
 
 // "a.*c" as a regex finds "abc" at 5. Searched as text it finds its own characters at 0.
@@ -363,7 +374,7 @@ test("Enter on a regex past the time limit searches it as text, and n then carri
   await page.settle();
   await ending;
   assert.equal(page.painted_.length, 1);
-  assert.equal(find.position(page.deps.build_model_()), 0);
+  assert.equal(find.position(page.make_model()), 0);
   const stepping = find.step(false);
   await page.settle();
   await stepping;
@@ -395,7 +406,7 @@ test("a search after a timeout runs as a regex again", async () => {
   await page.settle();
   assert.equal(lines.at(-1), "1 of 1");
   await find.end(true);
-  assert.equal(find.position(page.deps.build_model_()), 5);
+  assert.equal(find.position(page.make_model()), 5);
 });
 
 test("a regex answer that comes back after a newer keystroke is dropped", async () => {
@@ -448,7 +459,7 @@ test("Enter after a timeout searches as text even when older results of the same
   const ending = find.end(true);
   await page.settle();
   await ending;
-  assert.equal(find.position(page.deps.build_model_()), undefined, "Enter kept the matches of the older regex run");
+  assert.equal(find.position(page.make_model()), undefined, "Enter kept the matches of the older regex run");
 });
 
 test("a timeout stops counting_ once a later regex run of the same text answers", async () => {
@@ -469,7 +480,7 @@ test("a timeout stops counting_ once a later regex run of the same text answers"
   const ending = find.end(true);
   await page.settle();
   await ending;
-  assert.equal(find.position(page.deps.build_model_()), undefined, "Enter searched the pattern as text after the regex answered");
+  assert.equal(find.position(page.make_model()), undefined, "Enter searched the pattern as text after the regex answered");
 });
 
 test("n on a pattern that timed out searches as text at once on each later press, even after the page changed", async () => {
@@ -509,72 +520,6 @@ test("n after Enter on a pattern that timed out does not run the regex again", a
   assert.deepEqual(page.toasts, ["2 of 2 (too slow as a regex, searched as text)"]);
 });
 
-// A MutationObserver that records what it watches.
-function fake_observer() {
-  const watched: unknown[] = [];
-  class FakeObserver {
-    observe = (target: unknown) => void watched.push(target);
-    disconnect = () => void (watched.length = 0);
-  }
-  return { observer_class: FakeObserver as unknown as typeof MutationObserver, watched };
-}
-
-function fake_frame() {
-  const listeners: { fire: () => void; signal: AbortSignal }[] = [];
-  return {
-    frame: { addEventListener: (_type: string, fire: () => void, options: { signal: AbortSignal }) => void listeners.push({ fire, signal: options.signal }) } as unknown as Element,
-    load: () => listeners.filter((listener) => !listener.signal.aborted).forEach((listener) => listener.fire()),
-  };
-}
-
-test("the watcher observes shadow roots and frame documents that held no text", () => {
-  (globalThis as { document?: unknown }).document = { name: "page" };
-  const { observer_class, watched } = fake_observer();
-  const empty_root = { name: "empty root" };
-  const model = { trees: [{ name: "text root" }], empty_trees_: [empty_root], frames: [] } as unknown as TextModel;
-  page_watcher(observer_class)(() => {})(model);
-  assert.equal(watched.includes(empty_root), true);
-});
-
-test("a frame that loads after the model was built makes n read the page again", async () => {
-  (globalThis as { document?: unknown }).document = { name: "page" };
-  const { observer_class } = fake_observer();
-  const { frame, load } = fake_frame();
-  const page = fake_page();
-  const watch = page_watcher(observer_class);
-  const watch_page_: FindDeps["watch_page_"] = (on_change) => {
-    const retarget = watch(on_change);
-    return (model) => retarget({ ...model, frames: [frame] } as TextModel);
-  };
-  const find = create_find(page.host, { ...page.deps, watch_page_ });
-  find.begin("forward");
-  find.update("ab", () => {});
-  await page.settle();
-  await find.end(true);
-  const before = page.builds();
-  const stepping = find.step(false);
-  await page.settle();
-  await stepping;
-  assert.equal(page.builds(), before, "n read the page again with nothing changed");
-  load();
-  const stepping_again = find.step(false);
-  await page.settle();
-  await stepping_again;
-  assert.equal(page.builds() > before, true, "n kept the old model after the frame loaded");
-});
-
-test("a retarget drops the load listeners of the old model's frames", () => {
-  (globalThis as { document?: unknown }).document = { name: "page" };
-  const { observer_class } = fake_observer();
-  const { frame, load } = fake_frame();
-  let changes = 0;
-  const retarget = page_watcher(observer_class)(() => void changes++);
-  retarget({ trees: [], empty_trees_: [], frames: [frame] } as unknown as TextModel);
-  retarget({ trees: [], empty_trees_: [], frames: [] } as unknown as TextModel);
-  load();
-  assert.equal(changes, 0, "a frame the new model no longer lists still raised a change");
-});
-
 // A custom element that gains a shadow root fires no mutation, so the model lists it and `n` checks the list.
 async function step_after_host_change(host: Record<string, unknown>, change: () => void) {
   const page = fake_page();
@@ -612,4 +557,66 @@ test("n reads the page once after a custom element gains a closed shadow root", 
   const host: Record<string, unknown> = { shadowRoot: null, openOrClosedShadowRoot: null };
   const { before, after_change } = await step_after_host_change(host, () => (host.openOrClosedShadowRoot = {}));
   assert.equal(after_change, before + 1);
+});
+
+// R6: a caret key reads the page again while `n` scans the model it read before. The search keeps its own model, and the session carries the match over by DOM point.
+test("n that scans while the session reads the page again lands on its match in the newer model", async () => {
+  const page = fake_page();
+  const observer = fake_observer();
+  const nodes = Array.from({ length: 8 }, (_, index) => ({ index }));
+  let prefix = "";
+  const texts: string[] = [];
+  const build_model_ = (): TextModel => {
+    const shift = prefix.length;
+    texts.push(prefix + "ab ab ab");
+    return {
+      text: prefix + "ab ab ab",
+      trees: [],
+      empty_trees_: [],
+      pending_hosts_: [],
+      frames: [],
+      point_at_: (index: number) => ({ node: nodes[index - shift], offset: 0 }),
+      index_of_: (node: unknown) => {
+        const at = nodes.indexOf(node as { index: number });
+        return at < 0 ? undefined : at + shift;
+      },
+    } as unknown as TextModel;
+  };
+  const page_text = create_page_text({ build_model_, observer_class: observer.observer_class });
+  const find = create_find(page.host, { ...page.deps, page_text });
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(true);
+  prefix = "zz ";
+  observer.queue(page_record);
+  const stepping = find.step(false);
+  await new Promise((resume) => setImmediate(resume));
+  assert.deepEqual(texts, ["ab ab ab", "zz ab ab ab"], "n has not read the page before the session did");
+  prefix = "yyyy ";
+  observer.queue(page_record);
+  const session_model = page_text.current();
+  assert.equal(session_model.text, "yyyy ab ab ab");
+  await page.settle();
+  assert.deepEqual(await stepping, { ok: true });
+  assert.deepEqual(page.toasts, ["2 of 3"]);
+  assert.equal(find.position(session_model), 8, "the match did not carry into the model the session read");
+});
+
+// The caret bundle stops watching the page once no session is open and the search no longer uses its text.
+test("the search uses the page text while its line is open and after it found one, and not after a line that found nothing", async () => {
+  const page = fake_page();
+  const find = create_find(page.host, page.deps);
+  assert.equal(find.uses_page_text_(), false);
+  find.begin("forward");
+  assert.equal(find.uses_page_text_(), true);
+  find.update("zz", () => {});
+  await page.settle();
+  await find.end(true);
+  assert.equal(find.uses_page_text_(), false);
+  find.begin("forward");
+  find.update("ab", () => {});
+  await page.settle();
+  await find.end(false);
+  assert.equal(find.uses_page_text_(), true);
 });

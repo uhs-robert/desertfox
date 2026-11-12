@@ -11,14 +11,15 @@ import { create_find_mode, is_escape } from "./find_mode.ts";
 import { CHAR_FIND_NAMES, create_painter } from "./find_paint.ts";
 import type { FindColors } from "./find_paint.ts";
 import type { FindView } from "./find_mode.ts";
-import { create_find, read_find_colors } from "./find_session.ts";
+import { browser_find_deps, create_find, read_find_colors } from "./find_session.ts";
+import { create_page_text } from "./page_text.ts";
 import { select_object } from "./text_object.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
 import { apply_selection_colors, clear_selection_colors, keep_selection_colors } from "./selection_colors.ts";
 
 import { is_visual, line_span, retarget, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { CaretMode, Cursor, Span } from "./selection_state.ts";
-import { build_text_model, documents_of, frame_document, trees_alive } from "./text_model.ts";
+import { documents_of, frame_document, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
 import { page_selection_cursor, selection_span } from "./page_selection.ts";
 import { first_visible_index, visible_index_range } from "./start_point.ts";
@@ -27,7 +28,8 @@ import { indexes_in_range, pad_range } from "./visible_range.ts";
 // `desertfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { desertfox_host: BundleHostApi; desertfox_caret_ready?: true; desertfox_caret_target?: Element };
 const page = window as unknown as CaretWindow;
-const find = create_find(page.desertfox_host);
+const page_text = create_page_text();
+const find = create_find(page.desertfox_host, browser_find_deps(page_text));
 
 // `painted_` holds the ends of each selection as the last paint left it, so a later change by the page shows. `painted_span_` is the text that paint drew, which a linewise session cannot measure again without moving the page selection.
 type Session = { model_: TextModel; cursor: Cursor; mode: CaretMode; goal_x_: number | undefined; painted_: SelectionEnds[]; painted_span_: Span };
@@ -135,7 +137,7 @@ function start_session(mode: CaretMode): Session | string {
     return "Caret cannot reach a frame from another site";
   }
   // The model covers the whole page, so motion is not trapped in the element.
-  const model = build_text_model(document.body, target);
+  const model = page_text.current(target);
   if (model.text === "") return "No text here";
   const dragged = target === undefined ? selections_of(model).flatMap((selection) => page_selection_cursor(model, selection) ?? [])[0] : undefined;
   // A search position is valid only while no selection came after it, so it is newer than any drag and wins.
@@ -147,26 +149,13 @@ function start_session(mode: CaretMode): Session | string {
   return { model_: model, cursor, mode, goal_x_: undefined, painted_: [], painted_span_: selected_span(cursor) };
 }
 
-// A frame or a shadow host left the page while the session was open.
-function rebuild_if_stale(open: Session): Session | undefined {
-  if (trees_alive(open.model_)) return open;
+// The page changed its text since the session read it, so the session reads it again. The caret keeps its character if that is still on the page.
+function catch_up(open: Session): Session | undefined {
+  if (page_text.is_current(open.model_)) return open;
   for (const selection of selections_of(open.model_)) selection.removeAllRanges();
-  return rebuild_model(open);
-}
-
-// Reads the page text again. The caret keeps its character if that is still on the page.
-function rebuild_model(open: Session): Session | undefined {
-  const model = build_text_model(document.body);
+  const model = page_text.current();
   if (model.text === "") return undefined;
-  // A node of a removed frame throws on any read.
-  const carry = (index: number) => {
-    const { node, offset } = open.model_.point_at_(index);
-    try {
-      return model.index_of_(node, offset);
-    } catch {
-      return undefined;
-    }
-  };
+  const carry = (index: number) => page_text.carry(open.model_, index, model);
   const caret = carry(open.cursor.caret) ?? first_visible_index(model);
   const anchor = is_visual(open.mode) ? (carry(open.cursor.anchor) ?? caret) : caret;
   return retarget(open, model, { anchor, caret });
@@ -185,6 +174,12 @@ function end_session(): void {
   session = undefined;
   find_mode.end();
   clear_selection_colors();
+  release_if_idle();
+}
+
+// With no session open and no search that goes on, nothing reads the page text, so the page stops being watched.
+function release_if_idle(): void {
+  if (!session && !find.uses_page_text_()) page_text.release();
 }
 
 // Something else moved a page selection since the last paint, such as a find, a drag or a click. A drag is taken whole in either mode, because the next key may switch the mode. A click keeps the anchor in visual mode and takes the click.
@@ -204,9 +199,9 @@ function adopt_page_selection(open: Session): void {
 // A string is the failure message. The mode went back to normal then.
 function ensure_session(mode: CaretMode): Session | string {
   const mode_changed = !session || session.mode !== mode;
-  const model_before = session?.model_;
-  if (session) session = rebuild_if_stale(session);
+  // Adopted before the catch-up, which clears the page selections: a drag the user made since the last key must survive a page that changes without pause.
   if (session) adopt_page_selection(session);
+  if (session) session = catch_up(session);
   if (!session) {
     const started = start_session(mode);
     if (typeof started === "string") {
@@ -220,8 +215,7 @@ function ensure_session(mode: CaretMode): Session | string {
   session.mode = mode;
   paint(session);
   if (mode_changed && is_visual(mode)) visual_runs++;
-  // A rebuild brings new trees, which have no selection style yet.
-  if (mode_changed || session.model_ !== model_before) void apply_selection_colors(mode, session.model_.trees);
+  if (mode_changed) void apply_selection_colors(mode);
   return session;
 }
 
@@ -360,7 +354,7 @@ const escape_regex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
 // What `*` and `#` search for and where it starts. A visual selection is searched as text. Otherwise it is the word under the caret, whole.
 // With no session the start of the visible text stands in for the caret.
 function word_target(): { pattern: string; from: DomPoint } | string {
-  const model = session?.model_ ?? build_text_model(document.body);
+  const model = session?.model_ ?? page_text.current();
   if (model.text === "") return "No text here";
   const at = session ? undefined : (find.position(model) ?? first_visible_index(model));
   const cursor = session?.cursor ?? { anchor: at!, caret: at! };
@@ -383,17 +377,13 @@ function word_target(): { pattern: string; from: DomPoint } | string {
 const open_session_now = () => (session ? ensure_session(session.mode) : undefined);
 
 // Moves the caret to the current match. True when the session changed and needs a paint.
-// The session model holds only the text it was built from, so a match in text the page added since takes a rebuild.
+// A match in text the page added since the session read it needs the session to catch up first.
 function land_on_match(open: Session): boolean {
   const model_before = open.model_;
   // Paint runs before the next mode change, so a frame that left the page must leave the model first.
-  rebuild_if_stale(open);
-  let landed = find.position(open.model_);
-  if (landed === undefined && rebuild_model(open)) landed = find.position(open.model_);
-  const rebuilt = open.model_ !== model_before;
-  // A rebuild brings new trees, which have no selection style yet.
-  if (rebuilt) void apply_selection_colors(open.mode, open.model_.trees);
-  if (landed === undefined) return rebuilt;
+  catch_up(open);
+  const landed = find.position(open.model_);
+  if (landed === undefined) return open.model_ !== model_before;
   open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
   open.goal_x_ = undefined;
   return true;
@@ -407,6 +397,7 @@ async function find_step(reverse: boolean): Promise<Outcome> {
   const outcome = await find.step(reverse, started && started.model_.point_at_(started.cursor.caret));
   const open = session;
   if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
+  release_if_idle();
   return outcome;
 }
 
@@ -420,6 +411,7 @@ async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
   const outcome = await find.jump(target.pattern, direction, target.from);
   const open = session;
   if (open && outcome.ok && !("cancelled" in outcome && outcome.cancelled) && land_on_match(open)) paint(open);
+  release_if_idle();
   return outcome;
 }
 
@@ -464,6 +456,7 @@ if (!page.desertfox_caret_ready) {
     const from = searching_from;
     searching_from = undefined;
     if (from) await end_session_search(from, keep);
+    release_if_idle();
   });
   page.desertfox_host.register_handler_("find.clear", () => find.clear());
 }

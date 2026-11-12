@@ -15,6 +15,8 @@ const sheets = create_sheet_set();
 let current_css: string | undefined;
 // A read that finishes after a newer call or after clear_selection_colors is dropped.
 let latest_call = 0;
+// The trees of the last paint. A read that settles colors these, so a rebuild during the read still gets the sheet.
+let painted_trees: TextTree[] = [];
 
 // Undefined until the background has published a theme.
 export async function stored_theme(): Promise<StoredTheme | undefined> {
@@ -35,16 +37,17 @@ const rule = (mode: CaretMode, colors: RoleColors) =>
     ? `::selection{background:${colors.mode_caret} !important;color:${colors.bg_core} !important}`
     : `::selection{background:${colors.selection} !important}`;
 
-export async function apply_selection_colors(mode: CaretMode, trees: TextTree[]): Promise<void> {
+export async function apply_selection_colors(mode: CaretMode): Promise<void> {
   const this_call = ++latest_call;
   const theme = await stored_theme();
   if (this_call !== latest_call || !theme) return;
   current_css = `${rule(mode, theme.dark)}@media(prefers-color-scheme:light){${rule(mode, theme.light)}}`;
-  keep_selection_colors(trees);
+  keep_selection_colors(painted_trees);
 }
 
 // The page may replace its adopted sheets at any time, so each paint of the selection checks that ours is still there.
 export function keep_selection_colors(trees: TextTree[]): void {
+  painted_trees = trees;
   if (current_css === undefined) return;
   for (const tree of trees) {
     // A tree that died during the await throws on any use, and the later trees still need their sheet.
@@ -57,5 +60,6 @@ export function keep_selection_colors(trees: TextTree[]): void {
 export function clear_selection_colors(): void {
   latest_call++;
   current_css = undefined;
+  painted_trees = [];
   sheets.clear();
 }
