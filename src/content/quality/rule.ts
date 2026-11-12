@@ -99,7 +99,7 @@ export function create_rule(deps: RuleDeps) {
   async function look_again(): Promise<void> {
     while (look_left_ms > 0) {
       await deps.sleep(RULE_BACKUP_MS);
-      // A report that got a rule emptied the time while this slept. A frame that unloads takes its timers with it, so no stop is needed.
+      // A report that got a rule emptied the time while this slept. No stop on unload: a frozen page (back-forward cache) keeps its timers, and the leftover time runs out within 10 s.
       if (look_left_ms <= 0) break;
       look_left_ms -= RULE_BACKUP_MS;
       if (deps.has_media()) {
