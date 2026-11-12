@@ -24,7 +24,8 @@ function make() {
   const now: { tab: TabNow | undefined } = { tab: { url: A, status: "complete" } };
   const leave = create_jump_leave({ store, tab_now: async () => now.tab });
   const sender = (extra = {}) => ({ incognito: false, id: 5, window_id: 1, url: A, frame_id: 0, ...extra });
-  const report = (document_url = A, extra = {}) => leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(extra), document_url);
+  // `page_url` is the address the page shows as it hides. `document_url` is the sender's, the address the document loaded at, which a pushState does not change.
+  const report = (document_url = A, extra = {}, page_url = document_url) => leave.leave({ type: "jump_leave", url: page_url, x: 0, y: 700 }, sender(extra), document_url);
   // The tab moves on, and its onUpdated event is handled.
   const tab_at = (url: string, status: string, incognito = false) => {
     now.tab = { url, status };
@@ -214,4 +215,31 @@ test("a step that comes while a leave records sees the recorded place, so the pu
   const [, stepped] = await Promise.all([tab_at(B, "loading"), store.step(1, false, -1, { url: B, x: 0, y: 0 })]);
   assert.deepEqual(stepped, { url: A, x: 0, y: 700 });
   assert.deepEqual(await places(), [{ url: C, x: 0, y: 100 }, { url: A, x: 0, y: 700 }, { url: B, x: 0, y: 0 }]);
+});
+
+// A single-page app's address change reports the url change with status complete and no page hides, so the page's leave watch records it instead.
+test("an address change within the page, with no report held, records nothing", async () => {
+  const { leave, now, places } = make();
+  now.tab = { url: `${A}next`, status: "complete" };
+  await leave.updated({ tab_id: 5, incognito: false, url: `${A}next`, status: "complete" }, { url: `${A}next`, status: "complete" });
+  assert.deepEqual(await places(), []);
+});
+
+test("a page that changed its address in place reports the address it shows, so a step mark from there drops it and another leave records it", async () => {
+  const stepped = make();
+  await stepped.store.mark_step(5, false, `${A}section`);
+  await stepped.tab_at(B, "loading");
+  await stepped.report(A, {}, `${A}section`);
+  assert.deepEqual(await stepped.places(), []);
+  const left = make();
+  await left.tab_at(B, "loading");
+  await left.report(A, {}, `${A}section#part`);
+  assert.deepEqual(await left.places(), [{ url: `${A}section`, x: 0, y: 700 }]);
+});
+
+test("a report naming another site than the document's records nothing", async () => {
+  const { report, tab_at, places } = make();
+  await tab_at(B, "loading");
+  await report(A, {}, C);
+  assert.deepEqual(await places(), []);
 });

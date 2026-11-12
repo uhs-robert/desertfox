@@ -57,7 +57,7 @@ function make(tabs: MarkTab[]) {
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
   });
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: HERE, frame_id: 0, ...extra });
-  const push = (y: number, url = FAR, window_id = 1, incognito = false) => step({ type: "jump_push", x: 0, y }, sender(9, { url, window_id, incognito }));
+  const push = (y: number, url = FAR, window_id = 1, incognito = false) => step({ type: "jump_push", url, x: 0, y }, sender(9, { url, window_id, incognito }));
   // `arrival` makes the request the pushed one of that step.
   const go = (delta: number, y = 40, extra = {}, id = 1, arrival?: number): Promise<unknown> => step({ type: "jump_step", step: delta, x: 0, y, ...(arrival !== undefined && { arrival }) } as JumpRequest, sender(id, extra));
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -257,8 +257,8 @@ test("a step from a child frame asks the top frame, which steps from its own off
 
 test("a push from a child frame or with no tab refuses", async () => {
   const fakes = make([tab(1, HERE)]);
-  assert.deepEqual(await fakes.step({ type: "jump_push", x: 0, y: 5 }, fakes.sender(1, { frame_id: 2 })), { ok: false, message: "The jump list needs the top frame" });
-  assert.deepEqual(await fakes.step({ type: "jump_push", x: 0, y: 5 }, undefined), { ok: false, message: "No page to jump from" });
+  assert.deepEqual(await fakes.step({ type: "jump_push", url: HERE, x: 0, y: 5 }, fakes.sender(1, { frame_id: 2 })), { ok: false, message: "The jump list needs the top frame" });
+  assert.deepEqual(await fakes.step({ type: "jump_push", url: HERE, x: 0, y: 5 }, undefined), { ok: false, message: "No page to jump from" });
   assert.deepEqual(await fakes.step({ type: "jump_step", step: -1, x: 0, y: 5 }, fakes.sender(1, { url: undefined })), { ok: false, message: "No page to jump from" });
 });
 
@@ -316,7 +316,7 @@ test("a step that opens its address here marks the page it leaves, so that page'
   await fakes.go(-1);
   // The report comes after the step's arrival ended, with the tab already on the new page.
   const leave = create_jump_leave({ store: fakes.store, tab_now: async () => ({ url: FAR, status: "complete" }) });
-  await leave.leave({ type: "jump_leave", x: 0, y: 40 }, fakes.sender(), HERE);
+  await leave.leave({ type: "jump_leave", url: HERE, x: 0, y: 40 }, fakes.sender(), HERE);
   assert.deepEqual(await fakes.list(), { entries: [{ url: FAR, x: 0, y: 500 }, { url: HERE, x: 0, y: 40 }], cursor: 0 }, "the step's forward entry survives");
 });
 
@@ -326,7 +326,7 @@ test("a step that Firefox refuses to open leaves no mark, so the page's next lea
   await fakes.push(500);
   await fakes.go(-1);
   const leave = create_jump_leave({ store: fakes.store, tab_now: async () => ({ url: "https://other.test/", status: "loading" }) });
-  await leave.leave({ type: "jump_leave", x: 0, y: 40 }, fakes.sender(), HERE);
+  await leave.leave({ type: "jump_leave", url: HERE, x: 0, y: 40 }, fakes.sender(), HERE);
   // A skipped leave would leave the list as the step left it: both places, the cursor on the first.
   assert.deepEqual(await fakes.list(), { entries: [{ url: HERE, x: 0, y: 40 }], cursor: 1 });
 });
@@ -354,4 +354,31 @@ test("a late pushed request of an older step does not take a newer step's arriva
   await fakes.flush();
   await fakes.flush();
   assert.deepEqual(answers, { stale: { ok: true }, own: { ok: true, x: 0, y: 500 } });
+});
+
+test("a push records the address it names, which the tab may have left for another page of its site", async () => {
+  const fakes = make([tab(1, HERE)]);
+  assert.deepEqual(await fakes.step({ type: "jump_push", url: "https://here.test/old#part", x: 3, y: 40 }, fakes.sender(1, { url: "https://here.test/new" })), { ok: true });
+  assert.deepEqual((await fakes.list())?.entries, [{ url: "https://here.test/old", x: 3, y: 40 }]);
+});
+
+test("a push of another site's address refuses and records nothing", async () => {
+  const fakes = make([tab(1, HERE)]);
+  assert.deepEqual(await fakes.step({ type: "jump_push", url: FAR, x: 0, y: 40 }, fakes.sender(1)), { ok: false, message: "The jump list takes a place of the tab's own site only" });
+  assert.equal(await fakes.list(), undefined);
+});
+
+test("a push from a tab a step is still arriving at records nothing, and one after the arrival records", async () => {
+  const fakes = make([tab(1, HERE), tab(2, FAR)]);
+  await fakes.push(500);
+  await fakes.go(-1);
+  const pushed_from_far = () => fakes.step({ type: "jump_push", url: FAR, x: 0, y: 70 }, fakes.sender(2, { url: "https://far.test/q" }));
+  const has_pushed = async () => (await fakes.list())?.entries.some((entry) => (entry as { y: number }).y === 70);
+  assert.deepEqual(await pushed_from_far(), { ok: true });
+  assert.equal(await has_pushed(), false);
+  fakes.watches[0]!.resolve("ready");
+  await fakes.flush();
+  await fakes.go(-1, 500, { url: FAR }, 2, fakes.state.last_arrival);
+  assert.deepEqual(await pushed_from_far(), { ok: true });
+  assert.equal(await has_pushed(), true);
 });

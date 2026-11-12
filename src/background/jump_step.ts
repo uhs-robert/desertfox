@@ -9,6 +9,7 @@ import type { JumpAnswer, JumpRequest } from "../shared/messages.ts";
 import { create_address_arrivals, type AddressDeps } from "./address_arrival.ts";
 import type { JumpStore } from "./jump_store.ts";
 import type { MarkSender } from "./mark_store.ts";
+import { place_in_tab, url_origin } from "./router.ts";
 
 export type JumpStepDeps = Omit<AddressDeps, "failed_text"> & {
   store: JumpStore;
@@ -28,7 +29,12 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
     const { id: tab_id, window_id } = tab;
     if (request.type === "jump_push") {
       if (tab.frame_id !== 0) throw new RuntimeRefusal("The jump list needs the top frame");
-      await deps.store.push(window_id, tab.incognito, { url: mark_page_url(tab.url), x: request.x, y: request.y });
+      // The page a step sends the tab to can change its address as the step's scroll lands. That is the step's own move.
+      if (arrivals.is_arriving(tab_id)) return { ok: true };
+      // An address changed in place keeps the origin, and the tab can show either address by now.
+      const left = place_in_tab(request, tab.url, url_origin);
+      if (!left) throw new RuntimeRefusal("The jump list takes a place of the tab's own site only");
+      await deps.store.push(window_id, tab.incognito, left);
       return { ok: true };
     }
     // The page that was sent here asks again, and gets the entry the step chose, whatever address it ended on. Only the pushed request does that: a key the user pressed meanwhile is a step of its own.

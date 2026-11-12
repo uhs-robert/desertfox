@@ -90,8 +90,14 @@ export async function read_place_in_time(read: Promise<PageOffset | undefined>, 
     timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
   });
   const offset = await Promise.race([read.catch(() => undefined), waited]).finally(() => clearTimeout(timer));
-  const url = mark_page_url(tab_url);
-  return offset && mark_page_url(offset.url) === url ? { url, x: offset.x, y: offset.y } : undefined;
+  return offset && place_in_tab(offset, tab_url);
+}
+
+export const url_origin = (url: string): string => new URL(url).origin;
+
+// The place `offset` names, when its address matches the tab's under `address_of`: by default the same page.
+export function place_in_tab(offset: PageOffset, tab_url: string, address_of: (url: string) => string = mark_page_url): JumpEntry | undefined {
+  return address_of(offset.url) === address_of(tab_url) ? { url: mark_page_url(offset.url), x: offset.x, y: offset.y } : undefined;
 }
 
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.

@@ -37,6 +37,7 @@ import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
 import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
+import { arm_leave_watch } from "../page/leave_watch.ts";
 
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element; desertfox_content_loaded?: true | (() => void) };
@@ -628,5 +629,7 @@ if (typeof page.desertfox_content_loaded === "function") page.desertfox_content_
 // A second run would register a second copy and orphan the first copy's labels. Without a host (no content script at all) the flag stays unset, so a later load still registers.
 if (!page.desertfox_hints_ready && page.desertfox_host) {
   page.desertfox_hints_ready = true;
+  // A hint follow leaves the page, which may have no `page` bundle to report where it stood.
+  arm_leave_watch(page.desertfox_host);
   register(page.desertfox_host);
 }
