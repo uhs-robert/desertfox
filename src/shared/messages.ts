@@ -466,12 +466,15 @@ export type HintFramesTyped = {
   active?: string | undefined;
 };
 
-// The keyboard frame's complete label, which the background passes on to the frame that owns it. The answer is that frame's `Outcome`.
+// The keyboard frame's complete label, which the background passes on to the frame that owns it. The answer is a `HintFramesPickAnswer`.
 export type HintFramesPick = {
   type: "hint_frames_pick";
   session_id: string;
   label: string;
 };
+
+// The owner frame's answer to a pick. A copy or a `prompt` does not run there: the owner answers with the text (the copy text, or the whole line for `prompt`, tracking parameters already stripped), and `what` names it for the toast when it is not the text itself. The keyboard frame then copies it into its rapid list or opens the line, so one list holds the picks of every frame and the toast draws where the keyboard is. Any other action answers its `Outcome`.
+export type HintFramesPickAnswer = Outcome | { ok: true; text: string; what?: string };
 
 // The keyboard frame left hint mode. The background passes it on to every frame of the tab.
 export type HintFramesEnd = {

@@ -98,4 +98,20 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "fh_text_cross_one", "the cross-origin frame to follow the link text mode picked");
     await wait_for_no_labels("the labels of every frame to go after the pick");
   });
+
+  await run_case("a rapid copy of text joins the picks of the cross-origin frame and the top page into one clipboard list", async () => {
+    await open_page("frames_hints", "fh_rapid", { new_tab: true });
+    await in_background(`navigator.clipboard.writeText("seed").then(() => true)`);
+    await run_line("hint --links --all-frames --rapid --copy-text");
+    let labels = await wait_for_labels("the labels of every frame", 6);
+    // A pick in the cross-origin frame, then one in the top page: the rapid list lives in the keyboard frame and takes both.
+    await press_keys(labels.cross[0]);
+    labels = await wait_for_labels("the labels again after the cross-origin pick", 6);
+    await press_keys(labels.top[0]);
+    await poll_until("the clipboard to hold two lines", async () => (await in_background("navigator.clipboard.readText()")).split("\n").length === 2);
+    const lines = (await in_background("navigator.clipboard.readText()")).split("\n");
+    expect(lines[0] !== lines[1] && lines[0] !== "seed", `the clipboard holds ${JSON.stringify(lines)}, expected two different picks`);
+    await press_keys("-k", "Escape");
+    await wait_for_no_labels("the labels to go after Escape");
+  });
 }

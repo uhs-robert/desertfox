@@ -362,3 +362,9 @@ test("the typed relay passes the text mode matches and the active label to the o
     [3, { type: "hint_frames_typed", session_id: "s1", typed: "a" }],
   ]);
 });
+
+test("the owner's text answer to a pick reaches the keyboard frame unchanged", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => ({ ok: true, text: "https://other.test/x", what: "selector" }) } });
+  await fake.hints.start(TAB, 0, START);
+  assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: true, text: "https://other.test/x", what: "selector" });
+});

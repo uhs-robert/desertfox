@@ -2,7 +2,7 @@
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
 import type { HintFramesMessage } from "../../background/hint_frames.ts";
-import type { HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages.ts";
+import type { HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
@@ -253,13 +253,17 @@ const open_line_ = (text: string): Promise<Outcome> => page.desertfox_host.run_c
 
 type PickArgs = Pick<Session, "args" | "action" | "rapid" | "collected_" | "with_background_">;
 
-const perform_pick = (current: PickArgs, element: HTMLElement) => {
-  if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, open_line_);
-  const result = perform(current.action, element, pick_deps(current), current.with_background_);
+// `hand_over` is for a pick another frame owns: the text that would be copied, or the line that would open, goes to the keyboard frame instead.
+type HandOver = (text: string, what?: string) => void;
+
+const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
+  if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
+  const result = perform(current.action, element, hand_over ? { ...deps, copy: hand_over } : pick_deps(current), current.with_background_);
   // The hint mode has ended, so the frame is in the mode the hint began in. A refused pick leaves it there.
   if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
   return result;
 };
+
 // The background answers within its 300 ms wait. Past this, it is gone or stuck, and the frame keeps its own labels.
 const ACROSS_START_WAIT_MS = 2000;
 
@@ -354,8 +358,8 @@ function register(host: BundleHostApi): void {
   function pick_run(current: Session, labeled: Labeled, index: number): () => unknown {
     const own = labeled.own_of_(index);
     if (own !== undefined) return () => perform_pick(current, labeled.found[own]!.element as HTMLElement);
-    const answer = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_, label: labeled.labels[index] });
-    return () => answer;
+    const answer: Promise<HintFramesPickAnswer | undefined> = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_, label: labeled.labels[index] });
+    return () => answer.then((reply) => (reply && "text" in reply ? (current.action === "prompt" ? open_line_(reply.text) : copy_of_pick(current)(reply.text, reply.what)) : reply));
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
@@ -573,19 +577,21 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     void browser.runtime.sendMessage({ type: "hint_frames_report", session_id: current.session_id, count: found.length, texts: texts_of(found) } satisfies HintFramesReport).catch(() => undefined);
   }
 
-  // The answer of a pick is the action's outcome, which the keyboard frame shows.
-  function pick_here(current: Across, label: string): Promise<Outcome> {
+  // The answer of a pick is the action's outcome, which the keyboard frame shows. A copy or a prompt answers with its text, which the keyboard frame copies or opens.
+  function pick_here(current: Across, label: string): Promise<HintFramesPickAnswer> {
     const index = current.labels?.indexOf(label) ?? -1;
     const element = current.found?.[index]?.element as HTMLElement | undefined;
     clear();
     if (!element) return Promise.resolve({ ok: false, message: "That hint is gone" });
     const { args } = current;
     const pick_args: PickArgs = { args, action: args.action as HintAction, rapid: false, collected_: [], with_background_: args.filter === "images" };
+    let handed: { text: string; what: string | undefined } | undefined;
+    const hand_over: HandOver = (text, what) => void (handed = { text, what });
     // The keyboard focus is in another frame. Gecko keeps an element's focus() out of a frame of another site that does not hold it, and the window's focus() brings it in.
     if (pick_args.action === "focus" || takes_typing(element)) window.focus();
     return Promise.resolve()
-      .then(() => perform_pick(pick_args, element))
-      .then((result) => (result as Outcome | undefined) ?? done, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
+      .then(() => perform_pick(pick_args, element, hand_over))
+      .then((result): HintFramesPickAnswer => (handed ? { ok: true, text: handed.text, ...(handed.what !== undefined && { what: handed.what }) } : ((result as Outcome | undefined) ?? done)), (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
   }
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
