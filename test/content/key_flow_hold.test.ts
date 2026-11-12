@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_key_flow } from "../../src/content/key_flow.ts";
+import { DEFAULT_CHORDS, create_key_flow } from "../../src/content/key_flow.ts";
 import { create_mode_state } from "../../src/content/mode_state.ts";
+import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { parse_sequence } from "../../src/shared/keys/notation.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
+import { is_chord } from "../../src/shared/keys/token.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../../src/shared/prefix_tree.ts";
 
@@ -50,14 +53,28 @@ test("a chord that only the browser chords bind waits behind a hold and runs aft
   assert.deepEqual(ran, ["tab.new"]);
 });
 
-test("a chord typed before the keymap is read waits for it, then runs if bound and goes back to the page if not", () => {
+test("a chord typed before the keymap is read waits if the default keymap binds it, and passes at once if not", () => {
   const { flow, ran, read_keymap } = make(false);
-  const passed: string[] = [];
-  assert.equal(flow.handle_token_("<C-o>", false, () => passed.push("<C-o>")), "cancel", "<C-o> must not reach Firefox's Open File");
-  assert.equal(flow.handle_token_("<C-k>", false, () => passed.push("<C-k>")), "cancel");
+  assert.equal(flow.handle_token_("<C-o>", false, () => assert.fail("<C-o> must not go back to the page")), "cancel", "<C-o> must not reach Firefox's Open File");
+  assert.equal(flow.handle_token_("<C-k>", false), "pass", "<C-k> is not a default chord");
   read_keymap();
   assert.deepEqual(ran, ["page.jump"]);
-  assert.deepEqual(passed, ["<C-k>"]);
+});
+
+test("DEFAULT_CHORDS matches every chord of the default keymap and no other chord", () => {
+  const bound = new Set<string>();
+  for (const bindings of Object.values(DEFAULT_KEYMAP)) {
+    if (typeof bindings !== "object" || bindings === null) continue;
+    for (const sequence of Object.keys(bindings)) for (const token of parse_sequence(sequence).tokens ?? []) if (is_chord(token)) bound.add(token);
+  }
+  for (const token of bound) assert.ok(DEFAULT_CHORDS.test(token), `${token} is bound by default but DEFAULT_CHORDS misses it`);
+  const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789,.[]/;'-=\\`", "Space", "Escape", "Enter", "Tab", "ArrowDown", "ArrowUp", "ArrowLeft", "Backspace", "F5"];
+  for (const mods of ["C", "A", "M", "CS", "AS", "AC"]) {
+    for (const key of keys) {
+      const token = `<${mods}-${key}>`;
+      if (DEFAULT_CHORDS.test(token)) assert.ok(bound.has(token), `${token} matches DEFAULT_CHORDS but the default keymap does not bind it`);
+    }
+  }
 });
 
 test("a browser chord typed during a load in a mode where browser chords do not run goes to Firefox", () => {
