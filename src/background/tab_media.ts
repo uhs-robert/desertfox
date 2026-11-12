@@ -87,13 +87,27 @@ export type MediaDiscoveryDeps = {
   open_panel: (tab_id: number) => Promise<unknown>;
 };
 
-// Opens the which-key panel of the media mode when the top frame enters or returns to it, so the keys can be found. Media mode is set in every frame, so only the top frame's report counts. Full screen shows the video alone, and a delay of 0 means no panel unasked.
+// Opens the which-key panel of the media mode when the top frame moves into it (entry, or the return from a hint or the command line), so the keys can be found. A frame reports its mode again on a window or tab focus, which is no move and opens nothing. Media mode is set in every frame, so only the top frame's report counts. Full screen shows the video alone, and a delay of 0 means no panel unasked.
+// The state is in memory: a restarted background opens the panel at most once more, on the next report of media.
 export function create_media_discovery(deps: MediaDiscoveryDeps) {
+  const last_mode = new Map<number, Mode>();
+  // Counts the top frame's reports per tab, so a check that finishes after a newer report knows its mode is stale.
+  const epoch = new Map<number, number>();
   return {
     reported: async (tab_id: number, frame_id: number, mode: Mode): Promise<void> => {
-      if (frame_id !== 0 || mode !== "media") return;
+      if (frame_id !== 0) return;
+      const was = last_mode.get(tab_id);
+      last_mode.set(tab_id, mode);
+      const mine = (epoch.get(tab_id) ?? 0) + 1;
+      epoch.set(tab_id, mine);
+      if (mode !== "media" || was === "media") return;
       if ((await deps.which_key_delay_ms()) === 0 || (await deps.top_in_fullscreen(tab_id))) return;
+      if (epoch.get(tab_id) !== mine) return;
       await deps.open_panel(tab_id);
+    },
+    forget: (tab_id: number): void => {
+      last_mode.delete(tab_id);
+      epoch.delete(tab_id);
     },
   };
 }

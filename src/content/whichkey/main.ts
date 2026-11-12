@@ -26,5 +26,10 @@ if (!page.desertfox_whichkey_ready) {
     if (!prefix) return session.hide();
     void session.show_prefix_(prefix, is_current_, drawn_).catch(ignore_failure);
   });
-  page.desertfox_host.register_handler_("help.whichkey", () => void session.show_manual_(page.desertfox_host.get_mode()).catch(ignore_failure));
+  page.desertfox_host.register_handler_("help.whichkey", (args) => {
+    const mode = page.desertfox_host.get_mode();
+    // The background's own call names the mode it was sent for, so an Escape that came first leaves no normal-mode panel behind.
+    if (args.only_in_mode !== undefined && args.only_in_mode !== mode) return;
+    void session.show_manual_(mode).catch(ignore_failure);
+  });
 }
