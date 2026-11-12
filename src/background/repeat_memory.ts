@@ -73,3 +73,7 @@ export async function repeat_preview(memory: Pick<RepeatMemory, "load">, find_co
     .replace(/\s+/g, " ");
   return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS - 1)}\u2026` : line;
 }
+
+// The answer to `read_repeat_preview`: nothing for a private tab or with the setting off.
+export const answer_repeat_preview = async ({ is_private, enabled }: { is_private: boolean; enabled: boolean }, memory: Pick<RepeatMemory, "load">, find_command: (id: string) => CommandDef | undefined): Promise<string | undefined> =>
+  is_private || !enabled ? undefined : repeat_preview(memory, find_command);

@@ -30,7 +30,7 @@ import { wire_private_cleanup } from "./store_turns.ts";
 import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
 import { browser_quickmark_store } from "./quickmark_store.ts";
 import { answer_register_request, browser_register_store } from "./register_store.ts";
-import { create_repeat_memory, repeat_preview } from "./repeat_memory.ts";
+import { answer_repeat_preview, create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
@@ -282,8 +282,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return Promise.all([checked, browser_macro_recorder.record_page(checked, page_outcome(request), origin)]).then(() => undefined);
   }
   if (request?.type === "read_repeat_preview") {
-    if (sender.tab?.incognito === true) return Promise.resolve(undefined);
-    return get_config().then((config) => (effective_settings(config.settings).which_key_repeat ? repeat_preview(repeat_memory, (id) => registry.get(id)) : undefined));
+    return get_config().then((config) => answer_repeat_preview({ is_private: sender.tab?.incognito === true, enabled: effective_settings(config.settings).which_key_repeat }, repeat_memory, (id) => registry.get(id)));
   }
   if (request?.type === "list_keys") {
     const tab = sender.tab;

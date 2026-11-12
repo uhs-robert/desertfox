@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_router } from "../../src/background/router.ts";
-import { create_repeat_memory, no_repeat_memory, repeat_preview } from "../../src/background/repeat_memory.ts";
+import { create_repeat_memory, no_repeat_memory, repeat_preview, answer_repeat_preview } from "../../src/background/repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "../../src/background/record_step.ts";
 import { make_repeat_handler, type RepeatDeps } from "../../src/commands/command.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -373,4 +373,12 @@ test("the preview falls back to the label for a command with no name, and shorte
   assert.equal(text?.length, 48);
   assert.ok(text?.startsWith("Nameless | "));
   assert.ok(text?.endsWith("\u2026"));
+});
+
+test("the preview answer is empty for a private tab and with the setting off", async () => {
+  const memory = { load: async () => [{ id: "command.repeat" }] };
+  const find = (id: string) => ({ id, name: "repeat", label: "Repeat", params: [] }) as never;
+  assert.equal(await answer_repeat_preview({ is_private: false, enabled: true }, memory, find), ":repeat");
+  assert.equal(await answer_repeat_preview({ is_private: true, enabled: true }, memory, find), undefined);
+  assert.equal(await answer_repeat_preview({ is_private: false, enabled: false }, memory, find), undefined);
 });
