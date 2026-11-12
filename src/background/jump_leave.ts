@@ -30,10 +30,7 @@ const verdict_at =
   };
 
 export function create_jump_leave(deps: JumpLeaveDeps) {
-  async function settle(tab_id: number, is_private: boolean, now: TabNow | undefined): Promise<void> {
-    const left = await deps.store.settle_leaving(tab_id, is_private, verdict_at(now));
-    if (left) await deps.store.push(left.window_id, is_private, left.entry);
-  }
+  const settle = (tab_id: number, is_private: boolean, now: TabNow | undefined): Promise<void> => deps.store.settle_leaving(tab_id, is_private, verdict_at(now));
 
   return {
     forget: async (tab_id: number): Promise<void> => void (await Promise.all([false, true].map((is_private) => deps.store.forget_tab(tab_id, is_private)))),
