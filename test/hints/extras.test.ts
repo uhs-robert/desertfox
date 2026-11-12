@@ -247,7 +247,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     if ((message as { type?: string }).type === "hint_frames_start") return sent.push(message), start_answer(message);
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
     if ((message as { type?: string }).type === "record_timing") return void timings.push(message);
-    if ((message as { type?: string }).type === "read_strip_patterns") return [];
+    if ((message as { type?: string }).type === "read_strip_patterns") return settings.strip_tracking_params ?? ["utm_*"];
     if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
@@ -1329,6 +1329,14 @@ test("across frames a background that does not answer leaves the frame its own l
   assert.deepEqual(types_sent(page), ["hint_frames_start", "run"]);
 });
 
+test("across frames an ended answer cancels the run and draws no labels of its own", async () => {
+  const page = await page_with(["one", "two"]);
+  page.answer_start(() => ({ ok: false, reason: "ended" }));
+  assert.deepEqual(await page.run({ frames: "all_frames" }), { ok: true, cancelled: true });
+  assert.equal(page.labels().length, 0);
+  assert.equal(page.mode(), "normal");
+});
+
 test("across frames Escape before the labels come ends the session the background then answers", async () => {
   const page = await page_with(["one"]);
   let answer_start!: (answer: unknown) => void;
@@ -1417,6 +1425,27 @@ test("another frame reports its count, takes a prefix before its labels, and run
   assert.deepEqual(opened(page), ["https://example.com/three"]);
   assert.equal(page.labels().length, 0);
   assert.equal(page.active_listeners.size, 0);
+});
+
+test("another frame copies with the stored strip_tracking_params, not the shipped list", async () => {
+  const page = await page_with(["one?utm_source=x"], { strip_tracking_params: [] });
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "copy", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a"] });
+  await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" });
+  assert.deepEqual(page.copied, ["https://example.com/one?utm_source=x"]);
+});
+
+test("the end of the session the keyboard frame holds leaves hint mode there, and the end of another session does not", async () => {
+  const page = await page_with(["one"]);
+  page.answer_start(across_answer(["a"], ["a"]));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.deliver({ type: "hint_frames_end", session_id: "s0" });
+  assert.equal(page.mode(), "hint");
+  page.deliver({ type: "hint_frames_end", session_id: "s1" });
+  assert.equal(page.mode(), "normal");
+  assert.equal(page.labels().length, 0);
 });
 
 test("another frame ignores every message of another session, and the end of its own clears its labels", async () => {
