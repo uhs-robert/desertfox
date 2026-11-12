@@ -47,6 +47,8 @@ function make(tabs: MarkTab[]) {
   const log: string[] = [];
   const watches: { tab_id: number; stopped: boolean; resolve: (result: PageReady) => void; requires_navigation?: boolean | undefined }[] = [];
   const refusals: { tab_id: number; message: string }[] = [];
+  // The places put in the jump list, as `window: url x y`.
+  const records: string[] = [];
   const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false };
   const global_jump = create_global_mark_jump({
     store: real,
@@ -79,12 +81,14 @@ function make(tabs: MarkTab[]) {
     },
     push_jump: async (tab_id, key) => (log.push(`push ${tab_id} ${key}`), await state.during_push?.(), state.push_reply),
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
+    record_jump: async (window_id, _is_private, entry) => void records.push(`${window_id}: ${entry.url} ${entry.x} ${entry.y}`),
+    read_top_offset: async () => ({ x: 7, y: 77 }),
   });
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: "https://sender.test/", frame_id: 0, ...extra });
   const jump = (key = "A", y = 40, url = "https://sender.test/"): MarkJump => ({ type: "mark_jump", key, url, x: 0, y });
   const set_mark = (key = "A", is_private = false) => answer_mark_request(real, { type: "mark_set", key, url: "ignored", x: 0, y: 300 }, { incognito: is_private, id: 9, window_id: 1, url: MARK_URL, frame_id: 0 }, global_jump);
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { store: real, global_jump, log, watches, refusals, state, sender, jump, set_mark, flush };
+  return { store: real, global_jump, log, watches, refusals, records, state, sender, jump, set_mark, flush };
 }
 
 test("a jump with no mark refuses and touches no tab", async () => {
@@ -250,4 +254,36 @@ test("a private jump never sees a normal mark or tab", async () => {
   await fakes.global_jump(fakes.jump(), fakes.sender(1, { incognito: true }));
   // The normal tab on the address is not a candidate: the private tab navigates.
   assert.deepEqual(fakes.log, ["watch 1", `navigate 1 ${MARK_URL}`]);
+});
+
+test("a jump to a tab in another window records the place it left in that window's list, so <C-o> there comes back", async () => {
+  const fakes = make([tab(1, "https://sender.test/"), tab(2, MARK_URL, { window_id: 2 })]);
+  await fakes.set_mark();
+  await fakes.global_jump(fakes.jump("A", 40), fakes.sender());
+  assert.deepEqual(fakes.records, ["2: https://sender.test/ 0 40"]);
+});
+
+test("a jump records in the sender's window when it stays there, and the pushed arrival records nothing more", async () => {
+  const same_tab = make([tab(1, MARK_URL)]);
+  await same_tab.set_mark();
+  await same_tab.global_jump(same_tab.jump("A", 40, MARK_URL), same_tab.sender(1, { url: `${MARK_URL}#top` }));
+  assert.deepEqual(same_tab.records, [`1: ${MARK_URL} 0 40`]);
+  const opened = make([tab(1, "https://sender.test/")]);
+  await opened.set_mark();
+  opened.state.during_push = () => answer_mark_request(opened.store, opened.jump("A", 0, MARK_URL), { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, opened.global_jump);
+  await opened.global_jump(opened.jump("A", 40), opened.sender());
+  opened.watches[0]!.resolve("ready");
+  await opened.flush();
+  assert.deepEqual(opened.records, ["1: https://sender.test/ 0 40"]);
+});
+
+test("a jump a child frame asks for records the top frame's place, and leaves the same-tab case to the top frame", async () => {
+  const other = make([tab(1, "https://sender.test/"), tab(2, MARK_URL)]);
+  await other.set_mark();
+  await other.global_jump(other.jump("A", 40), other.sender(1, { frame_id: 2 }));
+  assert.deepEqual(other.records, ["1: https://sender.test/ 7 77"]);
+  const same = make([tab(1, MARK_URL)]);
+  await same.set_mark();
+  await same.global_jump(same.jump(), same.sender(1, { url: MARK_URL, frame_id: 2 }));
+  assert.deepEqual(same.records, []);
 });

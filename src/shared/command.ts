@@ -130,8 +130,7 @@ type CommandCommon = {
   // A function decides per call from the checked args, for one command whose args differ in danger (`page.reload --all` must never replay).
   repeatable?: boolean | ((args: CheckedArgs) => boolean);
   // True when a successful run moves the view in the tab it ran in, so the router records the place it left in the jump list. Absent means false and costs nothing. A function decides per call from the checked args (`open.url` jumps only with `where` here).
-  // True records only a run in the top frame, because a child frame scrolls its own box. "top_frame" says the run moves the top frame or leaves the page from a child frame too (a global mark), so the top frame's place is recorded then as well.
-  jumps?: JumpFlag | ((args: CheckedArgs) => JumpFlag);
+  jumps?: boolean | ((args: CheckedArgs) => boolean);
   // True lets a program outside the browser run the command through the bridge socket. Absent means false. Built-in commands must say it: `define` in `registry/builtin.ts` requires it. A hard-coded never-list in `background/bridge_run.ts` wins over a true here.
   bridge?: boolean;
   // Rarely used. The help Commands page hides the card until its "Show advanced commands" toggle is on. Completion and keys are unaffected.
@@ -147,8 +146,6 @@ export type ContentCommandDef = CommandCommon & {
   bundle?: BundleName;
   run?: undefined;
 };
-
-export type JumpFlag = boolean | "top_frame";
 
 export type CommandDef = BackgroundCommandDef | ContentCommandDef;
 

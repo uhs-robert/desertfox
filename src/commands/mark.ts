@@ -20,6 +20,6 @@ define("mark.jump", {
   runs_in: "content",
   bundle: "page",
   repeatable: false,
-  // A global mark jumps in the top frame or another tab, whichever frame asked.
-  jumps: (args) => (is_global_mark(args.key as string) ? "top_frame" : true),
+  // A global mark can land in another window, which only the background knows, so `global_mark_jump.ts` records it.
+  jumps: (args) => !is_global_mark(args.key as string),
 });

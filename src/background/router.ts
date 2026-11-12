@@ -207,10 +207,10 @@ export function create_router(deps: RouterDeps): Router {
     return done;
   }
 
-  // Where a command that moves the view starts. Only commands that say `jumps` pay for the read. A child frame's own offset has no entry in the list, so a command there records nothing unless it moves the top frame.
+  // Where a command that moves the view starts. Only commands that say `jumps` pay for the read. A child frame's own offset has no entry in the list, so a command there records nothing.
   async function read_place_left(command: CommandDef, args: CheckedArgs, context: CommandContext, active: ActiveTab | undefined) {
-    const moves_view = typeof command.jumps === "function" ? command.jumps(args) : command.jumps;
-    if (!moves_view || !active?.url || active.window_id < 0 || ((context.frame_id ?? 0) !== 0 && moves_view !== "top_frame") || context.tab_id !== active.tab_id) return undefined;
+    const moves_view = typeof command.jumps === "function" ? command.jumps(args) : command.jumps === true;
+    if (!moves_view || !active?.url || active.window_id < 0 || (context.frame_id ?? 0) !== 0 || context.tab_id !== active.tab_id) return undefined;
     let timer: number | undefined;
     const waited = new Promise<undefined>((resolve) => {
       timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
