@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CHAR_FIND_NAMES, create_painter } from "../../../src/content/caret/find_paint.ts";
 import { create_selection_mirror } from "../../../src/content/caret/selection_mirror.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
@@ -86,6 +87,7 @@ class FakeSelection {
 }
 
 class FakeHighlight {
+  priority = 0;
   ranges: FakeRange[];
   constructor(...ranges: FakeRange[]) {
     this.ranges = ranges;
@@ -300,4 +302,14 @@ test("a caret on a line break draws no cell", () => {
   (model as { text: string }).text = "abc\ndef";
   mirror.paint(model, { from: 3, to: 4 }, "caret");
   assert.deepEqual(cell_of(top), []);
+});
+
+// `f`, `t`, `;` and the live `/` line paint their current match after the cell, often on the caret's own character. At equal priority the later highlight paints on top.
+test("the cell paints above a find highlight on the same character", () => {
+  const { top, model, mirror } = setup();
+  mirror.paint(model, { from: 1, to: 2 }, "caret");
+  const char_find = create_painter(CHAR_FIND_NAMES);
+  char_find.paint(model, { from: [1], width: 1 }, 0, undefined, [0]);
+  const registry = top.defaultView.CSS.highlights;
+  assert.ok(registry.get("oasis-caret")!.priority > registry.get(CHAR_FIND_NAMES.current)!.priority, "the find covers the caret");
 });

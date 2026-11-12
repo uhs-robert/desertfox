@@ -15,12 +15,14 @@ export function paint_indexes(current: number, count: number, cap = PAINT_CAP): 
   return Array.from({ length: shown }, (_, at) => (((current - before + at) % count) + count) % count);
 }
 
-export type HighlightNames = { all: string; current: string };
+// `priority` lifts the current highlight above the others, which otherwise stack in the order they were registered.
+export type HighlightNames = { all: string; current: string; priority?: number };
 // One painter owns one pair of names, so a find by character never clears the matches a kept `/` search stands on.
 export const SEARCH_NAMES: HighlightNames = { all: "oasis-find", current: "oasis-find-current" };
 export const CHAR_FIND_NAMES: HighlightNames = { all: "oasis-ft", current: "oasis-ft-current" };
 // The caret mode cell is the one current match, so its `all` name stays empty. Its colors come from `selection_colors.ts`, which follows the mode.
-export const CARET_NAMES: HighlightNames = { all: "oasis-caret-none", current: "oasis-caret" };
+// A find paints its current match after the cell, often on the caret's own character, so the cell takes the higher priority.
+export const CARET_NAMES: HighlightNames = { all: "oasis-caret-none", current: "oasis-caret", priority: 1 };
 
 // Where matches start, and where each ends: one end per match, or one width for all.
 export type Spans = { from: number[] } & ({ to: number[] } | { width: number });
@@ -113,7 +115,9 @@ export function create_painter(names: HighlightNames = SEARCH_NAMES) {
         const view = page_view(owner);
         const registry = view.CSS.highlights as unknown as Registry;
         registry.set(names.all, new view.Highlight(...group.all));
-        registry.set(names.current, new view.Highlight(...group.current));
+        const current = new view.Highlight(...group.current);
+        current.priority = names.priority ?? 0;
+        registry.set(names.current, current);
         painted_documents.add(owner);
       } catch {}
     }

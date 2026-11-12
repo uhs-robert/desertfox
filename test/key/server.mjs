@@ -42,6 +42,11 @@ const report_change = () => {
   if (cell) document.dispatchEvent(new Event("caret_cell"));
 };
 document.addEventListener("selectionchange", report_change);
+// A hidden tab runs no animation frames, so the end of the session on a tab switch is checked on the switch itself and once more after it, as the content script may clear the cell after this listener runs.
+document.addEventListener("visibilitychange", () => {
+  report_change();
+  setTimeout(report_change, 0);
+});
 const watch_cell = () => {
   if (!getSelection().rangeCount) report_change();
   requestAnimationFrame(watch_cell);
