@@ -70,7 +70,7 @@ function decode_utf8(bytes: Uint8Array, what: string): string {
 }
 
 // A directory entry ("themes/") has no content and only passes the path rules. Returns the path without its trailing slash. A reader drops "." segments, because archivers such as bsdtar write "./a.toml" and a dot cannot leave the root. The writer refuses them.
-function check_path(name: string, drop_dot_segments: boolean): string {
+export function check_path(name: string, drop_dot_segments: boolean): string {
   if (name === "") throw new ZipError("an entry has an empty path");
   if (utf8_encoder.encode(name).length > MAX_PATH_BYTES) throw new ZipError(`path too long: ${name.slice(0, 40)}`);
   if (name.includes("\\")) throw new ZipError(`path has a backslash: ${name}`);

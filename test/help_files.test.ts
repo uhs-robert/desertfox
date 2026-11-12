@@ -67,6 +67,43 @@ test("a delete sends text null and closes the open file", async () => {
   await session.load();
   session.open("style.css");
   await session.remove("style.css");
-  assert.deepEqual(sent.at(-2), { type: "config_files", op: "save", path: "style.css", text: null });
+  assert.deepEqual(sent.at(-2), { type: "config_files", op: "save", path: "style.css", text: null, base: "a" });
   assert.equal(session.state.open, undefined);
+});
+
+test("text typed while a save runs stays as typed, and the save carries the text read at open", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { session, sent } = session_with(async (message) => {
+    if (message.op === "read") return { ok: true, files: { "keymap.toml": "old" } };
+    await gate;
+    return { ok: true, message: "Saved." };
+  });
+  await session.load();
+  session.open("keymap.toml");
+  session.edit("first");
+  const saving = session.save();
+  session.edit("first and more");
+  release();
+  await saving;
+  assert.equal(session.state.open?.text, "first and more");
+  assert.equal(session.state.open?.base, "first");
+  assert.deepEqual(sent.find((message) => message.op === "save"), { type: "config_files", op: "save", path: "keymap.toml", text: "first", base: "old" });
+});
+
+test("a refusal because the file changed keeps the draft and reloads the list", async () => {
+  let stored = "old";
+  const { session, sent } = session_with((message) => {
+    if (message.op === "read") return { ok: true, files: { "keymap.toml": stored } };
+    return { ok: false, message: "changed since you opened it" };
+  });
+  await session.load();
+  session.open("keymap.toml");
+  stored = "imported";
+  session.edit("mine");
+  await session.save();
+  assert.equal(session.state.files["keymap.toml"], "imported");
+  assert.equal(session.state.open?.text, "mine");
+  assert.equal(session.state.open?.base, "old");
+  assert.equal(sent.filter((message) => message.op === "read").length, 2);
 });
