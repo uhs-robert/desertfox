@@ -371,6 +371,7 @@ const external_editor = create_external_editor({
   save_text: (text, is_private) => browser_register_store.yank("", text, is_private),
   toast: (tab_id, frame_id, message) => show_toast_on_tab({ tab_id, frame_id }, "text.edit_external", message, "error"),
   tab_exists: (tab_id) => browser.tabs.get(tab_id).then(() => true, () => false),
+  private_window_open: has_private_window,
   now: () => Date.now(),
   pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });

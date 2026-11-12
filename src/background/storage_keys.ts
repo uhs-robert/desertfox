@@ -108,5 +108,5 @@ export const TAB_MEDIA_STORAGE_PREFIX = "desertfox_tab_media_";
 // The last mode the top frame of a tab reported and a counter of its changes, in `storage.session`. See `create_media_discovery`.
 export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";
 
-// The open external-editor jobs, `{ [tab_id]: { job, token, frame_id } }`, in `storage.session`, so a restarted background resumes collecting. See `external_editor.ts`.
+// The open external-editor jobs, `{ [job]: { job, tab_id, token, frame_id, is_private, orphaned? } }`, in `storage.session`, so a restarted background resumes collecting. See `external_editor.ts`.
 export const EDITOR_JOBS_STORAGE_KEY = "desertfox_editor_jobs";

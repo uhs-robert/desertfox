@@ -23,12 +23,20 @@ export type ExternalEditorDeps = {
   save_text: (text: string, is_private: boolean) => Promise<unknown>;
   toast: (tab_id: number, frame_id: number, message: string) => Promise<unknown>;
   tab_exists: (tab_id: number) => Promise<boolean>;
+  // Private text outlives its session if it is saved after the last private window closed, so it is dropped then.
+  private_window_open: () => Promise<boolean>;
   now: () => number;
   pause: (ms: number) => Promise<void>;
 };
 
 // A host long-polls about 20 s. A pending answer sooner than this means it did not wait, so the loop waits instead of spinning.
 const MIN_POLL_MS = 1000;
+
+// Failed collects in a row before the loop gives up. The editor may still be open, and one failed host call (a host update in flight) is no reason to lose its text.
+const MAX_COLLECT_FAILURES = 3;
+const SCRATCH_DIR = "~/.cache/desertfox/editor";
+// The host's refusal for a job it does not hold. Retrying cannot help.
+const UNKNOWN_JOB = /unknown editor job/;
 
 const failure_text = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -59,6 +67,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
     const delivered = !held.orphaned && (await deps.send_done(held.tab_id, held.frame_id, done).catch(() => undefined)) === true;
     if (delivered || text === undefined) return;
     const toast = (message: string) => deps.toast(held.tab_id, held.frame_id, message).catch(() => undefined);
+    if (held.is_private && !(await deps.private_window_open())) return void (await toast("The private window was gone when the editor ended, so the edited text was dropped"));
     try {
       await deps.save_text(text, held.is_private);
     } catch (error) {
@@ -71,14 +80,22 @@ export function create_external_editor(deps: ExternalEditorDeps) {
     if (collecting.has(held.job)) return;
     collecting.add(held.job);
     try {
+      let failures = 0;
       for (;;) {
         let reply: EditorCollectReply;
         const asked_at = deps.now();
         try {
           reply = await deps.client.editor_collect(held.job);
+          failures = 0;
         } catch (error) {
+          const unknown_job = UNKNOWN_JOB.test(failure_text(error));
+          if (!unknown_job && ++failures < MAX_COLLECT_FAILURES) {
+            await deps.pause(MIN_POLL_MS);
+            continue;
+          }
           const current = await clear(held.job);
-          if (current && !current.orphaned) await deps.toast(current.tab_id, current.frame_id, failure_text(error)).catch(() => undefined);
+          const where = unknown_job ? "" : ` The saved text stays in ${SCRATCH_DIR}.`;
+          if (current && !current.orphaned) await deps.toast(current.tab_id, current.frame_id, failure_text(error) + where).catch(() => undefined);
           return;
         }
         if ("pending" in reply) {

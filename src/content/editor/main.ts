@@ -26,6 +26,8 @@ function write_field(field: Element, text: string): boolean {
     const set_value = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")?.set;
     if (!set_value) return false;
     set_value.call(field, text);
+    // The field may sanitize the value (line breaks in a single-line input, a non-number in a number input), so what it holds is what counts.
+    if (field.value !== text) return false;
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
