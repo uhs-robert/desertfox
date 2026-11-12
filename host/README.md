@@ -42,7 +42,7 @@ The root README lists them in plain words. The details:
 - Editor: `<C-o>` in insert mode needs `editor.toml`, see External editor above.
 - `,f` keys: see Firefox pages above. Without the host, DesertFox copies the address.
 - `:native.update`: see `self_update` above. It replaces the host, the bridge, the `desertfox` command and the two manifests, and checks each script against the hashes in the signed extension (`dist/host_sha256.json`).
-- Bridge: set `bridge = true` (in `settings.toml` or with `:set bridge true`) and grant the `nativeMessaging` permission on the page that `:native.install` opens. Tab commands also need `bridge_share_tabs`. Private windows are never shared.
+- Bridge: set `bridge = true` (in `settings.toml` or with `:set bridge true`) and grant the `nativeMessaging` permission on the page that `:native.install` opens. Tab commands also need `bridge_share_tabs`. Private tabs and their ids are never shared. A focused private window still shows `private: true` and its mode.
 - Desktop theme: set `palette = "desktop"`, then run `desertfox theme <name>`. This needs the bridge, and only built-in theme names work.
 
 ## Bridge host
