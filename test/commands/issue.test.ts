@@ -11,9 +11,9 @@ const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "norma
 function make() {
   const log: string[] = [];
   const handler = make_issue_handler({
-    gather: async () => ({ version: "1", channel: "1", firefox: "130", os: "linux x86-64", warnings: ["w"], config_dir: "" }),
+    gather: async () => ({ version: "1", channel: "1", firefox: "130", os: "linux x86-64", warnings: ["w-text"], config_dir: "" }),
     open_tab: async (_ctx, url) => void log.push(`open ${url}`),
-    copy: async (text) => void log.push(`copy ${text.split("\n")[0]}`),
+    copy: async (text) => void log.push(`copy ${text.includes("- w-text") ? "with-warnings" : "bare"}`),
     toast: async (_ctx, message) => void log.push(`toast ${message}`),
   });
   return { handler, log };
@@ -24,12 +24,13 @@ test("by default it opens the prefilled form and copies nothing", async () => {
   await handler(CTX, { target: "form" });
   assert.equal(log.length, 1);
   assert.match(log[0]!, /^open https:\/\/github\.com\/uhs-robert\/desertfox\/issues\/new\?title=&body=/);
+  assert.doesNotMatch(log[0]!, /w-text/);
 });
 
 test("copy puts the report on the clipboard and opens the blank form", async () => {
   const { handler, log } = make();
   await handler(CTX, { target: "copy" });
-  assert.match(log[0]!, /^copy /);
+  assert.equal(log[0], "copy with-warnings");
   assert.equal(log[1], "open https://github.com/uhs-robert/desertfox/issues/new");
   assert.match(log[2]!, /^toast /);
 });

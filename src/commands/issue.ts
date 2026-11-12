@@ -16,14 +16,14 @@ export type IssueDeps = {
 
 export function make_issue_handler(deps: IssueDeps) {
   return async (ctx: CommandContext, args: { target?: unknown }): Promise<void> => {
-    const report = issue_report(await deps.gather());
+    const facts = await deps.gather();
     if (args.target === "copy") {
-      await deps.copy(report.body);
+      await deps.copy(issue_report(facts, "copy").body);
       await deps.open_tab(ctx, BLANK_ISSUE_URL);
       await deps.toast(ctx, "Report copied. Paste it into the issue form");
       return;
     }
-    await deps.open_tab(ctx, issue_url(report));
+    await deps.open_tab(ctx, issue_url(issue_report(facts, "form")));
   };
 }
 
@@ -56,7 +56,7 @@ const handler = make_issue_handler({
 define("help.issue", {
   name: "issue",
   label: "Report an issue",
-  intent: "Open a prefilled GitHub issue form. It holds the DesertFox and Firefox versions, the system and the config warnings. Read it there before you submit, because the command sends nothing itself. The copy flag puts the report on the clipboard and opens the blank form.",
+  intent: "Open a prefilled GitHub issue form. It holds the DesertFox and Firefox versions, the system and the warning count. Read it there before you submit, because the command sends nothing itself. The copy flag puts the report with the warning text on the clipboard and opens the blank form.",
   params: [
     {
       name: "target",
@@ -65,7 +65,7 @@ define("help.issue", {
       default: "form",
       short: { copy: "c" },
       value_labels: { copy: "to the clipboard" },
-      description: { copy: "Copy the report and open the blank form." },
+      description: { copy: "Copy the full report, open the blank form." },
     },
   ],
   bridge: false,
