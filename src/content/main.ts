@@ -56,10 +56,12 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
+let which_key_skip: readonly string[] | undefined;
 // Hiding asks only once the bundle has loaded, because before that there is no panel.
 const follow_prefix = create_which_key_timer(
   () => which_key_delay_ms,
   (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
+  () => which_key_skip,
 );
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
@@ -251,6 +253,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
   // The mode comes first, so keys held during the load replay in the right mode.

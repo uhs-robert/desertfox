@@ -6,8 +6,8 @@ import type { PendingPrefix } from "./key_flow.ts";
 // `drawn` tells the timer a nonempty panel is up, so the next prefix key may redraw it without the delay.
 export type AskWhichKey = (prefix: PendingPrefix | undefined, is_current: () => boolean, drawn: () => void) => unknown;
 
-// `get_delay_ms` returns zero or nothing when which-key is off. Plain arguments rather than an object keep the content script small.
-export function create_which_key_timer(get_delay_ms: () => number | undefined, ask: AskWhichKey): (prefix: PendingPrefix | undefined, at_once?: boolean) => void {
+// `get_delay_ms` returns zero or nothing when which-key is off. `get_skip` lists the typed-key strings whose panel waits for the delay and so never shows by itself: a redraw that is instant (Backspace, or a panel already up) ignores it. Plain arguments rather than an object keep the content script small.
+export function create_which_key_timer(get_delay_ms: () => number | undefined, ask: AskWhichKey, get_skip?: () => readonly string[] | undefined): (prefix: PendingPrefix | undefined, at_once?: boolean) => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let epoch = 0;
   // True once a panel is drawn, until a key that leaves the prefix tree. The delay only keeps the panel from flashing at a fast typist, so a panel already up follows the next prefix key at once.
@@ -21,7 +21,7 @@ export function create_which_key_timer(get_delay_ms: () => number | undefined, a
     const drawn = () => void (shown = is_current());
     ask(undefined, is_current, drawn);
     const delay_ms = get_delay_ms();
-    if (prefix && delay_ms)
+    if (prefix && delay_ms && (instant || !get_skip?.()?.includes(prefix.typed.join(""))))
       timer = setTimeout(() => ask(prefix, is_current, drawn), instant ? 0 : delay_ms);
   };
 }

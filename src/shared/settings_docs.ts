@@ -9,6 +9,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel first shows, later keys redraw it at once",
   which_key_repeat: "Show the step that . would repeat in the footer of the which-key panel (never for a private window)",
   which_key_border: "Corner style of the which-key panel border",
+  which_key_skip: "Key prefixes, in keymap notation such as `g` or `,`, whose which-key panel does not open after the delay. A prefix matches only as typed in full, so `g` leaves `gu` alone. An instant redraw still shows it: Backspace back to the prefix, or a key typed while a panel is already up. `?` lists only the first keys of the mode",
   next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
   prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
   strip_tracking_params: "Query parameters that copying a web address drops: the page address (yy and the other formats), the link list (yl, yL) and a hint copy of an address. Each entry is a name, or a prefix before a final `*`, matched without case. An empty list turns the stripping off",

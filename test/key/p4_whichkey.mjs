@@ -31,6 +31,21 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a finished sequence");
   });
 
+  await run_case("a prefix on the skip list waits past the delay and shows no panel", async () => {
+    await run_line(":set -t which_key_skip g");
+    try {
+      await sleep(500);
+      const mark = events.length;
+      await press_keys("g");
+      await sleep(which_key_delay_ms + 400);
+      expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a skipped prefix");
+      await press_keys("-k", "Escape");
+    } finally {
+      await run_line(":unset -t which_key_skip");
+      await sleep(500);
+    }
+  });
+
   await run_case("g? opens the help page", async () => {
     const help_tab_count = `(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes("/home.html")).length)()`;
     const before = await evaluate_in_background(rdp, extension_id, help_tab_count);

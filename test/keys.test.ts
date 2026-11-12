@@ -359,3 +359,11 @@ test("a chord is any token with Ctrl, Alt or Meta, alone or with other modifiers
   for (const token of ["<C-c>", "<A-j>", "<M-v>", "<CS-c>", "<AC-x>", "<ACMS-F5>"]) assert.equal(is_chord(token), true, token);
   for (const token of ["j", "J", "<S-Escape>", "<S-Tab>", "<Escape>", "<ArrowUp>", "<Space>"]) assert.equal(is_chord(token), false, token);
 });
+
+test("the compiled keymap carries the which-key skip list as typed tokens, and a bad entry is a warning", () => {
+  assert.equal("which_key_skip" in compile({}).compiled, false);
+  const { compiled, warnings } = compile({}, { which_key_skip: ["g", "<C-W>", "<S-1>"] });
+  assert.deepEqual(compiled.which_key_skip, ["g", "<C-w>"]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /which_key_skip: skipped "<S-1>"/);
+});

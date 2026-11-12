@@ -197,7 +197,7 @@ function rule_of(row: Exclude<SettingRow, { kind: "custom" }>): Rule {
         listed_values: () => row.suggestions,
       };
     case "text_list":
-      return { check: (value) => Array.isArray(value) && value.every(is_text), expectation: row.expectation };
+      return { check: (value) => Array.isArray(value) && value.every((item) => is_text(item) && (!row.key_sequences || parse_sequence(item).error === undefined)), expectation: row.expectation };
     case "enum_list":
       return {
         check: (value) => Array.isArray(value) && new Set(value).size === value.length && value.every((item) => row.values.includes(item)),

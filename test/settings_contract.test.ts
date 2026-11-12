@@ -13,6 +13,7 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
   which_key_repeat: "true or false",
   which_key_border: '"square", "round" or "chamfer"',
+  which_key_skip: "a list of key prefixes in keymap notation",
   hint_letters: "a string of 2 or more distinct letters, without /",
   hint_key_line: "true or false",
   hint_add: "a list of CSS selectors",
@@ -90,7 +91,7 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["hint_add", "hint_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["which_key_skip", "hint_add", "hint_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
@@ -101,6 +102,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_delay_ms: [0, 0.5, 300],
   which_key_repeat: [true, false],
   which_key_border: ["square", "round", "chamfer"],
+  which_key_skip: [[], ["g", ",", "<C-w>"]],
   hint_letters: ["ab", "asdfghjkl", "12"],
   hint_key_line: [true, false],
   hint_add: [[], [".card", "div[role=row]"]],
@@ -147,6 +149,7 @@ const REFUSES: Record<string, unknown[]> = {
   which_key_delay_ms: [-1, Number.POSITIVE_INFINITY, Number.NaN, "300"],
   which_key_repeat: ["true", 1],
   which_key_border: ["Square", "", 1],
+  which_key_skip: ["g", [""], ["<S-1>"], ["g", "<a>"]],
   hint_letters: ["a", "aa", "aba", "a/b", 12],
   hint_key_line: ["true", 1],
   // The check cannot parse a selector without a page, so a bad one is a notice when hints start.
@@ -246,6 +249,7 @@ test("the defaults stay the same", () => {
     which_key_delay_ms: 300,
     which_key_repeat: true,
     which_key_border: "square",
+    which_key_skip: [],
     hint_letters: "asdfghjkl",
     hint_key_line: true,
     hint_add: [],
@@ -324,6 +328,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });
