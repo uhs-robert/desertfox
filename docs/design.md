@@ -351,7 +351,7 @@ The config file is code, so whoever can write it can run code on pages. The file
 ## Routing
 
 1. The content script catches a trusted `keydown` in the capture phase on `window`, at `document_start`.
-2. It walks the prefix tree for the current mode. On a match it cancels the key and its keypress and keyup. It also cancels a trusted keyup whose keydown this frame never saw, so a page never acts on half a press that began in another frame or in the browser's own UI. This rule runs in every state: in ignore mode, on a site that is off and with DesertFox switched off.
+2. It walks the prefix tree for the current mode. On a match it cancels the key and its keypress and keyup. It also cancels a trusted keyup whose keydown this frame never saw, so a page never acts on half a press that began in another frame or in the browser's own UI. This rule runs in normal, insert and the other modes. In ignore mode, on a site that is off and with DesertFox switched off, a lone keyup passes, but a key whose keydown was cancelled still swallows its keyup.
 3. It runs a `content` command itself. It sends a `background` command to the background page.
 4. The background resolves context sources, checks args and runs the handler. Tab commands act on the tab that is active when they run, never on the tab that was active when the key arrived.
 

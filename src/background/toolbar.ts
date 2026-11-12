@@ -18,8 +18,8 @@ export const toolbar_look = (disabled: boolean): ToolbarLook =>
   disabled ? { path: ICON_OFF, title: "DesertFox (off)" } : { path: ICON_ON, title: "DesertFox" };
 
 // What the background publishes in place of the keymap while off. The content script reads it like any tree: no key matches and the
-// mode badge is hidden, so no content code knows about the switch.
-export const OFF_KEYMAP: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: {}, mode_indicator: "off", which_key_delay_ms: 0 };
+// mode badge is hidden. Only `off` is read by name, so a lone keyup passes.
+export const OFF_KEYMAP: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: {}, off: true, mode_indicator: "off", which_key_delay_ms: 0 };
 
 export type ToolbarDeps = {
   read_disabled: () => Promise<boolean>;

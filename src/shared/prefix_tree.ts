@@ -72,6 +72,8 @@ export type CompiledKeymap = {
   bridge_share_tabs?: true;
   // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
   frame_site_globals?: FrameSiteValues;
+  // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
+  off?: true;
   which_key_delay_ms: number;
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;
