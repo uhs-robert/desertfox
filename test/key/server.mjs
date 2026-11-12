@@ -215,8 +215,9 @@ export function start_server() {
     if (url.pathname === "/frame_links") return response.end(page(`frame_links ${id}`, `<a href="/page?id=${id}_one">one</a> <a href="/page?id=${id}_two">two</a>`));
     if (url.pathname === "/frames_hints") {
       // A link in the top page, a frame of another origin with two links in view, and a second such frame 3000 px down, outside the first viewport.
+      // The frame page's heading puts its links about 150 px down, so a lower frame shows no link.
       const port = request.socket.localPort;
-      const frame = (name, extra_style) => `<iframe id="${name}" src="http://localhost:${port}/frame_links?id=${id}_${name}" style="display:block;width:300px;height:80px;${extra_style}"></iframe>`;
+      const frame = (name, extra_style) => `<iframe id="${name}" src="http://localhost:${port}/frame_links?id=${id}_${name}" style="display:block;width:300px;height:200px;${extra_style}"></iframe>`;
       return response.end(page(`frames_hints ${id}`, `<a href="/page?id=${id}_top">top</a>${frame("cross", "")}${frame("below", "margin-top:3000px")}` + tall_filler));
     }
     if (url.pathname === "/hidden_input_frame") {

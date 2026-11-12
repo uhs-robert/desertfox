@@ -34,7 +34,6 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
   };
   const on_page = (id, type) => (event) => event.page_id === id && event.type === type;
 
-  // KNOWN FAILING (src bug, reported to the coordinator): after a74245ea the cross-origin frame still draws no labels. The last snapshot reads {"top":["a"],"cross":[],"below":[]}. The cases that start with --all-frames fail until a fix lands.
   await run_case("--all-frames labels the top page and the cross-origin frame with unique labels, and none in a frame below the viewport", async () => {
     const labels = await start_across_frames("fh_labels");
     expect(labels.top.length === 1, `the top page has ${labels.top.length} labels, expected 1`);
