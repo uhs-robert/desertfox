@@ -6,6 +6,7 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import { host_channel, install_command } from "../shared/native_host.ts";
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
+import type { SetUserCssHeld } from "./user_css_gate.ts";
 import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages.ts";
 
 export type PermissionDeps = {
@@ -176,12 +177,18 @@ export function create_panel_controller<Panel>(deps: PanelControllerDeps<Panel>)
 }
 
 // The panel sits outside the body because the help router rebuilds the body on every route change.
-export function mount_grant_panel(): void {
+export function mount_grant_panel(set_user_css_held: SetUserCssHeld = () => {}): void {
   const controller: PanelController = create_panel_controller<HTMLElement>({
     wanted: () => permission_of_grant_hash(location.hash),
     build: () => build_panel(permission_of_grant_hash(location.hash)!, () => controller.close()),
-    show: (panel) => document.documentElement.append(panel),
-    hide: (panel) => panel.remove(),
+    show: (panel) => {
+      set_user_css_held("grant_panel", true);
+      document.documentElement.append(panel);
+    },
+    hide: (panel) => {
+      set_user_css_held("grant_panel", false);
+      panel.remove();
+    },
   });
   window.addEventListener("hashchange", () => void controller.sync());
   void controller.sync();

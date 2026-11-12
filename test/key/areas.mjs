@@ -70,7 +70,7 @@ export const area_rules = [
   { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts", "src/background/site_zoom.ts"], areas: ["scroll"] },
   {
     globs: [
-      "src/background/{config_*,autoconfig_mirror,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",
+      "src/background/{config_*,css_limits,autoconfig_mirror,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",
       "src/commands/config.ts",
       "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key,zip}.ts",
       "src/shared/registry/{check_args,check_shape,params,parse_binding,commands_file,print_command,summary,usage,command_line,single_quote}.ts",

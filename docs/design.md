@@ -304,7 +304,7 @@ Every surface (which-key, the command line, hints and the mode indicator) draws 
 - The background resolves the theme at startup and at every `set`, and stores it as `desertfox_theme` (`{ dark, light }`, the light set already picked by `light_intensity`) in `storage.local`. Each surface turns it into one style block on its inner element, after the built-in styles and before user CSS, and follows `storage.onChanged`, so a `set palette` reaches open pages at once. A surface stays hidden until the first read of the theme and of user CSS returns, and a page stays hidden until the theme read returns, so the default colors never show. A failed read counts as returned. The first hint or which-key panel on a page appears a few ms later, once per page. Light or dark is a `prefers-color-scheme` block.
 - Setting variables covers colors, fonts and sizes. Full selectors can change layout. The documented class names on each surface are part of the public format, and the help page lists them.
 - In Oasis Dots, the theme switcher writes `style.d/00-oasis-theme.css` with the variables for the current Oasis theme, then runs the reload. Without Oasis, the built-in defaults apply.
-- CSS cannot run code. A `url()` in user CSS makes the page load that address, so an import can carry CSS that makes the page load an address. The preview lists `style.css` by name, and the user confirms the import as a whole.
+- CSS cannot run code. Imported CSS may not load remote addresses: an import that holds `@import`, `@font-face`, `image-set(`, `src(` or a `url()` that is not `data:` in `style.css` or `style.d/*.css` is refused, with the file and line. CSS from the user's config folder and from the files editor is not checked. The import review and the permission grant panel show no user CSS.
 
 ### Themes
 
@@ -349,7 +349,7 @@ window.wrappedJSObject.my_app.toggle_ids(args.query);
 - A relative URL in `fetch` resolves against the extension, not the page. Build the address from `location.origin`, for example `fetch(location.origin + "/api/items")`.
 - Snippet ids cannot use a group name that DesertFox uses.
 
-The config file is code, so whoever can write it can run code on pages. The file lives in the user's home directory and only the user's own tools write it, so this adds no new access. An import through the settings page shows each snippet's code, `matches` and `requires`, and stores only the snippets the user accepts. Its consent screen says a snippet can use every DesertFox permission. An import can also carry `style.css`, which the user does not confirm: the preview lists the file name. It asks on every import and remembers no trust.
+The config file is code, so whoever can write it can run code on pages. The file lives in the user's home directory and only the user's own tools write it, so this adds no new access. An import through the settings page shows each snippet's code, `matches` and `requires`, and stores only the snippets the user accepts. Its consent screen says a snippet can use every DesertFox permission. An import that carries CSS loading a remote address is refused, and the consent views show no user CSS. The import asks on every import and remembers no trust.
 
 ## Routing
 
