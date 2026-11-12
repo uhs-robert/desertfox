@@ -28,7 +28,9 @@ const page_document: ClipboardCommandDocument = {
   execCommand: (command) => document.execCommand(command),
 };
 
-const drawn_lines = (field: HTMLElement): string[] => Array.from(field.closest(VIRTUALIZED_EDITOR)?.querySelectorAll<HTMLElement>(DRAWN_LINE) ?? [], (line) => line.innerText);
+// An empty CodeMirror 6 editor draws its placeholder inside the line, and the placeholder is no document text.
+const drawn_lines = (field: HTMLElement): string[] =>
+  Array.from(field.closest(VIRTUALIZED_EDITOR)?.querySelectorAll<HTMLElement>(DRAWN_LINE) ?? [], (line) => (line.querySelector(".cm-placeholder") ? "" : line.innerText));
 
 const send_key = (field: HTMLElement, init: KeyboardEventInit): boolean => field.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
 
@@ -63,15 +65,14 @@ async function copy_then_collapse(field: HTMLElement): Promise<string> {
   }
 }
 
-// An editor can bind Ctrl+A to another command (vim's increment, emacs's line start) and still cancel it. Its copy then holds the caret line only, which misses the other lines it draws. The compare drops whitespace, as Monaco and Ace draw tabs and spaces as other characters.
+// An editor can bind Ctrl+A to another command (vim's increment, emacs's line start) and still cancel it. Its copy then holds the caret line only, which misses the other lines it draws. The compare drops whitespace, as Monaco and Ace draw tabs and spaces as other characters. It ignores order, as Monaco adds lines drawn on a scroll up at the end of its line list.
 // Only the open checks this. Ace and Monaco redraw on the next frame, so after a paste the drawn lines are stale, and the return compares whole texts instead.
 async function copy_covering_drawn(field: HTMLElement): Promise<string> {
   const drawn = drawn_lines(field);
   const copied = await copy_then_collapse(field);
   const squeeze = (text: string) => text.replace(/\s+/g, "");
   const whole = squeeze(copied);
-  let at = 0;
-  if (!drawn.every((line) => (at = whole.indexOf(squeeze(line), at)) >= 0)) throw new RuntimeRefusal("The copy misses lines the editor shows");
+  if (!drawn.every((line) => whole.includes(squeeze(line)))) throw new RuntimeRefusal("The copy misses lines the editor shows");
   return copied;
 }
 

@@ -18,8 +18,8 @@ class FakeHTMLElement {
   ctrl_a_selects = true;
   read_only = false;
   sees_clipboard_events = true;
-  // The lines on screen, a slice of `doc`.
-  drawn_lines: string[] = [];
+  // The lines on screen, a slice of `doc`. A placeholder line is what an empty CodeMirror 6 editor draws.
+  drawn_lines: (string | { placeholder: string })[] = [];
   takes_focus = true;
   // An editor can see the copy event and still put nothing on the clipboard.
   copies = true;
@@ -29,7 +29,7 @@ class FakeHTMLElement {
     if (this.takes_focus) page_document.activeElement = this;
   }
   closest(selector: string) {
-    return selector.includes(".cm-editor") ? { querySelectorAll: () => this.drawn_lines.map((innerText) => ({ innerText })) } : null;
+    return selector.includes(".cm-editor") ? { querySelectorAll: () => this.drawn_lines.map((line) => (typeof line === "string" ? { innerText: line, querySelector: () => null } : { innerText: line.placeholder, querySelector: () => ({}) })) } : null;
   }
   dispatchEvent(event: { type: string; ctrlKey?: boolean; metaKey?: boolean; key?: string }) {
     const select_all_key = navigator.platform === "MacIntel" ? event.metaKey : event.ctrlKey;
@@ -404,4 +404,21 @@ test("an empty result that a read-only editor of only whitespace drops is not ta
   assert.equal(field.doc, "   ");
   assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "" });
   assert.match(toasts.at(-1) ?? "", /did not take the edited text/);
+});
+
+test("the drawn-lines check passes lines out of order, wrapped rows and tabs drawn as spaces, as Monaco and Ace draw them", async () => {
+  reset();
+  const field = editor("line 1\n\tindented by a tab\nline 3 is long enough to wrap\nline 4");
+  // Monaco puts lines drawn on a scroll up at the end of its list, draws a tab as non-breaking spaces and a wrapped line as one row each.
+  field.drawn_lines = ["line 3 is long ", "enough to wrap", "line 4", "line 1", "\u00a0\u00a0\u00a0\u00a0indented by a tab"];
+  await run();
+  assert.equal(opened().text, "line 1\n\tindented by a tab\nline 3 is long enough to wrap\nline 4");
+});
+
+test("an empty CodeMirror 6 editor that draws a placeholder opens as empty", async () => {
+  reset();
+  const field = editor("");
+  field.drawn_lines = [{ placeholder: "Write a comment" }];
+  await run();
+  assert.equal(opened().text, "");
 });
