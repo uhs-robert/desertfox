@@ -1,6 +1,7 @@
 // The pure part of a config import: the user's zip or folder to the raw files to apply, and the preview the settings page shows first.
 // No snippet runs here. A snippet file is only read as text, and its header parsed, until the user accepts it by its exact code.
 
+import { parse, stringify } from "smol-toml";
 import type { CommandMeta } from "../shared/command.ts";
 import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
@@ -58,6 +59,32 @@ function split_files(files: ConfigFiles): { config_files: ConfigFiles; snippet_f
   };
 }
 
+// Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on.
+export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update"] as const;
+const is_settings_file = (path: string) => path === "settings.toml" || (path.startsWith("settings.d/") && path.endsWith(".toml"));
+
+// A settings file that holds a consent key is rewritten without it, which drops its comments. One that does not parse stays as it is, and the build reports it.
+export function drop_consent_settings(files: ConfigFiles): { files: ConfigFiles; dropped: string[] } {
+  const kept: ConfigFiles = {};
+  const dropped: string[] = [];
+  for (const [path, text] of Object.entries(files)) {
+    kept[path] = text;
+    if (!is_settings_file(path)) continue;
+    let data: Record<string, unknown>;
+    try {
+      data = parse(text);
+    } catch {
+      continue;
+    }
+    const found = CONSENT_SETTINGS.filter((key) => Object.hasOwn(data, key));
+    if (found.length === 0) continue;
+    for (const key of found) delete data[key];
+    kept[path] = stringify(data);
+    dropped.push(...found.map((key) => `${path}: ${key} is not imported. Set it on this machine.`));
+  }
+  return { files: kept, dropped };
+}
+
 // The files an import leaves in the slot. Config files in the import replace every config file in the slot. Without any, the slot's stay.
 // The slot's snippets always stay, and an accepted snippet joins them, in place of one at the same path.
 export function plan_import_files(incoming: ConfigFiles, current: ConfigFiles, accepted: Record<string, string>): { files: ConfigFiles; replaces_config: boolean } {
@@ -65,7 +92,7 @@ export function plan_import_files(incoming: ConfigFiles, current: ConfigFiles, a
   const kept = split_files(current);
   const replaces_config = Object.keys(imported.config_files).length > 0;
   return {
-    files: { ...(replaces_config ? imported.config_files : kept.config_files), ...kept.snippet_files, ...accepted },
+    files: { ...(replaces_config ? drop_consent_settings(imported.config_files).files : kept.config_files), ...kept.snippet_files, ...accepted },
     replaces_config,
   };
 }
@@ -102,7 +129,7 @@ function preview_snippet(path: string, code: string, current: ConfigFiles): Snip
 export function preview_import(incoming: ConfigFiles, current: ConfigFiles, commands: CommandMeta[]): ConfigImportPreview {
   const imported = split_files(incoming);
   const { files, replaces_config } = plan_import_files(incoming, current, imported.snippet_files);
-  const warnings: string[] = [];
+  const warnings: string[] = drop_consent_settings(imported.config_files).dropped;
   let problems: string[] = [];
   try {
     build_config(files, commands, warnings, { dir_label: IMPORT_DIR_LABEL });
