@@ -80,6 +80,15 @@ const NO_PAGE = "a page DesertFox runs on";
 // A page that does not answer the offset read must not hold the command: it runs and records nothing.
 export const JUMP_READ_TIMEOUT_MS = 1000;
 
+// The offset, or nothing when the read fails or takes longer than `JUMP_READ_TIMEOUT_MS`.
+export async function read_offset_in_time(read: Promise<{ x: number; y: number } | undefined>): Promise<{ x: number; y: number } | undefined> {
+  let timer: number | undefined;
+  const waited = new Promise<undefined>((resolve) => {
+    timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
+  });
+  return Promise.race([read.catch(() => undefined), waited]).finally(() => clearTimeout(timer));
+}
+
 // What a content script answers to a request that waits on the user. No answer is done: an older script answers nothing.
 function outcome_of_reply(reply: unknown): Outcome {
   const outcome = reply as Outcome | undefined;
@@ -211,11 +220,7 @@ export function create_router(deps: RouterDeps): Router {
   async function read_place_left(command: CommandDef, args: CheckedArgs, context: CommandContext, active: ActiveTab | undefined) {
     const moves_view = typeof command.jumps === "function" ? command.jumps(args) : command.jumps === true;
     if (!moves_view || !active?.url || active.window_id < 0 || (context.frame_id ?? 0) !== 0 || context.tab_id !== active.tab_id) return undefined;
-    let timer: number | undefined;
-    const waited = new Promise<undefined>((resolve) => {
-      timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
-    });
-    const offset = await Promise.race([deps.read_offset(active.tab_id).catch(() => undefined), waited]).finally(() => clearTimeout(timer));
+    const offset = await read_offset_in_time(deps.read_offset(active.tab_id));
     return offset && { window_id: active.window_id, is_private: active.incognito === true, entry: { url: mark_page_url(active.url), x: offset.x, y: offset.y } };
   }
 

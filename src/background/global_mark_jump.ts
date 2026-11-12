@@ -6,6 +6,7 @@ import type { JumpEntry } from "../shared/jump_names.ts";
 import { mark_page_url } from "../shared/mark_names.ts";
 import type { MarkAnswer, MarkJump } from "../shared/messages.ts";
 import { create_address_arrivals, type AddressDeps } from "./address_arrival.ts";
+import { read_offset_in_time } from "./router.ts";
 import type { GlobalJump, MarkSender, MarkStore } from "./mark_store.ts";
 
 export { find_mark_tab, type MarkTab } from "./address_arrival.ts";
@@ -24,10 +25,10 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
   const arrivals = create_address_arrivals<string>({ ...deps, failed_text: "Mark jump failed" });
   const push = (tab_id: number, key: string) => deps.push_jump(tab_id, key);
 
-  // Where the top frame of the sender's tab stands. A refused read records nothing.
+  // Where the top frame of the sender's tab stands. A refused or slow read records nothing, and the read is capped as the router's is, so a frame that never answers cannot hold the jump.
   async function place_left(request: MarkJump, tab: MarkSender): Promise<JumpEntry | undefined> {
     if (tab.url === undefined || tab.id === undefined) return undefined;
-    const offset = tab.frame_id === 0 ? request : await deps.read_top_offset(tab.id).catch(() => undefined);
+    const offset = tab.frame_id === 0 ? request : await read_offset_in_time(deps.read_top_offset(tab.id));
     return offset && { url: mark_page_url(tab.url), x: offset.x, y: offset.y };
   }
   // In the list of the window the jump lands in, so `<C-o>` there comes back.
@@ -46,8 +47,9 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
     // The tab you are on: the scroll is the page's, as for a local mark.
     if (found?.id === tab_id) {
       arrivals.forget(tab_id);
-      // The frame would scroll its own box and keep its own address, so the top frame jumps instead, and records as it does.
+      // The frame would scroll its own box and keep its own address, so the top frame jumps instead. Its pushed request claims the arrival and records nothing, so the place is recorded here, before the top frame moves.
       if (tab.frame_id !== 0) {
+        await record(window_id, tab.incognito, await place_left(request, tab));
         arrivals.push_now(tab_id, request.key, push);
         return { ok: true };
       }
