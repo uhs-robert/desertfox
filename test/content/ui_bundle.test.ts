@@ -9,5 +9,5 @@ test("running the ui bundle twice registers its handlers once, so no surface is 
   const bundle_url = new URL("../../src/content/ui/main.ts", import.meta.url).href;
   await import(`${bundle_url}?first`);
   await import(`${bundle_url}?second`);
-  assert.deepEqual(registered, ["ui.toast", "ui.badge"]);
+  assert.deepEqual(registered, ["ui.toast", "ui.hand_focus", "ui.badge"]);
 });

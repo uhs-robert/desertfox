@@ -2,7 +2,7 @@
 // into this frame. It registers through `register_sink_` and `register_handler_` and enters its mode with `set_mode_`.
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
-import { last_blurred_element } from "./handlers/page.ts";
+import { last_blurred_element } from "./handlers/last_blurred.ts";
 import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
