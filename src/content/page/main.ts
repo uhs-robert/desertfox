@@ -40,7 +40,7 @@ if (!page.desertfox_page_ready && host) {
   });
   host.register_handler_("mark.add", (args) => ask_at_scroll(host, { type: "mark_set", key: args.key as string }));
   host.register_handler_("mark.jump", (args) => ask_at_scroll(host, { type: "mark_jump", key: args.key as string }));
-  host.register_handler_("page.jump", (args) => ask_at_scroll(host, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...(args.arrival === true && { arrival: true as const }) }));
+  host.register_handler_("page.jump", (args) => ask_at_scroll(host, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...(typeof args.arrival === "number" && { arrival: args.arrival }) }));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
   // Returns nothing for every other message, so the listener in content.js answers those.
   browser.runtime.onMessage.addListener((message: BackgroundToContent) => {
