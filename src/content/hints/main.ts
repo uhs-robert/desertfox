@@ -259,6 +259,8 @@ type HandOver = (text: string, what?: string) => void;
 
 const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
+  // A pick right after a jump is the user's own move, so the address change it makes records.
+  arm_leave_watch(page.desertfox_host).quiet_(false);
   const result = perform(current.action, element, hand_over ? { ...deps, copy: hand_over } : pick_deps(current), current.with_background_);
   // The hint mode has ended, so the frame is in the mode the hint began in. A refused pick leaves it there.
   if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
