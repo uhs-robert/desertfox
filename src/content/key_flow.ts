@@ -118,9 +118,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
     active.binds_after_(mode, held_tokens(), token);
 
   const hold = (token: string, on_replay_pass_?: OnReplayPass): KeyDecision => {
-    // Chords and keys in a field never wait. A waiting key is cancelled, so the page does not act on it twice.
-    if (is_chord(token) || deps.in_editable_field_()) return "pass";
     const mode = deps.get_mode_();
+    // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
+    if (deps.in_editable_field_() || (is_chord(token) && !matcher?.binds_after_(mode, held_tokens(), token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every plain key waits.
     if (!matcher || waits_for_replay(matcher, mode, token)) {
       held_keys.push({ token, on_replay_pass_ });

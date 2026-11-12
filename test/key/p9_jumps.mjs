@@ -71,9 +71,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     const middle = last_scroll_y("p9j_fast");
     await push_here();
     await go_to_top("p9j_fast");
-    // The first step of a page loads the page bundle and holds the keys typed meanwhile, so a step and its way back come first and the two typed back to back run on a loaded page.
-    await to_y("p9j_fast", older, middle, "<C-o> to warm the page bundle");
-    await to_y("p9j_fast", newer, 0, "<C-i> to come back to the top");
+    // The page bundle is not loaded on this page yet: the second press arrives during its load and must wait for it.
     await press_keys(...older);
     await press_keys(...older);
     expect(middle !== bottom, "the two places are one place");
