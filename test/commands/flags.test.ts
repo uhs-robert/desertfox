@@ -20,6 +20,7 @@ test("typed names are the dotted id except the family words and one-word command
     "command.repeat=repeat",
     "copy.links=copylinks",
     "copy.url=copy",
+    "debug.perf=perf",
     "find.open=find",
     "heading.go=heading",
     "help.issue=issue",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_timing_log, KEPT_TIMINGS } from "../../src/background/timing_log.ts";
+import { accept_hint_timing, create_timing_log, KEPT_TIMINGS } from "../../src/background/timing_log.ts";
 import { format_timings, summarize_timings, toast_summary } from "../../src/background/timing_summary.ts";
 
 function slow_storage() {
@@ -53,4 +53,22 @@ test("text and toast of no timings and of some", () => {
   const rows = summarize_timings([["a", 3], ["b", 120]]);
   assert.match(format_timings(rows), /^a {2}n=1 {2}median=3\.0ms/);
   assert.match(toast_summary(rows), /slowest p95 b 120 ms/);
+});
+
+test("a burst is written once", async () => {
+  const storage = slow_storage();
+  let writes = 0;
+  const log = create_timing_log({ get: storage.get, set: (items) => (writes++, storage.set(items)) }, "t");
+  for (let index = 0; index < 50; index++) void log.record("a", index);
+  assert.equal((await log.read()).length, 50);
+  assert.equal(writes, 1);
+});
+
+test("only a hint.build time of zero or more is accepted", async () => {
+  const seen: [string, number][] = [];
+  const log = { record: async (name: string, ms: number) => void seen.push([name, ms]) };
+  for (const request of [{ name: "hint.build", ms: 4 }, { name: "hint.build", ms: 0 }, { name: "other", ms: 4 }, { name: "hint.build", ms: -1 }, { name: "hint.build", ms: NaN }, { name: "hint.build", ms: "4" }, { name: 5, ms: 1 }, {}]) {
+    accept_hint_timing(log, request);
+  }
+  assert.deepEqual(seen, [["hint.build", 4], ["hint.build", 0]]);
 });
