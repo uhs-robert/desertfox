@@ -219,7 +219,8 @@ export type MarkItem = { key: string; x: number; y: number; url?: string };
 
 // From the `page` bundle. `x` and `y` are the scroll offset now. A set stores them under `key`. A jump answers the offset stored under `key` and stores the offset now as the previous position (`'`), unless the mark is missing. The page's privacy is the sender tab's.
 export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y: number };
-export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number };
+// `arrival` names the global mark jump the background pushed into the tab it went to, as in `JumpStep`.
+export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number; arrival?: number };
 export type MarkRequest = MarkSet | MarkJump;
 // Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
 export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };

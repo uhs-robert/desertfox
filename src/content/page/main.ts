@@ -16,7 +16,7 @@ const page = window as unknown as PageWindow;
 
 // A set stores the scroll offset now. A jump asks the background for the stored one, which keeps the offset now as the previous position, then scrolls instantly so a smooth scroll in flight ends.
 // A step of the jump list asks the same way and gets the entry the cursor moved to, or nothing to scroll to when the background went to another tab.
-async function ask_at_scroll(host: BundleHostApi, message: { type: MarkRequest["type"]; key: string } | Pick<JumpStep, "type" | "step" | "arrival">) {
+async function ask_at_scroll(host: BundleHostApi, message: { type: MarkRequest["type"]; key: string; arrival?: number } | Pick<JumpStep, "type" | "step" | "arrival">) {
   const box = host.scroll_box_();
   const answer = (await browser.runtime.sendMessage({ ...message, url: location.href, x: box.scrollLeft, y: box.scrollTop })) as MarkAnswer;
   if (!answer.ok) throw new RuntimeRefusal(answer.message);
@@ -39,8 +39,9 @@ if (!page.desertfox_page_ready && host) {
     mark_text_entry({ id: "page.focus_input" });
   });
   host.register_handler_("mark.add", (args) => ask_at_scroll(host, { type: "mark_set", key: args.key as string }));
-  host.register_handler_("mark.jump", (args) => ask_at_scroll(host, { type: "mark_jump", key: args.key as string }));
-  host.register_handler_("page.jump", (args) => ask_at_scroll(host, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...(typeof args.arrival === "number" && { arrival: args.arrival }) }));
+  const arrival_of = (args: Record<string, unknown>) => typeof args.arrival === "number" && { arrival: args.arrival };
+  host.register_handler_("mark.jump", (args) => ask_at_scroll(host, { type: "mark_jump", key: args.key as string, ...arrival_of(args) }));
+  host.register_handler_("page.jump", (args) => ask_at_scroll(host, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...arrival_of(args) }));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
   // Returns nothing for every other message, so the listener in content.js answers those.
   browser.runtime.onMessage.addListener((message: BackgroundToContent) => {
