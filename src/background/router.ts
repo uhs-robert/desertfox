@@ -27,8 +27,8 @@ export type RouterDeps = {
   // True when the command runs with the param empty on this tab, so an empty selection runs it instead of opening the command line.
   runs_with_empty: (command_id: string, args: CheckedArgs, param: string, context: CommandContext) => Promise<boolean>;
   read_clipboard: () => Promise<string>;
-  // The scroll offset of the top frame's page, read through the `page` bundle (loaded on first use). Undefined when the page cannot answer.
-  read_offset: (tab_id: number) => Promise<{ x: number; y: number } | undefined>;
+  // The scroll offset of the top frame's page, read through the `page` bundle (loaded on first use), with the address of the page that answered. Undefined when the page cannot answer.
+  read_offset: (tab_id: number) => Promise<{ x: number; y: number; url: string } | undefined>;
   // Puts a place in the jump list of the window. Rejects for an address the list refuses.
   record_jump: (window_id: number, is_private: boolean, entry: JumpEntry) => Promise<unknown>;
   // The title of the bookmark at this address, undefined when there is none.
@@ -81,7 +81,7 @@ const NO_PAGE = "a page DesertFox runs on";
 export const JUMP_READ_TIMEOUT_MS = 1000;
 
 // The offset, or nothing when the read fails or takes longer than `JUMP_READ_TIMEOUT_MS`.
-export async function read_offset_in_time(read: Promise<{ x: number; y: number } | undefined>): Promise<{ x: number; y: number } | undefined> {
+export async function read_offset_in_time<Offset>(read: Promise<Offset | undefined>): Promise<Offset | undefined> {
   let timer: number | undefined;
   const waited = new Promise<undefined>((resolve) => {
     timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
@@ -221,7 +221,9 @@ export function create_router(deps: RouterDeps): Router {
     const moves_view = typeof command.jumps === "function" ? command.jumps(args) : command.jumps === true;
     if (!moves_view || !active?.url || active.window_id < 0 || (context.frame_id ?? 0) !== 0 || context.tab_id !== active.tab_id) return undefined;
     const offset = await read_offset_in_time(deps.read_offset(active.tab_id));
-    return offset && { window_id: active.window_id, is_private: active.incognito === true, entry: { url: mark_page_url(active.url), x: offset.x, y: offset.y } };
+    // A page that loaded in the tab during the read answers for itself, not for the address read before it.
+    if (!offset || mark_page_url(offset.url) !== mark_page_url(active.url)) return undefined;
+    return { window_id: active.window_id, is_private: active.incognito === true, entry: { url: mark_page_url(active.url), x: offset.x, y: offset.y } };
   }
 
   // A replay step names its number, because the user did not type the step.

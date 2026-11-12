@@ -532,7 +532,7 @@ export type GetSelection = {
   type: "get_selection";
 };
 
-// Asks the `page` bundle for the scroll offset of the box the scroll keys move. It answers `{ x, y }`, and content.js does not answer.
+// Asks the `page` bundle for the scroll offset of the box the scroll keys move. It answers `{ x, y, url }`, the url being the page's own, and content.js does not answer.
 export type GetJumpOffset = {
   type: "get_jump_offset";
 };

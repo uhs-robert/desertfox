@@ -828,9 +828,10 @@ const jump_commands = {
 
 function make_jumps(overrides: Parameters<typeof make_fake>[1] = {}) {
   const fake = make_fake(jump_commands, {
+    // The page that answers is the one on the active tab's address.
     read_offset: async () => {
       fake.log.push("read");
-      return { x: 3, y: 420 };
+      return { x: 3, y: 420, url: (await fake.deps.active_tab())?.url ?? "" };
     },
     record_jump: async (window_id, is_private, entry) => void fake.log.push(`record ${window_id} ${is_private} ${JSON.stringify(entry)}`),
     ...overrides,
@@ -848,12 +849,12 @@ test("a command that jumps records the place it left, after it ran", async () =>
 });
 
 test("the offset read finishes before the command runs, so the command cannot move the view first", async () => {
-  let release: (offset: { x: number; y: number }) => void = () => {};
+  let release: (offset: { x: number; y: number; url: string }) => void = () => {};
   const fake = make_jumps({ read_offset: () => new Promise((resolve) => (release = resolve)) });
   const running = create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(fake.log.length, 0, "the command started before the read ended");
-  release({ x: 0, y: 9 });
+  release({ x: 0, y: 9, url: "https://example.org/" });
   await running;
   assert.ok(fake.log[0]!.startsWith("send 7"));
   assert.ok(fake.log[1]!.startsWith("record 1 false"));
@@ -923,4 +924,14 @@ test("a record the list refuses does not fail the command", async () => {
   const fake = make_jumps({ record_jump: async () => Promise.reject(new Error("URL too long")) });
   const response = await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
   assert.deepEqual(response, { ok: true });
+});
+
+test("an offset from a page that replaced the one read before records nothing", async () => {
+  const fake = make_jumps({ read_offset: async () => ({ x: 0, y: 900, url: "https://other.example/" }) });
+  const response = await create_router(fake.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.deepEqual(response, { ok: true });
+  assert.ok(!fake.log.some((line) => line.startsWith("record")));
+  const same_page = make_jumps({ read_offset: async () => ({ x: 0, y: 900, url: "https://example.org/#later" }) });
+  await create_router(same_page.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
+  assert.ok(same_page.log.some((line) => line.startsWith("record")), "a hash change keeps the page");
 });
