@@ -396,8 +396,13 @@ class FaviconTest(BridgeTestCase):
         keys = ["%064x" % number for number in range(5)]
         started = time.monotonic()
         client = self.list_tabs(host, [dict(MAIL, tab_id=number, fav_icon_key=key) for number, key in enumerate(keys)])
+        first = host.read_request()
+        self.assertEqual(first["verb"], "favicon")
         reply = client.result()
-        self.assertLess(time.monotonic() - started, 6)
+        # The count proves the budget stopped the fills; the time bound only catches a hang, so it has room for a loaded machine.
+        self.assertLess(time.monotonic() - started, 13)
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
         self.assertEqual([tab["fav_icon_path"] for tab in reply["tabs"]], [""] * 5)
 
 
