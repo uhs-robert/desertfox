@@ -1,9 +1,13 @@
 // Drops tracking parameters from a web address before it is copied, shared by the page copy (`handlers/copy.ts`) and the hints bundle.
 // Pure and import-free, so both bundles can use it without growing content.js.
 
-// A pattern is a parameter name, or a prefix before a final `*`. Names compare in lowercase.
+// A pattern is a parameter name, or a prefix before a final `*`. Names compare decoded and in lowercase, so `utm%5Fsource` matches `utm_*`.
 const matches_any = (name: string, patterns: readonly string[]): boolean => {
-  const lower = name.toLowerCase();
+  let decoded = name;
+  try {
+    decoded = decodeURIComponent(name);
+  } catch {}
+  const lower = decoded.toLowerCase();
   return patterns.some((pattern) => {
     const wanted = pattern.toLowerCase();
     return wanted.endsWith("*") ? lower.startsWith(wanted.slice(0, -1)) : lower === wanted;

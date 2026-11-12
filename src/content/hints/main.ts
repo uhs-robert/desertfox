@@ -296,8 +296,8 @@ function register(host: BundleHostApi): void {
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
     const [letters, key_line_setting, visible, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect"), read_strip_patterns()]);
-    strip_patterns = patterns;
     if (current.cancelled) return;
+    strip_patterns = patterns;
     const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
     if (found.length === 0) {
       const message = none_message(current.text);
