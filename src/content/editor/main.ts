@@ -3,6 +3,7 @@
 import type { BundleHostApi } from "../bundle_host.ts";
 import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { read_field_text } from "../text/field_text.ts";
+import { type_at_caret } from "../text/field_writer.ts";
 import { is_secret_field } from "../text/secret_field.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { BackgroundToContent, EditorAnswer, EditorDone, EditorOpen } from "../../shared/messages.ts";
@@ -16,28 +17,55 @@ const page = window as unknown as EditorWindow;
 // What a page waits for, by token. It holds the field and its text at the press, so the result goes in only while the field still holds that text. A navigation drops the page and with it the map.
 const open_edits = new Map<string, { field: Element; original: string }>();
 
-// `insertText` over the whole content is a real edit, so React and Vue fields see an input event and undo keeps working. An empty result needs `delete`, which `insertText` refuses.
-function replace_content(field: Element, text: string): boolean {
-  (field as HTMLElement).focus();
-  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.select();
-  else getSelection()?.selectAllChildren(field);
-  return text === "" ? document.execCommand("delete") : document.execCommand("insertText", false, text);
+// Editors that draw only the lines near the viewport, or keep the focus in a hidden textarea. What they expose is a slice of the document, so a write-back would replace the document with it.
+const VIRTUALIZED_EDITOR = ".cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
+
+// A plain field takes the value through the native setter and `input` and `change` events, which is what a framework's own change tracking watches. An element that is editable by `contenteditable` takes one `insertText` over its whole content, so undo keeps working. An empty result needs `delete`, which `insertText` refuses.
+function write_field(field: Element, text: string): boolean {
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+    const set_value = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")?.set;
+    if (!set_value) return false;
+    set_value.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+  getSelection()?.selectAllChildren(field);
+  return text === "" ? document.execCommand("delete") : type_at_caret(text);
 }
 
-function finish(host: BundleHostApi, { token, text }: EditorDone): void {
+// Whether the page took the result. An unknown token is a page the result was not meant for.
+function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boolean> {
   const edit = open_edits.get(token);
-  if (!edit) return;
+  if (!edit) return Promise.resolve(false);
   open_edits.delete(token);
-  if (text === undefined) return;
-  if (edit.field.isConnected && read_field_text(edit.field) === edit.original && replace_content(edit.field, text)) return;
-  // The field moved on while the editor was open: the edited text must not be lost, and must not overwrite the newer text.
-  void browser.runtime.sendMessage({ type: "register_yank", name: "", text });
-  host.show_toast_('The field changed while the editor was open. The edited text is in the unnamed register: paste it with <C-r>"');
+  if (text === undefined || text === edit.original) return Promise.resolve(true);
+  const { field, original } = edit;
+  const unchanged = () => field.isConnected && read_field_text(field) === original;
+  let reason = "changed";
+  if (unchanged()) {
+    // A focus handler of the page can edit the field, so the check runs again before the write.
+    (field as HTMLElement).focus();
+    if (unchanged()) {
+      if (write_field(field, text)) return Promise.resolve(true);
+      reason = "refused";
+    }
+  }
+  return keep_in_register(host, text, reason).then(() => true);
+}
+
+// The edited text must not be lost, and must not overwrite the newer text. The toast says so only when the register took it.
+async function keep_in_register(host: BundleHostApi, text: string, reason: string): Promise<void> {
+  const saved = (await browser.runtime.sendMessage({ type: "register_yank", name: "", text }).catch(() => undefined)) as { ok?: boolean; message?: string } | undefined;
+  if (saved?.ok !== true) return host.show_toast_(`The edited text (${text.length} characters) could not be saved to a register${saved?.message ? `: ${saved.message}` : ""}`);
+  const why = reason === "changed" ? "The field changed while the editor was open." : "The field did not take the edited text.";
+  host.show_toast_(`${why} The edited text is in the unnamed register: paste it with <C-r>"`);
 }
 
 async function edit_external(host: BundleHostApi, args: Record<string, unknown>): Promise<void> {
   const field = deepest_focused_element();
   if (!field || !is_editable_element(field)) throw new RuntimeRefusal("No text field is focused");
+  if (field.closest(VIRTUALIZED_EDITOR)) throw new RuntimeRefusal("This editor shows only part of its text, so it cannot be edited externally");
   if (is_secret_field(field)) throw new RuntimeRefusal("A password field is not opened in an external editor");
   const text = read_field_text(field);
   const bytes = new TextEncoder().encode(text).length;
@@ -61,7 +89,6 @@ if (!page.desertfox_editor_ready && host) {
   // Returns nothing for every other message, so the other listeners answer those.
   browser.runtime.onMessage.addListener((message: BackgroundToContent) => {
     if (message.type !== "editor_done") return undefined;
-    finish(host, message);
-    return Promise.resolve();
+    return finish(host, message);
   });
 }
