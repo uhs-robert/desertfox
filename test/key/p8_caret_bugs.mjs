@@ -139,6 +139,26 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal("lines_blocks");
   });
 
+  // Line visual mode asks Selection.modify for its line bounds, which collapses the page selection while it measures. `*` searches the lines the paint drew.
+  await run_case("* in line visual mode searches the whole screen lines the selection shows", async () => {
+    const page_id = "caret_wrap_star";
+    const lines_are = (text) => (last) => last.text.replace(/\s+/g, " ").trim() === text;
+    const current_match = `window.wrappedJSObject.eval(${JSON.stringify(`(() => { const found = []; CSS.highlights.get("oasis-find-current")?.forEach((range) => found.push(String(range))); return found.join("|").replace(/\\s+/g, " ").trim(); })()`)})`;
+    await open_page("caret_wrap", page_id, { new_tab: true });
+    // The paragraph wraps to abc, def, ghi, jkl.
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await press_and_wait_for_move(page_id, "j", "j to the first screen line");
+    await press_and_wait_for_move(page_id, "j", "j to the second screen line");
+    const mark = events.length;
+    await press_keys("V");
+    await wait_for_last_selection(page_id, mark, lines_are("def"), "V to select the screen line def");
+    await press_keys("j");
+    await wait_for_last_selection(page_id, mark, lines_are("def ghi"), "j to grow the selection to the line ghi");
+    await press_keys("*");
+    await poll_until("the current match to be the two lines", async () => (await in_active_tab(current_match)) === "def ghi");
+    await escape_to_normal(page_id);
+  });
+
   // Focus entering a field in caret or visual mode must switch to insert, so motion keys do not swallow typing.
   for (const kind of ["caret", "visual"]) {
     await run_case(`focusing a field in ${kind} mode switches to insert and typing reaches the field`, async () => {

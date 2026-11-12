@@ -68,7 +68,8 @@ function fake_page(page_text = "ab ab ab") {
       await new Promise<void>((resume) => gates.push(resume));
       return background(text, regex);
     },
-    selection_key_: () => selection,
+    // The mark is the selection array itself, and a click replaces it.
+    selections: { mark: () => selection as never, moved_since_: (mark) => mark !== (selection as never) },
   };
   const settle = async () => {
     for (let round = 0; round < 30; round++) {

@@ -11,7 +11,8 @@ import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
 import type { PageText } from "./page_text.ts";
-import { documents_of, MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
+import type { SelectionMark, SelectionMirror } from "./selection_mirror.ts";
+import { MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
 
 // What the engine needs of the host script. A bundle reaches it through `window.desertfox_host`.
@@ -51,8 +52,8 @@ export type FindDeps = {
   set_register_: (name: string, text: string) => Promise<void>;
   slicing: (is_stale: () => boolean) => Slicing;
   scan_regex: ScanRegex;
-  // Where each document's own selection sits, both ends: a drag from the same anchor to a new point moves it too. A click moves it, which makes a later position win over an older match.
-  selection_key_: (model: TextModel) => unknown[];
+  // Tells whether a document's own selection moved since the search stood on its match. A click or a drag (from the same anchor too) moves it, which makes a later position win over an older match.
+  selections: Pick<SelectionMirror, "mark" | "moved_since_">;
 };
 
 const SLICE_MS = 8;
@@ -72,7 +73,7 @@ export async function read_find_colors(): Promise<FindColors> {
   return theme ? find_colors_of(theme) : FALLBACK_COLORS;
 }
 
-export const browser_find_deps = (page_text: PageText): FindDeps => ({
+export const browser_find_deps = (page_text: PageText, selections: FindDeps["selections"]): FindDeps => ({
   page_text,
   start_index_: (model) => (model.text === "" ? 0 : first_visible_index(model)),
   painter: create_painter(),
@@ -85,7 +86,7 @@ export const browser_find_deps = (page_text: PageText): FindDeps => ({
   set_register_: async (name, text) => void (await browser.runtime.sendMessage({ type: "register_write", name, text } satisfies RegisterWrite)),
   slicing: (is_stale_) => ({ is_stale_, yield_to_page_: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms_: SLICE_MS }),
   scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
-  selection_key_: (model) => documents_of(model).flatMap((owner) => [owner.getSelection()?.anchorNode, owner.getSelection()?.anchorOffset, owner.getSelection()?.focusNode, owner.getSelection()?.focusOffset]),
+  selections,
 });
 
 // Said under the line and in the toast when the model stopped at the size cap.
@@ -96,7 +97,7 @@ export function create_find(host: Host, deps: FindDeps) {
   let live: Live | undefined;
   // The match the search stands on, after Enter or Escape. Escape clears the highlights and keeps it, so `n` goes on from it and caret mode can start at it.
   let shown: Found | undefined;
-  let shown_selection: unknown[] = [];
+  let shown_mark: SelectionMark = [];
   let highlighted = false;
   let last: { query: string; direction: Direction } | undefined;
   // Bumped by each `step` that has to scan again, so an older scan does not paint over a newer one.
@@ -141,7 +142,7 @@ export function create_find(host: Host, deps: FindDeps) {
 
   const stand_on = (found: Found) => {
     shown = found;
-    shown_selection = deps.selection_key_(found.model_);
+    shown_mark = deps.selections.mark(found.model_);
   };
 
   // `as_text_` is for Enter: it searches the text fallback that a costly or timed-out pattern skipped while typing.
@@ -338,10 +339,7 @@ export function create_find(host: Host, deps: FindDeps) {
 
     // Where the search stands in `model`, for a caret or visual session that starts at it. A later click or selection takes the position, so nothing then.
     position(model: TextModel): number | undefined {
-      if (!shown) return undefined;
-      const now = deps.selection_key_(shown.model_);
-      if (now.length !== shown_selection.length || now.some((entry, at) => entry !== shown_selection[at])) return undefined;
-      return carry_match(shown, model);
+      return shown && !deps.selections.moved_since_(shown_mark) ? carry_match(shown, model) : undefined;
     },
   };
 }
