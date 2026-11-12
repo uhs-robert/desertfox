@@ -23,7 +23,7 @@ class EditorCase(ConfigDirCase):
         self.addCleanup(patcher.stop)
         self.stubs = os.path.join(self.tmp.name, "stubs")
         os.makedirs(self.stubs)
-        for patch in (mock.patch.object(host, "COLLECT_POLL_S", 0.02), mock.patch.object(host, "SETTLE_S", 0.15)):
+        for patch in (mock.patch.object(host, "COLLECT_POLL_S", 0.02),):
             patch.start()
             self.addCleanup(patch.stop)
         self.children = []
@@ -191,10 +191,61 @@ class CollectTest(EditorCase):
             pass
         self.assertEqual(self.collect(job), {"done": True, "changed": True, "text": "late"})
 
-    def test_a_save_in_an_editor_that_stays_open_is_collected_once_it_holds_still(self):
+    def test_a_save_in_an_editor_that_stays_open_stays_pending(self):
         self.configure(self.stub("open(path, 'w').write('saved')\ntime.sleep(30)\n"))
         job = self.start()
-        self.assertEqual(self.collect(job), {"done": True, "changed": True, "text": "saved"})
+        self.assertEqual(self.collect(job, wait_s=0.5), {"pending": True})
+        self.assertEqual(len(self.editor_files()), 2)
+
+    def test_a_rename_and_write_save_is_pending_while_the_name_is_missing_then_collected(self):
+        gate = os.path.join(self.tmp.name, "gate")
+        self.configure(self.stub(
+            f"os.rename(path, path + '~')\nwhile not os.path.exists({gate!r}): time.sleep(0.02)\n"
+            "open(path, 'w').write('renamed')\n"))
+        job = self.start()
+        time.sleep(0.2)
+        self.assertEqual(self.collect(job, wait_s=0.3), {"pending": True})
+        with open(gate, "w"):
+            pass
+        self.assertEqual(self.collect(job), {"done": True, "changed": True, "text": "renamed"})
+        self.assertEqual([n for n in self.editor_files() if n.startswith("job-")], [])
+
+    def test_a_reused_pid_is_not_the_editor(self):
+        own = os.getpid()
+        ticks = host.process_start_ticks(own)
+        self.assertTrue(host.editor_is_running(own, ticks))
+        self.assertFalse(host.editor_is_running(own, str(int(ticks) + 1)))
+        self.assertFalse(host.editor_is_running(own, None))
+
+    def test_a_killed_collectors_claimed_job_is_swept(self):
+        self.configure(self.stub("pass\n"))
+        job = self.start()
+        time.sleep(0.2)
+        job_path, record, scratch = host.read_job(host.editor_dir(), job)
+        claimed = host.claim_job(job_path)
+        long_ago = time.time() - 2 * host.STALE_JOB_S
+        os.utime(claimed, (long_ago, long_ago))
+        self.start()
+        self.assertFalse(os.path.exists(claimed))
+        self.assertFalse(os.path.exists(scratch))
+
+    def test_a_job_file_failure_kills_the_new_editor_and_removes_the_scratch(self):
+        pid_file = os.path.join(self.tmp.name, "pid")
+        self.configure(self.stub(f"open({pid_file!r}, 'w').write(str(os.getpid()))\ntime.sleep(30)\n"))
+        real_open = os.open
+
+        def failing_open(path, *args, **kwargs):
+            if os.path.basename(path).startswith("job-"):
+                raise OSError(28, "No space left on device")
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch.object(host.os, "open", failing_open):
+            self.assertRefused({"cmd": "editor_start", "text": "x"}, "cannot write")
+        self.assertEqual(self.editor_files(), [])
+
+    def test_an_argv_python_cannot_spawn_is_a_refusal_and_leaves_no_file(self):
+        self.put("editor.toml", 'argv = ["ed\\u0000itor", "{file}"]\n')
+        self.assertRefused({"cmd": "editor_start", "text": "x"}, "cannot start")
         self.assertEqual(self.editor_files(), [])
 
     def test_a_write_in_progress_is_never_read(self):
