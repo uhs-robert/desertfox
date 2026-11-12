@@ -417,7 +417,16 @@ export type ExportSessionsAnswer = { ok: true; json: string; count: number } | {
 // From an extension page: adds the sessions of an export file. A name that is taken keeps both, and the import gets a suffix. The answer is a ConfigImportAnswer.
 export type ImportSessions = { type: "import_sessions"; text: string };
 
-export type PageToBackground = ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+// From an extension page: the stored config files for the editor, or one save of them. `text: null` deletes the file. A snippet is stored only when `accepted` holds the exact code, as the consent screen showed it, so the first save of a snippet answers with `consent` instead.
+export type ConfigFilesRequest = { type: "config_files"; op: "read" } | { type: "config_files"; op: "save"; path: string; text: string | null; accepted?: string };
+// `problems` holds every build problem of a refused save, not only the few the message names.
+export type ConfigFilesAnswer =
+  | { ok: true; files: Record<string, string> }
+  | { ok: true; message: string }
+  | { ok: false; message: string; problems?: string[] }
+  | { ok: false; message: string; consent: SnippetPreview };
+
+export type PageToBackground = ConfigFilesRequest | ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From the `media` bundle in each frame the background injected it into, with that frame's media. The frame comes from the message sender.
 export type MediaReport = {

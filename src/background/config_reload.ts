@@ -9,18 +9,27 @@ import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { pick_config } from "./config_load.ts";
 import type { FilesSlot, LoadedConfig } from "./config_load.ts";
 
-export type ApplyAction = "reload" | "import" | "remove";
+export type ApplyAction = "reload" | "import" | "remove" | "edit";
 
 export const KEPT_CURRENT: Record<ApplyAction, string> = {
   reload: "Config not reloaded, the current one stays.",
   import: "Config not imported, the current one stays.",
   remove: "Snippet not removed, the current config stays.",
+  edit: "File not saved, the current config stays.",
 };
 
 // Every reason a reload or an import keeps the current config. The message is the whole toast: the cause and what to do.
+// `problems` holds every build problem when the build refused, for a page that lists them all. The message shows the first few.
 export class ConfigRefusal extends Error {
   override name = "ConfigRefusal";
+  problems: string[];
+  constructor(message: string, problems: string[] = []) {
+    super(message);
+    this.problems = problems;
+  }
 }
+
+const AGAIN_VERB: Record<ApplyAction, string> = { reload: "reload", import: "import", remove: "remove", edit: "save" };
 
 const PROBLEMS_SHOWN = 3;
 
@@ -34,7 +43,7 @@ export function build_files_config(files: ConfigFiles, dir_label: string, comman
     if (!(error instanceof ConfigErrors)) throw error;
     const shown = error.problems.slice(0, PROBLEMS_SHOWN).join("; ");
     const more = error.problems.length > PROBLEMS_SHOWN ? `; and ${error.problems.length - PROBLEMS_SHOWN} more` : "";
-    throw new ConfigRefusal(`${KEPT_CURRENT[action]} Fix the files and ${action} again. ${error.problems.length} problem(s): ${shown}${more}`);
+    throw new ConfigRefusal(`${KEPT_CURRENT[action]} Fix the files and ${AGAIN_VERB[action]} again. ${error.problems.length} problem(s): ${shown}${more}`, error.problems);
   }
   const loaded = pick_config(config);
   return { stored: { config, warnings: build_warnings }, loaded: { ...loaded, warnings: [...build_warnings, ...loaded.warnings] } };

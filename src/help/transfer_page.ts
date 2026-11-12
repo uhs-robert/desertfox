@@ -8,7 +8,7 @@ import type { ExportFile, PickedFile, Review, TransferSession } from "./transfer
 import type { InstalledSnippet, SnippetPreview } from "../shared/messages.ts";
 import type { TransferDeps } from "./transfer_model.ts";
 
-function button(label: string, on_click: () => void, disabled = false): HTMLButtonElement {
+export function button(label: string, on_click: () => void, disabled = false): HTMLButtonElement {
   const node = el("button", "desertfox-settings-install", label) as HTMLButtonElement;
   node.type = "button";
   node.disabled = disabled;
@@ -43,7 +43,7 @@ function picker(label: string, name: string, on_pick: (files: PickedFile[]) => v
 
 const list_text = (items: string[] | undefined) => (items && items.length > 0 ? items.join(", ") : "none");
 
-function snippet_card(snippet: SnippetPreview, review: Review, session: TransferSession): HTMLElement {
+export function snippet_card(snippet: SnippetPreview, review: Pick<Review, "accepted">, session: Pick<TransferSession, "accept">): HTMLElement {
   const box = el("input", undefined) as HTMLInputElement;
   box.type = "checkbox";
   box.checked = review.accepted.has(snippet.path);
