@@ -73,6 +73,7 @@ export function scroll_to_index(model: TextModel, index: number, options: { bott
 }
 
 // `goal_x_` is where j and k aim on each new line, so a short line in between does not move the column. A caller keeps what comes back for the next j or k and drops it after any other motion.
+// It moves a selection of the model to ask layout, so a caller runs it inside the selection mirror's `measure`, which puts the selection back.
 export function screen_line_target(model: TextModel, from: number, motion: ScreenMotion, goal_x?: number): { index: number; goal_x_: number | undefined } {
   const modified = modify_target(model, from, motion);
   const target = motion.unit === "line" ? line_target(model, from, modified, motion.direction) : modified;
