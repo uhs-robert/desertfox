@@ -287,17 +287,18 @@ function session_store() {
   };
 }
 
-function discovery(options: { delay_ms?: number; fullscreen?: boolean; storage?: ReturnType<typeof session_store>; open_tabs?: Set<number> } = {}) {
+function discovery(options: { delay_ms?: number; storage?: ReturnType<typeof session_store>; open_tabs?: Set<number> } = {}) {
   const opened: number[] = [];
+  const closed: number[] = [];
   const stored = options.storage ?? session_store();
   const discover = create_media_discovery({
     storage: stored.storage,
     which_key_delay_ms: async () => options.delay_ms ?? 300,
-    top_in_fullscreen: async () => options.fullscreen ?? false,
     tab_is_open: async (tab_id) => options.open_tabs?.has(tab_id) ?? true,
     open_panel: async (tab_id) => void opened.push(tab_id),
+    close_panel: async (tab_id) => void closed.push(tab_id),
   });
-  return { discover, opened, store: stored.store };
+  return { discover, opened, closed, store: stored.store };
 }
 
 test("the panel opens when the top frame enters the media mode", async () => {
@@ -306,12 +307,11 @@ test("the panel opens when the top frame enters the media mode", async () => {
   assert.deepEqual(opened, [7]);
 });
 
-test("the panel does not open for a child frame, another mode, full screen or a delay of 0", async () => {
+test("the panel does not open for a child frame, another mode or a delay of 0", async () => {
   for (const [name, test_case, frame_id, mode] of [
     ["child frame", discovery(), 3, "media"],
     ["normal mode", discovery(), 0, "normal"],
     ["hint mode", discovery(), 0, "hint"],
-    ["full screen", discovery({ fullscreen: true }), 0, "media"],
     ["delay 0", discovery({ delay_ms: 0 }), 0, "media"],
   ] as const) {
     await test_case.discover.reported(7, frame_id, mode);
@@ -357,9 +357,9 @@ function gated_discovery() {
   const discover = create_media_discovery({
     storage: session_store().storage,
     which_key_delay_ms: async () => (await gate, 300),
-    top_in_fullscreen: async () => false,
     tab_is_open: async () => true,
     open_panel: async (tab_id) => void opened.push(tab_id),
+    close_panel: async () => undefined,
   });
   return { discover, opened, release };
 }
@@ -399,4 +399,14 @@ test("the frame draws the panel only while it is in media mode and not in full s
     assert.equal(media_panel_admitted(mode, false), mode === "media", mode);
     assert.equal(media_panel_admitted(mode, true), false, `${mode} in full screen`);
   }
+});
+
+test("a key that runs in a child frame in media mode closes the panel of the top frame, and no other key does", async () => {
+  const { discover, closed } = discovery();
+  await discover.key_ran(7, 3, "media");
+  await discover.key_ran(7, 3, "media");
+  assert.deepEqual(closed, [7, 7]);
+  await discover.key_ran(7, 0, "media");
+  await discover.key_ran(7, 3, "normal");
+  assert.deepEqual(closed, [7, 7]);
 });

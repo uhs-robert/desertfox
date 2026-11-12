@@ -82,12 +82,12 @@ export type MediaDiscoveryDeps = {
   storage: SessionStorage;
   // 0 turns which-key off.
   which_key_delay_ms: () => Promise<number>;
-  // Whether the top document is in full screen. A video in a child frame in full screen counts, because it makes the top document's `fullscreenElement` its frame element.
-  top_in_fullscreen: (tab_id: number) => Promise<boolean>;
   // A report can land after its tab closed, and must not store anything for it.
   tab_is_open: (tab_id: number) => Promise<boolean>;
-  // Runs the conditional open of the panel in the top frame. The frame checks again that it is still in media mode and not in full screen, as it draws.
+  // Runs the conditional open of the panel in the top frame. The frame admits it only while it is in media mode and not in full screen, which a video in a child frame in full screen also sets on the top document.
   open_panel: (tab_id: number) => Promise<unknown>;
+  // Hides the panel of the top frame. Closing a panel that is not up does nothing.
+  close_panel: (tab_id: number) => Promise<unknown>;
 };
 
 // What the top frame of a tab last reported, and how many times that changed.
@@ -117,9 +117,13 @@ export function create_media_discovery(deps: MediaDiscoveryDeps) {
         return mode === "media" && state?.mode !== "media" ? changes : undefined;
       });
       if (mine === undefined) return;
-      if ((await deps.which_key_delay_ms()) === 0 || (await deps.top_in_fullscreen(tab_id))) return;
+      if ((await deps.which_key_delay_ms()) === 0) return;
       if ((await in_turn(() => read(tab_id)))?.changes !== mine) return;
       await deps.open_panel(tab_id);
+    },
+    // A key that runs in a child frame in media mode never reaches the key handling of the top frame, which draws the panel. So the key closes it from here.
+    key_ran: async (tab_id: number, frame_id: number, mode: Mode): Promise<void> => {
+      if (frame_id !== 0 && mode === "media") await deps.close_panel(tab_id);
     },
     forget: (tab_id: number): Promise<void> => in_turn(() => deps.storage.remove(top_key_of(tab_id))),
   };
