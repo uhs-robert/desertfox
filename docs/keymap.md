@@ -410,10 +410,10 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
-| `f` | bound | `caret.move --char-find` | Move to a character |  |
-| `t` | bound | `caret.move --char-find --till` | Move before a character |  |
-| `F` | bound | `caret.move --char-find --back` | Move back to a character |  |
-| `T` | bound | `caret.move --char-find --back --till` | Move back after a character |  |
+| `f` | bound | `caret.find` | Move to a character |  |
+| `t` | bound | `caret.find --till` | Move before a character |  |
+| `F` | bound | `caret.find --back` | Move back to a character |  |
+| `T` | bound | `caret.find --back --till` | Move back after a character |  |
 | `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
 | `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
 
@@ -440,10 +440,10 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
-| `f` | bound | `caret.move --char-find` | Move to a character |  |
-| `t` | bound | `caret.move --char-find --till` | Move before a character |  |
-| `F` | bound | `caret.move --char-find --back` | Move back to a character |  |
-| `T` | bound | `caret.move --char-find --back --till` | Move back after a character |  |
+| `f` | bound | `caret.find` | Move to a character |  |
+| `t` | bound | `caret.find --till` | Move before a character |  |
+| `F` | bound | `caret.find --back` | Move back to a character |  |
+| `T` | bound | `caret.find --back --till` | Move back after a character |  |
 | `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
 | `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
 | `/` | bound | `find` | Find forward |  |
@@ -488,10 +488,10 @@ Which-key group names:
 | `$` | bound | `caret.move --line-end` | Move caret |  |
 | `gg` | bound | `caret.move --start` | Move caret |  |
 | `G` | bound | `caret.move --end` | Move caret |  |
-| `f` | bound | `caret.move --char-find` | Move to a character |  |
-| `t` | bound | `caret.move --char-find --till` | Move before a character |  |
-| `F` | bound | `caret.move --char-find --back` | Move back to a character |  |
-| `T` | bound | `caret.move --char-find --back --till` | Move back after a character |  |
+| `f` | bound | `caret.find` | Move to a character |  |
+| `t` | bound | `caret.find --till` | Move before a character |  |
+| `F` | bound | `caret.find --back` | Move back to a character |  |
+| `T` | bound | `caret.find --back --till` | Move back after a character |  |
 | `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
 | `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
 | `/` | bound | `find` | Find forward |  |

@@ -205,12 +205,14 @@ test("key flow: insert mode with no field passes the insert keys and leaves on E
   assert.equal(state.get_mode_(), "normal");
 });
 
-test("key flow: Escape ends a pending prefix, hides the panel and runs the Escape binding", () => {
+test("key flow: Escape after the register prefix hides the panel and drops only the prefix, and a second Escape runs the Escape binding", () => {
   const { flow, ran, prefixes } = make_flow();
   flow.handle_token_('"');
   flow.handle_token_("<Escape>");
-  assert.deepEqual(ran, ["test.down::"]);
+  assert.deepEqual(ran, []);
   assert.equal(prefixes.at(-1), undefined);
+  flow.handle_token_("<Escape>");
+  assert.deepEqual(ran, ["test.down::"]);
 });
 
 test("key flow: a bad name or a key with no binding cancels the prefix and passes the key", () => {

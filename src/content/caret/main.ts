@@ -38,8 +38,6 @@ let visual_runs = 0;
 // The caret or visual session a `/` or `?` started from. The command line takes the mode while it is open, and the session waits for the end of the search.
 let searching_from: Session | undefined;
 
-// `f` arms this and the next printable key is its target. A count arrives as repeated calls of the handler, which add to `count`.
-let pending_find: { direction: CharFind["direction"]; till: boolean; count: number } | undefined;
 // The last find for `;` and `,`. Per page, and not a register.
 let last_find: CharFind | undefined;
 
@@ -79,7 +77,7 @@ function watch_view_(on_change: () => void): () => void {
   };
 }
 
-const find_mode = create_find_mode({ read_colors_: read_find_colors, show: show_char_matches, hide: () => char_painter.clear(), watch_view_, defer: (task) => queueMicrotask(task) });
+const find_mode = create_find_mode({ read_colors_: read_find_colors, show: show_char_matches, hide: () => char_painter.clear(), watch_view_ });
 
 const selections_of = (model: TextModel): Selection[] => documents_of(model).flatMap((owner) => owner.getSelection() ?? []);
 
@@ -227,22 +225,6 @@ function ensure_session(mode: CaretMode): Session | string {
   return session;
 }
 
-// A printable key is the target. Escape cancels and is spent. A chord or named key cancels and then runs as usual.
-function take_find_target(token: string): "handled" | "pass" {
-  const find = pending_find!;
-  pending_find = undefined;
-  if (is_escape(token)) return "handled";
-  const char = token === "<Space>" ? " " : token;
-  if ([...char].length !== 1) return "pass";
-  const open = ensure_session(session?.mode ?? "caret");
-  if (typeof open === "string") return "handled";
-  last_find = { char, direction: find.direction, till: find.till };
-  find_mode.start(find.till);
-  move_to_find(open, last_find, find.count, false);
-  find_mode.refresh();
-  return "handled";
-}
-
 // The caret goes to the count-th match, and the match is the current one for the highlights. With fewer matches the caret stays.
 function move_to_find(open: Session, find: CharFind, count: number, again: boolean): void {
   const hit = find_char_hit(open.model_.text, open.cursor.caret, find, count, again);
@@ -257,17 +239,13 @@ const SESSION_MODES: readonly ExitDestination[] = ["caret", "visual", "visual_li
 const sink_for = (mode: CaretMode) => ({
   // Showing the caret on entry is what makes entering the mode draw it at once.
   enter: () => {
-    pending_find = undefined;
     find_mode.end();
     const started = ensure_session(mode);
     if (typeof started === "string") page.desertfox_host.show_toast_(started);
   },
   on_token_: (token: string): "handled" | "pass" => {
-    if (pending_find) return take_find_target(token);
-    if (find_mode.is_live_()) {
-      // Escape only ends the find, in the visual modes too.
-      return find_mode.on_token_(token);
-    }
+    // Escape only ends the find, in the visual modes too.
+    if (find_mode.is_live_()) return find_mode.on_token_(token);
     if (mode === "caret" || !is_escape(token)) return "pass";
     // Escape in a visual mode goes back to caret mode, and the keymap never sees it.
     page.desertfox_host.set_mode_("caret");
@@ -276,36 +254,26 @@ const sink_for = (mode: CaretMode) => ({
   // Between caret and the visual modes the highlight stays. Every other way out clears it.
   exit: (destination: ExitDestination) => {
     const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
-    pending_find = undefined;
     find_mode.end();
     if (!SESSION_MODES.includes(destination) && !is_search_line) end_session();
   },
 });
 
-const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
-  // From the command line the mode is normal, so no sink would take the target key.
-  if (args.unit === "char_find" && !SESSION_MODES.includes(page.desertfox_host.get_mode())) return;
+// The key layer read the target, so a find key is a plain command. A line (`:caret.find x`) runs in normal mode, where there is no session to move.
+const handle_find = (args: Record<string, unknown>): Outcome | undefined => {
+  if (!SESSION_MODES.includes(page.desertfox_host.get_mode())) return;
   const open = ensure_session(session?.mode ?? "caret");
   if (typeof open === "string") return { ok: false, message: open };
-  if (args.unit === "char_find") {
-    const direction = (args.direction as CharFind["direction"] | undefined) ?? "forward";
-    const till = args.till === true;
-    find_mode.note_find_key_();
-    if (find_mode.is_live_() && last_find && find_mode.is_till() === till) {
-      // The same key family repeats in the key's own direction, which then is the direction of `;`.
-      last_find = { ...last_find, direction };
-      move_to_find(open, last_find, 1, till);
-      find_mode.refresh();
-      return;
-    }
-    // The other family ends this find and starts its own.
-    find_mode.end();
-    if (pending_find) pending_find.count++;
-    else pending_find = { direction, till, count: 1 };
-    return;
-  }
+  last_find = { char: args.char as string, direction: (args.direction as CharFind["direction"]) ?? "forward", till: args.till === true };
+  find_mode.start();
+  move_to_find(open, last_find, args.count as number, false);
+  find_mode.refresh();
+};
+
+const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
+  const open = ensure_session(session?.mode ?? "caret");
+  if (typeof open === "string") return { ok: false, message: open };
   if (args.unit === "find_repeat") {
-    find_mode.note_find_key_();
     if (!last_find) return;
     const reversed = args.direction === "back";
     const direction = reversed === (last_find.direction === "back") ? "forward" : "back";
@@ -313,6 +281,7 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
     find_mode.refresh();
     return;
   }
+  find_mode.end();
   const unit = args.unit as MotionUnit;
   const direction = (args.direction as Direction | undefined) ?? "forward";
   let caret: number;
@@ -336,6 +305,7 @@ function run_in_background(id: string, args: Record<string, unknown>): Promise<O
 }
 
 const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> | undefined => {
+  find_mode.end();
   const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
   if (typeof open === "string") return { ok: false, message: open };
   const action = args.action as "yank" | "swap" | "search";
@@ -357,6 +327,7 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
 
 // A refused object leaves the selection as it was. Line visual mode widens every selection to whole lines, so an object leaves it for character visual mode, as in vim.
 const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
+  find_mode.end();
   if (session?.mode === "visual_line") page.desertfox_host.set_mode_("visual");
   const open = ensure_session("visual");
   if (typeof open === "string") return { ok: false, message: open };
@@ -369,6 +340,7 @@ const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
 
 // Line breaks inside the selection are spaces, so a URL or a search sees one line. A blank selection stays selected.
 const handle_open = (args: Record<string, unknown>): Outcome | Promise<Outcome> => {
+  find_mode.end();
   const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
   if (typeof open === "string") return { ok: false, message: open };
   const text = selected_text(open.model_.text, open.painted_span_).replace(/\s+/g, " ").trim();
@@ -429,6 +401,7 @@ function land_on_match(open: Session): boolean {
 
 // `n` and `N`: step to the match, and an open session takes its caret there.
 async function find_step(reverse: boolean): Promise<Outcome> {
+  find_mode.end();
   const started = open_session_now();
   if (typeof started === "string") return { ok: false, message: started };
   const outcome = await find.step(reverse, started && started.model_.point_at_(started.cursor.caret));
@@ -439,6 +412,7 @@ async function find_step(reverse: boolean): Promise<Outcome> {
 
 // `*` and `#`: search for the word or selection at once, and let an open session follow the match.
 async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
+  find_mode.end();
   const started = open_session_now();
   if (typeof started === "string") return { ok: false, message: started };
   const target = word_target();
@@ -466,10 +440,12 @@ if (!page.desertfox_caret_ready) {
   // The one way into a caret mode from outside, so the mode is set only once its sink is in.
   page.desertfox_host.register_handler_("caret.mode", (args) => page.desertfox_host.set_mode_(args.mode as CaretMode));
   page.desertfox_host.register_handler_("caret.move", handle_move);
+  page.desertfox_host.register_handler_("caret.find", handle_find);
   page.desertfox_host.register_handler_("visual.act", handle_act);
   page.desertfox_host.register_handler_("visual.object", handle_object);
   page.desertfox_host.register_handler_("visual.open", handle_open);
   page.desertfox_host.register_handler_("find.open", (args) => {
+    find_mode.end();
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);
     const started = open_session_now();

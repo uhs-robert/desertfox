@@ -4,6 +4,7 @@ import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { ANY_KEY } from "../../src/shared/prefix_tree.ts";
 import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { check_args } from "../../src/shared/registry/index.ts";
@@ -131,9 +132,9 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("visual_line", "n"), "find.next {}");
   assert.equal(leaf_id("visual_line", "j"), leaf_id("visual", "j"));
   for (const mode of ["caret", "visual", "visual_line"] as const) {
-    assert.equal(leaf_id(mode, "f"), 'caret.move {"unit":"char_find","direction":"forward","till":false,"big":false}', mode);
-    assert.equal(leaf_id(mode, "T"), 'caret.move {"unit":"char_find","direction":"back","till":true,"big":false}', mode);
-    assert.equal(leaf_id(mode, ","), 'caret.move {"unit":"find_repeat","direction":"back","till":false,"big":false}', mode);
+    assert.equal(leaf_id(mode, "f", ANY_KEY), 'caret.find {}', mode);
+    assert.equal(leaf_id(mode, "T", ANY_KEY), 'caret.find {"direction":"back","till":true}', mode);
+    assert.equal(leaf_id(mode, ","), 'caret.move {"unit":"find_repeat","direction":"back","big":false}', mode);
   }
   for (const mode of ["hint", "cmdline", "caret", "visual", "visual_line"] as const) {
     assert.equal(leaf_id(mode, "<Escape>"), "mode.escape {}", mode);

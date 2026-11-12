@@ -6,11 +6,14 @@ import { CHAR_FIND_NAMES, SEARCH_NAMES } from "../../../src/content/caret/find_p
 import { create_key_flow } from "../../../src/content/key_flow.ts";
 import { create_mode_state } from "../../../src/content/mode_state.ts";
 import { create_matcher } from "../../../src/shared/keys/index.ts";
+import { ANY_KEY } from "../../../src/shared/prefix_tree.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../../src/shared/index.ts";
 import type { CompiledKeymap, TreeNode } from "../../../src/shared/index.ts";
 
-const leaf = (id: string, args: Record<string, unknown> = {}, count_rule: "repeat" | "ignore" = "ignore"): TreeNode => ({ kind: "leaf", steps: [{ invocation: { id, args }, runs_in: "content", count_rule }] });
+const leaf = (id: string, args: Record<string, unknown> = {}, count_rule: "repeat" | "ignore" = "ignore", capture?: string): TreeNode => ({ kind: "leaf", steps: [{ invocation: { id, args }, runs_in: capture ? "background" : "content", count_rule, ...(capture && { capture }) }] });
 const move = (args: Record<string, unknown>) => leaf("caret.move", args, "repeat");
+// What the compiler builds for a binding that leaves out its `key` param.
+const find = (args: Record<string, unknown>): TreeNode => ({ kind: "branch", children: { [ANY_KEY]: leaf("caret.find", { direction: "forward", till: false, count: 1, ...args }, "ignore", "char") } });
 
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
@@ -21,9 +24,10 @@ const keymap: CompiledKeymap = {
     caret: {
       kind: "branch",
       children: {
-        f: move({ unit: "char_find" }),
-        F: move({ unit: "char_find", direction: "back" }),
-        t: move({ unit: "char_find", till: true }),
+        f: find({}),
+        F: find({ direction: "back" }),
+        t: find({ till: true }),
+        l: move({ unit: "char" }),
         ";": move({ unit: "find_repeat" }),
         x: leaf("log_x"),
         "<Escape>": leaf("mode.escape"),
@@ -32,7 +36,7 @@ const keymap: CompiledKeymap = {
   },
 };
 
-// A page wired as main.ts wires it, with the caret bundle's find mode and the same handler contract: a find key calls `note_find_key_` first, in the turn of the key press.
+// A page wired as main.ts wires it, with the caret bundle's find mode and the same handler contract. A key layer find reaches its handler after a round trip through the background, which the test takes as a later turn of the event loop.
 function make_page() {
   const state = create_mode_state();
   const host = create_bundle_host();
@@ -55,9 +59,7 @@ function make_page() {
       watchers_added++;
       return () => void watching--;
     },
-    defer: queueMicrotask,
   });
-  let armed = false;
   const flow = create_key_flow({
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
@@ -72,12 +74,9 @@ function make_page() {
       const { id, args } = matched.steps[0]!.invocation;
       if (id === "mode.set") state.set_mode_(args?.mode as never);
       else if (id === "mode.escape") state.escape();
-      else if (id === "caret.move") {
-        // As run_content does: the first call runs in this turn, the rest after an await.
-        void (async () => {
-          for (let time = 0; time < (count ?? 1); time++) await host.run_command_("caret.move", "caret", args ?? {}, "");
-        })();
-      } else log.push(`key ${id}`);
+      else if (id === "caret.find") setImmediate(() => void host.run_command_("caret.find", "caret", { ...args, count: count ?? 1 }, ""));
+      else if (id === "caret.move") void host.run_command_("caret.move", "caret", args ?? {}, "");
+      else log.push(`key ${id}`);
     },
   });
   state.listen((mode) => {
@@ -95,68 +94,49 @@ function make_page() {
   flow.set_matcher_(create_matcher(keymap));
   host.api.register_sink_("caret", {
     enter: () => {},
-    on_token_: (token) => (armed ? ((armed = false), "handled") : find_mode.is_live_() ? find_mode.on_token_(token) : "pass"),
+    on_token_: (token) => (find_mode.is_live_() ? find_mode.on_token_(token) : "pass"),
     exit: () => find_mode.end(),
   });
+  host.api.register_handler_("caret.find", (args) => {
+    find_mode.start();
+    log.push(`find ${args.char} x${args.count}`);
+  });
   host.api.register_handler_("caret.move", (args) => {
-    find_mode.note_find_key_();
     if (args.unit === "find_repeat") return void log.push("repeat ;");
-    const till = args.till === true;
-    if (find_mode.is_live_() && find_mode.is_till() === till) return void log.push(`repeat ${args.direction ?? "forward"}`);
     find_mode.end();
-    armed = true;
-    log.push("armed");
+    log.push(`move ${args.unit}`);
   });
   const press = (...tokens: string[]) => tokens.map((token) => flow.handle_token_(token));
   // A tick of the event loop runs every microtask and the awaits of a count.
   const settle = () => new Promise((resolve) => setImmediate(resolve));
-  const start_find = async (till = false) => {
+  const start_find = async () => {
     state.set_mode_("normal");
     state.set_mode_("caret");
     await settle();
-    find_mode.start(till);
+    find_mode.start();
     await settle();
     log.length = 0;
   };
   return { state, find_mode, log, views, set_palette: (value: number) => (palette = value), color_reads: () => color_reads, press, settle, start_find, show_calls, watch: () => ({ watching, watchers_added }), hides: () => log.filter((entry) => entry === "hide").length };
 }
 
-test("the same key family repeats and keeps the find alive past the microtask", async () => {
+test("a find key keeps the find alive until its handler runs, after the round trip", async () => {
   const page = make_page();
   await page.start_find();
-  page.press("f");
+  page.press("f", "x");
   await page.settle();
-  page.press("F");
-  await page.settle();
-  assert.deepEqual(page.log, ["repeat forward", "repeat back"]);
+  assert.deepEqual(page.log, ["find x x1"]);
   assert.equal(page.find_mode.is_live_(), true);
   assert.equal(page.hides(), 0);
 });
 
-test("a count digit before a find key keeps the find and the key repeats once per count", async () => {
+test("a count before f reaches the handler as one call with the count", async () => {
   const page = make_page();
   await page.start_find();
-  page.press("3");
+  page.press("3", "f", "x");
   await page.settle();
+  assert.deepEqual(page.log, ["find x x3"]);
   assert.equal(page.find_mode.is_live_(), true);
-  page.press("f");
-  await page.settle();
-  assert.deepEqual(page.log, ["repeat forward", "repeat forward", "repeat forward"]);
-  assert.equal(page.find_mode.is_live_(), true);
-  assert.equal(page.hides(), 0);
-});
-
-test("a multi-digit count keeps the find, and a lone zero ends it", async () => {
-  const page = make_page();
-  await page.start_find();
-  page.press("1", "0", "f");
-  await page.settle();
-  assert.equal(page.find_mode.is_live_(), true);
-  assert.equal(page.log.length, 10);
-  page.press("0");
-  await page.settle();
-  assert.equal(page.find_mode.is_live_(), false);
-  assert.equal(page.hides(), 1);
 });
 
 test("; keeps the find alive", async () => {
@@ -168,23 +148,48 @@ test("; keeps the find alive", async () => {
   assert.equal(page.find_mode.is_live_(), true);
 });
 
-test("the other family ends the find once and arms its own", async () => {
+test("a new find keeps the find alive and the view listener", async () => {
   const page = make_page();
-  await page.start_find(false);
-  page.press("t");
+  await page.start_find();
+  page.press("t", "y");
   await page.settle();
-  assert.deepEqual(page.log, ["hide", "armed"]);
+  assert.deepEqual(page.log, ["find y x1"]);
+  assert.equal(page.find_mode.is_live_(), true);
+  assert.equal(page.hides(), 0);
+});
+
+test("a caret command that is not a find ends the find once", async () => {
+  const page = make_page();
+  await page.start_find();
+  page.press("l");
+  await page.settle();
+  assert.deepEqual(page.log, ["hide", "move char"]);
   assert.equal(page.find_mode.is_live_(), false);
 });
 
-test("another key ends the find once and still runs", async () => {
+test("a key that binds nothing in the caret keymap keeps the find", async () => {
   const page = make_page();
   await page.start_find();
   page.press("x");
-  assert.equal(page.find_mode.is_live_(), true, "the end waits for the microtask");
   await page.settle();
-  assert.deepEqual(page.log, ["key log_x", "hide"]);
-  assert.equal(page.find_mode.is_live_(), false);
+  assert.deepEqual(page.log, ["key log_x"]);
+  assert.equal(page.find_mode.is_live_(), true);
+  page.press("q");
+  await page.settle();
+  assert.equal(page.find_mode.is_live_(), true);
+});
+
+test("the find is still live in the gap between the target key and the handler", async () => {
+  const page = make_page();
+  await page.start_find();
+  page.press("f", "x");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(page.find_mode.is_live_(), true);
+  assert.deepEqual(page.log, []);
+  await page.settle();
+  assert.deepEqual(page.log, ["find x x1"]);
+  assert.equal(page.find_mode.is_live_(), true);
 });
 
 test("Escape ends the find, is spent and leaves the mode", async () => {
@@ -193,6 +198,21 @@ test("Escape ends the find, is spent and leaves the mode", async () => {
   assert.deepEqual(page.press("<Escape>"), ["cancel"]);
   await page.settle();
   assert.deepEqual(page.log, ["hide"]);
+  assert.equal(page.state.get_mode_(), "caret");
+});
+
+test("Escape while f waits for its target keeps the find, and the next Escape ends it", async () => {
+  const page = make_page();
+  await page.start_find();
+  page.press("f");
+  assert.deepEqual(page.press("<Escape>"), ["cancel"]);
+  await page.settle();
+  assert.equal(page.find_mode.is_live_(), true);
+  assert.equal(page.state.get_mode_(), "caret");
+  assert.deepEqual(page.log, []);
+  page.press("<Escape>");
+  await page.settle();
+  assert.equal(page.find_mode.is_live_(), false);
   assert.equal(page.state.get_mode_(), "caret");
 });
 
@@ -209,7 +229,7 @@ test("a key that ends the find and a mode change together still end it once", as
   const page = make_page();
   await page.start_find();
   page.state.set_mode_("normal");
-  page.press("x");
+  page.press("l");
   await page.settle();
   assert.equal(page.hides(), 1);
 });
@@ -218,14 +238,14 @@ test("the view listener is added once per find and removed when it ends", async 
   const page = make_page();
   await page.start_find();
   assert.deepEqual(page.watch(), { watching: 1, watchers_added: 1 });
-  page.find_mode.start(false);
-  page.press("f", "F");
+  page.find_mode.start();
+  page.press("f", "a", "F", "b");
   await page.settle();
   assert.deepEqual(page.watch(), { watching: 1, watchers_added: 1 });
-  page.press("x");
+  page.press("l");
   await page.settle();
   assert.deepEqual(page.watch(), { watching: 0, watchers_added: 1 });
-  page.find_mode.start(true);
+  page.find_mode.start();
   assert.deepEqual(page.watch(), { watching: 1, watchers_added: 2 });
   page.find_mode.end();
   page.find_mode.end();
@@ -258,24 +278,24 @@ test("a new find starts with no current match, even after a find that had one", 
   page.find_mode.refresh();
   assert.equal(page.views.at(-1)!.current, 42);
   // A new target that finds nothing sets no current match, so the old one must not linger.
-  page.find_mode.start(false);
+  page.find_mode.start();
   page.find_mode.refresh();
   assert.equal(page.views.at(-1)!.current, undefined);
 });
 
-test("every new find reads the colors again, and a repeat does not", async () => {
+test("every new find reads the colors again, and ; does not", async () => {
   const page = make_page();
   page.set_palette(1);
   await page.start_find();
   assert.equal(page.color_reads(), 1);
   assert.equal(page.views.at(-1)!.colors, "palette 1");
-  page.press("f", "F", ";");
+  page.press(";", ";");
   await page.settle();
   page.find_mode.refresh();
   assert.equal(page.color_reads(), 1);
   // The palette changed while the find stayed live: the next target picks it up.
   page.set_palette(2);
-  page.find_mode.start(false);
+  page.find_mode.start();
   await page.settle();
   assert.equal(page.color_reads(), 2);
   assert.equal(page.views.at(-1)!.colors, "palette 2");
@@ -286,7 +306,7 @@ test("colors that arrive after the find ended draw nothing", async () => {
   page.state.set_mode_("caret");
   await page.settle();
   const before = page.show_calls.count;
-  page.find_mode.start(false);
+  page.find_mode.start();
   page.find_mode.end();
   await page.settle();
   assert.equal(page.show_calls.count, before);

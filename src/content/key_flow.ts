@@ -9,6 +9,7 @@ import { is_hint_char } from "./hints/hint_keys.ts";
 import type { Sink } from "./bundle_host.ts";
 import { is_caret_mode } from "../shared/command.ts";
 import { is_chord } from "../shared/keys/token.ts";
+import { ANY_KEY } from "../shared/prefix_tree.ts";
 
 export type KeyDecision = "cancel" | "pass";
 
@@ -87,6 +88,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let typed: string[] = [];
   let keys: string[] = [];
   let register: string | undefined;
+  // The sequence waits for one key as an argument: a register name after `"`, or the key a command captures (`f`, `m`, `q`).
+  let awaiting_argument = false;
 
   // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
   const listed = (keys: string[]) => (register === '"' ? [register] : keys);
@@ -95,7 +98,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     matcher?.reset();
     typed = [];
     register = undefined;
-    sequence_in_progress = false;
+    sequence_in_progress = awaiting_argument = false;
     deps.on_prefix_(undefined);
   };
 
@@ -160,6 +163,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const result = active.feed(mode, token);
     sequence_in_progress = result.kind === "pending";
     if (result.kind === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
+    awaiting_argument = result.kind === "pending" && (register === '"' || !!result.node.children[ANY_KEY]);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);
     deps.on_prefix_(result.kind === "pending" && listing.length > 0 ? { mode, typed_: listing } : undefined);
@@ -174,6 +178,11 @@ export function create_key_flow(deps: KeyFlowDeps) {
   };
 
   const decide = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
+    // Escape drops a waiting argument and nothing else, so the mode stays. The sink must not take it: the next Escape does what Escape does.
+    if (awaiting_argument && (token === "<Escape>" || token === "<C-[>") && deps.get_mode_() !== "insert") {
+      reset_sequence_();
+      return "cancel";
+    }
     // A sink takes the token before the keymap, and "pass" lets the keymap see it.
     if (deps.sink_of_(deps.get_mode_())?.on_token_(token) === "handled") {
       reset_sequence_();

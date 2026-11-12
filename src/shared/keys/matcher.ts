@@ -66,8 +66,9 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
       return { kind: "pending", node: root, typed_: typed, ...progress() };
     }
 
-    // A branch with an `ANY_KEY` child waits for one printable key. Any other token breaks the sequence, as a stray key would.
-    const next = node.children[token] ?? ([...token].length === 1 ? node.children[ANY_KEY] : undefined);
+    // A branch with an `ANY_KEY` child waits for one printable key, and a space counts. Any other token breaks the sequence, as a stray key would.
+    const typed_char = token === "<Space>" ? " " : token;
+    const next = node.children[token] ?? ([...typed_char].length === 1 ? node.children[ANY_KEY] : undefined);
     const info = progress();
     if (!next) {
       reset();
@@ -78,7 +79,7 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
       const register = info.register_keys_?.[1];
       const fill = (step: LeafStep): LeafStep =>
         step.capture || (register && step.register)
-          ? { ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, ...(step.capture && { [step.capture]: token }), ...(register && step.register && { register }) } } }
+          ? { ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, ...(step.capture && { [step.capture]: typed_char }), ...(register && step.register && { register }) } } }
           : step;
       return { kind: "match", leaf: { ...next, steps: next.steps.map(fill) }, ...info };
     }

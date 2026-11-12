@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 
 export const areas = ["caret", "find"];
 
-export async function run_cases({ take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
+export async function run_cases({ sleep, take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts). The sheet text reads back with the colors as rgb().
   const CARET_BACKGROUND = "rgb(240, 230, 140)";
@@ -479,11 +479,11 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
   await run_case("Escape cancels a pending find and stays in caret mode, and a bound key is a target", async () => {
     await open_page("caret", "caret_find_cancel", { new_tab: true });
     await press_and_wait_for_move("caret_find_cancel", "gV", "the caret on the heading");
-    // A pending find shows nothing and takes any key as its target, even the barrier key, so Escape goes in the same run as f.
+    // A pending find takes any printable key as its target, even the barrier key, so Escape goes in the same run as f.
     await press_keys("f", "-k", "Escape");
     let mark = events.length;
     await press_keys("l");
-    await wait_event(mark, selection_is("caret_find_cancel", "a"), "l after the cancelled find");
+    await wait_event(mark, selection_is("caret_find_cancel", "a"), "l after the cancelled find, so the mode is still caret mode");
     // w is bound to a word motion, and here it is the target: the heading has no w, so the caret stays and the find is over.
     await press_keys("fw", "-k", "Escape");
     mark = events.length;
@@ -491,6 +491,32 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     await wait_event(mark, selection_is("caret_find_cancel", "d"), "fd after a find with no match");
     await press_keys("-k", "Escape");
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
+  });
+
+  // The pending argument takes the Escape and the mode stays. Only a second Escape does what Escape does.
+  await run_case("Escape after f keeps visual mode, and a second Escape then leaves it for caret mode", async () => {
+    await open_page("caret", "caret_find_visual", { new_tab: true });
+    await press_and_wait_for_move("caret_find_visual", "gV", "the caret on the heading");
+    await press_and_wait_for_move("caret_find_visual", "v", "visual mode on the first character");
+    await press_keys("f", "-k", "Escape");
+    const mark = events.length;
+    await press_keys("l");
+    await wait_event(mark, selection_is("caret_find_visual", "ca"), "l to extend the selection, so the mode is still visual");
+    await press_keys("f", "-k", "Escape");
+    await press_keys("-k", "Escape");
+    const mark_caret = events.length;
+    await press_keys("l");
+    await wait_event(mark_caret, selection_is("caret_find_visual", "r"), "the second Escape went to caret mode, where l moves one character");
+    await escape_to_normal("caret_find_visual");
+  });
+
+  await run_case("Escape after f then a second Escape leaves caret mode", async () => {
+    await open_page("caret", "caret_find_twice", { new_tab: true });
+    await press_and_wait_for_move("caret_find_twice", "gV", "the caret on the heading");
+    await press_keys("f", "-k", "Escape");
+    const mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, badge_is("caret_find_twice", "NORMAL"), "the NORMAL badge after the second Escape");
   });
 
   // A space arrives as the token <Space>, longer than one character, and is still a target.
@@ -506,7 +532,7 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     await escape_to_normal("caret_find_space");
   });
 
-  await run_case("fx lights the visible matches, f and F repeat across the page and scroll it, 3f counts", async () => {
+  await run_case("fx lights the visible matches, ; and , repeat across the page and scroll it, 3fx counts", async () => {
     await open_page("caret_ft", "ft_repeat", { new_tab: true });
     await press_and_wait_for_move("ft_repeat", "gV", "the caret");
     await press_keys("fx");
@@ -514,35 +540,37 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     expect(lit(first) < 25, `lit ${lit(first)} matches of forty rows: only the visible ones and a screen around should be lit`);
     expect(first.y === 0, `the first f scrolled to ${first.y}`);
     if (shot_dir) await take_shot(`${shot_dir}/char-find-highlights.png`);
-    await press_keys("3f");
-    await wait_ft((state) => current_row(state) === 3, "3f to row 3");
+    await press_keys("3fx");
+    await wait_ft((state) => current_row(state) === 3, "3fx to row 3");
     // Far past the first screen: the page scrolls and the new screen is lit, with the neighbours of the current row.
     for (let step = 1; step < 14; step++) {
-      await press_keys("f");
-      await wait_ft((state) => current_row(state) === 3 + step, `f to row ${3 + step}`);
+      await press_keys(";");
+      await wait_ft((state) => current_row(state) === 3 + step, `; to row ${3 + step}`);
     }
-    await press_keys("f");
+    await press_keys(";");
     const far = await wait_ft((state) => current_row(state) === 17 && state.y > 0, "row 17 current after the page scrolled");
     expect(far.all.some((text) => row_of(text) === 16) || far.all.some((text) => row_of(text) === 18), `the new screen is not lit: ${JSON.stringify(far)}`);
-    await press_keys("F");
-    await wait_ft((state) => current_row(state) === 16, "F back to row 16");
+    await press_keys(",");
+    await wait_ft((state) => current_row(state) === 16, ", back to row 16");
     await press_keys("-k", "Escape");
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
   });
 
-  await run_case("t after f starts a till find, and the match next to the caret is the current one", async () => {
+  await run_case("t after f starts a till find that keeps the lit matches while it waits, and the match next to the caret is the current one", async () => {
     await open_page("caret_ft", "ft_till", { new_tab: true });
     await press_and_wait_for_move("ft_till", "gV", "the caret");
     await press_keys("fx");
     await wait_ft((state) => current_row(state) === 0, "row 0 current");
     await press_keys("t");
-    await wait_ft((state) => lit(state) === 0, "no highlights while the till find waits for its target");
+    // The key waits in the key layer and takes any printable key as its target, so no barrier key can prove the wait. The lit matches stay through a pause.
+    await sleep(300);
+    expect(lit(await in_active_tab(READ_FT)) > 0, "the highlights ended while the till find waited for its target");
     await press_keys("x");
     await wait_ft((state) => current_row(state) === 1, "the x of row 1 current after tx");
-    await press_keys("t");
-    await wait_ft((state) => current_row(state) === 2, "t repeats the till find to row 2");
-    await press_keys("T");
-    await wait_ft((state) => current_row(state) === 1, "T repeats it back to row 1");
+    await press_keys(";");
+    await wait_ft((state) => current_row(state) === 2, "; repeats the till find to row 2");
+    await press_keys(",");
+    await wait_ft((state) => current_row(state) === 1, ", repeats it back to row 1");
     await press_keys("-k", "Escape");
     await wait_ft((state) => lit(state) === 0, "Escape to end the find");
   });
@@ -601,5 +629,48 @@ export async function run_cases({ take_shot, run_case, expect, expect_absent, op
     const after = await wait_ft((state) => lit(state) === 0, "the character find cleared");
     expect(after.search === kept.search, `the kept search lost highlights: ${kept.search} then ${after.search}`);
     await escape_to_normal("ft_search");
+  });
+
+  // The macro stores the step with its target character, so the replay needs no key from the keyboard.
+  await run_case("a macro that records 3fx replays it on another page and lands on the same match", async () => {
+    await open_page("caret_ft", "ft_macro_rec", { new_tab: true });
+    let mark = events.length;
+    await press_keys("qa");
+    await wait_event(mark, badge_is("ft_macro_rec", "NORMAL recording @a"), "the recording badge after qa");
+    await press_keys("gV");
+    await wait_event(mark, badge_is("ft_macro_rec", "CARET recording @a"), "caret mode while recording");
+    mark = events.length;
+    await press_keys("3fx");
+    // The caret starts on the heading, so the third x is in row 2.
+    await wait_ft((state) => current_row(state) === 2, "3fx to row 2 while recording");
+    const recorded = await wait_for_last_selection("ft_macro_rec", mark, (last) => last.text === "x", "the caret on the x of row 2");
+    const document_y = (report) => Math.round(report.top + report.scroll_y);
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await press_keys("-k", "Escape");
+    await wait_event(mark, badge_is("ft_macro_rec", "NORMAL recording @a"), "normal mode again, still recording");
+    await press_keys("q");
+    await wait_event(mark, badge_is("ft_macro_rec", "NORMAL"), "the plain badge after q");
+    await open_page("caret_ft", "ft_macro_play", { new_tab: true });
+    mark = events.length;
+    await press_keys("@a");
+    // The macro ends in normal mode, which ends the find, so the match is read from the selection report of its caret.
+    await wait_event(mark, (event) => is_selection_of("ft_macro_play")(event) && event.text === "x" && document_y(event) === document_y(recorded), "the replay of 3fx to the same x as the recording");
+    await escape_to_normal("ft_macro_play");
+  });
+
+  // visual.open refuses a blank selection before it changes modes, so only its own end of the find clears the highlights.
+  await run_case("p on a whitespace-only selection is refused and still ends the live character find", async () => {
+    await open_page("caret_ft", "ft_open_blank", { new_tab: true });
+    await press_and_wait_for_move("ft_open_blank", "gV", "the caret");
+    await press_keys("f", " ");
+    await wait_ft((state) => lit(state) === 0 || lit(state) > 0, "the find to settle");
+    await press_and_wait_for_move("ft_open_blank", "v", "visual mode on the space");
+    // Nothing lies before the heading, so Fx keeps the selection on the space and lights the x matches.
+    await press_keys("Fx");
+    await wait_ft((state) => lit(state) > 0, "the x matches lit by Fx");
+    await press_keys("p");
+    await wait_ft((state) => lit(state) === 0, "the highlights ended by the refused p");
+    await escape_to_normal("ft_open_blank");
   });
 }
