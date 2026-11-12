@@ -68,7 +68,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
       await press_keys(...keys);
       await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9m_missing", `a toast after ${keys.join("")}`);
       await expect_no_scroll(mark, "p9m_missing");
-      await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === "p9m_missing"));
+      await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === "p9m_missing"), { timeout_ms: 8000 });
     }
   });
 

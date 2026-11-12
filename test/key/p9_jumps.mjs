@@ -41,7 +41,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await press_keys(...keys);
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, what);
     await expect_no_scroll(mark, page_id);
-    await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === page_id));
+    await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === page_id), { timeout_ms: 8000 });
   };
 
   await run_case("<C-o> returns to the place gg left and <C-i> goes forward again", async () => {

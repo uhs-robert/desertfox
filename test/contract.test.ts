@@ -50,7 +50,7 @@ const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
   modes: { normal: { kind: "branch", children: { D: leaf } } },
   mode_indicator: "always",
-  which_key_delay_ms: DEFAULT_SETTINGS.which_key_delay_ms,
+  which_key_delay_ms: DEFAULT_SETTINGS.which_key_delay_ms, toast_ms: 3000, toast_error_ms: 6000,
 };
 
 test("design examples satisfy the shared contracts", () => {

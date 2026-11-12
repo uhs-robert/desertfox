@@ -5,6 +5,7 @@ import { matches_pattern, resolve_site_columns, site_row_columns, type ResolvedS
 import { COMPILED_KEYMAP_VERSION } from "../shared/prefix_tree.ts";
 import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import { DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
 
 // The manifest `commands` entry that toggles. It is not a slot: no keymap chord reaches it, and it runs while DesertFox is off.
 export const TOGGLE_COMMAND = "toggle_enabled";
@@ -19,7 +20,7 @@ export const toolbar_look = (disabled: boolean): ToolbarLook =>
 
 // What the background publishes in place of the keymap while off. The content script reads it like any tree: no key matches and the
 // mode badge is hidden. Only `off` is read by name, so a lone keyup passes.
-export const OFF_KEYMAP: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: {}, off: true, mode_indicator: "off", which_key_delay_ms: 0 };
+export const OFF_KEYMAP: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, modes: {}, off: true, mode_indicator: "off", which_key_delay_ms: 0, toast_ms: DEFAULT_TOAST_MS, toast_error_ms: DEFAULT_TOAST_ERROR_MS };
 
 export type ToolbarDeps = {
   read_disabled: () => Promise<boolean>;

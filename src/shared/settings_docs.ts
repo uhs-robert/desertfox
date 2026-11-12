@@ -7,6 +7,8 @@ import type { SettingName } from "./settings_table.ts";
 
 export const SETTING_DOCS: Record<SettingName, string> = {
   which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel first shows, later keys redraw it at once",
+  toast_ms: "Milliseconds a warning, info or success toast stays on the page, 500 to 30000",
+  toast_error_ms: "Milliseconds an error toast stays on the page, 500 to 30000. Longer than toast_ms by default so a failure is easy to read",
   which_key_repeat: "Show the step that . would repeat in the footer of the which-key panel (never for a private window)",
   which_key_border: "Corner style of the which-key panel border",
   which_key_skip: "Key prefixes, in keymap notation such as `g` or `,`, whose which-key panel does not open after the delay. A prefix matches only as typed in full, so `g` leaves `gu` alone. An instant redraw still shows it: Backspace back to the prefix, or a key typed while a panel is already up. `?` lists only the first keys of the mode",

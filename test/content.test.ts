@@ -22,7 +22,7 @@ const browser_chords = { kind: "branch", children: { "<A-j>": leaf("next_tab") }
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
   mode_indicator: "always",
-  which_key_delay_ms: 0,
+  which_key_delay_ms: 0, toast_ms: 3000, toast_error_ms: 6000,
   modes: {
     normal: { kind: "branch", children: { j: leaf("down"), g: { kind: "branch", children: { g: leaf("top") } } } },
     insert: { kind: "branch", children: { "<C-x>": leaf("insert_chord") } },

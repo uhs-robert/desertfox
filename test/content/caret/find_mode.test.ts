@@ -18,7 +18,7 @@ const find = (args: Record<string, unknown>): TreeNode => ({ kind: "branch", chi
 const keymap: CompiledKeymap = {
   format_version: COMPILED_KEYMAP_VERSION,
   mode_indicator: "always",
-  which_key_delay_ms: 0,
+  which_key_delay_ms: 0, toast_ms: 3000, toast_error_ms: 6000,
   modes: {
     normal: { kind: "branch", children: { V: leaf("mode.set", { mode: "caret" }) } },
     caret: {

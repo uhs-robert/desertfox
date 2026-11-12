@@ -17,7 +17,7 @@ import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
 import { follow_which_key } from "./whichkey/gate.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { badge_state } from "./badge_state.ts";
-import { show_mode_label, show_toast } from "./ui_proxy.ts";
+import { set_toast_durations, show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
 import { fullscreen_step, takes_media_step } from "./mode_state.ts";
@@ -250,6 +250,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  set_toast_durations(keymap);
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
