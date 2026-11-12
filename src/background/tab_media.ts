@@ -7,13 +7,12 @@ import { TAB_MEDIA_STORAGE_PREFIX, TAB_MEDIA_TOP_STORAGE_PREFIX } from "./storag
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
 // `pin_frame` is the frame whose video `;M` pinned. The video itself is a weak reference in that frame's page.
+// `stepped_on` says that `aa` sent the step on to every frame already, so the first frame to report the mode sends none.
 // `lines` are the frames of the hold with a hint or the line open, opened from the mode. `left` are the frames that reported normal while one was open, and go back to the mode when it closes. `line_closed` is the last frame whose line closed back to the mode, and when.
-export type MediaHold = { frames: number[]; pin_frame?: number; lines?: number[]; left?: number[]; line_closed?: { frame_id: number; at_ms: number } };
+export type MediaHold = { frames: number[]; pin_frame?: number; stepped_on?: true; lines?: number[]; left?: number[]; line_closed?: { frame_id: number; at_ms: number } };
 
 export type TabMediaDeps = {
   storage: SessionStorage;
-  // Rejects for a frame that is gone, which the caller ignores.
-  send_mode: (tab_id: number, frame_id: number, mode: "media") => Promise<unknown>;
   // The `MediaStep` message, to one frame or, with no frame, to every frame of the tab that runs the content script.
   send_step: (tab_id: number, on: boolean, frame_id?: number) => Promise<unknown>;
   // Whether the frame still runs the content script: a frame removed with its line open never reports again.
@@ -29,8 +28,8 @@ const without_pin = ({ pin_frame: _pin_frame, ...hold }: MediaHold): MediaHold =
 const KEEPS_THE_MODE: readonly Mode[] = ["media", "hint", "cmdline"];
 const is_line = (mode: Mode): boolean => mode === "hint" || mode === "cmdline";
 
-// The end of a fullscreen reaches every frame of it at once. Firefox spends the Escape that closes a line in fullscreen on leaving the fullscreen, so the line's frame returns to the mode while the others report normal, in any order. A normal report this soon after a line closed is that same end.
-export const LINE_CLOSE_GRACE_MS = 1000;
+// The end of a fullscreen reaches every frame of it at once. Firefox spends the Escape that closes a line in fullscreen on leaving the fullscreen, so the line's frame returns to the mode while the others report normal, in any order. A normal report this soon after a line closed, from a frame without the focus, is that same end. The report carries no cause, and content.js has no room for one.
+export const LINE_CLOSE_GRACE_MS = 500;
 
 export function create_tab_media(deps: TabMediaDeps) {
   // One read-then-write at a time per background, so two reports together do not drop each other's change.
@@ -42,22 +41,24 @@ export function create_tab_media(deps: TabMediaDeps) {
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
+  // The reporter gets no step off. A late step on would put it back in the mode, its report would start a new hold whose step on comes after that step off, and the two would repeat without end.
   const end = async (tab_id: number, hold: MediaHold, except?: number) => {
     await deps.storage.remove(key_of(tab_id));
     await Promise.all(hold.frames.filter((frame_id) => frame_id !== except).map((frame_id) => deps.send_step(tab_id, false, frame_id).catch(() => undefined)));
   };
 
   const write = (tab_id: number, hold: MediaHold) => deps.storage.set({ [key_of(tab_id)]: hold });
-  // A line of another frame closed back to the mode a moment ago, so a normal report now comes from the fullscreen end that closed it.
-  const line_just_closed = (hold: MediaHold, frame_id: number): boolean => !!hold.line_closed && hold.line_closed.frame_id !== frame_id && deps.now() - hold.line_closed.at_ms < LINE_CLOSE_GRACE_MS;
+  // A line of another frame closed back to the mode a moment ago, so a normal report now comes from the fullscreen end that closed it. An Escape the user pressed comes from the frame with the focus.
+  const line_just_closed = (hold: MediaHold, frame_id: number, focus: boolean): boolean => !focus && !!hold.line_closed && hold.line_closed.frame_id !== frame_id && deps.now() - hold.line_closed.at_ms < LINE_CLOSE_GRACE_MS;
   // A frame removed with its line open never reports again, so only a frame that still runs the content script keeps the mode with its line.
-  const has_open_line_besides = async (tab_id: number, hold: MediaHold, frame_id: number): Promise<boolean> => {
+  const open_lines_besides = async (tab_id: number, hold: MediaHold, frame_id: number): Promise<number[]> => {
     const others = (hold.lines ?? []).filter((line_frame) => line_frame !== frame_id);
-    return (await Promise.all(others.map((line_frame) => deps.frame_alive(tab_id, line_frame).catch(() => false)))).includes(true);
+    const alive = await Promise.all(others.map((line_frame) => deps.frame_alive(tab_id, line_frame).catch(() => false)));
+    return others.filter((_line_frame, index) => alive[index]);
   };
   // The line's frame is back in the mode. Once no line is open, every frame that reported normal meanwhile goes back too.
   const after_line_closed = async (tab_id: number, hold: MediaHold, frame_id: number) => {
-    const next: MediaHold = { ...hold, lines: hold.lines?.filter((line_frame) => line_frame !== frame_id) ?? [], line_closed: { frame_id, at_ms: deps.now() } };
+    const next: MediaHold = { ...hold, lines: await open_lines_besides(tab_id, hold, frame_id), line_closed: { frame_id, at_ms: deps.now() } };
     const all_closed = next.lines?.length === 0;
     if (all_closed) {
       delete next.lines;
@@ -68,12 +69,13 @@ export function create_tab_media(deps: TabMediaDeps) {
   };
 
   return {
-    // `aa`: starts the mode on the frame that took the key. A new start drops an old pin. The frame joins the hold when it reports the mode, because a report of normal that left before the mode arrived must not end the hold.
-    enter: (tab_id: number, frame_id: number): Promise<void> =>
+    // `aa`: starts the mode in every frame, the one that took the key among them. A new start drops an old pin. A frame joins the hold when it reports the mode, because a report of normal that left before the mode arrived must not end the hold.
+    // The one step on is the message that starts the mode in the key's frame, so it cannot reach that frame after an Escape there. A second step on, sent when that frame reports, could, and would put the frame back in the mode.
+    enter: (tab_id: number, _key_frame_id: number): Promise<void> =>
       in_turn(async () => {
         const hold = await read(tab_id);
-        if (hold) await write(tab_id, without_pin(hold));
-        await deps.send_mode(tab_id, frame_id, "media");
+        await write(tab_id, { ...(hold && without_pin(hold)), frames: hold?.frames ?? [], stepped_on: true });
+        await deps.send_step(tab_id, true).catch(() => undefined);
       }),
     // `;M`: the picked video acts for the keys until the mode ends. The frame enters the mode when its hint ends, and reports it.
     pin: (tab_id: number, frame_id: number): Promise<void> =>
@@ -89,22 +91,24 @@ export function create_tab_media(deps: TabMediaDeps) {
       }),
     // The mode a frame reports. Any frame can start the hold (fullscreen starts it in the frame that sees it), and the first report of media starts the mode in every other frame in normal mode, which then report and join. A frame of the hold that reports a mode that is not media ends it for every frame.
     // A frame of the hold with a hint or the line open keeps the mode for the others too, and when it closes back to the mode, every frame that left meanwhile goes back to it.
-    reported: (tab_id: number, frame_id: number, mode: Mode): Promise<void> =>
+    // `focus` says whether the frame's own document holds the keyboard focus.
+    reported: (tab_id: number, frame_id: number, mode: Mode, focus: boolean): Promise<void> =>
       in_turn(async () => {
         const hold = await read(tab_id);
         if (mode === "media") {
           if (hold?.lines?.includes(frame_id)) return after_line_closed(tab_id, hold, frame_id);
           if (hold?.frames.includes(frame_id)) return;
-          await write(tab_id, { ...hold, frames: [...(hold?.frames ?? []), frame_id] });
+          const { stepped_on, ...rest } = hold ?? { frames: [] };
+          await write(tab_id, { ...rest, frames: [...rest.frames, frame_id] });
           // No list of frames reaches the background, so the step goes to every frame, the reporter too, which is in media already and stays.
-          if (!hold?.frames.length) await deps.send_step(tab_id, true).catch(() => undefined);
+          if (rest.frames.length === 0 && !stepped_on) await deps.send_step(tab_id, true).catch(() => undefined);
           return;
         }
         if (!hold?.frames.includes(frame_id)) return;
         if (is_line(mode)) {
           if (!hold.lines?.includes(frame_id)) await write(tab_id, { ...hold, lines: [...(hold.lines ?? []), frame_id] });
-        } else if (mode === "normal" && line_just_closed(hold, frame_id)) await deps.send_step(tab_id, true, frame_id).catch(() => undefined);
-        else if (mode === "normal" && (await has_open_line_besides(tab_id, hold, frame_id))) {
+        } else if (mode === "normal" && line_just_closed(hold, frame_id, focus)) await deps.send_step(tab_id, true, frame_id).catch(() => undefined);
+        else if (mode === "normal" && (await open_lines_besides(tab_id, hold, frame_id)).length > 0) {
           if (!hold.left?.includes(frame_id)) await write(tab_id, { ...hold, left: [...(hold.left ?? []), frame_id] });
         } else if (!KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
       }),
