@@ -32,7 +32,7 @@ import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_ke
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
 // The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
 export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request), () => native_host.read_config().then(() => undefined)));
-const native_host = create_native_client(browser_native_deps(), host_update.watch);
+export const native_host = create_native_client(browser_native_deps(), host_update.watch);
 const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
 
 // Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.

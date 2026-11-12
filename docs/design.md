@@ -382,6 +382,7 @@ The content script must have the keymap before the first key. At start it sends 
 - Hints, which-key, caret and visual mode are separate files. Snippets run as their own code. The background injects one with `tabs.executeScript` on first use in a tab.
 - A site mode is a named set of binds in a site row (`modes.<name> = { label, bind }`) that `mode.site <name>` lays over normal mode, and `mode.site off` ends. It is not a `Mode`: the mode stays `normal`, so the matcher, `key_flow.ts` and `mode_state.ts` do not change. The page reply carries, per mode, the label and the top-level children of the tree that differ from the normal tree (binds go on after `pass` and `only` prune, and the matcher does not free a key the running mode binds, so a mode key wins over both). The content script swaps the matcher's tree to normal plus those children, and shows the label in the badge, even under `mode_indicator = not_normal`. The first matching row that has a mode name decides that mode whole. One exit policy holds for every mode: Escape, any keydown DesertFox does not cancel (a replayed key that the keymap passes too), a mousedown, any mode change (focus moving into a field too) and any keymap update. A macro recording starting or stopping is a keymap update, so it ends the mode. The mode report to the background, which-key listings inside a mode and a badge for a mode in a child frame are not built. The compiler warns on a `mode.site` bind that names a mode no row defines. The key test piece `p28_site_modes` proves it on the `/grid` stand-in.
 - `site_actions.js` holds the handlers of `page.send_key` and `page.clipboard`, which site rows bind to keys and which share one per-page queue. `page.clipboard` focuses its target and calls `document.execCommand` for cut, copy or paste, so the page gets the browser's own trusted event (a synthetic Ctrl+X or Ctrl+V keydown does nothing). A paste that fires no event falls back to reading `navigator.clipboard` and dispatching an untrusted `paste` event with that data. The shipped Sheets rows bind `x` and `p` to it and pass `<C-a>`, `<C-x>` and `<C-v>` to the page. A site bind of `x` or `p` replaces the default `xx`, `xp` and `pp`, `pt`, `pw` sequences on that site. The content script loads it on the first press, with the other bundles.
+- `editor.js` holds `text.edit_external` (see "External editor" below). It loads on the first press.
 - `media.js` and `quality.js` are the bundles the content script does not load. The background injects them into every frame of the tab for each `media` command (see the `a` group below).
 - `cmdline.html`: an extension page in an iframe. It has its own bundle with completion and fuzzy matching.
 
@@ -564,6 +565,15 @@ The help page is generated from `commands.json` and the live keymap: every comma
 
 The help page has a sidebar of page links on the left. In a window 40rem wide or less, the sidebar is a drawer and never a bar across the page. A bar that stays on top holds a menu button, which opens the drawer over the page. Escape, a picked link, a click outside the drawer or focus leaving it closes the drawer. Opening it focuses the current page's link, and Escape or a click outside returns focus to the menu button. The drawer starts closed on each render and is not stored.
 
+### External editor
+
+`text.edit_external` (insert mode `<C-i>`, content command, `bridge: false`) opens the focused field's text in the editor that the native host's own config names. The extension sends only text, an extension for the scratch file and an insert flag, so nothing executable crosses from the page or the extension. The `editor` bundle refuses a non-editable focus, a password field (`is_secret_field`) and text over 128 KiB (the host's cap), reads the field and asks the background. The background (`external_editor.ts`) calls `editor_start`, keeps `{ job, token, frame_id }` per tab in `storage.session`, and loops `editor_collect` (the host long-polls about 20 s and answers pending). A restarted background resumes the loop from storage.
+
+- One job per tab. A second press refuses with a toast, because closing a running editor needs a terminal-specific window class.
+- A tab that closes or starts loading drops its job, and the `token` the page made means a new page in a frame ignores a late result. The editor stays open for the user.
+- The result overwrites the field only while the field still holds the text it had at the press, through `insertText` over the whole content so page frameworks see an input event. Otherwise the result goes to the unnamed register and a toast says so.
+- The extension of the scratch file comes from the `ext` param, else the per-site `editor_ext` setting. A failure of the host (an old host, no editor config) shows its error as a toast. There is no enable setting. The command line cannot start an edit: it takes the focus off the field.
+
 ## Native host (optional)
 
 ### Config host (built)
@@ -647,7 +657,7 @@ Two channels exist, stable and beta. The `update_url` in the installed build's m
 | --- | --- |
 | v1 | Snippets and `config.reload`, with a managed storage config (since removed) and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and explicit prompts. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
 | Later | Quickmarks and the jump list. |
-| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, an external editor, page-event hooks, a key-grab mode, a theme engine, an update nag, an interactive tutorial, joke commands, a QR code of the URL and view source. |
+| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, page-event hooks, a key-grab mode, a theme engine, an update nag, an interactive tutorial, joke commands, a QR code of the URL and view source. |
 
 ## Trade-offs
 

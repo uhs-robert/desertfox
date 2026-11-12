@@ -26,3 +26,18 @@ define("register.paste", {
   repeatable: false,
   bundle: "text",
 });
+
+// The insert mode key `<C-i>`. The host runs the editor the user's config names: the request carries text only. The code sits in the `editor` bundle, and the background holds the job.
+define("text.edit_external", {
+  label: "Edit in external editor",
+  intent: "Edit the focused field in the native host's external editor.",
+  params: [
+    { name: "ext", type: "string", optional: true, pattern: "^[A-Za-z0-9]{1,10}$", description: "Extension of the scratch file, for the editor filetype." },
+    { name: "insert", type: "bool", default: false, description: "Start the editor in insert mode at the end." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  modes: ["insert"],
+  repeatable: false,
+  bundle: "editor",
+});
