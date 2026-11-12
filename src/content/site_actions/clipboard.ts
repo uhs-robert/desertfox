@@ -8,7 +8,7 @@ export type ClipboardCommandDocument = Pick<KeyTargetDocument, "activeElement"> 
 export type ClipboardDocument = KeyTargetDocument & ClipboardCommandDocument;
 
 // A target that takes focus and listens, which is all the handler asks of the element.
-export type ClipboardTarget = EventTarget & { focus?: () => void };
+type ClipboardTarget = EventTarget & { focus?: () => void };
 
 // Runs `execCommand` first because it makes the browser fire the real, trusted event with the real clipboard, which is what Ctrl+X or Ctrl+V does. Where it fires nothing, a paste falls back to `paste_by_api`.
 export async function clipboard_action(doc: ClipboardDocument, args: ClipboardArgs, paste_by_api: (target: EventTarget) => Promise<void>): Promise<void> {

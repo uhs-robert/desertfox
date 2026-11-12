@@ -109,9 +109,9 @@ test("a virtualized editor (CodeMirror 6 content, a hidden textarea of CM5, Ace 
   reset();
   for (const name of [".cm-editor", ".CodeMirror", ".monaco-editor", ".ace_editor"]) {
     focus(Object.assign(div("slice"), { inside: [name] }));
-    await assert.rejects(run(), /only part of its text.*clipboard.*cannot be edited externally/, name);
+    await assert.rejects(run(), /only part of its text.*clipboard copy failed/, name);
     focus(Object.assign(input("slice"), { inside: [name] }));
-    await assert.rejects(run(), /only part of its text.*clipboard.*cannot be edited externally/, name);
+    await assert.rejects(run(), /only part of its text.*clipboard copy failed/, name);
   }
   assert.equal(sent.length, 0);
 });

@@ -15,7 +15,7 @@ const MAX_BYTES = {
   // 5.5 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. The bundle loads on first use, not on every page.
   "page.js": 5.5 * 1024,
   "text.js": 4 * 1024,
-  "editor.js": 5 * 1024, // 5 KB: CodeMirror, Ace and Monaco go through the clipboard. The bundle loads on first use.
+  "editor.js": 6 * 1024, // 6 KB: CodeMirror, Ace and Monaco go through the clipboard, with a read-back of each copy and paste. The bundle loads on first use.
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
   "media.js": 5.5 * 1024,
   // 4.5 KB: the YouTube driver gained the captions toggle and its state read. The bundle loads on first use.
