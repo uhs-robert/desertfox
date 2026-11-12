@@ -168,6 +168,15 @@ Measured in the key test (`test/key/p23_media_keys.mjs`, Firefox 160), with the 
 
 Not measured: a `play()` the page blocks. The key press itself activates the top page, so the key test cannot make one. The command maps `NotAllowedError` from `play()` to "The page blocked play until you click it".
 
+## Escape in fullscreen (media-hls-player)
+
+Measured with a real Escape in the key test session (Firefox 160):
+
+- Firefox handles Escape during DOM fullscreen itself. It exits the fullscreen and delivers no keydown to the page. A capture listener on the page that calls `preventDefault` on Escape sees nothing and does not stop it.
+- The command line is a top-layer popover on the document element, so it shows over the fullscreen element. Its placement does not change the Escape handling.
+- `browser.fullscreen.exit_on_escape` and `dom.keyboard_lock.enabled` do not exist in Firefox 160, and `navigator.keyboard` is undefined. Nothing found lets a page or an extension keep DOM fullscreen on Escape.
+- So an Escape pressed on the line in media mode ends the fullscreen, not the line. The extension closes the line when the fullscreen ends and keeps the frame in media mode (`test/key/p29_media_mode.mjs`). The fullscreen itself ends.
+
 ## Frame focus and the tab's mode (google-docs-focus)
 
 Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a public Google Doc in view mode, in headless Firefox 160.

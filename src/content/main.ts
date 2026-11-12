@@ -337,9 +337,8 @@ function start(): void {
   listen("pageshow", report_mode, false);
 
   // A fullscreen change in this frame and the media mode of another frame take the same step.
-  const media_step = (on: boolean) => {
-    const next = fullscreen_step(page_mode.get_mode_(), on);
-    if (!on) page_mode.back_to_normal_();
+  const media_step = (on: boolean, own?: boolean) => {
+    const next = on ? fullscreen_step(page_mode.get_mode_(), true) : page_mode.media_ended_(own);
     if (next) bundles.set_mode_(next);
   };
   // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
@@ -347,7 +346,7 @@ function start(): void {
   listen(
     "fullscreenchange",
     () => {
-      media_step(!!document.fullscreenElement);
+      media_step(!!document.fullscreenElement, true);
       refresh_mode_indicator();
       key_flow.reset_sequence_();
     },
