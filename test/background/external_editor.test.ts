@@ -8,7 +8,7 @@ import type { EditorDone, EditorOpen } from "../../src/shared/messages.ts";
 const request = (token = "t1"): EditorOpen => ({ type: "editor_open", token, text: "hello", insert: false });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-function make(collect: (job: string) => Promise<EditorCollectReply>, options: { store?: Record<string, unknown>; start?: () => Promise<string>; tabs?: number[] } = {}) {
+function make(collect: (job: string) => Promise<EditorCollectReply>, options: { store?: Record<string, unknown>; start?: () => Promise<string>; tabs?: number[]; now?: () => number; pause?: (ms: number) => Promise<void> } = {}) {
   const store = options.store ?? {};
   const log = { starts: [] as object[], done: [] as { tab_id: number; frame_id: number; message: EditorDone }[], toasts: [] as string[], collects: 0 };
   let count = 0;
@@ -21,6 +21,8 @@ function make(collect: (job: string) => Promise<EditorCollectReply>, options: { 
     send_done: async (tab_id, frame_id, message) => void log.done.push({ tab_id, frame_id, message }),
     toast: async (_tab, _frame, message) => void log.toasts.push(message),
     tab_exists: async (tab_id) => (options.tabs ?? [1]).includes(tab_id),
+    now: options.now ?? (() => 0),
+    pause: options.pause ?? (async () => {}),
   });
   return { editor, log, store };
 }
@@ -105,4 +107,17 @@ test("resume does not start a second loop for a job this background already coll
   await settle();
   assert.equal(polls, 1);
   finish({ done: true, changed: false });
+});
+
+test("a pending answer that came back at once makes the loop wait out the rest of a second, and a slow one does not", async () => {
+  let clock = 0;
+  const pauses: number[] = [];
+  const answers = [{ pending: true }, { pending: true }, { done: true, changed: false }] as EditorCollectReply[];
+  const spent = [100, 20_000, 0];
+  let call = 0;
+  const { editor, log } = make(async () => ((clock += spent[call] ?? 0), answers[call++]!), { now: () => clock, pause: async (ms) => void pauses.push(ms) });
+  await editor.open(1, 0, request(), undefined);
+  await settle();
+  assert.deepEqual(pauses, [900]);
+  assert.equal(log.collects, 3);
 });

@@ -370,6 +370,8 @@ const external_editor = create_external_editor({
   send_done: (tab_id, frame_id, message) => browser.tabs.sendMessage(tab_id, message, { frameId: frame_id }),
   toast: (tab_id, frame_id, message) => show_toast_on_tab({ tab_id, frame_id }, "text.edit_external", message, "error"),
   tab_exists: (tab_id) => browser.tabs.get(tab_id).then(() => true, () => false),
+  now: () => Date.now(),
+  pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 const editor_ext_for = make_editor_ext_for(browser.storage.local, async () => effective_settings((await get_config()).settings).editor_ext);
 void external_editor.resume().catch(() => undefined);
