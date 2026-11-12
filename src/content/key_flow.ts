@@ -96,11 +96,13 @@ export function create_key_flow(deps: KeyFlowDeps) {
     deps.on_prefix_(undefined);
   };
 
+  // The `browser` chords run in normal and insert mode only. In every other mode the chord is Firefox's.
+  const browser_chord_in = (mode: Mode, token: string) => (mode === "normal" || mode === "insert" ? browser_chords?.children[token] : undefined);
+
   // The `browser` chords also have a Firefox shortcut. Cancelling the key stops the shortcut from firing too.
   const run_browser_chord = (token: string): boolean => {
-    const mode = deps.get_mode_();
-    const node = browser_chords?.children[token];
-    if (node?.kind !== "leaf" || (mode !== "normal" && mode !== "insert")) return false;
+    const node = browser_chord_in(deps.get_mode_(), token);
+    if (node?.kind !== "leaf") return false;
     reset_sequence_();
     deps.run_leaf_(node, undefined, false);
     return true;
@@ -120,9 +122,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean): KeyDecision => {
     const mode = deps.get_mode_();
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
-    if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chords?.children[token])) return "pass";
+    if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, chords too: a default chord such as <C-o> would otherwise reach Firefox's own shortcut (Open File). An unbound chord replays as a synthetic key and loses its Firefox action, which only a chord in the first moments of a page meets.
-    if (!matcher || browser_chords?.children[token] || waits_for_replay(matcher, mode, token)) {
+    if (!matcher || browser_chord_in(mode, token) || waits_for_replay(matcher, mode, token)) {
       held_keys.push({ token, on_replay_pass_, repeat });
       return "cancel";
     }

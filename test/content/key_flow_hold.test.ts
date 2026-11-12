@@ -28,7 +28,7 @@ function make(with_keymap = true) {
   const browser_chords: TreeBranch = { kind: "branch", children: { "<C-t>": leaf("tab.new") } };
   const read_keymap = () => flow.set_matcher_(create_matcher(keymap), browser_chords);
   if (with_keymap) read_keymap();
-  return { flow, ran, flags, read_keymap };
+  return { flow, ran, flags, read_keymap, state };
 }
 
 test("a held key replays with its repeat flag, so a queued auto-repeat of a jump key is a repeat", () => {
@@ -58,4 +58,14 @@ test("a chord typed before the keymap is read waits for it, then runs if bound a
   read_keymap();
   assert.deepEqual(ran, ["page.jump"]);
   assert.deepEqual(passed, ["<C-k>"]);
+});
+
+test("a browser chord typed during a load in a mode where browser chords do not run goes to Firefox", () => {
+  const { flow, ran, flags, state } = make();
+  state.set_mode_("caret");
+  flags.loading = true;
+  assert.equal(flow.handle_token_("<C-t>", false), "pass");
+  flags.loading = false;
+  flow.release();
+  assert.deepEqual(ran, []);
 });
