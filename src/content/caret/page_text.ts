@@ -7,8 +7,10 @@ import type { DomPoint, TextModel } from "./text_model.ts";
 export type PageTextDeps = { build_model_: (start_node?: Node) => TextModel; observer_class: typeof MutationObserver };
 
 export type PageText = {
-  // The held model while it matches the page, else a new one. A start node always reads the page again, because the model finds its start as it walks.
-  current(start_node?: Node): TextModel;
+  // The held model while it matches the page, else a new one.
+  current(): TextModel;
+  // Always a new model. For a reader that starts: a plain element that attached a shadow root fires no mutation, and the model finds `start_node` only as it walks.
+  read(start_node?: Node): TextModel;
   is_current(model: TextModel): boolean;
   // Where a character of `from` sits in `to`. Undefined when its text left the page.
   carry(from: TextModel, index: number, to: TextModel): number | undefined;
@@ -71,14 +73,16 @@ export function create_page_text(deps: PageTextDeps = browser_deps()): PageText 
     }
   };
 
+  const read = (start_node?: Node): TextModel => {
+    held = deps.build_model_(start_node);
+    watch(held);
+    changed = false;
+    return held;
+  };
+
   return {
-    current(start_node) {
-      if (start_node === undefined && held && is_current(held)) return held;
-      held = deps.build_model_(start_node);
-      watch(held);
-      changed = false;
-      return held;
-    },
+    current: () => (held && is_current(held) ? held : read()),
+    read,
     is_current,
     carry: (from, index, to) => locate(point_of(from, index), to),
     locate,

@@ -245,14 +245,14 @@ export function create_find(host: Host, deps: FindDeps) {
   }
 
   return {
-    // `/` or `?` was pressed.
+    // `/` or `?` was pressed. The page is read again, because a plain element that attached a shadow root since the last read fired no mutation.
     // `from` is where a visual session has its caret, so the search goes on from there and not from the top of the screen.
     begin(direction: Direction, from?: DomPoint): void {
       drop_highlights();
       // The old match belongs to the old search, so a search that finds nothing must not leave it as the position.
       shown = undefined;
       step_generation++;
-      const model = page_text.current();
+      const model = page_text.read();
       origin = from;
       const start = from_origin(model, direction) ?? deps.start_index_(model);
       origin = undefined;

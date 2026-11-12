@@ -127,17 +127,17 @@ test("many changes cost one rebuild per read, and a read with no change since co
 test("a model that is not the newest one is never current", () => {
   const { page_text } = fake_page();
   const first = page_text.current();
-  const second = page_text.current({} as Node);
+  const second = page_text.read();
   assert.notEqual(second, first);
   assert.equal(page_text.is_current(first), false);
   assert.equal(page_text.is_current(second), true);
 });
 
-test("a start node always reads the page again and reaches the build", () => {
+test("read always reads the page again and passes the start node to the build", () => {
   const { page, page_text, builds } = fake_page();
   page_text.current();
   const start = { name: "picked" } as unknown as Node;
-  page_text.current(start);
+  page_text.read(start);
   assert.equal(builds(), 2);
   assert.equal(page.starts.at(-1), start);
 });
@@ -190,7 +190,7 @@ test("carry finds the same node in a model with text before it, and undefined on
   const { page, page_text } = fake_page();
   const model = page_text.current();
   page.prefix = "zz ";
-  const rebuilt = page_text.current({} as Node);
+  const rebuilt = page_text.read();
   assert.equal(page_text.carry(model, 3, rebuilt), 6);
   assert.equal(page_text.locate(page_text.point_of(model, 3), rebuilt), 6);
   assert.equal(page_text.locate(undefined, rebuilt), undefined);
