@@ -1,7 +1,8 @@
 import { command_help_url, PAGES } from "../help/route.ts";
 import { create_matcher, type MatchResult } from "../shared/keys/matcher.ts";
+import { normal_tree_for, site_columns_for } from "./page_keymap.ts";
 import { parse_sequence } from "../shared/keys/notation.ts";
-import { ANY_KEY, type CompiledKeymap } from "../shared/prefix_tree.ts";
+import { ANY_KEY, is_freed, type CompiledKeymap } from "../shared/prefix_tree.ts";
 
 export type OpenHelpDeps = {
   is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
@@ -36,21 +37,33 @@ export function help_name_url(help_page_url: string, name: string, command_ids: 
 }
 
 // What `:helpkey <keys>` resolves to: the first step's command id of the normal mode binding the keys end on. The matcher reads
-// a count or register prefix as the page does. A key that waits for one more key press (`m`) names its capture leaf.
-export function key_command_id(keymap: CompiledKeymap | undefined, sequence: string): { id: string; error?: undefined } | { id?: undefined; error: string } {
+// a count or register prefix as the page does. The caller passes the keymap the page receives, so site rules count. A key that waits for one more key press (`m`) names its capture leaf.
+// `frees` is the page's pass rule, which hands a key to the page whatever the tree holds.
+export function key_command_id(keymap: CompiledKeymap | undefined, sequence: string, frees?: (token: string) => boolean): { id: string; error?: undefined } | { id?: undefined; error: string } {
   const tokens = parse_sequence(sequence).tokens ?? [];
   const none = { error: `${sequence} has no normal-mode binding` };
   if (!keymap) return none;
-  const matcher = create_matcher(keymap);
+  const matcher = create_matcher(keymap, frees);
   let result: MatchResult = { kind: "no_match" };
+  let consumed = 0;
   for (const token of tokens) {
     result = matcher.feed("normal", token);
+    consumed += 1;
     if (result.kind !== "pending") break;
   }
-  if (result.kind === "match") return { id: result.leaf.steps[0]!.invocation.id };
+  // Keys left after a complete binding are no binding, so `jx` is not `j`.
+  if (result.kind === "match") return consumed === tokens.length ? { id: result.leaf.steps[0]!.invocation.id } : none;
   const capture = result.kind === "pending" ? result.node.children[ANY_KEY] : undefined;
   if (capture?.kind === "leaf") return { id: capture.steps[0]!.invocation.id };
   return result.kind === "pending" ? { error: `${sequence} is the start of longer keys, not a command` } : none;
+}
+
+// The keys as the page at `address` receives them: its site rules bind, free or prune keys. No address gives the global tree.
+export function key_command_id_on_page(keymap: CompiledKeymap | undefined, address: string | undefined, sequence: string): ReturnType<typeof key_command_id> {
+  if (!keymap) return key_command_id(keymap, sequence);
+  const page = normal_tree_for(keymap.modes.normal, site_columns_for(keymap, [address]));
+  const frees = "frees" in page ? page.frees : undefined;
+  return key_command_id({ ...keymap, modes: { ...keymap.modes, normal: page.tree } } as CompiledKeymap, sequence, frees && ((token) => is_freed(frees, token)));
 }
 
 // The names `:help` completes: the help pages, then every command id.
