@@ -1,0 +1,306 @@
+# Beta channel: build, sign and publish a beta of main, nightly and on demand.
+# This workflow holds the AMO signing key and decides what code every beta install runs. Rules that keep it safe:
+#   - It never runs for a pull request or a fork. The only triggers are the schedule and a manual dispatch, and the dispatch takes no input.
+#   - The AMO key exists only in the sign job, which runs in the beta-signing environment on main. That job installs with npm ci --ignore-scripts, runs no build and runs only the sign_only recipe on a dist/ that the build job made.
+#   - The build job runs the repo's build with no secret and no write token. The publish job holds the write token, installs no npm dependency and runs no build tool. This keeps build code away from the AMO key and from the write token. It does not stop a compromised build from producing a bad dist/ that gets signed: the review of dependency changes is the guard for that.
+#   - A dispatch from another branch runs plan and test only.
+#   - GH_TOKEN is set only on the steps that run gh.
+name: beta
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# One beta at a time. A queued run waits: cancelling a run that already signed would leave a burned version with no release.
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Every beta bakes this URL into its manifest for good, so it names a fixed release tag whose updates.json is replaced on each build.
+  UPDATES_TAG: beta-channel
+
+jobs:
+  # Decides whether this run builds, and which version. Runs no repo code.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Decide
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BETA_PAUSED: ${{ vars.BETA_PAUSED }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          base=$(jq -r .version package.json)
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json holds '$base', not a stable x.y.z version." >&2
+            exit 1
+          fi
+          echo "version=$base.$RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            if [ -n "$BETA_PAUSED" ]; then
+              echo "BETA_PAUSED is set, so the nightly run builds nothing."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            beta_tags=$(gh api --paginate "repos/$REPOSITORY/releases" --jq '.[] | select(.prerelease and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name + " " + .target_commitish')
+            newest_beta=$(cut -d ' ' -f 1 <<<"$beta_tags" | sed 's/^v//' | sort -V | tail -n 1)
+            # Only a 404 on the release or a missing updates.json asset counts as "no channel file". Any other failure stops the run before it signs anything.
+            channel_version=""
+            if channel_json=$(gh api "repos/$REPOSITORY/releases/tags/$UPDATES_TAG" 2>&1); then
+              if [ -n "$(jq -r '.assets[] | select(.name == "updates.json") | .id' <<<"$channel_json")" ]; then
+                channel_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - | jq -r '.addons | to_entries[0].value.updates[0].version // empty')
+              fi
+            else
+              grep -q 'HTTP 404' <<<"$channel_json" || { echo "Could not read the $UPDATES_TAG release: $channel_json" >&2; exit 1; }
+            fi
+            # A beta whose publish failed stays above updates.json, so each nightly builds again until one succeeds, and each signed attempt burns a version number. Accepted.
+            # Self-healing: when updates.json is missing or older than the newest beta, a failed or out-of-order upload left the channel behind, so this run builds again and repairs it.
+            if [ -n "$newest_beta" ] && { [ -z "$channel_version" ] || [ "$channel_version" != "$newest_beta" ] && [ "$(printf '%s\n%s\n' "$channel_version" "$newest_beta" | sort -V | tail -n 1)" = "$newest_beta" ]; }; then
+              echo "updates.json names '${channel_version:-nothing}' but the newest beta is $newest_beta, so this run builds to repair the channel."
+            elif grep -q " $HEAD_SHA\$" <<<"$beta_tags"; then
+              echo "$HEAD_SHA already has a beta build, so the nightly run builds nothing."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+  # No secrets. A clean runner has never run this, so it installs what the checks need. key-test stays local.
+  test:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: npm ci --no-audit --no-fund
+      - run: just test
+
+  # Builds with no secret and no write token, and hands dist/ and the stamped hosts to the sign job as an artifact.
+  build:
+    needs: [plan, test]
+    if: github.ref == 'refs/heads/main' && needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      REPOSITORY: ${{ github.repository }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Refuse a rerun
+        env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$RUN_ATTEMPT" != "1" ]; then
+            echo "This is rerun $RUN_ATTEMPT of a run that may already have signed version $VERSION. AMO signs a version once and this run would reuse the number. Start a new run with 'Run workflow' instead." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Refuse a version that already has a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only a 404 means "no release". Any other failure stops the run before it signs.
+          if release_json=$(gh api "repos/$REPOSITORY/releases/tags/v$VERSION" 2>&1); then
+            echo "Release v$VERSION already exists, so that version was signed before. Start a new run." >&2
+            exit 1
+          fi
+          grep -q 'HTTP 404' <<<"$release_json" || { echo "Could not look up release v$VERSION: $release_json" >&2; exit 1; }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: npm ci --no-audit --no-fund
+      - name: Stamp the beta version and update_url in the runner's copy
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[1-9][0-9]*$ ]]; then
+            echo "version '$VERSION' is not x.y.z.N." >&2
+            exit 1
+          fi
+          node tools/stamp_beta_manifest.ts --version "$VERSION" --update-url "https://github.com/$REPOSITORY/releases/download/$UPDATES_TAG/updates.json"
+      - name: Build and check the hosts
+        run: just release_beta_build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ needs.plan.outputs.version }}
+          path: |
+            dist
+            release-assets
+          if-no-files-found: error
+
+  # The only job with the AMO key. It runs no build and no install script: it installs the locked dependencies with scripts off, takes dist/ from the build job and signs it. The beta-signing environment allows main only.
+  sign:
+    needs: [plan, build]
+    if: github.ref == 'refs/heads/main' && needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    environment: beta-signing
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-${{ needs.plan.outputs.version }}
+      - name: Sign
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+        run: just sign_only
+      # The version is burned once AMO signs it, so the signed file is kept even when the publish job fails.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed-xpi-${{ needs.plan.outputs.version }}
+          path: web-ext-artifacts/*.xpi
+          if-no-files-found: error
+
+  # Holds the write token. It installs no npm dependency and runs no build tool, only reviewed repo scripts that import nothing from npm.
+  publish:
+    needs: [plan, sign]
+    if: github.ref == 'refs/heads/main' && needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      REPOSITORY: ${{ github.repository }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-${{ needs.plan.outputs.version }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed-xpi-${{ needs.plan.outputs.version }}
+          path: web-ext-artifacts
+      # Before anything is published: a bad build must never become a release or a channel entry.
+      - name: Smoke check the build
+        run: |
+          set -euo pipefail
+          expected_url="https://github.com/$REPOSITORY/releases/download/$UPDATES_TAG/updates.json"
+          xpi="release-assets/desertfox-$VERSION.xpi"
+          cp web-ext-artifacts/*.xpi "$xpi"
+          unzip -p "$xpi" manifest.json > signed_manifest.json
+          unzip -p "$xpi" host_sha256.json > signed_host_sha256.json
+          for manifest in dist/manifest.json signed_manifest.json; do
+            [ "$(jq -r .version "$manifest")" = "$VERSION" ] || { echo "$manifest does not hold version $VERSION." >&2; exit 1; }
+            [ "$(jq -r .browser_specific_settings.gecko.update_url "$manifest")" = "$expected_url" ] || { echo "$manifest has the wrong update_url." >&2; exit 1; }
+          done
+          for hashes in dist/host_sha256.json signed_host_sha256.json; do
+            cmp "$hashes" release-assets/host_sha256.json
+          done
+          [ "$(jq -r .version release-assets/host_sha256.json)" = "$VERSION" ]
+          (cd release-assets && sha256sum --quiet -c desertfox-host.sha256 desertfox-bridge.sha256 desertfox.sha256)
+          for name in desertfox-host desertfox-bridge desertfox; do
+            [ "$(jq -r --arg name "$name" '.sha256[$name]' release-assets/host_sha256.json)" = "$(cut -d ' ' -f 1 "release-assets/$name.sha256")" ]
+          done
+      # Runs repo code, so it runs without the token. The point step only uploads the file.
+      - name: Write updates.json
+        run: node tools/write_updates_json.ts --tag "v$VERSION" --xpi "release-assets/desertfox-$VERSION.xpi" --manifest dist/manifest.json --repo "$REPOSITORY" --out "updates-new-$VERSION.json"
+      - name: Create the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: just release_publish "$VERSION" "$(ls web-ext-artifacts/*.xpi)"
+      # Releases that finish out of order must not move the channel backward, so this step leaves a newer updates.json alone. It uploads the new file under a temporary name first, so a failed upload keeps the old one. A failed rename puts the old file back.
+      - name: Point the beta channel at this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_api="repos/$REPOSITORY/releases/tags/$UPDATES_TAG"
+          # Only a 404 means "missing". Any other failure stops the step, so an API error never reads as an empty channel.
+          if ! release_json=$(gh api "$release_api" 2>&1); then
+            grep -q 'HTTP 404' <<<"$release_json" || { echo "Could not read the $UPDATES_TAG release: $release_json" >&2; exit 1; }
+            gh release create "$UPDATES_TAG" --repo "$REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" --title "Beta channel" --notes "Holds updates.json, which every beta build reads to find the next beta. Do not delete this release: its URL is built into each beta."
+            release_json=$(gh api "$release_api")
+          fi
+          asset_id() { jq -r --arg name "$1" '.assets[] | select(.name == $name) | .id' <<<"$release_json"; }
+          temp_name="updates-new-$VERSION.json"
+          mkdir previous
+          if [ -n "$(asset_id updates.json)" ]; then
+            gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --dir previous
+            current_version=$(jq -r '.addons | to_entries[0].value.updates[0].version // empty' previous/updates.json)
+            if [ -n "$current_version" ] && [ "$(printf '%s\n%s\n' "$current_version" "$VERSION" | sort -V | tail -n 1)" = "$current_version" ]; then
+              echo "updates.json already names $current_version, which is not older than $VERSION, so it stays."
+              exit 0
+            fi
+          fi
+          # A temporary asset left by an earlier failed run would block the rename.
+          for leftover in $(jq -r '.assets[] | select(.name | test("^updates-new-.*\\.json$")) | .name' <<<"$release_json"); do
+            gh release delete-asset "$UPDATES_TAG" "$leftover" --repo "$REPOSITORY" --yes
+          done
+          gh release upload "$UPDATES_TAG" "$temp_name" --repo "$REPOSITORY"
+          release_json=$(gh api "$release_api")
+          new_id=$(asset_id "$temp_name")
+          [ -n "$new_id" ] || { echo "The uploaded $temp_name is not on the $UPDATES_TAG release." >&2; exit 1; }
+          if [ -n "$(asset_id updates.json)" ]; then
+            gh release delete-asset "$UPDATES_TAG" updates.json --repo "$REPOSITORY" --yes
+          fi
+          if ! gh api -X PATCH "repos/$REPOSITORY/releases/assets/$new_id" -f name=updates.json >/dev/null; then
+            echo "The rename failed. Putting the previous updates.json back." >&2
+            if [ -f previous/updates.json ]; then
+              gh release upload "$UPDATES_TAG" previous/updates.json --repo "$REPOSITORY" --clobber
+            fi
+            gh release delete-asset "$UPDATES_TAG" "$temp_name" --repo "$REPOSITORY" --yes || true
+            exit 1
+          fi
+      # Keeps the 20 highest versions, by version and not by date, and never the one updates.json names. A failed read of updates.json stops the prune.
+      - name: Prune old beta prereleases
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          channel_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - | jq -r '.addons | to_entries[0].value.updates[0].version // empty')
+          gh release list --repo "$REPOSITORY" --limit 1000 --json tagName,isPrerelease \
+            --jq '.[] | select(.isPrerelease and (.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tagName | ltrimstr("v")' |
+            sort -V -r | tail -n +21 | { grep -vxF "$channel_version" || true; } |
+            while read -r version; do
+              gh release delete "v$version" --repo "$REPOSITORY" --cleanup-tag --yes
+            done

@@ -42,7 +42,14 @@ test: install_deps
 
 [private]
 install_deps:
-    @test -d node_modules || npm install --no-audit --no-fund
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # web-ext is checked too, at the version package.json pins: a checkout that installed before web-ext was locked has node_modules without it, and sign would fail late.
+    wanted=$(jq -r '.devDependencies["web-ext"] // empty' package.json)
+    have=$(jq -r '.version // empty' node_modules/web-ext/package.json 2>/dev/null || true)
+    if [ ! -d node_modules ] || [ ! -x node_modules/.bin/web-ext ] || [ "$have" != "$wanted" ]; then
+        npm install --no-audit --no-fund
+    fi
 
 # Lint the config directory (default ~/.config/desertfox): build it in memory and print problems. Writes nothing Firefox reads, but the build prerequisite rewrites dist/ because the lint reads dist/commands.json. Extra flags (such as --schemas) go to the CLI.
 build-config dir="" *flags="": build
@@ -174,16 +181,32 @@ key-test-changed base="origin/main" head="":
 
 # Sign dist/ as an unlisted add-on on addons.mozilla.org. Reads the AMO key from the environment only.
 sign: build
+    just sign_only
+
+# The signing alone: it builds nothing and installs nothing, so the AMO key reaches no other command. CI runs it in its own job with only the key. It needs dist/ and the locked web-ext already in place.
+[private]
+sign_only:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
         echo "sign needs WEB_EXT_API_KEY and WEB_EXT_API_SECRET (the AMO JWT issuer and secret) in the environment." >&2
         exit 2
     fi
+    # Read the version from the installed package.json, so nothing runs before the check. package.json pins it exactly and the lockfile agrees.
+    wanted=$(jq -r '.devDependencies["web-ext"] // empty' package.json)
+    have=$(jq -r '.version // empty' node_modules/web-ext/package.json 2>/dev/null || true)
+    if [ ! -x node_modules/.bin/web-ext ] || [ -z "$wanted" ] || [ "$have" != "$wanted" ]; then
+        echo "sign needs web-ext $wanted in node_modules, found '${have:-none}'. Run 'npm ci' first." >&2
+        exit 1
+    fi
+    if [ ! -f dist/manifest.json ]; then
+        echo "sign needs a built dist/. Run 'just build' first." >&2
+        exit 1
+    fi
     rm -rf web-ext-artifacts
     # web-ext 10.7.0 does not create the folder before it downloads the xpi.
     mkdir -p web-ext-artifacts
-    npx --yes web-ext@10.7.0 sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts
+    node_modules/.bin/web-ext sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts
     ls web-ext-artifacts/*.xpi
 
 # Copy the signed add-on into a Firefox profile. Firefox loads it at the next start. No sudo.
@@ -344,6 +367,8 @@ release:
     #!/usr/bin/env bash
     set -euo pipefail
     just release_guard
+    # Before the bump, so a missing dependency never leaves a bump behind.
+    just install_deps
     # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
     command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
     gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
@@ -382,8 +407,9 @@ release:
     just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
 
-# Build the beta in the workspace as stamped in src/manifest.json (see tools/stamp_beta_manifest.ts): stamp and hash the hosts, sign dist/, and create the prerelease v<version> with the signed xpi attached. Never bumps, never writes package.json, never installs and never commits. RELEASE_DRY_RUN=1 skips the signing and the release and runs the rest. Reads the AMO key from the environment only.
-release_beta:
+# Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
+[private]
+release_beta_build:
     #!/usr/bin/env bash
     set -euo pipefail
     version=$(jq -r .version src/manifest.json)
@@ -395,9 +421,6 @@ release_beta:
         echo "release_beta: src/manifest.json has no update_url, so no beta could update. Stamp it with tools/stamp_beta_manifest.ts first." >&2
         exit 1
     fi
-    # Fail before the signing, so a missing gh login does not leave a signed version with no release.
-    command -v gh >/dev/null || { echo "release_beta needs gh to create the GitHub release." >&2; exit 1; }
-    gh auth status >/dev/null 2>&1 || { echo "release_beta needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
     just release_stamp "$version"
     just build
     # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
@@ -405,9 +428,19 @@ release_beta:
         echo "release_beta: the build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json. Nothing was signed." >&2
         exit 1
     fi
+
+# Build the beta in the workspace as stamped in src/manifest.json (see tools/stamp_beta_manifest.ts): release_beta_build, then sign dist/, then create the prerelease v<version> with the signed xpi attached. CI runs the same recipes as separate jobs, each with only the secret it needs. Never bumps, never writes package.json, never installs and never commits. RELEASE_DRY_RUN=1 skips the signing and the release and runs the rest. Reads the AMO key from the environment only.
+release_beta:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just release_beta_build
+    version=$(jq -r .version src/manifest.json)
+    # Fail before the signing, so a missing gh login does not leave a signed version with no release.
+    command -v gh >/dev/null || { echo "release_beta needs gh to create the GitHub release." >&2; exit 1; }
+    gh auth status >/dev/null 2>&1 || { echo "release_beta needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
     xpi="web-ext-artifacts/desertfox-$version.xpi"
     if [ "${RELEASE_DRY_RUN:-}" != "1" ]; then
-        just sign
+        just sign_only
         xpi=$(ls web-ext-artifacts/*.xpi)
     else
         echo "dry run: skipping sign."
