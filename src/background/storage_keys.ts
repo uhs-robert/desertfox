@@ -19,6 +19,9 @@ export const DESKTOP_PALETTE_STORAGE_KEY = "desertfox_desktop_palette";
 // What the host updater remembers (`host_update.ts`): the last attempt, the version whose failure showed its toast, a blocked version and the notice shown.
 export const HOST_UPDATE_STORAGE_KEY = "desertfox_host_update";
 
+// True once a Firefox page key without the native host showed the notice that the host opens the page in one key.
+export const FIREFOX_PAGE_NOTICE_STORAGE_KEY = "desertfox_firefox_page_notice";
+
 // Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
 

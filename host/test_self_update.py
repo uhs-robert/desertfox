@@ -618,11 +618,11 @@ class SourceTest(unittest.TestCase):
             self.assertEqual(repo_bytes(name).count(b'\nRELEASE_VERSION = "dev"\n'), 1, name)
         self.assertEqual(host.RELEASE_VERSION, "dev")
 
-    def test_the_host_runs_no_shell_and_starts_one_process_only_for_the_editor(self):
+    def test_the_host_runs_no_shell_and_starts_processes_only_for_the_editor_and_the_firefox_remote(self):
         source = repo_bytes("desertfox-host").decode()
         for needle in ("os.system", "os.popen", "os.exec", "shell=", "eval(", "exec(", "subprocess.run", "subprocess.call", "check_output", "subprocess.getoutput", "subprocess.getstatusoutput", "os.spawn", "posix_spawn", "import pty", "pty."):
             self.assertNotIn(needle, source)
-        self.assertEqual(source.count("subprocess.Popen("), 1)
+        self.assertEqual(source.count("subprocess.Popen("), 2)
 
     def test_the_reply_too_large_for_firefox_carries_the_release_version(self):
         data = json.dumps({"cmd": "read_config"}).encode()

@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 425 (normal 218, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 435 (normal 228, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -200,6 +200,16 @@ bound: 425 (normal 218, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `,b` | bound | `page.blur` | Blur |  |
 | `,?` | bound | `help.whichkey` | Which key |  |
 | `,"` | bound | `registers` (prompts) | List registers |  |
+| `,fs` | bound | `firefox settings` | Firefox settings |  |
+| `,fa` | bound | `firefox addons` | Firefox add-ons |  |
+| `,fd` | bound | `firefox downloads` | Firefox downloads |  |
+| `,fc` | bound | `firefox config` | Firefox about:config |  |
+| `,fp` | bound | `firefox profiles` | Firefox profiles |  |
+| `,fS` | bound | `firefox support` | Firefox support info |  |
+| `,fD` | bound | `firefox debugging` | Firefox debugging |  |
+| `,fl` | bound | `firefox logins` | Firefox passwords |  |
+| `,fP` | bound | `firefox processes` | Firefox processes |  |
+| `,ff` | bound | `firefox` (prompts) | Firefox page |  |
 | `m` | bound | `mark.add` | Set mark |  |
 | `q` | bound | `macro.record` | Record macro |  |
 | `@` | bound | `macro.play` | Play macro |  |
@@ -273,6 +283,7 @@ Which-key group names:
 - `b`: Bookmark
 - `z`: Zoom and scroll
 - `,`: DesertFox
+- `,f`: Firefox pages
 - `q`: Record macro
 - `@`: Play macro
 - `;`: Hints

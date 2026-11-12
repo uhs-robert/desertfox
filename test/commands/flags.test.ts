@@ -17,6 +17,7 @@ test("typed names are the dotted id except the family words and one-word command
   const named = registry.list().filter((command) => command.name !== undefined).map((command) => `${command.id}=${command.name}`);
   assert.deepEqual(named.sort(), [
     "bookmark.open=bookmark",
+    "browser.open_firefox_page=firefox",
     "command.repeat=repeat",
     "copy.links=copylinks",
     "copy.tabs=copytabs",
@@ -75,7 +76,7 @@ test("only these commands record a jump, and the open commands only with where h
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), [
-    "browser.close_all", "browser.focus_page", "caret.find", "caret.move", "cmdline.clear", "cmdline.help", "cmdline.history", "cmdline.next_completion", "cmdline.open", "cmdline.prev_completion", "cmdline.submit",
+    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "caret.find", "caret.move", "cmdline.clear", "cmdline.help", "cmdline.history", "cmdline.next_completion", "cmdline.open", "cmdline.prev_completion", "cmdline.submit",
     "command.repeat", "config.reload", "debug.perf", "debug.restart", "engine.show", "find.open", "frame.exit", "help.issue", "help.key", "help.open", "help.whichkey", "hint.key", "list.act", "list.select", "macro.play", "macro.record", "macro.stop", "mark.add", "mark.clear", "mark.delete", "mark.jump", "mark.list", "mode.escape", "mode.insert", "mode.pass_next", "mode.set", "mode.site",
     "native.install", "native.update", "open.anything", "page.jump", "page.print", "page.save_pdf", "permissions.grant", "quickmark.add", "quickmark.delete", "quickmark.list", "register.list", "register.paste", "settings.set", "settings.toggle", "settings.unset", "text.edit_external", "visual.act", "visual.object", "visual.open",
   ]);
