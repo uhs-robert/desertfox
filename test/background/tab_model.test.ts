@@ -6,6 +6,7 @@ import type { ContainerIdentity, WindowLike } from "../../src/background/complet
 import type { TabModelMessage, TabRow } from "../../src/shared/messages.ts";
 
 type Tab = Awaited<ReturnType<TabModelDeps["query"]>>[number];
+type Group = Awaited<ReturnType<TabModelDeps["groups"]>>[number];
 type Gate = { promise: Promise<void>; release: () => void };
 const gate = (): Gate => {
   let release = () => {};
@@ -23,6 +24,7 @@ type Options = {
   windows?: WindowLike[];
   containers?: Map<string, ContainerIdentity>;
   previous?: Record<number, number>;
+  groups?: Group[];
   is_opener?: (tab_id: number, frame_id: number) => Promise<boolean>;
 };
 
@@ -43,6 +45,7 @@ function make(initial: Tab[] = [], options: Options = {}) {
   let timers: Array<{ id: number; fn: () => void }> = [];
   let next_timer = 1;
   let tabs = initial;
+  let groups: Group[] = options.groups ?? [];
   let query_gate: Promise<void> | undefined;
   let query_calls = 0;
   let fail_query = false;
@@ -57,6 +60,8 @@ function make(initial: Tab[] = [], options: Options = {}) {
       return snapshot;
     },
     events: events as unknown as TabModelDeps["events"],
+    groups: async () => groups.map((g) => ({ ...g })),
+    group_events: events_named("groups.") as unknown as TabModelDeps["group_events"],
     windows: async () => {
       const snapshot = windows.map((w) => ({ ...w }));
       const held = window_gate;
@@ -123,6 +128,7 @@ function make(initial: Tab[] = [], options: Options = {}) {
   return {
     model, fire, run_timers, connect_port, connect_port_now,
     set_tabs: (t: Tab[]) => void (tabs = t),
+    set_groups: (g: Group[]) => void (groups = g),
     hold_query: () => {
       let release = () => {};
       query_gate = new Promise<void>((resolve) => void (release = resolve));
@@ -1132,5 +1138,106 @@ describe("reconcile against Firefox", () => {
     await resync(p);
     assert.deepEqual(pick(last(p.messages), "previous"), [[1, false], [2, false]]);
     assert.deepEqual(pick(last(p.messages), "active"), [[1, false], [2, true]]);
+  });
+});
+
+describe("native tab groups", () => {
+  const group = (id: number, window_id: number, extra: Partial<Group> = {}): Group => ({ id, windowId: window_id, title: `g${id}`, color: "blue", collapsed: false, ...extra });
+  const patch_of = (m: TabModelMessage | undefined) => {
+    assert.equal(m?.type, "patch");
+    return m as Extract<TabModelMessage, { type: "patch" }>;
+  };
+
+  test("the snapshot carries each tab's group id and the groups table, a tab in no group is -1", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 5 }), tab(2, 1, 1)], { groups: [group(5, 1, { title: "Work", collapsed: true })] });
+    await f.model.start();
+    const p = await f.connect_port();
+    const snapshot = p.messages[0];
+    assert.equal(snapshot?.type, "snapshot");
+    if (snapshot?.type !== "snapshot") return;
+    assert.deepEqual(snapshot.tabs.map((row) => row.group_id), [5, -1]);
+    assert.deepEqual(snapshot.groups, [{ id: 5, window_id: 1, title: "Work", color: "blue", collapsed: true }]);
+  });
+
+  test("a created group patches the table and sends no tab rows", async () => {
+    const f = make([tab(1, 1, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("groups.onCreated", group(7, 1, { title: "New" }));
+    f.run_timers();
+    const patch = patch_of(p.messages[1]);
+    assert.deepEqual([patch.upserts, patch.groups?.map((g) => g.title), patch.groups_removed], [[], ["New"], undefined]);
+  });
+
+  test("an updated group patches its title and collapsed state, and one that changes nothing sends nothing", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 })], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("groups.onUpdated", group(7, 1));
+    assert.equal(f.pending_timers(), 0);
+    f.fire("groups.onUpdated", group(7, 1, { title: "Renamed", collapsed: true }));
+    f.run_timers();
+    assert.deepEqual(patch_of(p.messages[1]).groups, [{ id: 7, window_id: 1, title: "Renamed", color: "blue", collapsed: true }]);
+  });
+
+  test("a removed group leaves the table and clears the group id of its tabs in the same patch", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 }), tab(2, 1, 1, { groupId: 7 }), tab(3, 1, 2)], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("groups.onRemoved", group(7, 1), { isWindowClosing: false });
+    f.run_timers();
+    const patch = patch_of(p.messages[1]);
+    assert.deepEqual(patch.groups_removed, [7]);
+    assert.deepEqual(patch.upserts.map((row) => [row.id, row.group_id]), [[1, -1], [2, -1]]);
+  });
+
+  test("a tab that leaves its group is one upsert with group id -1, and one that joins carries the new id", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 }), tab(2, 1, 1)], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onUpdated", 1, { groupId: -1 }, tab(1, 1, 0, { groupId: -1 }));
+    f.fire("onUpdated", 2, { groupId: 7 }, tab(2, 1, 1, { groupId: 7 }));
+    f.run_timers();
+    assert.deepEqual(patch_of(p.messages[1]).upserts.map((row) => [row.id, row.group_id]), [[1, -1], [2, 7]]);
+  });
+
+  test("a moved group reads the tabs again, so the shifted indexes reach the ports", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 }), tab(2, 1, 1)], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    await tick();
+    const before = p.messages.length;
+    f.set_tabs([tab(2, 1, 0), tab(1, 1, 1, { groupId: 7 })]);
+    f.fire("groups.onMoved", group(7, 1));
+    await tick();
+    f.run_timers();
+    const patch = patch_of((p.messages as unknown as TabModelMessage[])[before]);
+    assert.deepEqual(patch.upserts.map((row) => [row.id, row.index]).sort(), [[1, 1], [2, 0]]);
+  });
+
+  test("a resync repairs a group event that was missed", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 })], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.set_groups([group(8, 1, { title: "Other" })]);
+    f.set_tabs([tab(1, 1, 0, { groupId: 8 })]);
+    p.send({ type: "resync" });
+    await tick();
+    await tick();
+    const last = (p.messages as unknown as TabModelMessage[]).at(-1);
+    assert.equal(last?.type === "snapshot" && last.groups.map((g) => g.id).join(), "8");
+  });
+
+  test("a private port sees only the groups of private windows", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 }), tab(2, 2, 0, { groupId: 8, incognito: true })], { groups: [group(7, 1), group(8, 2)] });
+    await f.model.start();
+    const normal = await f.connect_port({ incognito: false });
+    const priv = await f.connect_port({ incognito: true });
+    const ids_of = (m: TabModelMessage | undefined) => (m?.type === "snapshot" ? m.groups.map((g) => g.id) : []);
+    assert.deepEqual([ids_of(normal.messages[0]), ids_of(priv.messages[0])], [[7], [8]]);
+    f.fire("groups.onUpdated", group(8, 2, { title: "x" }));
+    f.run_timers();
+    assert.equal(normal.messages.length, 1);
+    assert.equal(patch_of(priv.messages[1]).groups?.[0]?.id, 8);
   });
 });

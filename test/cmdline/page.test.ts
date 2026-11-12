@@ -447,7 +447,7 @@ test("the first tab read opens one model port, the list shows the snapshot, and 
   assert.deepEqual(model_ports.map((port) => port.name), ["desertfox_tab_model"]);
   assert.equal(to_background.filter((type) => type === "complete_items").length, 0);
   assert.equal(list.children.length, 0);
-  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW] });
+  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW], groups: [] });
   await until(() => list.children.length === 1);
   assert.equal(list.children.length, 1);
   model_ports[0]!.deliver({ type: "patch", rev: 1, upserts: [{ ...ROW, id: 2, index: 1, title: "Alpine" }], removed: [] });
@@ -462,7 +462,7 @@ test("a patch that skips a number asks for a snapshot once", async (t) => {
   await host.opened();
   host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
   await until(() => model_ports.length === 1);
-  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW] });
+  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW], groups: [] });
   model_ports[0]!.deliver({ type: "patch", rev: 3, upserts: [], removed: [] });
   model_ports[0]!.deliver({ type: "patch", rev: 4, upserts: [], removed: [] });
   assert.deepEqual(model_ports[0]!.posted, [{ type: "resync" }]);
@@ -500,7 +500,7 @@ test("a snapshot sent after the line submitted never arrives", async (t) => {
   press_enter();
   await until(() => host.submits().length === 1);
   const drawn = list.children.length;
-  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW] });
+  model_ports[0]!.deliver({ type: "snapshot", rev: 0, tabs: [ROW], groups: [] });
   await settle();
   assert.equal(list.children.length, drawn);
 });

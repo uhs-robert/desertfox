@@ -379,3 +379,10 @@ Times in ms from the background's `tabs.update` call, median (min to max). Local
 - `tabs.reload` on a discarded tab loads it and leaves it inactive. The call returns in 5.3 ms, the content script starts at 59.7 ms (53.4 to 67.6) and has its keymap at 68.7 (62.4 to 80.2). A later switch costs 4.1 ms (3.4 to 4.6). `tabs.warmup` takes 4.6 ms in the background.
 - Early j, in the headed key test with the body delayed 3 s and j pressed at 445 ms: 6 of 6 runs showed no scroll, the page saw no keydown, and a second j after the body arrived scrolled 50 px. A held scroll that finds no height is used up.
 - On Linux, discarded tabs come from session restore (`browser.sessionstore.restore_on_demand`, default true) and explicit unloads. `browser.tabs.unloadOnLowMemory` is false on Linux.
+
+## Tab groups (native-tab-groups)
+
+Measured in Firefox 160 in the key test (`test/key/p32_tab_groups.mjs`).
+
+- `browser.tabGroups` is absent from the background page when the manifest lacks the `tabGroups` permission, so the permission is required.
+- Not measured: whether the permission adds an install prompt line, whether the active tab of a collapsed group keeps the group open, and whether groups exist in private windows. These need a person.
