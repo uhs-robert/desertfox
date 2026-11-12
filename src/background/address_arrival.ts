@@ -71,7 +71,9 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
   }
 
   return {
-    find_tab: async (url: string, from: TabOrigin): Promise<MarkTab | undefined> => find_mark_tab(await deps.list_tabs(), url, from),
+    // `own_window_only` ignores the tabs of other windows.
+    find_tab: async (url: string, from: TabOrigin, own_window_only = false): Promise<MarkTab | undefined> =>
+      find_mark_tab((await deps.list_tabs()).filter((tab) => !own_window_only || tab.window_id === from.window_id), url, from),
     // The page that was sent here asks again, and takes its armed entry whatever address it ended on. Without this a redirect would match no tab and open the address again, in a loop.
     claim_armed: (tab_id: number, is_same_step: (data: Data) => boolean): Arrival<Data> | undefined => {
       const arrival = arrivals.get(tab_id);
