@@ -9,6 +9,7 @@ class FakeHTMLElement {
   autocomplete = "";
   events: string[] = [];
   focus_handler: (() => void) | undefined;
+  event_handler: ((type: string) => void) | undefined;
   focus() {
     this.focus_handler?.();
   }
@@ -19,6 +20,7 @@ class FakeHTMLElement {
   inside: string[] = [];
   dispatchEvent(event: Event) {
     this.events.push(event.type);
+    this.event_handler?.(event.type);
     return true;
   }
 }
@@ -260,4 +262,18 @@ test("a field that sanitizes the value counts as refusing it: the result goes to
   assert.equal(field.value, "draft", "the field is put back to the text it had");
   assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "line one\nline two" });
   assert.match(toasts[0] ?? "", /did not take the edited text/);
+});
+
+test("a page handler that puts its own value back during input or change makes the write refused, and the result goes to the register", async () => {
+  for (const event_type of ["input", "change"]) {
+    reset();
+    const field = input("draft");
+    focus(field);
+    await run();
+    field.event_handler = (type) => type === event_type && (field.value = "draft");
+    await done("final");
+    assert.equal(field.value, "draft", `the page keeps the value it set during ${event_type}`);
+    assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "final" });
+    assert.match(toasts[0] ?? "", /did not take the edited text/);
+  }
 });
