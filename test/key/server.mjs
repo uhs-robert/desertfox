@@ -403,10 +403,12 @@ function make_movie_player(levels, start) {
   player.toggleSubtitles = () => send("quality_captions", {});
   player.nextVideo = () => send("quality_skip", { to: "next" });
   player.previousVideo = () => send("quality_skip", { to: "previous" });
+  // "late": a video id the rule can tell videos apart by, and a site that resets the level 6 s after a navigation.
+  if (kind.includes("late")) player.getVideoData = () => ({ video_id: "same_video" });
   player.start_over = () => { current = start; document.documentElement.dataset.level = start; };
   return player;
 }
-if (kind.includes("yt") || kind.includes("slow")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+if (kind.includes("yt") || kind.includes("slow") || kind.includes("late")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
 // "blank": the player lives in a frame with no address, as on some hls.js-based sites.
 if (kind.includes("blank")) {
   const blank = document.createElement("iframe");
@@ -416,7 +418,7 @@ if (kind.includes("blank")) {
 // An in-site navigation: the address changes first, and the next video starts at the site's own level 800 ms later.
 document.getElementById("navigate").addEventListener("click", () => {
   history.pushState({}, "", location.pathname + location.search + "&next=" + Date.now());
-  setTimeout(() => document.getElementById("movie_player")?.start_over(), 800);
+  setTimeout(() => document.getElementById("movie_player")?.start_over(), kind.includes("late") ? 6000 : 800);
 });
 document.getElementById("replace").addEventListener("click", () => {
   document.getElementById("movie_player")?.remove();

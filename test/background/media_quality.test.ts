@@ -5,15 +5,19 @@ import type { QualityRuleStart } from "../../src/shared/quality.ts";
 
 const web = "https://video.test/watch";
 
-function make({ disabled = false, inject = async (_tab_id: number): Promise<unknown> => [1] } = {}) {
+function make({ disabled = false, inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined } = {}) {
   const sent: [number, QualityRuleStart][] = [];
   const injected: number[] = [];
+  const about_blank: number[] = [];
   const quality = create_media_quality({
     is_disabled: async () => disabled,
     inject_all: (tab_id) => (injected.push(tab_id), inject(tab_id)),
     start: async (tab_id, message) => void sent.push([tab_id, message]),
+    inject_about_blank: async (tab_id) => void about_blank.push(tab_id),
+    wait,
+    settle_ms: 1000,
   });
-  return { quality, sent, injected };
+  return { quality, sent, injected, about_blank };
 }
 
 test("a changed address is a navigation, a finished load is a load, and other updates start nothing", () => {
@@ -50,7 +54,7 @@ test("a frame that refuses the script does not stop the others from getting the 
 });
 
 test("a tab that closed while the bundle was injected sends nothing and throws nothing", async () => {
-  const closing = create_media_quality({ is_disabled: async () => false, inject_all: async () => [1], start: async () => Promise.reject(new Error("no such tab")) });
+  const closing = create_media_quality({ is_disabled: async () => false, inject_all: async () => [1], inject_about_blank: async () => [1], wait: async () => undefined, settle_ms: 0, start: async () => Promise.reject(new Error("no such tab")) });
   await closing.tab_updated(2, { url: web }, web);
 });
 
@@ -89,4 +93,31 @@ test("a navigation to a non-web page supersedes the pending turn, so nothing rea
   await first;
   assert.deepEqual([early.injected, early.sent], [[], []]);
   assert.deepEqual(injected, [7]);
+});
+
+test("the about:blank pass runs after the wait and starts the rule without the navigated flag", async () => {
+  const { quality, sent, about_blank } = make();
+  await quality.tab_updated(3, { url: web }, web);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(about_blank, [3]);
+  assert.deepEqual(sent, [[3, { type: "quality_rule", navigated: true }], [3, { type: "quality_rule", navigated: false }]]);
+});
+
+test("a pass that waited through a newer trigger or a non-web page is dropped", async () => {
+  const release: (() => void)[] = [];
+  const { quality, sent, about_blank } = make({ wait: () => new Promise<void>((resolve) => release.push(resolve)) });
+  await quality.tab_updated(4, { url: web }, web);
+  await quality.tab_updated(4, { status: "complete" }, web);
+  release[0]?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(about_blank, [], "the older trigger's pass ran");
+  release[1]?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(about_blank, [4]);
+  assert.equal(sent.length, 3);
+  await quality.tab_updated(5, { url: web }, web);
+  await quality.tab_updated(5, { url: "about:blank" }, "about:blank");
+  release[2]?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(about_blank, [4]);
 });
