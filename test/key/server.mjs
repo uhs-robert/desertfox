@@ -368,12 +368,24 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
         for (const video of document.querySelectorAll("video")) report_media(video, (type, data) => send(type, { ...data, video: video.id }));
         document.addEventListener("fullscreenchange", () => send("media_fullscreen", { element: document.fullscreenElement?.id ?? "" }));
         addEventListener("keydown", (event) => { if (event.key === "e") document.fullscreenElement ? document.exitFullscreen() : document.getElementById("player").requestFullscreen(); });
+        // A message { busy: ms } blocks this frame's thread, so a message from the background waits until the block ends.
+        addEventListener("message", (event) => {
+          if (!event.data?.busy) return;
+          const end_ms = Date.now() + event.data.busy;
+          while (Date.now() < end_ms);
+          send("busy_done");
+        });
       </script>`;
       return response.end(page(`media_mode ${id}`, videos + tall_filler + script, MEDIA_REPORTER));
     }
     if (url.pathname === "/media_mode_host") {
       // The /media_mode page in a same-origin frame under tall filler, so the mode of each frame shows in whether j scrolls it.
       return response.end(page(`media_mode_host ${id}`, `<iframe id="frame" src="/media_mode?id=${id}_inner" style="display:block;width:340px;height:300px"></iframe>${tall_filler}`));
+    }
+    if (url.pathname === "/media_mode_pair") {
+      // The /media_mode page twice: a same-origin frame, and a frame from another origin (localhost is not 127.0.0.1), which runs in a process of its own, so blocking its thread leaves the first frame running.
+      const frame = (element_id, origin, suffix) => `<iframe id="${element_id}" src="${origin}/media_mode?id=${id}_${suffix}" style="display:block;width:340px;height:300px"></iframe>`;
+      return response.end(page(`media_mode_pair ${id}`, frame("frame", "", "inner") + frame("slow", `http://localhost:${request.socket.localPort}`, "slow") + tall_filler));
     }
     if (url.pathname === "/media_frames") {
       // A large paused video on top, and a frame from another origin (localhost is not 127.0.0.1) whose small muted video plays in a closed shadow root. Beside them a sandboxed frame and an about:blank frame, where a script may be refused.
