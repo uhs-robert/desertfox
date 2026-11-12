@@ -613,6 +613,17 @@ The extension is the trust boundary. It drops everything from a private window b
 
 `host/desertfox` is the command line for the socket, a stdlib Python script: `desertfox run [--tab <id>] <command> [args]`, `desertfox list`, `desertfox state`, `desertfox theme <palette>`, `desertfox events` (prints the stream, one JSON line per event), `desertfox tabs [--current]`, `desertfox activate <id> [--preface <nonce>]`, `desertfox clear-preface <window id>`, `desertfox close <id>` and `desertfox capture [id...]`. It prints plain text and exits 0 when done, 1 when refused or failed, 2 for bad usage and 3 when the bridge is not running (`theme` keeps the name and exits 0 instead). `-h` or `--help` after a verb prints the usage and sends nothing. The installer puts it beside the hosts and links it into `~/.local/bin`.
 
+## Release channels
+
+Two channels exist, stable and beta. The `update_url` in the installed build's manifest decides which one a copy follows. A stable build has none and updates from AMO. A beta build points at `updates.json`.
+
+- Versions. Betas are `x.y.z.N`, where N counts builds after the stable `x.y.z` (see [Host updates](#host-updates-built)). `.github/workflows/beta.yml` builds one nightly from `main`.
+- Update feed. `updates.json` sits on the fixed `beta-channel` release tag and lists only the latest beta. Its `update_link` and `update_hash` point at the signed xpi on that beta's own release.
+- Trust. The owner's AMO key sits in the `beta-signing` environment, and only the sign job sees it. The other jobs build and publish from the signed output.
+- Moving from a beta to a lower stable build. The host keeps the newer one, because it never downgrades. Use the stable build from AMO only after it passes the beta.
+- Policy pin. `tools/install_policy.sh beta` pins the https URL of the latest beta in the policy file. The pin only seeds the first install: the `update_url` carries every update after that. The stable pin is a `file://` URL to the local xpi, and it replaces a beta whenever the local xpi ranks higher, so it is not for a beta machine.
+- Local installs. On a beta machine, never run `just install` or `just release`. Both overwrite the beta with a local build.
+
 ## Scope
 
 | Phase | Contents |

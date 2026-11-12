@@ -71,6 +71,10 @@ When DesertFox is released, you will install it from a Firefox add-on file that 
 
 Until then, only contributors can run it. See [AGENTS.md](AGENTS.md) for the build and install commands.
 
+### Beta
+
+A beta build is signed by Mozilla, built nightly from `main` and updates itself. Open the [latest beta](https://github.com/uhs-robert/desertfox/releases?q=prerelease%3Atrue) release and open its `desertfox-<version>.xpi` in Firefox, or run `tools/install_policy.sh beta` to pin it through the policy file. Stable builds do not receive beta updates. See [Release channels](docs/design.md#release-channels).
+
 ## 🚀 Try it
 
 After you install DesertFox, press `g?`, `,h` or `<F1>` on a normal page. The help page opens. A short pause after a key shows the keys that can follow.
