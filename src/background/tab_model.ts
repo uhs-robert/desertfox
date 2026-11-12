@@ -129,6 +129,8 @@ export function create_tab_model(deps: TabModelDeps) {
   const groups = new Map<number, GroupRow>();
   let group_upserts = new Set<number>();
   let groups_removed = new Map<number, boolean | undefined>();
+  // Group ids a tab update named before the group was in the table.
+  const skipped_groups = new Set<number>();
   let created = new Set<number>();
   let timer: unknown;
 
@@ -198,8 +200,8 @@ export function create_tab_model(deps: TabModelDeps) {
   const touch_group = (group: Group, from_event = true) => {
     const row = group_row_of(group);
     const current = groups.get(row.id);
-    // A tab update that named this group before its event arrived was ignored, so the rows are read again.
-    if (!current && from_event && loaded) void reconcile();
+    // A tab update that named this group before its event arrived was ignored, so the rows are read again, once per such group.
+    if (!current && from_event && skipped_groups.delete(row.id)) void reconcile();
     if (current && (Object.keys(row) as (keyof GroupRow)[]).every((field) => current[field] === row[field])) return;
     groups.set(row.id, row);
     group_upserts.add(row.id);
@@ -436,7 +438,10 @@ export function create_tab_model(deps: TabModelDeps) {
       for (const field of UPDATABLE) {
         if (unloaded_blank && ADDRESS_FIELDS.has(field)) continue;
         // A stale tab object can still carry a group that was removed.
-        if (field === "group_id" && fresh.row.group_id !== -1 && !groups.has(fresh.row.group_id)) continue;
+        if (field === "group_id" && fresh.row.group_id !== -1 && !groups.has(fresh.row.group_id)) {
+          skipped_groups.add(fresh.row.group_id);
+          continue;
+        }
         if (current.row[field] !== fresh.row[field]) {
           (current.row as Record<string, unknown>)[field] = fresh.row[field];
           changed = true;
