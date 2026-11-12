@@ -115,6 +115,8 @@ const BASE_SECTIONS: KeymapConfig = {
 
     H: { id: "page.back" },
     L: { id: "page.forward" },
+    "<C-o>": { id: "page.jump", args: { direction: "older" }, label: "Jump back" },
+    "<C-i>": { id: "page.jump", args: { direction: "newer" }, label: "Jump forward" },
     rr: { id: "page.reload" },
     rh: { id: "page.reload", args: { hard: true }, label: "Hard reload" },
     R: { id: "page.reload", args: { hard: true }, label: "Hard reload" },

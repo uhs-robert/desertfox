@@ -10,20 +10,6 @@ note = "needs a shell"
 
 [[row]]
 mode = "normal"
-key = "<C-o>"
-status = "later"
-command = "page.jump --step=-1"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
-key = "<C-i>"
-status = "later"
-command = "page.jump --step=1"
-note = "phase 3"
-
-[[row]]
-mode = "normal"
 key = "yq"
 status = "dropped"
 note = "no longer planned"
@@ -43,9 +29,8 @@ note = "joke binding"
 [[row]]
 mode = "normal"
 key = "g;"
-status = "later"
-command = "page.change_jump"
-note = "phase 3"
+status = "dropped"
+note = "pages keep no history of edits to jump through"
 
 [[row]]
 mode = "normal"

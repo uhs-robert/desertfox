@@ -17,6 +17,7 @@ import "../commands/history.ts";
 import "../commands/page.ts";
 import "../commands/text.ts";
 import "../commands/mark.ts";
+import "../commands/jump.ts";
 import "../commands/mark_list.ts";
 import "../commands/quickmark.ts";
 import "../commands/url.ts";
