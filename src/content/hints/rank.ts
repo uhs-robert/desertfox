@@ -37,8 +37,8 @@ export function score_text(query: string, text: string): number {
 
 export type Ranked = { index: number; score: number };
 
-// Best first, ties in source order. A text that does not match is left out.
-export function rank_items(texts: readonly string[], query: string): Ranked[] {
-  const ranked = texts.map((text, index) => ({ index, score: score_text(query, text) })).filter((item) => item.score > 0);
+// Best first, ties in source order. A text that does not match is left out, and so is a hint with no text to rank (undefined).
+export function rank_items(texts: readonly (string | undefined)[], query: string): Ranked[] {
+  const ranked = texts.map((text, index) => ({ index, score: text === undefined ? 0 : score_text(query, text) })).filter((item) => item.score > 0);
   return ranked.sort((left, right) => right.score - left.score || left.index - right.index);
 }

@@ -26,6 +26,7 @@ import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
+import { browser_hint_frames_deps, create_hint_frames } from "./hint_frames.ts";
 import { create_word_lookup } from "../cmdline/word_lookup.ts";
 import { build_completer, create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
@@ -197,6 +198,7 @@ const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
   return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
 };
 const find_scan = create_find_scan(browser_find_scan_deps());
+const hint_frames = create_hint_frames(browser_hint_frames_deps());
 const toolbar = create_toolbar({
   read_disabled,
   write_disabled: (disabled) => (disabled ? browser.storage.local.set({ [DISABLED_STORAGE_KEY]: true }) : browser.storage.local.remove(DISABLED_STORAGE_KEY)),
@@ -259,6 +261,14 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "replay_stop") return void macro_replay.stop();
   if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);
   if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
+  if (typeof request?.type === "string" && request.type.startsWith("hint_frames_") && sender.tab?.id !== undefined && sender.frameId !== undefined) {
+    const [tab_id, frame_id] = [sender.tab.id, sender.frameId];
+    if (request.type === "hint_frames_start") return hint_frames.start(tab_id, frame_id, request);
+    if (request.type === "hint_frames_report") return hint_frames.report(tab_id, frame_id, request.session_id, request.count);
+    if (request.type === "hint_frames_typed") return hint_frames.typed(tab_id, frame_id, request.session_id, request.typed);
+    if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label);
+    if (request.type === "hint_frames_end") return hint_frames.end(tab_id, frame_id, request.session_id);
+  }
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
   if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, global_mark_jump);
@@ -421,6 +431,7 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void external_editor.orphan(tab_id).catch(() => undefined);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
+  void hint_frames.navigated(tab_id, change).catch(() => undefined);
   return tab_modes.forget_on_navigation(tab_id, change);
 });
 
@@ -440,6 +451,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
+  void hint_frames.forget(tab_id).catch(() => undefined);
   void tab_media.forget(tab_id).catch(() => undefined);
   void media_discovery.forget(tab_id).catch(() => undefined);
   return tab_modes.forget(tab_id);

@@ -209,3 +209,15 @@ test("frame.exit does nothing when the keys are already in the top frame", async
   const handlers = make_browser_handlers({ window_ids: async () => [], close_window: async () => {}, focus_window: async () => {}, activate_tab: async () => {}, focus_page_content: async () => assert.fail() });
   await handlers.exit_frame({ tab_id: 4, frame_id: 0 } as never);
 });
+
+test("a frame that waits for its first focus holds its start in the flag, which starts it once", () => {
+  const win: Record<string, unknown> & { addEventListener: () => void } = { addEventListener: () => {} };
+  let started = 0;
+  start_content_once(() => started++, win as never, false);
+  assert.equal(typeof win.desertfox_content_loaded, "function");
+  (win.desertfox_content_loaded as () => void)();
+  assert.equal(started, 1);
+  assert.equal(win.desertfox_content_loaded, true);
+  start_content_once(() => started++, win as never, false);
+  assert.equal(started, 1);
+});

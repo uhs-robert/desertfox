@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
-import { check_args, create_registry, DefineError } from "../../src/shared/registry/index.ts";
+import { check_args, create_registry, DefineError, parse_command_line, print_command } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { CommandInput } from "../../src/shared/registry/index.ts";
 
@@ -21,6 +21,39 @@ test("an explicit or default value is refused when its sibling does not allow it
   assert.equal(check_args(hint, { action: "mute", filter: "media" }).ok, true);
   const result = check_args(hint, { action: "copy", filter: "prose" });
   assert.equal(result.ok ? "" : result.error, "action copy needs filter all, clickable, links, images, frames, media or custom");
+});
+
+test("frames defaults to same_origin and prints nothing, so a binding without it runs today's single-frame path", () => {
+  const checked = check_args(hint, { action: "copy", filter: "links" });
+  assert.equal(checked.ok && checked.args.frames, "same_origin");
+  assert.equal(print_command(hint, { action: "copy", filter: "links", frames: "same_origin" }), "hint -y -l");
+  assert.equal(print_command(hint, { filter: "links", frames: "all_frames" }), "hint -l --all-frames");
+});
+
+test("all_frames is typed as its own flag or through --frames=, and --frames alone stays the frames filter", () => {
+  const parsed = (text: string) => {
+    const result = parse_command_line(registry, text);
+    return result.kind === "invocation" ? result.invocation.args : result;
+  };
+  assert.deepEqual(parsed("hint --all-frames"), { frames: "all_frames" });
+  assert.deepEqual(parsed("hint --frames=all_frames"), { frames: "all_frames" });
+  assert.deepEqual(parsed("hint --frames"), { filter: "frames" });
+  assert.equal(check_args(hint, { frames: "all" }).ok, false);
+});
+
+test("inspect is refused across frames, because the devtools eval runs in the top window", () => {
+  const result = check_args(hint, { action: "inspect", filter: "every", frames: "all_frames" });
+  assert.equal(result.ok ? "" : result.error, "action inspect needs frames same_origin");
+  assert.equal(check_args(hint, { action: "inspect", filter: "every" }).ok, true);
+  for (const action of ["here", "tab", "copy", "copy_html", "hover", "double_click", "focus"]) assert.equal(check_args(hint, { action, filter: "all", frames: "all_frames" }).ok, true, action);
+});
+
+test("the actions that need the keyboard in the frame of the pick are refused across frames", () => {
+  for (const [action, filter] of [["prompt", "links"], ["caret", "prose"], ["visual", "prose"], ["enter_media", "media"]] as const) {
+    const result = check_args(hint, { action, filter, frames: "all_frames" });
+    assert.equal(result.ok ? "" : result.error, `action ${action} needs frames same_origin`, action);
+    assert.equal(check_args(hint, { action, filter }).ok, true, action);
+  }
 });
 
 test("double_click is refused for the links filter", () => {

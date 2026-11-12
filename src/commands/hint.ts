@@ -16,7 +16,10 @@ define("hint.run", {
       values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "prompt"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
-        prompt: { filter: HAS_ADDRESS },
+        // These need the keyboard in the frame of the pick, and across frames it stays in the frame that ran the hint.
+        prompt: { filter: HAS_ADDRESS, frames: ["same_origin"] },
+        caret: { frames: ["same_origin"] },
+        visual: { frames: ["same_origin"] },
         tab: { filter: HAS_ADDRESS },
         background: { filter: HAS_ADDRESS },
         window: { filter: HAS_ADDRESS },
@@ -27,8 +30,10 @@ define("hint.run", {
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
-        enter_media: { filter: ["media"] },
+        enter_media: { filter: ["media"], frames: ["same_origin"] },
         double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
+        // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.
+        inspect: { frames: ["same_origin"] },
       },
       short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F", enter_media: "A", prompt: "L" },
       value_labels: {
@@ -104,6 +109,15 @@ define("hint.run", {
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "command", type: "string", default: "open", pattern: "^[a-z][a-z0-9_.-]*( --?[a-z][a-z0-9-]*)*$", when: { action: ["prompt"] }, description: "Type this command and its flags before the address." },
+    // `all` is a value of `filter`, and an enum value is a flag of its own, so the word must differ.
+    {
+      name: "frames",
+      type: "enum",
+      values: ["same_origin", "all_frames"],
+      default: "same_origin",
+      value_labels: { all_frames: "in every frame" },
+      description: { all_frames: "Label the frames of other sites too, in one label set." },
+    },
     { name: "rapid", type: "bool", default: false, short: "r", description: "Keep hint mode open for more picks." },
     YANK_REGISTER_PARAM,
   ],

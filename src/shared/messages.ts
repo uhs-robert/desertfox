@@ -413,10 +413,52 @@ export type MediaReport = {
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };
 
+// The cross-frame hints of `hint --frames=all_frames`, one session per tab. See `src/background/hint_frames.ts`.
+// The keyboard frame starts it. The answer is a `HintFramesStartAnswer`, once every frame reported or the wait ran out.
+export type HintFramesStart = {
+  type: "hint_frames_start";
+  // The `hint_letters` setting as the keyboard frame read it.
+  letters: string;
+  // The checked `hint.run` args, which every frame finds its candidates with.
+  args: Record<string, unknown>;
+  // How many candidates the keyboard frame found, best first. It reports here and ignores the collect, so its own labels never race the wait.
+  count: number;
+};
+
+// `labels` is every label of the session in label order, for the keyboard frame to narrow. `own_labels` are the keyboard frame's own, for its first candidates. Every other frame gets its share in a `HintFramesLabels`. An ended answer means a newer run, a navigation or a closed tab ended the session first.
+export type HintFramesStartAnswer = { ok: true; session_id: string; labels: string[]; own_labels: string[] } | { ok: false; reason: "ended" };
+
+// From each frame in answer to a `HintFramesCollect`: how many candidates the frame found, best first. A report after the wait gets no labels.
+export type HintFramesReport = {
+  type: "hint_frames_report";
+  session_id: string;
+  count: number;
+};
+
+// The keyboard frame's typed prefix, which the background passes on to every other labeled frame.
+export type HintFramesTyped = {
+  type: "hint_frames_typed";
+  session_id: string;
+  typed: string;
+};
+
+// The keyboard frame's complete label, which the background passes on to the frame that owns it. The answer is that frame's `Outcome`.
+export type HintFramesPick = {
+  type: "hint_frames_pick";
+  session_id: string;
+  label: string;
+};
+
+// The keyboard frame left hint mode. The background passes it on to every frame of the tab.
+export type HintFramesEnd = {
+  type: "hint_frames_end";
+  session_id: string;
+};
+
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadMediaQuality | RegisterRequest | MarkRequest | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -488,10 +530,24 @@ export type Ping = {
   type: "ping";
 };
 
+// Asks every frame of the tab for its hint candidates, found with the keyboard frame's `hint.run` args. Each frame answers with a `HintFramesReport`. A frame keeps the candidates of the latest session only.
+export type HintFramesCollect = {
+  type: "hint_frames_collect";
+  session_id: string;
+  args: Record<string, unknown>;
+};
+
+// A frame's share of the session's labels, one per candidate it reported, in its own order.
+export type HintFramesLabels = {
+  type: "hint_frames_labels";
+  session_id: string;
+  labels: string[];
+};
+
 // To the frame that opened an edit, when the editor ends. `text` is present only when the file changed. A frame with another `token` (a new page) ignores it.
 export type EditorDone = { type: "editor_done"; token: string; text?: string };
 
-export type BackgroundToContent = EditorDone | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
+export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 
