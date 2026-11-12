@@ -224,6 +224,13 @@ export type MarkRequest = MarkSet | MarkJump;
 // Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
 export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };
 
+// From the `page` bundle, for the jump list of the sender's window. `x` and `y` are the scroll offset now, and the page is the sender tab's address.
+// A push records the place a big jump left. A step moves the cursor of the list by `step` (older when negative) and answers the entry there: with `x` the page scrolls to it, without `x` the background switched to another tab or opened the address and scrolls from there.
+export type JumpPush = { type: "jump_push"; x: number; y: number };
+export type JumpStep = { type: "jump_step"; step: number; x: number; y: number };
+export type JumpRequest = JumpPush | JumpStep;
+export type JumpAnswer = MarkAnswer;
+
 // From the `caret` bundle: one register read or write. The background answers by the sender tab's privacy. A read answers the value, or nothing for an empty register and a refused name. A write answers an `Outcome`. A content script writes text only.
 export type RegisterRead = { type: "register_read"; name: string };
 export type RegisterWrite = { type: "register_write"; name: string; text: string };

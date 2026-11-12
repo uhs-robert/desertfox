@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 420 (normal 213, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 3 | dropped: 5
+bound: 422 (normal 215, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -44,6 +44,8 @@ bound: 420 (normal 213, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `<C-b>` | bound | `scroll.pages --fraction=-1` | Scroll page up |  |
 | `H` | bound | `page.back` | Back |  |
 | `L` | bound | `page.forward` | Forward |  |
+| `<C-o>` | bound | `page.jump --older` | Jump back |  |
+| `<C-i>` | bound | `page.jump --newer` | Jump forward |  |
 | `rr` | bound | `page.reload` | Reload |  |
 | `rh` | bound | `page.reload --hard` | Hard reload |  |
 | `R` | bound | `page.reload --hard` | Hard reload |  |
@@ -244,12 +246,10 @@ bound: 420 (normal 213, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `g?` | bound | `help` | Help |  |
 | `gV` | bound | `mode caret` | Set mode |  |
 | `wi` | dropped |  |  | needs a shell |
-| `<C-o>` | later | `page.jump --step=-1` |  | phase 3 |
-| `<C-i>` | later | `page.jump --step=1` |  | phase 3 |
 | `yq` | dropped |  |  | no longer planned |
 | `gf` | dropped |  |  | no longer planned |
 | `g!` | dropped |  |  | joke binding |
-| `g;` | later | `page.change_jump` |  | phase 3 |
+| `g;` | dropped |  |  | pages keep no history of edits to jump through |
 | `;c` | dropped |  |  | needs a shell |
 
 Which-key group names:

@@ -55,6 +55,8 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_global_mark_jump } from "./global_mark_jump.ts";
+import { browser_jump_store } from "./jump_store.ts";
+import { create_jump_step } from "./jump_step.ts";
 import { watch_page_ready } from "./page_ready.ts";
 import { native_host, change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
@@ -119,15 +121,26 @@ const macro_replay = create_macro_replay({
   check_play: check_play_step,
 });
 wire_macro_replay(macro_replay);
+const global_mark_tabs = async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0, discarded: tab.discarded === true }]));
 const global_mark_jump = create_global_mark_jump({
   store: browser_mark_store,
-  list_tabs: async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0, discarded: tab.discarded === true }])),
+  list_tabs: global_mark_tabs,
   activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
   navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
   watch: watch_tab,
   push_jump: (tab_id, key) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "mark.jump", message }, 0),
+});
+const jump_step = create_jump_step({
+  store: browser_jump_store,
+  list_tabs: global_mark_tabs,
+  activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
+  focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
+  navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
+  watch: watch_tab,
+  push_jump: (tab_id, steps) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps) }, bundle: "page" }] }, 0),
+  show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "page.jump", message }, 0),
 });
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
@@ -277,6 +290,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const frame_id = sender.frameId;
     return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
   }
+  if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -438,8 +452,9 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   return tab_modes.forget_on_navigation(tab_id, change);
 });
 
+browser.windows.onRemoved.addListener((window_id) => void browser_jump_store.forget_window(window_id).catch(() => undefined));
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
-wire_private_cleanup([browser_register_store, browser_mark_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);
+wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);
 
 // Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
 browser.history.onVisited.addListener(history_cache.visited);

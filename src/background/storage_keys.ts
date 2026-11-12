@@ -90,6 +90,12 @@ export const MARK_STORAGE_KEY = "desertfox_marks";
 // The same shape for the private windows, in `storage.session`. Cleared when the last private window closes.
 export const MARK_PRIVATE_STORAGE_KEY = "desertfox_private_marks";
 
+// The jump lists of the normal windows, in `storage.session`: `{ v: 1, windows: { [window id]: { entries, cursor } } }`. Only `jump_store.ts` reads and writes it. A browser restart clears it, as it renumbers the windows.
+export const JUMP_STORAGE_KEY = "desertfox_jumps";
+
+// The same shape for the private windows. Cleared when the last private window closes.
+export const JUMP_PRIVATE_STORAGE_KEY = "desertfox_private_jumps";
+
 // The macro being recorded, `{ register, steps }`, in `storage.session`. Absent means no recording. A private window has a key of its own, so a private recording never shows in or reaches a normal window. Only `macro_recorder.ts` reads and writes them.
 export const MACRO_RECORDING_STORAGE_KEY = "desertfox_macro_recording";
 export const MACRO_RECORDING_PRIVATE_STORAGE_KEY = "desertfox_private_macro_recording";
