@@ -95,7 +95,7 @@ function span_of(open: Session): Span {
 }
 
 function paint(open: Session): void {
-  mirror.paint(open.model_, (open.span_ = span_of(open)));
+  mirror.paint(open.model_, (open.span_ = span_of(open)), open.mode);
   scroll_to_index(open.model_, open.cursor.caret);
 }
 
@@ -135,7 +135,7 @@ function catch_up(open: Session): Session | undefined {
 }
 
 function end_session(): void {
-  mirror.clear(session?.model_);
+  mirror.clear();
   session = undefined;
   find_mode.end();
   release_if_idle();

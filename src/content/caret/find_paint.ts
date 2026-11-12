@@ -19,6 +19,8 @@ export type HighlightNames = { all: string; current: string };
 // One painter owns one pair of names, so a find by character never clears the matches a kept `/` search stands on.
 export const SEARCH_NAMES: HighlightNames = { all: "oasis-find", current: "oasis-find-current" };
 export const CHAR_FIND_NAMES: HighlightNames = { all: "oasis-ft", current: "oasis-ft-current" };
+// The caret mode cell is the one current match, so its `all` name stays empty. Its colors come from `selection_colors.ts`, which follows the mode.
+export const CARET_NAMES: HighlightNames = { all: "oasis-caret-none", current: "oasis-caret" };
 
 // Where matches start, and where each ends: one end per match, or one width for all.
 export type Spans = { from: number[] } & ({ to: number[] } | { width: number });
@@ -86,7 +88,8 @@ export function create_painter(names: HighlightNames = SEARCH_NAMES) {
   };
 
   // The match at `current` takes the strong color. `indexes` are the matches to draw, by default a window around the current one. Returns how many matches were drawn.
-  const paint = (model: TextModel, matches: Spans, current: number, colors: FindColors, indexes = paint_indexes(current, matches.from.length)): number => {
+  // With no `colors` the painter adopts no sheet, and the caller styles the names itself.
+  const paint = (model: TextModel, matches: Spans, current: number, colors: FindColors | undefined, indexes = paint_indexes(current, matches.from.length)): number => {
     clear_highlights();
     const by_document = new Map<Document, { all: Range[]; current: Range[] }>();
     for (const index of indexes) {
@@ -98,10 +101,12 @@ export function create_painter(names: HighlightNames = SEARCH_NAMES) {
         }
       } catch {}
     }
-    for (const tree of model.trees) {
-      try {
-        sheets.set(tree, sheet_text(names, colors));
-      } catch {}
+    if (colors) {
+      for (const tree of model.trees) {
+        try {
+          sheets.set(tree, sheet_text(names, colors));
+        } catch {}
+      }
     }
     for (const [owner, group] of by_document) {
       try {

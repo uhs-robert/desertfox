@@ -8,7 +8,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["find"];
 
-export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, type_in_line }) {
+export async function run_cases({ rdp, extension_id, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, wait_cmdline, close_cmdline, read_cmdline_state, scroll_of, scroll_report_wait_ms, sleep, events, wait_event, take_shot, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, type_in_line }) {
   // Read in the page's own world: ranges and sheets that the content script made are not readable from the script that tabs.executeScript runs. The closed root has no sheet count here, since only the content script can reach it.
   const READ_HIGHLIGHTS = `JSON.parse(window.wrappedJSObject.eval(${JSON.stringify(`JSON.stringify((() => {
     const texts = (owner, name) => { const highlight = owner?.defaultView.CSS.highlights.get(name); const found = []; highlight?.forEach((range) => found.push(range.startContainer.data.slice(0, 40))); return found; };
@@ -380,7 +380,8 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await wait_highlights((read) => total_painted(read) === 0, "the highlights cleared");
   });
 
-  const READ_SELECTION = `(() => { const s = getSelection(); return { text: String(s), anchor: s.anchorNode?.data?.slice(0, 20), anchor_offset: s.anchorOffset, focus: s.focusNode?.data?.slice(0, 20), focus_offset: s.focusOffset }; })()`;
+  // The selection, else the caret mode cell from its start to its end.
+  const READ_SELECTION = `(() => { const s = getSelection(); const cell = s.rangeCount ? undefined : ${shown_range_in()}; if (cell) return { text: String(cell), anchor: cell.startContainer.data?.slice(0, 20), anchor_offset: cell.startOffset, focus: cell.endContainer.data?.slice(0, 20), focus_offset: cell.endOffset }; return { text: String(s), anchor: s.anchorNode?.data?.slice(0, 20), anchor_offset: s.anchorOffset, focus: s.focusNode?.data?.slice(0, 20), focus_offset: s.focusOffset }; })()`;
   const mode_badge = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   // Polls the page selection until it passes `predicate`, so the case reads it after the caret has moved and not on a timer.
   const wait_read = (predicate, what) => poll_reads(() => in_active_tab(READ_SELECTION), predicate, what);

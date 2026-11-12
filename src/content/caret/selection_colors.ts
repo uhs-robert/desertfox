@@ -5,6 +5,7 @@
 import { THEME_STORAGE_KEY } from "../../shared/theme/apply.ts";
 import type { StoredTheme } from "../../shared/theme/apply.ts";
 import type { RoleColors } from "../../shared/theme/roles.ts";
+import { CARET_NAMES } from "./find_paint.ts";
 import type { FindColors } from "./find_paint.ts";
 import { create_sheet_set } from "./adopted_sheets.ts";
 import type { TextTree } from "./text_model.ts";
@@ -31,11 +32,9 @@ export function find_colors_of({ dark, light }: StoredTheme): FindColors {
   };
 }
 
-// Both visual modes tint the text and leave its color. Caret mode keeps one visible cell, so the caret does not vanish into the page.
+// Both visual modes tint the text and leave its color. Caret mode colors its cell, a highlight, so the caret does not vanish into the page.
 const rule = (mode: CaretMode, colors: RoleColors) =>
-  mode === "caret"
-    ? `::selection{background:${colors.mode_caret} !important;color:${colors.bg_core} !important}`
-    : `::selection{background:${colors.selection} !important}`;
+  mode === "caret" ? `::highlight(${CARET_NAMES.current}){background:${colors.mode_caret};color:${colors.bg_core}}` : `::selection{background:${colors.selection} !important}`;
 
 export async function apply_selection_colors(mode: CaretMode): Promise<void> {
   const this_call = ++latest_call;

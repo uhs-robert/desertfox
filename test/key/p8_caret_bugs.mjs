@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
   async function press_and_wait_for_badge(page_id, keys, label) {
@@ -32,11 +32,15 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   }
 
   // V starts on the title. Press a key n times and read the character under the caret ("" on an empty line, where no caret is drawn).
+  // A step from one empty line to the next changes nothing the page can see, so each key waits for a barrier, not for a report.
   async function caret_after(id, keys, after_g) {
-    let last = await press_and_wait_for_move(id, "gV", "the caret on the title");
-    if (after_g) last = await press_and_wait_for_move(id, "G", "G to move the caret");
-    for (const key of keys) last = await press_and_wait_for_move(id, key, `${key} to move the caret`);
-    return last.text;
+    await press_and_wait_for_move(id, "gV", "the caret on the title");
+    if (after_g) await press_and_wait_for_move(id, "G", "G to move the caret");
+    for (const key of keys) {
+      await press_keys(key);
+      await barrier(id);
+    }
+    return in_active_tab(`String(${shown_range_in()} ?? "")`);
   }
 
   async function check(kind, keys, expected, after_g = false) {
@@ -301,8 +305,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal(page_id);
   });
 
-  // The page swaps text under the open session half a second after the first selection report.
-  const selection_styles = `[document, ...[...document.querySelectorAll("*")].map((element) => element.shadowRoot), ...[...document.querySelectorAll("iframe")].map((frame) => frame.contentDocument)].filter(Boolean).flatMap((tree) => [...tree.adoptedStyleSheets]).filter((sheet) => [...sheet.cssRules].some((rule) => rule.cssText.includes("::selection"))).length`;
+  // The page swaps text under the open session half a second after the first caret. The style probe counts the sheets of the selection or the caret cell.
+  const selection_styles = `[document, ...[...document.querySelectorAll("*")].map((element) => element.shadowRoot), ...[...document.querySelectorAll("iframe")].map((frame) => frame.contentDocument)].filter(Boolean).flatMap((tree) => [...tree.adoptedStyleSheets]).filter((sheet) => [...sheet.cssRules].some((rule) => /::selection|::highlight\\(oasis-caret\\)/.test(rule.cssText))).length`;
   await run_case("caret mode survives the page replacing the paragraph that holds the caret", async () => {
     const page_id = "replaced_replace_paragraph";
     await open_page("caret_replaced", page_id, { new_tab: true });
@@ -312,8 +316,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await wait_event(mark, (event) => event.type === "text_replaced" && event.page_id === page_id, "the page to replace the heading");
     await press_and_wait_for_move(page_id, "j", "j to move the caret after the replace");
     await press_and_wait_for_move(page_id, "w", "w to move the caret after the replace");
-    const on_page = await in_active_tab("(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected && String(s) !== ''; })()");
-    expect(on_page === true, "the selection is blank or sits on a node the page removed");
+    const on_page = await in_active_tab(`(() => { const shown = ${shown_range_in()}; return Boolean(shown) && shown.startContainer.isConnected && String(shown) !== ""; })()`);
+    expect(on_page === true, "the caret is blank or sits on a node the page removed");
     const mark_search = events.length;
     await search_with_line("fresh");
     await wait_for_last_selection(page_id, mark_search, (last) => last.text === "f", 'the caret on the "f" of fresh');
@@ -331,8 +335,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await wait_event(mark, (event) => event.type === "text_replaced" && event.page_id === page_id, "the page to replace its text");
     await press_and_wait_for_move(page_id, "j", "j to move the caret after the replace");
     await press_and_wait_for_move(page_id, "w", "w to move the caret after the replace");
-    const on_page = await in_active_tab("(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected && String(s) !== ''; })()");
-    expect(on_page === true, "the selection is blank or sits on a node the page removed");
+    const on_page = await in_active_tab(`(() => { const shown = ${shown_range_in()}; return Boolean(shown) && shown.startContainer.isConnected && String(shown) !== ""; })()`);
+    expect(on_page === true, "the caret is blank or sits on a node the page removed");
     const mark_search = events.length;
     await search_with_line("zebra");
     await wait_for_last_selection(page_id, mark_search, (last) => last.text === "z", 'the caret on the "z" of zebra');
@@ -351,7 +355,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     const mark = events.length;
     await press_keys("j");
     await wait_for_last_selection(page_id, mark, (last) => last.text !== "", "the second j to move the caret");
-    const line = await in_active_tab("(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected ? s.anchorNode.textContent : null; })()");
+    const line = await in_active_tab(`(() => { const shown = ${shown_range_in()}; return shown?.startContainer.isConnected ? shown.startContainer.textContent : null; })()`);
     expect(line === "delta epsilon", `after two j the caret is in ${JSON.stringify(line)}, expected the line "delta epsilon"`);
     await escape_to_normal(page_id);
   });
@@ -361,7 +365,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     const page_id = "ticking_search";
     await open_page("caret_ticking", page_id, { new_tab: true });
     await press_and_wait_for_move(page_id, "gV", "the caret on the title");
-    const caret_line = "(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected ? s.anchorNode.textContent : null; })()";
+    const caret_line = `(() => { const shown = ${shown_range_in()}; return shown?.startContainer.isConnected ? shown.startContainer.textContent : null; })()`;
     const mark = events.length;
     await search_with_line("ta");
     await wait_for_last_selection(page_id, mark, (last) => last.text === "t", 'the caret on the "t" of beta');
@@ -373,7 +377,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal(page_id);
   });
 
-  // n paints the caret before it steps, and the page removes all its text at that selection change, while the step waits for its colors.
+  // n paints the caret before it steps, and the page removes all its text as that caret shows, while the step waits for its colors.
   await run_case("caret mode ends when the page loses all its text during n", async () => {
     const page_id = "emptied_n";
     await open_page("caret_emptied", page_id, { new_tab: true });
@@ -409,7 +413,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await in_active_tab(`(() => { const frame = document.getElementById("nav"); return new Promise((resolve) => { frame.addEventListener("load", () => resolve(true), { once: true }); frame.srcdoc = "<p>second inner</p>"; }); })()`);
     await press_and_wait_for_move(page_id, "j", "j to the top words");
     await press_keys("j");
-    const frame_caret = `String(document.getElementById("nav").contentDocument.getSelection())`;
+    const frame_caret = `String(${shown_range_in('document.getElementById("nav").contentDocument')} ?? "")`;
     await poll_until('the caret on the "s" of the frame\'s new text', async () => (await in_active_tab(frame_caret)) === "s");
     await escape_to_normal(page_id);
   });
@@ -429,8 +433,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal(page_id);
   });
 
-  // Pages that add trees after the session started. The sheet probes count the adopted sheets with a ::selection rule on each tree.
-  const selection_sheets_of = (tree) => `[...${tree}.adoptedStyleSheets].filter((sheet) => [...sheet.cssRules].some((rule) => rule.cssText.includes("::selection"))).length`;
+  // Pages that add trees after the session started. The sheet probes count the adopted sheets with a rule for the selection or the caret cell on each tree.
+  const selection_sheets_of = (tree) => `[...${tree}.adoptedStyleSheets].filter((sheet) => [...sheet.cssRules].some((rule) => /::selection|::highlight\\(oasis-caret\\)/.test(rule.cssText))).length`;
   const root_styles = (host_selector) => selection_sheets_of(`document.querySelector(${JSON.stringify(host_selector)}).shadowRoot`);
   const frame_styles = (frame_selector) => selection_sheets_of(`document.querySelector(${JSON.stringify(frame_selector)}).contentDocument`);
   const add_late_root = (text) => in_active_tab(`(() => { const host = document.createElement("div"); host.id = "late_host"; document.body.append(host); host.attachShadow({ mode: "open" }).innerHTML = "<p>${text}</p>"; return true; })()`);
@@ -466,8 +470,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_and_wait_for_move(page_id, "gV", "the caret on the title");
     await in_active_tab(`(() => { const frame = document.createElement("iframe"); frame.id = "late_frame"; frame.srcdoc = "<p>quartz inside</p>"; document.body.append(frame); return new Promise((resolve) => frame.addEventListener("load", () => resolve(true))); })()`);
     await search_with_line("quartz");
-    // The added frame has no reporter, so its own selection shows where the caret landed.
-    await poll_until('the caret on the "q" of quartz in the frame', async () => (await in_active_tab(`String(document.getElementById("late_frame").contentDocument.getSelection())`)) === "q");
+    // The added frame has no reporter, so its own cell shows where the caret landed.
+    await poll_until('the caret on the "q" of quartz in the frame', async () => (await in_active_tab(`String(${shown_range_in('document.getElementById("late_frame").contentDocument')} ?? "")`)) === "q");
     await poll_until("the selection style in the late frame", async () => (await in_active_tab(frame_styles("#late_frame"))) > 0);
     await escape_to_normal(page_id);
   });
@@ -502,8 +506,9 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await poll_until("the page to scroll past its title", async () => (await in_active_tab("scrollY")) >= 400);
     await in_active_tab(`(() => { const doc = document.getElementById("clip").contentDocument; doc.getSelection().collapse(doc.getElementById("hidden_text").firstChild, 3); return true; })()`);
     await press_keys("gV");
-    await poll_until("the caret on the first text in view", async () => (await in_active_tab(`String(document.getElementById("clip").contentDocument.getSelection())`)) !== "");
-    const caret = await in_active_tab(`String(document.getElementById("clip").contentDocument.getSelection())`);
+    const clip_caret = `String(${shown_range_in('document.getElementById("clip").contentDocument')} ?? "")`;
+    await poll_until("the caret on the first text in view", async () => (await in_active_tab(clip_caret)) !== "");
+    const caret = await in_active_tab(clip_caret);
     expect(caret === "s", `the caret is on ${JSON.stringify(caret)}, expected "s" of "shown words", the first text in view`);
     await escape_to_normal(page_id);
   });

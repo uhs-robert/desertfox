@@ -18,7 +18,35 @@ addEventListener("scroll", () => {
   }), 150);
 });
 addEventListener("keydown", (event) => send("keydown", { key: event.key, code: event.code }));
-document.addEventListener("selectionchange", () => send("selection", { text: String(getSelection()), scroll_y: scrollY, pane_top: document.getElementById("pane")?.scrollTop ?? null, top: getSelection().rangeCount ? getSelection().getRangeAt(0).getBoundingClientRect().top : null }));
+// Caret mode draws its cell as a highlight and leaves the selection empty, so a "selection" report covers the selection, else the cell ("oasis-caret" in src/content/caret/find_paint.ts).
+const caret_cell = () => CSS.highlights.get("oasis-caret")?.values().next().value;
+const shown_range = () => (getSelection().rangeCount ? getSelection().getRangeAt(0) : caret_cell());
+// The selection's own text keeps the line breaks between blocks, which a range's text drops.
+const report_selection = () => {
+  const range = shown_range();
+  send("selection", { text: getSelection().rangeCount ? String(getSelection()) : String(range ?? ""), scroll_y: scrollY, pane_top: document.getElementById("pane")?.scrollTop ?? null, top: range ? range.getBoundingClientRect().top : null });
+};
+// A highlight fires no event, so each frame looks for a new cell. Each paint draws a new range, as each paint of a selection fired a selectionchange.
+// With no selection, a cell is reported once, so a key's report does not come again after the next key. Fixtures that act on the caret listen for "caret_cell".
+const SELECTED = {};
+let reported = null;
+const report_change = () => {
+  if (getSelection().rangeCount) {
+    reported = SELECTED;
+    return report_selection();
+  }
+  const cell = caret_cell() ?? null;
+  if (cell === reported) return;
+  reported = cell;
+  report_selection();
+  if (cell) document.dispatchEvent(new Event("caret_cell"));
+};
+document.addEventListener("selectionchange", report_change);
+const watch_cell = () => {
+  if (!getSelection().rangeCount) report_change();
+  requestAnimationFrame(watch_cell);
+};
+requestAnimationFrame(watch_cell);
 addEventListener("input", (event) => send("input", { value: event.target.value }));
 addEventListener("focus", () => send("window_focus"));
 const root = document.documentElement;
@@ -573,11 +601,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
         closed_root.getElementById("nested_host").attachShadow({ mode: "open" }).innerHTML = '<p id="nested_text">delta four</p>';
         if (location.search.includes("remove_host")) {
           const watch = () => {
-            if (getSelection().anchorNode?.getRootNode() !== open_root) return;
-            document.removeEventListener("selectionchange", watch);
+            if (shown_range()?.startContainer.getRootNode() !== open_root) return;
+            document.removeEventListener("caret_cell", watch);
             setTimeout(() => document.getElementById("open_host").remove(), 1000);
           };
-          document.addEventListener("selectionchange", watch);
+          document.addEventListener("caret_cell", watch);
         }
       </script>`;
       return response.end(page(`caret_shadow ${id}`, `<p id="before">alpha one</p><div id="open_host"></div><div id="closed_host"></div><p>omega five</p>${roots}`));
@@ -600,22 +628,22 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
     if (url.pathname === "/caret_frame_inner") {
       // With remove_frame in the id, the frame takes itself off its parent a second after the caret first lands in it.
       const remove = id.includes("remove_frame")
-        ? `<script>const watch = () => { if (!getSelection().anchorNode) return; document.removeEventListener("selectionchange", watch); setTimeout(() => frameElement.remove(), 1000); }; document.addEventListener("selectionchange", watch);</script>`
+        ? `<script>document.addEventListener("caret_cell", () => setTimeout(() => frameElement.remove(), 1000), { once: true });</script>`
         : "";
       const deep = `<iframe id="deep" srcdoc="<p id=deep_text>deep words</p>" style="width:300px;height:50px"></iframe>`;
       return response.end(page(`inner ${id}`, `<p id="inner_text">inner words here</p>${deep}${remove}`));
     }
     if (url.pathname === "/caret_added") {
       // The text arrives after the caret session has read the page, so it is newer than the session's model.
-      const added = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { if (document.getElementById("added")) return; document.body.insertAdjacentHTML("beforeend", "<p id=added>zebra words</p>"); send("text_added"); }, 500), { once: true });</script>`;
+      const added = `<script>document.addEventListener("caret_cell", () => setTimeout(() => { if (document.getElementById("added")) return; document.body.insertAdjacentHTML("beforeend", "<p id=added>zebra words</p>"); send("text_added"); }, 500), { once: true });</script>`;
       return response.end(page(`caret_added ${id}`, `<p>foo bar</p>${added}`));
     }
     if (url.pathname === "/caret_replaced") {
-      // After the first selection report the page swaps its text for new text and reports text_replaced. With replace_paragraph in the id only the heading, which holds the caret, is swapped.
+      // After the first caret the page swaps its text for new text and reports text_replaced. With replace_paragraph in the id only the heading, which holds the caret, is swapped.
       const swap = id.includes("replace_paragraph")
         ? `document.querySelector("h1").replaceWith(Object.assign(document.createElement("h1"), { textContent: "fresh heading" }));`
         : `document.querySelectorAll("h1, p").forEach((node) => node.remove()); document.body.insertAdjacentHTML("afterbegin", "<p>quartz words</p><p>zebra stripes</p>");`;
-      const replace = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { ${swap} send("text_replaced"); }, 500), { once: true });</script>`;
+      const replace = `<script>document.addEventListener("caret_cell", () => setTimeout(() => { ${swap} send("text_replaced"); }, 500), { once: true });</script>`;
       return response.end(page(`caret_replaced ${id}`, `<p>foo bar</p>${replace}`));
     }
     if (url.pathname === "/caret_ticking") {
@@ -624,8 +652,8 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       return response.end(page(`caret_ticking ${id}`, `<p>alpha beta gamma</p><p>delta epsilon</p><p>clock <span id="clock">0</span></p>${tick}`));
     }
     if (url.pathname === "/caret_emptied") {
-      // Once the test arms it, the page removes all its text at the next selection change and reports emptied.
-      const empty = `<script>document.addEventListener("selectionchange", () => { if (document.body.dataset.empty !== "armed") return; document.body.dataset.empty = "done"; document.querySelectorAll("h1, p").forEach((node) => node.remove()); send("emptied"); });</script>`;
+      // Once the test arms it, the page removes all its text as soon as a new caret cell shows, and reports emptied. A cell fires no event, so the armed page polls in message tasks, which run before the session's next storage read answers.
+      const empty = `<script>new MutationObserver(() => { if (document.body.dataset.empty !== "armed") return; const armed_cell = caret_cell(); const channel = new MessageChannel(); channel.port1.onmessage = () => { if (caret_cell() === armed_cell) return channel.port2.postMessage(0); document.body.dataset.empty = "done"; document.querySelectorAll("h1, p").forEach((node) => node.remove()); send("emptied"); }; channel.port2.postMessage(0); }).observe(document.body, { attributes: true, attributeFilter: ["data-empty"] });</script>`;
       return response.end(page(`caret_emptied ${id}`, `<p>foo one</p><p>foo two</p>${empty}`));
     }
     if (url.pathname === "/caret_nav_frame") {
