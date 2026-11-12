@@ -547,6 +547,8 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 
 The help page is generated from `commands.json` and the live keymap: every command, its params, its keys and the keymap warnings. The palette is the command line with an empty prompt.
 
+`:issue` (`help.issue`, no default key) opens the GitHub new-issue form prefilled with the extension and Firefox versions, the OS and the config warnings (`src/background/issue_report.ts`). The warnings go in word for word, at most 10 and 2 KB, with a count of the cut ones. The config folder path in a warning becomes `<config dir>`, because the host reports it as an absolute path. `--copy` puts the report on the clipboard and opens the blank form, for a report too long for the address. The command sends nothing: the GitHub form is where the user reads the report before submitting.
+
 The help page has a sidebar of page links on the left. In a window 40rem wide or less, the sidebar is a drawer and never a bar across the page. A bar that stays on top holds a menu button, which opens the drawer over the page. Escape, a picked link, a click outside the drawer or focus leaving it closes the drawer. Opening it focuses the current page's link, and Escape or a click outside returns focus to the menu button. The drawer starts closed on each render and is not stored.
 
 ## Native host (optional)

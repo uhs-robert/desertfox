@@ -73,6 +73,9 @@ const STUB_MARK = { id: "b1", title: "Mark", url: "https://example.org/m", type:
 
 // What each browser call answers. A call that is not listed answers undefined.
 const STUB_ANSWERS: Record<string, unknown> = {
+  "management.getSelf": { installType: "normal" },
+  "runtime.getBrowserInfo": { version: "130.0" },
+  "runtime.getPlatformInfo": { os: "linux", arch: "x86-64" },
   "tabs.query": STUB_TABS,
   "tabs.get": STUB_TAB,
   "tabs.update": STUB_TAB,
@@ -144,7 +147,7 @@ function accepted_args(command: NonNullable<ReturnType<typeof registry.get>>): R
 
 test("no background handler refuses args the schema accepts", async () => {
   (globalThis as unknown as { browser: unknown }).browser = stub_browser();
-  Object.defineProperty(globalThis.navigator, "clipboard", { value: { readText: async () => "stub text" }, configurable: true });
+  Object.defineProperty(globalThis.navigator, "clipboard", { value: { readText: async () => "stub text", writeText: async () => undefined }, configurable: true });
   const failures: string[] = [];
   const stuck = new Set<string>();
   const used = new Set<string>();
