@@ -183,7 +183,8 @@ sign: build
     rm -rf web-ext-artifacts
     # web-ext 10.7.0 does not create the folder before it downloads the xpi.
     mkdir -p web-ext-artifacts
-    npx --yes web-ext@10.7.0 sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts
+    # The locked web-ext from package-lock.json: nothing is fetched while the AMO key is in the environment.
+    npx --no-install web-ext sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts
     ls web-ext-artifacts/*.xpi
 
 # Copy the signed add-on into a Firefox profile. Firefox loads it at the next start. No sudo.

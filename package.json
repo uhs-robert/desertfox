@@ -25,6 +25,7 @@
     "@types/node": "^26.6.6",
     "esbuild": "^0.25.0",
     "smol-toml": "^1.9.1",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "web-ext": "10.7.0"
   }
 }

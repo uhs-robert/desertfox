@@ -58,6 +58,7 @@ jobs:
             beta_tags=$(gh api --paginate "repos/$REPOSITORY/releases" --jq '.[] | select(.prerelease and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name + " " + .target_commitish')
             newest_beta=$(cut -d ' ' -f 1 <<<"$beta_tags" | sed 's/^v//' | sort -V | tail -n 1)
             channel_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - 2>/dev/null | jq -r '.addons | to_entries[0].value.updates[0].version // empty' 2>/dev/null || true)
+            # A beta whose publish failed stays above updates.json, so each nightly builds again until one succeeds, and each signed attempt burns a version number. Accepted.
             # Self-healing: when updates.json is missing or older than the newest beta, a failed or out-of-order upload left the channel behind, so this run builds again and repairs it.
             if [ -n "$newest_beta" ] && { [ -z "$channel_version" ] || [ "$channel_version" != "$newest_beta" ] && [ "$(printf '%s\n%s\n' "$channel_version" "$newest_beta" | sort -V | tail -n 1)" = "$newest_beta" ]; }; then
               echo "updates.json names '${channel_version:-nothing}' but the newest beta is $newest_beta, so this run builds to repair the channel."
