@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
   async function press_and_wait_for_badge(page_id, keys, label) {
@@ -278,6 +278,118 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await drag_and_wait(page_id, 4, 15, "needle sits");
     const text = await press_visual_and_read(page_id);
     expect(text === "needle sits", `the selection is ${JSON.stringify(text)}, expected "needle sits"`);
+    await escape_to_normal(page_id);
+  });
+
+  // The page swaps text under the open session half a second after the first selection report.
+  const selection_styles = `[...document.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
+  await run_case("caret mode survives the page replacing the paragraph that holds the caret", async () => {
+    const page_id = "replaced_replace_paragraph";
+    await open_page("caret_replaced", page_id, { new_tab: true });
+    const mark = events.length;
+    await press_keys("gV");
+    await wait_event(mark, is_selection_of(page_id), "the caret report");
+    await wait_event(mark, (event) => event.type === "text_replaced" && event.page_id === page_id, "the page to replace the heading");
+    await press_and_wait_for_move(page_id, "j", "j to move the caret after the replace");
+    await press_and_wait_for_move(page_id, "w", "w to move the caret after the replace");
+    const on_page = await in_active_tab("(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected && String(s) !== ''; })()");
+    expect(on_page === true, "the selection is blank or sits on a node the page removed");
+    const mark_search = events.length;
+    await search_with_line("fresh");
+    await wait_for_last_selection(page_id, mark_search, (last) => last.text === "f", 'the caret on the "f" of fresh');
+    await escape_to_normal(page_id);
+    await poll_until("the selection style to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
+  });
+
+  // A find unit needs a key as its target, so from normal mode `:caret.move` with it does nothing.
+  await run_case(":caret.move with char_find from normal mode leaves no find armed for the next caret key", async () => {
+    const page_id = "move_find";
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await run_line(":caret.move --unit=char_find");
+    await wait_cmdline((line) => !line.open, "the line to close");
+    await expect_absent(mark, page_id, (event) => is_selection_of(page_id)(event) || badge_is(page_id, "CARET")(event), "caret mode or a selection after the find unit");
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    // The title is "caret move_find". l as a motion lands on "a". l as a find target would jump to the "l" of "line".
+    const last = await press_and_wait_for_move(page_id, "l", "l to move the caret");
+    expect(last.text === "a", `the caret is on ${JSON.stringify(last.text)}, expected "a"`);
+    await escape_to_normal(page_id);
+  });
+
+  // Pages that add trees after the session started. The style probes read the ::selection style the caret puts on each tree.
+  const root_styles = (host_selector) => `(() => { const root = document.querySelector(${JSON.stringify(host_selector)}).shadowRoot; return [...root.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length; })()`;
+  const frame_styles = (frame_selector) => `[...document.querySelector(${JSON.stringify(frame_selector)}).contentDocument.querySelectorAll("style")].filter((style) => style.textContent.includes("::selection")).length`;
+  const add_late_root = (text) => in_active_tab(`(() => { const host = document.createElement("div"); host.id = "late_host"; document.body.append(host); host.attachShadow({ mode: "open" }).innerHTML = "<p>${text}</p>"; return true; })()`);
+
+  // A tree that leaves the page makes the next key rebuild the model, and the rebuild brings the new trees. They need the selection style too.
+  await run_case("a rebuild after a tree left the page gives the shadow root added meanwhile the selection style", async () => {
+    const page_id = "late_root_j";
+    await open_page("caret", page_id, { new_tab: true });
+    await in_active_tab(`(() => { const host = document.createElement("div"); host.id = "old_host"; document.body.append(host); host.attachShadow({ mode: "open" }).innerHTML = "<p>old words</p>"; return true; })()`);
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await in_active_tab(`document.getElementById("old_host").remove()`);
+    await add_late_root("late words");
+    await press_and_wait_for_move(page_id, "j", "j to move the caret after the rebuild");
+    await poll_until("the selection style in the late root", async () => (await in_active_tab(root_styles("#late_host"))) > 0);
+    await escape_to_normal(page_id);
+  });
+
+  await run_case("a search match in a shadow root added after caret mode started gets the selection style", async () => {
+    const page_id = "late_root_search";
+    await open_page("caret", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await add_late_root("quartz late");
+    const mark = events.length;
+    await search_with_line("quartz");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "q", 'the caret on the "q" of quartz');
+    await poll_until("the selection style in the late root", async () => (await in_active_tab(root_styles("#late_host"))) > 0);
+    await escape_to_normal(page_id);
+  });
+
+  await run_case("a search match in a frame added after caret mode started gets the selection style", async () => {
+    const page_id = "late_frame_search";
+    await open_page("caret", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await in_active_tab(`(() => { const frame = document.createElement("iframe"); frame.id = "late_frame"; frame.srcdoc = "<p>quartz inside</p>"; document.body.append(frame); return new Promise((resolve) => frame.addEventListener("load", () => resolve(true))); })()`);
+    await search_with_line("quartz");
+    // The added frame has no reporter, so its own selection shows where the caret landed.
+    await poll_until('the caret on the "q" of quartz in the frame', async () => (await in_active_tab(`String(document.getElementById("late_frame").contentDocument.getSelection())`)) === "q");
+    await poll_until("the selection style in the late frame", async () => (await in_active_tab(frame_styles("#late_frame"))) > 0);
+    await escape_to_normal(page_id);
+  });
+
+  // A frame that leaves the page while the search line is open must not break Enter. The frame removes itself a second after the caret first lands in it (see /caret_frame_inner).
+  await run_case("Enter on a search lands on the page after the frame holding the caret left while the line was open", async () => {
+    const page_id = "search_remove_frame";
+    await open_page("caret_frames", page_id, { new_tab: true });
+    const mark = events.length;
+    await run_line(":hint --caret --custom --selector=#inner_text");
+    await poll_until("the hint labels to show", async () => (await hint_label_count()) > 0);
+    await press_keys("a");
+    await wait_event(mark, (event) => event.type === "selection" && event.page_id === `${page_id}_inner` && event.text === "i", "the caret in the frame");
+    await press_keys("/");
+    await wait_cmdline((line) => line.open && line.focused, "the search line to open");
+    await press_keys("-d", "30", "tail");
+    await wait_cmdline((line) => line.open && line.value === "tail", "the search line to hold tail");
+    await poll_until("the frame to leave the page", async () => (await in_active_tab('!document.getElementById("frame")')) === true, { timeout_ms: 5000 });
+    const mark_enter = events.length;
+    await press_keys("-k", "Return");
+    await wait_cmdline((line) => !line.open, "the search line to close");
+    await wait_for_last_selection(page_id, mark_enter, (last) => last.text === "t", 'the caret on the "t" of tail on the page');
+    await poll_until("the CARET badge after Enter", () => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label === "CARET");
+    await escape_to_normal(page_id);
+  });
+
+  // A click leaves a collapsed selection, which gV honors only while it is on screen. This one is inside the frame, 300px below the frame's own viewport. The frame's box puts it inside the top viewport, so a check against the top viewport alone calls it visible.
+  await run_case("gV does not start at a click that is outside its frame's viewport", async () => {
+    const page_id = "clip_frame";
+    await open_page("caret_clip_frame", page_id, { new_tab: true });
+    await poll_until("the page to scroll past its title", async () => (await in_active_tab("scrollY")) >= 400);
+    await in_active_tab(`(() => { const doc = document.getElementById("clip").contentDocument; doc.getSelection().collapse(doc.getElementById("hidden_text").firstChild, 3); return true; })()`);
+    await press_keys("gV");
+    await poll_until("the caret on the first text in view", async () => (await in_active_tab(`String(document.getElementById("clip").contentDocument.getSelection())`)) !== "");
+    const caret = await in_active_tab(`String(document.getElementById("clip").contentDocument.getSelection())`);
+    expect(caret === "s", `the caret is on ${JSON.stringify(caret)}, expected "s" of "shown words", the first text in view`);
     await escape_to_normal(page_id);
   });
 }
