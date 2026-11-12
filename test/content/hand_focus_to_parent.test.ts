@@ -21,13 +21,15 @@ const { is_editable_element } = await import("../../src/content/editable.ts");
 const { page_mode } = await import("../../src/content/page_mode.ts");
 const { mode_set } = await import("../../src/content/handlers/mode.ts");
 const { bundles } = await import("../../src/content/bundles.ts");
+const { create_bundle_host } = await import("../../src/content/bundle_host.ts");
 // A caret mode stays pending, so the frame still reads as normal.
 // The ui bundle loads after a tick, like an injection answers, and registers the handler as ui/main.ts does.
 let ui_loads = 0;
+let ui_calls = 0;
 const load_ui = async () => {
   await Promise.resolve();
   ui_loads++;
-  bundles.api.register_handler_("ui.hand_focus", (args) => hand_off(page_mode.get_mode_(), is_editable_element, args.keep_field as boolean));
+  bundles.api.register_handler_("ui.hand_focus", (args) => (ui_calls++, hand_off(page_mode.get_mode_(), is_editable_element, args.keep_field as boolean)));
   return true;
 };
 // caret.js never loads here.
@@ -128,16 +130,32 @@ test("mode.set hands off for normal mode only, so a caret mode that waits on its
   assert.equal(frame_blurs, 1);
 });
 
-test("a top frame hands off nothing and loads no bundle, and a child frame loads ui once for any number of hand-offs", async () => {
+test("a top frame and a frame without the focus never reach the ui handler, and a focused child frame does", async () => {
+  const before = ui_calls;
   fake_window.frameElement = null;
   hand_focus_to_parent();
-  await settled();
-  assert.equal(frame_blurs, 0);
   fake_window.frameElement = frame;
-  hand_focus_to_parent();
+  fake_document.hasFocus = () => false;
   hand_focus_to_parent();
   await settled();
-  assert.equal(ui_loads, 1);
+  assert.equal(ui_calls, before, "a frame that cannot hand off called ui");
+  fake_document.hasFocus = () => true;
+  hand_focus_to_parent();
+  await settled();
+  assert.equal(ui_calls, before + 1);
+  assert.equal(ui_loads, 1, "ui loaded more than once");
+});
+
+test("a frame that has never loaded ui requests nothing for a top frame or an unfocused frame", async () => {
+  const requested: string[] = [];
+  bundles.connect({ request_bundle_: async (name) => (requested.push(name), true), on_idle_: () => {}, hold_first_: () => {}, set_mode_: () => {}, show_error_: () => {} });
+  fake_window.frameElement = null;
+  hand_focus_to_parent();
+  fake_window.frameElement = frame;
+  fake_document.hasFocus = () => false;
+  hand_focus_to_parent();
+  await settled();
+  assert.deepEqual(requested, []);
 });
 
 test("the first hand-off waits on the load and reads the mode then, so a mode change during the load wins", async () => {

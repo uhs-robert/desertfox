@@ -12,8 +12,8 @@ export function blur_focused_element(): void {
   hand_focus_to_parent();
 }
 
-// A same-origin child frame may be a hidden input frame, which the `ui` bundle hands off. Other frames never load it. The first call waits on the load, and the hand-off then reads the mode as it is by then.
-export const hand_focus_to_parent = (keep_field = true): void => void (window.frameElement && bundles.run_command_("ui.hand_focus", "ui", { keep_field }, "", false));
+// A same-origin child frame that holds the focus may be a hidden input frame, which the `ui` bundle hands off. Other frames never load it, because the hand-off needs the focus anyway. The first call waits on the load, and the hand-off then reads the mode as it is by then.
+export const hand_focus_to_parent = (keep_field = true): void => void (window.frameElement && document.hasFocus() && bundles.run_command_("ui.hand_focus", "ui", { keep_field }, "", false));
 
 export const page_blur: ContentHandler = {
   run: blur_focused_element,
