@@ -64,7 +64,7 @@ test("every setting keeps its listed values", () => {
   assert.ok(palette?.includes("oasis_moonlight"));
   assert.deepEqual(rest, {
     which_key_repeat: ["true", "false"],
-  which_key_border: ["square", "round", "chamfer"],
+    which_key_border: ["square", "round", "chamfer"],
     mode_indicator: ["always", "not_normal", "off"],
     light_intensity: ["1", "2", "3", "4", "5"],
     new_tab_page: ["desertfox"],
