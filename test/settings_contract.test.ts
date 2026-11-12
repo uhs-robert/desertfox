@@ -19,6 +19,9 @@ const EXPECTATIONS: Record<string, string> = {
   hint_add: "a list of CSS selectors",
   hint_remove: "a list of CSS selectors",
   blur_on_load: "true or false",
+  editable_add: "a list of CSS selectors",
+  editable_remove: "a list of CSS selectors",
+  editable_remove_unsized: "true or false",
   escape_to_page: "true or false",
   site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands, an optional "modes" of modes that each have a label plus a bind and any per-site setting',
   default_site_rows_off: 'a list of "sheets" with no repeat',
@@ -73,6 +76,7 @@ test("every setting keeps its listed values", () => {
     hint_key_line: ["true", "false"],
     blur_on_load: ["true", "false"],
     media_quality: ["off", "auto", "max", "min", "144", "240", "360", "480", "720", "1080", "1440", "2160", "4320"],
+    editable_remove_unsized: ["true", "false"],
     escape_to_page: ["true", "false"],
     bridge: ["true", "false"],
     bridge_share_tabs: ["true", "false"],
@@ -91,11 +95,11 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["which_key_skip", "hint_add", "hint_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["which_key_skip", "hint_add", "hint_remove", "editable_add", "editable_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes", "newtab_links"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, escape_to_page: false, bridge: false, bridge_share_tabs: false, host_auto_update: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
+  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, bridge: false, bridge_share_tabs: false, host_auto_update: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -108,8 +112,11 @@ const ACCEPTS: Record<string, unknown[]> = {
   hint_add: [[], [".card", "div[role=row]"]],
   hint_remove: [[], ["nav"]],
   blur_on_load: [true, false],
+  editable_add: [[], ["div.cell"]],
+  editable_remove: [[], ["#editor"]],
+  editable_remove_unsized: [true, false],
   escape_to_page: [true, false],
-  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }], [{ site: "*://a.com/*", media_quality: "auto" }, { site: "*://b.com/*", media_quality: 720 }]],
+  site_rules: [[], [{ site: "*://a.com/*" }, { site: "*://b.com/*", pass: "j k <C-d> gg" }, { site: "*://c.com/*", only: "<A-j>" }], [{ site: "*://a.com/*", off: true, pass: "j" }, { site: "*://b.com/*", off: false }], [{ site: "*://a.com/*", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } }, gx: { id: "scroll.top" } } }], [{ site: "*://a.com/*", bind: { h: "scroll top", G: ["scroll top", { id: "scroll.top", label: "Top" }], x: { run: ["a", "b"], label: "Both", intent: "Does both" }, y: Array(20).fill("x") } }], [{ site: "*://a.com/*", zoom: 1.5 }], [{ site: "*://a.com/*", blur_on_load: true }], [{ site: "*://a.com/*", escape_to_page: true }], [{ site: "*://a.com/*", editable_add: ["div"], editable_remove: ["#e"], editable_remove_unsized: true }], [{ site: "*://a.com/*", hint_add: [".card"], hint_remove: [] }], [{ site: "*://a.com/*", media_quality: "auto" }, { site: "*://b.com/*", media_quality: 720 }]],
   default_site_rows_off: [[], ["sheets"]],
   next_patterns: [[], ["next", ">"]],
   prev_patterns: [[], ["prev", "<"]],
@@ -156,9 +163,12 @@ const REFUSES: Record<string, unknown[]> = {
   hint_add: [".card", [""], [1]],
   hint_remove: ["nav", [""], [1]],
   blur_on_load: ["true", 1],
+  editable_add: ["div", [""], [1]],
+  editable_remove: ["div", [""], [1]],
+  editable_remove_unsized: ["true", 1],
   escape_to_page: ["true", 1],
   site_rules: [
-    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }], [{ site: "a", media_quality: "high" }], [{ site: "a", media_quality: 500 }],
+    "a.com", [""], [{}], [{ site: "a" , pass: "j", only: "k" }], [{ site: "a", pass: "" }], [{ site: "a", pass: "   " }], [{ site: "a", only: "<j>" }], [{ site: "a", keys: "j" }], [{ site: "a", pass: 1 }], [{ site: "a", off: "true" }], [{ site: "a", off: 1 }], [{ site: "a", bind: {} }], [{ site: "a", bind: "h" }], [{ site: "a", bind: { "<a>": { id: "x" } } }], [{ site: "a", bind: { h: "" } }], [{ site: "a", bind: { h: [] } }], [{ site: "a", bind: { h: ["x", 1] } }], [{ site: "a", bind: { h: {} } }], [{ site: "a", bind: { h: { id: "x", args: "y" } } }], [{ site: "a", bind: { h: { id: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", extra: "y" } } }], [{ site: "a", bind: { h: { run: "x", label: 1 } } }], [{ site: "a", bind: { h: Array(21).fill("x") } }], [{ site: "a", zoom: 9 }], [{ site: "a", no_such_setting: 2 }], [{ site: "a", blur_on_load: "yes" }], [{ site: "a", escape_to_page: "yes" }], [{ site: "a", editable_add: [""] }], [{ site: "a", editable_remove: "x" }], [{ site: "a", editable_remove_unsized: "yes" }], [{ site: "a", hint_add: [""] }], [{ site: "a", hint_remove: "nav" }], [{ site: "a", media_quality: "high" }], [{ site: "a", media_quality: 500 }],
   ],
   default_site_rows_off: ["sheets", ["other"], ["sheets", "sheets"], [1]],
   next_patterns: ["next", [""], [1]],
@@ -255,6 +265,9 @@ test("the defaults stay the same", () => {
     hint_add: [],
     hint_remove: [],
     blur_on_load: false,
+    editable_add: [],
+    editable_remove: [],
+    editable_remove_unsized: false,
     escape_to_page: false,
     site_rules: [],
     default_site_rows_off: [],
@@ -328,6 +341,6 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "editor_ext", "which_key_skip"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
 });

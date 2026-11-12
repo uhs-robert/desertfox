@@ -387,12 +387,12 @@ test("the shipped sheets rows bind x and p to cut and paste on the grid editor, 
   assert.equal(plain.modes.normal?.children["p"]?.kind, "branch");
 });
 
-test("the shipped sheets rows turn escape_to_page on, a user row beats it, and no other page gets it", async () => {
+test("the shipped sheets rows turn escape_to_page and the parked cell editor rule on, a user row beats it, and no other page gets it", async () => {
   const compiled = with_defaults({});
-  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.deepEqual((await ask(compiled, url))!.site_values, { escape_to_page: true }, url);
+  for (const url of [SHEETS, SHEETS_DOMAIN]) assert.deepEqual((await ask(compiled, url))!.site_values, { escape_to_page: true, editable_remove: ["#waffle-rich-text-editor"], editable_remove_unsized: true }, url);
   assert.equal((await ask(compiled, "https://docs.google.com/document/d/abc/edit"))!.site_values, undefined);
   const user = with_defaults({ site_rules: [{ site: "https://docs.google.com/spreadsheets/*", escape_to_page: false }] });
-  assert.equal((await ask(user, SHEETS))!.site_values, undefined);
+  assert.deepEqual((await ask(user, SHEETS))!.site_values, { editable_remove: ["#waffle-rich-text-editor"], editable_remove_unsized: true });
   assert.equal(await key_at(user, SHEETS, "j"), "ArrowDown");
 });
 

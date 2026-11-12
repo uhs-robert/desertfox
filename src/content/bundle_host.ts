@@ -43,6 +43,9 @@ export type BundleHostApi = {
   hold_keys_until_: (handed_back: Promise<readonly string[]>, drop_on_hide?: boolean) => void;
 };
 
+// What main.ts adds to the host a bundle sees: the frame's own answer to `is_editable_element`, which holds the per-site rules. A bundle's copy of editable.ts has none.
+export type PageHostApi = BundleHostApi & { is_editable_: (element: Element | null) => boolean };
+
 export type BundleHostDeps = {
   // Never rejects: a failure answers false.
   request_bundle_: (name: BundleName) => Promise<boolean>;

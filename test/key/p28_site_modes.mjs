@@ -16,6 +16,8 @@ const ROW = [
   'only = "v"',
   "[[site_rules]]",
   'site = "*://127.0.0.1/*?id=grid_*"',
+  'editable_remove = ["#waffle-rich-text-editor"]',
+  "editable_remove_unsized = true",
   'bind = { v = "mode.site visual", V = "mode.site visual" }',
   `modes.visual = { label = "VISUAL", bind = { l = ${arrow("ArrowRight", 39, true)}, h = ${arrow("ArrowLeft", 37, true)}, x = [{ id = "mode.site", args = { name = "off" } }, ${arrow("ArrowDown", 40, false)}] } }`,
   "",

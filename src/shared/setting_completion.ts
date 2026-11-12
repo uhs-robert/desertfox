@@ -99,6 +99,33 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "editable_add",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "editable_remove",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of CSS selectors",
+    "values": []
+  },
+  {
+    "name": "editable_remove_unsized",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "escape_to_page",
     "settable": true,
     "is_toggle": true,

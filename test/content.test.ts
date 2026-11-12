@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { takes_typing } from "../src/content/editable.ts";
+import { is_editable_element, set_editable_rules, takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "../src/content/replay_key.ts";
@@ -610,6 +610,48 @@ test("editable kinds", () => {
   assert.ok(!takes_typing("INPUT", "checkbox", false));
   assert.ok(!takes_typing("SELECT", "", false));
   assert.ok(!takes_typing("DIV", "", false));
+});
+
+test("editable rules: remove beats add, unsized limits remove, a bad selector is skipped", () => {
+  class StubElement {
+    tagName = "DIV";
+    isContentEditable = false;
+    offsetWidth = 100;
+    id: string;
+    constructor(id: string, props: Partial<StubElement> = {}) {
+      this.id = id;
+      Object.assign(this, props);
+    }
+    matches(selector: string): boolean {
+      if (selector === "!!") throw new SyntaxError("bad selector");
+      return selector === `#${this.id}`;
+    }
+  }
+  Object.assign(globalThis, { HTMLElement: StubElement, HTMLInputElement: class {} });
+  const editable = (element: StubElement) => is_editable_element(element as unknown as HTMLElement);
+  const field = new StubElement("f", { isContentEditable: true });
+  const plain = new StubElement("p");
+  try {
+    assert.ok(editable(field) && !editable(plain));
+    set_editable_rules({ editable_remove: ["#f"] });
+    assert.ok(!editable(field), "remove makes a contenteditable not editable");
+    set_editable_rules({ editable_add: ["#p"] });
+    assert.ok(editable(plain) && editable(field), "add makes a div editable");
+    set_editable_rules({ editable_add: ["#f"], editable_remove: ["#f"] });
+    assert.ok(!editable(field), "remove beats add");
+    set_editable_rules({ editable_remove: ["#f"], editable_remove_unsized: true });
+    assert.ok(editable(field), "a sized match is not removed with unsized");
+    field.offsetWidth = 0;
+    assert.ok(!editable(field), "a match with no width is removed with unsized");
+    set_editable_rules({ editable_add: ["!!", "#p"], editable_remove: ["!!"] });
+    assert.ok(editable(plain) && editable(field), "a selector that does not parse matches nothing");
+    set_editable_rules(undefined);
+    assert.ok(editable(field) && !editable(plain), "no rules restore the default");
+  } finally {
+    set_editable_rules(undefined);
+    Reflect.deleteProperty(globalThis, "HTMLElement");
+    Reflect.deleteProperty(globalThis, "HTMLInputElement");
+  }
 });
 
 test("count rules", () => {

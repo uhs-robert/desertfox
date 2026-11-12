@@ -6,6 +6,7 @@ import { check_args } from "../../src/shared/registry/check_args.ts";
 import type { Outcome } from "../../src/shared/messages.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { KEY_LINE_LABELS, KEY_LINE_TEXT } from "../../src/content/hints/view.ts";
+import { is_editable_element } from "../../src/content/editable.ts";
 
 class FakeNode {
   children: FakeNode[] = [];
@@ -146,6 +147,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
         if (left_hint) sink?.exit();
       },
       get_mode: () => mode,
+      is_editable_: is_editable_element,
       escape_: () => win.desertfox_host.set_mode_("normal"),
       // The caret bundle's `caret.mode` sets the caret mode it is asked for.
       run_command_: async (id: string, _name: string, args: Record<string, unknown>) => {

@@ -7,9 +7,9 @@ import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { all_off_step } from "./site_rule.ts";
 import { create_keymap_asks } from "./ask_keymap.ts";
 import { message_of } from "./bundle_host.ts";
-import type { BundleHostApi } from "./bundle_host.ts";
+import type { PageHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
-import { deepest_focused_element, is_editable_element } from "./editable.ts";
+import { deepest_focused_element, is_editable_element, set_editable_rules } from "./editable.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
@@ -256,6 +256,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
+  set_editable_rules(reply?.site_values);
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;
@@ -301,7 +302,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 }
 
 function start(): void {
-  (window as unknown as { desertfox_host: BundleHostApi }).desertfox_host = bundles.api;
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);
