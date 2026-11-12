@@ -172,6 +172,8 @@ export function create_tab_model(deps: TabModelDeps) {
     created = new Set();
     group_upserts = new Set();
     groups_removed = new Map();
+    // A group of a window with no tab row has no privacy yet. It waits for the flush after its first tab row.
+    for (const id of batch.group_upserts) if (groups.has(id) && window_privacy(groups.get(id)!.window_id) === undefined) group_upserts.add(id);
     for (const state of [...ports]) {
       if (!state.ready) continue;
       const rows = [...batch.upserts].flatMap((id) => {
@@ -193,9 +195,11 @@ export function create_tab_model(deps: TabModelDeps) {
     upserts.add(id);
     schedule();
   };
-  const touch_group = (group: Group) => {
+  const touch_group = (group: Group, from_event = true) => {
     const row = group_row_of(group);
     const current = groups.get(row.id);
+    // A tab update that named this group before its event arrived was ignored, so the rows are read again.
+    if (!current && from_event && loaded) void reconcile();
     if (current && (Object.keys(row) as (keyof GroupRow)[]).every((field) => current[field] === row[field])) return;
     groups.set(row.id, row);
     group_upserts.add(row.id);
@@ -343,7 +347,7 @@ export function create_tab_model(deps: TabModelDeps) {
   const repair_groups = (fresh: Group[]) => {
     const live = new Set(fresh.map((group) => group.id));
     for (const id of [...groups.keys()]) if (!live.has(id)) forget_group(id);
-    for (const group of fresh) touch_group(group);
+    for (const group of fresh) touch_group(group, false);
   };
   const repair_from = (tabs: Tab[]) => {
     const fresh = new Map<number, Entry>();
@@ -380,7 +384,7 @@ export function create_tab_model(deps: TabModelDeps) {
           deps.query().catch(() => undefined),
           deps.windows().then(number_windows, () => undefined),
           deps.containers().catch((): Containers => new Map()),
-          deps.groups().catch((): Group[] => []),
+          deps.groups().catch(() => undefined),
         ]);
         if (call !== reconciles) return newest_reconcile;
         if (tabs === undefined) return;
@@ -388,7 +392,8 @@ export function create_tab_model(deps: TabModelDeps) {
         if (numbers) window_numbers = numbers;
         containers = read_containers;
         repair_from(tabs);
-        repair_groups(read_groups);
+        // A rejected read says nothing about the groups, so it repairs none.
+        if (read_groups) repair_groups(read_groups);
         // `repair_from` labels the listed rows. This reaches the detached ones.
         relabel_rows();
         return;
@@ -430,6 +435,8 @@ export function create_tab_model(deps: TabModelDeps) {
       const unloaded_blank = is_unloaded_blank(fresh.row);
       for (const field of UPDATABLE) {
         if (unloaded_blank && ADDRESS_FIELDS.has(field)) continue;
+        // A stale tab object can still carry a group that was removed.
+        if (field === "group_id" && fresh.row.group_id !== -1 && !groups.has(fresh.row.group_id)) continue;
         if (current.row[field] !== fresh.row[field]) {
           (current.row as Record<string, unknown>)[field] = fresh.row[field];
           changed = true;
@@ -505,7 +512,7 @@ export function create_tab_model(deps: TabModelDeps) {
   // A group that moves carries its tabs, and Firefox may report that as tab moves or not, so the indexes come from a fresh read.
   group_events?.onMoved.addListener(
     when_loaded((group) => {
-      touch_group(group);
+      touch_group(group, false);
       void reconcile();
     }),
   );

@@ -46,6 +46,7 @@ function make(initial: Tab[] = [], options: Options = {}) {
   let next_timer = 1;
   let tabs = initial;
   let groups: Group[] = options.groups ?? [];
+  let fail_groups = false;
   let query_gate: Promise<void> | undefined;
   let query_calls = 0;
   let fail_query = false;
@@ -60,7 +61,10 @@ function make(initial: Tab[] = [], options: Options = {}) {
       return snapshot;
     },
     events: events as unknown as TabModelDeps["events"],
-    groups: async () => groups.map((g) => ({ ...g })),
+    groups: async () => {
+      if (fail_groups) throw new Error("no groups");
+      return groups.map((g) => ({ ...g }));
+    },
     group_events: events_named("groups.") as unknown as TabModelDeps["group_events"],
     windows: async () => {
       const snapshot = windows.map((w) => ({ ...w }));
@@ -129,6 +133,7 @@ function make(initial: Tab[] = [], options: Options = {}) {
     model, fire, run_timers, connect_port, connect_port_now,
     set_tabs: (t: Tab[]) => void (tabs = t),
     set_groups: (g: Group[]) => void (groups = g),
+    fail_groups: (fails: boolean) => void (fail_groups = fails),
     hold_query: () => {
       let release = () => {};
       query_gate = new Promise<void>((resolve) => void (release = resolve));
@@ -1239,5 +1244,55 @@ describe("native tab groups", () => {
     f.run_timers();
     assert.equal(normal.messages.length, 1);
     assert.equal(patch_of(priv.messages[1]).groups?.[0]?.id, 8);
+  });
+
+  test("a tab that closes in the same batch as its group's removal sends the removal and no row for it", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 }), tab(2, 1, 1, { groupId: 7 })], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("onRemoved", 2, { windowId: 1, isWindowClosing: false });
+    f.fire("groups.onRemoved", group(7, 1), { isWindowClosing: false });
+    f.run_timers();
+    const patch = patch_of((p.messages as unknown as TabModelMessage[])[1]);
+    assert.deepEqual([patch.removed, patch.groups_removed, patch.upserts.map((row) => [row.id, row.group_id])], [[2], [7], [[1, -1]]]);
+  });
+
+  test("a stale tab update after its group was removed keeps the tab out of the dead group", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 })], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("groups.onRemoved", group(7, 1), { isWindowClosing: false });
+    f.fire("onUpdated", 1, { title: "x" }, tab(1, 1, 0, { groupId: 7, title: "x" }));
+    f.run_timers();
+    const patch = patch_of((p.messages as unknown as TabModelMessage[])[1]);
+    assert.deepEqual(patch.upserts.map((row) => [row.id, row.group_id]), [[1, -1]]);
+  });
+
+  test("a group of a window with no tab row yet is sent once the first tab row arrives", async () => {
+    const f = make([tab(1, 1, 0)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    f.fire("groups.onCreated", group(9, 2));
+    f.run_timers();
+    assert.equal(p.messages.length, 1);
+    f.set_tabs([tab(1, 1, 0), tab(5, 2, 0, { groupId: 9 })]);
+    f.set_groups([group(9, 2)]);
+    f.fire("onCreated", tab(5, 2, 0, { groupId: 9 }));
+    f.run_timers();
+    const patch = patch_of((p.messages as unknown as TabModelMessage[])[1]);
+    assert.deepEqual(patch.groups?.map((g) => g.id), [9]);
+  });
+
+  test("a failed group read in a resync keeps the groups the model has", async () => {
+    const f = make([tab(1, 1, 0, { groupId: 7 })], { groups: [group(7, 1)] });
+    await f.model.start();
+    const p = await f.connect_port();
+    await tick();
+    f.fail_groups(true);
+    p.send({ type: "resync" });
+    await tick();
+    await tick();
+    const last = (p.messages as unknown as TabModelMessage[]).at(-1);
+    assert.equal(last?.type === "snapshot" && last.groups.map((g) => g.id).join(), "7");
   });
 });

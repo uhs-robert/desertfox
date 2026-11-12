@@ -16,3 +16,12 @@ test("a label or a unique bare title picks one group, and a repeated bare title 
   assert.deepEqual(find_group(groups, "Nothing"), { kind: "none" });
   assert.deepEqual(find_group(groups, "  "), { kind: "none" });
 });
+
+test("a generated label never equals another group's literal title, and every label picks one group", () => {
+  const groups = [{ id: 1, title: "Play" }, { id: 2, title: "Play" }, { id: 3, title: "Play #1" }, { id: 4, title: "" }, { id: 5, title: "#4" }];
+  const labels = group_labels(groups);
+  assert.equal(new Set(labels.values()).size, groups.length);
+  assert.equal(labels.get(3), "Play #1");
+  assert.equal(labels.get(5), "#4");
+  for (const group of groups) assert.deepEqual(find_group(groups, labels.get(group.id)!), { kind: "found", id: group.id });
+});

@@ -145,10 +145,23 @@ test("a patch adds, changes and drops groups, and a group change alone reports a
   const { client, changes } = make({ line_window_id: 10 });
   const group = (id: number, title: string) => ({ id, window_id: 10, title, color: "blue", collapsed: false });
   client.receive({ type: "snapshot", rev: 0, tabs: [], groups: [group(1, "Work")] });
+  client.group_items();
   const before = changes();
   client.receive({ type: "patch", rev: 1, upserts: [], removed: [], groups: [group(1, "Job"), group(2, "Play")] });
   assert.deepEqual(client.group_items()?.map((item) => item.name), ["Job", "Play"]);
   client.receive({ type: "patch", rev: 2, upserts: [], removed: [], groups_removed: [1] });
   assert.deepEqual(client.group_items()?.map((item) => item.name), ["Play"]);
   assert.equal(changes(), before + 2);
+});
+
+test("a group change reports a change only after a source asked for groups", () => {
+  const { client, changes } = make({ line_window_id: 10 });
+  const group = (id: number, title: string) => ({ id, window_id: 10, title, color: "blue", collapsed: false });
+  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, 0)], groups: [] });
+  const before = changes();
+  client.receive({ type: "patch", rev: 1, upserts: [], removed: [], groups: [group(1, "Work")] });
+  assert.equal(changes(), before);
+  client.group_items();
+  client.receive({ type: "patch", rev: 2, upserts: [], removed: [], groups: [group(1, "Job")] });
+  assert.equal(changes(), before + 1);
 });
