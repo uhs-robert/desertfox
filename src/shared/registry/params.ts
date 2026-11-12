@@ -12,6 +12,9 @@ export function is_context_source(value: unknown): value is ContextSource {
   return is_name(from) && (then === undefined || is_name(then));
 }
 
+// A source as the command line writes it: `@selection`, or the chain `@selection,search_query`.
+export const source_text = (source: ContextSource): string => `@${source.from}${source.then === undefined ? "" : `,${source.then}`}`;
+
 export type DefaultList = Extract<NonNullable<ParamDef["default"]>, readonly unknown[]>;
 
 export function is_default_list(value: unknown): value is DefaultList {

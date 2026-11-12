@@ -14,7 +14,7 @@ import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
-import { describe_default, is_dynamic_values, positional_params } from "../shared/registry/params.ts";
+import { describe_default, is_dynamic_values, positional_params, source_text } from "../shared/registry/params.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
@@ -102,7 +102,7 @@ function describe_args(sources: EnumSources, command: CommandMeta | undefined, a
     parts.push(text.slice((command.name ?? command.id).length).trim());
   }
   if (count !== undefined) parts.push(`count=${count}`);
-  if (prompt) parts.push(prompt.prefill ? `prompts for ${prompt.param}, prefilled from ${prompt.prefill.from}` : `prompts for ${prompt.param}`);
+  if (prompt) parts.push(prompt.prefill ? `prompts for ${prompt.param}, prefilled from ${source_text(prompt.prefill).slice(1)}` : `prompts for ${prompt.param}`);
   return parts.join(" ");
 }
 

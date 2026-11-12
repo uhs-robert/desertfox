@@ -6,7 +6,7 @@
 import type { CommandMeta, Mode } from "../command.ts";
 import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../config.ts";
 import { intent_problem, label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
-import { captured_key_param, find_param, without_param } from "../registry/params.ts";
+import { captured_key_param, find_param, source_text, without_param } from "../registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
 import { COUNT_MODES } from "../keys/matcher.ts";
@@ -76,7 +76,7 @@ function check_prompt(prompt: Prompt, command: CommandMeta): string[] {
     const names = (command.params ?? []).map((candidate) => candidate.name).join(", ") || "none";
     errors.push(`param "${prompt.param}" is not a param of ${command.id} (params: ${names})`);
   } else if (prompt.prefill !== undefined && param.type !== "string") {
-    errors.push(`${prompt.prefill ? `@${prompt.prefill.from}` : "a source"} needs a string param, "${param.name}" is ${param.type}`);
+    errors.push(`${prompt.prefill ? source_text(prompt.prefill) : "a source"} needs a string param, "${param.name}" is ${param.type}`);
   }
   return errors;
 }
