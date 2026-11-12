@@ -11,7 +11,9 @@ import type { RouteRequest, ActiveTab } from "./router.ts";
 export type OmniboxDisposition = "currentTab" | "newForegroundTab" | "newBackgroundTab";
 
 export type OmniboxDeps = {
-  registry: CommandLookup & { get: (command_id: string) => { params?: readonly { name: string }[] } | undefined };
+  // The words the command line accepts, configured aliases included, read once the config has loaded.
+  lookup: () => Promise<CommandLookup>;
+  registry: { get: (command_id: string) => { params?: readonly { name: string }[] } | undefined };
   get_enum_sources: () => Promise<EnumSources>;
   active_tab: () => Promise<ActiveTab | undefined>;
   mode_of: (tab_id: number | undefined) => Promise<Mode>;
@@ -31,19 +33,21 @@ export function create_omnibox(deps: OmniboxDeps) {
     const active = await deps.active_tab();
     const refuse = (id: string, message: string) => deps.show_refusal(active?.tab_id, { id, message });
     if (line === "") return void (await refuse("omnibox", OMNIBOX_HINT));
-    const parsed = parse_command_line(deps.registry, line, await deps.get_enum_sources());
+    const parsed = parse_command_line(await deps.lookup(), line, await deps.get_enum_sources());
     if (parsed.kind === "error") return void (await refuse("omnibox", parsed.error));
     if (parsed.kind === "help") return void (await refuse("omnibox", parsed.usage));
     let { invocation } = parsed;
     const where = WHERE_OF[disposition];
     if (where !== undefined && deps.registry.get(invocation.id)?.params?.some((param) => param.name === "where")) invocation = { ...invocation, args: { ...invocation.args, where } };
-    // Recorded as the command line records: what the user typed, from a normal window only.
-    await deps.record_history(line, active?.incognito === true);
-    await deps.run({
+    const response = await deps.run({
       invocations: [invocation],
       mode: await deps.mode_of(active?.tab_id),
       ...(active === undefined ? {} : { sender_tab_id: active.tab_id }),
     });
+    // The router delivers every refusal itself except this one, and a line typed while off is not history.
+    if (!response.ok && response.refusal.id === "desertfox.off") return void (await deps.show_refusal(active?.tab_id, response.refusal));
+    // Recorded as the command line records: what the user typed, from a normal window only.
+    await deps.record_history(line, active?.incognito === true);
   }
 
   return { entered };

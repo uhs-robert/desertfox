@@ -4,7 +4,7 @@ import { evaluate_in_background, evaluate_in_chrome } from "./rdp.mjs";
 
 export const areas = ["omnibox"];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, expect, sleep, open_page, press_keys, poll_until, type_in_address_bar, wait_active_tab, wait_tab_quiet }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, expect, open_page, press_keys, poll_until, type_in_address_bar, wait_active_tab, wait_tab_quiet }) {
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const active_url = () => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab?.url)`);
   const tab_count = () => in_background(`browser.tabs.query({}).then((tabs) => tabs.length)`);
@@ -54,12 +54,13 @@ export async function run_cases({ rdp, extension_id, run_case, setup, expect, sl
     await poll_until("the active tab to change", async () => (await active_url()) !== before);
   });
 
-  await run_case("a refused line runs nothing", async () => {
+  await run_case("a refused line runs nothing and shows a notification", async () => {
     const before = await active_url();
+    await in_background(`browser.notifications.getAll().then((all) => Promise.all(Object.keys(all).map((id) => browser.notifications.clear(id))))`);
     await type_command("df rust");
     await press_keys("-k", "Return");
-    // The refusal is a notice window that takes the focus, so the tab stays as it was.
-    await sleep(500);
+    // The protected page has no toast, so the refusal arrives as a notification. That proves the keyword fired.
+    await poll_until("the refusal notification", async () => Object.keys((await in_background(`browser.notifications.getAll()`)) ?? {}).length > 0);
     expect((await active_url()) === before, "the active tab stayed");
   });
 }
