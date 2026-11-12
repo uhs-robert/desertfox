@@ -27,8 +27,12 @@ export function exec_clipboard_command(doc: ClipboardCommandDocument, target: Cl
   let event_fired = false;
   const mark = () => (event_fired = true);
   doc.addEventListener(action, mark, { capture: true, once: true });
-  doc.execCommand(action);
-  doc.removeEventListener(action, mark, { capture: true });
+  // A listener left behind by a throw would mark the user's next copy or paste.
+  try {
+    doc.execCommand(action);
+  } finally {
+    doc.removeEventListener(action, mark, { capture: true });
+  }
   return event_fired;
 }
 

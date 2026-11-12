@@ -80,7 +80,16 @@ async function edit_external(host: BundleHostApi, args: Record<string, unknown>)
   if (!field || !is_editable_element(field)) throw new RuntimeRefusal("No text field is focused");
   if (is_secret_field(field)) throw new RuntimeRefusal("A password field is not opened in an external editor");
   const through_clipboard = field.closest(VIRTUALIZED_EDITOR) !== null;
-  const text = through_clipboard ? await copy_through_clipboard(field as HTMLElement) : read_field_text(field);
+  if (!through_clipboard) return open_in_editor(field, read_field_text(field), false, args);
+  const text = await copy_through_clipboard(field as HTMLElement);
+  // The clipboard was used even when the open is refused after the copy, so the refusal says so too.
+  await open_in_editor(field, text, true, args).catch((error: Error) => {
+    throw new RuntimeRefusal(`${error.message}. ${CLIPBOARD_USED_TOAST}`);
+  });
+  host.show_toast_(CLIPBOARD_USED_TOAST);
+}
+
+async function open_in_editor(field: Element, text: string, through_clipboard: boolean, args: Record<string, unknown>): Promise<void> {
   const bytes = new TextEncoder().encode(text).length;
   if (bytes > MAX_EDITOR_BYTES) throw new RuntimeRefusal(`The field holds ${Math.ceil(bytes / 1024)} KiB, over the ${MAX_EDITOR_BYTES / 1024} KiB the external editor takes`);
   const token = crypto.randomUUID();
@@ -92,7 +101,6 @@ async function edit_external(host: BundleHostApi, args: Record<string, unknown>)
     open_edits.delete(token);
     throw new RuntimeRefusal(answer.message);
   }
-  if (through_clipboard) host.show_toast_(CLIPBOARD_USED_TOAST);
 }
 
 const CLIPBOARD_USED_TOAST = "Used the clipboard. Its text is back, an image or HTML on it is lost";
