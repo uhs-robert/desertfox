@@ -18,6 +18,10 @@ from host_under_test import load_host
 HOST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desertfox-bridge")
 
 MODE = {"verb": "mode", "id": "insert", "label": "INSERT", "tab_id": 17, "window_id": 3, "private": False}
+
+# How long a test waits for something that must happen. A wait ends the moment the thing happens, so a
+# long bound costs nothing on a green run and only keeps a starved CPU from failing the test.
+LIVENESS_S = 15
 PRIVATE_MODE = {"verb": "mode", "id": "normal", "label": "NORMAL", "private": True}
 
 
@@ -58,7 +62,7 @@ class Host:
             raise AssertionError("the host did not say ready within %s s" % timeout)
         return self.read_frame()
 
-    def read_request(self, timeout=5):
+    def read_request(self, timeout=LIVENESS_S):
         """The next frame the host sends to the extension after ready: a run or list request."""
         waiting, _, _ = select.select([self.process.stdout], [], [], timeout)
         if not waiting:
@@ -116,7 +120,7 @@ class BridgeTestCase(unittest.TestCase):
             return json.load(state_file)
 
     def wait_for(self, condition, what="the state file"):
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + LIVENESS_S
         while time.monotonic() < deadline:
             try:
                 state = self.read_state()
@@ -128,7 +132,7 @@ class BridgeTestCase(unittest.TestCase):
         self.fail("timed out waiting for " + what)
 
     def wait_path_gone(self, path):
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + LIVENESS_S
         while time.monotonic() < deadline:
             if not os.path.exists(path):
                 return
@@ -138,7 +142,7 @@ class BridgeTestCase(unittest.TestCase):
     def ask(self, request, raw=None):
         """One request line on a new connection, the decoded reply line."""
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
+            client.settimeout(LIVENESS_S)
             client.connect(self.socket_path)
             client.sendall(raw if raw is not None else json.dumps(request).encode() + b"\n")
             data = b""
@@ -321,7 +325,7 @@ class LifecycleTest(BridgeTestCase):
         self.assertEqual(len(losers), 1)
         self.assertEqual(len(winners), 1)
         self.assertGreaterEqual(time.monotonic() - started, 2.5, "the loser must wait for the lock before it gives up")
-        self.assertEqual(losers[0].process.wait(timeout=5), 1)
+        self.assertEqual(losers[0].process.wait(timeout=LIVENESS_S), 1)
         self.assertEqual(losers[0].process.stdout.read(), b"", "the loser must not say ready")
         self.assertIn(b"another bridge host", losers[0].process.stderr.read())
         self.assertEqual(winners[0].read_ready(), {"ready": True, "host_version": 1, "release_version": "dev"})
@@ -399,7 +403,7 @@ class SocketTest(BridgeTestCase):
     def test_one_connection_takes_several_requests(self):
         self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
+            client.settimeout(LIVENESS_S)
             client.connect(self.socket_path)
             client.sendall(b'{"verb":"ping"}\n{"verb":"ping"}\n')
             data = b""
@@ -420,7 +424,7 @@ class SocketTest(BridgeTestCase):
     def test_a_request_over_the_cap_is_refused(self):
         self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
+            client.settimeout(LIVENESS_S)
             client.connect(self.socket_path)
             client.sendall(b"x" * (70 * 1024))
             data = client.recv(4096)
@@ -447,13 +451,13 @@ class SocketTest(BridgeTestCase):
             time.sleep(0.2)
             extra = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             held.append(extra)
-            extra.settimeout(5)
+            extra.settimeout(LIVENESS_S)
             extra.connect(self.socket_path)
             self.assertEqual(extra.recv(10), b"", "the 17th connection is closed without an answer")
         finally:
             for client in held:
                 client.close()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + LIVENESS_S
         while True:
             try:
                 self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
@@ -622,7 +626,7 @@ class RunAndListTest(BridgeTestCase):
     def test_a_refused_run_over_the_rate_limit_never_reaches_the_extension(self):
         host = self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5)
+            client.settimeout(LIVENESS_S)
             client.connect(self.socket_path)
             client.sendall(b'{"verb":"run","command":"tab.next"}\n' * 12)
             for _ in range(10):
@@ -893,7 +897,7 @@ class ThemeKeeperTest(unittest.TestCase):
                 self.fired = True
                 pusher = threading.Thread(target=lambda: keeper.push(link, "oasis_rose"))
                 pusher.start()
-                deadline = time.monotonic() + 5
+                deadline = time.monotonic() + LIVENESS_S
                 while keeper.palette != "oasis_rose" and time.monotonic() < deadline:
                     time.sleep(0.005)
                 link.answered({"request_id": 1, "ok": False, "message": outer.module.UNKNOWN_PALETTE_MESSAGE})
@@ -961,7 +965,7 @@ class LinkTest(unittest.TestCase):
         threads = [threading.Thread(target=lambda: results.append(link.ask("run", {"command": "x"}, 5))) for _ in range(self.module.MAX_PENDING)]
         for thread in threads:
             thread.start()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + LIVENESS_S
         while len(link.pending) < self.module.MAX_PENDING and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertEqual(link.ask("run", {"command": "x"}, 5), {"ok": False, "message": "too many requests are waiting"})
@@ -1021,11 +1025,16 @@ class AcceptErrorTest(BridgeTestCase):
                 return real.fileno()
 
         state = module.BridgeState(self.state_path, os.getpid(), "1")
+        # The accept thread is a daemon that outlives the test, so the recorder is never undone.
+        logged = []
+        module.log = logged.append
         thread = threading.Thread(target=module.accept_loop, args=(Flaky(), state, module.ExtensionLink(None), module.EventHub()), daemon=True)
         thread.start()
         self.addCleanup(real.close)
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
         self.assertTrue(thread.is_alive())
+        self.assertEqual(len(logged), 1)
+        self.assertIn("accept failed, retrying", logged[0])
 
 
 if __name__ == "__main__":
