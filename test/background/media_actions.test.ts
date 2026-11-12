@@ -431,3 +431,15 @@ test("the site player is asked only when no acted-on player has a track, and the
   await run_media(unknown.deps, ctx, { action: "captions" });
   assert.deepEqual(unknown.toasts, ["Asked the player to toggle captions"]);
 });
+
+test("a frame step ranks the videos alone, so playing audio does not hide an idle video", () => {
+  const audio_and_video = [scan(0, { playing: 1, audible: 1, playing_audio: 1, audible_audio: 1, has_video: false }), scan(1, { video_area: 9000 })];
+  assert.deepEqual(choose_frames(audio_and_video, "frame"), [{ frame_id: 1, target: "largest" }]);
+  assert.deepEqual(choose_frames([scan(0, { playing: 1, audible: 1, playing_audio: 1, audible_audio: 1, has_video: false })], "frame"), []);
+});
+
+test("a captions notice comes from a frame that has a track", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "none" }) }, 1: { scan: scan(1, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "on" }) } });
+  await run_media(tab.deps, ctx, { action: "captions" });
+  assert.deepEqual(tab.toasts, ["Captions on, 2 players"]);
+});

@@ -15,7 +15,8 @@ export type Player = {
   muted: boolean;
   currentTime: number;
   duration: number;
-  textTracks?: ArrayLike<{ kind: string; mode: string; default?: boolean }>;
+  textTracks?: ArrayLike<{ kind: string; mode: string }>;
+  querySelector?: (selector: string) => { track?: unknown } | null;
   play: () => Promise<void>;
   pause: () => void;
   requestPictureInPicture?: () => Promise<unknown>;
@@ -125,12 +126,12 @@ function targets_of(view: FrameView, request: Extract<MediaRequest, { type: "med
 // Only subtitle and caption tracks count. A track a site draws itself stays "hidden", which reads as off.
 const caption_tracks = (player: Player) => Array.from(player.textTracks ?? []).filter(({ kind }) => kind === "subtitles" || kind === "captions");
 
-// `Reflect.get`: a property named default trips the scan that keeps param defaults read in one place.
+// The default flag belongs to the <track> element, not to its TextTrack.
 function toggle_captions(player: Player): void {
   const tracks = caption_tracks(player);
   const shown = tracks.filter(({ mode }) => mode === "showing");
   if (shown.length > 0) for (const track of shown) track.mode = "disabled";
-  else if (tracks[0]) (tracks.find((track) => Reflect.get(track, "default")) ?? tracks[0]).mode = "showing";
+  else if (tracks[0]) (tracks.find((track) => track === player.querySelector?.("track[default]")?.track) ?? tracks[0]).mode = "showing";
 }
 
 // `none` only when no acted-on player has a track, so another player's track still counts.

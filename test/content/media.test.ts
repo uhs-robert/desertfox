@@ -318,8 +318,10 @@ test("play_pause on the pinned video toggles it even when another video plays", 
 const track = (kind: string, mode = "disabled", extra: Record<string, unknown> = {}) => ({ kind, mode, ...extra });
 
 test("captions on shows the default subtitle track, else the first, and ignores other kinds", async () => {
-  const tracks = [track("chapters"), track("subtitles"), track("captions", "disabled", { default: true })];
-  const result = await apply_in_frame(frame([{ player: player({ textTracks: tracks }), area: 1 }]), apply({ action: "captions" }));
+  const tracks = [track("chapters"), track("subtitles"), track("captions")];
+  // The default flag sits on the <track> element, whose `track` is the TextTrack.
+  const querySelector = () => ({ track: tracks[2] });
+  const result = await apply_in_frame(frame([{ player: player({ textTracks: tracks, querySelector }), area: 1 }]), apply({ action: "captions" }));
   assert.deepEqual(tracks.map(({ mode }) => mode), ["disabled", "disabled", "showing"]);
   assert.equal(result.state?.captions, "on");
   const plain = [track("subtitles"), track("subtitles")];
@@ -384,4 +386,18 @@ test("a frame step leaves audio alone and acts on nothing without a video", asyn
   assert.deepEqual(audio.calls, []);
   assert.equal(result.acted, 1);
   assert.equal((await apply_in_frame(frame([{ player: audio, area: 0 }]), apply({ action: "frame", value: "up" }))).acted, 0);
+});
+
+test("a default track that is not the first is the one captions show", async () => {
+  const tracks = [track("subtitles"), track("subtitles")];
+  await apply_in_frame(frame([{ player: player({ textTracks: tracks, querySelector: () => ({ track: tracks[1] }) }), area: 1 }]), apply({ action: "captions" }));
+  assert.deepEqual(tracks.map(({ mode }) => mode), ["disabled", "showing"]);
+});
+
+test("a frame step with audio playing and a paused video steps the video", async () => {
+  const audio = player({ localName: "audio", paused: false });
+  const video = player({ currentTime: 5 });
+  const result = await apply_in_frame(frame([{ player: audio, area: 0 }, { player: video, area: 1 }]), apply({ action: "frame", value: "up", target: "largest" }));
+  assert.equal(result.acted, 1);
+  assert.ok(video.currentTime > 5);
 });
