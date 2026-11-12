@@ -9,7 +9,7 @@ const sent: unknown[] = [];
 (globalThis as { browser?: unknown }).browser = { runtime: { sendMessage: async (message: unknown) => void sent.push(message) } };
 
 // How a navigation ends, as Firefox 160 reports it (docs/firefox-behavior.md): a change within the document and one an app intercepts commit here, a cancelled one does not, and one that loads another document only hides this one.
-type Outcome = "commit" | "intercept" | "cancel" | "load";
+type Outcome = "commit" | "intercept" | "cancel" | "load" | "stall";
 
 // One document: its window, its scroll box and the messages it sent.
 function make(extra: { is_top?: boolean } = {}) {
@@ -33,13 +33,13 @@ function make(extra: { is_top?: boolean } = {}) {
   const navigate = (url: string, type: NavigateEvent["navigationType"] = "push", outcome: Outcome = "commit") => {
     const event: NavigateEvent = { navigationType: type, hashChange: url.split("#")[0] === page.location.href.split("#")[0] && url !== page.location.href, destination: { url, sameDocument: outcome === "commit" || outcome === "cancel" } };
     navigation.dispatchEvent(Object.assign(new Event("navigate"), event));
-    if (outcome === "cancel") return;
+    if (outcome === "cancel" || outcome === "stall") return;
     if (outcome === "load") return hide();
     page.location.href = url;
     state.y = 0;
-    navigation.dispatchEvent(new Event("currententrychange"));
+    navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: type }));
   };
-  return { watch, page, host, state, navigate, hide };
+  return { watch, page, host, state, navigation, navigate, hide };
 }
 
 const pushed = (url: string, y: number) => ({ type: "jump_push", url, x: 0, y });
@@ -151,4 +151,12 @@ test("a hint pick ends the quiet window, so its change records right after a jum
   watch.quiet_(false);
   navigate("https://app.test/a");
   assert.deepEqual(sent, [pushed(HERE, 400)]);
+});
+
+// A navigation to another document that never loads (a download, a 204) leaves its read held. `navigation.updateCurrentEntry()` then changes the entry with no navigation.
+test("a change of the current entry with no navigation does not commit a read held from an earlier navigate", () => {
+  const { navigation } = make();
+  navigation.dispatchEvent(Object.assign(new Event("navigate"), { navigationType: "push", hashChange: false, destination: { url: "https://app.test/report.pdf", sameDocument: false } }));
+  navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: null }));
+  assert.deepEqual(sent, []);
 });

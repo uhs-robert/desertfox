@@ -46,7 +46,7 @@ const section_push = (section: string) => {
   const url = `https://app.test/doc?section=${section}`;
   navigation.dispatchEvent(Object.assign(new Event("navigate"), { navigationType: "push", hashChange: false, destination: { url, sameDocument: true } }));
   page.location.href = url;
-  navigation.dispatchEvent(new Event("currententrychange"));
+  navigation.dispatchEvent(Object.assign(new Event("currententrychange"), { navigationType: "push" }));
 };
 const pushes = () => sent.filter((message) => message.type === "jump_push");
 
