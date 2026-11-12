@@ -2,7 +2,8 @@
 # This workflow holds the AMO signing key and decides what code every beta install runs. Rules that keep it safe:
 #   - It never runs for a pull request or a fork. The only triggers are the schedule and a manual dispatch, and the dispatch takes no input.
 #   - Only the beta job reads the signing secrets, and only in the one step that signs.
-#   - The beta job runs from main only, through the beta-signing environment and a branch check.
+#   - The beta job runs from main only, through the beta-signing environment and a branch check. A dispatch from another branch runs plan and test and skips beta.
+#   - The write token (GH_TOKEN) is set only on the steps that run gh, so npm and the build never see it.
 # A beta version is <last stable>.<run number> (0.1.23.7): Firefox ranks it above that stable version and below the next one. AMO signs a version once, so the number is never reused.
 name: beta
 
@@ -20,7 +21,6 @@ env:
 jobs:
   # Decides whether this run builds, and which version. Runs no repo code.
   plan:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -55,8 +55,13 @@ jobs:
               echo "build=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            built=$(gh api --paginate "repos/$REPOSITORY/releases" --jq '.[] | select(.prerelease and .target_commitish == env.HEAD_SHA) | .tag_name' | grep -Ecx 'v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
-            if [ "$built" != "0" ]; then
+            beta_tags=$(gh api --paginate "repos/$REPOSITORY/releases" --jq '.[] | select(.prerelease and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name + " " + .target_commitish')
+            newest_beta=$(cut -d ' ' -f 1 <<<"$beta_tags" | sed 's/^v//' | sort -V | tail -n 1)
+            channel_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - 2>/dev/null | jq -r '.addons | to_entries[0].value.updates[0].version // empty' 2>/dev/null || true)
+            # Self-healing: when updates.json is missing or older than the newest beta, a failed or out-of-order upload left the channel behind, so this run builds again and repairs it.
+            if [ -n "$newest_beta" ] && { [ -z "$channel_version" ] || [ "$channel_version" != "$newest_beta" ] && [ "$(printf '%s\n%s\n' "$channel_version" "$newest_beta" | sort -V | tail -n 1)" = "$newest_beta" ]; }; then
+              echo "updates.json names '${channel_version:-nothing}' but the newest beta is $newest_beta, so this run builds to repair the channel."
+            elif grep -q " $HEAD_SHA\$" <<<"$beta_tags"; then
               echo "$HEAD_SHA already has a beta build, so the nightly run builds nothing."
               echo "build=false" >> "$GITHUB_OUTPUT"
               exit 0
@@ -85,7 +90,7 @@ jobs:
 
   beta:
     needs: [plan, test]
-    if: needs.plan.outputs.build == 'true'
+    if: github.ref == 'refs/heads/main' && needs.plan.outputs.build == 'true'
     runs-on: ubuntu-latest
     environment: beta-signing
     timeout-minutes: 30
@@ -96,7 +101,6 @@ jobs:
       group: beta
       cancel-in-progress: false
     env:
-      GH_TOKEN: ${{ github.token }}
       REPOSITORY: ${{ github.repository }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
@@ -118,6 +122,8 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - run: npm ci --no-audit --no-fund
       - name: Refuse a version that already has a release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "v$VERSION" --repo "$REPOSITORY" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists, so that version was signed before. Start a new run." >&2
@@ -133,6 +139,7 @@ jobs:
       # release_beta checks the gh login even in a dry run, hence GH_TOKEN. Its sign step needs the AMO key, so the key is in this step only.
       - name: Build, sign and create the prerelease
         env:
+          GH_TOKEN: ${{ github.token }}
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
         run: just release_beta
@@ -164,16 +171,38 @@ jobs:
           for name in desertfox-host desertfox-bridge desertfox; do
             [ "$(jq -r --arg name "$name" '.sha256[$name]' release-assets/host_sha256.json)" = "$(cut -d ' ' -f 1 "release-assets/$name.sha256")" ]
           done
+      # Releases that finish out of order must not move the channel backward, so this step leaves a newer updates.json alone. It uploads the new file under a temporary name first, so a failed upload keeps the old one.
       - name: Point the beta channel at this build
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          node tools/write_updates_json.ts --tag "v$VERSION" --xpi "release-assets/desertfox-$VERSION.xpi" --manifest dist/manifest.json --repo "$REPOSITORY" --out updates.json
+          current_version=$(gh release download "$UPDATES_TAG" --repo "$REPOSITORY" --pattern updates.json --output - 2>/dev/null | jq -r '.addons | to_entries[0].value.updates[0].version // empty' 2>/dev/null || true)
+          if [ -n "$current_version" ] && [ "$(printf '%s\n%s\n' "$current_version" "$VERSION" | sort -V | tail -n 1)" = "$current_version" ]; then
+            echo "updates.json already names $current_version, which is not older than $VERSION, so it stays."
+            exit 0
+          fi
+          temp_name="updates-new-$VERSION.json"
+          node tools/write_updates_json.ts --tag "v$VERSION" --xpi "release-assets/desertfox-$VERSION.xpi" --manifest dist/manifest.json --repo "$REPOSITORY" --out "$temp_name"
           if ! gh release view "$UPDATES_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
             gh release create "$UPDATES_TAG" --repo "$REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" --title "Beta channel" --notes "Holds updates.json, which every beta build reads to find the next beta. Do not delete this release: its URL is built into each beta."
           fi
-          gh release upload "$UPDATES_TAG" updates.json --repo "$REPOSITORY" --clobber
+          asset_id() { gh api "repos/$REPOSITORY/releases/tags/$UPDATES_TAG" --jq ".assets[] | select(.name == \"$1\") | .id"; }
+          # A temporary asset left by an earlier failed run would block the rename.
+          for leftover in $(gh api "repos/$REPOSITORY/releases/tags/$UPDATES_TAG" --jq '.assets[] | select(.name | test("^updates-new-.*\\.json$")) | .name'); do
+            gh release delete-asset "$UPDATES_TAG" "$leftover" --repo "$REPOSITORY" --yes
+          done
+          gh release upload "$UPDATES_TAG" "$temp_name" --repo "$REPOSITORY"
+          new_id=$(asset_id "$temp_name")
+          [ -n "$new_id" ] || { echo "The uploaded $temp_name is not on the $UPDATES_TAG release." >&2; exit 1; }
+          if [ -n "$(asset_id updates.json)" ]; then
+            gh release delete-asset "$UPDATES_TAG" updates.json --repo "$REPOSITORY" --yes
+          fi
+          gh api -X PATCH "repos/$REPOSITORY/releases/assets/$new_id" -f name=updates.json >/dev/null
       - name: Prune old beta prereleases
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh release list --repo "$REPOSITORY" --limit 1000 --json tagName,isPrerelease,createdAt \
