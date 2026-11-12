@@ -336,6 +336,51 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal(page_id);
   });
 
+  // The page changes while the line is open and while n waits, so the session reads the page again before it lands on the match.
+  await run_case("Enter and n land the caret on the match on a page that changes its text every 50 ms", async () => {
+    const page_id = "ticking_search";
+    await open_page("caret_ticking", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    const caret_line = "(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected ? s.anchorNode.textContent : null; })()";
+    const mark = events.length;
+    await search_with_line("ta");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "t", 'the caret on the "t" of beta');
+    expect((await in_active_tab(caret_line)) === "alpha beta gamma", "Enter left the caret off the line of the first match");
+    const mark_n = events.length;
+    await press_keys("n");
+    await poll_until("n to put the caret on the line of delta", async () => (await in_active_tab(caret_line)) === "delta epsilon");
+    await wait_for_last_selection(page_id, mark_n, (last) => last.text === "t", 'the caret on the "t" of delta');
+    await escape_to_normal(page_id);
+  });
+
+  // n paints the caret before it steps, and the page removes all its text at that selection change, while the step waits for its colors.
+  await run_case("caret mode ends when the page loses all its text during n", async () => {
+    const page_id = "emptied_n";
+    await open_page("caret_emptied", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    const mark = events.length;
+    await search_with_line("foo");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "f", 'the caret on the "f" of foo');
+    await in_active_tab(`(document.body.dataset.empty = "armed", true)`);
+    const mark_n = events.length;
+    await press_keys("n");
+    await wait_event(mark_n, (event) => event.type === "emptied" && event.page_id === page_id, "the page to remove its text");
+    await wait_event(mark_n, badge_is(page_id, "NORMAL"), "the NORMAL badge once the page has no text");
+  });
+
+  // A plain element fires no mutation when it attaches a shadow root, so only a fresh read at / finds its text.
+  await run_case("a search finds text in a shadow root that a plain element attached after caret mode started", async () => {
+    const page_id = "plain_late_root";
+    await open_page("caret", page_id, { new_tab: true });
+    await in_active_tab(`(() => { const host = document.createElement("div"); host.id = "plain_host"; document.body.append(host); return true; })()`);
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await in_active_tab(`(document.getElementById("plain_host").attachShadow({ mode: "open" }).innerHTML = "<p>zebra late</p>", true)`);
+    const mark = events.length;
+    await search_with_line("zebra");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "z", 'the caret on the "z" of zebra');
+    await escape_to_normal(page_id);
+  });
+
   // A frame that navigates fires `load` and no mutation in its parent, and its old document dies.
   await run_case("j reaches the new text of a same-origin frame that navigated under caret mode", async () => {
     const page_id = "nav_frame";
