@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { MarkTab } from "../../src/background/address_arrival.ts";
 import { create_jump_store } from "../../src/background/jump_store.ts";
 import type { JumpArea } from "../../src/background/jump_store.ts";
+import { create_jump_leave } from "../../src/background/jump_leave.ts";
 import { create_jump_step } from "../../src/background/jump_step.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
 import type { JumpRequest } from "../../src/shared/messages.ts";
@@ -58,7 +59,9 @@ function make(tabs: MarkTab[]) {
   const go = (delta: number, y = 40, extra = {}, id = 1, arrival = false): Promise<unknown> => step({ type: "jump_step", step: delta, x: 0, y, ...(arrival && { arrival: true }) } as JumpRequest, sender(id, extra));
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const pushes = () => log.filter((line) => line.startsWith("push"));
-  return { store, step, log, watches, refusals, state, sender, push, go, flush, pushes };
+  // The stored list of window 1, read without moving the cursor.
+  const list = async () => ((await session.get("desertfox_jumps")) as { desertfox_jumps?: { windows: Record<string, { entries: unknown[]; cursor: number }> } }).desertfox_jumps?.windows["1"];
+  return { store, step, log, watches, refusals, state, sender, push, go, flush, pushes, list };
 }
 
 test("a step to a place on the page you are on answers the offset and touches no tab", async () => {
@@ -302,4 +305,24 @@ test("an origin's older arrival that already ended cannot cancel another tab's a
   await arrivals.go(origin(1), target(4), "https://t4.test/", 3, push);
   assert.equal(arrivals.is_arriving(2), true, "tab 1's new step cancelled tab 3's arrival");
   assert.equal(arrivals.is_arriving(4), true);
+});
+
+test("a step that opens its address here marks the page it leaves, so that page's late report records nothing", async () => {
+  const fakes = make([tab(1, HERE)]);
+  await fakes.push(500);
+  await fakes.go(-1);
+  // The report comes after the step's arrival ended, with the tab already on the new page.
+  const leave = create_jump_leave({ store: fakes.store, tab_now: async () => ({ url: FAR, status: "complete" }) });
+  await leave.leave({ type: "jump_leave", x: 0, y: 40 }, fakes.sender(), HERE);
+  assert.deepEqual(await fakes.list(), { entries: [{ url: FAR, x: 0, y: 500 }, { url: HERE, x: 0, y: 40 }], cursor: 0 }, "the step's forward entry survives");
+});
+
+test("a step that Firefox refuses to open leaves no mark, so the page's next leave records", async () => {
+  const fakes = make([tab(1, HERE)]);
+  fakes.state.navigate_fails = true;
+  await fakes.push(500);
+  await fakes.go(-1);
+  const leave = create_jump_leave({ store: fakes.store, tab_now: async () => ({ url: "https://other.test/", status: "loading" }) });
+  await leave.leave({ type: "jump_leave", x: 0, y: 40 }, fakes.sender(), HERE);
+  assert.deepEqual((await fakes.list())?.entries.at(-1), { url: HERE, x: 0, y: 40 });
 });

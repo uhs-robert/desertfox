@@ -143,7 +143,13 @@ const jump_step = create_jump_step({
   push_jump: (tab_id, steps, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps), ...(arrival && { arrival }) }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "page.jump", message }, 0),
 });
-const jump_leave = create_jump_leave({ store: browser_jump_store, is_stepping: jump_step.is_stepping, is_open: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined)) !== undefined });
+const jump_leave = create_jump_leave({
+  store: browser_jump_store,
+  tab_now: async (tab_id) => {
+    const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+    return tab && { url: tab.url, status: tab.status };
+  },
+});
 const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
 wire_repeat({
@@ -447,7 +453,7 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
   if (change.status === "loading") void external_editor.orphan(tab_id).catch(() => undefined);
-  if (tab.windowId !== undefined) void jump_leave.updated({ tab_id, window_id: tab.windowId, incognito: tab.incognito, url: tab.url }, change).catch(() => undefined);
+  void jump_leave.updated({ tab_id, incognito: tab.incognito, url: tab.url, status: tab.status }, change).catch(() => undefined);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   void hint_frames.navigated(tab_id, change).catch(() => undefined);
   return tab_modes.forget_on_navigation(tab_id, change);

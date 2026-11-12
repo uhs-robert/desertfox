@@ -9,9 +9,12 @@ import { create_write_queue } from "./store_turns.ts";
 import { JUMP_PRIVATE_STORAGE_KEY, JUMP_STORAGE_KEY } from "./storage_keys.ts";
 
 type JumpList = { entries: JumpEntry[]; cursor: number };
-// A page that went away leaves its last offset here, per tab, until the tab's address changes or the page loads again.
+// A page that went away leaves its last offset here, per tab, until the tab shows another page or the page loads again.
 export type Leaving = { window_id: number; entry: JumpEntry };
-type JumpsValue = { v: 1; windows: Record<string, JumpList>; leaving?: Record<string, Leaving>; moved?: Record<string, string> };
+// What `settle_leaving` does with a held offset: wait for the tab to tell more, forget it, or take it to record.
+export type LeavingVerdict = "wait" | "drop" | "record";
+// `steps` holds, per tab, the page a jump step took the tab away from, until that page's report is settled.
+type JumpsValue = { v: 1; windows: Record<string, JumpList>; leaving?: Record<string, Leaving>; steps?: Record<string, string> };
 
 export type JumpArea = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -109,31 +112,34 @@ export function create_jump_store(deps: JumpStoreDeps) {
         all.leaving = { ...all.leaving, [tab_id]: { window_id: leaving.window_id, entry: check_entry(leaving.entry) } };
         await deps.session().set({ [key_of(is_private)]: all });
       }),
-    // Notes the address a tab went to before its page reported the offset it left.
-    note_moved: (tab_id: number, is_private: boolean, url: string) =>
+    // Notes that a jump step is taking the tab away from `page_url`, so the offset that page reports is no new place.
+    mark_step: (tab_id: number, is_private: boolean, page_url: string) =>
       in_turn(async () => {
         const all = await read_all(is_private);
-        all.moved = { ...all.moved, [tab_id]: url };
+        all.steps = { ...all.steps, [tab_id]: page_url };
         await deps.session().set({ [key_of(is_private)]: all });
       }),
-    take_moved: (tab_id: number, is_private: boolean): Promise<string | undefined> =>
-      in_turn(async () => {
-        const all = await read_all(is_private);
-        const url = all.moved?.[tab_id];
-        if (url === undefined) return undefined;
-        delete all.moved![tab_id];
-        await deps.session().set({ [key_of(is_private)]: all });
-        return url;
-      }),
-    // Takes what the tab's page left, and nothing when it left none.
-    take_leaving: (tab_id: number, is_private: boolean): Promise<Leaving | undefined> =>
+    // Judges the tab's held offset against the step mark, in one turn so no other event takes it meanwhile. Any verdict but `wait` ends both the offset and the mark. Answers the offset to record.
+    settle_leaving: (tab_id: number, is_private: boolean, judge: (leaving: Leaving, step_from: string | undefined) => LeavingVerdict): Promise<Leaving | undefined> =>
       in_turn(async () => {
         const all = await read_all(is_private);
         const leaving = all.leaving?.[tab_id];
         if (!leaving || !is_entry(leaving.entry)) return undefined;
+        const verdict = judge(leaving, all.steps?.[tab_id]);
+        if (verdict === "wait") return undefined;
         delete all.leaving![tab_id];
+        if (all.steps) delete all.steps[tab_id];
         await deps.session().set({ [key_of(is_private)]: all });
-        return leaving;
+        return verdict === "record" ? leaving : undefined;
+      }),
+    // A closed tab, or a step that never left its page: drops the held offset and the step mark.
+    forget_tab: (tab_id: number, is_private: boolean) =>
+      in_turn(async () => {
+        const all = await read_all(is_private);
+        if (!all.leaving?.[tab_id] && all.steps?.[tab_id] === undefined) return;
+        delete all.leaving?.[tab_id];
+        delete all.steps?.[tab_id];
+        await deps.session().set({ [key_of(is_private)]: all });
       }),
     // The list of a window that closed. Its id may be a private window's, so both values drop it.
     forget_window: (window_id: number) =>
