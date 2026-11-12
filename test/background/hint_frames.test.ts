@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assign_labels, create_hint_frames, HINT_FRAMES_WAIT_MS, type HintFrames, type HintFramesDeps, type HintFramesMessage } from "../../src/background/hint_frames.ts";
+import { assign_labels, create_hint_frames, HINT_FRAMES_PICK_MS, HINT_FRAMES_WAIT_MS, type HintFrames, type HintFramesDeps, type HintFramesMessage } from "../../src/background/hint_frames.ts";
 import { make_labels } from "../../src/content/hints/labels.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "../../src/background/storage_keys.ts";
 
@@ -49,6 +49,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
     set_timer: (callback) => (timers.set(next_timer, callback), next_timer++),
     clear_timer: (handle) => void timers.delete(handle as number),
     wait_ms: HINT_FRAMES_WAIT_MS,
+    pick_ms: HINT_FRAMES_PICK_MS,
   };
   current = create_hint_frames(deps);
   return {
@@ -146,6 +147,28 @@ test("a frame that navigated away loses its pick, and the typed prefix still rea
   assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "d"), { ok: false, message: "The frame of that hint is gone" });
   assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: true });
   assert.deepEqual(fake.of_type("hint_frames_pick").at(-1), { frame_id: 2, message: { type: "hint_frames_pick", session_id: "s1", label: "s" } });
+});
+
+test("a pick the owner frame never answers ends at its deadline as a gone frame", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => ({ ok: true }) } });
+  const started = fake.hints.start(TAB, 0, START);
+  fake.fire_timers();
+  await started;
+  fake.hang_sends();
+  const picked = fake.hints.pick(TAB, 0, "s1", "s");
+  await flush();
+  assert.equal(fake.timers.size, 1);
+  fake.fire_timers();
+  assert.deepEqual(await picked, { ok: false, message: "The frame of that hint is gone" });
+});
+
+test("a pick that is answered clears its deadline", async () => {
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1, pick: () => ({ ok: true }) } });
+  const started = fake.hints.start(TAB, 0, START);
+  fake.fire_timers();
+  await started;
+  assert.deepEqual(await fake.hints.pick(TAB, 0, "s1", "s"), { ok: true });
+  assert.equal(fake.timers.size, 0);
 });
 
 test("a frame id reused by a new page answers no outcome to a pick, which reads as a gone frame", async () => {
