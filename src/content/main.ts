@@ -163,7 +163,7 @@ function on_keypress(event: KeyboardEvent): void {
 
 function on_keyup(event: KeyboardEvent): void {
   follow_field_change();
-  if (cancels_keyup(event, cancelled_keys)) cancel(event);
+  if (cancels_keyup(event, cancelled_keys, page_mode.get_mode_() === "ignore" || page_reply?.keymap.off)) cancel(event);
 }
 
 const on_focusin = (event: Event) => follow_focus(true, event);

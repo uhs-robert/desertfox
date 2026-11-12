@@ -92,6 +92,7 @@ function make(containers: { name: string; cookie_store_id: string }[] = STORES, 
       }
       return tab_items;
     },
+    groups: () => [],
     all_tabs: () => tab_items,
     on_ready: () => session.source_ready(),
   });

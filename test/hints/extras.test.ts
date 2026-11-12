@@ -98,6 +98,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   const links: Link[] = [];
   const active_listeners = new Set<string>();
   const sent: unknown[] = [];
+  const timings: unknown[] = [];
   const repeat_records: unknown[] = [];
   const yanked: unknown[] = [];
   const copied: string[] = [];
@@ -223,6 +224,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   };
   globals.browser = { storage: { local: { get: async () => ({ desertfox_config_status: { settings } }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async (message: unknown) => {
     if ((message as { type?: string }).type === "register_yank") return void yanked.push(message), { ok: true };
+    if ((message as { type?: string }).type === "record_timing") return void timings.push(message);
     if ((message as { type?: string }).type === "read_hint_selectors") return selector_asks++, typeof hint_selectors === "function" ? hint_selectors() : hint_selectors;
     const is_record = (message as { type?: string }).type === "record_step";
     (is_record ? repeat_records : sent).push(message);
@@ -244,6 +246,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   return {
     links,
     sent,
+    timings,
     repeat_records,
     yanked,
     copied,
@@ -800,6 +803,18 @@ test("hint.run waits until a label is picked, then answers done and the mode cha
   page.type(page.labels()[0]!.toLowerCase());
   assert.deepEqual(await answer, { ok: true });
   assert.equal(page.mode(), "normal");
+});
+
+test("the first build and a rapid rebuild each report a hint.build time", async () => {
+  const page = await page_with(["one", "two"]);
+  void page.run({ action: "background", rapid: true });
+  await settle();
+  assert.equal(page.timings.length, 1);
+  const [timing] = page.timings as { type: string; name: string; ms: number }[];
+  assert.deepEqual([timing!.type, timing!.name, timing!.ms >= 0], ["record_timing", "hint.build", true]);
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.timings.length, 2);
 });
 
 test("hint.run answers cancelled when the mode ends with no pick, and a later exit changes nothing", async () => {

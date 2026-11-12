@@ -16,3 +16,23 @@ test(":help refuses a name that is neither a page nor a command, before the hand
   assert.deepEqual(check_args(help, { name: "nope" }, {}).ok, false);
   for (const name of ["", "commands", "quick_start", "scroll.to"]) assert.equal(check_args(help, { name }, {}).ok, true, name);
 });
+
+test(":helpkey takes a leader sequence typed on the command line, and refuses missing or spaced keys", async () => {
+  const { parse_command_line } = await import("../../src/shared/registry/command_line.ts");
+  const help_key = registry.get("help.key")!;
+  for (const keys of [",r", "gg", "<A-j>", "<C-d>"]) {
+    const parsed = parse_command_line(registry, `helpkey ${keys}`, {});
+    assert.equal(parsed.kind, "invocation", keys);
+    if (parsed.kind === "invocation") assert.deepEqual(parsed.invocation.args, { keys });
+  }
+  assert.equal(check_args(help_key, {}, {}).ok, false);
+  assert.equal(check_args(help_key, { keys: "g g" }, {}).ok, false);
+  assert.equal(check_args(help_key, { keys: ",r" }, {}).ok, true);
+  for (const keys of ["<S-1>", "<A-x>y z"]) assert.equal(check_args(help_key, { keys }, {}).ok, false, keys);
+  for (const keys of ["3j", "<S-a>", '"a,r']) assert.equal(check_args(help_key, { keys }, {}).ok, true, keys);
+});
+
+test("the debug, config and native commands are advanced and the rest of the help commands are not", () => {
+  for (const id of ["config.reload", "debug.restart", "native.install", "native.update"]) assert.equal(registry.get(id)!.advanced, true, id);
+  assert.equal(registry.get("help.open")!.advanced, undefined);
+});

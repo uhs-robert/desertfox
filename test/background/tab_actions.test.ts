@@ -156,3 +156,53 @@ test("many-tab reopen skips a tab whose old copy fails to close and counts it as
   const reopened = await reopen_tabs_in_container(failing, [{ id: 10, index: 0, pinned: false, url: "https://a.test/", window_id: 1 }, { id: 11, index: 1, pinned: false, url: "https://b.test/", window_id: 1 }], "work");
   assert.deepEqual(reopened, [11]);
 });
+
+import { group_tabs, set_group, ungroup_tabs } from "../../src/background/tab_actions.ts";
+import type { GroupDeps, GroupTabInfo } from "../../src/background/tab_actions.ts";
+import { RuntimeRefusal } from "../../src/shared/command.ts";
+
+function make_group_deps(infos: GroupTabInfo[], group_windows: Record<number, number> = {}) {
+  const log: string[] = [];
+  const deps: GroupDeps = {
+    tab_infos: async (ids) => infos.filter((info) => ids.includes(info.id)),
+    group_window: async (group_id) => group_windows[group_id],
+    group: async (ids, group_id) => {
+      log.push(`group ${ids.join(",")} ${group_id ?? "new"}`);
+      return group_id ?? 99;
+    },
+    ungroup: async (ids) => void log.push(`ungroup ${ids.join(",")}`),
+    update_group: async (group_id, props) => void log.push(`update ${group_id} ${JSON.stringify(props)}`),
+  };
+  return { deps, log };
+}
+const info = (id: number, window_id: number, extra: Partial<GroupTabInfo> = {}): GroupTabInfo => ({ id, window_id, pinned: false, group_id: -1, ...extra });
+
+test("group_tabs makes a new group, and names it when given a title", async () => {
+  const { deps, log } = make_group_deps([info(1, 5), info(2, 5)]);
+  assert.equal(await group_tabs(deps, [1, 2]), 99);
+  assert.equal(await group_tabs(deps, [1], { title: "Work" }), 99);
+  assert.deepEqual(log, ["group 1,2 new", "group 1 new", 'update 99 {"title":"Work"}']);
+});
+
+test("group_tabs joins an existing group of the same window and sets no title", async () => {
+  const { deps, log } = make_group_deps([info(1, 5)], { 7: 5 });
+  await group_tabs(deps, [1], { group_id: 7, title: "ignored" });
+  assert.deepEqual(log, ["group 1 7"]);
+});
+
+test("group_tabs refuses a pinned tab, a list across windows, a group of another window and a gone group", async () => {
+  const { deps, log } = make_group_deps([info(1, 5, { pinned: true }), info(2, 5), info(3, 6)], { 7: 6 });
+  await assert.rejects(group_tabs(deps, [1, 2]), (error) => error instanceof RuntimeRefusal && /pinned/.test(error.message));
+  await assert.rejects(group_tabs(deps, [2, 3]), (error) => error instanceof RuntimeRefusal && /different windows/.test(error.message));
+  await assert.rejects(group_tabs(deps, [2], { group_id: 7 }), (error) => error instanceof RuntimeRefusal && /another window/.test(error.message));
+  await assert.rejects(group_tabs(deps, [2], { group_id: 8 }), (error) => error instanceof RuntimeRefusal && /gone/.test(error.message));
+  assert.deepEqual(log, []);
+});
+
+test("ungroup_tabs and set_group pass through, and an empty list ungroups nothing", async () => {
+  const { deps, log } = make_group_deps([]);
+  await ungroup_tabs(deps, [1, 2]);
+  await ungroup_tabs(deps, []);
+  await set_group(deps, 4, { collapsed: true });
+  assert.deepEqual(log, ["ungroup 1,2", 'update 4 {"collapsed":true}']);
+});

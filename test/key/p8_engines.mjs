@@ -137,4 +137,41 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, settl
     await press_keys("-M", "ctrl", "u", "-m", "ctrl");
     await close_cmdline();
   });
+
+  // Alt+q is `search keysite` with no query: it opens the line with the page's query typed in. The duck engine of the test config is the results page: it reads back the q of /page?id=search_result.
+  const alt_q = () => press_keys("-M", "alt", "q", "-m", "alt");
+  const open_results_page = async (id) => {
+    await open_page("page", id, { new_tab: false });
+    const mark = events.length;
+    await run_line(":search needle hay");
+    await wait_event(mark, loaded("search_result"), "the results page");
+    // The line that ran the search held the focus, so the page needs it back before it takes a key.
+    await settle_focus();
+  };
+
+  await run_case("a key with no query on a results page opens the line with the page's query typed in, and Enter searches the other engine", async () => {
+    await open_results_page("eng_query_back");
+    await alt_q();
+    await wait_cmdline((line) => line.open && line.value.includes("keysite") && line.value.includes("needle hay"), "the line to open with the page query");
+    const mark = events.length;
+    await press_keys("-k", "Return");
+    const result = await wait_event(mark, loaded("engine_site"), "the other engine's page");
+    expect(decodeURIComponent(result.search).replaceAll("+", " ").includes("needle hay"), `the page opened with ${result.search}`);
+  });
+
+  await run_case("a selection wins over the page's query", async () => {
+    await open_results_page("eng_query_sel");
+    await select_all();
+    const mark = events.length;
+    await alt_q();
+    const result = await wait_event(mark, loaded("engine_site"), "the other engine's page");
+    expect(!decodeURIComponent(result.search).includes("needle") && decodeURIComponent(result.search).includes("search_result"), `the page opened with ${result.search}`);
+  });
+
+  await run_case("off a results page the key opens the command line as before", async () => {
+    await open_page("page", "eng_query_none", { new_tab: false });
+    await alt_q();
+    await wait_cmdline((line) => line.open, "the command line to open for alt+q");
+    await close_cmdline();
+  });
 }

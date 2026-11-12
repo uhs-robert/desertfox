@@ -30,7 +30,7 @@ import { wire_private_cleanup } from "./store_turns.ts";
 import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
 import { browser_quickmark_store } from "./quickmark_store.ts";
 import { answer_register_request, browser_register_store } from "./register_store.ts";
-import { create_repeat_memory } from "./repeat_memory.ts";
+import { answer_repeat_preview, create_repeat_memory } from "./repeat_memory.ts";
 import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
@@ -57,6 +57,8 @@ import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
 import { answer_config_transfer } from "./config_transfer.ts";
+import { browser_timing_log } from "./timing_browser.ts";
+import { accept_hint_timing } from "./timing_log.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
@@ -247,6 +249,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     });
   }
   if (request?.type === "quality_report") return void quality_reports.receive(sender.tab?.id, sender.frameId, request);
+  if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
   if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
   if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
@@ -280,6 +283,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       return steps;
     });
     return Promise.all([checked, browser_macro_recorder.record_page(checked, page_outcome(request), origin)]).then(() => undefined);
+  }
+  if (request?.type === "read_repeat_preview") {
+    return get_config().then((config) => answer_repeat_preview({ is_private: sender.tab?.incognito === true, enabled: effective_settings(config.settings).which_key_repeat }, repeat_memory, (id) => registry.get(id)));
   }
   if (request?.type === "list_keys") {
     const tab = sender.tab;

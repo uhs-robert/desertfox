@@ -25,12 +25,13 @@ export function create_cancelled_keys() {
       }
     },
     cancels_keypress_: (code: string) => codes.has(code),
-    take_keyup_: (code: string) => {
+    // `keys_off` is ignore mode or DesertFox switched off: the page then gets the keyup of a key it never saw go down here, because no key of ours began that press. A cancelled key still swallows its keyup.
+    take_keyup_: (code: string, keys_off?: boolean) => {
       const press = presses.get(code);
       if (press) press.keyup_seen = true;
       presses.delete(code);
       const was_cancelled = codes.delete(code);
-      return !seen_down.delete(code) || was_cancelled;
+      return (!seen_down.delete(code) && !keys_off) || was_cancelled;
     },
     // The press goes back to the page. Returns whether its keyup was already swallowed, so the caller sends one. Otherwise the key is still down, and its real keyup must reach the page.
     release_for_replay_: (code: string, press: HeldPress): boolean => {

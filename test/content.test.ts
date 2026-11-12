@@ -515,6 +515,18 @@ test("a keyup whose keydown this frame never saw is cancelled, and never when th
   assert.equal(cancels_keyup({ isTrusted: true, code: "ArrowDown" }, keys), true);
 });
 
+test("keys_off lets a lone keyup through, while a cancelled key still swallows its keyup and the seen code clears", () => {
+  const keys = create_cancelled_keys();
+  assert.equal(cancels_keyup({ isTrusted: true, code: "Escape" }, keys, true), false);
+  keys.saw_keydown_("KeyJ");
+  keys.record_keydown_("KeyJ", "cancel");
+  assert.equal(cancels_keyup({ isTrusted: true, code: "KeyJ" }, keys, true), true);
+  // The seen code cleared, so with keys on the next lone keyup is cancelled again.
+  keys.saw_keydown_("KeyA");
+  assert.equal(cancels_keyup({ isTrusted: true, code: "KeyA" }, keys, true), false);
+  assert.equal(cancels_keyup({ isTrusted: true, code: "KeyA" }, keys, false), true);
+});
+
 test("a keydown whose keyup went to another frame lets the next keyup of that key through", () => {
   const keys = create_cancelled_keys();
   // Shift went down here and came up in another frame. The stale code errs towards the page: the next Shift keyup here passes, even one whose keydown was elsewhere.

@@ -20,6 +20,9 @@ only = "G"
 [[site_rules]]
 site = "*://127.0.0.1/page?id=rule_off*"  # also covers rule_off_switch
 
+[[site_rules]]
+site = "*://127.0.0.1/hidden_input_frame?id=rule_off_title_input_shift_moves_focus*"  # the keyup case below
+
 # Each column resolves on its own: off = false keeps rule_keep on under the bare row below, and the pass row between them still applies.
 [[site_rules]]
 site = "*://127.0.0.1/page?id=rule_keep*"

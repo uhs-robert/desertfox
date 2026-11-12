@@ -60,6 +60,7 @@ function make(items: AnythingItems = ITEMS) {
   const live = create_live_source({
     ask: async (kind): Promise<CompleteItemsAnswer | undefined> => ({ items: (kind === "engines" ? ENGINES : items) as CompleteItemsAnswer["items"] }),
     tabs: () => TABS,
+    groups: () => [],
     all_tabs: () => TABS,
     on_ready: () => {},
   });
@@ -201,7 +202,7 @@ test("speed: ranking 1000 history rows, 3000 bookmarks and 300 tabs per key", as
     bookmarks: Array.from({ length: 3000 }, (_, index) => ({ title: `Bookmark ${index} on subject ${index % 23}`, url: `https://b${index}.example.test/read/${index}` })),
   };
   const tabs = Array.from({ length: 300 }, (_, index) => tab(index + 10, `Tab ${index} reading`, `https://t${index}.example.test/`));
-  const live = create_live_source({ ask: async (kind) => ({ items: (kind === "engines" ? ENGINES : many) as CompleteItemsAnswer["items"] }), tabs: () => tabs, all_tabs: () => tabs, on_ready: () => {} });
+  const live = create_live_source({ ask: async (kind) => ({ items: (kind === "engines" ? ENGINES : many) as CompleteItemsAnswer["items"] }), tabs: () => tabs, groups: () => [], all_tabs: () => tabs, on_ready: () => {} });
   const complete = create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live);
   complete("anything x", 10);
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -215,13 +216,14 @@ test("speed: ranking 1000 history rows, 3000 bookmarks and 300 tabs per key", as
 });
 
 test("empty query: only the line's own tab is left out, not the active tab of another window", async () => {
-  const base = { favicon_url: "", site: "", pinned: false, muted: false, audible: false, discarded: false, previous: false, container: "", container_name: "", container_color: "", container_icon: "" };
+  const base = { favicon_url: "", site: "", pinned: false, muted: false, audible: false, discarded: false, previous: false, container: "", container_name: "", container_color: "", container_icon: "", group_id: -1 };
   const row = (id: number, window_id: number, active: boolean) => ({ ...base, id, window_id, index: 0, title: `Tab ${id}`, url: `https://t${id}.test/`, active, window_number: window_id === 10 ? 1 : 2 });
   const client = create_model_client({ line_window_id: 10, all_windows: false, request_resync: () => {}, on_change: () => {} });
-  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, true), row(2, 11, true), row(3, 11, false)] });
+  client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, true), row(2, 11, true), row(3, 11, false)], groups: [] });
   const live = create_live_source({
     ask: async (kind): Promise<CompleteItemsAnswer | undefined> => ({ items: (kind === "engines" ? [] : { ...ITEMS, quickmarks: [], bookmarks: [], history: [], closed: [] }) as CompleteItemsAnswer["items"] }),
     tabs: () => client.items(),
+    groups: () => [],
     all_tabs: () => client.all_items(),
     on_ready: () => {},
   });
@@ -257,6 +259,7 @@ test("a keyword query puts the engine row first and highlighted, ahead of a tab 
   const live = create_live_source({
     ask: async (kind): Promise<CompleteItemsAnswer | undefined> => ({ items: (kind === "engines" ? ENGINES : items) as CompleteItemsAnswer["items"] }),
     tabs: () => live_tabs,
+    groups: () => [],
     all_tabs: () => live_tabs,
     on_ready: () => {},
   });

@@ -34,3 +34,12 @@ test("a conditional default is exported as data", () => {
   const file = JSON.parse(JSON.stringify(build_commands_file(registry)));
   assert.deepEqual(file.commands[0].params[1].default, [{ value: "", when: { where: ["tab"] } }]);
 });
+
+test("the advanced flag crosses into commands.json only when set", () => {
+  const registry = create_registry();
+  registry.define("a.b", { label: "AB", intent: "x", runs_in: "background", advanced: true, run: () => {} });
+  registry.define("a.c", { label: "AC", intent: "x", runs_in: "background", run: () => {} });
+  const [flagged, plain] = build_commands_file(registry).commands;
+  assert.equal(flagged!.advanced, true);
+  assert.equal("advanced" in plain!, false);
+});

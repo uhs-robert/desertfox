@@ -81,6 +81,7 @@ const BASE_SECTIONS: KeymapConfig = {
     p: "Page",
     ">": "Move tab",
     t: "Tabs",
+    tg: "Tab groups",
     w: "Windows",
     y: "Copy",
     b: "Bookmark",
@@ -187,6 +188,15 @@ const BASE_SECTIONS: KeymapConfig = {
     tU: { id: "tab.load" },
     tH: { id: "tab.unload", args: { side: "all_before" }, label: "Unload tabs before this one" },
     tL: { id: "tab.unload", args: { side: "all_after" }, label: "Unload tabs after this one" },
+
+    // The tg group works on the tab's native tab group.
+    tga: { id: "tabgroup.add", prompt: { param: "group" }, label: "Add tab to a group" },
+    tgA: { id: "tabgroup.add", label: "Add tab to a new group" },
+    tgd: { id: "tabgroup.remove" },
+    tgn: { id: "tabgroup.name", prompt: { param: "title" } },
+    tgc: { id: "tabgroup.collapse" },
+    tge: { id: "tabgroup.expand" },
+    tgt: { id: "tabgroup.toggle" },
 
     // The w group works on windows.
     W: { id: "window.new", prompt: { param: "url", prefill: { from: "current_url" } }, label: "New window, edit current URL" },

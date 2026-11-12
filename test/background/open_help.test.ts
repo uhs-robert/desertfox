@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_open_help, help_name_choices, help_name_url, plan_help_tab } from "../../src/background/open_help.ts";
+import { create_open_help, help_name_choices, help_name_url, key_command_id, key_command_id_on_page, plan_help_tab } from "../../src/background/open_help.ts";
+import { compile_keymap } from "../../src/shared/keys/compiler.ts";
 
 // The line's frame in each opener tab.
 const LINE_FRAME = 3;
@@ -71,4 +72,58 @@ test("a page whose address only starts like the help page opens a new tab", () =
 
 test("no asking tab opens a plain new tab", () => {
   assert.deepEqual(plan_help_tab(HELP, HELP, { id: undefined, window_id: undefined, url: undefined }), { kind: "create", url: HELP });
+});
+
+const step = (id: string) => ({ invocation: { id }, runs_in: "content" as const, count_rule: "ignore" as const });
+const keymap = {
+  modes: {
+    normal: {
+      kind: "branch",
+      children: {
+        j: { kind: "leaf", steps: [step("scroll.lines")] },
+        ",": { kind: "branch", children: { r: { kind: "leaf", steps: [step("page.reload")] }, x: { kind: "leaf", steps: [step("a.b")] } } },
+        m: { kind: "branch", children: { "": { kind: "leaf", steps: [step("mark.set")] } } },
+        "<A-j>": { kind: "leaf", steps: [step("tab.next")] },
+      },
+    },
+  },
+} as never;
+
+test("key_command_id follows a leader sequence, a chord and a capture key to the command", () => {
+  assert.deepEqual(key_command_id(keymap, "j"), { id: "scroll.lines" });
+  assert.deepEqual(key_command_id(keymap, ",r"), { id: "page.reload" });
+  assert.deepEqual(key_command_id(keymap, "<A-j>"), { id: "tab.next" });
+  assert.deepEqual(key_command_id(keymap, "m"), { id: "mark.set" });
+});
+
+test("key_command_id reads a count or register prefix as the page does", () => {
+  assert.deepEqual(key_command_id(keymap, "3j"), { id: "scroll.lines" });
+  assert.deepEqual(key_command_id(keymap, '"a3,r'), { id: "page.reload" });
+});
+
+test("key_command_id says why a sequence names no command", () => {
+  assert.equal(key_command_id(keymap, "z").error, "z has no normal-mode binding");
+  assert.equal(key_command_id(keymap, "3z").error, "3z has no normal-mode binding");
+  assert.equal(key_command_id(undefined, "j").error, "j has no normal-mode binding");
+  assert.match(key_command_id(keymap, ",").error!, /start of longer keys/);
+});
+
+test("key_command_id refuses keys left after a complete binding", () => {
+  assert.match(key_command_id(keymap, "jx").error!, /no normal-mode binding/);
+  assert.match(key_command_id(keymap, ",rx").error!, /no normal-mode binding/);
+});
+
+const resolve_stub = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
+const site_keymap = (rule: Record<string, unknown>) =>
+  compile_keymap({ normal: { j: { id: "a.j" }, k: { id: "a.k" } } } as never, { site_rules: [{ site: "https://a.test/*", ...rule }] } as never, resolve_stub).compiled;
+
+test("key_command_id_on_page follows the site rule of the page: a rebind and a pass", () => {
+  const rebound = site_keymap({ bind: { j: { id: "a.site" } } });
+  assert.deepEqual(key_command_id_on_page(rebound, "https://a.test/x", "j"), { id: "a.site" });
+  assert.deepEqual(key_command_id_on_page(rebound, "https://b.test/x", "j"), { id: "a.j" });
+  assert.deepEqual(key_command_id_on_page(rebound, undefined, "j"), { id: "a.j" });
+  const passed = site_keymap({ pass: "j" });
+  assert.match(key_command_id_on_page(passed, "https://a.test/x", "j").error!, /no normal-mode binding/);
+  assert.deepEqual(key_command_id_on_page(passed, "https://a.test/x", "k"), { id: "a.k" });
+  assert.deepEqual(key_command_id_on_page(passed, "https://b.test/x", "j"), { id: "a.j" });
 });

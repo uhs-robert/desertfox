@@ -30,5 +30,5 @@ export function replay_key_to_page(
 // Only a real key press has a cancelled code. The synthetic events of a replay, a page or an extension must not read or clear one.
 export const cancels_keypress = (event: Pick<KeyboardEvent, "isTrusted" | "code">, cancelled_keys: CancelledKeys): boolean =>
   event.isTrusted && cancelled_keys.cancels_keypress_(event.code);
-export const cancels_keyup = (event: Pick<KeyboardEvent, "isTrusted" | "code">, cancelled_keys: CancelledKeys): boolean =>
-  event.isTrusted && cancelled_keys.take_keyup_(event.code);
+export const cancels_keyup = (event: Pick<KeyboardEvent, "isTrusted" | "code">, cancelled_keys: CancelledKeys, keys_off?: boolean): boolean =>
+  event.isTrusted && cancelled_keys.take_keyup_(event.code, keys_off);

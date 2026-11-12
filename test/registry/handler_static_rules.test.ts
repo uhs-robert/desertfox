@@ -20,6 +20,7 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
+  "help.key": [/has no normal-mode binding/],
   "tab.goto_audible": [/no tab is playing sound/],
   "tab.switch": [/matches .* equally, use a number/],
   "tab.move": [/matches .* equally/],
@@ -27,6 +28,11 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "tab.load": [/matches .* equally/, /loaded 0 tabs/],
   "tab.reopen_in_container": [/No container named/],
   "tab.attach": [/already in that window/],
+  "tabgroup.remove": [/no group/],
+  "tabgroup.name": [/no group/],
+  "tabgroup.collapse": [/no group/],
+  "tabgroup.expand": [/no group/],
+  "tabgroup.toggle": [/no group/],
   "bookmark.open": [/no bookmark matches/, /no folder matches/],
   "history.open": [/no history entry matches/],
   "bookmark.remove": [/no bookmark matches/, /No bookmark for this page/, /no folder matches/],
@@ -83,6 +89,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "tabs.duplicate": STUB_TAB,
   "tabs.move": [STUB_TAB],
   "tabs.getZoom": 1,
+  "tabGroups.query": [],
   "tabs.executeScript": [],
   "cookies.getAll": [],
   "windows.getAll": STUB_WINDOWS,

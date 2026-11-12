@@ -35,7 +35,7 @@ import type { FollowDirection } from "./follow_links.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
-import type { HeadingItem } from "../../shared/messages.ts";
+import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
 
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element };
 const page = window as unknown as HintsWindow;
@@ -294,7 +294,8 @@ function register(host: BundleHostApi): void {
   }
 
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
-  async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
+  // `started_ms` is taken before the candidates are found, so the time covers finding, filtering and labeling.
+  async function build(current: Session, candidates: Found[], first_build: boolean, started_ms: number): Promise<void> {
     const [letters, key_line_setting, visible, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect"), read_strip_patterns()]);
     if (current.cancelled) return;
     strip_patterns = patterns;
@@ -323,6 +324,7 @@ function register(host: BundleHostApi): void {
     // Every build starts in label mode. `text` only filters the hints, it does not start text mode, so the labels stay typable.
     const picker = create_picker(labels, text_of_found_);
     current.ready = { picker, found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
+    void browser.runtime.sendMessage({ type: "record_timing", name: "hint.build", ms: performance.now() - started_ms } satisfies RecordTiming).catch(() => undefined);
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
     while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
   }
@@ -345,7 +347,9 @@ function register(host: BundleHostApi): void {
     ready.view.clear_labels_();
     delete current.ready;
     performed(() => perform_pick(current, picked));
-    if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_), false);
+    if (current.cancelled) return;
+    const started_ms = performance.now();
+    void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_), false, started_ms);
   }
 
   // The rest of a typed word still arrives after the key that made the match unique, and it would run as normal keys or as labels of the next round. So that pick waits, with hint mode still open, and the keys are dropped.
@@ -410,6 +414,7 @@ function register(host: BundleHostApi): void {
 
   // Answers when hint mode is on or the run ended without it. The pick's own answer comes later, through `picked`.
   async function start_hints(args: Record<string, unknown>): Promise<Outcome | { picked: Promise<Outcome> }> {
+    const started_ms = performance.now();
     const run = ++latest_run;
     const action = args.action as HintAction;
     const filter = args.filter as HintFilter;
@@ -431,7 +436,7 @@ function register(host: BundleHostApi): void {
       const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
-      void build(current, candidates, true);
+      void build(current, candidates, true, started_ms);
     });
     return { picked };
   }

@@ -27,6 +27,8 @@ export type RouterDeps = {
   read_clipboard: () => Promise<string>;
   // The title of the bookmark at this address, undefined when there is none.
   bookmark_title: (url: string | undefined) => Promise<string | undefined>;
+  // The query of the search results page at this address, undefined when it is no engine's results page.
+  search_query: (url: string | undefined) => Promise<string | undefined>;
   has_permission: (permission: string) => Promise<boolean>;
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
   // Opens the command line in the frame with the text typed in. Rejects when the tab has no content script.
@@ -38,6 +40,8 @@ export type RouterDeps = {
   repeat_memory: RepeatMemory;
   // Replaces the `.` recorder, for a caller that records every step.
   record_step?: RecordStep;
+  // Gets the time one background command took from the start of its step to its answer, for `debug.perf`.
+  record_timing?: (command_id: string, ms: number) => void;
 };
 
 export type RouteRequest = {
@@ -134,6 +138,8 @@ export function create_router(deps: RouterDeps): Router {
   }
 
   async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, is_first: boolean): Promise<Outcome> {
+    // Before the tab read, permission checks and validation, so a slow preflight shows in the time.
+    const started_ms = performance.now();
     const { active, context } = await read_now(request, is_first);
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
@@ -161,9 +167,9 @@ export function create_router(deps: RouterDeps): Router {
       return refuse(typeof command.count === "object" && checked.missing_param === command.count.param ? "Type a number first" : checked.error);
     }
 
-    const filled = await fill_context_sources(command.id, checked.args, context, active);
+    const filled = await fill_context_sources(command.id, checked.args, context, active, request.may_prompt === true);
     if (!filled.ok) {
-      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open(counted.args ?? {}, filled.empty_selection_param);
+      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open(counted.args ?? {}, filled.empty_selection_param, filled.prefill);
     }
 
     // A source passed the check above as a marker. Its text is checked now, by the same validator. An empty text keeps its marker, because an empty selection or clipboard is a runtime matter that the handler reports.
@@ -173,11 +179,14 @@ export function create_router(deps: RouterDeps): Router {
     // The handler gets the rechecked args, with a kept marker back as its empty text.
     const final_args = Object.fromEntries(Object.entries(rechecked.args).map(([name, value]) => [name, is_context_source(value) ? filled.args[name] : value]));
 
+    // Only background commands are timed. A content command can wait on the user (hint mode, find, caret, visual), the registry cannot say which, and the wait would read as a slow command.
     if (command.runs_in === "content") return run_in_content(command, final_args, counted.times, context, request);
     for (let time = 0; time < counted.times; time++) {
       const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, final_args));
       if (!result.ok) return result;
     }
+    // Not `debug.perf`, which would time itself into the numbers it reports. A refusal or a throw is not a round trip.
+    if (command.id !== "debug.perf") deps.record_timing?.(command.id, performance.now() - started_ms);
     return done;
   }
 
@@ -219,10 +228,10 @@ export function create_router(deps: RouterDeps): Router {
   ): Promise<Outcome> {
     const typed: Record<string, unknown> = {};
     for (const [name, value] of Object.entries(args)) {
-      typed[name] = is_context_source(value) ? await read_source(value.from, context, active).catch(() => undefined) : value;
+      typed[name] = is_context_source(value) ? await read_chain(value, context, active).catch(() => undefined) : value;
     }
     // The line opens when the key is pressed, because focus moves into the iframe and the selection with it.
-    if (prefill) typed[open_param] = await read_source(prefill.from, context, active).catch(() => undefined);
+    if (prefill) typed[open_param] = await read_chain(prefill, context, active).catch(() => undefined);
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     // A reply lost after the line opened means the page went away, as when Enter opens a link in this tab. Navigation cancels the wait,
@@ -240,17 +249,23 @@ export function create_router(deps: RouterDeps): Router {
     args: CheckedArgs,
     context: CommandContext,
     active: ActiveTab | undefined,
-  ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string; empty_selection_param?: string }> {
+    may_prompt: boolean,
+  ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string; empty_selection_param?: string; prefill?: ContextSource }> {
     const filled: CheckedArgs = {};
     for (const [name, value] of Object.entries(args)) {
       if (!is_context_source(value)) {
         filled[name] = value;
         continue;
       }
-      const text = await read_source(value.from, context, active);
-      if (text === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name, context))) {
+      const first = await read_source(value.from, context, active);
+      if (first === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name, context))) {
         filled[name] = "";
         continue;
+      }
+      const text = first ?? (value.then === undefined ? undefined : await read_source(value.then, context, active));
+      // The page's query stands in for an empty selection. With someone to type, the line opens with it typed in, so the key never searches at once.
+      if (first === undefined && text !== undefined && value.from === "selection" && may_prompt) {
+        return { ok: false, message: `${name}: nothing selected`, empty_selection_param: name, prefill: { from: value.then! } };
       }
       if (text === undefined) {
         const message = `${name}: ${value.from} is not available here`;
@@ -261,10 +276,16 @@ export function create_router(deps: RouterDeps): Router {
     return { ok: true, args: filled };
   }
 
+  // The first source with a value: `from`, else `then`.
+  async function read_chain(source: ContextSource, context: CommandContext, active: ActiveTab | undefined) {
+    return (await read_source(source.from, context, active)) ?? (source.then === undefined ? undefined : read_source(source.then, context, active));
+  }
+
   async function read_source(source: ContextSourceName, context: CommandContext, active: ActiveTab | undefined) {
     if (source === "current_url") return active?.url;
     if (source === "clipboard") return deps.read_clipboard();
     if (source === "bookmark_title") return deps.bookmark_title(active?.url);
+    if (source === "search_query") return deps.search_query(active?.url);
     const selection = context.tab_id === undefined ? undefined : await deps.ask_selection(context.tab_id, context.frame_id ?? 0);
     return selection === "" ? undefined : selection;
   }

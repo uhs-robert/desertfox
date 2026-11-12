@@ -1,6 +1,8 @@
 // The request `.` replays, in `storage.session` so a background restart keeps it. A private window has its own slot, cleared when the last private window closes.
 
+import type { CommandDef } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
+import { print_command } from "../shared/registry/print_command.ts";
 import { REPEAT_PRIVATE_STORAGE_KEY, REPEAT_STORAGE_KEY } from "./storage_keys.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
@@ -54,3 +56,24 @@ export function create_repeat_memory(storage: SessionStorage, has_private_window
 
 // A key binding's prompt and label are not part of what ran.
 export const as_stored = ({ id, args, count }: BoundInvocation): BoundInvocation => ({ id, ...(args === undefined ? {} : { args }), ...(count === undefined ? {} : { count }) });
+
+const PREVIEW_CHARS = 48;
+
+// What `.` would run, as the command line that does the same, or the label for a command with no name to type. Steps join with ` | `.
+// Reads the normal slot only: a private window's step stays out of the panel, which any page in the tab can ask for.
+export async function repeat_preview(memory: Pick<RepeatMemory, "load">, find_command: (id: string) => CommandDef | undefined): Promise<string | undefined> {
+  const steps = await memory.load(false);
+  if (!steps?.length) return undefined;
+  const line = steps
+    .map(({ id, args }) => {
+      const command = find_command(id);
+      return command?.name === undefined ? (command?.label ?? id) : `:${print_command(command, args ?? {}, { flags: "long" })}`;
+    })
+    .join(" | ")
+    .replace(/\s+/g, " ");
+  return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS - 1)}\u2026` : line;
+}
+
+// The answer to `read_repeat_preview`: nothing for a private tab or with the setting off.
+export const answer_repeat_preview = async ({ is_private, enabled }: { is_private: boolean; enabled: boolean }, memory: Pick<RepeatMemory, "load">, find_command: (id: string) => CommandDef | undefined): Promise<string | undefined> =>
+  is_private || !enabled ? undefined : repeat_preview(memory, find_command);

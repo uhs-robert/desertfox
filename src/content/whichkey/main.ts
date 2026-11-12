@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { PendingPrefix } from "../key_flow.ts";
-import type { ListKeys, WhichKeyPanel } from "../../shared/messages.ts";
+import type { ListKeys, ReadRepeatPreview, WhichKeyPanel } from "../../shared/messages.ts";
 import { MEDIA_PANEL_HANDLER, media_panel_admitted } from "./media_panel.ts";
 import { hide_panel, show_panel } from "./panel.ts";
 import { create_which_key_session } from "./session.ts";
@@ -13,7 +13,11 @@ const page = window as unknown as WhichKeyWindow;
 type ShowArgs = { prefix?: PendingPrefix; is_current_: () => boolean; drawn_: () => void };
 
 const session = create_which_key_session(
-  (mode, typed) => browser.runtime.sendMessage({ type: "list_keys", mode, prefix: typed } satisfies ListKeys) as Promise<WhichKeyPanel>,
+  async (mode, typed) => {
+    const ask = <Answer>(message: ListKeys | ReadRepeatPreview) => browser.runtime.sendMessage(message) as Promise<Answer>;
+    const [panel, repeat] = await Promise.all([ask<WhichKeyPanel>({ type: "list_keys", mode, prefix: typed }), ask<string | undefined>({ type: "read_repeat_preview" }).catch(() => undefined)]);
+    return repeat === undefined ? panel : { ...panel, repeat };
+  },
   show_panel,
   hide_panel,
 );

@@ -37,6 +37,8 @@ export const area_rules = [
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
+  // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
+  { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
@@ -59,7 +61,7 @@ export const area_rules = [
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
   { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
   {
-    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store}.ts"],
+    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
     areas: ["tabs"],
   },
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready}.ts", "src/commands/mark.ts", "src/shared/mark_names.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },

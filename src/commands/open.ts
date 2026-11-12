@@ -41,11 +41,11 @@ async function search_target(ctx: CommandContext, engine: unknown, query: string
 define("open.search", {
   name: "search",
   label: "Search",
-  intent: "Search with a keyword engine. The engine comes from the search engine list. It defaults to the default_engine setting and the query to the selection.",
+  intent: "Search with a keyword engine. The engine comes from the search engine list. It defaults to the default_engine setting and the query to the selection, else the query of the search results page you are on.",
   params: [
     // Empty stands for "none named", so the default_engine setting decides.
     { name: "engine", type: "enum", values: { from: "search_engines" }, optional: true },
-    { name: "query", type: "string", rest: true, main: true, default: { from: "selection" } },
+    { name: "query", type: "string", rest: true, main: true, default: { from: "selection", then: "search_query" } },
     WHERE_PARAM,
     CONTAINER_PARAM,
   ],

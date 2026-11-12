@@ -3,11 +3,11 @@
 
 import type { AnythingItems, BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, FolderItem, RegisterItem, SessionItem, TabItem, WindowItem } from "../../shared/messages.ts";
 
-export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "anything";
-export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkRows; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quality_levels: RegisterItem[]; quickmarks: RegisterItem[]; saved_quickmarks: RegisterItem[]; anything: AnythingItems };
+export type LiveKind = "tabs" | "bookmarks" | "engines" | "history" | "open" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "anything" | "groups";
+export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkRows; engines: EngineItem[]; history: HistoryItems; open: OpenItems; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quality_levels: RegisterItem[]; quickmarks: RegisterItem[]; saved_quickmarks: RegisterItem[]; anything: AnythingItems; groups: SessionItem[] };
 export type LiveRead<Kind extends LiveKind> = { loading: true } | { loading: false; items: LiveItems[Kind] };
 
-type FetchedKind = Exclude<LiveKind, "tabs">;
+type FetchedKind = Exclude<LiveKind, "tabs" | "groups">;
 
 export type LiveDeps = {
   ask: (kind: FetchedKind) => Promise<CompleteItemsAnswer | undefined>;
@@ -15,6 +15,8 @@ export type LiveDeps = {
   tabs: () => TabItem[] | undefined;
   // The tab rows of every window of the line's privacy, whatever `completion_all_windows` says. Undefined until the first snapshot.
   all_tabs: () => TabItem[] | undefined;
+  // The named groups of the line's window, from the tab model. Undefined until the first snapshot.
+  groups: () => SessionItem[] | undefined;
   // A fetch landed and the list can rank it.
   on_ready: () => void;
 };
@@ -49,6 +51,10 @@ export function create_live_source(deps: LiveDeps) {
       if (kind === "tabs") {
         const tabs = deps.tabs();
         return (tabs ? { loading: false, items: tabs } : { loading: true }) as LiveRead<Kind>;
+      }
+      if (kind === "groups") {
+        const groups = deps.groups();
+        return (groups ? { loading: false, items: groups } : { loading: true }) as LiveRead<Kind>;
       }
       const items = cache[kind as FetchedKind] as LiveItems[Kind] | undefined;
       if (items) return { loading: false, items };

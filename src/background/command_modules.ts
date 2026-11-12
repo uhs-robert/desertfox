@@ -5,6 +5,7 @@ import "../commands/scroll.ts";
 import "../commands/mode.ts";
 import "../commands/tab.ts";
 import "../commands/window.ts";
+import "../commands/tab_group.ts";
 import "../commands/session.ts";
 import "../commands/register.ts";
 import "../commands/macro.ts";
@@ -33,5 +34,6 @@ import "../commands/engine.ts";
 import "../commands/command.ts";
 import "../commands/native.ts";
 import "../commands/issue.ts";
+import "../commands/perf.ts";
 // Last, because help.open lists every command defined before it.
 import "../commands/help.ts";

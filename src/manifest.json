@@ -49,6 +49,7 @@
     "contextualIdentities",
     "cookies",
     "sessions",
+    "tabGroups",
     "<all_urls>"
   ],
   "optional_permissions": [
