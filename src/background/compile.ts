@@ -7,7 +7,7 @@ import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
 import type { KeymapConfig } from "../shared/keymap.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, SiteBind, SiteRule, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -18,7 +18,6 @@ import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import type { Registry } from "../shared/registry/index.ts";
 import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
-import { match_regex_source } from "../shared/match_pattern.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
@@ -67,7 +66,9 @@ export function compile_config(input: CompileInput): CompileOutput {
   const resolve_warnings: string[] = [];
   const user_rows = with_resolved_binds(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules, input, resolve_warnings);
   // The shipped rows rank after the user's, so a user row decides each column first.
-  const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off)] };
+  const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off);
+  const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows.map(({ row }) => row)] };
+  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...default_rows.map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
@@ -77,7 +78,7 @@ export function compile_config(input: CompileInput): CompileOutput {
       // The prompted param is filled when the key runs, as in keep_node.
       return result.ok || (prompt !== undefined && result.missing_param === prompt.param);
     } };
-  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, input.config.keymap));
+  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, input.config.keymap), row_sources);
 
   const set_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
   const requested_palette = set_palette === DESKTOP_PALETTE ? (input.desktop_palette ?? DEFAULT_PALETTE) : set_palette;
@@ -98,7 +99,7 @@ export function compile_config(input: CompileInput): CompileOutput {
     if (Object.keys(root.children).length === 0) delete compiled.modes[mode as keyof CompiledKeymap["modes"]];
   }
   for (const rule of compiled.site_rules ?? []) {
-    const site = (settings.site_rules as { site: string }[]).find((row) => match_regex_source([row.site]) === rule.regex)?.site ?? rule.regex;
+    const { site } = rule;
     check_site_binds(rule.bind, "", site, input, warnings);
     for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, site, input, warnings);
   }

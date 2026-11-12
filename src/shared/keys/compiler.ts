@@ -5,7 +5,7 @@ import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BindingTable } from "../settings_table.ts";
@@ -382,26 +382,27 @@ function warn_prefix_binds(rows: readonly { site: string; rule: SiteRule }[], wa
   }
 }
 
-export function compile_site_rules(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): SiteRule[] {
-  const rows = compile_rows(rules, resolve, settings, sources, warnings);
+// `row_sources` runs parallel to `rules`. A row without an entry is the user's.
+export function compile_site_rules(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[], row_sources: readonly SiteRuleSource[] = []): SiteRule[] {
+  const rows = compile_rows(rules, resolve, settings, sources, warnings, row_sources);
   warn_prefix_binds(rows, warnings);
   return rows.map(({ rule }) => rule);
 }
 
-function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): { site: string; rule: SiteRule }[] {
-  return rules.flatMap((row): { site: string; rule: SiteRule }[] => {
+function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[], row_sources: readonly SiteRuleSource[]): { site: string; rule: SiteRule }[] {
+  return rules.flatMap((row, index): { site: string; rule: SiteRule }[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];
     const { keys, bind, modes, ...columns } = site_row_columns(row);
     const compiled_bind = bind === undefined ? {} : { bind: compile_binds(bind as BindingTable, resolve, settings, sources, warnings) };
     const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
-    const rule = { regex, ...columns, ...compiled_bind, ...compiled_modes };
+    const rule: SiteRule = { ...(row_sources[index] ?? { origin: "user" }), site: row.site, regex, ...columns, ...compiled_bind, ...compiled_modes };
     if (keys === undefined) return [{ site: row.site, rule }];
     return [{ site: row.site, rule: { ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } } }];
   });
 }
 
-export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}): CompileResult {
+export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}, row_sources: readonly SiteRuleSource[] = []): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
   const keymap_modes: readonly KeymapMode[] = [...RUNTIME_MODES, "browser"];
@@ -415,7 +416,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
-  const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, resolve, settings, label_sources, warnings);
+  const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, resolve, settings, label_sources, warnings, row_sources);
   const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || is_default_value(name, settings[name]) ? [] : [[name, settings[name]]])));
   const which_key_skip = (settings.which_key_skip ?? []).flatMap((entry) => {
     const { tokens, error } = parse_sequence(entry);
