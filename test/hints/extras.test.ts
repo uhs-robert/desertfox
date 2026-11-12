@@ -642,7 +642,7 @@ test("an invalid custom selector shows a notice instead of throwing", async () =
 
 test("hint.run needs no text: it defaults to empty, which filters nothing", () => {
   const checked = check_args(registry.get("hint.run")!, { action: "here" });
-  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", rapid: false, register: "" } });
+  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", frames: "same_origin", rapid: false, register: "" } });
   assert.equal(check_args(registry.get("hint.run")!, { action: "copy_text", text: "x", rapid: true }).ok, true);
 });
 

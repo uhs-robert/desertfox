@@ -104,3 +104,6 @@ export const QUICKMARK_PRIVATE_STORAGE_KEY = "desertfox_private_quickmarks";
 export const TAB_MEDIA_STORAGE_PREFIX = "desertfox_tab_media_";
 // The last mode the top frame of a tab reported and a counter of its changes, in `storage.session`. See `create_media_discovery`.
 export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";
+
+// The cross-frame hint session of a tab, in `storage.session`. See `hint_frames.ts`.
+export const HINT_FRAMES_STORAGE_PREFIX = "desertfox_hint_frames_";

@@ -33,7 +33,7 @@ function keymap_with(normal: Record<string, unknown>, modifiers: NonNullable<Key
 test("a modifier derives a variant of each key in its group, with its args added and the sibling label kept", () => {
   const { compiled, warnings } = compile(keymap_with({}, { ";B": { action: "background", label: "Background tab" } }));
   assert.deepEqual(warnings, []);
-  assert.deepEqual(args_at(compiled, ";", "B", "l"), { action: "background", filter: "links", text: "", rapid: false, register: "" });
+  assert.deepEqual(args_at(compiled, ";", "B", "l"), { action: "background", filter: "links", text: "", frames: "same_origin", rapid: false, register: "" });
   assert.deepEqual(args_at(compiled, ";", "B", "I")?.action, "background");
   const variant = node_at(compiled, ";", "B", "l");
   assert.equal(variant?.kind === "leaf" && variant.label, "Link");
@@ -162,5 +162,5 @@ test("the ;: modifier derives a prompt variant for filters with an address and n
 
 test(";Y copies link addresses in rapid mode", () => {
   const { compiled } = compile(DEFAULT_KEYMAP);
-  assert.deepEqual(args_at(compiled, ";", "Y"), { action: "copy", filter: "links", text: "", rapid: true, register: "" });
+  assert.deepEqual(args_at(compiled, ";", "Y"), { action: "copy", filter: "links", text: "", frames: "same_origin", rapid: true, register: "" });
 });
