@@ -84,6 +84,8 @@ class FirefoxPageCase(unittest.TestCase):
             "XRE_PROFILE_PATH": "",
             "MOZ_LAUNCHED_CHILD": "",
             "MOZ_APP_SILENT_START": "",
+            "MOZ_NO_REMOTE": "1",
+            "MOZ_NEW_INSTANCE": "1",
         }
         self.grandchildren = []
         self.addCleanup(self.reap_grandchildren)
@@ -175,12 +177,14 @@ class ParentTest(FirefoxPageCase):
         self.assertIn(f"the Firefox program {gone} is gone", message)
         self.assertIn("Restart Firefox", message)
 
-    def test_firefox_bin_is_accepted(self):
-        firefox_bin = os.path.join(self.bin_dir, "firefox-bin")
-        os.symlink(self.exe, firefox_bin)
-        self.set_exe(firefox_bin)
-        self.open_page()
-        self.assertEqual(self.stub_record()["argv"][0], firefox_bin)
+    def test_the_other_firefox_program_names_are_accepted(self):
+        for name in ("firefox-bin", "firefox-esr", "firefox-esr-bin"):
+            with self.subTest(name=name):
+                program = os.path.join(self.bin_dir, name)
+                os.symlink(self.exe, program)
+                self.set_exe(program)
+                self.open_page()
+                self.assertEqual(self.stub_record()["argv"][0], program)
 
 
 class ProfileTest(FirefoxPageCase):
@@ -235,7 +239,7 @@ class LaunchTest(FirefoxPageCase):
     def test_the_environment_drops_the_parent_variables_and_keeps_display_and_bus(self):
         self.open_page()
         env = self.stub_record()["env"]
-        for name in ("MOZ_CRASHREPORTER_EVENTS_DIRECTORY", "MOZ_CRASHREPORTER_RESTART_ARG_0", "XRE_PROFILE_PATH", "MOZ_LAUNCHED_CHILD", "MOZ_APP_SILENT_START"):
+        for name in ("MOZ_CRASHREPORTER_EVENTS_DIRECTORY", "MOZ_CRASHREPORTER_RESTART_ARG_0", "XRE_PROFILE_PATH", "MOZ_LAUNCHED_CHILD", "MOZ_APP_SILENT_START", "MOZ_NO_REMOTE", "MOZ_NEW_INSTANCE"):
             self.assertNotIn(name, env)
         for name in ("WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"):
             self.assertEqual(env[name], self.environ[name])
@@ -288,9 +292,17 @@ class LaunchTest(FirefoxPageCase):
         with open(self.out + ".grandchild") as file:
             self.grandchildren.append(int(file.read()))
 
-    def test_a_program_that_cannot_start_is_refused(self):
+    def test_a_program_that_is_not_executable_is_refused_before_the_launch(self):
         os.chmod(self.exe, 0o644)
         self.assertIn("is gone", self.refusal())
+
+    def test_a_launch_that_fails_is_refused_with_the_reason(self):
+        # An executable that the kernel cannot run passes the access check and fails in Popen.
+        with open(self.exe, "w") as file:
+            file.write("#!/nonexistent/interpreter\n")
+        message = self.refusal()
+        self.assertIn(f"cannot start {self.exe}", message)
+        self.assertIn("No such file or directory", message)
 
 
 if __name__ == "__main__":

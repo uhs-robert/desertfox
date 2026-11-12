@@ -45,6 +45,7 @@ test("a shared file selects every piece, a docs file none, a missing src change 
   assert.ok(select_pieces(["src/content/hints/labels.ts"], piece_areas).pieces.includes("p5_hints"));
   assert.equal(select_pieces(["src/manifest.json"], piece_areas).pieces.length, piece_areas.size);
   assert.equal(select_pieces(["test/key/harness.mjs"], piece_areas).pieces.length, piece_areas.size);
+  for (const path of ["host/desertfox-host", "host/install.sh"]) assert.ok(select_pieces([path], piece_areas).pieces.includes("p34_firefox_pages"), path);
   for (const path of ["tools/build.mjs", "tools/write_commands_json.mjs", "tools/render_docs.ts"]) assert.equal(select_pieces([path], piece_areas).pieces.length, piece_areas.size);
   assert.deepEqual(select_pieces(["test/key/p7_caret.mjs"], piece_areas).pieces, ["p7_caret"]);
 });
