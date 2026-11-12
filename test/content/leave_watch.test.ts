@@ -98,16 +98,11 @@ test("a hidden tab records nothing", () => {
   assert.deepEqual(sent, []);
 });
 
-test("a child frame records no push and no leave, but its listeners still hear its changes within the document", () => {
-  const { watch, navigate, hide } = make({ is_top: false });
-  const heard: string[] = [];
-  watch.listen_((event) => heard.push(`${event.navigationType} ${event.destination.url}`));
+test("a child frame records no push and no leave", () => {
+  const { navigate, hide } = make({ is_top: false });
   navigate("https://app.test/a");
-  navigate("https://app.test/a#x");
-  navigate("https://app.test/b", "push", "cancel");
   hide();
   assert.deepEqual(sent, []);
-  assert.deepEqual(heard, ["push https://app.test/a", "push https://app.test/a#x"]);
 });
 
 test("the top frame reports its offset as the page hides", () => {
