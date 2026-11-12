@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_key_flow } from "../../src/content/key_flow.ts";
 import type { PendingPrefix } from "../../src/content/key_flow.ts";
 import { create_mode_state } from "../../src/content/mode_state.ts";
-import { create_which_key_timer } from "../../src/content/which_key_timer.ts";
+import { create_which_key_timer } from "../../src/content/whichkey/timer.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../../src/shared/prefix_tree.ts";

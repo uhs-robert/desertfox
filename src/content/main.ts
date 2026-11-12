@@ -13,9 +13,8 @@ import { deepest_focused_element, is_editable_element, set_editable_rules } from
 import { set_scroll_selector } from "./handlers/scroll.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
-import { create_key_flow } from "./key_flow.ts";
+import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
-import { create_which_key_timer } from "./which_key_timer.ts";
 import { badge_state } from "./badge_state.ts";
 import { show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
@@ -58,12 +57,9 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
 let which_key_skip: readonly string[] | undefined;
-// Hiding asks only once the bundle has loaded, because before that there is no panel.
-const follow_prefix = create_which_key_timer(
-  () => which_key_delay_ms,
-  (prefix, is_current_, drawn_) => (prefix || bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, is_current_, drawn_ }, "", false),
-  () => which_key_skip,
-);
+// The timer lives in the `whichkey` bundle. A prefix loads it only while which-key is on, and the first panel may appear late by the load. Hiding asks only once the bundle has loaded, because before that there is no panel.
+const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) =>
+  (prefix ? which_key_delay_ms : bundles.has_handler_("whichkey")) && bundles.run_command_("whichkey", "whichkey", { prefix, at_once, delay_ms: which_key_delay_ms, skip: which_key_skip }, "", false);
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
