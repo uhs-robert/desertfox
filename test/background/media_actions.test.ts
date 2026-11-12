@@ -19,14 +19,14 @@ test("every frame with playing media acts, even beside a larger idle video", () 
 });
 
 test("media with sound acts before a muted preview that also plays, in another frame or the same", () => {
-  const preview_beside_main = [scan(0, { playing: 1, playing_video_area: 90_000, video_area: 90_000 }), scan(4, { playing: 1, audible: 1, playing_video_area: 400, audible_video_area: 400 })];
+  const preview_beside_main = [scan(0, { playing: 1, playing_video_area: 400, video_area: 400 }), scan(4, { playing: 1, audible: 1, playing_video_area: 90_000, audible_video_area: 90_000, video_area: 90_000 })];
   assert.deepEqual(choose_frames(preview_beside_main, "speed"), [{ frame_id: 4, target: "audible" }]);
   assert.deepEqual(choose_frames(preview_beside_main, "pip"), [{ frame_id: 4, target: "audible" }]);
   assert.deepEqual(choose_frames([scan(0, { playing: 2, audible: 1 })], "volume"), [{ frame_id: 0, target: "audible" }]);
 });
 
 test("ap pauses every playing element on the tab when anything plays with sound, a muted preview included", () => {
-  const scans = [scan(0, { playing: 1, playing_video_area: 90_000, video_area: 90_000 }), scan(4, { playing: 1, audible: 1, playing_video_area: 400, audible_video_area: 400 })];
+  const scans = [scan(0, { playing: 1, playing_video_area: 400, video_area: 400 }), scan(4, { playing: 1, audible: 1, playing_video_area: 90_000, audible_video_area: 90_000, video_area: 90_000 })];
   assert.deepEqual(choose_frames(scans, "play_pause"), [
     { frame_id: 0, target: "playing" },
     { frame_id: 4, target: "playing" },
@@ -45,6 +45,19 @@ test("picture-in-picture closes an open window first, then takes the largest pla
   assert.deepEqual(choose_frames([scan(0, { playing: 1, playing_video_area: 500 }), scan(2, { playing: 1, playing_video_area: 900 })], "pip"), [{ frame_id: 2, target: "playing" }]);
   assert.deepEqual(choose_frames([scan(0, { playing: 1 }), scan(1, { video_area: 300 })], "pip"), [{ frame_id: 1, target: "largest" }]);
   assert.deepEqual(choose_frames([scan(0, { playing: 1 })], "pip"), []);
+});
+
+test("size beats playing: a small playing ad does not outrank a large video that waits, for every key", () => {
+  const ad_beside_main = [scan(0, { video_area: 700_000 }), scan(3, { playing: 1, audible: 1, playing_video_area: 75_000, audible_video_area: 75_000, video_area: 75_000 })];
+  for (const action of ["fullscreen", "pip", "speed", "volume", "play_pause"] as const) assert.deepEqual(choose_frames(ad_beside_main, action), [{ frame_id: 0, target: "largest" }], action);
+  const half_size = [scan(0, { video_area: 700_000 }), scan(3, { playing: 1, playing_video_area: 175_000, video_area: 175_000 })];
+  assert.deepEqual(choose_frames(half_size, "fullscreen"), [{ frame_id: 3, target: "playing" }]);
+  assert.deepEqual(choose_frames([scan(0, { video_area: 700_000 }), scan(3, { playing: 1, playing_video_area: 174_999, video_area: 174_999 })], "fullscreen"), [{ frame_id: 0, target: "largest" }]);
+});
+
+test("a playing audio-only frame still acts beside a large idle video", () => {
+  const scans = [scan(0, { video_area: 700_000 }), scan(3, { playing: 1, audible: 1, has_video: false })];
+  assert.deepEqual(choose_frames(scans, "volume"), [{ frame_id: 3, target: "audible" }]);
 });
 
 test("the notice names the new value, the player count and a live stream's position alone", () => {

@@ -9,6 +9,9 @@ export const SPEED_RULE: LevelRule = { step: 0.25, min: 0.25, max: 4, reset: 1 }
 export const VOLUME_RULE: LevelRule = { step: 10, min: 0, max: 100, reset: 100 };
 export const SEEK_RULE: LevelRule = { step: 10, min: 0, max: Infinity, reset: 0 };
 
+// Size beats playing: a video that plays (or has sound) only wins when its area is at least this part of the largest visible video's, so a small ad that plays does not outrank the main video that waits to start.
+export const PLAYING_MIN_SHARE = 0.25;
+
 // `audible` acts on every element that plays with sound in the frame, `playing` on every element that plays. `largest` acts on the one largest visible video, else the first media element. `pinned` acts on the video that `;M` pinned in the frame.
 export type MediaTarget = "audible" | "playing" | "largest" | "pinned";
 
