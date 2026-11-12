@@ -167,7 +167,7 @@ test("an empty result clears the editor with a cut, because pasting nothing leav
 test("a copy that leaves the marker on the clipboard keeps the refusal, restores the clipboard and sends nothing", async () => {
   reset();
   editor("draft").copies = false;
-  await assert.rejects(run(), /only part of its text.*clipboard copy failed: The editor did not copy its text/);
+  await assert.rejects(run(), /only part of its text.*copying it failed: The editor copied nothing/);
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(sent.length, 0);
   // The editor ignores the copy: its page never sees the event.
@@ -278,12 +278,12 @@ test("a second return for the same job, even while the first is still pasting, w
   assert.equal(clipboard.text, "saved by the user");
 });
 
-test("an editor that cancels Ctrl+A but runs another command (a vim or emacs keymap) copies the caret line, which is refused as shorter than the drawn lines", async () => {
+test("an editor that cancels Ctrl+A but runs another command (a vim or emacs keymap) copies the caret line, which is refused as it misses drawn lines", async () => {
   reset();
   const field = editor("line 1\nline 2\nline 3");
   field.drawn_lines = ["line 1", "line 2", "line 3"];
   field.ctrl_a_selects = false;
-  await assert.rejects(run(), /shorter than the drawn text/);
+  await assert.rejects(run(), /misses drawn lines/);
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(sent.length, 0);
 });
@@ -337,14 +337,14 @@ test("a clipboard that cannot be restored refuses the open, and after a paste th
   reset();
   editor("draft");
   clipboard.refuses = "saved by the user";
-  await assert.rejects(run(), /clipboard could not be restored/);
+  await assert.rejects(run(), /[Cc]lipboard could not be restored/);
   assert.equal(sent.length, 0);
   reset();
   const field = await opened_editor("draft");
   clipboard.refuses = "saved by the user";
   await done("final");
   assert.equal(field.doc, "final");
-  assert.match(toasts.at(-1) ?? "", /clipboard could not be restored/);
+  assert.match(toasts.at(-1) ?? "", /[Cc]lipboard could not be restored/);
   assert.doesNotMatch(toasts.at(-1) ?? "", /Its text is back/);
 });
 
@@ -372,4 +372,36 @@ test("two quick presses run one after the other, so the second never saves the f
   await second;
   assert.equal(clipboard.text, "saved by the user");
   assert.equal(clipboard_at_open, "saved by the user");
+});
+
+test("a paste that shortens the document passes the read-back while the drawn lines still show the old text, as Ace and Monaco redraw on the next frame", async () => {
+  reset();
+  const lines = Array.from({ length: 20 }, (_, index) => `line ${index + 1} of the snippet`);
+  const field = editor(lines.join("\n"));
+  field.drawn_lines = lines;
+  await run();
+  await done("short");
+  assert.equal(field.doc, "short");
+  assert.equal(yanked().length, 0);
+  assert.match(toasts.at(-1) ?? "", /Used the clipboard/);
+});
+
+test("a caret-line copy at least as long as the drawn lines is still refused, because it misses a drawn line", async () => {
+  reset();
+  const field = editor("a much longer first line at the caret\nline 2\nline 3");
+  field.drawn_lines = ["line 2", "line 3"];
+  field.ctrl_a_selects = false;
+  await assert.rejects(run(), /misses drawn lines/);
+  assert.equal(sent.length, 0);
+  assert.equal(clipboard.text, "saved by the user");
+});
+
+test("an empty result that a read-only editor of only whitespace drops is not taken as cleared", async () => {
+  reset();
+  const field = await opened_editor("   ");
+  field.read_only = true;
+  await done("");
+  assert.equal(field.doc, "   ");
+  assert.deepEqual(yanked().at(-1), { type: "register_yank", name: "", text: "" });
+  assert.match(toasts.at(-1) ?? "", /did not take the edited text/);
 });

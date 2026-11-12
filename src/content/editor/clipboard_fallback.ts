@@ -14,6 +14,8 @@ const DRAWN_LINE = ".cm-line, .CodeMirror-line, .ace_line, .view-line";
 
 const { clipboard } = navigator;
 
+export const CLIPBOARD_NOT_RESTORED = "The clipboard could not be restored";
+
 export type PasteOutcome = "pasted" | "changed" | "refused";
 
 // A field inside a shadow root shows in `document.activeElement` only as its host, so the focus check walks down.
@@ -26,7 +28,7 @@ const page_document: ClipboardCommandDocument = {
   execCommand: (command) => document.execCommand(command),
 };
 
-const drawn_text = (field: HTMLElement): string => Array.from(field.closest(VIRTUALIZED_EDITOR)?.querySelectorAll<HTMLElement>(DRAWN_LINE) ?? [], (line) => line.innerText).join("\n");
+const drawn_lines = (field: HTMLElement): string[] => Array.from(field.closest(VIRTUALIZED_EDITOR)?.querySelectorAll<HTMLElement>(DRAWN_LINE) ?? [], (line) => line.innerText);
 
 const send_key = (field: HTMLElement, init: KeyboardEventInit): boolean => field.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
 
@@ -34,8 +36,8 @@ const send_key = (field: HTMLElement, init: KeyboardEventInit): boolean => field
 function select_all_then(field: HTMLElement, action: "copy" | "cut" | "paste"): void {
   // The focus check comes with the clipboard command. An editor that did not take focus loses only a selection.
   field.focus();
-  const modifier = navigator.platform?.startsWith("Mac") ? "metaKey" : "ctrlKey";
-  if (send_key(field, { key: "a", code: "KeyA", keyCode: 65, [modifier]: true })) throw new RuntimeRefusal("The editor did not select all");
+  const modifier = /Mac/.test(navigator.platform) ? "metaKey" : "ctrlKey";
+  if (send_key(field, { key: "a", keyCode: 65, [modifier]: true })) throw new RuntimeRefusal("The editor did not select all");
   // The untrusted paste event that `page.clipboard` falls back to is left out: with `clipboardRead` a paste through `execCommand` fires, or the page refused it.
   if (!exec_clipboard_command(page_document, field, action)) throw new RuntimeRefusal(`The page did not take ${action}`);
 }
@@ -44,15 +46,12 @@ function select_all_then(field: HTMLElement, action: "copy" | "cut" | "paste"): 
 const collapse_selection = (field: HTMLElement): void => void send_key(field, { key: "ArrowLeft", keyCode: 37 });
 
 // A copy that did nothing leaves the clipboard as it was, which would open the old clipboard text as the document. A fresh marker tells the two apart.
-// An editor can bind Ctrl+A to another command (vim's increment, emacs's line start) and still cancel it. Its copy then holds the caret line only, which is shorter than the lines it draws.
 async function copy_whole_text(field: HTMLElement): Promise<string> {
-  const drawn = drawn_text(field);
   const marker = `desertfox-marker-${crypto.randomUUID()}`;
-  if (!(await copy_text(clipboard, marker))) throw new RuntimeRefusal("Could not write to the clipboard");
+  if (!(await copy_text(clipboard, marker))) throw new RuntimeRefusal("Could not write the clipboard");
   select_all_then(field, "copy");
   const copied = await clipboard.readText();
-  if (copied === marker) throw new RuntimeRefusal("The editor did not copy its text");
-  if (copied.length < drawn.length) throw new RuntimeRefusal("The copy is shorter than the drawn text");
+  if (copied === marker) throw new RuntimeRefusal("The editor copied nothing");
   return copied;
 }
 
@@ -62,6 +61,18 @@ async function copy_then_collapse(field: HTMLElement): Promise<string> {
   } finally {
     collapse_selection(field);
   }
+}
+
+// An editor can bind Ctrl+A to another command (vim's increment, emacs's line start) and still cancel it. Its copy then holds the caret line only, which misses the other lines it draws. The compare drops whitespace, as Monaco and Ace draw tabs and spaces as other characters.
+// Only the open checks this. Ace and Monaco redraw on the next frame, so after a paste the drawn lines are stale, and the return compares whole texts instead.
+async function copy_covering_drawn(field: HTMLElement): Promise<string> {
+  const drawn = drawn_lines(field);
+  const copied = await copy_then_collapse(field);
+  const squeeze = (text: string) => text.replace(/\s+/g, "");
+  const whole = squeeze(copied);
+  let at = 0;
+  if (!drawn.every((line) => (at = whole.indexOf(squeeze(line), at)) >= 0)) throw new RuntimeRefusal("The copy misses drawn lines");
+  return copied;
 }
 
 // Only text is saved, as the Clipboard API writes back only text. An image or HTML on the clipboard is lost, which the toast says. A failed save refuses before anything is written.
@@ -84,13 +95,13 @@ export const copy_through_clipboard = (field: HTMLElement): Promise<string> =>
   queued_in_page(async () => {
     let why: string;
     try {
-      const { value, error, restored } = await with_clipboard_saved(() => copy_then_collapse(field));
+      const { value, error, restored } = await with_clipboard_saved(() => copy_covering_drawn(field));
       if (restored && value !== undefined) return value;
-      why = restored ? (error as Error).message : "the clipboard could not be restored";
+      why = restored ? (error as Error).message : CLIPBOARD_NOT_RESTORED;
     } catch (error) {
       why = (error as Error).message;
     }
-    throw new RuntimeRefusal(`This editor shows only part of its text, and its clipboard copy failed: ${why}`);
+    throw new RuntimeRefusal(`This editor shows only part of its text, and copying it failed: ${why}`);
   });
 
 // The same stale check as a plain field: the result goes in only while the editor still holds the text it opened with. An empty result is a cut, because pasting nothing leaves the selection in place.
@@ -98,18 +109,18 @@ async function replace_whole_text(field: HTMLElement, text: string, original: st
   let replaced = false;
   try {
     if ((await copy_whole_text(field)) !== original) return "changed";
-    const drawn_at_check = drawn_text(field);
+    const drawn_at_check = drawn_lines(field).join();
     if (!(await copy_text(clipboard, text))) return "refused";
     // The page can change the editor while the result goes onto the clipboard. The drawn lines are read again with no await before the paste, so a change on screen in that gap is seen. A change to an undrawn line in that gap is not.
-    if (drawn_text(field) !== drawn_at_check) return "changed";
+    if (drawn_lines(field).join() !== drawn_at_check) return "changed";
     select_all_then(field, text === "" ? "cut" : "paste");
     replaced = true;
   } finally {
     if (!replaced) collapse_selection(field);
   }
-  // A paste event proves only that the editor saw it. A read-only editor drops the text, so the document is read back.
+  // A paste event proves only that the editor saw it. A read-only editor drops the text, so the document is read back. An empty document copies as nothing (the marker stays) or, where the editor copies the caret line, as one line break.
   const now_holds = await copy_then_collapse(field).catch(() => "");
-  return (text === "" ? now_holds.trim() === "" : now_holds === text) ? "pasted" : "refused";
+  return now_holds === text || (text === "" && now_holds === "\n") ? "pasted" : "refused";
 }
 
 export function paste_through_clipboard(field: HTMLElement, text: string, original: string): Promise<{ outcome: PasteOutcome; restored: boolean }> {
