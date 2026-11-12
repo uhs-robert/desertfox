@@ -5,7 +5,7 @@ import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { read_field_text } from "../text/field_text.ts";
 import { type_at_caret } from "../text/field_writer.ts";
 import { is_secret_field } from "../text/secret_field.ts";
-import { copy_through_clipboard, paste_through_clipboard, VIRTUALIZED_EDITOR } from "./clipboard_fallback.ts";
+import { CLIPBOARD_NOT_RESTORED, copy_through_clipboard, paste_through_clipboard, VIRTUALIZED_EDITOR } from "./clipboard_fallback.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { BackgroundToContent, EditorAnswer, EditorDone, EditorOpen } from "../../shared/messages.ts";
 
@@ -48,7 +48,7 @@ function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boole
   const { field, original } = edit;
   if (edit.through_clipboard) {
     return paste_through_clipboard(field as HTMLElement, text, original).then(async ({ outcome, restored }) => {
-      const note = restored ? "" : "The clipboard could not be restored. ";
+      const note = restored ? "" : `${CLIPBOARD_NOT_RESTORED}. `;
       if (outcome === "pasted") host.show_toast_(note || CLIPBOARD_USED_TOAST);
       else await keep_in_register(host, text, outcome, note);
       return true;
