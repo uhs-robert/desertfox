@@ -180,6 +180,20 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-${{ needs.plan.outputs.version }}
+          path: ${{ runner.temp }}/build
+      # Build code wrote this artifact, so only dist/ and release-assets/ may come into the checkout.
+      - name: Unpack the build artifact
+        env:
+          BUILD_DIR: ${{ runner.temp }}/build
+        run: |
+          set -euo pipefail
+          unexpected=$(find "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name dist ! -name release-assets)
+          if [ -n "$unexpected" ] || [ -n "$(find "$BUILD_DIR" -type l)" ] || [ ! -d "$BUILD_DIR/dist" ] || [ ! -d "$BUILD_DIR/release-assets" ]; then
+            echo "The build artifact must hold dist/ and release-assets/ and nothing else:" >&2
+            ls -la "$BUILD_DIR" >&2
+            exit 1
+          fi
+          mv "$BUILD_DIR/dist" "$BUILD_DIR/release-assets" .
       - name: Sign
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
@@ -215,6 +229,20 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-${{ needs.plan.outputs.version }}
+          path: ${{ runner.temp }}/build
+      # Build code wrote this artifact, so only dist/ and release-assets/ may come into the checkout.
+      - name: Unpack the build artifact
+        env:
+          BUILD_DIR: ${{ runner.temp }}/build
+        run: |
+          set -euo pipefail
+          unexpected=$(find "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name dist ! -name release-assets)
+          if [ -n "$unexpected" ] || [ -n "$(find "$BUILD_DIR" -type l)" ] || [ ! -d "$BUILD_DIR/dist" ] || [ ! -d "$BUILD_DIR/release-assets" ]; then
+            echo "The build artifact must hold dist/ and release-assets/ and nothing else:" >&2
+            ls -la "$BUILD_DIR" >&2
+            exit 1
+          fi
+          mv "$BUILD_DIR/dist" "$BUILD_DIR/release-assets" .
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signed-xpi-${{ needs.plan.outputs.version }}
