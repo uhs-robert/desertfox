@@ -10,6 +10,7 @@ import { message_of } from "./bundle_host.ts";
 import type { PageHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element, set_editable_rules } from "./editable.ts";
+import { set_scroll_selector } from "./handlers/scroll.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow } from "./key_flow.ts";
@@ -258,6 +259,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   escape_to_page = !!reply?.site_values?.escape_to_page;
   const was_in_field = is_editable_element(deepest_focused_element());
   set_editable_rules(reply?.site_values);
+  set_scroll_selector(reply?.site_values?.scroll_selector);
   // The mode comes first, so keys held during the load replay in the right mode.
   const first_install = !matcher_installed;
   matcher_installed = true;

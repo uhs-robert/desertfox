@@ -68,6 +68,8 @@ export const SETTINGS_TABLE = {
   editable_remove_unsized: { kind: "boolean", default: false, per_site: true },
   // Each frame resolves it against its own address. Set it only for sites whose editor handles Escape itself: in a field, insert mode then keeps Escape for the page and ends when the page drops the field.
   escape_to_page: { kind: "boolean", default: false, per_site: true },
+  // A CSS selector for the element that the scroll commands scroll on the site, for an app with an inner scroll area. It wins over the focus chain. A match that cannot scroll on the axis, a selector that does not parse and no match all leave the usual choice.
+  scroll_selector: { kind: "custom", schema: { type: "string" }, default: "", per_site: true },
   // Each column resolves on its own: the first row whose `site` matches the page and that sets the column decides it. `pass` and `only` form one column, the key rule.
   // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. It binds normal-mode keys and runs before `pass` and `only` prune the tree.
   // `modes.<name> = { label, bind }` is a site mode: a set of binds laid over normal mode while `mode.site <name>` has it on. The first row that has the mode decides it, whole. Escape, any key DesertFox does not cancel, a mousedown, any mode change and a keymap update end it.

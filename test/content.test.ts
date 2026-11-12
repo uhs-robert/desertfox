@@ -669,10 +669,20 @@ test("scroll target order: focus chain, page, largest", () => {
   const page = area("page", false, true, 900);
   const big = area("big", false, true, 500);
   const small = area("small", false, true, 50);
-  assert.equal(pick_scroll_target([area("input", false, false, 5), pane], page, () => [], "y"), "pane");
-  assert.equal(pick_scroll_target([], page, () => [big], "y"), "page");
-  assert.equal(pick_scroll_target([], area("page", false, false, 900), () => [small, big], "y"), "big");
-  assert.equal(pick_scroll_target([], page, () => [big], "x"), undefined);
+  assert.equal(pick_scroll_target(undefined, [area("input", false, false, 5), pane], page, () => [], "y"), "pane");
+  assert.equal(pick_scroll_target(undefined, [], page, () => [big], "y"), "page");
+  assert.equal(pick_scroll_target(undefined, [], area("page", false, false, 900), () => [small, big], "y"), "big");
+  assert.equal(pick_scroll_target(undefined, [], page, () => [big], "x"), undefined);
+});
+
+test("scroll target: the site selector wins, and falls through when it cannot scroll or is missing", () => {
+  const page = area("page", false, true, 900);
+  const pane = area("pane", false, true, 100);
+  const site = area("site", false, true, 10);
+  assert.equal(pick_scroll_target(site, [pane], page, () => [], "y"), "site");
+  assert.equal(pick_scroll_target(area("site", true, false, 10), [pane], page, () => [], "y"), "pane");
+  assert.equal(pick_scroll_target(area("site", true, false, 10), [], page, () => [], "y"), "page");
+  assert.equal(pick_scroll_target(undefined, [pane], page, () => [], "y"), "pane");
 });
 
 test("percent offsets clamp", () => {

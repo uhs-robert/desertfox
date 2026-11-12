@@ -125,6 +125,14 @@ test("escape_to_page reaches a page as a site value for its own address only", a
   assert.equal((await page_keymap_for(storage_of(compiled), frame))!.site_values, undefined);
 });
 
+test("scroll_selector reaches a page as a site value for its own address only", async () => {
+  const compiled = compile_keymap(KEYMAP, { site_rules: [{ site: "https://top.test/*", scroll_selector: "#pane" }] }, resolve).compiled;
+  const top = rule_addresses_of({ frameId: 0, url: "https://top.test/", tab: { url: "https://top.test/" } });
+  assert.deepEqual((await page_keymap_for(storage_of(compiled), top))!.site_values, { scroll_selector: "#pane" });
+  const other = rule_addresses_of({ frameId: 0, url: "https://other.test/", tab: { url: "https://other.test/" } });
+  assert.equal((await page_keymap_for(storage_of(compiled), other))!.site_values, undefined);
+});
+
 test("the global blur_on_load reaches every page, and a site row turns it off there", async () => {
   const compiled = compile_keymap(KEYMAP, { blur_on_load: true, site_rules: [{ site: "https://quiet.test/*", blur_on_load: false }] }, resolve).compiled;
   assert.deepEqual(compiled.frame_site_globals, { blur_on_load: true });
