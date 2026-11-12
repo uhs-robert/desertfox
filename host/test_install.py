@@ -425,22 +425,25 @@ class ReleaseStepTest(InstallCase):
         os.chmod(gh, 0o755)
 
         self.assets = os.path.join(self.tmp.name, "release-assets")
+        self.xpi = os.path.join(self.tmp.name, "signed.xpi")
+        with open(self.xpi, "wb") as file:
+            file.write(b"signed xpi bytes")
 
-    def just(self, recipe, cwd=None, **extra_env):
+    def just(self, recipe, *args, cwd=None, **extra_env):
         env = dict(os.environ, PATH=self.stub_bin + os.pathsep + os.environ["PATH"], GH_LOG=self.gh_log, GH_OUT=self.gh_out, RELEASE_ASSETS_DIR=self.assets, **extra_env)
-        return subprocess.run(["just", recipe], cwd=cwd or os.path.dirname(HOST_DIR), env=env, capture_output=True, text=True, timeout=60)
+        return subprocess.run(["just", recipe, *args], cwd=cwd or os.path.dirname(HOST_DIR), env=env, capture_output=True, text=True, timeout=60)
 
     def publish(self, **extra_env):
-        stamp = self.just("release_stamp")
+        stamp = self.just("release_stamp", self.package_version())
         self.assertEqual(stamp.returncode, 0, stamp.stderr)
-        return self.just("release_publish", **extra_env)
+        return self.just("release_publish", self.package_version(), self.xpi, **extra_env)
 
     def package_version(self):
         with open(os.path.join(os.path.dirname(HOST_DIR), "src", "manifest.json")) as file:
             return json.load(file)["version"]
 
     def test_stamp_writes_the_version_into_both_hosts_before_hashing(self):
-        self.assertEqual(self.just("release_stamp").returncode, 0)
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
         version = self.package_version()
         with open(os.path.join(self.assets, "host_sha256.json")) as file:
             hashes = json.load(file)
@@ -459,16 +462,16 @@ class ReleaseStepTest(InstallCase):
             self.assertIn(b'\nRELEASE_VERSION = "dev"\n', file.read(), "the repo copy keeps the placeholder")
 
     def test_publish_refuses_without_a_stamp_of_this_version(self):
-        done = self.just("release_publish")
+        done = self.just("release_publish", self.package_version(), self.xpi)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("just release_stamp", done.stderr)
         self.assertFalse(os.path.exists(self.gh_log))
 
     def test_publish_refuses_a_stamped_file_changed_after_hashing(self):
-        self.assertEqual(self.just("release_stamp").returncode, 0)
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
         with open(os.path.join(self.assets, "desertfox"), "ab") as file:
             file.write(b"\n# changed\n")
-        done = self.just("release_publish")
+        done = self.just("release_publish", self.package_version(), self.xpi)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("no longer matches its checksum", done.stderr)
         self.assertFalse(os.path.exists(self.gh_log))
@@ -495,8 +498,8 @@ class ReleaseStepTest(InstallCase):
 
     def test_a_beta_version_publishes_a_prerelease_and_a_bad_version_stamps_nothing(self):
         work = self.release_work_dir("0.2.0.3")
-        self.assertEqual(self.just("release_stamp", cwd=work).returncode, 0)
-        done = self.just("release_publish", cwd=work)
+        self.assertEqual(self.just("release_stamp", "0.2.0.3", cwd=work).returncode, 0)
+        done = self.just("release_publish", "0.2.0.3", self.xpi, cwd=work)
         self.assertEqual(done.returncode, 0, done.stderr)
         with open(self.gh_log) as file:
             logged = file.read()
@@ -505,14 +508,14 @@ class ReleaseStepTest(InstallCase):
         with open(os.path.join(work, "package.json")) as file:
             self.assertEqual(json.load(file)["version"], STABLE_PACKAGE_VERSION, "a beta never lands in package.json")
         self.write_manifest_version(work, "0.2.0-beta.3")
-        done = self.just("release_stamp", cwd=work)
+        done = self.just("release_stamp", "0.2.0-beta.3", cwd=work)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("not x.y.z or x.y.z.N", done.stderr)
 
     def test_a_stable_version_is_not_a_prerelease(self):
         work = self.release_work_dir("0.2.0")
-        self.assertEqual(self.just("release_stamp", cwd=work).returncode, 0)
-        done = self.just("release_publish", cwd=work)
+        self.assertEqual(self.just("release_stamp", "0.2.0", cwd=work).returncode, 0)
+        done = self.just("release_publish", "0.2.0", self.xpi, cwd=work)
         self.assertEqual(done.returncode, 0, done.stderr)
         with open(self.gh_log) as file:
             logged = file.read()
@@ -520,7 +523,7 @@ class ReleaseStepTest(InstallCase):
         self.assertNotIn("--prerelease", logged)
 
     def test_publish_refuses_a_file_that_matches_its_sha256_but_not_the_hashes_the_build_carries(self):
-        self.assertEqual(self.just("release_stamp").returncode, 0)
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
         cli = os.path.join(self.assets, "desertfox")
         with open(cli, "ab") as file:
             file.write(b"\n# edited after the stamp\n")
@@ -528,7 +531,7 @@ class ReleaseStepTest(InstallCase):
             digest = hashlib.sha256(file.read()).hexdigest()
         with open(cli + ".sha256", "w") as file:
             file.write(f"{digest}  desertfox\n")
-        done = self.just("release_publish")
+        done = self.just("release_publish", self.package_version(), self.xpi)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("does not match its hash in host_sha256.json", done.stderr)
         self.assertFalse(os.path.exists(self.gh_log))
@@ -540,7 +543,8 @@ class ReleaseStepTest(InstallCase):
         with open(self.gh_log) as file:
             logged = file.read()
         self.assertTrue(logged.startswith(f"release create v{version} "), logged)
-        self.assertEqual(sorted(os.listdir(self.gh_out)), ["desertfox", "desertfox-bridge", "desertfox-bridge.sha256", "desertfox-host", "desertfox-host.sha256", "desertfox.sha256", "install.sh"])
+        self.assertEqual(sorted(os.listdir(self.gh_out)), sorted(["desertfox", "desertfox-bridge", "desertfox-bridge.sha256", "desertfox-host", "desertfox-host.sha256", "desertfox.sha256", f"desertfox-{version}.xpi", "install.sh"]))
+        self.assertIn(f"/desertfox-{version}.xpi ", logged)
 
     def test_uploaded_assets_install_through_the_script(self):
         self.assertEqual(self.publish().returncode, 0)
@@ -641,6 +645,52 @@ class ReleaseStepTest(InstallCase):
         again = subprocess.run(["just", "release_commit_push"], cwd=work, env=env, capture_output=True, text=True, timeout=60)
         self.assertIn("bump commit is local", again.stderr)
         self.assertEqual(git("rev-list", "--count", "HEAD"), "2")
+
+    def beta_work_dir(self, version, update_url=True):
+        """A work dir whose npm build is a stub that copies the stamped hashes into dist/, so release_beta runs without esbuild."""
+        work = self.release_work_dir(version)
+        os.makedirs(os.path.join(work, "node_modules"))
+        scripts = {"typecheck": "true", "build": 'mkdir -p dist && cp "$RELEASE_ASSETS_DIR/host_sha256.json" dist/'}
+        with open(os.path.join(work, "package.json"), "w") as file:
+            file.write(json.dumps({"version": STABLE_PACKAGE_VERSION, "scripts": scripts}))
+        gecko = {"update_url": "https://example.invalid/updates.json"} if update_url else {}
+        with open(os.path.join(work, "src", "manifest.json"), "w") as file:
+            file.write(json.dumps({"version": version, "browser_specific_settings": {"gecko": gecko}}))
+        return work
+
+    def test_release_beta_rejects_a_stable_version_and_a_missing_update_url(self):
+        stable = self.just("release_beta", cwd=self.beta_work_dir("0.2.0"))
+        self.assertNotEqual(stable.returncode, 0)
+        self.assertIn("not a beta version", stable.stderr)
+        bare = self.just("release_beta", cwd=self.beta_work_dir("0.2.0.3", update_url=False))
+        self.assertNotEqual(bare.returncode, 0)
+        self.assertIn("no update_url", bare.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_release_beta_dry_run_skips_signing_and_leaves_package_json_alone(self):
+        if shutil.which("npm") is None:
+            self.skipTest("npm not found")
+        work = self.beta_work_dir("0.2.0.3")
+        with open(os.path.join(work, "package.json")) as file:
+            before = file.read()
+        done = self.just("release_beta", cwd=work, RELEASE_DRY_RUN="1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("dry run: skipping sign", done.stdout)
+        self.assertIn("v0.2.0.3", done.stdout)
+        self.assertIn("desertfox-0.2.0.3.xpi", done.stdout)
+        self.assertIn("--prerelease", done.stdout)
+        self.assertFalse(os.path.exists(os.path.join(work, "web-ext-artifacts")))
+        with open(self.gh_log) as file:
+            self.assertNotIn("release create", file.read(), "only the auth check ran")
+        with open(os.path.join(work, "package.json")) as file:
+            self.assertEqual(file.read(), before)
+
+    def test_publish_refuses_a_missing_xpi_outside_a_dry_run(self):
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
+        done = self.just("release_publish", self.package_version(), os.path.join(self.tmp.name, "none.xpi"))
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("does not exist", done.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
 
     def test_dry_run_creates_nothing(self):
         done = self.publish(RELEASE_DRY_RUN="1")

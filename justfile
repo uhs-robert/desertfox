@@ -262,12 +262,11 @@ export RELEASE_ASSETS_DIR := env("RELEASE_ASSETS_DIR", "release-assets")
 
 # Copy the hosts, the command line and install.sh into RELEASE_ASSETS_DIR and write the given version into both hosts as release_version. Then hash the stamped files: a .sha256 per script for the GitHub release, and host_sha256.json, which the extension build copies into dist/ so the signed build carries the hashes. Stamping comes first, so the hashes match the shipped bytes.
 [private]
-release_stamp version="":
+release_stamp version:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Callers pass the version from src/manifest.json, not package.json: npm refuses x.y.z.N, so a beta lives in the manifest only and package.json keeps the last stable version. No argument reads it from src/manifest.json.
+    # Callers pass the version from src/manifest.json, not package.json: npm refuses x.y.z.N, so a beta lives in the manifest only and package.json keeps the last stable version.
     version={{quote(version)}}
-    if [ -z "$version" ]; then version=$(jq -r .version src/manifest.json); fi
     # The same pattern as VERSION_PATTERN in host/desertfox-host, which refuses to update to any other version.
     if ! [[ "$version" =~ ^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(\.[1-9][0-9]{0,5})?$ ]]; then
         echo "release_stamp: '$version' is not x.y.z or x.y.z.N, so no host could update to it." >&2
@@ -291,30 +290,15 @@ release_stamp version="":
         '{version: $version, sha256: {"desertfox-host": $host, "desertfox-bridge": $bridge, "desertfox": $cli}}' > host_sha256.json
     echo "stamped the hosts as $version in $RELEASE_ASSETS_DIR"
 
-# Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file. release and release_beta always pass one, and with no xpi argument the release carries none. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
+# Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
 [private]
-release_publish version="" xpi="":
+release_publish version xpi:
     #!/usr/bin/env bash
     set -euo pipefail
     version={{quote(version)}}
-    if [ -z "$version" ]; then version=$(jq -r .version src/manifest.json); fi
     xpi={{quote(xpi)}}
     assets="$RELEASE_ASSETS_DIR"
     xpi_asset="$assets/desertfox-$version.xpi"
-    xpi_args=()
-    if [ -z "$xpi" ]; then
-        echo "release_publish: no xpi given, so the release carries none." >&2
-    elif [ -f "$xpi" ]; then
-        # The release asset name is the file name, and updates.json links to exactly this one.
-        if [ "$(realpath "$xpi")" != "$(realpath -m "$xpi_asset")" ]; then cp -f "$xpi" "$xpi_asset"; fi
-        xpi_args=("$xpi_asset")
-    elif [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
-        echo "dry run: $xpi does not exist, so $xpi_asset is not written."
-        xpi_args=("$xpi_asset")
-    else
-        echo "release_publish: the xpi $xpi does not exist. Run 'just sign' first." >&2
-        exit 1
-    fi
     # Publish only the bytes the extension build hashed. Restamping here would upload files the signed build does not know.
     if [ "$(jq -r .version "$assets/host_sha256.json" 2>/dev/null)" != "$version" ]; then
         echo "release_publish found no files stamped as $version in $assets. Run 'just release_stamp' on the commit that was signed, so the files match the hashes the signed build carries. Do not sign this version again: AMO refuses a second signing." >&2
@@ -331,6 +315,18 @@ release_publish version="" xpi="":
             exit 1
         fi
     done
+    xpi_args=()
+    if [ -f "$xpi" ]; then
+        # The release asset name is the file name, and updates.json links to exactly this one.
+        if [ "$(realpath "$xpi")" != "$(realpath -m "$xpi_asset")" ]; then cp -f "$xpi" "$xpi_asset"; fi
+        xpi_args=("$xpi_asset")
+    elif [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
+        echo "dry run: $xpi does not exist, so $xpi_asset is not written."
+        xpi_args=("$xpi_asset")
+    else
+        echo "release_publish: the xpi $xpi does not exist. Run 'just sign' first." >&2
+        exit 1
+    fi
     gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" "${xpi_args[@]}" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
     if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         gh_command+=(--prerelease)
@@ -383,7 +379,7 @@ release:
     just install
     just release_commit_push
     xpi=$(ls web-ext-artifacts/*.xpi)
-    just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish'." >&2; exit 1; }
+    just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
 
 # Build the beta in the workspace as stamped in src/manifest.json (see tools/stamp_beta_manifest.ts): stamp and hash the hosts, sign dist/, and create the prerelease v<version> with the signed xpi attached. Never bumps, never writes package.json, never installs and never commits. RELEASE_DRY_RUN=1 skips the signing and the release and runs the rest. Reads the AMO key from the environment only.
@@ -399,6 +395,9 @@ release_beta:
         echo "release_beta: src/manifest.json has no update_url, so no beta could update. Stamp it with tools/stamp_beta_manifest.ts first." >&2
         exit 1
     fi
+    # Fail before the signing, so a missing gh login does not leave a signed version with no release.
+    command -v gh >/dev/null || { echo "release_beta needs gh to create the GitHub release." >&2; exit 1; }
+    gh auth status >/dev/null 2>&1 || { echo "release_beta needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
     just release_stamp "$version"
     just build
     # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
@@ -413,4 +412,4 @@ release_beta:
     else
         echo "dry run: skipping sign."
     fi
-    just release_publish "$version" "$xpi"
+    just release_publish "$version" "$xpi" || { echo "The add-on is signed, but the GitHub release failed. Do not sign this version again. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
