@@ -104,13 +104,14 @@ test("no focused field and a password field refuse before anything is sent", asy
   assert.equal(sent.length, 0);
 });
 
-test("a virtualized editor (CodeMirror 6 content, a hidden textarea of CM5, Ace or Monaco) is refused before anything is sent", async () => {
+// The whole clipboard path is in editor_clipboard_fallback.test.ts. Here the page has no clipboard, so the copy fails.
+test("a virtualized editor (CodeMirror 6 content, a hidden textarea of CM5, Ace or Monaco) goes through the clipboard, and a failed copy is refused before anything is sent", async () => {
   reset();
   for (const name of [".cm-editor", ".CodeMirror", ".monaco-editor", ".ace_editor"]) {
     focus(Object.assign(div("slice"), { inside: [name] }));
-    await assert.rejects(run(), /only part of its text/, name);
+    await assert.rejects(run(), /only part of its text.*clipboard.*cannot be edited externally/, name);
     focus(Object.assign(input("slice"), { inside: [name] }));
-    await assert.rejects(run(), /only part of its text/, name);
+    await assert.rejects(run(), /only part of its text.*clipboard.*cannot be edited externally/, name);
   }
   assert.equal(sent.length, 0);
 });

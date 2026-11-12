@@ -4,26 +4,32 @@ import type { KeyTargetDocument } from "./send_key.ts";
 
 export type ClipboardArgs = { action: "cut" | "copy" | "paste"; target?: string };
 
-export type ClipboardDocument = KeyTargetDocument & Pick<EventTarget, "addEventListener" | "removeEventListener"> & { execCommand(command: string): boolean };
+export type ClipboardCommandDocument = Pick<KeyTargetDocument, "activeElement"> & Pick<EventTarget, "addEventListener" | "removeEventListener"> & { execCommand(command: string): boolean };
+export type ClipboardDocument = KeyTargetDocument & ClipboardCommandDocument;
 
 // A target that takes focus and listens, which is all the handler asks of the element.
-type ClipboardTarget = EventTarget & { focus?: () => void };
+export type ClipboardTarget = EventTarget & { focus?: () => void };
 
 // Runs `execCommand` first because it makes the browser fire the real, trusted event with the real clipboard, which is what Ctrl+X or Ctrl+V does. Where it fires nothing, a paste falls back to `paste_by_api`.
-// The event is the proof the page saw the action, so the return value of `execCommand` is ignored: Firefox returns false when the page cancelled the event. The marker listens in the capture phase on the document, so a page listener that stops propagation cannot hide the event.
 export async function clipboard_action(doc: ClipboardDocument, args: ClipboardArgs, paste_by_api: (target: EventTarget) => Promise<void>): Promise<void> {
-  const target: ClipboardTarget = key_target(doc, args.target);
+  const target = key_target(doc, args.target);
+  if (exec_clipboard_command(doc, target, args.action)) return;
+  if (args.action !== "paste") throw new RuntimeRefusal(`The page did not take ${args.action}`);
+  await paste_by_api(target);
+}
+
+// Whether the page saw the event. The editor bundle calls it directly and so skips the selector lookup.
+// The event is the proof the page saw the action, so the return value of `execCommand` is ignored: Firefox returns false when the page cancelled the event. The marker listens in the capture phase on the document, so a page listener that stops propagation cannot hide the event.
+export function exec_clipboard_command(doc: ClipboardCommandDocument, target: ClipboardTarget, action: ClipboardArgs["action"]): boolean {
   target.focus?.();
   // `execCommand` fires on the focused element, so a target that did not take focus would paste into something else.
   if (doc.activeElement !== target) throw new RuntimeRefusal("The target did not take focus");
   let event_fired = false;
   const mark = () => (event_fired = true);
-  doc.addEventListener(args.action, mark, { capture: true, once: true });
-  doc.execCommand(args.action);
-  doc.removeEventListener(args.action, mark, { capture: true });
-  if (event_fired) return;
-  if (args.action !== "paste") throw new RuntimeRefusal(`The page did not take ${args.action}`);
-  await paste_by_api(target);
+  doc.addEventListener(action, mark, { capture: true, once: true });
+  doc.execCommand(action);
+  doc.removeEventListener(action, mark, { capture: true });
+  return event_fired;
 }
 
 // The fallback. The page sees an untrusted paste event that carries the clipboard text, and the HTML too where the browser lets the content script read it.

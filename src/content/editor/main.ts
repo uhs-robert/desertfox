@@ -5,6 +5,7 @@ import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { read_field_text } from "../text/field_text.ts";
 import { type_at_caret } from "../text/field_writer.ts";
 import { is_secret_field } from "../text/secret_field.ts";
+import { copy_through_clipboard, paste_through_clipboard } from "./clipboard_fallback.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { BackgroundToContent, EditorAnswer, EditorDone, EditorOpen } from "../../shared/messages.ts";
 
@@ -15,9 +16,9 @@ type EditorWindow = { desertfox_host?: BundleHostApi; desertfox_editor_ready?: t
 const page = window as unknown as EditorWindow;
 
 // What a page waits for, by token. It holds the field and its text at the press, so the result goes in only while the field still holds that text. A navigation drops the page and with it the map.
-const open_edits = new Map<string, { field: Element; original: string }>();
+const open_edits = new Map<string, { field: Element; original: string; through_clipboard: boolean }>();
 
-// Editors that draw only the lines near the viewport, or keep the focus in a hidden textarea. What they expose is a slice of the document, so a write-back would replace the document with it.
+// Editors that draw only the lines near the viewport, or keep the focus in a hidden textarea. What they expose is a slice of the document, so their text goes in and out through the clipboard.
 const VIRTUALIZED_EDITOR = ".cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
 
 // A plain field takes the value through the native setter and `input` and `change` events, which is what a framework's own change tracking watches. An element that is editable by `contenteditable` takes one `insertText` over its whole content, so undo keeps working. An empty result needs `delete`, which `insertText` refuses.
@@ -48,6 +49,13 @@ function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boole
   open_edits.delete(token);
   if (text === undefined || text === edit.original) return Promise.resolve(true);
   const { field, original } = edit;
+  if (edit.through_clipboard) {
+    return paste_through_clipboard(field as HTMLElement, text, original).then((outcome) => {
+      if (outcome !== "pasted") return keep_in_register(host, text, outcome).then(() => true);
+      host.show_toast_(CLIPBOARD_USED_TOAST);
+      return true;
+    });
+  }
   const unchanged = () => field.isConnected && read_field_text(field) === original;
   let reason = "changed";
   if (unchanged()) {
@@ -72,21 +80,24 @@ async function keep_in_register(host: BundleHostApi, text: string, reason: strin
 async function edit_external(host: BundleHostApi, args: Record<string, unknown>): Promise<void> {
   const field = deepest_focused_element();
   if (!field || !is_editable_element(field)) throw new RuntimeRefusal("No text field is focused");
-  if (field.closest(VIRTUALIZED_EDITOR)) throw new RuntimeRefusal("This editor shows only part of its text, so it cannot be edited externally");
   if (is_secret_field(field)) throw new RuntimeRefusal("A password field is not opened in an external editor");
-  const text = read_field_text(field);
+  const through_clipboard = field.closest(VIRTUALIZED_EDITOR) !== null;
+  const text = through_clipboard ? await copy_through_clipboard(field as HTMLElement) : read_field_text(field);
   const bytes = new TextEncoder().encode(text).length;
   if (bytes > MAX_EDITOR_BYTES) throw new RuntimeRefusal(`The field holds ${Math.ceil(bytes / 1024)} KiB, over the ${MAX_EDITOR_BYTES / 1024} KiB the external editor takes`);
   const token = crypto.randomUUID();
   // Registered before the send, because a quick editor can end before the answer to the send arrives.
-  open_edits.set(token, { field, original: text });
+  open_edits.set(token, { field, original: text, through_clipboard });
   const request: EditorOpen = { type: "editor_open", token, text, insert: args.insert === true, ...(typeof args.ext === "string" ? { ext: args.ext } : {}) };
   const answer = (await browser.runtime.sendMessage(request).catch((error: unknown) => ({ ok: false, message: String(error) }))) as EditorAnswer;
   if (!answer.ok) {
     open_edits.delete(token);
     throw new RuntimeRefusal(answer.message);
   }
+  if (through_clipboard) host.show_toast_(CLIPBOARD_USED_TOAST);
 }
+
+const CLIPBOARD_USED_TOAST = "The editor text went through the clipboard. Its text is back, other content (an image, HTML) is not";
 
 // A second run would register again for nothing. With no host, content.js has not started in this frame, and the load it asks for later registers.
 const host = page.desertfox_host;
