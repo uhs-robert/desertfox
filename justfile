@@ -42,8 +42,14 @@ test: install_deps
 
 [private]
 install_deps:
-    # web-ext is checked too: a checkout that installed before web-ext was locked has node_modules without it, and sign would fail late.
-    @test -x node_modules/.bin/web-ext || npm install --no-audit --no-fund
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # web-ext is checked too, at the version package.json pins: a checkout that installed before web-ext was locked has node_modules without it, and sign would fail late.
+    wanted=$(jq -r '.devDependencies["web-ext"] // empty' package.json)
+    have=$(jq -r '.version // empty' node_modules/web-ext/package.json 2>/dev/null || true)
+    if [ ! -d node_modules ] || [ ! -x node_modules/.bin/web-ext ] || [ "$have" != "$wanted" ]; then
+        npm install --no-audit --no-fund
+    fi
 
 # Lint the config directory (default ~/.config/desertfox): build it in memory and print problems. Writes nothing Firefox reads, but the build prerequisite rewrites dist/ because the lint reads dist/commands.json. Extra flags (such as --schemas) go to the CLI.
 build-config dir="" *flags="": build
@@ -177,7 +183,7 @@ key-test-changed base="origin/main" head="":
 sign: build
     just sign_only
 
-# The signing alone: it builds nothing and installs nothing, so the AMO key reaches no other command. CI runs it as its own step with only the key. It needs dist/ and the locked web-ext already in place.
+# The signing alone: it builds nothing and installs nothing, so the AMO key reaches no other command. CI runs it in its own job with only the key. It needs dist/ and the locked web-ext already in place.
 [private]
 sign_only:
     #!/usr/bin/env bash
@@ -186,8 +192,11 @@ sign_only:
         echo "sign needs WEB_EXT_API_KEY and WEB_EXT_API_SECRET (the AMO JWT issuer and secret) in the environment." >&2
         exit 2
     fi
-    if [ ! -x node_modules/.bin/web-ext ]; then
-        echo "sign needs the locked web-ext in node_modules. Run 'npm ci' first." >&2
+    # Read the version from the installed package.json, so nothing runs before the check. package.json pins it exactly and the lockfile agrees.
+    wanted=$(jq -r '.devDependencies["web-ext"] // empty' package.json)
+    have=$(jq -r '.version // empty' node_modules/web-ext/package.json 2>/dev/null || true)
+    if [ ! -x node_modules/.bin/web-ext ] || [ -z "$wanted" ] || [ "$have" != "$wanted" ]; then
+        echo "sign needs web-ext $wanted in node_modules, found '${have:-none}'. Run 'npm ci' first." >&2
         exit 1
     fi
     if [ ! -f dist/manifest.json ]; then
@@ -398,7 +407,7 @@ release:
     just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
 
-# Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own step.
+# Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
 [private]
 release_beta_build:
     #!/usr/bin/env bash
@@ -420,7 +429,7 @@ release_beta_build:
         exit 1
     fi
 
-# Build the beta in the workspace as stamped in src/manifest.json (see tools/stamp_beta_manifest.ts): release_beta_build, then sign dist/, then create the prerelease v<version> with the signed xpi attached. CI runs the same three recipes as separate steps, each with only the secret it needs. Never bumps, never writes package.json, never installs and never commits. RELEASE_DRY_RUN=1 skips the signing and the release and runs the rest. Reads the AMO key from the environment only.
+# Build the beta in the workspace as stamped in src/manifest.json (see tools/stamp_beta_manifest.ts): release_beta_build, then sign dist/, then create the prerelease v<version> with the signed xpi attached. CI runs the same recipes as separate jobs, each with only the secret it needs. Never bumps, never writes package.json, never installs and never commits. RELEASE_DRY_RUN=1 skips the signing and the release and runs the rest. Reads the AMO key from the environment only.
 release_beta:
     #!/usr/bin/env bash
     set -euo pipefail
