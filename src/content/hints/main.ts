@@ -257,11 +257,20 @@ type PickArgs = Pick<Session, "args" | "action" | "rapid" | "collected_" | "with
 // `hand_over` is for a pick another frame owns: the text that would be copied, or the line that would open, goes to the keyboard frame instead.
 type HandOver = (text: string, what?: string) => void;
 
+// Set while a pick performs, so the address change the pick makes (a table-of-contents anchor) does not end the session that made it.
+let picking = false;
+
 const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
   // A pick right after a jump is the user's own move, so the address change it makes records.
   arm_leave_watch(page.desertfox_host).quiet_(false);
-  const result = perform(current.action, element, hand_over ? { ...deps, copy: hand_over } : pick_deps(current), current.with_background_);
+  picking = true;
+  let result;
+  try {
+    result = perform(current.action, element, hand_over ? { ...deps, copy: hand_over } : pick_deps(current), current.with_background_);
+  } finally {
+    picking = false;
+  }
   // The hint mode has ended, so the frame is in the mode the hint began in. A refused pick leaves it there.
   if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
   return result;
@@ -285,6 +294,8 @@ const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipbo
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
+  // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode, as a hidden page does.
+  arm_leave_watch(host).listen_(() => session && !picking && host.set_mode_("normal"));
 
   function end_session(): void {
     const session_id = session?.ready?.session_id_;
@@ -631,7 +642,5 @@ if (typeof page.desertfox_content_loaded === "function") page.desertfox_content_
 // A second run would register a second copy and orphan the first copy's labels. Without a host (no content script at all) the flag stays unset, so a later load still registers.
 if (!page.desertfox_hints_ready && page.desertfox_host) {
   page.desertfox_hints_ready = true;
-  // A hint follow leaves the page, which may have no `page` bundle to report where it stood.
-  arm_leave_watch(page.desertfox_host);
   register(page.desertfox_host);
 }

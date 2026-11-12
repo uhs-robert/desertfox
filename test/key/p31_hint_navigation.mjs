@@ -1,9 +1,9 @@
-// Hint mode and navigation. A navigation that replaces the document ends the mode. A change of the address inside the document (hash, pushState) leaves the labels up, because the elements they point at are still there.
+// Hint mode and navigation. A navigation that replaces the document ends the mode. A change of the address inside the document (hash, pushState) ends it too, because the view the labels point at may be gone.
 // Hint mode shows no badge, so the mode is read from the label host and from whether j scrolls: hint mode takes the letter, normal mode scrolls.
 
 export const areas = ["hints"];
 
-export async function run_cases({ run_case, press_keys, poll_until, open_page, wait_event, events, expect, in_active_tab, hint_label_count, scroll_delta_by_press, expect_no_scroll, settle_focus }) {
+export async function run_cases({ run_case, press_keys, poll_until, open_page, wait_event, events, expect, in_active_tab, hint_label_count, scroll_delta_by_press, settle_focus }) {
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
   const start_hints = async (page_id) => {
     await open_page("hints", page_id, { new_tab: true });
@@ -49,16 +49,12 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await expect_keys_work("hn_back", "the way back");
   });
 
-  for (const [name, change] of [["a hash change", `location.hash = "#moved"`], ["history.pushState", `history.pushState({}, "", location.pathname + location.search + "&pushed=1")`]]) {
-    await run_case(`${name} keeps hint mode, because the document stays`, async () => {
-      await start_hints("hn_same_document");
+  for (const [page_id, name, change] of [["hn_hash", "a hash change", `location.hash = "#moved"`], ["hn_push", "history.pushState", `history.pushState({}, "", location.pathname + location.search + "&pushed=1")`]]) {
+    await run_case(`${name} ends hint mode, as a new document does`, async () => {
+      await start_hints(page_id);
       await in_active_tab(`${change}; true`);
-      const mark = events.length;
-      await press_keys("j");
-      await expect_no_scroll(mark, "hn_same_document");
-      expect((await hint_label_count()) > 0, `${name} removed the hint labels`);
-      await press_keys("-k", "Escape");
-      await expect_normal("Escape");
+      await expect_normal(name);
+      await expect_keys_work(page_id, name);
     });
   }
 }
