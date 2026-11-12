@@ -28,11 +28,14 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, media(page_id, "volumechange", "big", (event) => Math.abs(event.volume - volume) < 0.001), `the volume at ${volume}`);
   };
   const j_scrolls = async (page_id) => expect((await scroll_delta_by_press(page_id, ["j"])) > 0, `j did not scroll ${page_id}`);
+  // The panel of the media keys opens by itself on entry. Waiting for it keeps a late bundle load from holding the next key.
+  const panel_up = (what) => poll_until(what, async () => await in_active_tab('[...document.documentElement.children].some((c) => c.getAttribute("data-desertfox-layer") === "2147483646" && c.matches(":popover-open"))'));
   const open_media_page = async (id) => {
     await open_page("media_mode", id, { new_tab: true });
     const mark = events.length;
     await press_keys("a", "a");
     await shown(mark, id);
+    await panel_up(`the media panel of ${id}`);
   };
   const focus_frame = async (host_id) => {
     const mark = events.length;

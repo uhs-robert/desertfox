@@ -2,7 +2,7 @@
 // It lives in `storage.session`, so a restarted background still knows and a browser restart clears it.
 
 import type { Mode } from "../shared/command.ts";
-import { TAB_MEDIA_STORAGE_PREFIX } from "./storage_keys.ts";
+import { TAB_MEDIA_STORAGE_PREFIX, TAB_MEDIA_TOP_STORAGE_PREFIX } from "./storage_keys.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -79,35 +79,48 @@ export function create_tab_media(deps: TabMediaDeps) {
 export type TabMedia = ReturnType<typeof create_tab_media>;
 
 export type MediaDiscoveryDeps = {
+  storage: SessionStorage;
   // 0 turns which-key off.
   which_key_delay_ms: () => Promise<number>;
   // Whether the top document is in full screen. A video in a child frame in full screen counts, because it makes the top document's `fullscreenElement` its frame element.
   top_in_fullscreen: (tab_id: number) => Promise<boolean>;
-  // Runs `help.whichkey` in the top frame.
+  // A report can land after its tab closed, and must not store anything for it.
+  tab_is_open: (tab_id: number) => Promise<boolean>;
+  // Runs the conditional open of the panel in the top frame. The frame checks again that it is still in media mode and not in full screen, as it draws.
   open_panel: (tab_id: number) => Promise<unknown>;
 };
 
+// What the top frame of a tab last reported, and how many times that changed.
+type TopState = { mode: Mode; changes: number };
+
+const top_key_of = (tab_id: number): string => TAB_MEDIA_TOP_STORAGE_PREFIX + tab_id;
+
 // Opens the which-key panel of the media mode when the top frame moves into it (entry, or the return from a hint or the command line), so the keys can be found. A frame reports its mode again on a window or tab focus, which is no move and opens nothing. Media mode is set in every frame, so only the top frame's report counts. Full screen shows the video alone, and a delay of 0 means no panel unasked.
-// The state is in memory: a restarted background opens the panel at most once more, on the next report of media.
+// The state is in `storage.session`, so a restarted background does not take a focus report for an entry.
 export function create_media_discovery(deps: MediaDiscoveryDeps) {
-  const last_mode = new Map<number, Mode>();
-  // Counts the top frame's reports per tab, so a check that finishes after a newer report knows its mode is stale.
-  const epoch = new Map<number, number>();
+  let chain: Promise<unknown> = Promise.resolve();
+  const in_turn = <T>(step: () => Promise<T>): Promise<T> => {
+    const run = chain.then(step);
+    chain = run.catch(() => undefined);
+    return run;
+  };
+  const read = async (tab_id: number): Promise<TopState | undefined> => (await deps.storage.get(top_key_of(tab_id)))[top_key_of(tab_id)] as TopState | undefined;
   return {
     reported: async (tab_id: number, frame_id: number, mode: Mode): Promise<void> => {
       if (frame_id !== 0) return;
-      const was = last_mode.get(tab_id);
-      last_mode.set(tab_id, mode);
-      const mine = (epoch.get(tab_id) ?? 0) + 1;
-      epoch.set(tab_id, mine);
-      if (mode !== "media" || was === "media") return;
+      // Only a change of mode counts, so a repeat report while the checks run does not drop their open.
+      const mine = await in_turn(async () => {
+        const state = await read(tab_id);
+        if (state?.mode === mode || !(await deps.tab_is_open(tab_id))) return undefined;
+        const changes = (state?.changes ?? 0) + 1;
+        await deps.storage.set({ [top_key_of(tab_id)]: { mode, changes } satisfies TopState });
+        return mode === "media" && state?.mode !== "media" ? changes : undefined;
+      });
+      if (mine === undefined) return;
       if ((await deps.which_key_delay_ms()) === 0 || (await deps.top_in_fullscreen(tab_id))) return;
-      if (epoch.get(tab_id) !== mine) return;
+      if ((await in_turn(() => read(tab_id)))?.changes !== mine) return;
       await deps.open_panel(tab_id);
     },
-    forget: (tab_id: number): void => {
-      last_mode.delete(tab_id);
-      epoch.delete(tab_id);
-    },
+    forget: (tab_id: number): Promise<void> => in_turn(() => deps.storage.remove(top_key_of(tab_id))),
   };
 }

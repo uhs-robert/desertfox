@@ -13,6 +13,7 @@ import { MODES } from "../src/shared/command.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { panel_after_prefix } from "../src/background/list_keys.ts";
 import { mode_label } from "../src/content/ui/mode_label.ts";
+import { media_panel_admitted } from "../src/content/whichkey/media_panel.ts";
 import { badge_state } from "../src/content/badge_state.ts";
 import { check_args } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
@@ -274,14 +275,29 @@ test("the media panel lists the media keys, and the badge says MEDIA", () => {
   assert.equal(badge_state("media", false, "off", undefined), undefined);
 });
 
-function discovery(options: { delay_ms?: number; fullscreen?: boolean } = {}) {
+function session_store() {
+  const store = new Map<string, unknown>();
+  return {
+    store,
+    storage: {
+      get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
+      set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
+      remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
+    } as never,
+  };
+}
+
+function discovery(options: { delay_ms?: number; fullscreen?: boolean; storage?: ReturnType<typeof session_store>; open_tabs?: Set<number> } = {}) {
   const opened: number[] = [];
+  const stored = options.storage ?? session_store();
   const discover = create_media_discovery({
+    storage: stored.storage,
     which_key_delay_ms: async () => options.delay_ms ?? 300,
     top_in_fullscreen: async () => options.fullscreen ?? false,
+    tab_is_open: async (tab_id) => options.open_tabs?.has(tab_id) ?? true,
     open_panel: async (tab_id) => void opened.push(tab_id),
   });
-  return { discover, opened };
+  return { discover, opened, store: stored.store };
 }
 
 test("the panel opens when the top frame enters the media mode", async () => {
@@ -318,6 +334,14 @@ test("a repeated media report from the top frame (a refocus) opens nothing, a re
   assert.equal(opened.length, 4);
 });
 
+test("a restarted background does not take a focus report for an entry", async () => {
+  const stored = session_store();
+  await discovery({ storage: stored }).discover.reported(7, 0, "media");
+  const after_restart = discovery({ storage: stored });
+  await after_restart.discover.reported(7, 0, "media");
+  assert.deepEqual(after_restart.opened, []);
+});
+
 test("a child frame's report does not count as the top frame leaving media", async () => {
   const { discover, opened } = discovery();
   await discover.reported(7, 0, "media");
@@ -326,18 +350,53 @@ test("a child frame's report does not count as the top frame leaving media", asy
   assert.deepEqual(opened, [7]);
 });
 
-test("a panel is not opened when the mode changed while the checks were pending", async () => {
+function gated_discovery() {
   const opened: number[] = [];
   let release: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => (release = resolve));
   const discover = create_media_discovery({
+    storage: session_store().storage,
     which_key_delay_ms: async () => (await gate, 300),
     top_in_fullscreen: async () => false,
+    tab_is_open: async () => true,
     open_panel: async (tab_id) => void opened.push(tab_id),
   });
+  return { discover, opened, release };
+}
+
+test("a panel is not opened when the mode changed while the checks were pending", async () => {
+  const { discover, opened, release } = gated_discovery();
   const pending = discover.reported(7, 0, "media");
   await discover.reported(7, 0, "normal");
   release();
   await pending;
   assert.deepEqual(opened, []);
+});
+
+test("a repeat media report while the checks are pending does not drop the open", async () => {
+  const { discover, opened, release } = gated_discovery();
+  const pending = discover.reported(7, 0, "media");
+  await discover.reported(7, 0, "media");
+  release();
+  await pending;
+  assert.deepEqual(opened, [7]);
+});
+
+test("forget clears the tab, and a report that lands after the close stores nothing", async () => {
+  const open_tabs = new Set([7]);
+  const { discover, store } = discovery({ open_tabs });
+  await discover.reported(7, 0, "media");
+  assert.equal(store.size, 1);
+  open_tabs.delete(7);
+  await discover.forget(7);
+  assert.equal(store.size, 0);
+  await discover.reported(7, 0, "media");
+  assert.equal(store.size, 0);
+});
+
+test("the frame draws the panel only while it is in media mode and not in full screen", () => {
+  for (const mode of MODES) {
+    assert.equal(media_panel_admitted(mode, false), mode === "media", mode);
+    assert.equal(media_panel_admitted(mode, true), false, `${mode} in full screen`);
+  }
 });
