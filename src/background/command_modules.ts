@@ -33,5 +33,6 @@ import "../commands/engine.ts";
 import "../commands/command.ts";
 import "../commands/native.ts";
 import "../commands/issue.ts";
+import "../commands/perf.ts";
 // Last, because help.open lists every command defined before it.
 import "../commands/help.ts";
