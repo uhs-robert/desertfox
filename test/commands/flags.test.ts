@@ -68,6 +68,8 @@ test("only these commands record a jump, and the open commands only with where h
     const jumps = registry.get(id)!.jumps as (args: Record<string, unknown>) => boolean;
     assert.deepEqual(["here", "tab", "background", "window"].map((where) => jumps({ where })), [true, false, false, false], id);
   }
+  const mark_jumps = registry.get("mark.jump")!.jumps as (args: Record<string, unknown>) => unknown;
+  assert.deepEqual(["a", "'", "A"].map((key) => mark_jumps({ key })), [true, true, "top_frame"], "only a global mark moves the top frame from a child frame");
 });
 
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {

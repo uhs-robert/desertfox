@@ -1,5 +1,5 @@
 import { define } from "../shared/registry/builtin.ts";
-import { MARK_ADD_KEY, MARK_JUMP_KEY } from "../shared/mark_names.ts";
+import { is_global_mark, MARK_ADD_KEY, MARK_JUMP_KEY } from "../shared/mark_names.ts";
 
 // Both run in the `page` bundle, which stores and reads marks through the background. Only the page can read its scroll position.
 define("mark.add", {
@@ -20,5 +20,6 @@ define("mark.jump", {
   runs_in: "content",
   bundle: "page",
   repeatable: false,
-  jumps: true,
+  // A global mark jumps in the top frame or another tab, whichever frame asked.
+  jumps: (args) => (is_global_mark(args.key as string) ? "top_frame" : true),
 });
