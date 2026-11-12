@@ -25,7 +25,7 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 
 - **You learn it as you go.** Pause after a key and a popup lists the keys that can follow, with what each does. The popup shows live data too: your marks under `'`, your registers under `"` and your macros under `@`. The command line lists every command and completes its flags and values.
 - **It checks what you give it.** Every command is defined once, with typed arguments. A key, a typed command and a config line all pass the same check, so a typo is an error with a message and never a silent no-op. A config file error names the file, line and column.
-- **It stays light on every page.** The script DesertFox loads into each page is 18 KB, and the build fails if it grows past 18.5 KB. Hints, caret mode and the command line load on first use.
+- **It stays light on every page.** The script DesertFox loads into each page is 18.5 KB, and the build fails if it grows past that. Hints, caret mode and the command line load on first use.
 - **It is always ready.** DesertFox runs on a background page that stays loaded, and keeps its state in storage. A page gets its keys within milliseconds of starting to load.
 - **It grows with you.** The first day needs five keys: `j`, `k`, `f`, `:` and `g?`. Macros, registers, marks, per-site rules and your own commands wait until you want them, and the popup teaches each one when you reach it. See [Features](#-features).
 - **It is safe by design.** DesertFox never evaluates text as code. The optional helper program outside Firefox takes a fixed set of requests and cannot run a shell command.
@@ -35,7 +35,7 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 
 Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up.
 
-| Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser |
+| Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
 | --- | --- | --- | --- | --- | --- |
 | Hints with modifiers | yes | partial | yes | yes | yes |
 | Hint filters | yes | partial | yes | yes | yes |
@@ -51,7 +51,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Config file | yes | no | no | yes | yes |
 | Helper program outside the browser | optional, fixed requests | none | none | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | yes | yes | yes | yes | no |
-| Script loaded on every page | 18 KB | 254 KB | 94 KB | 1.1 MB | n/a |
+| Script loaded on every page | 18.5 KB | 254 KB | 94 KB | 1.1 MB | n/a |
 
 Sources, read in November 2026: each project's documentation, source code and shipped add-on.
 
@@ -120,6 +120,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Run commands by name: `:` opens a line that completes commands, flags, tabs, bookmarks, history and search engines.
 - Open a page or search with `o`, or in a new tab with `O`.
 - Search the web: bind a key to any search engine. An engine can read the page you are on, for example to search inside the current GitHub repository.
+- Open Firefox's own pages, such as settings, add-ons and downloads, with the `,f` keys. They need the native host. Without it, DesertFox copies the address for you to paste.
 - Open bookmarks, add them and file them in folders from the keyboard.
 
 </details>
@@ -139,7 +140,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - Play, pause, seek, change speed and volume, toggle captions, fullscreen and picture-in-picture from the keyboard.
 - Press `aa` for a media mode with one-key controls. It starts by itself when a video goes fullscreen.
-- Pick the video quality on sites whose player DesertFox knows.
+- Pick the video quality on sites whose player DesertFox knows. The `media_quality` setting sets a level for every site or for chosen sites, and it applies when a video loads.
 
 </details>
 
