@@ -314,3 +314,12 @@ test("play_pause on the pinned video toggles it even when another video plays", 
   assert.equal(pinned.paused, false);
   assert.equal(other.paused, false);
 });
+
+test("fullscreen in one frame takes the large video that waits over a small playing ad", async () => {
+  const ad = player({ paused: false });
+  const main = player({ paused: true });
+  const full = { element: null as unknown };
+  const view = frame([{ player: ad, area: 75_000 }, { player: main, area: 700_000 }], { element: null }, full);
+  await apply_in_frame(view, apply({ target: "playing", action: "fullscreen" }));
+  assert.equal(full.element, main);
+});

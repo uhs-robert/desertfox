@@ -1,7 +1,7 @@
 // What the `media` bundle does in one frame: find the media elements, describe them for the background's choice, and change the chosen ones.
 
 import { shadow_root_of } from "../shadow.ts";
-import { SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
+import { PLAYING_MIN_SHARE, SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
 import type { LevelRule, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../../shared/media.ts";
 
 // The parts of a media element this file reads and writes, so the tests can pass plain objects.
@@ -110,9 +110,13 @@ function targets_of(view: FrameView, request: Extract<MediaRequest, { type: "med
     // A frame holds one picture-in-picture window or fullscreen element at most, and the key closes it whatever the target.
     const open = request.action === "pip" ? view.pip_element() : view.fullscreen_element() && found.find(({ player }) => is_video(player))?.player;
     if (open) return [open as Player];
-    const videos = found.filter(({ player }) => is_video(player) && in_target(player, request.target));
-    const video = largest(videos);
-    return video ? [video] : [];
+    const video = largest(found.filter(({ player }) => is_video(player) && in_target(player, request.target)));
+    // The frame can hold a small playing ad beside a large video that waits, and the large one is the player.
+    const biggest = largest(found.filter(({ player }) => is_video(player)));
+    const area_of = (player: Player | undefined) => found.find((entry) => entry.player === player)?.area ?? 0;
+    const small = video !== undefined && area_of(video) < area_of(biggest) * PLAYING_MIN_SHARE;
+    const chosen = small ? biggest : video;
+    return chosen ? [chosen] : [];
   }
   if (request.target !== "largest") return found.filter(({ player }) => in_target(player, request.target)).map(({ player }) => player);
   const chosen = largest(found);
