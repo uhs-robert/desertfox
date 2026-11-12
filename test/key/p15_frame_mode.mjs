@@ -75,7 +75,7 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
 
   await run_case("a reloaded page keeps its stored tab mode through its next address change", async () => {
     const mark = events.length;
-    // A reload of the same address may send no `url`, so the sequence is recorded to prove which path the case takes: a load start with no `url`, then a `complete` with none.
+    // The update sequence is recorded to prove which path the reload takes.
     const listening = await in_background(`(() => { window.p15_on_updated = (tab_id, change) => window.p15_updates.push({ status: change.status ?? null, has_url: change.url !== undefined }); window.p15_updates = []; browser.tabs.onUpdated.addListener(window.p15_on_updated); return true; })()`);
     expect(listening === true, "the update recorder did not start in the background");
     const recorded_updates = async () => JSON.parse((await in_background(`JSON.stringify(window.p15_updates)`)) ?? "null") ?? [];
