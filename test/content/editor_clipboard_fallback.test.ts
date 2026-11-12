@@ -422,3 +422,13 @@ test("an empty CodeMirror 6 editor that draws a placeholder opens as empty", asy
   await run();
   assert.equal(opened().text, "");
 });
+
+test("a refusal after the copy (the size cap or the background) also says the clipboard was used", async () => {
+  reset();
+  editor("x".repeat(128 * 1024 + 1));
+  await assert.rejects(run(), /over the 128 KiB.*Used the clipboard/);
+  reset();
+  editor("draft");
+  answer = { ok: false, message: "An editor is already open for this tab" };
+  await assert.rejects(run(), /already open.*Used the clipboard/);
+});

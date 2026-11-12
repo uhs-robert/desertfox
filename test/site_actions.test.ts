@@ -211,6 +211,15 @@ test("clipboard_action counts a fired event as taken even when execCommand retur
   assert.deepEqual(page.listeners, {});
 });
 
+test("an execCommand that throws still removes the capture listener, so the user's next copy is not marked", async () => {
+  const page = clipboard_page(true);
+  page.doc.execCommand = () => {
+    throw new Error("page bug");
+  };
+  await assert.rejects(clipboard_action(page.doc, { action: "copy", target: "#e" }, async () => undefined), /page bug/);
+  assert.deepEqual(page.listeners, {});
+});
+
 test("clipboard_action refuses a target that did not take focus, without running the command", async () => {
   const page = clipboard_page(true, true, false);
   await assert.rejects(clipboard_action(page.doc, { action: "paste", target: "#e" }, async () => undefined), /did not take focus/);
