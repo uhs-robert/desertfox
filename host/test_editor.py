@@ -236,12 +236,19 @@ class CollectTest(EditorCase):
 
         def failing_open(path, *args, **kwargs):
             if os.path.basename(path).startswith("job-"):
+                deadline = time.monotonic() + 5
+                while not os.path.exists(pid_file) and time.monotonic() < deadline:
+                    time.sleep(0.02)
                 raise OSError(28, "No space left on device")
             return real_open(path, *args, **kwargs)
 
         with mock.patch.object(host.os, "open", failing_open):
             self.assertRefused({"cmd": "editor_start", "text": "x"}, "cannot write")
         self.assertEqual(self.editor_files(), [])
+        with open(pid_file) as file:
+            editor_pid = int(file.read())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(editor_pid, 0)
 
     def test_an_argv_python_cannot_spawn_is_a_refusal_and_leaves_no_file(self):
         self.put("editor.toml", 'argv = ["ed\\u0000itor", "{file}"]\n')

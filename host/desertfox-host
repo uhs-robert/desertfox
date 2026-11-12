@@ -680,7 +680,7 @@ def editor_start(request):
         )
     except (OSError, ValueError) as error:
         remove_quietly(scratch_path)
-        raise HostError(f"cannot start {argv[0]!r} from {EDITOR_CONFIG_NAME}: {getattr(error, "strerror", None) or error}") from error
+        raise HostError(f"cannot start {argv[0]!r} from {EDITOR_CONFIG_NAME}: {getattr(error, 'strerror', None) or error}") from error
     record = {"scratch": scratch_name, "mtime_ns": saved_mtime_ns, "pid": process.pid, "start_ticks": process_start_ticks(process.pid)}
     try:
         descriptor = os.open(job_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
