@@ -119,6 +119,16 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(whichkey_events(mark, "wk").every((event) => event.value === ""), "the panel came back after Escape");
   });
 
+  // The panel root is closed and the footer text is the user's command, so the page cannot read it: the case saves a shot for a person to look at.
+  await run_case("a panel opened after a repeatable step still opens, with the repeat line in its footer", async () => {
+    expect(await scroll_delta_by_press("wk", ["j"]) > 0, "j did not scroll the page");
+    const mark = events.length;
+    await press_keys("g");
+    await panel_value(mark, (value) => value !== "", "the g panel");
+    if (process.env.DESERTFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/repeat-footer.png`); }
+    await close_panel();
+  });
+
   await run_case("a comma then a pause shows the DesertFox panel, and comma then j still scrolls", async () => {
     let mark = events.length;
     await press_keys(",");

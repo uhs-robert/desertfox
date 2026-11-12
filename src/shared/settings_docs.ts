@@ -7,6 +7,7 @@ import type { SettingName } from "./settings_table.ts";
 
 export const SETTING_DOCS: Record<SettingName, string> = {
   which_key_delay_ms: "Milliseconds after a prefix key before the which-key panel first shows, later keys redraw it at once",
+  which_key_repeat: "Show the step that . would repeat in the footer of the which-key panel (never for a private window)",
   which_key_border: "Corner style of the which-key panel border",
   next_patterns: "Link texts that \`page.follow\` takes for the next page, best first",
   prev_patterns: "Link texts that \`page.follow\` takes for the previous page, best first",
