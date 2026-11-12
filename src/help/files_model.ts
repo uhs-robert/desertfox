@@ -3,6 +3,7 @@
 
 import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
+import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { template_for } from "./file_templates.ts";
 
 export type FilesState = {
@@ -18,7 +19,7 @@ export type FilesState = {
   accepted: boolean;
 };
 
-export type FilesDeps = { send: (message: ConfigFilesRequest) => Promise<unknown>; on_change: () => void };
+export type FilesDeps = { send: (message: ConfigFilesRequest) => Promise<unknown>; on_change: () => void; user_css_hold?: UserCssHold };
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -26,6 +27,8 @@ export function create_files_session(deps: FilesDeps) {
   const state: FilesState = { files: {}, busy: false, problems: [], accepted: false };
   const set = (change: Partial<FilesState>) => {
     Object.assign(state, change);
+    // The consent card shows snippet code, so the user CSS stays off the page while it is up.
+    (deps.user_css_hold ?? NO_USER_CSS_HOLD).set(state.consent !== undefined);
     deps.on_change();
   };
   const ask = (message: Parameters<FilesDeps["send"]>[0]) =>
