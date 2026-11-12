@@ -335,7 +335,7 @@ A snippet file has a header with the command fields, then the code:
 window.wrappedJSObject.my_app.toggle_ids(args.query);
 ```
 
-- `short=` gives a bool or a valued param its flag letter (`short=a`). An enum maps values to letters: `short=tab:t,window:w`. The letter rules are the define-time checks above.
+- `default=selection` reads a context source. `default=selection,search_query` is a chain: the selection, else the query of the results page. `short=` gives a bool or a valued param its flag letter (`short=a`). An enum maps values to letters: `short=tab:t,window:w`. The letter rules are the define-time checks above.
 - `modes` is optional. It lists the modes where a key can run the snippet, from `normal`, `caret`, `visual` and `visual_line`. The default is `normal`. Any other name is a build-config error.
 - `tools/build-config` turns the header into a normal registry entry. Snippet commands get keys, which-key rows, help, completion and prompts (through an explicit `prompt`) the same as built-in commands.
 - The router checks args, then runs the code in the tab's content script with `tabs.executeScript`, with `args` defined. `window.wrappedJSObject` reaches the page's own functions.

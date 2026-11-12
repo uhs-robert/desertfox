@@ -5,15 +5,19 @@ import { SITE_ENGINE_NAME } from "../config.ts";
 import type { SearchEngine } from "../config.ts";
 import { parse_template } from "./fill.ts";
 
-// A regex that long, or with a quantified group inside a quantified group, is refused: a page address is read on a key press, so a pattern must not backtrack badly.
+// A regex that long, or with a quantifier on a group, is refused: a page address is read on a key press, so a pattern must not backtrack badly.
+// A quantifier on a group is the shape of every nested-repeat blowup, so the rule needs no case analysis. Escapes and character classes are removed first, so `\)` and `[)]` do not count.
 export const REVERSE_MAX_CHARS = 200;
-const NESTED_QUANTIFIER = /\([^)]*[+*][^)]*\)[+*{]/;
+const QUANTIFIED_GROUP = /\)[*+?{]/;
+const without_escapes_and_classes = (text: string): string => text.replace(/\\./g, "").replace(/\[[^\]]*\]/g, "");
 
 // The problem with a `reverse` text, or undefined when it can be used.
 export function reverse_problem(text: string): string | undefined {
   if (text.length === 0 || text.length > REVERSE_MAX_CHARS) return `reverse must be 1 to ${REVERSE_MAX_CHARS} characters`;
-  if (NESTED_QUANTIFIER.test(text)) return "reverse has a quantified group inside a quantifier, which can backtrack without end";
   try {
+    // The unmodified text first: the `|` added below would hide a pattern that ends on a bare `|` or a backslash.
+    new RegExp(text);
+    if (QUANTIFIED_GROUP.test(without_escapes_and_classes(text))) return "reverse has a quantifier on a group, which can backtrack without end: write the group once, with no *, +, ? or { after it";
     const groups = new RegExp(`${text}|`).exec("")!.length - 1;
     if (groups !== 1) return `reverse needs exactly one capture group, it has ${groups}`;
   } catch {
@@ -88,7 +92,7 @@ function template_reader(template: string): Reader | undefined {
     if (page.protocol !== `${scheme}:` || page.host !== host.toLowerCase()) return undefined;
     const path_match = path_regex.exec(page.pathname === "" ? "/" : page.pathname);
     if (!path_match) return undefined;
-    if (required.some(([name, value]) => page.searchParams.get(name) !== decode(value))) return undefined;
+    if (required.some(([name, value]) => !page.searchParams.getAll(name).includes(decode(value) ?? value))) return undefined;
     if (in_path !== undefined) return decode(path_match[1] ?? "");
     if (query_pair) {
       const raw_pair = page.search.slice(1).split("&").find((candidate) => (candidate.split("=", 1)[0] ?? "") === query_pair.name);

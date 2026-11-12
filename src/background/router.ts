@@ -163,9 +163,9 @@ export function create_router(deps: RouterDeps): Router {
       return refuse(typeof command.count === "object" && checked.missing_param === command.count.param ? "Type a number first" : checked.error);
     }
 
-    const filled = await fill_context_sources(command.id, checked.args, context, active);
+    const filled = await fill_context_sources(command.id, checked.args, context, active, request.may_prompt === true);
     if (!filled.ok) {
-      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open(counted.args ?? {}, filled.empty_selection_param);
+      return filled.empty_selection_param === undefined || !request.may_prompt ? filled : open(counted.args ?? {}, filled.empty_selection_param, filled.prefill);
     }
 
     // A source passed the check above as a marker. Its text is checked now, by the same validator. An empty text keeps its marker, because an empty selection or clipboard is a runtime matter that the handler reports.
@@ -242,17 +242,23 @@ export function create_router(deps: RouterDeps): Router {
     args: CheckedArgs,
     context: CommandContext,
     active: ActiveTab | undefined,
-  ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string; empty_selection_param?: string }> {
+    may_prompt: boolean,
+  ): Promise<{ ok: true; args: CheckedArgs } | { ok: false; message: string; empty_selection_param?: string; prefill?: ContextSource }> {
     const filled: CheckedArgs = {};
     for (const [name, value] of Object.entries(args)) {
       if (!is_context_source(value)) {
         filled[name] = value;
         continue;
       }
-      const text = await read_chain(value, context, active);
-      if (text === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name, context))) {
+      const first = await read_source(value.from, context, active);
+      if (first === undefined && value.from === "selection" && (await deps.runs_with_empty(command_id, args, name, context))) {
         filled[name] = "";
         continue;
+      }
+      const text = first ?? (value.then === undefined ? undefined : await read_source(value.then, context, active));
+      // The page's query stands in for an empty selection. With someone to type, the line opens with it typed in, so the key never searches at once.
+      if (first === undefined && text !== undefined && value.from === "selection" && may_prompt) {
+        return { ok: false, message: `${name}: nothing selected`, empty_selection_param: name, prefill: { from: value.then! } };
       }
       if (text === undefined) {
         const message = `${name}: ${value.from} is not available here`;
