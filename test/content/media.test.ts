@@ -368,3 +368,20 @@ test("the media command takes frame up and down and refuses other frame values",
   assert.equal(check_args(media, { action: "captions" }).ok, true);
   assert.equal(check_args(media, { action: "captions", value: "up" }).ok, false);
 });
+
+test("captions read none only when no acted-on player has a track", async () => {
+  const bare = player({ paused: false });
+  const withtrack = player({ paused: false, textTracks: [track("subtitles", "showing")] });
+  const result = await apply_in_frame(frame([{ player: bare, area: 1 }, { player: withtrack, area: 1 }]), apply({ action: "captions", target: "playing" }));
+  assert.equal(result.state?.captions, "off");
+});
+
+test("a frame step leaves audio alone and acts on nothing without a video", async () => {
+  const audio = player({ localName: "audio", currentTime: 5, paused: false });
+  const video = player({ currentTime: 5, paused: false });
+  const result = await apply_in_frame(frame([{ player: audio, area: 0 }, { player: video, area: 1 }]), apply({ action: "frame", value: "up", target: "playing" }));
+  assert.equal(audio.currentTime, 5);
+  assert.deepEqual(audio.calls, []);
+  assert.equal(result.acted, 1);
+  assert.equal((await apply_in_frame(frame([{ player: audio, area: 0 }]), apply({ action: "frame", value: "up" }))).acted, 0);
+});

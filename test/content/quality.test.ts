@@ -194,3 +194,11 @@ test("the YouTube driver toggles captions through the player and refuses a playe
   const old = youtube_driver(youtube_page({ getAvailableQualityLevels: () => [] }))!;
   assert.equal(apply_quality(old, request).toggled, false);
 });
+
+test("the YouTube captions answer carries the state only when the player reports it", () => {
+  const request: QualityRequest = { type: "quality_apply", op: "captions", value: undefined, times: 1 };
+  const base = { getAvailableQualityLevels: () => [], toggleSubtitles: () => undefined };
+  assert.equal(apply_quality(youtube_driver(youtube_page({ ...base, getOption: () => ({ languageCode: "en" }) }))!, request).captions, "on");
+  assert.equal(apply_quality(youtube_driver(youtube_page({ ...base, getOption: () => ({}) }))!, request).captions, "off");
+  assert.equal(apply_quality(youtube_driver(youtube_page(base))!, request).captions, undefined);
+});

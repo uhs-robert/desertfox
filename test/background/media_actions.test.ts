@@ -401,7 +401,7 @@ test("captions with no track on the element ask the site player, and refuse when
   const site = fake_tab({ 0: { scan: scan(0, {}), apply: none } }, { quality: () => ({ levels: [], toggled: true }) });
   await run_media(site.deps, ctx, { action: "captions" });
   assert.deepEqual(site.asked.map(({ op }) => op), ["captions"]);
-  assert.deepEqual(site.toasts, ["Captions toggled"]);
+  assert.deepEqual(site.toasts, ["Asked the player to toggle captions"]);
   const bare = fake_tab({ 0: { scan: scan(0, {}), apply: none } }, { quality: () => ({ levels: [], toggled: false }) });
   await assert.rejects(run_media(bare.deps, ctx, { action: "captions" }), { message: "No captions" });
   const unreachable = fake_tab({ 0: { scan: scan(0, {}), apply: none } }, { quality: () => undefined });
@@ -413,4 +413,21 @@ test("captions on a track need no site player, and the toast names the state", a
   await run_media(tab.deps, ctx, { action: "captions" });
   assert.deepEqual(tab.asked, []);
   assert.deepEqual(tab.toasts, ["Captions on"]);
+});
+
+test("the captions fallback asks the planned frame, the pinned one first", async () => {
+  const none = (): MediaResult => acted(1, { captions: "none" });
+  const tab = fake_tab({ 0: { scan: scan(0, { video_area: 10 }), apply: none }, 2: { scan: scan(2, { pinned: true, video_area: 5 }), apply: none } }, { pin_frame: 2, quality: () => ({ levels: [], toggled: true, captions: "on" }) });
+  await run_media(tab.deps, ctx, { action: "captions" });
+  assert.deepEqual(tab.preferred, [2]);
+  assert.deepEqual(tab.toasts, ["Captions on"]);
+});
+
+test("the site player is asked only when no acted-on player has a track, and the notice does not claim a state it cannot see", async () => {
+  const mixed = fake_tab({ 0: { scan: scan(0, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "none" }) }, 1: { scan: scan(1, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "off" }) } }, { quality: () => ({ levels: [], toggled: true }) });
+  await run_media(mixed.deps, ctx, { action: "captions" });
+  assert.deepEqual(mixed.asked, []);
+  const unknown = fake_tab({ 0: { scan: scan(0, {}), apply: () => acted(1, { captions: "none" }) } }, { quality: () => ({ levels: [], toggled: true }) });
+  await run_media(unknown.deps, ctx, { action: "captions" });
+  assert.deepEqual(unknown.toasts, ["Asked the player to toggle captions"]);
 });

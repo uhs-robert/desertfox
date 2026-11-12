@@ -6,8 +6,8 @@ export type QualityRequest = { type: "quality_apply"; op: "list" | "set" | "skip
 // The levels are in ascending order of height. `label` is what the site calls the level, such as "1080p60". `height` is the number a `media quality` value takes.
 export type QualityLevel = { label: string; height: number; active: boolean };
 
-// `levels` is empty while the player does not know its levels yet (YouTube answers "unknown" until it plays). `chosen` is the label that `set` picked, or "auto". `skipped` tells whether the site player took a skip, `toggled` whether it took a captions toggle.
-export type QualityAnswer = { levels: QualityLevel[]; chosen?: string; skipped?: boolean; toggled?: boolean };
+// `levels` is empty while the player does not know its levels yet (YouTube answers "unknown" until it plays). `chosen` is the label that `set` picked, or "auto". `skipped` tells whether the site player took a skip, `toggled` whether it took a captions toggle and `captions` the state afterwards, when the player says it.
+export type QualityAnswer = { levels: QualityLevel[]; chosen?: string; skipped?: boolean; toggled?: boolean; captions?: "on" | "off" };
 
 // What each frame pushes to the background when the bundle runs in it, so the background picks one player to act on. `ready` means the player lists its levels.
 export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean };
