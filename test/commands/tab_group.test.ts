@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GROUP_COLORS, make_tab_group_handlers, pick_group_stop } from "../../src/commands/tab_group.ts";
+import { GROUP_COLORS, group_stops, make_tab_group_handlers, pick_group_stop } from "../../src/commands/tab_group.ts";
 import type { GroupInfo, GroupedTab, TabGroupDeps } from "../../src/commands/tab_group.ts";
 import type { GroupTabInfo } from "../../src/background/tab_actions.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
@@ -112,7 +112,7 @@ const strip: GroupedTab[] = [
   { id: 1, index: 0, group_id: 10 }, { id: 2, index: 1, group_id: 10 }, { id: 3, index: 2, group_id: -1 },
   { id: 4, index: 3, group_id: 20 }, { id: 5, index: 4, group_id: 20 }, { id: 6, index: 5, group_id: -1 }, { id: 7, index: 6, group_id: 30 },
 ];
-const stops = strip.filter((t) => t.group_id !== -1 && strip.find((o) => o.group_id === t.group_id) === t);
+const stops = group_stops(strip);
 const picked = (current: number, steps: number) => pick_group_stop(stops, strip[current - 1]!, steps)?.id;
 
 test("pick_group_stop moves between groups, wraps, and starts from a tab in no group", () => {
@@ -144,4 +144,43 @@ test("next with a count skips groups, and a window with no group refuses", async
   const none = make(tab(), [], [{ id: 1, index: 0, group_id: -1 }]);
   await assert.rejects(none.handlers.next(ctx, { count: 1 }), refused(/no tab groups/));
   await assert.rejects(none.handlers.prev(ctx, { count: 1 }), refused(/no tab groups/));
+});
+
+test("group_stops lists the first tab of each group in strip order, whatever the input order", () => {
+  assert.deepEqual(group_stops([...strip].reverse()).map((t) => t.id), [1, 4, 7]);
+});
+
+const open_groups = [{ id: 10, title: "", collapsed: false }, { id: 20, title: "", collapsed: false }, { id: 30, title: "", collapsed: false }];
+
+test("next and prev from an ungrouped tab take the group after and the group before it", async () => {
+  const next = make(tab({ id: 3 }), open_groups, strip);
+  await next.handlers.next(ctx, { count: 1 });
+  assert.deepEqual(next.log, ["activate 4"]);
+  const prev = make(tab({ id: 3 }), open_groups, strip);
+  await prev.handlers.prev(ctx, { count: 1 });
+  assert.deepEqual(prev.log, ["activate 1"]);
+});
+
+test("a pinned tab sits before the groups, so next takes the first group and prev the last", async () => {
+  const pinned_strip: GroupedTab[] = [{ id: 9, index: 0, group_id: -1 }, ...strip.map((t) => ({ ...t, index: t.index + 1 }))];
+  const next = make(tab({ id: 9, pinned: true }), open_groups, pinned_strip);
+  await next.handlers.next(ctx, { count: 1 });
+  const prev = make(tab({ id: 9, pinned: true }), open_groups, pinned_strip);
+  await prev.handlers.prev(ctx, { count: 1 });
+  assert.deepEqual([next.log, prev.log], [["activate 1"], ["activate 7"]]);
+});
+
+test("a count above the group count wraps around", async () => {
+  const next = make(tab({ id: 1, group_id: 10 }), open_groups, strip);
+  await next.handlers.next(ctx, { count: 4 });
+  const prev = make(tab({ id: 1, group_id: 10 }), open_groups, strip);
+  await prev.handlers.prev(ctx, { count: 4 });
+  assert.deepEqual([next.log, prev.log], [["activate 4"], ["activate 7"]]);
+});
+
+test("with one collapsed group that holds the tab, next expands it and focuses its first tab", async () => {
+  const only = [{ id: 1, index: 0, group_id: 10 }, { id: 2, index: 1, group_id: 10 }];
+  const { handlers, log } = make(tab({ id: 2, group_id: 10 }), [{ id: 10, title: "", collapsed: true }], only);
+  await handlers.next(ctx, { count: 1 });
+  assert.deepEqual(log, ['update 10 {"collapsed":false}', "activate 1"]);
 });
