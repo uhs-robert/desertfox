@@ -7,14 +7,18 @@ export const areas = ["hints"];
 const HINTS_LAYER = 2147483647 - 4;
 
 export async function run_cases({ run_case, press_keys, poll_until, open_page, wait_event, find_event, events, expect, in_background, run_line }) {
-  const labels_by_frame = async () => {
-    const code = `(() => { const host = [...document.documentElement.children].find((child) => child.getAttribute("data-desertfox-layer") === "${HINTS_LAYER}"); return { href: location.href, labels: [...(host?.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((label) => label.textContent) }; })()`;
+  // `read_label` runs in each frame on one label node and returns what to keep of it.
+  const read_frames = async (read_label) => {
+    const code = `(() => { const host = [...document.documentElement.children].find((child) => child.getAttribute("data-desertfox-layer") === "${HINTS_LAYER}"); return { href: location.href, labels: [...(host?.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map(${read_label}) }; })()`;
     const frames = await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true }); return browser.tabs.executeScript(tab.id, { allFrames: true, matchAboutBlank: true, code: ${JSON.stringify(code)} }); })()`);
     const by_name = { top: [], same: [], blank: [], cross: [], below: [] };
     const name_of = (href = "") => (href === "about:blank" ? "blank" : href.includes("/frame_links") ? ["below", "same", "cross"].find((name) => href.endsWith(`_${name}`)) : "top");
     for (const frame of Array.isArray(frames) ? frames : []) by_name[name_of(frame?.href)] = frame?.labels ?? [];
     return by_name;
   };
+  const labels_by_frame = () => read_frames("(label) => label.textContent");
+  // Text mode hides the labels outside the matches with display none, and marks the active one with a background.
+  const shown_by_frame = () => read_frames(`(label) => ({ text: label.textContent, hidden: label.style.display === "none", active: label.style.background !== "" })`);
   const total_of = (by_name) => Object.values(by_name).flat().length;
   const wait_for_labels = async (what, wanted_total) => {
     let last;
@@ -73,5 +77,25 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     expect(labels.cross.length === 0 && labels.below.length === 0, `a cross-origin frame got labels without the flag: ${JSON.stringify(labels)}`);
     await press_keys("-k", "Escape");
     await wait_for_no_labels("the labels to go after Escape");
+  });
+
+  await run_case("text mode across frames shows the labels of the matches in every frame, and Tab moves the active hint to the cross-origin frame", async () => {
+    await start_across_frames("fh_text");
+    // Both the same-origin frame and the cross-origin frame hold a link "one", and only the cross-origin one gets its hide or show from the relay.
+    await press_keys("/", "o", "n", "e");
+    const shown_of = (frame) => frame.filter((label) => !label.hidden);
+    let shown;
+    await poll_until("one label left in the cross-origin frame", async () => shown_of((shown = await shown_by_frame()).cross).length === 1);
+    expect(shown.top.filter((label) => !label.hidden).length === 1, `the top page shows ${JSON.stringify(shown.top)}, expected its one match for "one" (in the same-origin frame, which it reads)`);
+    for (let tabs = 0; tabs < 4 && !shown.cross.some((label) => label.active); tabs++) {
+      await press_keys("-k", "Tab");
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      shown = await shown_by_frame();
+    }
+    expect(shown.cross.some((label) => label.active), `Tab never made the cross-origin label active: ${JSON.stringify(shown)}`);
+    const mark = events.length;
+    await press_keys("-k", "Return");
+    await wait_event(mark, (event) => event.type === "visibility" && event.page_id.startsWith("fh_text_cross_"), "the cross-origin frame to follow the link text mode picked");
+    await wait_for_no_labels("the labels of every frame to go after the pick");
   });
 }

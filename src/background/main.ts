@@ -287,8 +287,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (typeof request?.type === "string" && request.type.startsWith("hint_frames_") && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const [tab_id, frame_id] = [sender.tab.id, sender.frameId];
     if (request.type === "hint_frames_start") return hint_frames.start(tab_id, frame_id, request);
-    if (request.type === "hint_frames_report") return hint_frames.report(tab_id, frame_id, request.session_id, request.count);
-    if (request.type === "hint_frames_typed") return hint_frames.typed(tab_id, frame_id, request.session_id, request.typed);
+    if (request.type === "hint_frames_report") return hint_frames.report(tab_id, frame_id, request.session_id, request.count, request.texts);
+    if (request.type === "hint_frames_typed") return hint_frames.typed(tab_id, frame_id, request.session_id, request.typed, request.matches && { matches: request.matches, active: request.active });
     if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label);
     if (request.type === "hint_frames_end") return hint_frames.end(tab_id, frame_id, request.session_id);
   }

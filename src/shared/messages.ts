@@ -433,16 +433,20 @@ export type HintFramesStart = {
   args: Record<string, unknown>;
   // How many candidates the keyboard frame found, best first. It reports here and ignores the collect, so its own labels never race the wait.
   count: number;
+  // The text of each of those candidates, same order and length as `count`, "" for none. Text mode ranks them, and they go no further than the background's wait.
+  texts: string[];
 };
 
-// `labels` is every label of the session in label order, for the keyboard frame to narrow. `own_labels` are the keyboard frame's own, for its first candidates. Every other frame gets its share in a `HintFramesLabels`. An ended answer means a newer run, a navigation or a closed tab ended the session first.
-export type HintFramesStartAnswer = { ok: true; session_id: string; labels: string[]; own_labels: string[] } | { ok: false; reason: "ended" };
+// `labels` is every label of the session in label order, for the keyboard frame to narrow, and `texts` the candidate texts of every frame, aligned with `labels`. `own_labels` are the keyboard frame's own, for its first candidates. Every other frame gets its share in a `HintFramesLabels`. An ended answer means a newer run, a navigation or a closed tab ended the session first.
+export type HintFramesStartAnswer = { ok: true; session_id: string; labels: string[]; own_labels: string[]; texts: string[] } | { ok: false; reason: "ended" };
 
 // From each frame in answer to a `HintFramesCollect`: how many candidates the frame found, best first. A report after the wait gets no labels.
 export type HintFramesReport = {
   type: "hint_frames_report";
   session_id: string;
   count: number;
+  // The text of each candidate, aligned with the count, "" for none.
+  texts: string[];
 };
 
 // The keyboard frame's typed prefix, which the background passes on to every other labeled frame.
@@ -450,6 +454,9 @@ export type HintFramesTyped = {
   type: "hint_frames_typed";
   session_id: string;
   typed: string;
+  // Text mode only: `typed` is "/", `matches` the labels that match the text, best first, and `active` the one Enter picks. A frame hides its labels outside `matches`.
+  matches?: string[];
+  active?: string | undefined;
 };
 
 // The keyboard frame's complete label, which the background passes on to the frame that owns it. The answer is that frame's `Outcome`.
