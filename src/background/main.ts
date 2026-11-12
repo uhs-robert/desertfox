@@ -90,7 +90,7 @@ const media_discovery = create_media_discovery({
   storage: browser.storage.session,
   tab_is_open: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined)) !== undefined,
   which_key_delay_ms: async () => effective_settings((await get_config()).settings).which_key_delay_ms,
-  top_in_fullscreen: async (tab_id) => (await browser.tabs.executeScript(tab_id, { code: "!!document.fullscreenElement", frameId: 0, runAt: "document_start" }))[0] === true,
+  close_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "whichkey", args: {}, bundle: "whichkey" }] }, 0),
   open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0),
 });
 const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
@@ -301,6 +301,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }
   if (request?.type !== "run") return undefined;
+  if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(() => undefined);
   return get_config().then(async (config) => {
     await macro_replay.wait_unless_from(sender.tab?.id);
     const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
