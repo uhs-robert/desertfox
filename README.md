@@ -176,21 +176,21 @@ With it you can:
 
 - Edit text in your own editor: press `<C-o>` in insert mode to edit a text field in an editor such as Neovim. You name the editor in an `editor.toml` file.
 - Open Firefox pages: the `,f` keys open settings, add-ons and downloads.
-- Keep your setup in files: store keys, search engines and settings in TOML files in `~/.config/desertfox/`.
+- Keep your setup in files: store keys, search engines and settings in TOML files in `~/.config/desertfox/`, or in `$XDG_CONFIG_HOME/desertfox/` when that variable holds an absolute path.
 - Update from the command line: `:native.update` updates the host and checks the download against hashes in the signed extension.
 - Use scripts: the bridge (a second helper, off by default) lets scripts run DesertFox commands, read the current mode and follow your desktop theme.
 
 Without the host, almost everything works. Change settings with `:set` or on the settings page, and bring in keys, search engines and themes there as a zip or a folder. Only the features above need the host. The `,f` keys copy the page address instead, so you can paste it.
 
-To install it, run `:native.install` in DesertFox. It shows one command to paste in a terminal. See [host/README.md](host/README.md) for how the host works, the bridge setup and every detail.
+To install it, run `:native.install` in DesertFox. It shows one command to paste in a terminal. On that page, also grant the `nativeMessaging` permission with its button, because the host features need it. See [host/README.md](host/README.md) for how the host works, the bridge setup and every detail.
 
 What the host can and cannot do:
 
 - It has a fixed list of actions: read the config files, write one file for your saved edits, update itself, edit text, open a Firefox page and, with the bridge, pass commands to DesertFox. It has no shell and no way to run a command that someone sends it.
 - A web page cannot give it an address. The `,f` keys pick a page from a fixed table, not a URL.
 - Text from a web page goes only into a temporary file for your editor. The editor program comes from your own `editor.toml`.
-- The updater downloads only from this project's GitHub releases over HTTPS, and refuses a file that does not match the hashes in the signed extension.
-- With the bridge on, DesertFox itself decides which commands a script can run, and private windows stay hidden.
+- The updater starts at this project's GitHub releases and follows up to five HTTPS redirects, without limiting which hosts they lead to. It refuses a redirect that is not HTTPS, and refuses a file that does not match the hashes in the signed extension.
+- With the bridge on, DesertFox itself decides which commands a script can run, and private tabs and their ids stay hidden. A focused private window still shows `private: true` and its mode.
 
 ### From source
 
