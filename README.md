@@ -17,7 +17,7 @@
 
 DesertFox is a keyboard-driven Firefox extension built for speed, discoverability and complete control of the browser. It mixes the power of Tridactyl with the simplicity of Vimium. A which-key popup teaches every key as you press it.
 
-You learn it as you go, with no manual to memorize. Press any key and the popup lists every key that can follow and what it does. Type `:` and commands complete as you type. Press `g?` to see every key.
+You learn it as you go, with no manual to memorize. Press any key and the popup lists every key that can follow and what it does. Type `:` and commands complete as you type. Press `g?` to open the help page, which lists every key. Type `:help.whichkey` to show the top-level keys of the current mode in the popup.
 
 The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, counts, registers and macros. You do not need to know Vim.
 
@@ -37,21 +37,23 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 | Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
 | --- | --- | --- | --- | --- | --- |
-| Hints with modifiers | yes | partial | yes | yes | yes |
-| Hint filters | yes | partial | yes | yes | yes |
-| Key popup (which-key) | yes | no | no | no | yes |
-| Generated help | yes | partial | partial | yes | yes |
-| Command line with completion | yes | partial | partial | yes | yes |
-| Caret mode | yes | partial | partial | no | yes |
-| Visual mode | yes | yes | yes | partial | yes |
-| Page search | yes | yes | yes | yes | yes |
-| Macros | yes | no | no | no | yes |
-| Per-site keys and settings | yes | keys only | partial | yes | yes |
-| Containers | yes | no | partial | yes | no |
-| Config file | yes | no | no | yes | yes |
+| Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
+| Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
+| Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
+| Command line with completion | ✅ | 🟡 | 🟡 | ✅ | ✅ |
+| Caret mode | ✅ | 🟡 | 🟡 | ❌ | ✅ |
+| Visual mode | ✅ | ✅ | ✅ | 🟡 | ✅ |
+| Page search | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Macros | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Per-site keys and settings | ✅ | keys only | 🟡 | ✅ | ✅ |
+| Containers | ✅ | ❌ | 🟡 | ✅ | ❌ |
+| Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Helper program outside the browser | optional, fixed requests | none | none | optional, runs shell commands | n/a |
-| Works with other Firefox add-ons | yes | yes | yes | yes | no |
+| Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Script loaded on every page | 18.5 KB | 254 KB | 94 KB | 1.1 MB | n/a |
+
+✅ yes · ❌ no · 🟡 partial
 
 Sources, read in November 2026: each project's documentation, source code and shipped add-on.
 
@@ -69,7 +71,7 @@ Sources, read in November 2026: each project's documentation, source code and sh
 - You use Chrome, Edge or Safari. DesertFox runs on desktop Firefox only. Vimium and Vimium C cover the other browsers.
 - You want keys on every page, with no exception. Only a browser built for the keyboard, such as qutebrowser, gives that. An extension cannot run on Firefox's own pages.
 - You want to run shell commands or your own scripting language from the browser. Tridactyl allows both. DesertFox leaves them out on purpose.
-- You want zero setup and a small set of keys. Vimium is the simplest of the five.
+- You want the smallest set of keys and nothing to configure. Vimium has the fewest commands, but you learn them from its help page. DesertFox shows the next keys in its which-key popup after a short pause.
 
 ## ✨ Features
 
@@ -83,7 +85,7 @@ Sources, read in November 2026: each project's documentation, source code and sh
 Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every default key.
 
 <details>
-<summary><b>Move and click</b></summary>
+<summary><b>🖱️ Move and click</b></summary>
 
 - Click anything: press `f`, then type the short label next to a link, button, input or image. `F` opens a link in a background tab.
 - Narrow the labels by link text: press `/` in hint mode and type part of the text.
@@ -94,7 +96,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 </details>
 
 <details>
-<summary><b>Find, select and copy</b></summary>
+<summary><b>🔍 Find, select and copy</b></summary>
 
 - Search the page: `/` finds text as you type, with regular expressions, and `n` and `N` move between matches.
 - Select text without the mouse: `v` puts a caret in the page and `V` starts a selection, both with Vim motions.
@@ -104,7 +106,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 </details>
 
 <details>
-<summary><b>Tabs and windows</b></summary>
+<summary><b>🗂️ Tabs and windows</b></summary>
 
 - Switch, move, pin, mute, close and reopen tabs. `T` lists your tabs and filters as you type.
 - Find anything: `,,` searches open tabs, bookmarks, history, quickmarks and closed tabs in one list.
@@ -115,7 +117,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 </details>
 
 <details>
-<summary><b>Commands and search</b></summary>
+<summary><b>⌨️ Commands and search</b></summary>
 
 - Run commands by name: `:` opens a line that completes commands, flags, tabs, bookmarks, history and search engines.
 - Open a page or search with `o`, or in a new tab with `O`.
@@ -126,7 +128,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 </details>
 
 <details>
-<summary><b>Repeat and remember</b></summary>
+<summary><b>🔁 Repeat and remember</b></summary>
 
 - Repeat the last command or typed text with `.`.
 - Record a macro with `q` and a letter, and replay it with `@`.
@@ -136,7 +138,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 </details>
 
 <details>
-<summary><b>Media</b></summary>
+<summary><b>🎬 Media</b></summary>
 
 - Play, pause, seek, change speed and volume, toggle captions, fullscreen and picture-in-picture from the keyboard.
 - Press `aa` for a media mode with one-key controls. It starts by itself when a video goes fullscreen.
@@ -145,7 +147,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 </details>
 
 <details>
-<summary><b>Make it yours</b></summary>
+<summary><b>🎨 Make it yours</b></summary>
 
 - Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site.
 - Change settings in the browser with `:set` or on the settings page.
@@ -168,9 +170,19 @@ A beta build is signed by Mozilla, built nightly from `main` and updates itself.
 
 ### Native host (optional)
 
-DesertFox works without it. The native host is a small helper program outside Firefox. It adds two things: DesertFox reads your config files from `~/.config/desertfox/`, and desktop programs can read the current mode and run commands. Run `:native.install` in DesertFox for the steps.
+DesertFox works without it. The native host is a small helper program outside Firefox. With it:
 
-Without the host, change settings with `:set` or on the settings page, and bring in keys, search engines and themes as a zip or a folder from the settings page.
+- Keep your keys, search engines and settings in TOML files in `~/.config/desertfox/`, and DesertFox reads them.
+- Edit a text field in your own editor with `<C-o>` in insert mode, once you add an `editor.toml` file.
+- Open Firefox pages such as settings, add-ons and downloads with the `,f` keys.
+- Update the host and DesertFox's own files with `:native.update`, checked against hashes in the signed extension.
+- Run commands from scripts and desktop programs, and read the current mode and its changes as they happen.
+- List, activate, close and capture tabs from scripts, if you turn on `bridge_share_tabs`. Private windows never show up.
+- Follow the desktop's color palette with the `desktop` theme.
+
+Run `:native.install` in DesertFox for the steps.
+
+Without the host, change settings with `:set` or on the settings page. Bring in keys, search engines and themes as a zip or a folder from that page. The editor key and the bridge do not work.
 
 ### From source
 
