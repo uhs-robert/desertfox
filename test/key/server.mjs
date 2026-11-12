@@ -212,6 +212,13 @@ export function start_server() {
       const frames = `<iframe id="same" src="/frame_inner?id=${id}_same" style="display:block;width:300px;height:200px"></iframe><iframe id="cross" src="http://localhost:${port}/frame_inner?id=${id}_cross" style="display:block;width:300px;height:200px"></iframe><iframe id="tiny" src="http://localhost:${port}/frame_inner?id=${id}_tiny" style="display:block;width:10px;height:10px"></iframe>`;
       return response.end(page(`frames ${id}`, frames + tall_filler));
     }
+    if (url.pathname === "/frame_links") return response.end(page(`frame_links ${id}`, `<a href="/page?id=${id}_one">one</a> <a href="/page?id=${id}_two">two</a>`));
+    if (url.pathname === "/frames_hints") {
+      // A link in the top page, a frame of another origin with two links in view, and a second such frame 3000 px down, outside the first viewport.
+      const port = request.socket.localPort;
+      const frame = (name, extra_style) => `<iframe id="${name}" src="http://localhost:${port}/frame_links?id=${id}_${name}" style="display:block;width:300px;height:80px;${extra_style}"></iframe>`;
+      return response.end(page(`frames_hints ${id}`, `<a href="/page?id=${id}_top">top</a>${frame("cross", "")}${frame("below", "margin-top:3000px")}` + tall_filler));
+    }
     if (url.pathname === "/hidden_input_frame") {
       // A stand-in for the Google Docs editor: on load the page writes a contenteditable into an offscreen same-origin frame and focuses it.
       // The frame is made the way Docs makes it, with `src="javascript:undefined"`, so its content script starts in the written document.
