@@ -20,7 +20,8 @@ async function started(tag: string, host_files: Files = {}) {
   await startup.get_config();
   const answer = (request: Parameters<typeof answer_config_files>[0]) =>
     answer_config_files(request, { read_files: async () => slot_of(browser.local).files ?? {}, save: startup.save_config_file });
-  const save = (path: string, text: string | null, accepted?: string) => answer({ type: "config_files", op: "save", path, text, ...(accepted !== undefined && { accepted }) });
+  // `base` is what the editor read: by default the stored text now.
+  const save = (path: string, text: string | null, accepted?: string, base: string | null = slot_of(browser.local).files?.[path] ?? null) => answer({ type: "config_files", op: "save", path, text, base, ...(accepted !== undefined && { accepted }) });
   return { host, startup, save, answer, ...browser };
 }
 
@@ -50,7 +51,9 @@ test("a failed build names every problem and leaves the stored files and the con
   assert.equal(answer.problems?.length, 5);
   assert.deepEqual(slot_of(local), before);
   const syntax = (await save("keymap.toml", "[normal\n")) as { problems?: string[] };
-  assert.match(syntax.problems?.[0] ?? "", /keymap\.toml:1:\d+/);
+  // The stored name, not the host folder, and each problem once: the message holds the count only.
+  assert.match(syntax.problems?.[0] ?? "", /^keymap\.toml:1:\d+/);
+  assert.doesNotMatch((syntax as { message: string }).message, /keymap\.toml:1/);
   assert.deepEqual(slot_of(local), before);
 });
 
@@ -60,15 +63,14 @@ test("saves queue: overlapping saves apply in order, and a failing one changes n
     save("settings.toml", 'hint_letters = "ab"\n'),
     save("quickmarks.toml", "g = 1\n"),
     save("search_engines.toml", '[mine]\nurl = "https://e.test/?q={query}"\n'),
-    save("settings.toml", 'hint_letters = "cd"\n'),
+    save("style.css", "a {}\n"),
   ]);
   assert.deepEqual(results.map((result) => result.ok), [true, false, true, true]);
   const slot = slot_of(local);
-  assert.deepEqual(Object.keys(slot.files!).sort(), ["search_engines.toml", "settings.toml"]);
-  assert.equal(slot.files!["settings.toml"], 'hint_letters = "cd"\n');
+  assert.deepEqual(Object.keys(slot.files!).sort(), ["search_engines.toml", "settings.toml", "style.css"]);
   // The stored config is the build of the stored files, so the two never part.
-  assert.match(JSON.stringify(slot.config), /"hint_letters":"cd"/);
-  assert.match(JSON.stringify(await startup.get_config()), /"hint_letters":"cd"/);
+  assert.match(JSON.stringify(slot.config), /"hint_letters":"ab"/);
+  assert.match(JSON.stringify(await startup.get_config()), /"hint_letters":"ab"/);
 });
 
 test("a save and a reload that overlap run one after the other, whichever came first", async () => {
@@ -84,12 +86,13 @@ test("a save and a reload that overlap run one after the other, whichever came f
   assert.equal(reloaded_first.config_dir, "/home/u/.config/desertfox");
   assert.equal(saved_second.ok, true);
   assert.deepEqual(Object.keys(slot_of(local).files!).sort(), ["keymap.toml", "settings.toml"]);
-  // A failing save between two good ones leaves the files of the first.
+  // A failing save writes nothing: the slot after it is the one the save before it left, and only then does the reload replace it.
   const before = structuredClone(slot_of(local));
-  const [failed] = await Promise.all([save("settings.toml", "no_such = 1\n"), startup.reload_config().catch(() => undefined)]);
+  const failed = await save("settings.toml", "no_such = 1\n");
   assert.equal(failed.ok, false);
-  assert.deepEqual(Object.keys(slot_of(local).files!), ["settings.toml"]);
-  assert.notDeepEqual(slot_of(local).files, before.files);
+  assert.deepEqual(slot_of(local), before);
+  await startup.reload_config();
+  assert.deepEqual(slot_of(local).files, { "settings.toml": 'hint_letters = "hj"\n' });
 });
 
 test("a snippet is stored only with consent to its exact code", async () => {
@@ -113,7 +116,33 @@ test("a snippet is stored only with consent to its exact code", async () => {
 test("a path outside the config layout and a file past the size limit are refused", async () => {
   const { startup } = await started("path");
   for (const path of ["../keymap.toml", "autoconfig.toml", "notes.txt", "snippets/a/b.js", "keymap.d/x.js"]) {
-    await assert.rejects(startup.save_config_file(path, "x"), (error: unknown) => error instanceof ConfigRefusal && /^File not saved/.test(error.message), path);
+    await assert.rejects(startup.save_config_file(path, "x", null), (error: unknown) => error instanceof ConfigRefusal && /^File not saved/.test(error.message), path);
   }
-  await assert.rejects(startup.save_config_file("style.css", "x".repeat(1024 * 1024 + 1)), /too large/);
+  await assert.rejects(startup.save_config_file("style.css", "x".repeat(1024 * 1024 + 1), null), /too large/);
+});
+
+test("a save refuses when the stored text changed since the editor read it, and writes nothing", async () => {
+  const { save, local } = await started("stale");
+  await save("keymap.toml", "[normal]\n");
+  const stale_base = "[normal]\n";
+  // Another save (an import, a reload or another tab) changes the file after the editor read it.
+  await save("keymap.toml", "[normal]\n# newer\n");
+  const before = structuredClone(slot_of(local));
+  const refused = (await save("keymap.toml", "[normal]\n# mine\n", undefined, stale_base)) as { ok: boolean; message: string };
+  assert.equal(refused.ok, false);
+  assert.match(refused.message, /changed since you opened it/);
+  assert.deepEqual(slot_of(local), before);
+  // A file the editor saw as absent, and a delete of one that is gone, refuse the same way.
+  assert.equal(((await save("keymap.toml", "x", undefined, null)) as { ok: boolean }).ok, false);
+  assert.equal(((await save("style.css", null, undefined, "old")) as { ok: boolean }).ok, false);
+});
+
+test("a path the zip refuses and a file the export cannot hold are refused, counting bytes", async () => {
+  const { startup } = await started("zip_rules");
+  for (const path of ["snippets/a\\b.js", "themes/a\nb.toml", `themes/${"n".repeat(400)}.toml`]) {
+    await assert.rejects(startup.save_config_file(path, "x", null), (error: unknown) => error instanceof ConfigRefusal && /^File not saved/.test(error.message), path);
+  }
+  // 600,000 two-byte letters are 1.2 MB in UTF-8 but only 600,000 UTF-16 units.
+  await assert.rejects(startup.save_config_file("style.css", "\u00e9".repeat(600_000), null), /too large/);
+  await assert.rejects(startup.save_config_file("style.css", "x".repeat(700 * 1024), null).then(() => startup.save_config_file("style.d/a.css", "\u00e9".repeat(200_000), null)), /together/);
 });

@@ -171,7 +171,8 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
   const current_step = await (load_step as Promise<LoadStep>);
   // The build checks snippet ids against the built-in commands, so the snippets of the last load stay out.
   const built_in_commands = commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
-  const { stored, loaded } = build_files_config(files, dir_label, built_in_commands, action);
+  // The editor names files by their stored path, not by the host folder they may have come from.
+  const { stored, loaded } = build_files_config(files, action === "edit" ? "" : dir_label, built_in_commands, action);
   const edits = await load_edits();
   // From here the registry holds the new snippets while the tabs still run the old keymap.
   // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
@@ -305,11 +306,12 @@ export function remove_snippet(path: string): Promise<{ warnings: number }> {
 // Stores one file the user typed in the files editor, or deletes it with `text` null, and rebuilds. The user's own config: the import guards do not apply.
 // It runs in the change queue, so saves and reloads apply one after another, each on the files the one before left. A build that fails writes nothing, so the stored files and the config stay as they were.
 // A snippet is code with every permission, so it is stored only with `accepted` equal to its text. Otherwise the answer is the consent preview, and nothing is stored.
-export function save_config_file(path: string, text: string | null, accepted?: string): Promise<{ warnings: number } | { consent: SnippetPreview }> {
+export function save_config_file(path: string, text: string | null, base: string | null, accepted?: string): Promise<{ warnings: number } | { consent: SnippetPreview }> {
   return in_change_queue(async () => {
     const current = await load_files_source();
     const problem = edit_problem(path, text, current.files);
     if (problem) throw new ConfigRefusal(`${KEPT_CURRENT.edit} ${problem}`);
+    if ((current.files[path] ?? null) !== base) throw new ConfigRefusal(`${KEPT_CURRENT.edit} ${path} changed since you opened it (an import, a reload or another tab). Close it and open it again.`);
     if (text !== null && is_snippet_file(path) && accepted !== text) return { consent: preview_snippet(path, text, current.files) };
     const { [path]: _replaced, ...others } = current.files;
     return apply_files(text === null ? others : { ...others, [path]: text }, current.dir_label, "edit");

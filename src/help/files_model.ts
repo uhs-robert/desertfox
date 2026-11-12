@@ -1,14 +1,15 @@
 // No DOM: the state of the settings page's files editor. It lists the stored config files, holds the text being edited and sends each save to the background.
 // The background decides. A refused save keeps the draft here, shows every problem and leaves the stored files alone.
 
-import type { ConfigFilesAnswer, SnippetPreview } from "../shared/messages.ts";
+import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import { template_for } from "./file_templates.ts";
 
 export type FilesState = {
   files: Record<string, string>;
   // The file being edited. `is_new` means it is not stored yet.
-  open?: { path: string; text: string; is_new: boolean } | undefined;
+  // `base` is the stored text the editor read, sent back with a save so a file changed meanwhile is not overwritten.
+  open?: { path: string; text: string; is_new: boolean; base: string | null } | undefined;
   busy: boolean;
   message?: { ok: boolean; text: string } | undefined;
   problems: string[];
@@ -17,7 +18,7 @@ export type FilesState = {
   accepted: boolean;
 };
 
-export type FilesDeps = { send: (message: { type: "config_files"; op: "read" } | { type: "config_files"; op: "save"; path: string; text: string | null; accepted?: string }) => Promise<unknown>; on_change: () => void };
+export type FilesDeps = { send: (message: ConfigFilesRequest) => Promise<unknown>; on_change: () => void };
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -39,7 +40,7 @@ export function create_files_session(deps: FilesDeps) {
   function open(path: string): void {
     const text = state.files[path];
     if (text === undefined) return;
-    set({ open: { path, text, is_new: false }, message: undefined, problems: [], consent: undefined, accepted: false });
+    set({ open: { path, text, is_new: false, base: text }, message: undefined, problems: [], consent: undefined, accepted: false });
   }
 
   // A new file starts from the template for its kind. Returns the reason it cannot, which the page shows.
@@ -47,7 +48,7 @@ export function create_files_session(deps: FilesDeps) {
     const problem = edit_problem(path, "", state.files);
     if (problem) return problem;
     if (Object.hasOwn(state.files, path)) return `${path} exists already. Open it from the list.`;
-    set({ open: { path, text: template_for(path), is_new: true }, message: undefined, problems: [], consent: undefined, accepted: false });
+    set({ open: { path, text: template_for(path), is_new: true, base: null }, message: undefined, problems: [], consent: undefined, accepted: false });
     return undefined;
   }
 
@@ -61,16 +62,31 @@ export function create_files_session(deps: FilesDeps) {
     set({ accepted: on });
   }
 
+  // The answer changes only what still matches the submitted text: text typed while the save ran stays as typed.
   async function send_save(path: string, text: string | null, accepted?: string): Promise<boolean> {
     set({ busy: true });
-    const answer = await ask({ type: "config_files", op: "save", path, text, ...(accepted !== undefined && { accepted }) });
+    // The text read when the file was opened, not the list as reloaded since: a changed file must still refuse.
+    const base = state.open?.path === path ? state.open.base : (state.files[path] ?? null);
+    const answer = await ask({ type: "config_files", op: "save", path, text, base, ...(accepted !== undefined && { accepted }) });
+    const same_draft = state.open?.path === path && state.open.text === text;
     if (answer.ok) {
       await load();
-      set({ busy: false, message: { ok: true, text: "message" in answer ? answer.message : "Saved." }, problems: [], consent: undefined, accepted: false });
+      const open = state.open;
+      set({
+        busy: false,
+        message: { ok: true, text: "message" in answer ? answer.message : "Saved." },
+        problems: [],
+        ...(same_draft && { consent: undefined, accepted: false }),
+        ...(open?.path === path && text !== null && { open: { ...open, is_new: false, base: text } }),
+      });
       return true;
     }
-    if ("consent" in answer) set({ busy: false, consent: answer.consent, accepted: false, message: undefined, problems: [] });
-    else set({ busy: false, message: { ok: false, text: answer.message }, problems: "problems" in answer ? (answer.problems ?? []) : [] });
+    if ("consent" in answer) set({ busy: false, ...(same_draft && { consent: answer.consent, accepted: false }), message: undefined, problems: [] });
+    else {
+      set({ busy: false, message: { ok: false, text: answer.message }, problems: "problems" in answer ? (answer.problems ?? []) : [] });
+      // The refusal may mean the stored files moved on, so the list shows them again.
+      await load();
+    }
     return false;
   }
 
@@ -79,7 +95,7 @@ export function create_files_session(deps: FilesDeps) {
     if (!editing || state.busy) return;
     // A snippet already consented to goes with its exact text.
     const accepted = state.consent && state.accepted && state.consent.code === editing.text ? editing.text : undefined;
-    if (await send_save(editing.path, editing.text, accepted)) set({ open: { ...editing, is_new: false } });
+    await send_save(editing.path, editing.text, accepted);
   }
 
   async function remove(path: string): Promise<void> {
