@@ -146,3 +146,12 @@ test("a path the zip refuses and a file the export cannot hold are refused, coun
   await assert.rejects(startup.save_config_file("style.css", "\u00e9".repeat(600_000), null), /too large/);
   await assert.rejects(startup.save_config_file("style.css", "x".repeat(700 * 1024), null).then(() => startup.save_config_file("style.d/a.css", "\u00e9".repeat(200_000), null)), /together/);
 });
+
+test("a stored file with CRLF line ends saves when the editor sends the raw stored text as base", async () => {
+  const { save, local } = await started("crlf");
+  const crlf = "[normal]\r\n# a\r\n";
+  await save("keymap.toml", crlf);
+  // The textarea shows the text with LF, but the base is the stored text as read.
+  assert.equal(((await save("keymap.toml", "[normal]\n# b\n", undefined, crlf)) as { ok: boolean }).ok, true);
+  assert.equal(slot_of(local).files!["keymap.toml"], "[normal]\n# b\n");
+});

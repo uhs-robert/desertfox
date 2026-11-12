@@ -52,7 +52,7 @@ export const area_rules = [
       "src/help/**",
       "src/commands/{help,help_tab,issue,settings,native,firefox_page}.ts",
       "src/background/{open_help,site_rules_view,issue_report,native_client,host_update,host_update_browser}.ts",
-      "src/shared/{settings_docs,settings_schema,settings_table,setting_list,table_constants,native_host,host_version,permission_grant}.ts",
+      "src/shared/{settings_docs,settings_schema,settings_table,setting_list,config_file_path,table_constants,native_host,host_version,permission_grant}.ts",
     ],
     areas: ["help"],
   },
