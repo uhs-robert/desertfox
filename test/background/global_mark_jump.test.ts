@@ -5,6 +5,7 @@ import type { MarkTab } from "../../src/background/global_mark_jump.ts";
 import { answer_mark_request, create_mark_store } from "../../src/background/mark_store.ts";
 import type { MarkArea } from "../../src/background/mark_store.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
+import { JUMP_READ_TIMEOUT_MS } from "../../src/background/router.ts";
 import type { MarkJump } from "../../src/shared/messages.ts";
 
 const tab = (id: number, url: string, extra: Partial<MarkTab> = {}): MarkTab => ({ id, window_id: 1, index: id, url, incognito: false, last_accessed: id, discarded: false, ...extra });
@@ -49,7 +50,7 @@ function make(tabs: MarkTab[]) {
   const refusals: { tab_id: number; message: string }[] = [];
   // The places put in the jump list, as `window: url x y`.
   const records: string[] = [];
-  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false };
+  const state = { tabs, push_reply: undefined as unknown, during_push: undefined as (() => Promise<unknown>) | undefined, navigate_fails: false, activate_fails: false, focus_fails: false, read_top_offset: async (): Promise<{ x: number; y: number } | undefined> => ({ x: 7, y: 77 }) };
   const global_jump = create_global_mark_jump({
     store: real,
     list_tabs: async () => state.tabs,
@@ -82,7 +83,7 @@ function make(tabs: MarkTab[]) {
     push_jump: async (tab_id, key) => (log.push(`push ${tab_id} ${key}`), await state.during_push?.(), state.push_reply),
     show_refusal: async (tab_id, message) => void refusals.push({ tab_id, message }),
     record_jump: async (window_id, _is_private, entry) => void records.push(`${window_id}: ${entry.url} ${entry.x} ${entry.y}`),
-    read_top_offset: async () => ({ x: 7, y: 77 }),
+    read_top_offset: () => state.read_top_offset(),
   });
   const sender = (id = 1, extra = {}) => ({ incognito: false, id, window_id: 1, url: "https://sender.test/", frame_id: 0, ...extra });
   const jump = (key = "A", y = 40, url = "https://sender.test/"): MarkJump => ({ type: "mark_jump", key, url, x: 0, y });
@@ -277,13 +278,30 @@ test("a jump records in the sender's window when it stays there, and the pushed 
   assert.deepEqual(opened.records, ["1: https://sender.test/ 0 40"]);
 });
 
-test("a jump a child frame asks for records the top frame's place, and leaves the same-tab case to the top frame", async () => {
+test("a jump a child frame asks for records the top frame's place once, on another tab or on this page", async () => {
   const other = make([tab(1, "https://sender.test/"), tab(2, MARK_URL)]);
   await other.set_mark();
   await other.global_jump(other.jump("A", 40), other.sender(1, { frame_id: 2 }));
   assert.deepEqual(other.records, ["1: https://sender.test/ 7 77"]);
   const same = make([tab(1, MARK_URL)]);
   await same.set_mark();
+  // The top frame's pushed request comes back while the push waits, as the page answers it.
+  same.state.during_push = () => answer_mark_request(same.store, same.jump("A", 77, MARK_URL), { incognito: false, id: 1, window_id: 1, url: MARK_URL, frame_id: 0 }, same.global_jump);
   await same.global_jump(same.jump(), same.sender(1, { url: MARK_URL, frame_id: 2 }));
-  assert.deepEqual(same.records, []);
+  await same.flush();
+  assert.deepEqual(same.log, ["push 1 A"]);
+  assert.deepEqual(same.records, [`1: ${MARK_URL} 7 77`]);
+});
+
+test("a top frame that never answers the offset read does not hold a child frame's jump", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fakes = make([tab(1, "https://sender.test/"), tab(2, MARK_URL)]);
+  await fakes.set_mark();
+  fakes.state.read_top_offset = () => new Promise(() => {});
+  const jumping = fakes.global_jump(fakes.jump("A", 40), fakes.sender(1, { frame_id: 2 }));
+  for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+  context.mock.timers.tick(JUMP_READ_TIMEOUT_MS);
+  assert.deepEqual(await jumping, { ok: true });
+  assert.deepEqual(fakes.log, ["watch 2", "activate 2"]);
+  assert.deepEqual(fakes.records, []);
 });
