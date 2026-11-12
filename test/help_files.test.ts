@@ -145,3 +145,57 @@ test("the consent card holds user css off while it shows, and a mount that is go
   await new_session.save();
   assert.equal(sheet.media, "");
 });
+
+test("deleting the open file clears its consent card and releases the css hold", async () => {
+  const sheet = { media: "" };
+  const hold = create_user_css_gate(sheet)();
+  const { session } = session_with((message) => {
+    if (message.op === "read") return { ok: true, files: { "snippets/a.js": "A" } };
+    if (message.text === null) return { ok: true, message: "Deleted." };
+    return { ok: false, message: "consent", consent: { path: "snippets/a.js", code: "A", replaces: true, problems: [] } };
+  }, hold);
+  await session.load();
+  session.open("snippets/a.js");
+  await session.save();
+  assert.equal(sheet.media, "not all");
+  await session.remove("snippets/a.js");
+  assert.equal(session.state.consent, undefined);
+  assert.equal(sheet.media, "");
+});
+
+test("a session kept across a remount keeps its draft, and attach moves the hold to the new mount", async () => {
+  const sheet = { media: "" };
+  const open_hold = create_user_css_gate(sheet);
+  const answers = (message: { op: string; text?: string | null }) =>
+    message.op === "read" ? { ok: true, files: { "snippets/a.js": "A" } } : { ok: false, message: "consent", consent: { path: "snippets/a.js", code: message.text, replaces: true, problems: [] } };
+  const first = open_hold();
+  const { session } = session_with(answers, first);
+  await session.load();
+  session.open("snippets/a.js");
+  session.edit("A2");
+  await session.save();
+  assert.equal(sheet.media, "not all");
+  let redraws = 0;
+  first.dispose();
+  const second = open_hold();
+  session.attach(() => redraws++, second);
+  assert.equal(session.state.open?.text, "A2");
+  assert.equal(sheet.media, "not all");
+  session.edit("A3");
+  assert.equal(redraws, 1);
+  assert.equal(sheet.media, "");
+});
+
+test("a change of the stored file loads into an unedited draft and leaves an edited one", async () => {
+  let stored = "old";
+  const { session } = session_with((message) => (message.op === "read" ? { ok: true, files: { "keymap.toml": stored } } : { ok: true, message: "Saved." }));
+  await session.load();
+  session.open("keymap.toml");
+  stored = "imported";
+  await session.load();
+  assert.deepEqual([session.state.open?.text, session.state.open?.base], ["imported", "imported"]);
+  session.edit("mine");
+  stored = "imported again";
+  await session.load();
+  assert.deepEqual([session.state.open?.text, session.state.open?.base], ["mine", "imported"]);
+});

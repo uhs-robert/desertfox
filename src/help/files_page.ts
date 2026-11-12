@@ -2,8 +2,7 @@
 
 import { el } from "./render.ts";
 import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
-import { create_files_session } from "./files_model.ts";
-import type { FilesDeps, FilesSession } from "./files_model.ts";
+import type { FilesSession } from "./files_model.ts";
 import { button, snippet_card } from "./transfer_page.ts";
 import { SNIPPET_WARNING } from "./transfer_model.ts";
 
@@ -42,7 +41,8 @@ function list_view(session: FilesSession): HTMLElement[] {
   return rows.length > 0 ? rows : [el("p", "desertfox-help-muted", "No config file is stored. Make one below.")];
 }
 
-export function mount_files(container: HTMLElement, send: FilesDeps["send"], user_css_hold: UserCssHold = NO_USER_CSS_HOLD): FilesSession {
+// Draws `session` into `container`. The session is the caller's and outlives the mount, so an unsaved draft survives a rebuild of the page.
+export function mount_files(container: HTMLElement, session: FilesSession, user_css_hold: UserCssHold = NO_USER_CSS_HOLD): FilesSession {
   const message = el("div", "desertfox-settings-message");
   message.setAttribute("role", "status");
   const list_box = el("div", undefined);
@@ -91,8 +91,8 @@ export function mount_files(container: HTMLElement, send: FilesDeps["send"], use
       if (had_focus) consent_box.querySelector<HTMLElement>("[data-snippet]")?.focus();
     }
   };
-  const session = create_files_session({ send, on_change: draw, user_css_hold });
   container.replaceChildren(list_box, el("div", "desertfox-settings-body", name, make), new_error, message, problems_box, editor_box, consent_box);
+  session.attach(draw, user_css_hold);
   draw();
   void session.load();
   return session;
