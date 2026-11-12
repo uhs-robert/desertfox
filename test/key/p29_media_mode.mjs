@@ -334,10 +334,15 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     const mark = events.length;
     await press_keys("a", "a");
     await shown(mark, id);
-    await focus_frame(id);
     const key_mark = events.length;
+    await focus_frame(id);
     await press_keys("j");
     await expect_absent(key_mark, `${id}_inner`, (event) => event.page_id === `${id}_inner` && (event.type === "media_volumechange" || event.type === "scroll"), "the all-off frame took a key");
+    // The badge of the top frame follows the focused frame, so only a key shows whether the tab still holds the mode: Escape from the top frame ends it.
+    await focus_top(id);
+    const escape_mark = events.length;
+    await press_keys("-k", "Escape");
+    await normal(escape_mark, id);
   });
 
   await run_case("F in the top frame fullscreens a video in a frame, and the end of the fullscreen returns every frame to normal", async () => {

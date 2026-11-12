@@ -113,7 +113,7 @@ export function create_tab_media(deps: TabMediaDeps) {
         } else if (!KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
       }),
     // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode. A pin alone is no hold, since it holds no frame yet.
-    // The frame goes into `frames` in the same turn as the read. A hold that ends before the frame reports then still reaches it, and its report cannot start a new hold.
+    // The frame goes into `frames` in the same turn as the read, so an end after the read sends it the step off, and its report finds it in the hold. This narrows the race and does not close it: a step off that reaches the frame before it applies this reply is lost, and its report then starts a new hold.
     join: (tab_id: number, frame_id: number): Promise<boolean> =>
       in_turn(async () => {
         const hold = await read(tab_id);

@@ -454,15 +454,21 @@ test("the reply carries the mode a frame joins, insert beats media, and an all-o
   assert.equal(await join_of(async () => "media"), "media");
   assert.equal(await join_of(async () => "insert"), "insert");
   assert.equal(await join_of(async () => undefined), undefined);
-  assert.equal(await join_of(async () => "media", storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
-  assert.equal(await join_of(async () => "insert", storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+  let asked = 0;
+  const counted = async () => (asked++, "media" as const);
+  assert.equal(await join_of(counted, storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+  assert.equal(await join_of(counted, storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+  assert.equal(asked, 0, "join is never asked for an all-off frame");
 });
 
-test("join_mode: insert beats media, and media is not asked when insert holds", async () => {
-  let media_asked = 0;
-  const media = async () => (media_asked++, true);
-  assert.equal(await join_mode(async () => true, media), "insert");
-  assert.equal(media_asked, 0);
-  assert.equal(await join_mode(async () => false, media), "media");
-  assert.equal(await join_mode(async () => false, async () => false), undefined);
+test("join_mode: insert beats media, media is not asked when insert holds, and a re-ask asks nothing", async () => {
+  let asked = 0;
+  const media = async () => (asked++, true);
+  assert.equal(await join_mode(true, async () => true, media), "insert");
+  assert.equal(asked, 0);
+  assert.equal(await join_mode(true, async () => false, media), "media");
+  assert.equal(await join_mode(true, async () => false, async () => false), undefined);
+  asked = 0;
+  assert.equal(await join_mode(false, async () => (asked++, true), media), undefined);
+  assert.equal(asked, 0);
 });

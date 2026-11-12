@@ -105,7 +105,8 @@ function with_stop_for_record(node: TreeBranch): TreeBranch {
 }
 
 // The mode a frame that starts late joins. Insert wins: media entry leaves a frame in insert alone too. Media is asked only when insert is not held, so its join writes the frame into the hold only when the frame joins it.
-export const join_mode = async (insert_held: () => Promise<boolean>, media_held: () => Promise<boolean>): Promise<"insert" | "media" | undefined> => ((await insert_held()) ? "insert" : (await media_held()) ? "media" : undefined);
+// Only a frame's first ask joins: a re-ask (config reload, macro recording) from a frame in another mode must not write it into a hold.
+export const join_mode = async (first_ask: boolean, insert_held: () => Promise<boolean>, media_held: () => Promise<boolean>): Promise<"insert" | "media" | undefined> => (!first_ask ? undefined : (await insert_held()) ? "insert" : (await media_held()) ? "media" : undefined);
 
 // `recording` is the register a macro is being recorded into, or undefined.
 export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<"insert" | "media" | undefined>): Promise<PageKeymap | undefined> {

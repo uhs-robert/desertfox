@@ -583,7 +583,7 @@ test("join: a pin with no frame in the mode, no hold, an ended hold and a new lo
   assert.equal(await loaded.media.join(7, 3), false);
 });
 
-test("join: a hold that ends before the joined frame reports sends it the step off and starts no new hold", async () => {
+test("join: a hold that ends after the join sends the joined frame the step off, and the hold is gone", async () => {
   const { media, sent, store } = fake_tab_media();
   await media.enter(7, 0);
   await media.reported(7, 0, "media", false);
