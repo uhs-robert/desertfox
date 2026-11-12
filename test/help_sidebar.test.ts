@@ -386,8 +386,8 @@ test("the Site Rules route carries its address through the hash, whatever the ad
 const SITE_RULES_VIEW = {
   address: "https://a.test/",
   rows: [
-    { origin: "user", site: "https://a.test/*", columns: [{ name: "hint_add", value: ".a, .b", shadowed: false }], changes: [{ keys: "j", action: "Reload", replaces: "Scroll down", shadowed: false }] },
-    { origin: "default", name: "sheets", site: "https://a.test/*", columns: [{ name: "hint_add", value: ".c", shadowed: true }], changes: [{ keys: "k", mode: "visual", action: "Stop", shadowed: true }] },
+    { origin: "user", site: "https://a.test/*", columns: [{ name: "hint_add", value: ".a, .b", shadowed: false }], changes: [{ keys: "j", action: "Reload", replaces: "Scroll down" }] },
+    { origin: "default", name: "sheets", site: "https://a.test/*", columns: [{ name: "hint_add", value: ".c", shadowed: true }], changes: [{ keys: "k", mode: "visual", action: "Stop", dead: "an earlier row decides it" }] },
   ],
 };
 
@@ -410,6 +410,7 @@ test("the Site Rules page draws each row with its origin, columns as name and va
   assert.match(text_of(sections[1]!), /Shipped row sheets.*hint_add.*\.c.*visual.*Stop/);
   assert.equal(sections[0]!.find_all(by_class("desertfox-help-shadowed")).length, 0);
   assert.equal(sections[1]!.find_all(by_class("desertfox-help-shadowed")).length, 2);
+  assert.match(text_of(sections[1]!), /an earlier row decides it/);
 });
 
 test("the Site Rules page says so when no row fits, and tells where to run it without an address", () => {

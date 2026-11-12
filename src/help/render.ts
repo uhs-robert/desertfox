@@ -253,14 +253,13 @@ function settings_page(model: HelpModel): HTMLElement[] {
 }
 
 const SHADOWED_CLASS = "desertfox-help-shadowed";
-const shadow_note = (shadowed: boolean): HTMLElement | string => (shadowed ? el("span", undefined, "an earlier row decides this") : "");
-const table_of = (heads: string[], rows: (HTMLElement | string)[][], shadowed: boolean[]): HTMLElement =>
-  el("table", "desertfox-help-params", el("tr", undefined, ...heads.map((name) => el("th", undefined, name))), ...rows.map((cells, index) => el("tr", shadowed[index] ? SHADOWED_CLASS : undefined, ...cells.map((cell) => el("td", undefined, cell)))));
+const table_of = (class_name: string, heads: string[], rows: (HTMLElement | string)[][], shadowed: boolean[]): HTMLElement =>
+  el("table", `desertfox-help-site-rules ${class_name}`, el("tr", undefined, ...heads.map((name) => el("th", undefined, name))), ...rows.map((cells, index) => el("tr", shadowed[index] ? SHADOWED_CLASS : undefined, ...cells.map((cell) => el("td", undefined, cell)))));
 
 // Columns are name and value pairs, so a per-site setting added later shows with no code here.
-const columns_table = (columns: RuleColumn[]): HTMLElement => table_of(["column", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadow_note(shadowed)]), columns.map(({ shadowed }) => shadowed));
+const columns_table = (columns: RuleColumn[]): HTMLElement => table_of("desertfox-help-columns", ["column", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadowed ? "an earlier row decides it" : ""]), columns.map(({ shadowed }) => shadowed));
 const changes_table = (changes: KeyChange[]): HTMLElement =>
-  table_of(["key", "mode", "does", "instead of", ""], changes.map(({ keys, mode, action, replaces, shadowed }) => [el("kbd", undefined, keys), mode ?? "", action, replaces ?? el("span", "desertfox-help-muted", "nothing"), shadow_note(shadowed)]), changes.map(({ shadowed }) => shadowed));
+  table_of("desertfox-help-changes", ["key", "mode", "does", "instead of", ""], changes.map(({ keys, mode, action, replaces, dead }) => [el("kbd", undefined, keys), mode ?? "", action, replaces ?? "", dead ?? ""]), changes.map(({ dead }) => dead !== undefined));
 
 function site_rule_row(row: SiteRuleRowView): HTMLElement {
   const source = row.origin === "default" ? `Shipped row ${row.name}` : "Your row";

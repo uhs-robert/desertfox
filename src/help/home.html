@@ -106,7 +106,7 @@
   .desertfox-help-tip-label { color: var(--desertfox-primary); }
   .desertfox-help-warnings { color: var(--desertfox-primary); }
   .desertfox-help table { border-collapse: collapse; margin: .5rem 0; }
-  .desertfox-help-params { width: 100%; }
+  .desertfox-help-params, .desertfox-help-site-rules { width: 100%; }
   .desertfox-help-engines { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
   .desertfox-help-engines th:nth-child(1) { width: 24%; }
   .desertfox-help-engines th:nth-child(2) { width: 28%; }
@@ -152,7 +152,18 @@
     .desertfox-help-drawer-open .desertfox-help-backdrop { position: fixed; inset: 0; z-index: 2; display: block; background: color-mix(in srgb, var(--desertfox-bg-core) 60%, transparent); }
     .desertfox-help-page { padding: 1rem; }
     /* Five param columns leave each one a few letters wide, so each param stacks as labelled lines. */
-    .desertfox-help-params, .desertfox-help-params tr, .desertfox-help-params td { display: block; }
+    .desertfox-help-params, .desertfox-help-params tr, .desertfox-help-params td, .desertfox-help-site-rules, .desertfox-help-site-rules tr, .desertfox-help-site-rules td { display: block; }
+    .desertfox-help-site-rules td { overflow-wrap: anywhere; }
+    .desertfox-help-site-rules tr:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .desertfox-help-site-rules tr { margin: .5rem 0; }
+    .desertfox-help-site-rules td:empty { display: none; }
+    .desertfox-help-site-rules td::before { opacity: .6; margin-right: .5rem; }
+    .desertfox-help-columns td:nth-child(1)::before { content: "column"; }
+    .desertfox-help-columns td:nth-child(2)::before { content: "value"; }
+    .desertfox-help-changes td:nth-child(1)::before { content: "key"; }
+    .desertfox-help-changes td:nth-child(2)::before { content: "mode"; }
+    .desertfox-help-changes td:nth-child(3)::before { content: "does"; }
+    .desertfox-help-changes td:nth-child(4)::before { content: "instead of"; }
     .desertfox-help-params td { overflow-wrap: anywhere; }
     /* Visually hidden, not display:none, so screen readers keep the column headers. */
     .desertfox-help-params tr:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
