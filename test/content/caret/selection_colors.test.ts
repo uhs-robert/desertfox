@@ -50,3 +50,24 @@ test("a theme read that settles after a rebuild colors the trees of the last pai
   clear_selection_colors();
   assert.equal(new_tree.adoptedStyleSheets.length, 0);
 });
+
+// R8 for the cell: `v` right after caret mode starts, before the caret mode read settles.
+test("caret mode colors its cell highlight, and a read that settles after a mode switch is dropped", async () => {
+  const gates: (() => void)[] = [];
+  Object.assign(globalThis, { browser: { storage: { local: { get: async (key: string) => (await new Promise<void>((resume) => gates.push(resume)), { [key]: moonlight }) } } } });
+  const tree = fake_tree();
+  keep_selection_colors([tree]);
+  const caret_read = apply_selection_colors("caret");
+  const visual_read = apply_selection_colors("visual");
+  gates[1]!();
+  await visual_read;
+  gates[0]!();
+  await caret_read;
+  assert.doesNotMatch(tree.adoptedStyleSheets[0]!.css, /highlight/, "the older caret read colored visual mode");
+  const back = apply_selection_colors("caret");
+  gates[2]!();
+  await back;
+  assert.match(tree.adoptedStyleSheets[0]!.css, /^::highlight\(oasis-caret\)\{background:#[0-9a-f]+;color:#[0-9a-f]+\}/);
+  assert.doesNotMatch(tree.adoptedStyleSheets[0]!.css, /::selection/);
+  clear_selection_colors();
+});

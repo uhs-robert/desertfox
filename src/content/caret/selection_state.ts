@@ -1,5 +1,4 @@
-// The caret and the visual selection as two character indexes in a text model, drawn as a real Selection.
-// Caret mode selects the one character under the caret: Firefox paints no caret on a collapsed selection in page text.
+// The caret and the visual selection as two character indexes in a text model. `selection_mirror.ts` draws them: visual mode as a real Selection, caret mode as a highlight cell on the one character under the caret, because Firefox paints no caret on a collapsed selection in page text.
 // Visual mode selects from the anchor to the caret, both ends included. Linewise visual mode widens that to whole screen lines.
 
 export type Cursor = { anchor: number; caret: number };

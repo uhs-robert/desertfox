@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CHAR_FIND_NAMES, create_painter } from "../../../src/content/caret/find_paint.ts";
 import { create_selection_mirror } from "../../../src/content/caret/selection_mirror.ts";
 import type { TextModel } from "../../../src/content/caret/text_model.ts";
 
@@ -85,11 +86,22 @@ class FakeSelection {
   }
 }
 
-type FakeDocument = { nodeType: 9; defaultView: object; selection: FakeSelection; getSelection: () => FakeSelection; createRange: () => FakeRange };
+class FakeHighlight {
+  priority = 0;
+  ranges: FakeRange[];
+  constructor(...ranges: FakeRange[]) {
+    this.ranges = ranges;
+  }
+}
+
+// Each document has its own highlight registry, as in Firefox.
+type FakeView = { CSS: { highlights: Map<string, FakeHighlight> }; Highlight: typeof FakeHighlight };
+type FakeDocument = { nodeType: 9; defaultView: FakeView; selection: FakeSelection; getSelection: () => FakeSelection; createRange: () => FakeRange };
 
 function fake_document(): FakeDocument {
   const selection = new FakeSelection();
-  return { nodeType: 9, defaultView: {}, selection, getSelection: () => selection, createRange: () => new FakeRange() };
+  const view = { CSS: { highlights: new Map<string, FakeHighlight>() }, Highlight: FakeHighlight };
+  return { nodeType: 9, defaultView: view, selection, getSelection: () => selection, createRange: () => new FakeRange() };
 }
 
 // The text "abcdef": "abc" in one text node of `first`, "def" in one of `second`. `second` is a shadow root of the first document, or a frame document of its own.
@@ -116,31 +128,22 @@ function fake_model(top: FakeDocument, second: "shadow_root" | FakeDocument) {
 
 const ends = (selection: FakeSelection) => selection.ranges.map((range) => [range.startContainer.base + range.startOffset, range.endContainer.base + range.endOffset]);
 
-class FakeElement {
-  isContentEditable: boolean;
-  holds: unknown;
-  constructor(is_editable: boolean, holds: unknown) {
-    this.isContentEditable = is_editable;
-    this.holds = holds;
-  }
-  contains(node: unknown) {
-    return node === this.holds;
-  }
-}
-
-function setup(second: "shadow_root" | "frame" = "shadow_root", focused: () => unknown = () => null) {
+function setup(second: "shadow_root" | "frame" = "shadow_root") {
   const top = fake_document();
   const frame = fake_document();
-  const window_selection = new FakeSelection();
-  Object.assign(globalThis, { HTMLElement: FakeElement, getSelection: () => window_selection });
+  // The painter reaches the top document's registry through this window.
+  Object.assign(globalThis, { document: top, window: top.defaultView, Node: { TEXT_NODE: 3 } });
   const page = fake_model(top, second === "frame" ? frame : "shadow_root");
-  const mirror = create_selection_mirror({ focused_element_: () => focused() as Element | null });
-  return { top, frame, window_selection, mirror, ...page };
+  const mirror = create_selection_mirror();
+  return { top, frame, mirror, ...page };
 }
+
+// The cell's ranges in one document, as [start, end] text indexes.
+const cell_of = (owner: FakeDocument) => owner.defaultView.CSS.highlights.get("oasis-caret")?.ranges.map((range) => [range.startContainer.base + range.startOffset, range.endContainer.base + range.endOffset]) ?? [];
 
 test("paint draws one range per tree, and its own paint is no outside move", () => {
   const { top, model, mirror } = setup();
-  mirror.paint(model, { from: 1, to: 5 });
+  mirror.paint(model, { from: 1, to: 5 }, "visual");
   assert.deepEqual(ends(top.selection), [
     [1, 3],
     [3, 5],
@@ -152,7 +155,7 @@ test("paint draws one range per tree, and its own paint is no outside move", () 
 // R7: line visual mode and j, k, 0, ^ and $ ask Selection.modify, which collapses the selection the paint drew, here across a shadow root.
 test("measure puts back the ranges Selection.modify collapsed, so the paint and an earlier mark still stand", () => {
   const { top, model, mirror, second_node } = setup();
-  mirror.paint(model, { from: 1, to: 5 });
+  mirror.paint(model, { from: 1, to: 5 }, "visual");
   const mark = mirror.mark(model);
   const answer = mirror.measure(model, () => {
     top.selection.collapse(second_node, 2);
@@ -169,7 +172,7 @@ test("measure puts back the ranges Selection.modify collapsed, so the paint and 
 
 test("measure puts the ranges back when the measure throws", () => {
   const { top, model, mirror, first_node } = setup();
-  mirror.paint(model, { from: 0, to: 2 });
+  mirror.paint(model, { from: 0, to: 2 }, "visual");
   assert.throws(() =>
     mirror.measure(model, () => {
       top.selection.collapse(first_node, 1);
@@ -181,7 +184,7 @@ test("measure puts the ranges back when the measure throws", () => {
 
 test("a click after the paint moves the caret there, and visual mode keeps its anchor", () => {
   const { top, model, mirror, second_node } = setup();
-  mirror.paint(model, { from: 1, to: 3 });
+  mirror.paint(model, { from: 1, to: 3 }, "visual");
   top.selection.collapse(second_node, 1);
   assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 1, caret: 2 }, true), { anchor: 1, caret: 4 });
   assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 1, caret: 2 }, false), { anchor: 4, caret: 4 });
@@ -189,7 +192,7 @@ test("a click after the paint moves the caret there, and visual mode keeps its a
 
 test("a drag after the paint is taken whole, and a backward one puts the caret at its start", () => {
   const { top, model, mirror, second_node } = setup();
-  mirror.paint(model, { from: 0, to: 1 });
+  mirror.paint(model, { from: 0, to: 1 }, "visual");
   top.selection.setBaseAndExtent(second_node, 3, second_node, 1);
   assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 0, caret: 0 }, false), { anchor: 5, caret: 4 });
 });
@@ -205,7 +208,7 @@ test("a mark sees a selection drawn again the other way round", () => {
 
 test("a mark taken in a frame that left the page counts as moved", () => {
   const { frame, model, mirror } = setup("frame");
-  mirror.paint(model, { from: 4, to: 5 });
+  mirror.paint(model, { from: 4, to: 5 }, "visual");
   const mark = mirror.mark(model);
   assert.equal(mirror.moved_since_(mark), false);
   frame.selection.dead = true;
@@ -214,38 +217,99 @@ test("a mark taken in a frame that left the page counts as moved", () => {
 
 test("paint clears its last paint in a frame the new model no longer reads, and a frame that died does not stop it", () => {
   const { top, frame, model, mirror } = setup("frame");
-  mirror.paint(model, { from: 2, to: 5 });
+  mirror.paint(model, { from: 2, to: 5 }, "visual");
   assert.deepEqual(ends(frame.selection), [[3, 5]]);
   const top_only = fake_model(top, fake_document()).model;
-  mirror.paint(top_only, { from: 0, to: 1 });
+  mirror.paint(top_only, { from: 0, to: 1 }, "visual");
   assert.deepEqual(ends(frame.selection), [], "the old paint stayed in the frame");
-  mirror.paint(model, { from: 4, to: 5 });
+  mirror.paint(model, { from: 4, to: 5 }, "visual");
   frame.selection.dead = true;
-  mirror.paint(top_only, { from: 1, to: 2 });
+  mirror.paint(top_only, { from: 1, to: 2 }, "visual");
   assert.deepEqual(ends(top.selection), [[1, 2]]);
 });
 
 test("clear empties its last paint in a frame the model no longer reads, and a frame that died does not stop it", () => {
   const { top, frame, model, mirror } = setup("frame");
-  const top_only = fake_model(top, fake_document()).model;
-  mirror.paint(model, { from: 2, to: 5 });
-  mirror.clear(top_only);
+  mirror.paint(model, { from: 2, to: 5 }, "visual");
+  mirror.clear();
   assert.deepEqual(ends(frame.selection), [], "the old paint stayed in the frame");
-  mirror.paint(model, { from: 4, to: 5 });
+  mirror.paint(model, { from: 4, to: 5 }, "visual");
   frame.selection.dead = true;
-  mirror.clear(top_only);
+  mirror.clear();
   assert.deepEqual(ends(top.selection), []);
 });
 
-test("clear empties every selection of the model and of this window, and spares a focused contenteditable's caret", () => {
-  let focused: unknown = null;
-  const { top, frame, window_selection, model, mirror, first_node, second_node } = setup("frame", () => focused);
-  mirror.paint(model, { from: 0, to: 6 });
-  window_selection.collapse(second_node, 0);
-  top.selection.collapse(first_node, 1);
-  focused = new FakeElement(true, first_node);
-  mirror.clear(model);
+// A click into a contenteditable field moves the document selection to the field's caret before the session ends on the focus.
+test("clear spares a selection that moved since the paint, in caret and in visual mode", () => {
+  const { top, model, mirror, first_node } = setup();
+  for (const mode of ["caret", "visual"] as const) {
+    mirror.paint(model, { from: 4, to: 6 }, mode);
+    top.selection.collapse(first_node, 1);
+    mirror.clear();
+    assert.deepEqual(ends(top.selection), [[1, 1]], `the field lost its caret in ${mode} mode`);
+    assert.deepEqual(cell_of(top), [], `the cell stayed after ${mode} mode`);
+  }
+});
+
+test("caret mode draws its cell as a highlight in the document of the character and writes no selection", () => {
+  const { top, frame, model, mirror } = setup("frame");
+  mirror.paint(model, { from: 1, to: 2 }, "caret");
+  assert.deepEqual(cell_of(top), [[1, 2]]);
+  assert.deepEqual(ends(top.selection), []);
+  mirror.paint(model, { from: 4, to: 5 }, "caret");
+  assert.deepEqual(cell_of(top), [], "the old cell stayed in the top document");
+  assert.deepEqual(cell_of(frame), [[4, 5]]);
   assert.deepEqual(ends(frame.selection), []);
-  assert.deepEqual(ends(window_selection), [], "the window's own selection stayed");
-  assert.deepEqual(ends(top.selection), [[1, 1]], "the field lost its caret");
+  assert.equal(mirror.foreign_cursor_(model, { anchor: 4, caret: 4 }, false), undefined);
+  mirror.clear();
+  assert.deepEqual(cell_of(frame), []);
+});
+
+test("a cell in a shadow root is registered in its document", () => {
+  const { top, model, mirror } = setup();
+  mirror.paint(model, { from: 3, to: 4 }, "caret");
+  assert.deepEqual(cell_of(top), [[3, 4]]);
+});
+
+// The cell and the real selection never show together, and one of them always shows.
+test("a switch to visual mode writes the selection and drops the cell, and the switch back does the reverse", () => {
+  const { top, model, mirror } = setup();
+  mirror.paint(model, { from: 1, to: 2 }, "caret");
+  mirror.paint(model, { from: 1, to: 2 }, "visual");
+  assert.deepEqual(cell_of(top), []);
+  assert.deepEqual(ends(top.selection), [[1, 2]]);
+  mirror.paint(model, { from: 1, to: 5 }, "visual_line");
+  assert.deepEqual(cell_of(top), []);
+  mirror.paint(model, { from: 4, to: 5 }, "caret");
+  assert.deepEqual(ends(top.selection), []);
+  assert.deepEqual(cell_of(top), [[4, 5]]);
+});
+
+test("in caret mode any selection is an outside move, and the next paint clears it", () => {
+  const { top, model, mirror, second_node } = setup();
+  mirror.paint(model, { from: 0, to: 1 }, "caret");
+  top.selection.collapse(second_node, 1);
+  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 0, caret: 0 }, false), { anchor: 4, caret: 4 });
+  top.selection.setBaseAndExtent(second_node, 0, second_node, 2);
+  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 0, caret: 0 }, false), { anchor: 3, caret: 4 });
+  mirror.paint(model, { from: 4, to: 5 }, "caret");
+  assert.deepEqual(ends(top.selection), []);
+  assert.deepEqual(cell_of(top), [[4, 5]]);
+});
+
+test("a caret on a line break draws no cell", () => {
+  const { top, model, mirror } = setup();
+  (model as { text: string }).text = "abc\ndef";
+  mirror.paint(model, { from: 3, to: 4 }, "caret");
+  assert.deepEqual(cell_of(top), []);
+});
+
+// `f`, `t`, `;` and the live `/` line paint their current match after the cell, often on the caret's own character. At equal priority the later highlight paints on top.
+test("the cell paints above a find highlight on the same character", () => {
+  const { top, model, mirror } = setup();
+  mirror.paint(model, { from: 1, to: 2 }, "caret");
+  const char_find = create_painter(CHAR_FIND_NAMES);
+  char_find.paint(model, { from: [1], width: 1 }, 0, undefined, [0]);
+  const registry = top.defaultView.CSS.highlights;
+  assert.ok(registry.get("oasis-caret")!.priority > registry.get(CHAR_FIND_NAMES.current)!.priority, "the find covers the caret");
 });

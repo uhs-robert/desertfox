@@ -391,6 +391,8 @@ export async function create_session({ name: session_name, timings, sweep = true
     if (value?.error) throw new Error(`in the tab: ${JSON.stringify(value)}`);
     return value;
   });
+  // An expression, for in_active_tab, of what the caret or the selection covers in `doc`: the first range of its selection, else the caret mode cell, which is a highlight ("oasis-caret" in src/content/caret/find_paint.ts). A cell in a shadow root sits in its document's registry.
+  const shown_range_in = (doc = "document") => `((doc) => { const selection = doc.getSelection(); if (selection.rangeCount) return selection.getRangeAt(0); let cell; doc.defaultView.CSS.highlights.get("oasis-caret")?.forEach((range) => (cell = range)); return cell; })(${doc})`;
   const badge_is = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const is_selection_of = (page_id) => (event) => event.type === "selection" && event.page_id === page_id;
   // A key that moves the caret reports a selection change, so this is the wait after it. A caret that sticks reports nothing and the wait names the key.
@@ -929,7 +931,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
     const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, expect_no_tab_shown, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
-      in_background, clear_notices, set_optional_permissions, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
+      in_background, clear_notices, set_optional_permissions, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };
   }
 

@@ -1,5 +1,5 @@
 // Key cases of the caret and visual piece. run.mjs calls run_cases with its helpers.
-// The pages report each change of their selection. The selection colors sit in a sheet the bundle adopts, which the page cannot report, so the cases read it from the content script world.
+// The pages report each change of their selection, and in caret mode each new caret cell, a highlight. The colors sit in a sheet the bundle adopts, which the page cannot report, so the cases read it from the content script world.
 
 import { mkdirSync } from "node:fs";
 
@@ -7,12 +7,12 @@ export const areas = ["caret", "find"];
 
 export async function run_cases({ sleep, take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, in_background, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
-  // oasis_moonlight, the default palette, dark: the caret takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts). The sheet text reads back with the colors as rgb().
+  // oasis_moonlight, the default palette, dark: the caret cell takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts). The sheet text reads back with the colors as rgb().
   const CARET_BACKGROUND = "rgb(240, 230, 140)";
   const VISUAL_BACKGROUND = "rgb(36, 54, 77)";
 
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
-  const selection_css = () => in_active_tab(`[...document.adoptedStyleSheets].flatMap((sheet) => [...sheet.cssRules]).map((rule) => rule.cssText).filter((text) => text.includes("::selection")).join("")`);
+  const selection_css = () => in_active_tab(`[...document.adoptedStyleSheets].flatMap((sheet) => [...sheet.cssRules]).map((rule) => rule.cssText).filter((text) => /::selection|::highlight\\(oasis-caret\\)/.test(text)).join("")`);
   const wait_for_selection_css = (what, accept) => poll_until(what, async () => accept(await selection_css()));
   const no_style = (css) => css === "";
 
@@ -57,17 +57,44 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     const mark = events.length;
     await press_keys("gV");
     await wait_event(mark, selection_is("caret_enter", "c"), "the caret on the first character");
-    await wait_for_selection_css("the caret color", (css) => css.includes(CARET_BACKGROUND));
+    await wait_for_selection_css("the caret cell color", (css) => css.includes("::highlight(oasis-caret)") && css.includes(CARET_BACKGROUND));
     await press_keys("v");
     await wait_for_selection_css("the visual color", (css) => css.includes(VISUAL_BACKGROUND));
     const mark_escape = events.length;
     await escape_to_normal("caret_enter");
-    await wait_event(mark_escape, selection_is("caret_enter", ""), "an empty selection after Escape");
+    await wait_event(mark_escape, selection_is("caret_enter", ""), "no selection and no caret cell after Escape");
     await wait_for_selection_css("no selection colors after Escape", no_style);
     const mark_again = events.length;
     await press_keys("gV");
     await wait_event(mark_again, selection_is("caret_enter", "c"), "the caret again after leaving");
     await escape_to_normal("caret_enter");
+  });
+
+  // The cell is a highlight and visual mode a real selection, so exactly one of them shows in each mode.
+  await run_case("v, V and Escape switch between one caret cell and one page selection, never both or neither", async () => {
+    const page_id = "caret_cell_switch";
+    await open_page("caret", page_id, { new_tab: true });
+    const READ_SHOWN = `(() => { let cells = 0; CSS.highlights.get("oasis-caret")?.forEach(() => cells++); return { cells, ranges: getSelection().rangeCount, text: String(getSelection()) }; })()`;
+    const wait_shown = (cells, ranges, text_ok, what) => poll_until(what, async () => {
+      const shown = await in_active_tab(READ_SHOWN);
+      return shown.cells === cells && shown.ranges === ranges && text_ok(shown.text);
+    });
+    const no_text = (text) => text === "";
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await wait_shown(1, 0, no_text, "one cell and no selection in caret mode");
+    // The title is "caret caret_cell_switch", so line visual mode selects all of it.
+    for (const [key, badge, text_ok] of [["v", "VISUAL", (text) => text === "c"], ["V", "V-LINE", (text) => text.trim() === `caret ${page_id}`]]) {
+      let mark = events.length;
+      await press_keys(key);
+      await wait_event(mark, badge_is(page_id, badge), `the ${badge} badge`);
+      await wait_shown(0, 1, text_ok, `a selection and no cell in ${badge}`);
+      mark = events.length;
+      await press_keys("-k", "Escape");
+      await wait_event(mark, badge_is(page_id, "CARET"), `the CARET badge after Escape from ${badge}`);
+      await wait_shown(1, 0, no_text, `one cell and no selection after Escape from ${badge}`);
+    }
+    await escape_to_normal(page_id);
+    await wait_shown(0, 0, no_text, "no cell and no selection in normal mode");
   });
 
   await run_case("a page that drops the adopted sheets mid-session gets the selection colors back with the next motion", async () => {
@@ -89,7 +116,7 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     const mark_switch = events.length;
     // Caret mode binds no tab key, so the switch is Firefox's own Ctrl+Page Down.
     await press_keys("-M", "ctrl", "-k", "Next", "-m", "ctrl");
-    await wait_event(mark_switch, selection_is("caret_tab", ""), "an empty selection after the tab switch");
+    await wait_event(mark_switch, selection_is("caret_tab", ""), "no caret cell after the tab switch");
     await press_keys("-M", "ctrl", "-k", "Prior", "-m", "ctrl");
     await wait_active_tab("caret_tab", "the page to come back to the front");
     await settle_focus();
@@ -747,6 +774,10 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await wait_ft((state) => current_row(state) === 2, "3fx to row 2 while recording");
     const recorded = await wait_for_last_selection("ft_macro_rec", mark, (last) => last.text === "x", "the caret on the x of row 2");
     const document_y = (report) => Math.round(report.top + report.scroll_y);
+    // v selects the character under the caret, so the replay leaves a selection report that the next keys cannot outrun. The caret cell alone can show for less than a frame.
+    mark = events.length;
+    await press_keys("v");
+    await wait_event(mark, badge_is("ft_macro_rec", "VISUAL recording @a"), "visual mode while recording");
     mark = events.length;
     await press_keys("-k", "Escape");
     await press_keys("-k", "Escape");
@@ -756,9 +787,9 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await open_page("caret_ft", "ft_macro_play", { new_tab: true });
     mark = events.length;
     await press_keys("@a");
-    // The macro ends in normal mode, which ends the find, so the match is read from the selection report of its caret.
+    // The macro ends in normal mode, which ends the find, so the match is read from the selection report of its v.
     await wait_event(mark, (event) => is_selection_of("ft_macro_play")(event) && event.text === "x" && document_y(event) === document_y(recorded), "the replay of 3fx to the same x as the recording");
-    await escape_to_normal("ft_macro_play");
+    await wait_event(mark, badge_is("ft_macro_play", "NORMAL"), "the replay to end in normal mode");
   });
 
   // visual.open refuses a blank selection before it changes modes, so only its own end of the find clears the highlights.

@@ -1,7 +1,7 @@
-// A grid of selection sources against the caret and visual modes. Each cell asserts the selection's two ends, read from `getSelection()` on the page, after the mode took the source and again after one `l`.
+// A grid of selection sources against the caret and visual modes. Each cell asserts the selection's two ends, read from `getSelection()` on the page, and the caret mode cell, a highlight, after the mode took the source and again after one `l`.
 // The sources are script stand-ins. The harness has no pointer, so click and drag send no pointer events. A drag is `setBaseAndExtent` and a click is a collapsed selection, which is all the caret code reads. The page script uses the drag's call on another span, but keeps its own row.
 // "Before" means the source exists when the mode starts. "During" means the mode is already active when the source arrives.
-// The expected values are what the code did when the grid was written. A cell is not a promise that the behavior is right.
+// The expected values are what the code did when the grid was written. A cell is not a promise that the behavior is right. Caret mode leaves no selection of its own, so its cells show the cell and no selection after `l`.
 
 export const areas = ["caret", "find"];
 
@@ -16,38 +16,38 @@ const TIMINGS = ["before", "during"];
 const ENTRY = { caret: [["v", "CARET"]], visual: [["V", "VISUAL"]], line_visual: [["v", "CARET"], ["V", "V-LINE"]] };
 
 const EXPECTED = {
-  "drag_forward caret before": "\"e\" anchor the :9 focus the :10 | after l \" \" anchor the :10 focus the :11",
-  "drag_forward caret during": "\"needle\" anchor the :4 focus the :10 | after l \" \" anchor the :10 focus the :11",
+  "drag_forward caret before": "\"\" anchor none:0 focus none:0 cell \"e\" the :9-10 | after l \"\" anchor none:0 focus none:0 cell \" \" the :10-11",
+  "drag_forward caret during": "\"needle\" anchor the :4 focus the :10 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \" \" the :10-11",
   "drag_forward visual before": "\"needle\" anchor the :4 focus the :10 | after l \"needle \" anchor the :4 focus the :11",
   "drag_forward visual during": "\"needle\" anchor the :4 focus the :10 | after l \"needle \" anchor the :4 focus the :11",
   "drag_forward line_visual before": "\"the needle s...(20 characters)\" anchor the :0 focus the :20 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
   "drag_forward line_visual during": "\"needle\" anchor the :4 focus the :10 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
-  "drag_backward caret before": "\"n\" anchor the :4 focus the :5 | after l \"e\" anchor the :5 focus the :6",
-  "drag_backward caret during": "\"needle\" anchor the :10 focus the :4 | after l \"e\" anchor the :5 focus the :6",
+  "drag_backward caret before": "\"\" anchor none:0 focus none:0 cell \"n\" the :4-5 | after l \"\" anchor none:0 focus none:0 cell \"e\" the :5-6",
+  "drag_backward caret during": "\"needle\" anchor the :10 focus the :4 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \"e\" the :5-6",
   "drag_backward visual before": "\"needle\" anchor the :4 focus the :10 | after l \"eedle\" anchor the :5 focus the :10",
   "drag_backward visual during": "\"needle\" anchor the :10 focus the :4 | after l \"eedle\" anchor the :5 focus the :10",
   "drag_backward line_visual before": "\"the needle s...(20 characters)\" anchor the :0 focus the :20 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
   "drag_backward line_visual during": "\"needle\" anchor the :10 focus the :4 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
-  "click caret before": "\"o\" anchor star:6 focus star:7 | after l \"f\" anchor star:7 focus star:8",
-  "click caret during": "\"\" anchor star:6 focus star:6 | after l \"f\" anchor star:7 focus star:8",
+  "click caret before": "\"\" anchor none:0 focus none:0 cell \"o\" star:6-7 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
+  "click caret during": "\"\" anchor star:6 focus star:6 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
   "click visual before": "\"o\" anchor star:6 focus star:7 | after l \"of\" anchor star:6 focus star:8",
   "click visual during": "\"\" anchor star:6 focus star:6 | after l \"caret_bug_fi...(49 characters)\" anchor care:0 focus star:8",
   "click line_visual before": "\"start of pag...(13 characters)\" anchor star:0 focus star:13 | after l \"start of pag...(13 characters)\" anchor star:0 focus star:13",
   "click line_visual during": "\"\" anchor star:6 focus star:6 | after l \"caret_bug_fi...(59 characters)\" anchor care:0 focus star:13",
-  "browser_find caret before": "\"e\" anchor the :9 focus the :10 | after l \" \" anchor the :10 focus the :11",
-  "browser_find caret during": "\"needle\" anchor the :4 focus the :10 | after l \" \" anchor the :10 focus the :11",
+  "browser_find caret before": "\"\" anchor none:0 focus none:0 cell \"e\" the :9-10 | after l \"\" anchor none:0 focus none:0 cell \" \" the :10-11",
+  "browser_find caret during": "\"needle\" anchor the :4 focus the :10 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \" \" the :10-11",
   "browser_find visual before": "\"needle\" anchor the :4 focus the :10 | after l \"needle \" anchor the :4 focus the :11",
   "browser_find visual during": "\"needle\" anchor the :4 focus the :10 | after l \"needle \" anchor the :4 focus the :11",
   "browser_find line_visual before": "\"the needle s...(20 characters)\" anchor the :0 focus the :20 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
   "browser_find line_visual during": "\"needle\" anchor the :4 focus the :10 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
-  "search_position caret before": "\"n\" anchor the :4 focus the :5 | after l \"e\" anchor the :5 focus the :6",
-  "search_position caret during": "\"n\" anchor the :4 focus the :5 | after l \"e\" anchor the :5 focus the :6",
+  "search_position caret before": "\"\" anchor none:0 focus none:0 cell \"n\" the :4-5 | after l \"\" anchor none:0 focus none:0 cell \"e\" the :5-6",
+  "search_position caret during": "\"\" anchor none:0 focus none:0 cell \"n\" the :4-5 | after l \"\" anchor none:0 focus none:0 cell \"e\" the :5-6",
   "search_position visual before": "\"n\" anchor the :4 focus the :5 | after l \"ne\" anchor the :4 focus the :6",
   "search_position visual during": "\"caret_bug_fi...(1921 characters)\" anchor care:0 focus the :5 | after l \"caret_bug_fi...(1922 characters)\" anchor care:0 focus the :6",
   "search_position line_visual before": "\"the needle s...(20 characters)\" anchor the :0 focus the :20 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
   "search_position line_visual during": "\"caret_bug_fi...(1941 characters)\" anchor care:0 focus the :20 | after l \"caret_bug_fi...(1941 characters)\" anchor care:0 focus the :20",
-  "page_script caret before": "\"s\" anchor the :14 focus the :15 | after l \" \" anchor the :15 focus the :16",
-  "page_script caret during": "\"sits\" anchor the :11 focus the :15 | after l \" \" anchor the :15 focus the :16",
+  "page_script caret before": "\"\" anchor none:0 focus none:0 cell \"s\" the :14-15 | after l \"\" anchor none:0 focus none:0 cell \" \" the :15-16",
+  "page_script caret during": "\"sits\" anchor the :11 focus the :15 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \" \" the :15-16",
   "page_script visual before": "\"sits\" anchor the :11 focus the :15 | after l \"sits \" anchor the :11 focus the :16",
   "page_script visual during": "\"sits\" anchor the :11 focus the :15 | after l \"sits \" anchor the :11 focus the :16",
   "page_script line_visual before": "\"the needle s...(20 characters)\" anchor the :0 focus the :20 | after l \"the needle s...(20 characters)\" anchor the :0 focus the :20",
@@ -100,11 +100,12 @@ export async function run_cases({ run_case, expect, open_page, press_keys, barri
     await escape_to_normal(page_id);
   }
 
-  const READ = `(() => { const s = getSelection(); const at = (node, offset) => (node ? node.data.slice(0, 4) : "none") + ":" + offset; return JSON.stringify({ text: String(s), anchor: at(s.anchorNode, s.anchorOffset), focus: at(s.focusNode, s.focusOffset) }); })()`;
+  // The caret mode cell is a highlight, so a read shows it after the selection, from its start to its end offset. A read with no cell shows the selection alone.
+  const READ = `(() => { const s = getSelection(); const at = (node, offset) => (node ? node.data.slice(0, 4) : "none") + ":" + offset; let cell; CSS.highlights.get("oasis-caret")?.forEach((range) => (cell = range)); return JSON.stringify({ text: String(s), anchor: at(s.anchorNode, s.anchorOffset), focus: at(s.focusNode, s.focusOffset), cell: cell && \`\${JSON.stringify(String(cell))} \${at(cell.startContainer, cell.startOffset)}-\${cell.endOffset}\` }); })()`;
   const read_ends = async () => {
-    const { text, anchor, focus } = JSON.parse(await in_active_tab(READ));
+    const { text, anchor, focus, cell } = JSON.parse(await in_active_tab(READ));
     const shown = text.length > 12 ? `${text.slice(0, 12)}...(${text.length} characters)` : text;
-    return `${JSON.stringify(shown)} anchor ${anchor} focus ${focus}`;
+    return `${JSON.stringify(shown)} anchor ${anchor} focus ${focus}${cell ? ` cell ${cell}` : ""}`;
   };
 
   for (const source of SOURCES) {

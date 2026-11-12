@@ -1,8 +1,9 @@
 // The one writer of the page selections in caret and visual mode. It paints a span, keeps the ends of each selection as it left them, and tells a later change by someone else (a drag, a click, a find, a page script) from its own paint by comparing those ends.
+// Caret mode writes no selection: its cell is a highlight, so any selection there is outside input.
 // It compares at the moment of asking and listens to no `selectionchange`: Firefox fires that event late, for this script's own paints and measures too.
 
-import { deepest_focused_element } from "../editable.ts";
 import { page_selection_cursor, selection_span } from "./page_selection.ts";
+import { CARET_NAMES, create_painter } from "./find_paint.ts";
 import { apply_selection_colors, clear_selection_colors, keep_selection_colors } from "./selection_colors.ts";
 import { with_caret } from "./selection_state.ts";
 import type { CaretMode, Cursor, Span } from "./selection_state.ts";
@@ -28,13 +29,10 @@ const same_ends = (one: readonly unknown[], other: readonly unknown[]) => one.le
 
 const mark_of = (model: TextModel): SelectionMark => selections_of(model).map((selection) => ({ selection, ends: ends_of(selection) }));
 
-function in_focused_editable(selection: Selection, focused: Element | null): boolean {
-  return focused instanceof HTMLElement && focused.isContentEditable && focused.contains(selection.anchorNode);
-}
-
-export function create_selection_mirror(deps = { focused_element_: deepest_focused_element }) {
+export function create_selection_mirror() {
   // The selections as the last paint left them. Empty outside a session.
   let painted: SelectionMark = [];
+  const cell = create_painter(CARET_NAMES);
 
   // A Range stays in one tree, so a span across a shadow root or a frame takes one range per tree. Firefox keeps several ranges in one selection.
   function draw(model: TextModel, { from, to }: Span): void {
@@ -55,7 +53,8 @@ export function create_selection_mirror(deps = { focused_element_: deepest_focus
   }
 
   return {
-    paint(model: TextModel, span: Span): void {
+    // Caret mode draws `span`, one character, as the cell. A line break has no character to cover, so the caret there is not drawn.
+    paint(model: TextModel, span: Span, mode: CaretMode): void {
       // The last paint can sit in a document the model no longer reads, such as a frame that lost its text.
       for (const { selection } of painted) {
         try {
@@ -63,7 +62,10 @@ export function create_selection_mirror(deps = { focused_element_: deepest_focus
         } catch {}
       }
       for (const selection of selections_of(model)) selection.removeAllRanges();
-      draw(model, span);
+      if (mode !== "caret") {
+        cell.clear();
+        draw(model, span);
+      } else cell.paint(model, { from: [span.from], width: 1 }, 0, undefined, model.text[span.from] === "\n" ? [] : [0]);
       painted = mark_of(model);
       keep_selection_colors(model.trees);
     },
@@ -111,16 +113,16 @@ export function create_selection_mirror(deps = { focused_element_: deepest_focus
 
     set_mode_colors_: (mode: CaretMode): Promise<void> => apply_selection_colors(mode),
 
-    // Ends the session's selection in `model`, in this document and wherever the last paint left it, such as a frame that lost its text. A focused contenteditable field keeps its own caret in the document selection.
-    clear(model: TextModel | undefined): void {
-      const focused = deps.focused_element_();
-      for (const selection of [...painted.map((record) => record.selection), ...(model ? selections_of(model) : []), getSelection()]) {
+    // Ends the session's cell and selection, wherever the last paint left them, such as a frame that lost its text. A selection that moved since is someone else's, such as a focused contenteditable field's caret, and stays.
+    clear(): void {
+      for (const { selection, ends } of painted) {
         // A frame that left the page throws on any read of its selection.
         try {
-          if (selection && !in_focused_editable(selection, focused)) selection.removeAllRanges();
+          if (same_ends(ends_of(selection), ends)) selection.removeAllRanges();
         } catch {}
       }
       painted = [];
+      cell.clear();
       clear_selection_colors();
     },
   };

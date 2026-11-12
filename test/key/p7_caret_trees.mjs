@@ -4,8 +4,8 @@
 
 export const areas = ["caret"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event, in_active_tab, badge_is, escape_to_normal, hint_label_count, run_line }) {
-  const selection_styles = `[document, ...[...document.querySelectorAll("*")].map((element) => element.shadowRoot), ...[...document.querySelectorAll("iframe")].map((frame) => frame.contentDocument)].filter(Boolean).flatMap((tree) => [...tree.adoptedStyleSheets]).filter((sheet) => [...sheet.cssRules].some((rule) => rule.cssText.includes("::selection"))).length`;
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, sleep, scroll_report_wait_ms, scroll_of, last_scroll_y, events, wait_event, in_active_tab, shown_range_in, badge_is, escape_to_normal, hint_label_count, run_line }) {
+  const selection_styles = `[document, ...[...document.querySelectorAll("*")].map((element) => element.shadowRoot), ...[...document.querySelectorAll("iframe")].map((frame) => frame.contentDocument)].filter(Boolean).flatMap((tree) => [...tree.adoptedStyleSheets]).filter((sheet) => [...sheet.cssRules].some((rule) => /::selection|::highlight\\(oasis-caret\\)/.test(rule.cssText))).length`;
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
   const last_selection = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id).at(-1)?.text;
 
@@ -149,10 +149,15 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     const mark = events.length;
     await press_keys("gV");
     await wait_event(mark, selection_is(page_id, "c"), "the caret on the title");
-    for (const press of ["first", "second", "third"]) await press_and_wait_for_move_in_tree(page_id, "j", `the ${press} j to move the caret`);
+    // The page reports an empty caret as the cell leaves it, so each j waits for the caret's new character, wherever it shows.
+    for (const press of ["first", "second"]) {
+      const mark_j = events.length;
+      await press_keys("j");
+      await wait_event(mark_j, (event) => event.type === "selection" && event.page_id.startsWith(page_id) && event.text !== "", `the ${press} j to move the caret`);
+    }
     await wait_event(mark, selection_is(`${page_id}_inner`, "i"), "j into the frame's first paragraph");
     await escape_to_normal(page_id);
-    await poll_until("Escape to clear the selection in the frame", () => last_selection(`${page_id}_inner`) === "");
+    await poll_until("Escape to clear the caret in the frame", () => last_selection(`${page_id}_inner`) === "");
   });
 
   await run_case("a frame removed under the caret leaves caret mode working on the page", async () => {
@@ -172,7 +177,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
   await run_case("caret in a tall frame that is already on screen does not scroll the page", async () => {
     const page_id = "frames_tall";
     await open_page("caret_tall_frame", page_id, { new_tab: true, keys_page_id: `${page_id}_frame` });
-    const frame_selection = `document.getElementById("tall").contentWindow.getSelection().toString()`;
+    const frame_selection = `String(${shown_range_in('document.getElementById("tall").contentDocument')} ?? "")`;
     const scroll_y = async () => await in_active_tab("scrollY");
     // The load handler scrolls the page. Its scroll report comes after the scroll, so the wait is for the report: a later scroll event is then the caret's.
     await poll_until("the page to report its scroll to the frame text", () => last_scroll_y(page_id) > 1000);
@@ -184,9 +189,9 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await sleep(scroll_report_wait_ms);
     expect(!events.slice(mark).some(scroll_of(page_id)), "the page scrolled with the caret already on screen");
     expect((await scroll_y()) === before, `the page scrolled from ${before} to ${await scroll_y()} with the caret already on screen`);
-    // The frame holds the focus and reports only keydowns, so the frame's own selection shows that Escape arrived.
+    // The frame holds the focus and reports only keydowns, so the frame's own cell shows that Escape arrived.
     await press_keys("-k", "Escape");
-    await poll_until("Escape to clear the selection in the frame", async () => (await in_active_tab(frame_selection)) === "");
+    await poll_until("Escape to clear the caret in the frame", async () => (await in_active_tab(frame_selection)) === "");
   });
 
   await run_case("hint --caret on a frame from another origin shows a notice and stays in normal mode", async () => {
