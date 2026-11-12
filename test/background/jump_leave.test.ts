@@ -23,14 +23,11 @@ function make(stepping = false, open = true) {
   const leave = create_jump_leave({ store, is_stepping: () => state.stepping, is_open: async () => open });
   const sender = (url: string, extra = {}) => ({ incognito: false, id: 5, window_id: 1, url, frame_id: 0, ...extra });
   const tab = (incognito = false) => ({ tab_id: 5, window_id: 1, incognito, url: undefined });
-  // The list as a step back from the present sees it.
+  // The whole stored list of window 1, read without moving the cursor.
   const places = async (is_private = false) => {
-    try {
-      const first = await store.step(1, is_private, -1, { url: "https://here.test/", x: 0, y: 0 });
-      return first.url === "https://here.test/" ? [] : [first];
-    } catch {
-      return [];
-    }
+    const key = is_private ? "desertfox_private_jumps" : "desertfox_jumps";
+    const stored = (await session.get(key)) as Record<string, { windows?: Record<string, { entries: unknown[] }> }>;
+    return stored[key]?.windows?.["1"]?.entries ?? [];
   };
   return { leave, store, state, sender, tab, places };
 }
@@ -77,6 +74,7 @@ test("a child frame, and a tab that closed, record nothing", async () => {
   await leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(A, { frame_id: 2 }), A);
   await leave.updated(tab(), { url: B });
   assert.deepEqual(await places(), []);
+  await leave.updated(tab(), { status: "complete" });
   await leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(A), A);
   await leave.forget(5);
   await leave.updated(tab(), { url: B });
@@ -95,5 +93,22 @@ test("a report that arrives after its tab closed leaves nothing held", async () 
   const { leave, sender, tab, places } = make(false, false);
   await leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(A), A);
   await leave.updated(tab(), { url: B });
+  assert.deepEqual(await places(), []);
+});
+
+test("the address change handled before the page's report still records, whatever address the report's tab shows", async () => {
+  const { leave, sender, tab, places } = make();
+  await leave.updated(tab(), { url: B });
+  assert.deepEqual(await places(), []);
+  await leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(A), A);
+  assert.deepEqual(await places(), [{ url: A, x: 0, y: 700 }]);
+});
+
+test("a noted address change does not outlive its load, so a later reload records nothing", async () => {
+  const { leave, sender, tab, places } = make();
+  await leave.updated(tab(), { url: B });
+  await leave.updated(tab(), { status: "complete" });
+  await leave.leave({ type: "jump_leave", x: 0, y: 700 }, sender(B), B);
+  await leave.updated(tab(), { status: "complete" });
   assert.deepEqual(await places(), []);
 });

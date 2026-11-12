@@ -148,6 +148,9 @@ function check_branch(branch: TreeBranch, path: string[], mode: string, input: C
   }
 }
 
+// Only the router reads the offset a jump leaves, so a first press of a content command that moves the view goes to the router.
+const moves_view = (command: Pick<CommandDef, "jumps">, args: Record<string, unknown>): boolean => (typeof command.jumps === "function" ? command.jumps(args) : command.jumps === true);
+
 function keep_node(node: TreeNode, path: string[], mode: string, input: CompileInput, warnings: string[]): boolean {
   if (node.kind === "branch") {
     check_branch(node, path, mode, input, warnings);
@@ -198,8 +201,7 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
     if (result.ok) {
       // Defaults filled in, so a content-side leaf runs without the registry.
       step.invocation = { ...step.invocation, args: result.args };
-      // Only the router reads the offset a jump leaves, so a first press of a content command that moves the view goes to the router.
-      if (typeof command.jumps === "function" ? command.jumps(result.args) : command.jumps === true) step.jump = true;
+      if (moves_view(command, result.args)) step.jump = true;
     } else if (COUNT_MODES.includes(mode) && result.missing_param !== undefined && typeof command.count === "object" && result.missing_param === command.count.param) {
       // The typed count fills this param when the key runs (`50%`), and a key with no count is refused then. A stand-in count lets every other arg get its check. A Firefox shortcut takes no count, so it gets no such pass.
       const stand_in = check_args(command, { ...step.invocation.args, [result.missing_param]: 1 }, input.enum_sources);
@@ -208,6 +210,7 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
         return false;
       }
       step.runs_in = "background";
+      if (moves_view(command, stand_in.args)) step.jump = true;
     } else {
       warnings.push(`${mode}: skipped "${path.join("")}": ${result.error}`);
       return false;

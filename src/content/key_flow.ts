@@ -16,7 +16,7 @@ export type KeyDecision = "cancel" | "pass";
 export type OnReplayPass = () => void;
 
 // A key waiting for replay. Keys handed back by the command line have no way to reach the page again.
-type HeldKey = { token: string; on_replay_pass_?: OnReplayPass | undefined };
+type HeldKey = { token: string; on_replay_pass_?: OnReplayPass | undefined; repeat?: boolean | undefined };
 
 // The keys typed so far in a half-typed sequence. Which-key reads it.
 export type PendingPrefix = { mode: Mode; typed: string[] };
@@ -117,13 +117,13 @@ export function create_key_flow(deps: KeyFlowDeps) {
     held_keys.some((held) => held.token === "<Backspace>" || held.token === "<Escape>") ||
     active.binds_after_(mode, held_tokens(), token);
 
-  const hold = (token: string, on_replay_pass_?: OnReplayPass): KeyDecision => {
+  const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean): KeyDecision => {
     const mode = deps.get_mode_();
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
-    if (deps.in_editable_field_() || (is_chord(token) && !matcher?.binds_after_(mode, held_tokens(), token))) return "pass";
+    if (deps.in_editable_field_() || (is_chord(token) && !matcher?.binds_after_(mode, held_tokens(), token) && !browser_chords?.children[token])) return "pass";
     // Before the keymap is read nothing is known to bind, so every plain key waits.
-    if (!matcher || waits_for_replay(matcher, mode, token)) {
-      held_keys.push({ token, on_replay_pass_ });
+    if (!matcher || browser_chords?.children[token] || waits_for_replay(matcher, mode, token)) {
+      held_keys.push({ token, on_replay_pass_, repeat });
       return "cancel";
     }
     const last_held = held_keys.at(-1)?.token;
@@ -179,9 +179,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
   // A replayed key can start another load, and the keys behind it wait for that load too.
   const replay = () => {
     while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
-      const { token, on_replay_pass_ } = held_keys.shift()!;
+      const { token, on_replay_pass_, repeat } = held_keys.shift()!;
       if (token === SEQUENCE_BREAK) reset_sequence_();
-      else if (decide(matcher, token, false) === "pass") on_replay_pass_?.();
+      else if (decide(matcher, token, repeat === true) === "pass") on_replay_pass_?.();
     }
   };
 
@@ -191,7 +191,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
         reset_sequence_();
         return "pass";
       }
-      if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_);
+      if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_, repeat);
       return decide(matcher, token, repeat);
     },
     reset_sequence_,

@@ -271,3 +271,35 @@ test("two quick steps from one tab to two other tabs: the newer step wins, one s
   assert.equal(activations.at(-1), "activate 2", fakes.log.join(" | "));
   assert.deepEqual(fakes.pushes(), ["push 2 -1 arrival"], fakes.log.join(" | "));
 });
+
+test("an origin's older arrival that already ended cannot cancel another tab's arrival at the same target", async () => {
+  const { create_address_arrivals } = await import("../../src/background/address_arrival.ts");
+  const watches: { tab_id: number; resolve: (result: PageReady) => void }[] = [];
+  const arrivals = create_address_arrivals<number>({
+    list_tabs: async () => [],
+    activate_tab: async () => {},
+    focus_window: async () => {},
+    navigate: async () => {},
+    watch: (tab_id) => {
+      const entry = { tab_id, resolve: (_: PageReady) => {} };
+      const done = new Promise<PageReady>((resolve) => (entry.resolve = resolve));
+      watches.push(entry);
+      return { navigated: () => false, stop: () => entry.resolve("gone"), done: () => done } satisfies PageWatch;
+    },
+    show_refusal: async () => {},
+    failed_text: "failed",
+  });
+  const origin = (id: number) => ({ id, window_id: 1, incognito: false });
+  const target = (id: number) => tab(id, `https://t${id}.test/`);
+  const push = async () => ({ ok: true });
+  // Tab 1 goes to tab 2, and that arrival ends.
+  await arrivals.go(origin(1), target(2), "https://t2.test/", 1, push);
+  watches[0]!.resolve("ready");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(arrivals.is_arriving(2), false);
+  // Tab 3 goes to tab 2, and waits. Then tab 1 goes to tab 4.
+  await arrivals.go(origin(3), target(2), "https://t2.test/", 2, push);
+  await arrivals.go(origin(1), target(4), "https://t4.test/", 3, push);
+  assert.equal(arrivals.is_arriving(2), true, "tab 1's new step cancelled tab 3's arrival");
+  assert.equal(arrivals.is_arriving(4), true);
+});
