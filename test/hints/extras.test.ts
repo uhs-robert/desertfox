@@ -1723,7 +1723,7 @@ test("a hover of this frame sends no release to the others", async () => {
 
 test("the frame that holds a hover releases it when the release arrives, with no session", async () => {
   const page = await page_with(["one"]);
-  assert.equal(page.deliver({ type: "hint_frames_unhover" }), undefined);
+  assert.equal(page.deliver({ type: "hint_frames_unhover", session_id: "s1" }), undefined);
 });
 
 test("across frames an end that reaches the frame before the start answer ends the run on that session", async () => {
@@ -1734,9 +1734,10 @@ test("across frames an end that reaches the frame before the start answer ends t
   await settle();
   page.deliver({ type: "hint_frames_end", session_id: "s1" });
   answer_start(across_answer(["a"], ["a"])());
-  assert.deepEqual(await answer, { ok: true, cancelled: true });
-  assert.equal(page.labels().length, 0);
+  await settle();
   assert.equal(page.mode(), "normal");
+  assert.equal(page.labels().length, 0);
+  assert.deepEqual(await answer, { ok: true, cancelled: true });
 });
 
 test("across frames an end for another session does not end the run", async () => {
@@ -1750,4 +1751,94 @@ test("across frames an end for another session does not end the run", async () =
   await settle();
   assert.equal(page.mode(), "hint");
   assert.deepEqual(page.labels(), ["a"]);
+});
+
+test("across frames a mode that fails to start in the owner leaves the keys typed ahead to replay here", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: false, message: "Could not load caret mode", left: ["x"] } });
+  await pick_with_typeahead(page, { action: "caret" }, ["s", "x"]);
+  assert.deepEqual(page.held_key_batches, [["x"]]);
+});
+
+test("across frames a rapid run with one text match in another frame sends the keys typed ahead and replays what comes back", async () => {
+  const page = await page_with(["one"]);
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  answer_picks_with(page, { s: { ok: true, left: ["x", "y"] } });
+  void page.run({ frames: "all_frames", rapid: true, text: "two" });
+  await settle();
+  page.type("x");
+  page.type("y");
+  answer_start(across_answer(["s"], [])());
+  await settle();
+  assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s", keys: ["x", "y"] }]);
+  assert.deepEqual(page.held_key_batches, [["x", "y"]]);
+});
+
+test("across frames an end noted during one start does not end a later run that gets the same session id", async () => {
+  const page = await page_with(["one"]);
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.deliver({ type: "hint_frames_end", session_id: "s0" });
+  answer_start({ ...across_answer(["a"], ["a"])(), session_id: "s1" });
+  await settle();
+  page.escape();
+  void page.run({ frames: "all_frames" });
+  await settle();
+  answer_start({ ...across_answer(["a"], ["a"])(), session_id: "s0" });
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.deepEqual(page.labels(), ["a"]);
+});
+
+test("across frames Escape releases each pending remote hover with the session of its own pick, once the answer is in", async () => {
+  const page = await page_with(["one"]);
+  let next = 0;
+  page.answer_start(() => ({ ...across_answer(["a", "s"], ["a"])(), session_id: `h${++next}` }));
+  const answers: ((reply: unknown) => void)[] = [];
+  page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? new Promise((resolve) => answers.push(resolve)) : undefined));
+  void page.run({ action: "hover", rapid: true, frames: "all_frames" });
+  await settle();
+  page.type("s");
+  await settle();
+  page.type("s");
+  await settle();
+  page.unhover();
+  answers[1]!({ ok: true });
+  await settle();
+  const released = () => page.sent.filter((message) => (message as { type: string }).type === "hint_frames_unhover");
+  assert.deepEqual(released(), [{ type: "hint_frames_unhover", session_id: "h2" }]);
+  answers[0]!({ ok: true });
+  await settle();
+  assert.deepEqual(released(), [{ type: "hint_frames_unhover", session_id: "h2" }, { type: "hint_frames_unhover", session_id: "h1" }]);
+});
+
+test("the owner frame lets go of a hover only for the release that names the pick that made it", async () => {
+  const events: string[] = [];
+  const stub = class {
+    type: string;
+    constructor(type: string) {
+      this.type = type;
+    }
+  };
+  Object.assign(globalThis, { PointerEvent: stub, MouseEvent: stub });
+  try {
+    const page = await page_with(["one", "two"]);
+    Object.assign(page.links[1]!, { dispatchEvent: (event: { type: string }) => (events.push(event.type), true) });
+    page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "hover", filter: "links" } });
+    await settle();
+    page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+    await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s" });
+    assert.ok(events.includes("mouseover"));
+    events.length = 0;
+    page.deliver({ type: "hint_frames_unhover", session_id: "s0" });
+    assert.equal(events.length, 0);
+    page.deliver({ type: "hint_frames_unhover", session_id: "s1" });
+    assert.ok(events.includes("mouseleave"));
+  } finally {
+    delete (globalThis as { PointerEvent?: unknown }).PointerEvent;
+    delete (globalThis as { MouseEvent?: unknown }).MouseEvent;
+  }
 });

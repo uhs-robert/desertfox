@@ -183,8 +183,8 @@ export function create_hint_frames(deps: HintFramesDeps) {
       if (ended) void send_quietly(tab_id, { type: "hint_frames_end", session_id });
     },
 
-    // To every frame, because the session that picked the hover is gone and the frame that holds the hover is not known. A frame with nothing hovered ignores it.
-    unhover: (tab_id: number): Promise<void> => send_quietly(tab_id, { type: "hint_frames_unhover" }).then(() => undefined),
+    // To every frame, because the session that picked the hover is gone and the frame that holds the hover is not known. A frame that no pick of that session hovered ignores it.
+    unhover: (tab_id: number, session_id: string): Promise<void> => send_quietly(tab_id, { type: "hint_frames_unhover", session_id }).then(() => undefined),
 
     // A load replaces every frame, so nothing is left to tell. An address change the page makes itself keeps the frames and the session.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> => (change.status === "loading" && change.url === undefined ? forget(tab_id) : Promise.resolve()),
