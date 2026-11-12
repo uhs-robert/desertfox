@@ -1,5 +1,6 @@
 // One set of hint labels across every frame of a tab, for `hint --frames=all_frames`. The keyboard frame starts a session, every frame that runs the hints bundle reports how many candidates it found, and the background hands out one prefix-free label set. The keyboard frame keeps the typing rules and sends its typed prefix and its pick here, and this passes them on to the frames that own the labels.
 // The session lives in `storage.session`, so a restarted background still routes typed keys and picks. Only the wait for reports is in memory: a restart ends it, and the keyboard frame's start request fails with it.
+// Nothing on the wait awaits a browser call: Firefox can leave an injection or a message to a navigating frame unanswered, and only the deadline ends the wait then.
 
 import { clean_letters, make_labels } from "../content/hints/labels.ts";
 import type { HintFramesCollect, HintFramesEnd, HintFramesLabels, HintFramesPick, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../shared/messages.ts";
@@ -14,14 +15,13 @@ export type HintFramesMessage = HintFramesCollect | HintFramesLabels | HintFrame
 
 export type HintFramesDeps = {
   storage: SessionStorage;
-  // Runs the hints bundle in every frame of the tab that takes scripts, and resolves with how many ran it. Rejects when one frame refuses, while the others still run it.
+  // Runs the hints bundle in every frame of the tab that takes scripts, and resolves with how many ran it. Rejects when one frame refuses, while the others still run it. May never settle.
   inject_all: (tab_id: number) => Promise<number>;
   // To one frame, or with no frame to every frame of the tab.
   send: (tab_id: number, message: HintFramesMessage, frame_id?: number) => Promise<unknown>;
   new_session_id: () => string;
   set_timer: (callback: () => void, delay_ms: number) => unknown;
   clear_timer: (handle: unknown) => void;
-  now: () => number;
   wait_ms: number;
 };
 
@@ -30,7 +30,6 @@ export type HintFramesDeps = {
 export type HintFramesSession = {
   session_id: string;
   keyboard_frame: number;
-  started_ms: number;
   reports?: Record<string, number>;
   labels?: Record<string, string[]>;
 };
@@ -39,6 +38,8 @@ export type HintFramesSession = {
 type Wait = { expected?: number; wake: () => void };
 
 const key_of = (tab_id: number): string => HINT_FRAMES_STORAGE_PREFIX + tab_id;
+
+const whole_count = (count: unknown): count is number => Number.isInteger(count) && (count as number) >= 0;
 
 const is_outcome = (answer: unknown): answer is Outcome => typeof (answer as Outcome | undefined)?.ok === "boolean";
 
@@ -78,20 +79,22 @@ export function create_hint_frames(deps: HintFramesDeps) {
   // A frame that navigated keeps its id, so the session id in every message lets its new page ignore what was meant for the old one.
   const send_quietly = (tab_id: number, message: HintFramesMessage, frame_id?: number) => deps.send(tab_id, message, frame_id).catch(() => undefined);
 
+  // The keyboard frame's own count is in already, so only the other frames race the deadline.
   async function collect(tab_id: number, session_id: string, args: Record<string, unknown>): Promise<void> {
     let wake!: () => void;
     const woken = new Promise<void>((resolve) => (wake = resolve));
     const wait: Wait = { wake };
     waits.set(session_id, wait);
     const timer = deps.set_timer(wake, deps.wait_ms);
+    // The bundle must run before the ask, or a frame that loads it now misses the ask. A frame that refuses scripts rejects the count, and the deadline ends the wait.
+    void deps.inject_all(tab_id).then(
+      (expected) => {
+        wait.expected = expected;
+        return ask_frames(tab_id, session_id, args);
+      },
+      () => ask_frames(tab_id, session_id, args),
+    );
     try {
-      // The bundle must run before the ask, or a frame that loads it now misses the ask. A frame that refuses scripts rejects the count, and the timer ends the wait.
-      const expected = await deps.inject_all(tab_id).catch(() => undefined);
-      if (expected !== undefined) wait.expected = expected;
-      await send_quietly(tab_id, { type: "hint_frames_collect", session_id, args });
-      const session = await in_turn(() => read(tab_id));
-      if (session?.session_id === session_id) wake_when_all_reported(session);
-      else wake();
       await woken;
     } finally {
       deps.clear_timer(timer);
@@ -99,17 +102,25 @@ export function create_hint_frames(deps: HintFramesDeps) {
     }
   }
 
+  // A newer run can start while this one's injection runs. Its frames keep the latest ask only, so an ask for a session that has ended must not go out after the newer one.
+  async function ask_frames(tab_id: number, session_id: string, args: Record<string, unknown>): Promise<void> {
+    const session = await in_turn(() => read(tab_id));
+    if (session?.session_id !== session_id) return;
+    void send_quietly(tab_id, { type: "hint_frames_collect", session_id, args });
+    wake_when_all_reported(session);
+  }
+
   return {
     // A new run in the tab ends the one before, in every frame.
-    start: async (tab_id: number, frame_id: number, request: Pick<HintFramesStart, "letters" | "args">): Promise<HintFramesStartAnswer> => {
+    start: async (tab_id: number, frame_id: number, request: Pick<HintFramesStart, "letters" | "args" | "count">): Promise<HintFramesStartAnswer> => {
       const session_id = deps.new_session_id();
       const replaced = await in_turn(async () => {
         const old = await read(tab_id);
-        await write(tab_id, { session_id, keyboard_frame: frame_id, started_ms: deps.now(), reports: {} });
+        await write(tab_id, { session_id, keyboard_frame: frame_id, reports: whole_count(request.count) ? { [frame_id]: request.count } : {} });
         end_wait(old);
         return old;
       });
-      if (replaced) await send_quietly(tab_id, { type: "hint_frames_end", session_id: replaced.session_id });
+      if (replaced) void send_quietly(tab_id, { type: "hint_frames_end", session_id: replaced.session_id });
       await collect(tab_id, session_id, request.args);
       const labeled = await in_turn(async () => {
         const session = await read(tab_id);
@@ -121,18 +132,17 @@ export function create_hint_frames(deps: HintFramesDeps) {
       });
       if (!labeled?.labels) return { ok: false, reason: "ended" };
       const shares = Object.entries(labeled.labels).filter(([owner]) => Number(owner) !== frame_id);
-      await Promise.all(shares.map(([owner, labels]) => send_quietly(tab_id, { type: "hint_frames_labels", session_id, labels }, Number(owner))));
+      for (const [owner, labels] of shares) void send_quietly(tab_id, { type: "hint_frames_labels", session_id, labels }, Number(owner));
       return { ok: true, session_id, labels: Object.values(labeled.labels).flat(), own_labels: labeled.labels[frame_id] ?? [] };
     },
 
-    // A frame's count. Only the first report of a frame in the current session counts, and only within the wait. The deadline holds in storage too, so a report to a restarted background, whose wait is gone, cannot fill a session nobody labels.
+    // A frame's count. Only the first report of a frame counts, and only while this background waits for the session. A restarted background has no wait, so a report cannot fill a session nobody labels.
     report: (tab_id: number, frame_id: number, session_id: string, count: unknown): Promise<void> =>
       in_turn(async () => {
-        if (!Number.isInteger(count) || (count as number) < 0) return;
+        if (!whole_count(count) || !waits.has(session_id)) return;
         const session = await read(tab_id);
         if (session?.session_id !== session_id || !session.reports || String(frame_id) in session.reports) return;
-        if (deps.now() - session.started_ms > deps.wait_ms) return;
-        const next = { ...session, reports: { ...session.reports, [frame_id]: count as number } };
+        const next = { ...session, reports: { ...session.reports, [frame_id]: count } };
         await write(tab_id, next);
         wake_when_all_reported(next);
       }),
@@ -141,7 +151,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
       const session = await labeled_for(tab_id, frame_id, session_id);
       if (!session?.labels) return;
       const others = Object.keys(session.labels).map(Number).filter((owner) => owner !== frame_id);
-      await Promise.all(others.map((owner) => send_quietly(tab_id, { type: "hint_frames_typed", session_id, typed }, owner)));
+      for (const owner of others) void send_quietly(tab_id, { type: "hint_frames_typed", session_id, typed }, owner);
     },
 
     // The owner's answer is the pick's. It can wait on the user (a prompt), so it runs outside the turn.
@@ -163,7 +173,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
         end_wait(session);
         return true;
       });
-      if (ended) await send_quietly(tab_id, { type: "hint_frames_end", session_id });
+      if (ended) void send_quietly(tab_id, { type: "hint_frames_end", session_id });
     },
 
     // A load replaces every frame, so nothing is left to tell. An address change the page makes itself keeps the frames and the session.
@@ -188,12 +198,12 @@ export function browser_hint_frames_deps(): HintFramesDeps {
   return {
     storage: browser.storage.session,
     // Document start runs the bundle at once, so a frame that still loads reports instead of holding the labels until it is idle. The bundle registers once per page, so a frame that has it already only counts.
+    // Trap: this skips the bundle host's load map. The bundle sets its ready flag before it registers, so in a frame with no host yet it throws and never registers there later.
     inject_all: async (tab_id) => (await browser.tabs.executeScript(tab_id, { file: "hints.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" })).length,
     send: (tab_id, message, frame_id) => browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id }),
     new_session_id: () => crypto.randomUUID(),
     set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),
     clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
-    now: () => Date.now(),
     wait_ms: HINT_FRAMES_WAIT_MS,
   };
 }

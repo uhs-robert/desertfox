@@ -10,6 +10,7 @@ const LETTERS = "asdfghjkl";
 
 // A fake frame. `count` is what it reports to a collect, `silent` never reports, `gone` rejects every message (removed or navigated with no script), and `pick` answers a pick.
 type FakeFrame = { count: number; silent?: boolean; gone?: boolean; pick?: (label: string) => unknown };
+type StartRequest = { letters: string; args: Record<string, unknown>; count?: number };
 type Sent = { frame_id: number | undefined; message: HintFramesMessage };
 
 const flush = () => new Promise((resume) => setImmediate(resume));
@@ -20,7 +21,8 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
   const timers = new Map<number, () => void>();
   let next_timer = 1;
   let next_session = 0;
-  const clock = { now: 1_000 };
+  // The keyboard frame sends its count with the start and ignores the collect.
+  let keyboard_frame: number | undefined;
   const sent: Sent[] = [];
   let current: HintFrames;
   const deps: HintFramesDeps = {
@@ -35,7 +37,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
       sent.push({ frame_id, message });
       if (frame_id !== undefined && frames[frame_id]?.gone) throw new Error("Could not establish connection. Receiving end does not exist.");
       if (message.type === "hint_frames_collect") {
-        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone) void current.report(TAB, Number(id), message.session_id, frame.count);
+        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void current.report(TAB, Number(id), message.session_id, frame.count);
       }
       if (message.type === "hint_frames_pick") return frames[frame_id!]?.pick?.(message.label);
       return undefined;
@@ -43,17 +45,21 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
     new_session_id: () => `s${++next_session}`,
     set_timer: (callback) => (timers.set(next_timer, callback), next_timer++),
     clear_timer: (handle) => void timers.delete(handle as number),
-    now: () => clock.now,
     wait_ms: HINT_FRAMES_WAIT_MS,
   };
   current = create_hint_frames(deps);
   return {
     data,
     sent,
-    clock,
     timers,
     get hints() {
-      return current;
+      return {
+        ...current,
+        start: (tab_id: number, frame_id: number, request: StartRequest) => {
+          keyboard_frame = frame_id;
+          return current.start(tab_id, frame_id, { ...request, count: request.count ?? frames[frame_id]?.count ?? 0 });
+        },
+      };
     },
     restart: () => (current = create_hint_frames(deps)),
     fire_timers: () => [...timers.values()].forEach((fire) => fire()),
@@ -61,7 +67,8 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
   };
 }
 
-const START = { letters: LETTERS, args: { action: "here", filter: "clickable" } };
+// The harness adds the keyboard frame's own count.
+const START: StartRequest = { letters: LETTERS, args: { action: "here", filter: "clickable" } };
 
 test("one prefix-free label set covers every frame, the top frame first, and the wait ends once all reported", async () => {
   const fake = harness({ 0: { count: 5 }, 3: { count: 4 }, 9: { count: 2 } });
@@ -103,7 +110,6 @@ test("a frame that reports after the wait gets no labels and changes none, and t
   const answer = await pending;
   assert.ok(answer.ok);
   const labeled = structuredClone(fake.data[KEY]);
-  fake.clock.now += HINT_FRAMES_WAIT_MS + 50;
   await fake.hints.report(TAB, 5, "s1", 3);
   assert.deepEqual(fake.data[KEY], labeled);
   assert.deepEqual(fake.of_type("hint_frames_labels"), []);
@@ -213,18 +219,17 @@ test("a restart during the wait drops the session's late reports, and the next r
   // The old wait and its start request die with the background, and its timer never fires.
   fake.timers.clear();
   fake.restart();
-  fake.clock.now += HINT_FRAMES_WAIT_MS + 1;
   await fake.hints.report(TAB, 2, "s1", 1);
-  assert.deepEqual((fake.data[KEY] as { reports: object }).reports, {});
+  assert.deepEqual((fake.data[KEY] as { reports: object }).reports, { 0: 1 });
   const answer = fake.hints.start(TAB, 0, START);
   await flush();
   fake.fire_timers();
-  assert.deepEqual(await answer, { ok: true, session_id: "s2", labels: [], own_labels: [] });
+  assert.deepEqual(await answer, { ok: true, session_id: "s2", labels: ["a"], own_labels: ["a"] });
   assert.equal(fake.of_type("hint_frames_end").at(-1)!.message.session_id, "s1");
 });
 
 test("a closed tab ends the wait at once and leaves nothing stored", async () => {
-  const fake = harness({ 0: { count: 1, silent: true } });
+  const fake = harness({ 0: { count: 1 }, 3: { count: 1, silent: true } });
   const pending = fake.hints.start(TAB, 0, START);
   await flush();
   await fake.hints.forget(TAB);
@@ -252,4 +257,39 @@ test("a report with a count that is not a whole number is dropped", async () => 
   fake.fire_timers();
   const answer = await pending;
   assert.deepEqual(answer.ok && answer.labels, ["a"]);
+});
+
+test("an injection that never answers still ends the wait at the deadline", async () => {
+  // Firefox can leave an injection into a navigating frame unanswered.
+  const fake = harness({ 0: { count: 2 } }, { inject: () => new Promise<number>(() => {}) });
+  const pending = fake.hints.start(TAB, 0, START);
+  await flush();
+  fake.fire_timers();
+  const settled = await Promise.race([pending, new Promise((resume) => setTimeout(() => resume("pending"), 50))]);
+  assert.notEqual(settled, "pending");
+  assert.equal(fake.timers.size, 0);
+});
+
+test("a run whose injection answers after a newer run's sends no collect for its dead session", async () => {
+  const injections: Array<(count: number) => void> = [];
+  const fake = harness({ 0: { count: 1 }, 2: { count: 1 } }, { inject: () => new Promise<number>((resolve) => injections.push(resolve)) });
+  const first = fake.hints.start(TAB, 0, START);
+  await flush();
+  const second = fake.hints.start(TAB, 0, START);
+  await flush();
+  injections[1]!(2);
+  await second;
+  injections[0]!(2);
+  await first;
+  await flush();
+  assert.deepEqual(fake.of_type("hint_frames_collect").map((entry) => entry.message.session_id), ["s2"]);
+});
+
+test("the keyboard frame's own count is in before the wait, so a slow top page keeps its labels", async () => {
+  // Its collect report would come too late. The count in the start does not race the deadline.
+  const fake = harness({ 0: { count: 2, silent: true }, 4: { count: 1 }, 5: { count: 1, silent: true } });
+  const pending = fake.hints.start(TAB, 0, START);
+  await flush();
+  fake.fire_timers();
+  assert.deepEqual(await pending, { ok: true, session_id: "s1", labels: ["a", "s", "d"], own_labels: ["a", "s"] });
 });

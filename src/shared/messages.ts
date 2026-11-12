@@ -409,6 +409,8 @@ export type HintFramesStart = {
   letters: string;
   // The checked `hint.run` args, which every frame finds its candidates with.
   args: Record<string, unknown>;
+  // How many candidates the keyboard frame found, best first. It reports here and ignores the collect, so its own labels never race the wait.
+  count: number;
 };
 
 // `labels` is every label of the session in label order, for the keyboard frame to narrow. `own_labels` are the keyboard frame's own, for its first candidates. Every other frame gets its share in a `HintFramesLabels`. An ended answer means a newer run, a navigation or a closed tab ended the session first.
