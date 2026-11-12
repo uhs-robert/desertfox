@@ -20,8 +20,8 @@ export type KeyOutcome =
   // `text` is set only in text mode: what was typed, and `active` the best match, the one Enter picks.
   | { kind: "handled"; typed: string; still_possible_: number[]; picked?: number; text?: string | undefined; active?: number | undefined };
 
-// `texts` gives the text of each hint, by the index of its label. It is read when text mode needs it.
-export function create_picker(labels: readonly string[], texts: () => readonly string[] = () => []) {
+// `texts` gives the text of each hint, by the index of its label. It is read when text mode needs it. Text mode skips a hint whose text is undefined.
+export function create_picker(labels: readonly string[], texts: () => readonly (string | undefined)[] = () => []) {
   let typed = "";
   // Undefined is label mode. Text mode keeps the matches best first and which of them is active.
   let text: string | undefined;

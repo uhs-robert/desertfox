@@ -1,7 +1,8 @@
 // The `hints` bundle: registers the hint sink and the `hint.run` handler with the host.
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
-import type { Outcome } from "../../shared/messages.ts";
+import type { HintFramesMessage } from "../../background/hint_frames.ts";
+import type { HintFramesStart, HintFramesStartAnswer, Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
@@ -13,7 +14,7 @@ import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
 import { collect, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
-import { clean_letters, make_labels } from "./labels.ts";
+import { clean_letters, make_labels, narrow } from "./labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
 import type { KeyOutcome } from "./pick.ts";
 import { is_hint_char } from "./hint_keys.ts";
@@ -54,6 +55,8 @@ type Session = {
   waiting_tokens_: string[];
   // Rapid mode picks again after each pick.
   rapid: boolean;
+  // `frames=all_frames`: the labels cover every frame of the tab, and this frame owns the keyboard. See `src/background/hint_frames.ts`.
+  across_frames_: boolean;
   filter: HintFilter;
   // Only the images filter takes a picture from a CSS background.
   with_background_: boolean;
@@ -64,10 +67,18 @@ type Session = {
   lower_text_: string | undefined;
   // What a rapid copy has picked so far, in order. The clipboard holds all of it after every pick.
   collected_: string[];
-  ready?: { picker: ReturnType<typeof create_picker>; found: Found[]; view: HintView; stop_following_: () => void };
+  ready?: Labeled & { picker: ReturnType<typeof create_picker>; view: HintView; stop_following_: () => void; relayed_: string };
   // Set while a pick that typed text waits out its grace, see `PICK_GRACE_MS`. Keys that continue the word are dropped.
   settling_?: true;
 };
+
+// What one build labels. `labels` holds every label, also those of other frames, in the picker's order. `own_labels` are this frame's, one per element of `found`. `own_of_` turns a label's index into the index of this frame's element, or undefined for another frame's. `session_id_` is set across frames only.
+type Labeled = { found: Found[]; labels: readonly string[]; own_labels: readonly string[]; own_of_: (index: number) => number | undefined; session_id_?: string };
+
+function single_frame(found: Found[], letters: string[]): Labeled {
+  const labels = make_labels(found.length, letters);
+  return { found, labels, own_labels: labels, own_of_: (index) => index };
+}
 
 function observe_intersecting(elements: Element[]): Promise<Set<Element>> {
   if (elements.length === 0) return Promise.resolve(new Set());
@@ -96,6 +107,12 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
 }
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
+
+// The collect step: what a person can see of the candidates, narrowed by `text`.
+async function shown_of(current: Pick<Session, "filter" | "action" | "lower_text_">, candidates: Found[]): Promise<Found[]> {
+  const visible = await keep_visible_ones(candidates, current.filter, current.action === "inspect");
+  return current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
+}
 
 async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
@@ -227,19 +244,29 @@ const pick_deps = (current: Pick<Session, "args" | "action" | "rapid" | "collect
 // The line opens in this frame, as it does for a key typed here. Keys typed while cmdline.js loads stay held for it.
 const open_line_ = (text: string): Promise<Outcome> => page.desertfox_host.run_command_("cmdline.open", "cmdline", { text });
 
-const perform_pick = (current: Session, element: HTMLElement) => {
+type PickArgs = Pick<Session, "args" | "action" | "rapid" | "collected_" | "with_background_">;
+
+const perform_pick = (current: PickArgs, element: HTMLElement) => {
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, open_line_);
   const result = perform(current.action, element, pick_deps(current), current.with_background_);
   // The hint mode has ended, so the frame is in the mode the hint began in. A refused pick leaves it there.
   if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
   return result;
 };
+// While this frame starts hints across frames, it ignores the collect: the start carries its count.
+let starting = 0;
+
+// To the background, which passes it on. Nothing waits for the answer.
+const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_collect" | "hint_frames_labels" }>) => void browser.runtime.sendMessage(message).catch(() => undefined);
+
 const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), image_action, start_caret_, inspect_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
 
   function end_session(): void {
+    const session_id = session?.ready?.session_id_;
+    if (session_id) send_across({ type: "hint_frames_end", session_id });
     session?.ready?.stop_following_();
     session?.ready?.view.clear_labels_();
     if (session) session.cancelled = true;
@@ -287,12 +314,34 @@ function register(host: BundleHostApi): void {
     if (left.length > 0) host.hold_keys_until_(Promise.resolve(left));
   }
 
+  // Hands this frame's count to the background and waits for the labels of every frame. A background that does not answer leaves this frame's own labels.
+  async function label_across(current: Session, found: Found[], letters: string[]): Promise<Labeled> {
+    starting++;
+    const answer = (await browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length } satisfies HintFramesStart).catch(() => undefined)) as HintFramesStartAnswer | undefined;
+    starting--;
+    if (!answer?.ok) return single_frame(found, letters);
+    if (current.cancelled) send_across({ type: "hint_frames_end", session_id: answer.session_id });
+    const first_own = answer.labels.indexOf(answer.own_labels[0]!);
+    const own_of_ = (index: number) => (index >= first_own && index < first_own + answer.own_labels.length ? index - first_own : undefined);
+    return { found, labels: answer.labels, own_labels: answer.own_labels, own_of_, session_id_: answer.session_id };
+  }
+
+  // A pick of another frame's label goes out before hint mode ends here, so the background routes it before the end. The owner's answer is the pick's.
+  function pick_run(current: Session, labeled: Labeled, index: number): () => unknown {
+    const own = labeled.own_of_(index);
+    if (own !== undefined) return () => perform_pick(current, labeled.found[own]!.element as HTMLElement);
+    const answer = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_, label: labeled.labels[index] });
+    return () => answer;
+  }
+
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   async function build(current: Session, candidates: Found[], first_build: boolean): Promise<void> {
-    const [letters, key_line_setting, visible] = await Promise.all([read_letters(), read_setting("hint_key_line"), keep_visible_ones(candidates, current.filter, current.action === "inspect")]);
+    const [letters, key_line_setting, found] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates)]);
     if (current.cancelled) return;
-    const found = current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
-    if (found.length === 0) {
+    const labeled = current.across_frames_ ? await label_across(current, found, letters) : single_frame(found, letters);
+    if (current.cancelled) return;
+    const { labels, own_of_ } = labeled;
+    if (labels.length === 0) {
       const message = none_message(current.text);
       current.finish({ ok: false, message });
       leave_with_keys(current);
@@ -301,43 +350,52 @@ function register(host: BundleHostApi): void {
       return;
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
-    if (first_build && current.lower_text_ !== undefined && found.length === 1) {
+    if (first_build && current.lower_text_ !== undefined && labels.length === 1) {
+      const run = pick_run(current, labeled, 0);
       const performed = begin_pick(current);
-      leave_with_keys(current, () => performed(() => perform_pick(current, found[0]!.element as HTMLElement)));
+      leave_with_keys(current, () => performed(run));
       return;
     }
     const view = create_view();
-    const labels = make_labels(found.length, letters);
-    view.show(found.map((item, index) => ({ found: item, text: labels[index]! })));
+    view.show(found.map((item, own) => ({ found: item, text: labeled.own_labels[own]! })));
     if (key_line_setting !== false) view.add_key_line_();
-    // Read when text mode first needs the texts, once for this build.
-    let texts: string[] | undefined;
-    const text_of_found_ = () => (texts ??= found.map((item) => text_of(item.element)));
+    // Read when text mode first needs the texts, once for this build. Text mode ranks this frame's hints only.
+    let texts: (string | undefined)[] | undefined;
+    const text_of_found_ = () => (texts ??= labels.map((_label, index) => {
+      const own = own_of_(index);
+      return own === undefined ? undefined : text_of(found[own]!.element);
+    }));
     // Every build starts in label mode. `text` only filters the hints, it does not start text mode, so the labels stay typable.
     const picker = create_picker(labels, text_of_found_);
-    current.ready = { picker, found, view, stop_following_: follow_windows(windows_of(found), view.reposition) };
+    current.ready = { ...labeled, picker, view, stop_following_: follow_windows(windows_of(found), view.reposition), relayed_: "" };
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
     while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
   }
 
-  function show_outcome(view: HintView, outcome: KeyOutcome): void {
-    if (outcome.kind === "handled") view.show_progress_(outcome.typed, new Set(outcome.still_possible_), outcome.text, outcome.active);
+  // The view holds this frame's labels only. The other frames hear the typed prefix through the background, and text mode hides their labels, because no label holds "/".
+  function show_outcome(ready: NonNullable<Session["ready"]>, outcome: KeyOutcome): void {
+    if (outcome.kind !== "handled") return;
+    const { own_of_ } = ready;
+    ready.view.show_progress_(outcome.typed, new Set(outcome.still_possible_.flatMap((index) => own_of_(index) ?? [])), outcome.text, outcome.active === undefined ? undefined : own_of_(outcome.active));
+    const typed = outcome.text === undefined ? outcome.typed : "/";
+    if (ready.session_id_ && typed !== ready.relayed_) send_across({ type: "hint_frames_typed", session_id: ready.session_id_, typed });
+    ready.relayed_ = typed;
   }
 
   function pick(current: Session, index: number): void {
     const ready = current.ready!;
     delete current.settling_;
-    const picked = ready.found[index]!.element as HTMLElement;
+    const run = pick_run(current, ready, index);
     const performed = begin_pick(current);
     if (!current.rapid) {
-      leave_with_keys(current, () => performed(() => perform_pick(current, picked)));
+      leave_with_keys(current, () => performed(run));
       return;
     }
     // Rapid: the pick may delete or move elements, so drop these labels and label the page again.
     ready.stop_following_();
     ready.view.clear_labels_();
     delete current.ready;
-    performed(() => perform_pick(current, picked));
+    performed(run);
     if (!current.cancelled) void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_), false);
   }
 
@@ -353,7 +411,7 @@ function register(host: BundleHostApi): void {
       ready.view.rotate_overlaps_();
       return "handled";
     }
-    show_outcome(ready.view, outcome);
+    show_outcome(ready, outcome);
     if (outcome.picked !== undefined) {
       const picked_index = outcome.picked;
       // Enter is a deliberate pick. A letter that left one match is the key that may be followed by more of the word.
@@ -421,7 +479,7 @@ function register(host: BundleHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", across_frames_: args.frames === "all_frames", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true);
@@ -429,12 +487,83 @@ function register(host: BundleHostApi): void {
     return { picked };
   }
 
+  answer_across();
+
   host.register_handler_("hint.run", (args): Promise<Outcome> => {
     end_session();
     const started = start_hints(args);
     // Keys typed while the background answers wait, so they reach hint mode and not normal mode. A page hidden before the answer ends the hold, as the answer is then lost.
     host.hold_keys_until_(started.then(() => []), true);
     return started.then((outcome) => ("picked" in outcome ? outcome.picked : outcome));
+  });
+}
+
+// Another frame's hints across frames: this frame finds its candidates, reports how many, draws the labels the background hands it, follows the typed prefix and runs the pick it owns. Only the frame that started the session reads keys, so this frame stays in its mode.
+type Across = { session_id: string; args: Record<string, unknown>; found?: Found[]; labels?: readonly string[]; typed: string; view?: HintView; stop_following_?: () => void };
+
+function answer_across(): void {
+  let across: Across | undefined;
+  const clear = () => {
+    across?.stop_following_?.();
+    across?.view?.clear_labels_();
+    across = undefined;
+  };
+  const show_typed = (current: Across) => current.view?.show_progress_(current.typed, new Set(narrow(current.labels!, current.typed).still_possible_));
+
+  async function collect_here(current: Across): Promise<void> {
+    const { args } = current;
+    const action = args.action as HintAction;
+    const filter = args.filter as HintFilter;
+    const text = (args.text as string | undefined) || undefined;
+    let found: Found[] = [];
+    try {
+      const candidates = find_candidates(filter, args.selector as string | undefined, action, await read_site_selectors(() => {}));
+      found = await shown_of({ filter, action, lower_text_: text?.toLowerCase() }, candidates);
+    } catch {
+      // A selector that does not parse labels nothing here. The keyboard frame shows the notice.
+    }
+    if (across !== current) return;
+    current.found = found;
+    void browser.runtime.sendMessage({ type: "hint_frames_report", session_id: current.session_id, count: found.length }).catch(() => undefined);
+  }
+
+  // The answer of a pick is the action's outcome, which the keyboard frame shows.
+  function pick_here(current: Across, label: string): Promise<Outcome> {
+    const index = current.labels?.indexOf(label) ?? -1;
+    const element = current.found?.[index]?.element as HTMLElement | undefined;
+    clear();
+    if (!element) return Promise.resolve({ ok: false, message: "That hint is gone" });
+    const { args } = current;
+    const pick_args: PickArgs = { args, action: args.action as HintAction, rapid: false, collected_: [], with_background_: args.filter === "images" };
+    return Promise.resolve()
+      .then(() => perform_pick(pick_args, element))
+      .then((result) => (result as Outcome | undefined) ?? done, (error: unknown) => ({ ok: false, message: String((error as Error)?.message ?? error) }));
+  }
+
+  browser.runtime.onMessage.addListener((raw: unknown) => {
+    const message = raw as HintFramesMessage;
+    if (message.type === "hint_frames_collect") {
+      if (starting > 0) return undefined;
+      clear();
+      across = { session_id: message.session_id, args: message.args, typed: "" };
+      void collect_here(across);
+      return undefined;
+    }
+    const current = across;
+    if (!message.type?.startsWith("hint_frames_") || current?.session_id !== message.session_id) return undefined;
+    if (message.type === "hint_frames_labels" && current.found) {
+      current.labels = message.labels;
+      current.view = create_view();
+      current.view.show(message.labels.map((text, index) => ({ found: current.found![index]!, text })));
+      current.stop_following_ = follow_windows(windows_of(current.found), current.view.reposition);
+      show_typed(current);
+    } else if (message.type === "hint_frames_typed") {
+      // The prefix can arrive before the labels, which then start from it.
+      current.typed = message.typed;
+      if (current.labels) show_typed(current);
+    } else if (message.type === "hint_frames_pick") return pick_here(current, message.label);
+    else if (message.type === "hint_frames_end") clear();
+    return undefined;
   });
 }
 

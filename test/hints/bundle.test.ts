@@ -16,11 +16,14 @@ test("the hints bundle registers a hint sink and hint.run, and registers once", 
     escape_: () => void modes.push("normal"),
   };
   (globalThis as Record<string, unknown>).window = { desertfox_host: host };
+  const message_listeners: unknown[] = [];
+  (globalThis as Record<string, unknown>).browser = { runtime: { onMessage: { addListener: (listener: unknown) => void message_listeners.push(listener) } } };
   const bundle_url = new URL("../../src/content/hints/main.ts", import.meta.url).href;
   await import(`${bundle_url}?first`);
   await import(`${bundle_url}?second`);
   assert.deepEqual(registered, ["page.follow", "page.focus_field", "page.heading", "copy.links", "hint.unhover", "hint.key", "heading.list", "heading.go", "heading.clear", "hint.run"]);
   assert.deepEqual([...sinks.keys()], ["hint"]);
+  assert.equal(message_listeners.length, 1);
   assert.deepEqual(modes, []);
   assert.equal(sinks.get("hint")!.on_token_("a"), "pass");
   // With no session the keys go on to the page and the keymap, whatever they mean in hint mode.
