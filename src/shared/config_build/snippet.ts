@@ -6,7 +6,8 @@
 // `main` marks the one free-text param a bare word fills, as in the command grammar.
 // `short=p` gives a bool or valued param the flag `-p`. An enum maps values to letters: `short=tab:t,window:w`.
 // A bare `default=` word that names a context source (current_url, selection,
-// clipboard, bookmark_title) is that source. A double-quoted default is always a literal string.
+// clipboard, bookmark_title, search_query) is that source. `default=selection,search_query` reads the selection, else the query of the results page.
+// A double-quoted default is always a literal string.
 
 import type { ContextSourceName, Mode, ParamDef, ParamType, ParamValue } from "../command.ts";
 import { SLOTS } from "../engines/index.ts";

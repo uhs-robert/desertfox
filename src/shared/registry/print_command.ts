@@ -24,8 +24,11 @@ const PLAIN_WORD = /^[A-Za-z0-9_./:%+,~-]+$/;
 
 const quoted = (text: string): string => (PLAIN_WORD.test(text) ? text : single_quote(text));
 
+// A chain prints as `@selection,search_query`, which the command line reads back as the same chain.
+const source_text = (source: { from: string; then?: string }): string => `@${source.from}${source.then === undefined ? "" : `,${source.then}`}`;
+
 function value_text(value: unknown): string {
-  return is_context_source(value) ? `@${value.from}` : quoted(String(value));
+  return is_context_source(value) ? source_text(value) : quoted(String(value));
 }
 
 const dashed = (word: string): string => word.replaceAll("_", "-");
@@ -98,7 +101,7 @@ function assemble(command: Printable, args: Record<string, unknown>, options: Pr
   return words.join(" ");
 }
 
-const unquoted_text = (value: unknown): string => (is_context_source(value) ? `@${value.from}` : String(value));
+const unquoted_text = (value: unknown): string => (is_context_source(value) ? source_text(value) : String(value));
 
 // Reads back as the same args. A value that would be misread (a source, a flag, an engine name) fails this.
 function reads_back(command: Printable, args: Record<string, unknown>, options: PrintOptions, text: string): boolean {
@@ -117,7 +120,7 @@ function reads_back(command: Printable, args: Record<string, unknown>, options: 
   const got = Object.fromEntries(Object.entries(parsed.invocation.args ?? {}).filter(([, value]) => value !== ""));
   if (Object.keys(got).length !== given.length) return false;
   return given.every(([name, value]) =>
-    is_context_source(value) ? is_context_source(got[name]) && (got[name] as { from: string }).from === value.from : got[name] === (value === true ? true : String(value)),
+    is_context_source(value) ? is_context_source(got[name]) && source_text(got[name] as { from: string; then?: string }) === source_text(value) : got[name] === (value === true ? true : String(value)),
   );
 }
 

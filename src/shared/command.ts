@@ -19,7 +19,7 @@ export type RunsIn = "background" | "content";
 
 export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title" | "search_query";
 
-// `then` is read when `from` has nothing: `{ from: "selection", then: "search_query" }` is the selection, else the query of the results page. Only a command's own default carries it.
+// `then` is read when `from` has nothing: `{ from: "selection", then: "search_query" }` is the selection, else the query of the results page. A command's default and a snippet header (`default=selection,search_query`) carry it.
 export type ContextSource = { from: ContextSourceName; then?: ContextSourceName };
 
 export type ParamValue = string | number | boolean;

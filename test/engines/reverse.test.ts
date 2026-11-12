@@ -44,6 +44,12 @@ test("a fixed query pair of the template must be on the page", () => {
   assert.equal(read_query(issues, "https://github.com/search?q=a&type=code"), undefined);
 });
 
+test("a template that repeats a fixed query name reads its own page", () => {
+  const commons = engine("https://commons.example/w/index.php?search_fields=title&search_fields=tags&search={query}");
+  assert.equal(read_query(commons, "https://commons.example/w/index.php?search_fields=title&search_fields=tags&search=cat"), "cat");
+  assert.equal(read_query(commons, "https://commons.example/w/index.php?search_fields=title&search=cat"), undefined);
+});
+
 test("a page slot in the template reads as any text, and a scope before the query is dropped", () => {
   const repo = engine("https://github.com/search?q=repo:{repo} {query}&type=code");
   assert.equal(read_query(repo, "https://github.com/search?q=repo:foo%2Fbar%20the%20thing&type=code"), "the thing");
@@ -86,6 +92,10 @@ test("a reverse that cannot be used is refused", () => {
   assert.match(reverse_problem("(unclosed")!, /valid/);
   assert.match(reverse_problem("a")!, /one capture group/);
   assert.match(reverse_problem("(a)(b)")!, /one capture group/);
-  assert.match(reverse_problem("(a+)+b(c)")!, /backtrack/);
+  assert.match(reverse_problem("(a+)+b(c)")!, /quantifier on a group/);
+  assert.match(reverse_problem("(?:a|aa)+(x)")!, /quantifier on a group/);
+  assert.match(reverse_problem("(?:a)?(x)")!, /quantifier on a group/);
+  assert.match(reverse_problem("|(a)\\")!, /valid/);
+  assert.equal(reverse_problem("a\\)+([^)]+)"), undefined);
   assert.equal(reverse_problem("https://x\\.example/([^/]+)"), undefined);
 });
