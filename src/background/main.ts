@@ -290,8 +290,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (request.type === "hint_frames_start") return hint_frames.start(tab_id, frame_id, request);
     if (request.type === "hint_frames_report") return hint_frames.report(tab_id, frame_id, request.session_id, request.count, request.texts);
     if (request.type === "hint_frames_typed") return hint_frames.typed(tab_id, frame_id, request.session_id, request.typed, request.matches && { matches: request.matches, active: request.active });
-    if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label);
+    if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label, request.keys);
     if (request.type === "hint_frames_end") return hint_frames.end(tab_id, frame_id, request.session_id);
+    if (request.type === "hint_frames_unhover") return hint_frames.unhover(tab_id);
   }
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);

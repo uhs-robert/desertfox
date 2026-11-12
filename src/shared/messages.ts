@@ -472,10 +472,13 @@ export type HintFramesPick = {
   type: "hint_frames_pick";
   session_id: string;
   label: string;
+  // The keys typed before the labels showed, which the owner types into the field the pick focuses. Left out for a rapid pick, which keeps them for its next build.
+  keys?: string[];
 };
 
 // The owner frame's answer to a pick. A copy or a `prompt` does not run there: the owner answers with the text (the copy text, or the whole line for `prompt`, tracking parameters already stripped), and `what` names it for the toast when it is not the text itself. The keyboard frame then copies it into its rapid list or opens the line, so one list holds the picks of every frame and the toast draws where the keyboard is. Any other action answers its `Outcome`.
-export type HintFramesPickAnswer = Outcome | { ok: true; text: string; what?: string };
+// `left` is the part of the pick's `keys` the owner did not type, in order. An answer without it leaves all of them to the keyboard frame.
+export type HintFramesPickAnswer = (Outcome | { ok: true; text: string; what?: string }) & { left?: string[] };
 
 // The keyboard frame left hint mode. The background passes it on to every frame of the tab.
 export type HintFramesEnd = {
@@ -483,10 +486,15 @@ export type HintFramesEnd = {
   session_id: string;
 };
 
+// The keyboard frame's Escape after a hover pick of another frame. The background passes it on to every frame of the tab, and the frame that holds the hover releases it. It names no session, because the pick ended its session.
+export type HintFramesUnhover = {
+  type: "hint_frames_unhover";
+};
+
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | ReadMediaQuality | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | ReadMediaQuality | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
@@ -582,7 +590,7 @@ export type HintFramesLabels = {
 // To the frame that opened an edit, when the editor ends. `text` is present only when the file changed. A frame with another `token` (a new page) ignores it.
 export type EditorDone = { type: "editor_done"; token: string; text?: string };
 
-export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | GetJumpOffset | FocusPage | Ping;
+export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | GetJumpOffset | FocusPage | Ping;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

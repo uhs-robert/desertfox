@@ -221,6 +221,12 @@ export function start_server() {
       const blank = `<iframe id="blank" style="display:block;width:300px;height:60px"></iframe><script>document.getElementById("blank").contentDocument.body.innerHTML = '<a href="/page?id=${id}_blank">blank</a>';</script>`;
       return response.end(page(`frames_hints ${id}`, `<a href="/page?id=${id}_top">top</a>${frame("same", "", "")}${blank}${frame("cross", `http://localhost:${port}`, "")}${frame("below", `http://localhost:${port}`, "margin-top:3000px")}` + tall_filler));
     }
+    if (url.pathname === "/frame_field") return response.end(page(`frame_field ${id}`, `<input id="cross_field" type="text"> <p id="cross_text">words in a frame</p>`));
+    if (url.pathname === "/frames_field") {
+      // A text field and a paragraph in a frame of another origin, for picks across frames that focus a field or start the caret.
+      const port = request.socket.localPort;
+      return response.end(page(`frames_field ${id}`, `<iframe id="cross" src="http://localhost:${port}/frame_field?id=${id}_cross" style="display:block;width:300px;height:200px"></iframe>` + tall_filler));
+    }
     if (url.pathname === "/hidden_input_frame") {
       // A stand-in for the Google Docs editor: on load the page writes a contenteditable into an offscreen same-origin frame and focuses it.
       // The frame is made the way Docs makes it, with `src="javascript:undefined"`, so its content script starts in the written document.

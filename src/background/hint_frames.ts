@@ -3,7 +3,7 @@
 // Nothing on the wait awaits a browser call: Firefox can leave an injection or a message to a navigating frame unanswered, and only the deadline ends the wait then.
 
 import { clean_letters, make_labels } from "../content/hints/labels.ts";
-import type { HintFramesCollect, HintFramesEnd, HintFramesLabels, HintFramesPick, HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../shared/messages.ts";
+import type { HintFramesCollect, HintFramesEnd, HintFramesLabels, HintFramesPick, HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesUnhover, Outcome } from "../shared/messages.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "./storage_keys.ts";
 
 // Slow ad frames answer late, and a frame that has not reported by then gets no labels. The labels already drawn are never redrawn for it.
@@ -11,7 +11,7 @@ export const HINT_FRAMES_WAIT_MS = 300;
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
-export type HintFramesMessage = HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd;
+export type HintFramesMessage = HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover;
 
 export type HintFramesDeps = {
   storage: SessionStorage;
@@ -162,12 +162,12 @@ export function create_hint_frames(deps: HintFramesDeps) {
     },
 
     // The owner's answer is the pick's. It waits on another frame, so it runs outside the turn.
-    pick: async (tab_id: number, frame_id: number, session_id: string, label: string): Promise<HintFramesPickAnswer> => {
+    pick: async (tab_id: number, frame_id: number, session_id: string, label: string, keys?: string[]): Promise<HintFramesPickAnswer> => {
       const session = await labeled_for(tab_id, frame_id, session_id);
       if (!session?.labels) return NO_SESSION;
       const owner = Object.entries(session.labels).find(([, labels]) => labels.includes(label))?.[0];
       if (owner === undefined) return { ok: false, message: `No hint has the label ${label}` };
-      const answer = await deps.send(tab_id, { type: "hint_frames_pick", session_id, label }, Number(owner)).catch(() => undefined);
+      const answer = await deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)).catch(() => undefined);
       return is_pick_answer(answer) ? answer : FRAME_GONE;
     },
 
@@ -182,6 +182,9 @@ export function create_hint_frames(deps: HintFramesDeps) {
       });
       if (ended) void send_quietly(tab_id, { type: "hint_frames_end", session_id });
     },
+
+    // To every frame, because the session that picked the hover is gone and the frame that holds the hover is not known. A frame with nothing hovered ignores it.
+    unhover: (tab_id: number): Promise<void> => send_quietly(tab_id, { type: "hint_frames_unhover" }).then(() => undefined),
 
     // A load replaces every frame, so nothing is left to tell. An address change the page makes itself keeps the frames and the session.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> => (change.status === "loading" && change.url === undefined ? forget(tab_id) : Promise.resolve()),
