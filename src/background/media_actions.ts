@@ -96,7 +96,7 @@ function largest_by(scans: FrameScan[], measure: (scan: FrameScan) => number): F
   return best;
 }
 
-// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture and fullscreen take one video: the open one, else the largest audible, else the largest playing, else the largest visible. Audible and playing media count only when big enough (see `PLAYING_MIN_SHARE`), else the largest visible video acts. A frame with no video always counts.
+// Media that plays with sound acts first, then any playing media, so a muted autoplay preview yields to the video the user hears. Play or pause is the exception: with sound playing anywhere, it pauses everything that plays. Every frame with such media acts on all of it, so two players that play together move together. With nothing playing, the largest visible video acts, else the first frame with any media. Picture-in-picture, fullscreen and a frame step take one video: the open one (none for a frame step), else the largest audible, else the largest playing, else the largest visible. Audible and playing media count only when big enough (see `PLAYING_MIN_SHARE`), else the largest visible video acts. A frame with no video always counts.
 export function choose_frames(scans: FrameScan[], action: MediaAction, pin_frame?: number): FramePlan[] {
   // An open picture-in-picture window goes first, even from an unpinned video, so `p` closes it. Firefox has one window at a time.
   const pip_window = action === "pip" ? scans.find((scan) => scan.pip_open) : undefined;
@@ -106,8 +106,9 @@ export function choose_frames(scans: FrameScan[], action: MediaAction, pin_frame
   const largest_area = Math.max(0, ...scans.map((scan) => scan.video_area));
   // A playing audio element competes with no video, so it counts whatever else its frame holds. A video that plays hidden or off screen has area 0 and does not.
   const big_enough = (audio: number, area: number) => audio > 0 || area >= largest_area * PLAYING_MIN_SHARE;
-  if (action === "pip" || action === "fullscreen") {
-    const is_open = (scan: FrameScan) => (action === "pip" ? scan.pip_open : scan.fullscreen_open);
+  if (action === "pip" || action === "fullscreen" || action === "frame") {
+    // A frame step needs a picture, so it ranks the videos alone and has no open window to follow.
+    const is_open = (scan: FrameScan) => (action === "pip" ? scan.pip_open : action === "fullscreen" && scan.fullscreen_open);
     // A fullscreen video in a child frame leaves the top document fullscreen too, so the frame that holds media is the one to ask.
     const open = scans.find((scan) => is_open(scan) && scan.count > 0) ?? scans.find(is_open);
     if (open) return [{ frame_id: open.frame_id, target: "largest" }];
@@ -146,6 +147,8 @@ export function describe_change(action: MediaAction, state: MediaState, acted: n
     action === "speed" ? `Speed ${rounded(state.rate, 2)}x`
     : action === "volume" ? `Volume ${Math.round(state.volume * 100)}%${state.muted ? ", muted" : ""}`
     : action === "seek" ? (state.duration === null ? clock(state.position) : `${clock(state.position)} of ${clock(state.duration)}`)
+    : action === "captions" ? `Captions ${state.captions === "on" ? "on" : "off"}`
+    : action === "frame" ? `Paused at ${rounded(state.position, 2)} s`
     : action === "mute" ? (state.muted ? "Muted" : "Unmuted")
     : action === "loop" ? `Loop ${state.loop ? "on" : "off"}`
     : action === "fullscreen" ? `Fullscreen ${state.fullscreen ? "on" : "off"}`
@@ -191,7 +194,7 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   if (tab_id === undefined) throw new RuntimeRefusal("Media needs a tab");
   if (args.action === "quality" || args.action === "skip") return run_quality(deps, ctx, tab_id, args);
   if (args.action === "pip" && !deps.can_picture_in_picture()) throw new RuntimeRefusal("Picture-in-picture needs Firefox 153 or newer");
-  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" || args.action === "enter" ? "No video on this page" : "No video or audio on this page");
+  const no_media = new RuntimeRefusal(args.action === "pip" || args.action === "fullscreen" || args.action === "frame" || args.action === "enter" ? "No video on this page" : "No video or audio on this page");
   const scans = await scan_frames(deps, tab_id);
   // Audio alone has no picture to watch, so the mode needs a video.
   if (args.action === "enter" && !scans.some((scan) => scan.has_video)) throw no_media;
@@ -206,8 +209,17 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   const failed = results.find((result) => result.error_name !== undefined);
   if (failed) throw new RuntimeRefusal(refusal_for(args.action, failed.error_name!, failed.error_message ?? ""));
   const acted = results.reduce((sum, result) => sum + result.acted, 0);
-  const state = results.find((result) => result.state)?.state;
+  // A captions notice comes from a frame that has a track, so a frame with none does not say "off" for one that toggled.
+  const state = (args.action === "captions" ? results.find((result) => result.state && result.state.captions !== "none") : undefined)?.state ?? results.find((result) => result.state)?.state;
   if (acted === 0 || !state) throw no_media;
+  // Only when no acted-on player had a track does the site player get the key. It is asked for the planned frame first, the pinned one when a video is pinned.
+  if (args.action === "captions" && results.every((result) => result.state?.captions !== "on" && result.state?.captions !== "off")) {
+    // No track on the element: a site player may draw its own captions. The generic path runs first so other pages never pay the quality bundle.
+    const answer = await deps.quality(tab_id, { type: "quality_apply", op: "captions", value: undefined, times: 1 }, plan[0]!.frame_id).catch(() => undefined);
+    if (!answer?.toggled) throw new RuntimeRefusal("No captions");
+    // The player may not say what it did, so the notice claims no change then.
+    return deps.toast(ctx, answer.captions ? `Captions ${answer.captions}` : "Asked the player to toggle captions");
+  }
   const quality = args.action === "info" ? (await deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined))?.levels.find((level) => level.active)?.label : undefined;
   await deps.toast(ctx, describe_change(args.action, state, acted, quality));
 }

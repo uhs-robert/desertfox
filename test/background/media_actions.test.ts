@@ -8,7 +8,7 @@ import type { MediaRequest, MediaResult, MediaScan, MediaState } from "../../src
 const ctx: CommandContext = { tab_id: 4, window_id: 1, frame_id: 0, mode: "normal" };
 const empty: MediaScan = { count: 0, playing: 0, audible: 0, playing_audio: 0, audible_audio: 0, video_area: 0, playing_video_area: 0, audible_video_area: 0, pip_open: false, fullscreen_open: false, pinned: false, has_video: false };
 const scan = (frame_id: number, fields: Partial<MediaScan>): FrameScan => ({ ...empty, count: 1, has_video: true, ...fields, frame_id });
-const state: MediaState = { rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false, loop: false, fullscreen: false };
+const state: MediaState = { captions: "off", rate: 1.25, volume: 0.6, muted: false, position: 85, duration: 220, paused: false, pip: false, loop: false, fullscreen: false };
 
 test("every frame with playing media acts, even beside a larger idle video", () => {
   const scans = [scan(0, { video_area: 90_000 }), scan(3, { playing: 1, playing_audio: 1, has_video: false }), scan(5, { playing: 2, playing_audio: 2, has_video: false })];
@@ -394,4 +394,52 @@ test("quality and skip prefer no frame once the pinned video left the page", asy
   await run_media(tab.deps, ctx, { action: "quality", value: "max" });
   await run_media(tab.deps, ctx, { action: "skip" }).catch(() => undefined);
   assert.deepEqual(tab.preferred, [undefined, undefined]);
+});
+
+test("captions with no track on the element ask the site player, and refuse when it has none", async () => {
+  const none = (): MediaResult => acted(1, { captions: "none" });
+  const site = fake_tab({ 0: { scan: scan(0, {}), apply: none } }, { quality: () => ({ levels: [], toggled: true }) });
+  await run_media(site.deps, ctx, { action: "captions" });
+  assert.deepEqual(site.asked.map(({ op }) => op), ["captions"]);
+  assert.deepEqual(site.toasts, ["Asked the player to toggle captions"]);
+  const bare = fake_tab({ 0: { scan: scan(0, {}), apply: none } }, { quality: () => ({ levels: [], toggled: false }) });
+  await assert.rejects(run_media(bare.deps, ctx, { action: "captions" }), { message: "No captions" });
+  const unreachable = fake_tab({ 0: { scan: scan(0, {}), apply: none } }, { quality: () => undefined });
+  await assert.rejects(run_media(unreachable.deps, ctx, { action: "captions" }), { message: "No captions" });
+});
+
+test("captions on a track need no site player, and the toast names the state", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}), apply: () => acted(1, { captions: "on" }) } });
+  await run_media(tab.deps, ctx, { action: "captions" });
+  assert.deepEqual(tab.asked, []);
+  assert.deepEqual(tab.toasts, ["Captions on"]);
+});
+
+test("the captions fallback asks the planned frame, the pinned one first", async () => {
+  const none = (): MediaResult => acted(1, { captions: "none" });
+  const tab = fake_tab({ 0: { scan: scan(0, { video_area: 10 }), apply: none }, 2: { scan: scan(2, { pinned: true, video_area: 5 }), apply: none } }, { pin_frame: 2, quality: () => ({ levels: [], toggled: true, captions: "on" }) });
+  await run_media(tab.deps, ctx, { action: "captions" });
+  assert.deepEqual(tab.preferred, [2]);
+  assert.deepEqual(tab.toasts, ["Captions on"]);
+});
+
+test("the site player is asked only when no acted-on player has a track, and the notice does not claim a state it cannot see", async () => {
+  const mixed = fake_tab({ 0: { scan: scan(0, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "none" }) }, 1: { scan: scan(1, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "off" }) } }, { quality: () => ({ levels: [], toggled: true }) });
+  await run_media(mixed.deps, ctx, { action: "captions" });
+  assert.deepEqual(mixed.asked, []);
+  const unknown = fake_tab({ 0: { scan: scan(0, {}), apply: () => acted(1, { captions: "none" }) } }, { quality: () => ({ levels: [], toggled: true }) });
+  await run_media(unknown.deps, ctx, { action: "captions" });
+  assert.deepEqual(unknown.toasts, ["Asked the player to toggle captions"]);
+});
+
+test("a frame step ranks the videos alone, so playing audio does not hide an idle video", () => {
+  const audio_and_video = [scan(0, { playing: 1, audible: 1, playing_audio: 1, audible_audio: 1, has_video: false }), scan(1, { video_area: 9000 })];
+  assert.deepEqual(choose_frames(audio_and_video, "frame"), [{ frame_id: 1, target: "largest" }]);
+  assert.deepEqual(choose_frames([scan(0, { playing: 1, audible: 1, playing_audio: 1, audible_audio: 1, has_video: false })], "frame"), []);
+});
+
+test("a captions notice comes from a frame that has a track", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "none" }) }, 1: { scan: scan(1, { playing: 1, playing_video_area: 9 }), apply: () => acted(1, { captions: "on" }) } });
+  await run_media(tab.deps, ctx, { action: "captions" });
+  assert.deepEqual(tab.toasts, ["Captions on, 2 players"]);
 });

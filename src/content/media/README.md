@@ -1,6 +1,6 @@
 # media
 
-The `media` bundle (`media.js`, 5 KB limit). Unlike the other bundles, the content script never loads it: the background injects it into every frame of the tab for each `media` command (`src/background/media_actions.ts`), so a key pressed in one frame reaches a player in another. It works without `content.js`, which a subframe starts only on its first focus.
+The `media` bundle (`media.js`, 5.5 KB limit). Unlike the other bundles, the content script never loads it: the background injects it into every frame of the tab for each `media` command (`src/background/media_actions.ts`), so a key pressed in one frame reaches a player in another. It works without `content.js`, which a subframe starts only on its first focus.
 
 - `main.ts`: a scan that each run pushes to the background with `media_report`, and one `runtime.onMessage` listener for `media_apply`, added once per frame however often the file runs. The message types live in `src/shared/media.ts`.
 - `fullscreen.ts`: `F` enters fullscreen through the site's own button when the player box holds one, else on the player box. It leaves every nested level.

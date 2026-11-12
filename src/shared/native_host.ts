@@ -4,7 +4,7 @@
 export const NATIVE_HOST_NAME = "desertfox_host";
 export const NATIVE_PERMISSION = "nativeMessaging";
 
-const REPO = "uhs-robert/desertfox";
+export const REPO = "uhs-robert/desertfox";
 
 // "main" fetches the host from the main branch. A version fetches it from the GitHub release of that version, checked by checksum.
 export type HostChannel = "main" | string;

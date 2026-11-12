@@ -2,7 +2,7 @@
 """Native-messaging host for the DesertFox Firefox extension.
 
 Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
-in the same framing to stdout and exits. It has three verbs and no others:
+in the same framing to stdout and exits. It has five verbs and no others:
 
   {"cmd": "read_config"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
@@ -10,12 +10,18 @@ in the same framing to stdout and exits. It has three verbs and no others:
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "..."}
   {"cmd": "self_update", "version": "0.1.23", "sha256": {"desertfox-host": "<hex>", "desertfox-bridge": "<hex>", "desertfox": "<hex>"}}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "updated": true, "version": "0.1.23", "replaced": ["<path>", ...]}
+  {"cmd": "editor_start", "text": "<text>", "ext": "md", "insert": true}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "job": "<32 hex digits>"}
+  {"cmd": "editor_collect", "job": "<job from editor_start>"}
+      -> {"ok": true, ..., "pending": true}  while the editor runs (after a wait of 20 s at most), or
+         {"ok": true, ..., "done": true, "changed": true, "text": "<edited text>"}  (`text` only when `changed`)
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
-file there, autoconfig.toml. It never edits the user's own files, and it parses nothing: the extension owns the TOML.
+file there, autoconfig.toml. It never edits the user's own files, and it parses no config of the extension: the extension owns that TOML. Only editor.toml, which the extension never sees, is parsed here.
 `self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
-`self_update`). Stdout carries only protocol bytes.
+`self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
+reply ever carries. Stdout carries only protocol bytes.
 """
 import contextlib
 import fcntl
@@ -25,12 +31,15 @@ import io
 import json
 import os
 import re
+import secrets
 import signal
 import ssl
 import struct
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -43,6 +52,8 @@ MAX_REPLY_BYTES = 1024 * 1024
 # The request size is not limited by Firefox. The host stops reading a request this large, which only a bug would send.
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 AUTOCONFIG_NAME = "autoconfig.toml"
+# The editor command. Only the host reads it, so read_config and the tool reader skip it: the extension never sees it.
+EDITOR_CONFIG_NAME = "editor.toml"
 AUTOCONFIG_HEADER = (
     "# Written by DesertFox from the edits saved in the browser. DesertFox never reads this file back.\n"
     "# Edits here are overwritten. Put your own settings in settings.toml.\n"
@@ -85,7 +96,7 @@ def read_files(directory):
     """Raw text by path relative to `directory`. A folder entry is `<path>/` with empty text, as the tool reader makes it."""
     files = {}
     for name in visible_entries(directory):
-        if name == AUTOCONFIG_NAME:
+        if name in (AUTOCONFIG_NAME, EDITOR_CONFIG_NAME):
             continue
         path = os.path.join(directory, name)
         if not os.path.isdir(path):
@@ -481,6 +492,270 @@ def self_update(request, fetch=fetch_release_file, host_file=None, current=RELEA
     return {"updated": True, "version": version, "replaced": replaced}
 
 
+# The external editor. editor_start writes the text to a scratch file and starts the user's editor on it, detached, then
+# this process exits like every other host process. editor_collect runs in a later process, so the two share only files
+# in EDITOR_DIR: the scratch file and a job file that names it.
+EDITOR_ARGV_KEY = "argv"
+EDITOR_INSERT_KEY = "insert_argv"
+FILE_PLACEHOLDER = "{file}"
+EXT_PATTERN = re.compile(r"[A-Za-z0-9]{1,10}")
+# The text rides inside a JSON reply that Firefox drops above 1 MiB. JSON escapes one character into at most 6 bytes.
+MAX_EDITOR_TEXT_BYTES = MAX_REPLY_BYTES // 8
+COLLECT_WAIT_S = 20
+COLLECT_POLL_S = 0.1
+STALE_JOB_S = 24 * 60 * 60
+JOB_PATTERN = re.compile(r"[0-9a-f]{32}")
+
+
+def editor_dir():
+    cache_home = os.environ.get("XDG_CACHE_HOME", "")
+    if not os.path.isabs(cache_home):
+        cache_home = os.path.join(os.path.expanduser("~"), ".cache")
+    return os.path.join(cache_home, "desertfox", "editor")
+
+
+def read_toml_strings(text):
+    """The `key = ["a", 'b']` entries of an editor.toml. This is the only TOML shape the file takes, and the host parses it
+    itself because python3 3.9 has no tomllib. Strings are basic ("..." with JSON escapes) or literal ('...')."""
+    values = {}
+    position = 0
+    skip = re.compile(r"(?:\s|#[^\n]*)*")
+    key_pattern = re.compile(r"([A-Za-z0-9_-]+)\s*=\s*\[")
+    string_pattern = re.compile(r'"((?:[^"\\\n]|\\.)*)"|\'([^\'\n]*)\'')
+    while True:
+        position = skip.match(text, position).end()
+        if position == len(text):
+            return values
+        key = key_pattern.match(text, position)
+        if key is None:
+            raise HostError(f"expected name = [\"...\"] near {text[position:position + 20]!r}")
+        if key.group(1) in values:
+            raise HostError(f"{key.group(1)} is set twice")
+        items = []
+        position = key.end()
+        while True:
+            position = skip.match(text, position).end()
+            if text.startswith("]", position):
+                position += 1
+                break
+            string = string_pattern.match(text, position)
+            if string is None:
+                raise HostError(f"expected a quoted string in {key.group(1)} near {text[position:position + 20]!r}")
+            if string.group(1) is not None:
+                try:
+                    items.append(json.loads('"' + string.group(1) + '"'))
+                except ValueError as error:
+                    raise HostError(f"bad escape in {key.group(1)}: {string.group(0)}") from error
+            else:
+                items.append(string.group(2))
+            position = skip.match(text, string.end()).end()
+            if text.startswith(",", position):
+                position += 1
+            elif not text.startswith("]", position):
+                raise HostError(f"expected , or ] in {key.group(1)} near {text[position:position + 20]!r}")
+        values[key.group(1)] = items
+
+
+def load_editor_config():
+    """(argv, insert_argv) from editor.toml. Both are lists of strings. `argv` needs one element with {file}."""
+    path = os.path.join(config_dir(), EDITOR_CONFIG_NAME)
+    if not os.path.isfile(path):
+        raise HostError(f'no editor is set up: create {path} with a line like argv = ["your-terminal", "-e", "your-editor", "{{file}}"]')
+    try:
+        values = read_toml_strings(read_text(path))
+    except HostError as error:
+        raise HostError(f"{path} is broken: {error}") from error
+    extra = set(values) - {EDITOR_ARGV_KEY, EDITOR_INSERT_KEY}
+    if extra:
+        raise HostError(f"{path} is broken: unknown key {', '.join(sorted(extra))} (known: {EDITOR_ARGV_KEY}, {EDITOR_INSERT_KEY})")
+    argv = values.get(EDITOR_ARGV_KEY)
+    if not argv or not any(FILE_PLACEHOLDER in item for item in argv):
+        raise HostError(f"{path} is broken: argv must be a list with the program first and {FILE_PLACEHOLDER} in one element")
+    if not argv[0] or FILE_PLACEHOLDER in argv[0]:
+        raise HostError(f"{path} is broken: the first element of argv must be the program, without {FILE_PLACEHOLDER}")
+    return argv, values.get(EDITOR_INSERT_KEY, [])
+
+
+def editor_command(argv, insert_argv, scratch_path, insert):
+    """The argv to run. The insert_argv elements go just before the first element that holds {file}, so for
+    `["term", "-e", "nvim", "{file}"]` they land after the editor program. No shell is involved: each element is one argument."""
+    command = list(argv)
+    if insert:
+        slot = next(index for index, item in enumerate(command) if FILE_PLACEHOLDER in item)
+        command[slot:slot] = insert_argv
+    return [item.replace(FILE_PLACEHOLDER, scratch_path) for item in command]
+
+
+def process_start_ticks(pid):
+    """Field 22 of /proc/<pid>/stat, or None when the process is gone or a zombie. The start time tells a reused pid from the editor."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as file:
+            stat = file.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    fields = stat[stat.rindex(")") + 2:].split()
+    return None if fields[0] == "Z" else fields[19]
+
+
+def editor_is_running(pid, start_ticks):
+    return start_ticks is not None and process_start_ticks(pid) == start_ticks
+
+
+def remove_quietly(path):
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+def sweep_stale_jobs(directory):
+    """Removes the files of a job whose editor is gone and which nobody collected for a day (a closed browser). A claimed
+    `.done` job file, left by a collector that died after claiming, goes the same way."""
+    for name in os.listdir(directory):
+        if not (name.startswith("job-") and (name.endswith(".json") or name.endswith(".done"))):
+            continue
+        path = os.path.join(directory, name)
+        try:
+            if time.time() - os.stat(path).st_mtime < STALE_JOB_S:
+                continue
+            job = json.loads(read_text(path))
+            if editor_is_running(job["pid"], job["start_ticks"]):
+                continue
+            remove_quietly(os.path.join(directory, os.path.basename(job["scratch"])))
+        except (OSError, ValueError, KeyError, TypeError, HostError):
+            pass
+        remove_quietly(path)
+
+
+def checked_fields(request, allowed, verb):
+    extra = set(request) - allowed - {"cmd"}
+    if extra:
+        raise HostError(f"{verb} takes only {', '.join(sorted(allowed))}, not {', '.join(sorted(extra))}")
+
+
+def editor_start(request):
+    """Writes the text to a private scratch file, runs the configured editor on it and returns the job id."""
+    checked_fields(request, {"text", "ext", "insert"}, "editor_start")
+    text, ext, insert = request.get("text"), request.get("ext"), request.get("insert", False)
+    if not isinstance(text, str):
+        raise HostError("editor_start needs a string field text")
+    if ext is not None and (not isinstance(ext, str) or EXT_PATTERN.fullmatch(ext) is None):
+        raise HostError("the file extension must be 1 to 10 letters or digits")
+    if not isinstance(insert, bool):
+        raise HostError("editor_start takes a boolean insert")
+    try:
+        data = text.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise HostError("the text is not valid unicode") from error
+    if len(data) > MAX_EDITOR_TEXT_BYTES:
+        raise HostError(f"the text is {len(data)} bytes, over the {MAX_EDITOR_TEXT_BYTES} byte limit for the external editor")
+    argv, insert_argv = load_editor_config()
+    directory = editor_dir()
+    try:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
+        sweep_stale_jobs(directory)
+    except OSError as error:
+        raise HostError(f"cannot prepare {directory}: {error.strerror or error}") from error
+    job = secrets.token_hex(16)
+    scratch_name = f"doc-{time.strftime('%Y%m%d-%H%M%S')}-{job[:8]}" + (f".{ext}" if ext else "")
+    scratch_path = os.path.join(directory, scratch_name)
+    job_path = os.path.join(directory, f"job-{job}.json")
+    try:
+        descriptor = os.open(scratch_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(data)
+        # An mtime a minute back, so a save always changes it, even on a filesystem with coarse time stamps.
+        past = time.time() - 60
+        os.utime(scratch_path, (past, past))
+        saved_mtime_ns = os.stat(scratch_path).st_mtime_ns
+    except OSError as error:
+        remove_quietly(scratch_path)
+        raise HostError(f"cannot write {scratch_path}: {error.strerror or error}") from error
+    try:
+        process = subprocess.Popen(
+            editor_command(argv, insert_argv, scratch_path, insert),
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True, start_new_session=True,
+        )
+    except (OSError, ValueError) as error:
+        remove_quietly(scratch_path)
+        raise HostError(f"cannot start {argv[0]!r} from {EDITOR_CONFIG_NAME}: {getattr(error, 'strerror', None) or error}") from error
+    record = {"scratch": scratch_name, "mtime_ns": saved_mtime_ns, "pid": process.pid, "start_ticks": process_start_ticks(process.pid)}
+    try:
+        descriptor = os.open(job_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            json.dump(record, file)
+    except OSError as error:
+        # The editor is already running with no job to collect it, so end its whole session first.
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        remove_quietly(job_path)
+        remove_quietly(scratch_path)
+        raise HostError(f"cannot write {job_path}: {error.strerror or error}") from error
+    return {"job": job}
+
+
+def read_job(directory, job):
+    if not isinstance(job, str) or JOB_PATTERN.fullmatch(job) is None:
+        raise HostError("unknown editor job")
+    path = os.path.join(directory, f"job-{job}.json")
+    try:
+        record = json.loads(read_text(path))
+        return path, record, os.path.join(directory, os.path.basename(record["scratch"]))
+    except (HostError, ValueError, KeyError, TypeError) as error:
+        raise HostError("unknown editor job: it never ran or its text was already taken") from error
+
+
+def claim_job(job_path):
+    """Claims the job by renaming its file, so of two collectors exactly one gets the text and removes the files."""
+    claimed = f"{job_path}.{os.getpid()}.done"
+    try:
+        os.rename(job_path, claimed)
+    except FileNotFoundError as error:
+        raise HostError("unknown editor job: its text was already taken") from error
+    return claimed
+
+
+def collect_result(record, scratch_path, claimed_job):
+    """The reply for a finished job. The files are removed on every path out, so no outcome leaves one behind."""
+    try:
+        try:
+            changed = os.stat(scratch_path).st_mtime_ns != record["mtime_ns"]
+        except FileNotFoundError:
+            raise HostError("the scratch file of the editor job is gone") from None
+        if not changed:
+            return {"done": True, "changed": False}
+        with open(scratch_path, "rb") as file:
+            data = file.read(MAX_EDITOR_TEXT_BYTES + 1)
+        if len(data) > MAX_EDITOR_TEXT_BYTES:
+            raise HostError(f"the edited text is over the {MAX_EDITOR_TEXT_BYTES} byte limit, so it was dropped")
+        return {"done": True, "changed": True, "text": data.decode("utf-8", errors="replace").rstrip("\r\n")}
+    except OSError as error:
+        raise HostError(f"cannot read {scratch_path}: {error.strerror or error}") from error
+    finally:
+        remove_quietly(scratch_path)
+        remove_quietly(claimed_job)
+
+
+def editor_collect(request, wait_s=COLLECT_WAIT_S):
+    """Waits up to `wait_s` for the editor to end, then answers {"pending": true} or the result.
+
+    The file is read only after the editor exited, so a write in progress is never read. While the editor runs, a
+    missing or changing file is a save in progress (a rename-and-write save removes the name for a moment), and the
+    answer stays pending. A job that exited without saving gives changed false."""
+    checked_fields(request, {"job"}, "editor_collect")
+    directory = editor_dir()
+    job_path, record, scratch_path = read_job(directory, request.get("job"))
+    deadline = time.monotonic() + wait_s
+    while editor_is_running(record["pid"], record["start_ticks"]):
+        if time.monotonic() >= deadline:
+            return {"pending": True}
+        time.sleep(COLLECT_POLL_S)
+    return collect_result(record, scratch_path, claim_job(job_path))
+
+
 def handle(request):
     if not isinstance(request, dict):
         raise HostError("the request must be a JSON object")
@@ -491,6 +766,10 @@ def handle(request):
         return write_autoconfig(request.get("toml"))
     if cmd == "self_update":
         return self_update(request)
+    if cmd == "editor_start":
+        return editor_start(request)
+    if cmd == "editor_collect":
+        return editor_collect(request)
     raise HostError(f"unknown cmd: {cmd!r}")
 
 

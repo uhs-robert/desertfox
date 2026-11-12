@@ -14,6 +14,8 @@ type MoviePlayer = {
   getVideoData?: () => unknown;
   nextVideo?: () => void;
   previousVideo?: () => void;
+  toggleSubtitles?: () => void;
+  getOption?: (module: string, option: string) => unknown;
 };
 
 export type YouTubePage = { document: { getElementById: (id: string) => unknown } };
@@ -64,6 +66,14 @@ export function youtube_driver(page: YouTubePage): Driver | undefined {
     video_id: () => {
       const id = (player.getVideoData?.() as { video_id?: unknown } | undefined)?.video_id;
       return typeof id === "string" ? id : undefined;
+    },
+    // Unofficial and unverified on the current site: a player without the call refuses.
+    toggle_captions: () => {
+      if (typeof player.toggleSubtitles !== "function") return undefined;
+      player.toggleSubtitles();
+      // An object with keys is a chosen track, an empty one means off. Anything else (no call, no answer) leaves the state unsaid.
+      const track = player.getOption?.("captions", "track");
+      return typeof track === "object" && track !== null ? { on: Object.keys(track).length > 0 } : {};
     },
     skip: (forward) => {
       const go = forward ? player.nextVideo : player.previousVideo;

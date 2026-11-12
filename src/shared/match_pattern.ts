@@ -61,6 +61,19 @@ export function match_regex_source(patterns: readonly string[]): string | undefi
   return alternatives.length > 0 ? `^(?:${alternatives.join("|")})$` : undefined;
 }
 
+// True only when no URL can match both patterns, judged by host alone. Anything unparsable or `<all_urls>` counts as overlapping, so a caller that warns errs toward warning.
+export function hosts_disjoint(left: string, right: string): boolean {
+  const left_parts = PATTERN_PARTS.exec(left);
+  const right_parts = PATTERN_PARTS.exec(right);
+  if (!left_parts || !right_parts) return false;
+  const [left_host, right_host] = [left_parts[2]!.toLowerCase(), right_parts[2]!.toLowerCase()];
+  if (left_host === "*" || right_host === "*") return false;
+  const [left_wild, right_wild] = [left_host.startsWith("*."), right_host.startsWith("*.")];
+  const [left_base, right_base] = [left_wild ? left_host.slice(2) : left_host, right_wild ? right_host.slice(2) : right_host];
+  const under = (host: string, base: string) => host === base || host.endsWith(`.${base}`);
+  return !((left_wild && under(right_base, left_base)) || (right_wild && under(left_base, right_base)) || left_base === right_base);
+}
+
 // A frame passes its own address and the tab's, so an embed on a ruled page follows the rule too. A stored regex that does not compile matches nothing, so keys keep working.
 export function matches_any_address(source: string | undefined, addresses: readonly (string | undefined)[]): boolean {
   if (source === undefined) return false;

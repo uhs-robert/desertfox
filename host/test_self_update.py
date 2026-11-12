@@ -1,5 +1,6 @@
 """Tests of the config host's `self_update` verb. Every download goes through an injected fetch, so nothing touches the
 network, and every install lives under a temporary HOME."""
+import ast
 import email.message
 import fcntl
 import hashlib
@@ -596,15 +597,31 @@ class RealTlsFetchTest(unittest.TestCase):
 
 
 class SourceTest(unittest.TestCase):
+    def test_no_script_reuses_an_fstring_quote_inside_its_braces(self):
+        # Python 3.9 to 3.11 reject f"{d["k"]}". A newer interpreter accepts it, and ast.parse(feature_version=(3, 9))
+        # does not catch it either, so the check reads each replacement field's source for the delimiter.
+        for name in ("desertfox-host", "desertfox-bridge", "desertfox"):
+            source = repo_bytes(name).decode()
+            for node in ast.walk(ast.parse(source)):
+                if not isinstance(node, ast.JoinedStr):
+                    continue
+                text = ast.get_source_segment(source, node)
+                opening = text.lstrip("rbfRBF")
+                delimiter = opening[:3] if opening[:3] in ('"""', "'''") else opening[0]
+                for part in node.values:
+                    if isinstance(part, ast.FormattedValue):
+                        self.assertNotIn(delimiter, ast.get_source_segment(source, part.value), f"{name} line {node.lineno}")
+
     def test_the_repo_hosts_carry_the_dev_placeholder(self):
         for name in ("desertfox-host", "desertfox-bridge"):
             self.assertEqual(repo_bytes(name).count(b'\nRELEASE_VERSION = "dev"\n'), 1, name)
         self.assertEqual(host.RELEASE_VERSION, "dev")
 
-    def test_the_updater_runs_no_shell_or_subprocess(self):
+    def test_the_host_runs_no_shell_and_starts_one_process_only_for_the_editor(self):
         source = repo_bytes("desertfox-host").decode()
-        for needle in ("subprocess", "os.system", "os.popen", "os.exec", "shell=", "eval(", "exec("):
+        for needle in ("os.system", "os.popen", "os.exec", "shell=", "eval(", "exec(", "subprocess.run", "subprocess.call", "check_output", "subprocess.getoutput", "subprocess.getstatusoutput", "os.spawn", "posix_spawn", "import pty", "pty."):
             self.assertNotIn(needle, source)
+        self.assertEqual(source.count("subprocess.Popen("), 1)
 
     def test_the_reply_too_large_for_firefox_carries_the_release_version(self):
         data = json.dumps({"cmd": "read_config"}).encode()

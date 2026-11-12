@@ -413,4 +413,39 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_toast(/^Start media mode in that frame first$/);
     await j_scrolls(id);
   });
+
+  await run_case("c toggles the captions track of the main video and . and , step a frame", async () => {
+    const id = "p29_captions_frame";
+    await open_media_page(id);
+    let mark = events.length;
+    await press_keys("c");
+    await wait_event(mark, media(id, "captions", "big", (event) => event.mode === "showing"), "the track showing");
+    mark = events.length;
+    await press_keys("c");
+    await wait_event(mark, media(id, "captions", "big", (event) => event.mode === "disabled"), "the track off");
+    mark = events.length;
+    await press_keys("3", ".");
+    await wait_event(mark, media(id, "seeked", "big", (event) => event.paused && Math.abs(event.time - 0.1) < 0.02), "three frames on, paused");
+    mark = events.length;
+    await press_keys(",");
+    await wait_event(mark, media(id, "seeked", "big", (event) => Math.abs(event.time - 0.0667) < 0.02), "one frame back");
+  });
+
+  await run_case("c calls the YouTube player when the video has no track, and refuses with No captions elsewhere", async () => {
+    const yt = "p29_captions_yt";
+    await open_page("quality", yt, { new_tab: true });
+    let mark = events.length;
+    await press_keys("a", "a");
+    await shown(mark, yt);
+    mark = events.length;
+    await press_keys("c");
+    await wait_event(mark, (event) => event.page_id === yt && event.type === "quality_captions", "the toggleSubtitles call");
+    const none = "p29_captions_none";
+    await open_page("quality", none, { new_tab: true });
+    mark = events.length;
+    await press_keys("a", "a");
+    await shown(mark, none);
+    await press_keys("c");
+    await wait_toast(/^No captions$/);
+  });
 }

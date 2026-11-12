@@ -3,7 +3,7 @@
 import type { BundleName } from "../bundles.ts";
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
-import { match_regex_source, site_row_columns } from "../match_pattern.ts";
+import { hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
 import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, TreeBranch, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
@@ -347,39 +347,57 @@ function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: P
   return binds;
 }
 
-// Rows of one site that bind a key and a longer key under it. The shorter bind wins and the longer is dropped when the binds are grafted, as in a keymap, where a complete binding hides the keys under it.
-function warn_prefix_binds(rules: readonly SiteRule[], warnings: string[]) {
-  const by_site = new Map<string, SiteBind[]>();
+// Rows that bind a key and a longer key under it. The shorter bind wins and the longer is dropped when the binds are grafted, as in a keymap, where a complete binding hides the keys under it.
+// Rows of one pattern are checked against each other. Rows of other patterns are checked too unless their hosts are provably different, as a page can fit both. Order does not matter.
+function warn_prefix_binds(rows: readonly { site: string; rule: SiteRule }[], warnings: string[]) {
+  type Scope = { site: string; mode: string; binds: SiteBind[] };
+  const scopes = new Map<string, Scope>();
   // A mode has binds of its own, so its keys are checked against each other and not against the row's.
-  const add = (key: string, binds: Record<string, SiteBind> | undefined) => by_site.set(key, [...(by_site.get(key) ?? []), ...Object.values(binds ?? {})]);
-  for (const rule of rules) {
-    add(rule.regex, rule.bind);
-    for (const [name, mode] of Object.entries(rule.modes ?? {})) add(`${rule.regex} mode ${name}`, mode.bind);
+  const add = (site: string, regex: string, mode: string, binds: Record<string, SiteBind> | undefined) => {
+    const key = `${regex} mode ${mode}`;
+    const scope = scopes.get(key) ?? { site, mode, binds: [] };
+    scope.binds.push(...Object.values(binds ?? {}));
+    scopes.set(key, scope);
+  };
+  for (const { site, rule } of rows) {
+    add(site, rule.regex, "", rule.bind);
+    for (const [name, mode] of Object.entries(rule.modes ?? {})) add(site, rule.regex, name, mode.bind);
   }
-  for (const binds of by_site.values()) {
-    for (const longer of binds) {
-      const shorter = binds.find((other) => other.tokens.length < longer.tokens.length && other.tokens.every((token, index) => longer.tokens[index] === token));
-      if (shorter) warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}": "${shorter.tokens.join("")}" is already a complete bind for the same site`);
+  const under = (longer: SiteBind, binds: SiteBind[]) => binds.find((other) => other.tokens.length < longer.tokens.length && other.tokens.every((token, index) => longer.tokens[index] === token));
+  for (const scope of scopes.values()) {
+    for (const longer of scope.binds) {
+      const shorter = under(longer, scope.binds);
+      if (shorter) {
+        warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}": "${shorter.tokens.join("")}" is already a complete bind for the same site`);
+        continue;
+      }
+      // Only the row's own binds merge across rows. A named mode comes whole from the first matching row, so its binds never meet those of another row.
+      if (scope.mode !== "") continue;
+      for (const other of scopes.values()) {
+        // Disjoint hosts are skipped, though an embedded cross-site frame resolves rules by both its own URL and the tab's and can still meet both rows.
+        const hiding = other === scope || other.mode !== "" || hosts_disjoint(scope.site, other.site) ? undefined : under(longer, other.binds);
+        if (hiding) warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}" of "${scope.site}": "${hiding.tokens.join("")}" is already a complete bind of "${other.site}", which can match the same pages`);
+      }
     }
   }
 }
 
 export function compile_site_rules(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): SiteRule[] {
-  const compiled = compile_rows(rules, resolve, settings, sources, warnings);
-  warn_prefix_binds(compiled, warnings);
-  return compiled;
+  const rows = compile_rows(rules, resolve, settings, sources, warnings);
+  warn_prefix_binds(rows, warnings);
+  return rows.map(({ rule }) => rule);
 }
 
-function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): SiteRule[] {
-  return rules.flatMap((row): SiteRule[] => {
+function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[]): { site: string; rule: SiteRule }[] {
+  return rules.flatMap((row): { site: string; rule: SiteRule }[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];
     const { keys, bind, modes, ...columns } = site_row_columns(row);
     const compiled_bind = bind === undefined ? {} : { bind: compile_binds(bind as BindingTable, resolve, settings, sources, warnings) };
     const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
     const rule = { regex, ...columns, ...compiled_bind, ...compiled_modes };
-    if (keys === undefined) return [rule];
-    return [{ ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } }];
+    if (keys === undefined) return [{ site: row.site, rule }];
+    return [{ site: row.site, rule: { ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } } }];
   });
 }
 

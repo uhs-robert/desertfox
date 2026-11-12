@@ -47,8 +47,8 @@ export const area_rules = [
   {
     globs: [
       "src/help/**",
-      "src/commands/{help,help_tab,settings,native}.ts",
-      "src/background/{open_help,native_client,host_update,host_update_browser}.ts",
+      "src/commands/{help,help_tab,issue,settings,native}.ts",
+      "src/background/{open_help,issue_report,native_client,host_update,host_update_browser}.ts",
       "src/shared/{settings_docs,settings_schema,settings_table,setting_list,table_constants,native_host,host_version,permission_grant}.ts",
     ],
     areas: ["help"],

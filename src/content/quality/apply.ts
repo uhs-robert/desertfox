@@ -7,6 +7,10 @@ import type { Driver } from "./driver.ts";
 const shown = (levels: readonly { label: string; height: number; active: boolean }[]): QualityLevel[] => levels.map(({ label, height, active }) => ({ label, height, active }));
 
 export function apply_quality(driver: Driver, request: QualityRequest): QualityAnswer {
+  if (request.op === "captions") {
+    const result = driver.toggle_captions?.();
+    return { levels: [], toggled: Boolean(result), ...(result?.on === undefined ? {} : { captions: result.on ? "on" : "off" }) };
+  }
   if (request.op === "skip") return { levels: [], skipped: driver.skip(request.value !== "previous") };
   const levels = driver.levels();
   if (request.op === "list" || request.value === undefined) return { levels: shown(levels) };

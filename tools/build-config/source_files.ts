@@ -4,6 +4,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { KNOWN_DIRS, KNOWN_FILES, type ConfigFiles } from "../../src/shared/config_build/source_files.ts";
 
+// The native host's editor command. Only the host reads it, and read_config skips it too, so the extension never sees it.
+const HOST_ONLY_FILE = "editor.toml";
+
 function visible_entries(dir: string): string[] {
   return readdirSync(dir).filter((name) => !name.startsWith(".")).sort();
 }
@@ -13,6 +16,7 @@ function visible_entries(dir: string): string[] {
 export function read_config_files(config_dir: string): ConfigFiles {
   const files: ConfigFiles = {};
   for (const name of visible_entries(config_dir)) {
+    if (name === HOST_ONLY_FILE) continue;
     const path = join(config_dir, name);
     if (!statSync(path).isDirectory()) {
       files[name] = KNOWN_FILES.has(name) ? readFileSync(path, "utf8") : "";
