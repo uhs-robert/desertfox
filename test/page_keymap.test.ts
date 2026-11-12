@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hint_selectors_reply, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
@@ -445,4 +445,24 @@ test("the shipped sheets rows bind G to Ctrl+End then Home, labeled, on both add
   }
   assert.equal(await key_at(with_defaults({}), "https://example.org/", "G"), "scroll.to");
   assert.equal(await key_at(with_defaults({ default_site_rows_off: ["sheets"] }), SHEETS, "G"), "scroll.to");
+});
+
+test("the reply carries the mode a frame joins, insert beats media, and an all-off frame gets none", async () => {
+  const on = compile([]);
+  const storage = storage_of(on);
+  const join_of = async (join: () => Promise<"insert" | "media" | undefined>, compiled = storage) => (await page_keymap_for(compiled, ["https://a.test/"], undefined, join))?.join;
+  assert.equal(await join_of(async () => "media"), "media");
+  assert.equal(await join_of(async () => "insert"), "insert");
+  assert.equal(await join_of(async () => undefined), undefined);
+  assert.equal(await join_of(async () => "media", storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+  assert.equal(await join_of(async () => "insert", storage_of(compile([{ site: "https://a.test/*" }]))), undefined);
+});
+
+test("join_mode: insert beats media, and media is not asked when insert holds", async () => {
+  let media_asked = 0;
+  const media = async () => (media_asked++, true);
+  assert.equal(await join_mode(async () => true, media), "insert");
+  assert.equal(media_asked, 0);
+  assert.equal(await join_mode(async () => false, media), "media");
+  assert.equal(await join_mode(async () => false, async () => false), undefined);
 });
