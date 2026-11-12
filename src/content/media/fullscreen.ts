@@ -8,11 +8,12 @@ const ANSWER_WAIT_MS = 300;
 const labelled = (element: Element): boolean => [element.getAttribute("aria-label"), element.getAttribute("title"), element.getAttribute("class")].some((text) => FULLSCREEN_LABEL.test(text ?? ""));
 
 // The innermost match, since a wrapper whose class names fullscreen holds the button itself. A match inside a control, such as an icon, stands for that control. An SVG has no `click`.
+// A control outside the box, such as a link that wraps the whole player, is no fullscreen button, so the box goes fullscreen instead.
 function fullscreen_button(box: Element): HTMLElement | undefined {
   const found = Array.from(box.querySelectorAll("*")).filter(labelled);
   const match = found.find((element) => !found.some((other) => other !== element && element.contains(other)));
   const control = match?.closest("button, a, [role=button]") ?? match;
-  return typeof (control as HTMLElement | undefined)?.click === "function" ? (control as HTMLElement) : undefined;
+  return control && box.contains(control) && typeof (control as HTMLElement).click === "function" ? (control as HTMLElement) : undefined;
 }
 
 const ANSWERS = ["fullscreenchange", "fullscreenerror"];

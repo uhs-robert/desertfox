@@ -53,12 +53,24 @@ test("a fullscreen button inside the player box is clicked, and nothing else is 
 
 test("a match that is an svg icon inside a button clicks the button", async () => {
   const { video, requests, stack, html5 } = setup("player");
-  const control = Object.assign(Object.create(null), { id: "control", click: () => stack.push(html5), getAttribute: () => "" });
+  const control = Object.assign(Object.create(null), { id: "control", parentElement: html5, click: () => stack.push(html5), getAttribute: () => "" });
   const icon: Fake = { id: "icon", ownerDocument: html5.ownerDocument, parentElement: control, getBoundingClientRect: () => small, getAttribute: (name: string) => (name === "class" ? "fullscreen-icon" : null), contains: () => false, closest: () => control, querySelectorAll: () => [] };
   html5.children.push(icon);
   await enter_fullscreen(video as unknown as Element);
   assert.deepEqual(requests, []);
   assert.equal(stack.at(-1)?.id, "html5");
+});
+
+test("an icon inside a link that wraps the player box is not clicked, and the box goes fullscreen", async () => {
+  const { video, requests, stack, html5 } = setup("player");
+  const clicks: string[] = [];
+  const link = Object.assign(Object.create(null), { id: "link", parentElement: null, click: () => clicks.push("link"), getAttribute: () => "" });
+  const icon: Fake = { id: "icon", ownerDocument: html5.ownerDocument, parentElement: html5, getBoundingClientRect: () => small, getAttribute: (name: string) => (name === "class" ? "fullscreen-icon" : null), contains: () => false, closest: () => link, querySelectorAll: () => [] };
+  html5.children.push(icon);
+  await enter_fullscreen(video as unknown as Element);
+  assert.deepEqual(clicks, []);
+  assert.equal(requests.length, 1);
+  assert.equal(stack.at(-1)?.id, requests[0]);
 });
 
 test("a click that throws falls back to the box request", async () => {
