@@ -317,11 +317,6 @@ export type ReadStripPatterns = {
   address: string;
 };
 
-// From the `quality` bundle when it starts the `media_quality` rule in a frame. The answer is the rule for the frame's own address: a `media quality` value (`max`, `min`, `auto` or a height as text) or `off`.
-export type ReadMediaQuality = {
-  type: "read_media_quality";
-};
-
 // From the devtools page, as the first message on its port: which tab its toolbox inspects.
 export type DevtoolsHello = {
   type: "devtools_hello";
@@ -497,7 +492,7 @@ export type HintFramesUnhover = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | ReadMediaQuality | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

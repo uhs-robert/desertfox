@@ -99,7 +99,7 @@ export const PAGE_REPLY_SITE_SETTINGS = ["blur_on_load", "editable_add", "editab
 export const HINT_SITE_SETTINGS = ["hint_add", "hint_remove"] as const satisfies readonly PerSiteName[];
 // The page, hints and background copy paths ask for the strip rule (`read_strip_patterns`).
 export const STRIP_SITE_SETTINGS = ["strip_tracking"] as const satisfies readonly PerSiteName[];
-// The quality bundle asks for its own (`read_media_quality`).
+// The background answers the quality bundle's report with its own (`quality_report`).
 export const QUALITY_SITE_SETTINGS = ["media_quality"] as const satisfies readonly PerSiteName[];
 // A literal, not a spread of the lists: the bundler keeps an unused spread in content.js.
 export const FRAME_SITE_SETTINGS = ["blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "media_quality", "strip_tracking"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS, ...typeof QUALITY_SITE_SETTINGS, ...typeof STRIP_SITE_SETTINGS];

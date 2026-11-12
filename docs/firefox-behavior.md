@@ -426,3 +426,19 @@ Results:
 - No route without the host: `tabs.create`, `tabs.update` and `windows.create` refuse the URLs, and an extension page cannot navigate to them.
 - Focus: on X11 the window with the new tab was the active window. On Wayland it was not measured, because headless labwc has no input. Hyprland grants a focus request only with `misc:focus_on_activate`.
 - A private window: not measured. Firefox opens command-line URLs in a normal window.
+
+## Cost of the `media_quality` rule on a page with no video (quality-rule-load)
+
+Counted from the unit tests (`test/quality_load.test.ts`) against a fake background, not measured in Firefox. One hard load: an address change, the load finishing, then the about:blank pass 1 s later. Per frame, the counts are the same for a page of 5 frames and one of 200.
+
+| Message or work, per frame | Before | After |
+| --- | --- | --- |
+| `quality.js` injections | 3 | 3 |
+| `quality_report` messages | 3 | 3 |
+| `quality_rule` messages | 3 | 0 (the message is gone) |
+| `read_media_quality` messages | 11 | 0 (the message is gone) |
+| Keymap reads in the background | 11 | 0 |
+| Driver probes | 100 | 0 |
+| Timers that wait | one poll for 10 s | one 2 s look-again timer for 10 s |
+
+With the rule `off` everywhere (the global value `off`, no site row sets one) the count is 0 injections. A frame with a video costs one keymap read per report, which is 3 per load. Each report that comes from a frame with a video carries the rule in its answer. The 200-frame page that cost about 2,200 `read_media_quality` messages in 10 s now costs none.

@@ -416,7 +416,9 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
     }
     if (url.pathname === "/quality") {
       // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" until a test sets data-ready on the document element. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
-      const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button><button id="navigate">navigate</button>';
+      const buttons = '<button id="replace">replace</button><button id="navigate">navigate</button>';
+      // "lazy": the video and its player appear 4 s after the load, as on a page that builds its player late.
+      const video = id.includes("lazy") ? buttons : '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video>' + buttons;
       const script = `<script>
 const kind = ${JSON.stringify(id)};
 const is_ready = () => !kind.includes("slow") || document.documentElement.dataset.ready === "1";
@@ -436,7 +438,16 @@ function make_movie_player(levels, start) {
   player.start_over = () => { current = start; document.documentElement.dataset.level = start; };
   return player;
 }
-if (kind.includes("yt") || kind.includes("slow") || kind.includes("late")) document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
+function add_movie_player() { document.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720")); }
+if (kind.includes("lazy")) {
+  setTimeout(() => {
+    const video = document.createElement("video");
+    video.src = "/tone.wav";
+    video.loop = true;
+    document.body.append(video);
+    add_movie_player();
+  }, 4000);
+} else if (kind.includes("yt") || kind.includes("slow") || kind.includes("late")) add_movie_player();
 // "blank": the player lives in a frame with no address, as on some hls.js-based sites.
 if (kind.includes("blank")) {
   const blank = document.createElement("iframe");
