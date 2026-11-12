@@ -22,6 +22,22 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "toast_ms",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number of milliseconds, from 500 to 30000",
+    "values": []
+  },
+  {
+    "name": "toast_error_ms",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number of milliseconds, from 500 to 30000",
+    "values": []
+  },
+  {
     "name": "which_key_repeat",
     "settable": true,
     "is_toggle": true,

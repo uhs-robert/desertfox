@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 8;
+export const COMPILED_KEYMAP_VERSION = 9;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -79,6 +79,9 @@ export type CompiledKeymap = {
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
   which_key_delay_ms: number;
+  // How long the ui bundle keeps a toast: `toast_error_ms` for an error, `toast_ms` for every other kind.
+  toast_ms: number;
+  toast_error_ms: number;
   // Typed-key strings (tokens joined) of the prefixes that open no panel by themselves. Absent when none.
   which_key_skip?: string[];
   // A tree stored before this setting has none, and the panel keeps square corners.

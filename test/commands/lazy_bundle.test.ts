@@ -69,7 +69,7 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
   const keymap: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     mode_indicator: "always",
-    which_key_delay_ms: 0,
+    which_key_delay_ms: 0, toast_ms: 3000, toast_error_ms: 6000,
     modes: { normal: { kind: "branch", children: { n: leaf("find.next", "caret"), x: leaf("t.plain") } } },
   };
   content_handlers["t.plain"] = { run: () => void events.push("plain x") };
@@ -109,7 +109,7 @@ test("a bound chord typed during a bundle load waits and runs after it, and an u
   const shown: string[] = [];
   const state = create_mode_state();
   const jump = { kind: "leaf" as const, steps: [{ invocation: { id: "page.jump", args: { direction: "older" }, bundle: "page" as const }, runs_in: "content" as const, count_rule: "ignore" as const, bundle: "page" as const }] };
-  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, mode_indicator: "always", which_key_delay_ms: 0, modes: { normal: { kind: "branch", children: { "<C-o>": jump } } } };
+  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, mode_indicator: "always", which_key_delay_ms: 0, toast_ms: 3000, toast_error_ms: 6000, modes: { normal: { kind: "branch", children: { "<C-o>": jump } } } };
   const flow = create_key_flow({
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,

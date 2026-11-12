@@ -51,6 +51,8 @@ export type SettingRow = (
 
 export const SETTINGS_TABLE = {
   which_key_delay_ms: { kind: "number", min: 0, unit: "milliseconds", default: 300 },
+  toast_ms: { kind: "number", whole: true, min: 500, max: 30000, unit: "milliseconds", default: 3000 },
+  toast_error_ms: { kind: "number", whole: true, min: 500, max: 30000, unit: "milliseconds", default: 6000 },
   which_key_repeat: { kind: "boolean", default: true },
   which_key_border: { kind: "enum", values: ["square", "round", "chamfer"], default: "square" },
   // Global only: the compiled keymap carries it, and the content script compares the typed keys with it. An exact match skips the delayed open, so a prefix that also has a longer reach (`g` of `gg`) does not open its panel after the delay. An instant redraw still shows it.

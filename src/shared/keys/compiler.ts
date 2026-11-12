@@ -434,6 +434,8 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     ...(Object.keys(frame_site_globals).length > 0 ? { frame_site_globals } : {}),
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
+    toast_ms: settings.toast_ms ?? DEFAULT_SETTINGS.toast_ms,
+    toast_error_ms: settings.toast_error_ms ?? DEFAULT_SETTINGS.toast_error_ms,
     ...(which_key_skip.length > 0 ? { which_key_skip } : {}),
   };
   return { compiled, warnings };

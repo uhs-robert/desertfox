@@ -27,7 +27,7 @@ function make(with_keymap = true) {
     leave_insert_: () => {},
     run_leaf_: (matched, _count, repeat) => void ran.push(`${matched.steps[0]!.invocation.id}${repeat ? " repeat" : ""}`),
   });
-  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, mode_indicator: "always", which_key_delay_ms: 0, modes: { normal: { kind: "branch", children: { G: leaf("scroll.to", { jump: true }), "<C-o>": leaf("page.jump") } } } };
+  const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, mode_indicator: "always", which_key_delay_ms: 0, toast_ms: 3000, toast_error_ms: 6000, modes: { normal: { kind: "branch", children: { G: leaf("scroll.to", { jump: true }), "<C-o>": leaf("page.jump") } } } };
   const browser_chords: TreeBranch = { kind: "branch", children: { "<C-t>": leaf("tab.new") } };
   const read_keymap = () => flow.set_matcher_(create_matcher(keymap), browser_chords);
   if (with_keymap) read_keymap();
