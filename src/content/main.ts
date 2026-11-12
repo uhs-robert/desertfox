@@ -293,7 +293,7 @@ function publish_timing(): void {
 }
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {
-  return (browser.runtime.sendMessage({ type: "read_keymap" } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
+  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
 }
 
 function start(): void {

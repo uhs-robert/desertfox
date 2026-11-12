@@ -255,6 +255,8 @@ export type OpenHelp = {
 // A page asks for its keymap at start and again on `tree_updated`. The answer is a PageKeymap as a JSON string, or undefined when no usable keymap is stored.
 export type ReadKeymap = {
   type: "read_keymap";
+  // Set on a frame's first ask only, when it starts in normal mode with no editable focus: only such a frame may join a hold. A re-ask, or a frame in another mode, must not be written into one.
+  join: boolean;
 };
 
 // Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
