@@ -658,4 +658,19 @@ export async function run_cases({ sleep, take_shot, run_case, expect, expect_abs
     await wait_event(mark, (event) => is_selection_of("ft_macro_play")(event) && event.text === "x" && document_y(event) === document_y(recorded), "the replay of 3fx to the same x as the recording");
     await escape_to_normal("ft_macro_play");
   });
+
+  // visual.open refuses a blank selection before it changes modes, so only its own end of the find clears the highlights.
+  await run_case("p on a whitespace-only selection is refused and still ends the live character find", async () => {
+    await open_page("caret_ft", "ft_open_blank", { new_tab: true });
+    await press_and_wait_for_move("ft_open_blank", "gV", "the caret");
+    await press_keys("f", " ");
+    await wait_ft((state) => lit(state) === 0 || lit(state) > 0, "the find to settle");
+    await press_and_wait_for_move("ft_open_blank", "v", "visual mode on the space");
+    // Nothing lies before the heading, so Fx keeps the selection on the space and lights the x matches.
+    await press_keys("Fx");
+    await wait_ft((state) => lit(state) > 0, "the x matches lit by Fx");
+    await press_keys("p");
+    await wait_ft((state) => lit(state) === 0, "the highlights ended by the refused p");
+    await escape_to_normal("ft_open_blank");
+  });
 }

@@ -340,6 +340,7 @@ const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
 
 // Line breaks inside the selection are spaces, so a URL or a search sees one line. A blank selection stays selected.
 const handle_open = (args: Record<string, unknown>): Outcome | Promise<Outcome> => {
+  find_mode.end();
   const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
   if (typeof open === "string") return { ok: false, message: open };
   const text = selected_text(open.model_.text, open.painted_span_).replace(/\s+/g, " ").trim();
