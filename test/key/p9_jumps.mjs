@@ -161,4 +161,27 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     const list = await list_of_window();
     expect(list?.entries.length === 1, `the list after a reload: ${JSON.stringify(list)}`);
   });
+
+  await run_case("a key typed right after G waits for it: G then k at once ends one step above the bottom", async () => {
+    await reset_list();
+    // A fresh page: the page bundle is not loaded, so G first loads it and the k arrives while it does.
+    await open_page("aligned", "p9j_order", { new_tab: true });
+    await press_keys("G", "k");
+    const settled = (last) => last !== undefined && last.y > 0 && last.y < last.max_y - 1 && last.max_y - last.y < 400;
+    await poll_until("the page to reach the bottom and move up", async () => settled(events.filter(scroll_of("p9j_order")).at(-1)));
+    await sleep(500);
+    const last = events.filter(scroll_of("p9j_order")).at(-1);
+    expect(settled(last), `the page ended at ${last.y} of ${last.max_y}`);
+    const list = await list_of_window();
+    expect(list?.entries.length === 1 && list.entries[0].y === 0, `the place G left: ${JSON.stringify(list)}`);
+  });
+
+  await run_case("$ and ^ record no place", async () => {
+    await reset_list();
+    await open_page("aligned", "p9j_edge", { new_tab: true });
+    await press_keys("$");
+    await press_keys("^");
+    await sleep(300);
+    expect((await list_of_window()) === null, `$ and ^ recorded ${JSON.stringify(await list_of_window())}`);
+  });
 }
