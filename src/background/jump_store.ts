@@ -9,7 +9,9 @@ import { create_write_queue } from "./store_turns.ts";
 import { JUMP_PRIVATE_STORAGE_KEY, JUMP_STORAGE_KEY } from "./storage_keys.ts";
 
 type JumpList = { entries: JumpEntry[]; cursor: number };
-type JumpsValue = { v: 1; windows: Record<string, JumpList> };
+// A page that went away leaves its last offset here, per tab, until the tab's address changes or the page loads again.
+export type Leaving = { window_id: number; entry: JumpEntry };
+type JumpsValue = { v: 1; windows: Record<string, JumpList>; leaving?: Record<string, Leaving> };
 
 export type JumpArea = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -99,6 +101,23 @@ export function create_jump_store(deps: JumpStoreDeps) {
         all.windows[window_id] = result.list;
         await deps.session().set({ [key_of(is_private)]: all });
         return result.entry;
+      }),
+    // Holds the offset a page left, for the navigation that may follow.
+    hold_leaving: (tab_id: number, is_private: boolean, leaving: Leaving) =>
+      in_turn(async () => {
+        const all = await read_all(is_private);
+        all.leaving = { ...all.leaving, [tab_id]: { window_id: leaving.window_id, entry: check_entry(leaving.entry) } };
+        await deps.session().set({ [key_of(is_private)]: all });
+      }),
+    // Takes what the tab's page left, and nothing when it left none.
+    take_leaving: (tab_id: number, is_private: boolean): Promise<Leaving | undefined> =>
+      in_turn(async () => {
+        const all = await read_all(is_private);
+        const leaving = all.leaving?.[tab_id];
+        if (!leaving || !is_entry(leaving.entry)) return undefined;
+        delete all.leaving![tab_id];
+        await deps.session().set({ [key_of(is_private)]: all });
+        return leaving;
       }),
     // The list of a window that closed. Its id may be a private window's, so both values drop it.
     forget_window: (window_id: number) =>

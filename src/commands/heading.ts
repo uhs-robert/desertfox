@@ -8,4 +8,5 @@ define("heading.go", {
   bridge: false,
   runs_in: "content",
   bundle: "hints",
+  jumps: true,
 });

@@ -23,6 +23,11 @@ async function ask_at_scroll(host: BundleHostApi, message: { type: MarkRequest["
   if (message.type !== "mark_set" && answer.x !== undefined) box.scrollTo({ left: answer.x, top: answer.y, behavior: "instant" });
 }
 
+const offset_of = (host: BundleHostApi) => {
+  const box = host.scroll_box_();
+  return { x: box.scrollLeft, y: box.scrollTop };
+};
+
 // A second run would register the handlers again for nothing.
 // With no host, content.js has not started in this frame. The run leaves the flag unset, so the load that content.js asks for later registers the handlers.
 const host = page.desertfox_host;
@@ -38,5 +43,10 @@ if (!page.desertfox_page_ready && host) {
   host.register_handler_("page.jump", (args) => ask_at_scroll(host, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...(args.arrival === true && { arrival: true as const }) }));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
   // Returns nothing for every other message, so the listener in content.js answers those.
-  browser.runtime.onMessage.addListener((message: BackgroundToContent) => (message.type === "get_selection" ? Promise.resolve(selected_text()) : undefined));
+  browser.runtime.onMessage.addListener((message: BackgroundToContent) => {
+    if (message.type === "get_jump_offset") return Promise.resolve(offset_of(host));
+    return message.type === "get_selection" ? Promise.resolve(selected_text()) : undefined;
+  });
+  // The background records the place if the tab goes to another address. Only the top frame's report counts.
+  addEventListener("pagehide", () => void browser.runtime.sendMessage({ type: "jump_leave", ...offset_of(host) }));
 }

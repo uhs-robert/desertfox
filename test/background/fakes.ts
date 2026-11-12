@@ -19,6 +19,8 @@ export function make_fake(commands: Record<string, CommandInput>, overrides: Par
     ask_selection: async () => "chosen text",
     runs_with_empty: async () => false,
     read_clipboard: async () => "clip",
+    read_offset: async () => undefined,
+    record_jump: async () => undefined,
     bookmark_title: async () => "Saved title",
     search_query: async () => undefined,
     has_permission: async () => true,

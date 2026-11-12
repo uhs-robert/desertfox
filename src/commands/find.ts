@@ -23,6 +23,7 @@ define("find.next", {
   bridge: false,
   runs_in: "content",
   bundle: "caret",
+  jumps: true,
 });
 
 define("find.prev", {
@@ -33,4 +34,5 @@ define("find.prev", {
   bridge: false,
   runs_in: "content",
   bundle: "caret",
+  jumps: true,
 });

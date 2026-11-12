@@ -27,6 +27,7 @@ define("open.url", {
   bridge: true,
   runs_in: "background",
   run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string), args.where as Where, container_of(args)),
+  jumps: (args) => args.where === "here",
 });
 
 // The address a search opens: the engine named, else the default_engine setting, filled from the page of the command's tab.
@@ -52,6 +53,7 @@ define("open.search", {
   bridge: false,
   runs_in: "background",
   run: async (ctx, args) => open_in(ctx, await search_target(ctx, args.engine, args.query as string), args.where as Where, container_of(args)),
+  jumps: (args) => args.where === "here",
 });
 
 export type AnythingDeps = {
@@ -111,6 +113,7 @@ define("open.anything", {
   runs_in: "background",
   repeatable: false,
   run: (ctx, args) => anything_handlers.run(ctx, args as { query: string; where: Where }),
+  jumps: (args) => args.where === "here",
 });
 
 // A register that holds a macro has no text to open.
@@ -134,4 +137,5 @@ define("open.clipboard", {
     const target = await typed_url_target(await text_to_open(ctx, args.register as string));
     await open_in(ctx, target, args.where as Where, container_of(args));
   },
+  jumps: (args) => args.where === "here",
 });

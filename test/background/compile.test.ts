@@ -146,3 +146,19 @@ test("palette desktop shows the pushed palette, else oasis_moonlight, and leaves
   assert.deepEqual(compile({ palette: "oasis_rose" }, "oasis_dune").theme, compile({ palette: "oasis_rose" }).theme);
   assert.deepEqual(compile({}, "oasis_dune").theme, compile({ palette: "oasis_moonlight" }).theme);
 });
+
+test("a content command that moves the view goes to the background, so the router can record the place it left", () => {
+  const { registry } = make_fake({
+    "scroll.to": { label: "To", intent: "x", params: [{ name: "percent", type: "float" as const }], runs_in: "content", jumps: true },
+    "scroll.by": { label: "By", intent: "x", runs_in: "content" },
+    "page.follow": { label: "Follow", intent: "x", params: [{ name: "where", type: "enum" as const, values: ["here", "tab"], default: "here" }], runs_in: "content", jumps: (args) => args.where === "here" },
+  });
+  const { compiled } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { a: { id: "scroll.to", args: { percent: 0 } }, b: { id: "scroll.by" }, c: { id: "page.follow" }, d: { id: "page.follow", args: { where: "tab" } } } } },
+    default_keymap: {},
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: [], containers: [] },
+  });
+  const runs_in = (key: string) => (compiled.modes.normal!.children[key] as TreeLeaf).steps[0]!.runs_in;
+  assert.deepEqual(["a", "b", "c", "d"].map(runs_in), ["background", "content", "background", "content"]);
+});

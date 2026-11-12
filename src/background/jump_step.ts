@@ -16,7 +16,7 @@ export type JumpStepDeps = Omit<AddressDeps, "failed_text"> & {
   push_jump: (tab_id: number, steps: number, arrival?: true) => Promise<unknown>;
 };
 
-export type JumpAnswerer = (request: JumpRequest, tab: MarkSender | undefined) => Promise<JumpAnswer>;
+export type JumpAnswerer = ((request: JumpRequest, tab: MarkSender | undefined) => Promise<JumpAnswer>) & { is_stepping: (tab_id: number) => boolean };
 
 export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
   const arrivals = create_address_arrivals<JumpEntry>({ ...deps, failed_text: "Jump failed" });
@@ -56,5 +56,6 @@ export function create_jump_step(deps: JumpStepDeps): JumpAnswerer {
   }
 
   // The sender is a page script, so a bad request answers as a refusal and never throws into the listener.
-  return (request, tab) => answer(request, tab).catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
+  const reply: JumpAnswerer = Object.assign((request: JumpRequest, tab: MarkSender | undefined) => answer(request, tab).catch((error: unknown) => ({ ok: false as const, message: error instanceof Error ? error.message : String(error) })), { is_stepping: arrivals.is_arriving });
+  return reply;
 }

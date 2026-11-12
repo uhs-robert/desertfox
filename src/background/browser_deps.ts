@@ -19,8 +19,9 @@ import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "./storage_keys.ts";
 import { deliver_refusal, deliver_toast } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
-import { ask_selection } from "./selection_ask.ts";
+import { ask_page_bundle, ask_selection } from "./selection_ask.ts";
 import type { SelectionAskDeps } from "./selection_ask.ts";
+import { browser_jump_store } from "./jump_store.ts";
 import type { SnippetDeps } from "./snippets.ts";
 
 // Without a frame id the message reaches every frame, which shows a toast in each.
@@ -89,6 +90,11 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     },
     has_content_script,
     ask_selection: (tab_id, frame_id) => ask_selection(selection_ask_deps, tab_id, frame_id),
+    read_offset: async (tab_id) => {
+      const answer = (await ask_page_bundle(jump_offset_ask_deps, tab_id, 0)) as { x?: unknown; y?: unknown } | undefined;
+      return typeof answer?.x === "number" && typeof answer.y === "number" ? { x: answer.x, y: answer.y } : undefined;
+    },
+    record_jump: (window_id, is_private, entry) => browser_jump_store.push(window_id, is_private, entry),
     runs_with_empty: async (command_id, args, param, context) => runs_with_empty(await get_config(), command_id, args, param, await page_of(context.tab_id)),
     read_clipboard: () => navigator.clipboard.readText(),
     bookmark_title: async (url) => (url === undefined ? undefined : title_for_address(await browser.bookmarks.search({ url }), url)),
@@ -151,6 +157,8 @@ const selection_ask_deps: SelectionAskDeps = {
   ask: (tab_id, frame_id) => send_to_tab(tab_id, { type: "get_selection" }, frame_id),
   load_page_bundle: (tab_id, frame_id) => bundle_loader.load({ tab_id, frame_id, document_id: "" }, "page"),
 };
+
+const jump_offset_ask_deps: SelectionAskDeps = { ...selection_ask_deps, ask: (tab_id, frame_id) => send_to_tab(tab_id, { type: "get_jump_offset" }, frame_id) };
 
 // The decode runs in the background page, where the fetched bytes are same-origin, so no canvas is tainted. `createImageBitmap` rejects an SVG, which an `Image` element decodes.
 async function decode_to_canvas(bytes: ArrayBuffer, kind: ImageKind): Promise<OffscreenCanvas> {

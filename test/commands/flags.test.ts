@@ -61,6 +61,15 @@ test("only page.reload decides `.` by its args", () => {
   assert.deepEqual(registry.list().filter((command) => typeof command.repeatable === "function").map((command) => command.id), ["page.reload"]);
 });
 
+test("only these commands record a jump, and the open commands only with where here", () => {
+  const flagged = registry.list().filter((command) => command.jumps !== undefined);
+  assert.deepEqual(flagged.map((command) => command.id).sort(), ["find.next", "find.prev", "heading.go", "mark.jump", "open.anything", "open.clipboard", "open.search", "open.url", "page.follow", "page.heading", "scroll.to"]);
+  for (const id of ["open.url", "open.search", "open.anything", "open.clipboard", "page.follow"]) {
+    const jumps = registry.get(id)!.jumps as (args: Record<string, unknown>) => boolean;
+    assert.deepEqual(["here", "tab", "background", "window"].map((where) => jumps({ where })), [true, false, false, false], id);
+  }
+});
+
 test("only these commands opt out of `.`, so a new command repeats unless someone decides otherwise", () => {
   const opted_out = registry.list().filter((command) => command.repeatable === false).map((command) => command.id);
   assert.deepEqual(opted_out.sort(), [
