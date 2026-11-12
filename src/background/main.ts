@@ -263,7 +263,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;
-    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender)))));
+    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, request.ext ?? (await editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
   }
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
@@ -368,6 +368,7 @@ const external_editor = create_external_editor({
   session: browser.storage.session,
   client: native_host,
   send_done: (tab_id, frame_id, message) => browser.tabs.sendMessage(tab_id, message, { frameId: frame_id }),
+  save_text: (text, is_private) => browser_register_store.yank("", text, is_private),
   toast: (tab_id, frame_id, message) => show_toast_on_tab({ tab_id, frame_id }, "text.edit_external", message, "error"),
   tab_exists: (tab_id) => browser.tabs.get(tab_id).then(() => true, () => false),
   now: () => Date.now(),
@@ -389,7 +390,7 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
-  if (change.status === "loading") void external_editor.forget(tab_id).catch(() => undefined);
+  if (change.status === "loading") void external_editor.orphan(tab_id).catch(() => undefined);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   return tab_modes.forget_on_navigation(tab_id, change);
 });
@@ -406,7 +407,7 @@ void history_cache.start();
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
-  void external_editor.forget(tab_id).catch(() => undefined);
+  void external_editor.orphan(tab_id).catch(() => undefined);
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);

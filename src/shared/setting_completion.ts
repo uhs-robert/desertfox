@@ -178,7 +178,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "a file extension of 1 to 10 letters or digits, without a dot",
+    "expectation": "a file extension of up to 10 letters or digits, without a dot, or empty for none",
     "values": []
   },
   {
