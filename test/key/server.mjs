@@ -596,6 +596,16 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const replace = `<script>document.addEventListener("selectionchange", () => setTimeout(() => { ${swap} send("text_replaced"); }, 500), { once: true });</script>`;
       return response.end(page(`caret_replaced ${id}`, `<p>foo bar</p>${replace}`));
     }
+    if (url.pathname === "/caret_ticking") {
+      // A clock below the text changes every 50 ms, as a timer or a feed does, so each key meets a page that changed since the last one.
+      const tick = `<script>let ticks = 0; setInterval(() => { document.getElementById("clock").textContent = String(++ticks); }, 50);</script>`;
+      return response.end(page(`caret_ticking ${id}`, `<p>alpha beta gamma</p><p>delta epsilon</p><p>clock <span id="clock">0</span></p>${tick}`));
+    }
+    if (url.pathname === "/caret_nav_frame") {
+      // A same-origin frame that the test navigates to new text under an open session.
+      const frame = `<iframe id="nav" srcdoc="<p>first inner</p>" style="width:300px;height:60px"></iframe>`;
+      return response.end(page(`caret_nav_frame ${id}`, `<p>top words</p>${frame}<p>bottom words</p>`));
+    }
     if (url.pathname === "/caret_clip_frame") {
       // The frame is 100px tall. "zebra hidden" sits 300px down in it, outside the frame's own viewport but inside the top one. The page is scrolled so its title is off screen and the frame is the first text in view.
       const inner = "<body style='margin:0'><p>shown words</p><div style='height:300px'></div><p id='hidden_text'>zebra hidden</p></body>";

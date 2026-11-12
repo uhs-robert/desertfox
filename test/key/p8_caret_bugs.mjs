@@ -320,6 +320,35 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await poll_until("the selection style to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
   });
 
+  // Every key reads the page again here, so the caret carries over on each one.
+  await run_case("w and j move on a page that changes its text every 50 ms", async () => {
+    const page_id = "ticking";
+    await open_page("caret_ticking", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    const after_w = await press_and_wait_for_move(page_id, "w", "w to move the caret");
+    expect(after_w.text === "t", `w put the caret on ${JSON.stringify(after_w.text)}, expected the "t" of ticking`);
+    await press_and_wait_for_move(page_id, "j", "the first j to move the caret");
+    const mark = events.length;
+    await press_keys("j");
+    await wait_for_last_selection(page_id, mark, (last) => last.text !== "", "the second j to move the caret");
+    const line = await in_active_tab("(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected ? s.anchorNode.textContent : null; })()");
+    expect(line === "delta epsilon", `after two j the caret is in ${JSON.stringify(line)}, expected the line "delta epsilon"`);
+    await escape_to_normal(page_id);
+  });
+
+  // A frame that navigates fires `load` and no mutation in its parent, and its old document dies.
+  await run_case("j reaches the new text of a same-origin frame that navigated under caret mode", async () => {
+    const page_id = "nav_frame";
+    await open_page("caret_nav_frame", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await in_active_tab(`(() => { const frame = document.getElementById("nav"); return new Promise((resolve) => { frame.addEventListener("load", () => resolve(true), { once: true }); frame.srcdoc = "<p>second inner</p>"; }); })()`);
+    await press_and_wait_for_move(page_id, "j", "j to the top words");
+    await press_keys("j");
+    const frame_caret = `String(document.getElementById("nav").contentDocument.getSelection())`;
+    await poll_until('the caret on the "s" of the frame\'s new text', async () => (await in_active_tab(frame_caret)) === "s");
+    await escape_to_normal(page_id);
+  });
+
   // A find needs a character, which the line supplies, and a session to move, which normal mode has not. The command leaves the page alone and nothing waits for the next key.
   await run_case(":caret.find from normal mode starts no session and leaves nothing armed for the next caret key", async () => {
     const page_id = "move_find";
