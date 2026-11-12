@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { template_for } from "../src/help/file_templates.ts";
+import { create_user_css_gate } from "../src/help/user_css_gate.ts";
 import { create_files_session } from "../src/help/files_model.ts";
 
-function session_with(answer_of: (message: { op: string; path?: string; text?: string | null; accepted?: string }) => unknown) {
+function session_with(answer_of: (message: { op: string; path?: string; text?: string | null; accepted?: string }) => unknown, user_css_hold?: import("../src/help/user_css_gate.ts").UserCssHold) {
   const sent: { op: string; path?: string; text?: string | null; accepted?: string }[] = [];
   const session = create_files_session({
     send: async (message) => {
@@ -11,6 +12,7 @@ function session_with(answer_of: (message: { op: string; path?: string; text?: s
       return answer_of(message as never);
     },
     on_change: () => undefined,
+    ...(user_css_hold && { user_css_hold }),
   });
   return { session, sent };
 }
@@ -106,4 +108,40 @@ test("a refusal because the file changed keeps the draft and reloads the list", 
   assert.equal(session.state.open?.text, "mine");
   assert.equal(session.state.open?.base, "old");
   assert.equal(sent.filter((message) => message.op === "read").length, 2);
+});
+
+test("the consent card holds user css off while it shows, and a mount that is gone cannot release the next one", async () => {
+  const sheet = { media: "" };
+  const open_hold = create_user_css_gate(sheet);
+  const consent = { path: "snippets/a.js", code: "A", replaces: false, problems: [] };
+  const answers = (message: { op: string; text?: string | null; accepted?: string }) =>
+    message.op === "read" ? { ok: true, files: {} } : message.accepted === message.text ? { ok: true, message: "Saved." } : { ok: false, message: "consent", consent: { ...consent, code: message.text } };
+  const old_hold = open_hold();
+  const { session: old_session } = session_with(answers, old_hold);
+  await old_session.load();
+  old_session.start_new("snippets/a.js");
+  old_session.edit("A");
+  assert.equal(sheet.media, "");
+  await old_session.save();
+  assert.equal(sheet.media, "not all");
+  // An edit voids the consent and releases the hold.
+  old_session.edit("AB");
+  assert.equal(sheet.media, "");
+  await old_session.save();
+  assert.equal(sheet.media, "not all");
+  // The route is rebuilt: the old mount is disposed and the new mount holds for its own consent card.
+  old_hold.dispose();
+  const new_hold = open_hold();
+  const { session: new_session } = session_with(answers, new_hold);
+  await new_session.load();
+  new_session.start_new("snippets/b.js");
+  new_session.edit("B");
+  await new_session.save();
+  assert.equal(sheet.media, "not all");
+  // A late callback of the old mount changes nothing.
+  old_session.edit("late");
+  assert.equal(sheet.media, "not all");
+  new_session.accept(true);
+  await new_session.save();
+  assert.equal(sheet.media, "");
 });
