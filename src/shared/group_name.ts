@@ -5,13 +5,20 @@ export type NamedGroup = { id: number; title: string };
 
 export type GroupMatch = { kind: "found"; id: number } | { kind: "none" } | { kind: "ambiguous"; ids: number[] };
 
+// A generated label that equals another group's literal title or label gets the suffix again, so every label picks one group.
 export function group_labels(groups: readonly NamedGroup[]): Map<number, string> {
   const uses = new Map<string, number>();
   for (const group of groups) uses.set(group.title.trim(), (uses.get(group.title.trim()) ?? 0) + 1);
-  return new Map(groups.map((group) => {
-    const title = group.title.trim();
-    return [group.id, title !== "" && uses.get(title) === 1 ? title : `${title} #${group.id}`.trim()];
-  }));
+  const is_plain = (group: NamedGroup) => group.title.trim() !== "" && uses.get(group.title.trim()) === 1;
+  const labels = new Map<number, string>(groups.filter(is_plain).map((group) => [group.id, group.title.trim()]));
+  const taken = new Set(labels.values());
+  for (const group of groups.filter((candidate) => !is_plain(candidate)).toSorted((a, b) => a.id - b.id)) {
+    let label = `${group.title.trim()} #${group.id}`.trim();
+    while (taken.has(label)) label = `${label} #${group.id}`;
+    taken.add(label);
+    labels.set(group.id, label);
+  }
+  return labels;
 }
 
 // A typed label picks its group. A bare title picks the group only when one group has it.

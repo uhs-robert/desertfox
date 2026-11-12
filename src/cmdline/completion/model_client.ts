@@ -52,7 +52,7 @@ export function create_model_client(deps: ModelClientDeps) {
           .map(item_of);
 
   // The groups of the line's window, named as `group_labels` names them. Undefined until the first snapshot.
-  const group_items = (): SessionItem[] | undefined => {
+  const read_group_items = (): SessionItem[] | undefined => {
     if (rev < 0) return undefined;
     const mine = [...groups.values()].filter((group) => group.window_id === deps.line_window_id).sort((a, b) => a.id - b.id);
     const labels = group_labels(mine);
@@ -63,8 +63,10 @@ export function create_model_client(deps: ModelClientDeps) {
   let reported: string | undefined;
   // The finder lists every window, so a change in any window is a change of its list.
   let watches_all = false;
+  // A group change reranks the list only once a source asked for groups, as for `watches_all`.
+  let watches_groups = false;
   const report_change = () => {
-    const key = JSON.stringify([listed_items(watches_all || undefined), group_items()]);
+    const key = JSON.stringify([listed_items(watches_all || undefined), watches_groups ? read_group_items() : undefined]);
     if (key === reported) return;
     reported = key;
     deps.on_change();
@@ -96,7 +98,10 @@ export function create_model_client(deps: ModelClientDeps) {
       report_change();
     },
     items: listed_items,
-    group_items,
+    group_items: (): SessionItem[] | undefined => {
+      watches_groups = true;
+      return read_group_items();
+    },
     // Every window's rows, and a change in any of them reports.
     all_items: (): TabItem[] | undefined => {
       watches_all = true;
