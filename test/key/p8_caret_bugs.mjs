@@ -301,6 +301,25 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await poll_until("the selection colors to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
   });
 
+  // Every tree stays alive, so only a mutation tells the session its text is gone.
+  await run_case("caret mode survives the page replacing its text", async () => {
+    const page_id = "replaced_all";
+    await open_page("caret_replaced", page_id, { new_tab: true });
+    const mark = events.length;
+    await press_keys("gV");
+    await wait_event(mark, is_selection_of(page_id), "the caret report");
+    await wait_event(mark, (event) => event.type === "text_replaced" && event.page_id === page_id, "the page to replace its text");
+    await press_and_wait_for_move(page_id, "j", "j to move the caret after the replace");
+    await press_and_wait_for_move(page_id, "w", "w to move the caret after the replace");
+    const on_page = await in_active_tab("(() => { const s = getSelection(); return s.rangeCount > 0 && s.anchorNode.isConnected && String(s) !== ''; })()");
+    expect(on_page === true, "the selection is blank or sits on a node the page removed");
+    const mark_search = events.length;
+    await search_with_line("zebra");
+    await wait_for_last_selection(page_id, mark_search, (last) => last.text === "z", 'the caret on the "z" of zebra');
+    await escape_to_normal(page_id);
+    await poll_until("the selection style to leave the page", async () => (await in_active_tab(selection_styles)) === 0);
+  });
+
   // A find needs a character, which the line supplies, and a session to move, which normal mode has not. The command leaves the page alone and nothing waits for the next key.
   await run_case(":caret.find from normal mode starts no session and leaves nothing armed for the next caret key", async () => {
     const page_id = "move_find";
