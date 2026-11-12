@@ -44,3 +44,7 @@ test("an empty list turns the stripping off", () => {
 test("the shipped list drops the common trackers", () => {
   assert.equal(strip_tracking("https://a.com/p?gclid=1&msclkid=2&_hsenc=3&mkt_tok=4&id=5", DEFAULT_STRIP_TRACKING_PARAMS), "https://a.com/p?id=5");
 });
+
+test("a percent-encoded name matches, and the original text stays for what is kept", () => {
+  assert.equal(strip_tracking("https://a.com/p?utm%5Fsource=x&%75tm_medium=m&q=a%20b&%ZZ=1", patterns), "https://a.com/p?q=a%20b&%ZZ=1");
+});
