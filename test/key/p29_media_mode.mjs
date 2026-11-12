@@ -307,6 +307,14 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, (event) => event.page_id === `${id}_inner` && event.type === "media_fullscreen" && event.element === "", "the framed fullscreen to end");
     await wait_event(busy_mark, (event) => event.page_id === slow_id && event.type === "busy_done", "the busy frame to run again", 8000);
     await focus_frame(id, "slow", slow_id);
+    // The step off may still be on its way, and j in the media mode changes the volume instead of scrolling.
+    await poll_until("the busy frame to be in normal mode", async () =>
+      await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
+        const key = "desertfox_tab_mode_" + tab.id;
+        const record = (await browser.storage.local.get(key))[key];
+        return (record?.focused_child?.mode ?? record?.top_mode) === "normal";
+      })`),
+    );
     await j_scrolls(slow_id);
     await focus_frame(id);
     await j_scrolls(`${id}_inner`);
