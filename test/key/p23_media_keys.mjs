@@ -234,6 +234,7 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await open_page("quality", "p23_quality_slow", { new_tab: true });
     await run_line("quality max");
     await wait_toast("The player has no quality levels yet");
+    await in_active_tab('document.documentElement.dataset.ready = "1"; 0');
     await poll_until("the player to be ready", async () => {
       await run_line("quality");
       return (await read_toast()).startsWith("Quality: ");

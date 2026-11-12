@@ -400,19 +400,18 @@ document.addEventListener("fullscreenchange", () => send("media_fullscreen", { e
       return response.end(page(`quality_frame ${id}`, `<iframe id="inner" src="/quality?id=${id}_yt_inner" style="display:block;width:320px;height:200px"></iframe>`, MEDIA_REPORTER));
     }
     if (url.pathname === "/quality") {
-      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" for its first two seconds. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
+      // A video beside a fake site player, defined on the page's own objects as the sites do. "yt" gives a #movie_player with the unofficial quality calls, "hls" a html5player.hlsobj with the hls.js level calls, and "slow" a YouTube player that answers "unknown" until a test sets data-ready on the document element. The #replace button swaps in a second player with other levels, and #navigate pushes a new address and resets the player to its start level 800 ms later, as YouTube does on in-site navigation. Each call the extension makes reports back.
       const video = '<video id="video" src="/tone.wav" loop style="display:block;width:160px;height:90px"></video><button id="replace">replace</button><button id="navigate">navigate</button>';
       const script = `<script>
 const kind = ${JSON.stringify(id)};
-let ready = !kind.includes("slow");
-if (kind.includes("slow")) setTimeout(() => (ready = true), 2000);
+const is_ready = () => !kind.includes("slow") || document.documentElement.dataset.ready === "1";
 function make_movie_player(levels, start) {
   let current = start;
   const player = document.createElement("div");
   player.id = "movie_player";
   player.getAvailableQualityLevels = () => levels.map((entry) => entry[0]);
   player.getAvailableQualityData = () => levels.map(([quality, qualityLabel]) => ({ quality, qualityLabel, isPlayable: true }));
-  player.getPlaybackQuality = () => (ready ? current : "unknown");
+  player.getPlaybackQuality = () => (is_ready() ? current : "unknown");
   player.setPlaybackQualityRange = (low, high) => { current = low; document.documentElement.dataset.level = low; send("quality_set", { low, high }); };
   player.toggleSubtitles = () => send("quality_captions", {});
   player.nextVideo = () => send("quality_skip", { to: "next" });
