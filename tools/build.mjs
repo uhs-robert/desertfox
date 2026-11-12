@@ -6,14 +6,14 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   "content.js": 18.5 * 1024,
-  // 45 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB.
-  "hints.js": 45 * 1024,
+  // 46 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB.
+  "hints.js": 46 * 1024,
   "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
   "ui.js": 8 * 1024,
-  // 5 KB: the page copy reads the strip list and drops tracking parameters. The bundle loads on first use, not on every page.
-  "page.js": 5 * 1024,
+  // 5.5 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. The bundle loads on first use, not on every page.
+  "page.js": 5.5 * 1024,
   "text.js": 4 * 1024,
   "editor.js": 4 * 1024,
   // 5.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, and the captions and frame keys read the text tracks and step the time. The bundle loads on first use, not on every page.
