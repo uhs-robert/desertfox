@@ -27,7 +27,7 @@ define("register.paste", {
   bundle: "text",
 });
 
-// The insert mode key `<C-i>`. The host runs the editor the user's config names: the request carries text only. The code sits in the `editor` bundle, and the background holds the job.
+// The insert mode key `<C-o>`. The host runs the editor the user's config names: the request carries text only. The code sits in the `editor` bundle, and the background holds the job.
 define("text.edit_external", {
   label: "Edit in external editor",
   intent: "Edit the focused field in the native host's external editor.",
