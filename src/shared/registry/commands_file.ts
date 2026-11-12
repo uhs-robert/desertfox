@@ -10,6 +10,7 @@ export function command_meta(command: CommandDef): CommandMeta {
   if (command.repeat_limit !== undefined) meta.repeat_limit = command.repeat_limit;
   if (command.modes !== undefined) meta.modes = command.modes;
   if (command.completion !== undefined) meta.completion = command.completion;
+  if (command.advanced !== undefined) meta.advanced = command.advanced;
   return meta;
 }
 

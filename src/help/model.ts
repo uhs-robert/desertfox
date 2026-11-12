@@ -42,6 +42,7 @@ export type CommandRow = {
   usage: string;
   params: ParamRow[];
   keys: KeyRow[];
+  advanced: boolean;
 };
 
 export type HelpGroup = { name: string; commands: CommandRow[] };
@@ -201,6 +202,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
       usage: usage_line(command),
       params: (command.params ?? []).map((param) => param_row(param, subject_param(command), positional_params(command))),
       keys: keys.get(command.id) ?? [],
+      advanced: command.advanced === true,
     };
     groups.set(group_name, [...(groups.get(group_name) ?? []), row]);
   }
@@ -214,6 +216,19 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
+
+// The model the Commands page draws: without `advanced` commands unless the route asks for them. The one card a route names stays,
+// so a `#command=<id>` link to an advanced command still lands on it. A group the filter empties drops out, so no heading stands alone.
+export function visible_commands_model(model: HelpModel, show_advanced: boolean, named_command?: string): HelpModel {
+  if (show_advanced) return model;
+  const groups = model.groups.flatMap((group) => {
+    const commands = group.commands.filter((command) => !command.advanced || command.id === named_command);
+    return commands.length < group.commands.length && commands.length === 0 ? [] : [{ name: group.name, commands }];
+  });
+  return { ...model, groups };
+}
+
+export const advanced_count = (model: HelpModel): number => model.groups.reduce((total, group) => total + group.commands.filter((command) => command.advanced).length, 0);
 
 // The public styling surface from design.md "Styles" and "Themes".
 const ROLE_MEANINGS: Record<Role, string> = {

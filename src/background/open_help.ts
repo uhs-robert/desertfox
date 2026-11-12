@@ -1,4 +1,6 @@
 import { command_help_url, PAGES } from "../help/route.ts";
+import { parse_sequence } from "../shared/keys/notation.ts";
+import { ANY_KEY, type CompiledKeymap, type TreeNode } from "../shared/prefix_tree.ts";
 
 export type OpenHelpDeps = {
   is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
@@ -30,6 +32,20 @@ export function help_name_url(help_page_url: string, name: string, command_ids: 
   const page = PAGES.find((candidate) => page_name(candidate) === name);
   if (page) return help_page_url + page.hash;
   return command_ids.has(name) ? command_help_url(help_page_url, name) : undefined;
+}
+
+// What `:helpkey <keys>` resolves to in normal mode: the command id the sequence runs, or the reason it runs none.
+// A key that waits for one more key press (`m` of a mark) is a branch with a capture child, so it names that leaf's command.
+export function key_command_id(keymap: CompiledKeymap | undefined, sequence: string): { id: string; error?: undefined } | { id?: undefined; error: string } {
+  const parsed = parse_sequence(sequence);
+  if (parsed.error !== undefined) return { error: parsed.error };
+  let node: TreeNode | undefined = keymap?.modes.normal;
+  for (const token of parsed.tokens) {
+    node = node?.kind === "branch" ? node.children[token] : undefined;
+  }
+  if (node?.kind === "branch") node = node.children[ANY_KEY] ?? node;
+  if (node?.kind === "leaf") return { id: node.steps[0]!.invocation.id };
+  return { error: node === undefined ? `${sequence} is bound to nothing` : `${sequence} is the start of longer keys, not a command` };
 }
 
 // The names `:help` completes: the help pages, then every command id.

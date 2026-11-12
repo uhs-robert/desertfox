@@ -130,6 +130,8 @@ type CommandCommon = {
   repeatable?: boolean | ((args: CheckedArgs) => boolean);
   // True lets a program outside the browser run the command through the bridge socket. Absent means false. Built-in commands must say it: `define` in `registry/builtin.ts` requires it. A hard-coded never-list in `background/bridge_run.ts` wins over a true here.
   bridge?: boolean;
+  // Rarely used. The help Commands page hides the card until its "Show advanced commands" toggle is on. Completion and keys are unaffected.
+  advanced?: true;
 };
 
 export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run: CommandRun; bundle?: undefined };
@@ -147,7 +149,7 @@ export type CommandDef = BackgroundCommandDef | ContentCommandDef;
 // A `commands.json` entry: the definition without the handler and the router fields.
 export type CommandMeta = Pick<
   CommandDef,
-  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "repeat_limit" | "modes" | "completion"
+  "id" | "name" | "aliases" | "label" | "intent" | "params" | "count" | "repeat_limit" | "modes" | "completion" | "advanced"
 >;
 
 export type CommandsFile = {
