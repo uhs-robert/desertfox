@@ -16,6 +16,7 @@ import { history_cache, history_row } from "./history_cache.ts";
 import { MAX_BOOST } from "../shared/score.ts";
 import { browser_register_store } from "./register_store.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export type TabLike = {
   id?: number | undefined;
@@ -291,7 +292,7 @@ export type ContainerIdentity = TabContainer & { name: string };
 
 // With containers off the query rejects or answers false, and no tab gets a mark. The default container never appears in the answer.
 export async function read_container_identities(query: IdentityQuery): Promise<ReadonlyMap<string, ContainerIdentity>> {
-  const identities = await Promise.resolve().then(query).catch(() => false as const);
+  const identities = await refused_as(Promise.resolve().then(query), false as const);
   return new Map(Array.isArray(identities) ? identities.map((identity) => [identity.cookieStoreId, { name: identity.name, color: identity.colorCode, icon: identity.iconUrl }]) : []);
 }
 
@@ -313,7 +314,7 @@ export const browser_complete_items_deps = {
   folders: async (): Promise<FolderNode[]> => folder_nodes(await browser.bookmarks.getTree()),
   // A private line reads no history, so its rows rank by text alone. The `bookmark` command passes the privacy of its tab, so its Enter ranks as the list does.
   bookmark_view: async (is_private: boolean): Promise<BookmarkView> => {
-    const [roots, history] = await Promise.all([browser.bookmarks.getTree(), is_private ? [] : search_history().catch(() => [])]);
+    const [roots, history] = await Promise.all([browser.bookmarks.getTree(), is_private ? [] : refused_as(search_history(), [])]);
     return bookmark_view(roots, usage_by_url(history_items(history)));
   },
   search_history,
@@ -357,9 +358,9 @@ export type Asker = LineScope & { tab_id: number; frame_id: number };
 export function create_complete_items(deps: CompleteItemsDeps) {
   const open_items = async (asker: Asker) => {
     const { sources, history_max } = await deps.open_settings();
-    const bookmarks = sources.includes("bookmarks") ? bookmark_items(await deps.all_bookmarks().catch(() => [])) : [];
+    const bookmarks = sources.includes("bookmarks") ? bookmark_items(await refused_as(deps.all_bookmarks(), [])) : [];
     // One source failing leaves the other. Firefox records no private visit, so a private line lists none of the normal history either.
-    const visits = sources.includes("history") && !asker.incognito ? await deps.search_history().catch(() => []) : [];
+    const visits = sources.includes("history") && !asker.incognito ? await refused_as(deps.search_history(), []) : [];
     const history = history_items(visits);
     const rows = open_rows(sources, bookmarks, history);
     return { rows, history_max, sites: site_items(visits, new Set(rows.map((row) => row.url))) };
@@ -367,7 +368,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
 
   // A private line lists nothing, as in `open_items`, and the `history` command refuses there.
   const history_list = async (asker: Asker): Promise<HistoryItems> => ({
-    rows: asker.incognito ? [] : history_items(await deps.search_history().catch(() => [])),
+    rows: asker.incognito ? [] : history_items(await refused_as(deps.search_history(), [])),
     max: await deps.history_list_max(),
   });
 
@@ -375,12 +376,12 @@ export function create_complete_items(deps: CompleteItemsDeps) {
   // A private line gets quickmarks and bookmarks only: Firefox records no private visit, and the closed tabs and sessions are hidden there as in `session`.
   const anything_items = async (asker: Asker): Promise<AnythingItems> => {
     const [quickmarks, bookmarks, visits, closed, tabs, history_max] = await Promise.all([
-      deps.quickmark_table(asker.incognito).catch((): Record<string, string> => ({})),
-      deps.all_bookmarks().then(bookmark_items, () => []),
-      asker.incognito ? [] : deps.search_history().catch(() => []),
-      asker.incognito ? [] : deps.closed_tabs().catch((): ClosedTabRow[] => []),
-      deps.query_tabs(undefined).catch((): TabLike[] => []),
-      deps.open_settings().then(({ history_max }) => history_max, () => 0),
+      refused_as(deps.quickmark_table(asker.incognito), {} as Record<string, string>),
+      refused_as(deps.all_bookmarks(), []).then(bookmark_items),
+      asker.incognito ? [] : refused_as(deps.search_history(), []),
+      asker.incognito ? [] : refused_as(deps.closed_tabs(), [] as ClosedTabRow[]),
+      refused_as(deps.query_tabs(undefined), [] as TabLike[]),
+      refused_as(deps.open_settings().then(({ history_max }) => history_max), 0),
     ]);
     const history = history_items(visits);
     const usage = usage_by_url(history);
@@ -461,7 +462,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
       if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(() => (kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, tab_boost: {}, sites: [], quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []));
+      const items = await refused_as(fetch_items(kind, asker), kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, tab_boost: {}, sites: [], quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []);
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

@@ -8,6 +8,7 @@ import type { HlsPage } from "./hls.ts";
 import { create_rule } from "./rule.ts";
 import { youtube_driver } from "./youtube.ts";
 import type { YouTubePage } from "./youtube.ts";
+import { ignore_refusal } from "../../shared/swallow.ts";
 
 type QualityWindow = { desertfox_quality_ready?: true; desertfox_quality_address?: string; desertfox_quality_rule?: ReturnType<typeof create_rule>; wrappedJSObject: YouTubePage & HlsPage };
 const quality_window = window as unknown as QualityWindow;
@@ -43,7 +44,7 @@ function probe(): Driver | undefined {
 
 // One rule per frame however often the file runs, so a second injection continues the first one's manual-choice state.
 const rule = (quality_window.desertfox_quality_rule ??= create_rule({
-  report: () => (browser.runtime.sendMessage(report()) as Promise<string | undefined>).catch(() => undefined),
+  report: () => ignore_refusal(browser.runtime.sendMessage(report()) as Promise<string | undefined>),
   has_media,
   probe,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

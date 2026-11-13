@@ -1,3 +1,4 @@
+import { ignore_refusal, keep_chain, warn_and_go } from "../shared/swallow.ts";
 // The tab verbs of the bridge: list, activate, close and capture the tabs of normal windows, and hand over their stored icons, for a picker or a script outside the browser.
 // A private window never shows up here: every verb starts from `normal_tab`, and a tab it does not return is answered "no such tab",
 // the same text as for an id that never existed, so a caller cannot probe for private tabs. A failure carries fixed text, never a tab title.
@@ -71,15 +72,15 @@ export function create_tab_switch(deps: TabSwitchDeps) {
   let title_turns: Promise<unknown> = Promise.resolve();
   function in_turn<T>(work: () => Promise<T>): Promise<T> {
     const turn = title_turns.then(work);
-    title_turns = turn.catch(() => undefined);
+    title_turns = keep_chain(turn);
     return turn;
   }
 
   async function normal_tab(tab_id: unknown): Promise<TabInfo | undefined> {
     if (!is_whole(tab_id)) return undefined;
-    const tab = await deps.tab(tab_id).catch(() => undefined);
+    const tab = await ignore_refusal(deps.tab(tab_id));
     if (tab?.id === undefined || tab.windowId === undefined || tab.incognito !== false) return undefined;
-    return is_normal_window(await deps.window(tab.windowId).catch(() => undefined)) ? tab : undefined;
+    return is_normal_window(await ignore_refusal(deps.window(tab.windowId))) ? tab : undefined;
   }
 
   // With `current`, only the active tab of the last focused window, and none when that window is private or a popup.
@@ -132,7 +133,7 @@ export function create_tab_switch(deps: TabSwitchDeps) {
         await deps.set_preface(window_id, `${preface} `);
         prefaces.set(window_id, preface);
         result.preface_set = true;
-        deps.after(() => void clear_preface({ window_id, preface }).catch(() => undefined), PREFACE_LIFETIME_MS);
+        deps.after(() => void clear_preface({ window_id, preface }).catch(warn_and_go("clear_preface")), PREFACE_LIFETIME_MS);
       } catch {
         // A window without a preface is still found by the caller's fallback.
       }
@@ -143,7 +144,7 @@ export function create_tab_switch(deps: TabSwitchDeps) {
   async function clear_preface_now(request: { window_id?: unknown; preface?: unknown }): Promise<TabAnswer> {
     const { window_id, preface } = request;
     if (!is_whole(window_id) || (preface !== undefined && !(typeof preface === "string" && PREFACE_PATTERN.test(preface)))) return refuse("clear_preface needs a window_id and, optionally, the preface");
-    if (!is_normal_window(await deps.window(window_id).catch(() => undefined))) return refuse("no such window");
+    if (!is_normal_window(await ignore_refusal(deps.window(window_id)))) return refuse("no such window");
     if (preface !== undefined && prefaces.get(window_id) !== preface) return { ok: true, cleared: false };
     await deps.set_preface(window_id, "");
     prefaces.delete(window_id);

@@ -23,6 +23,7 @@ import { ask_page_bundle, ask_selection } from "./selection_ask.ts";
 import type { SelectionAskDeps } from "./selection_ask.ts";
 import { browser_jump_store } from "./jump_store.ts";
 import type { SnippetDeps } from "./snippets.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 // Without a frame id the message reaches every frame, which shows a toast in each.
 export function send_to_tab(tab_id: number, message: BackgroundToContent, frame_id?: number): Promise<unknown> {
@@ -51,19 +52,19 @@ export async function notify(refusal: Refusal): Promise<void> {
 // What the page slots read. `current_page` in commands/open_target.ts reads the same, but importing it here loops
 // through startup.ts.
 export async function page_of(tab_id: number | undefined): Promise<PageInfo | undefined> {
-  const tab = tab_id === undefined ? undefined : await browser.tabs.get(tab_id).catch(() => undefined);
+  const tab = tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(tab_id));
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
 export async function container_names(): Promise<string[]> {
   // Returns false or rejects when containers are off.
-  const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
+  const identities = await ignore_refusal(browser.contextualIdentities.query({}));
   return Array.isArray(identities) ? identities.map((identity) => identity.name) : [];
 }
 
 // `default` first, then the containers. Empty with containers off, where a reopen has nowhere to go.
 export async function container_stores(): Promise<ContainerStore[]> {
-  const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
+  const identities = await ignore_refusal(browser.contextualIdentities.query({}));
   if (!Array.isArray(identities) || identities.length === 0) return [];
   return [{ name: DEFAULT_CONTAINER_NAME, cookie_store_id: DEFAULT_COOKIE_STORE_ID }, ...identities.map((identity) => ({ name: identity.name, cookie_store_id: identity.cookieStoreId }))];
 }
@@ -85,7 +86,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
     get_tab: async (tab_id) => {
-      const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+      const tab = await ignore_refusal(browser.tabs.get(tab_id));
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
     has_content_script,

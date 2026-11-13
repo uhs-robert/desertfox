@@ -11,6 +11,7 @@ import { as_stored } from "./repeat_memory.ts";
 import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "./storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { is_replaying } from "./macro_replay.ts";
+import { best_effort, refused_as } from "../shared/swallow.ts";
 
 export type Recording = { register: string; steps: BoundInvocation[] };
 
@@ -49,7 +50,7 @@ export function create_macro_recorder(deps: MacroRecorderDeps) {
     return is_recording(stored) ? stored : undefined;
   }
 
-  const tell_tabs = () => deps.tell_tabs().catch(() => undefined);
+  const tell_tabs = () => best_effort(deps.tell_tabs());
 
   async function record_now(steps: readonly BoundInvocation[], outcome: StepOutcome, origin: StepOrigin): Promise<void> {
     // A prompted step runs again, with its value, as the request the command line sends. A hint pick's address opens again when the pick does.
@@ -66,7 +67,7 @@ export function create_macro_recorder(deps: MacroRecorderDeps) {
   // A step from a page takes its turn when the message arrives, while the checks on it still run. Without that, a stop that arrives after it could finish first and the step would be lost.
   const record_page = (checked: Promise<readonly BoundInvocation[] | undefined>, outcome: StepOutcome, origin: StepOrigin): Promise<void> =>
     replay_running() ? Promise.resolve() : in_turn(async () => {
-      const steps = await checked.catch(() => undefined);
+      const steps = await refused_as(checked, undefined);
       if (steps) await record_now(steps, outcome, origin);
     });
 
@@ -112,6 +113,6 @@ export const browser_macro_recorder = create_macro_recorder({
   is_replaying,
   tell_tabs: async () => {
     const tabs = await browser.tabs.query({});
-    await Promise.all(tabs.map((tab) => (tab.id === undefined ? undefined : browser.tabs.sendMessage(tab.id, { type: "tree_updated" }).catch(() => undefined))));
+    await Promise.all(tabs.map((tab) => (tab.id === undefined ? undefined : best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))));
   },
 });

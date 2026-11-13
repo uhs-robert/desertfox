@@ -7,6 +7,7 @@ import type { HeadingItem, Outcome } from "../shared/messages.ts";
 import { LAYER_ATTRIBUTE, LAYERS, RESTACKED_EVENT } from "../shared/layers.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
+import { best_effort, refused_as } from "../shared/swallow.ts";
 
 type CmdlineWindow = { desertfox_host: BundleHostApi; desertfox_cmdline_ready?: true };
 const page = window as unknown as CmdlineWindow;
@@ -119,7 +120,7 @@ if (!page.desertfox_cmdline_ready) {
       frame,
       holder,
       // A failed request reads as no ticket, so `ready` closes the line.
-      ticket: browser.runtime.sendMessage({ type: "issue_cmdline_ticket" }).catch(() => undefined),
+      ticket: refused_as(browser.runtime.sendMessage({ type: "issue_cmdline_ticket" }), undefined),
       said_ready_: false,
       page_opened_: false,
       // A page that removes the bar would leave the sink taking every key with nobody to show them.
@@ -168,7 +169,7 @@ if (!page.desertfox_cmdline_ready) {
     current.finish(new Promise<Outcome>((resolve) => (answered = () => resolve({ ok: true }))));
     current.submitted = true;
     close();
-    await browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" }).catch(() => undefined);
+    await best_effort(browser.runtime.sendMessage({ type: "run", invocations: [message.invocation], mode: "normal" }));
     if (current.asked_headings_) void host.run_command_("heading.clear", "hints", {});
     answered();
   }

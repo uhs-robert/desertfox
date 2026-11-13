@@ -3,6 +3,7 @@ import type { CommandContext } from "../shared/command.ts";
 import type { FocusPage } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
+import { best_effort } from "../shared/swallow.ts";
 
 const TOP_FRAME_ID = 0;
 
@@ -45,7 +46,7 @@ export const browser_browser_deps: BrowserDeps = {
   activate_tab: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
   // Pages without a content script reject, which is fine.
   focus_page_content: async (tab_id, frame_id) => {
-    await browser.tabs.sendMessage(tab_id, { type: "focus_page" } satisfies FocusPage, frame_id === undefined ? {} : { frameId: frame_id }).catch(() => undefined);
+    await best_effort(browser.tabs.sendMessage(tab_id, { type: "focus_page" } satisfies FocusPage, frame_id === undefined ? {} : { frameId: frame_id }));
   },
 };
 

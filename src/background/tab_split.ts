@@ -1,5 +1,6 @@
 // Split view: the two tabs of a window that Firefox shows side by side. The extension cannot create or end a split, so these only move within one.
 import { RuntimeRefusal } from "../shared/command.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 export type SplitTab = { id: number; index: number; split_id: number };
 
@@ -34,7 +35,7 @@ export async function swap_panes(deps: TabSplitDeps, tab_id: number): Promise<vo
 
 export const browser_tab_split_deps: TabSplitDeps = {
   window_tabs_of: async (tab_id) => {
-    const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+    const tab = await ignore_refusal(browser.tabs.get(tab_id));
     if (tab?.windowId === undefined) return [];
     return (await browser.tabs.query({ windowId: tab.windowId })).map((tab) => ({ id: tab.id!, index: tab.index, split_id: tab.splitViewId ?? -1 }));
   },

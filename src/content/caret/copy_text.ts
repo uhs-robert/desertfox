@@ -1,5 +1,6 @@
 import type { Outcome, RegisterYank } from "../../shared/messages.ts";
 import { BLACK_HOLE_REGISTER } from "../../shared/register_names.ts";
+import { refused_as } from "../../shared/swallow.ts";
 
 // The clipboard is missing on a plain http page and refuses a write the browser does not allow, so a copy can fail.
 export async function copy_text(clipboard: { writeText: (text: string) => Promise<void> } | undefined, text: string): Promise<boolean> {
@@ -20,7 +21,7 @@ export type Yanked = Outcome | { ok: true; dropped: true };
 export async function copy_yank(clipboard: Parameters<typeof copy_text>[0], text: string, register: string | undefined): Promise<Yanked> {
   if (register === BLACK_HOLE_REGISTER) return { ok: true, dropped: true };
   const copied = await copy_text(clipboard, text);
-  const stored = (await browser.runtime.sendMessage({ type: "register_yank", name: register ?? "", text } satisfies RegisterYank).catch(() => undefined)) as Outcome | undefined;
+  const stored = (await refused_as(browser.runtime.sendMessage({ type: "register_yank", name: register ?? "", text } satisfies RegisterYank), undefined)) as Outcome | undefined;
   if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
   return stored ?? { ok: false, message: "DesertFox background did not answer" };
 }

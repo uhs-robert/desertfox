@@ -9,6 +9,7 @@ import { BUILT_IN_PAGE, DEFAULT_SETTINGS, NEW_TAB_PAGE_FILE } from "../shared/co
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import { engine_url, home_page_url, search_engine_name } from "./url_build.ts";
 import { decode_ref } from "../shared/anything_ref.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
@@ -93,7 +94,7 @@ export function make_anything_handlers(deps: AnythingDeps) {
 const anything_handlers = make_anything_handlers({
   is_private: is_private_context,
   read_tab: async (tab_id) => {
-    const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+    const tab = await ignore_refusal(browser.tabs.get(tab_id));
     return tab?.windowId === undefined ? undefined : { window_id: tab.windowId, incognito: tab.incognito };
   },
   activate: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),

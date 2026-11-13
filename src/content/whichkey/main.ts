@@ -7,6 +7,7 @@ import { MEDIA_PANEL_HANDLER, media_panel_admitted } from "./media_panel.ts";
 import { hide_panel, show_panel } from "./panel.ts";
 import { create_which_key_session } from "./session.ts";
 import { create_which_key_timer } from "./timer.ts";
+import { refused_as } from "../../shared/swallow.ts";
 
 type WhichKeyWindow = { desertfox_host: BundleHostApi; desertfox_whichkey_ready?: true };
 const page = window as unknown as WhichKeyWindow;
@@ -17,7 +18,7 @@ type PrefixArgs = { prefix?: PendingPrefix; at_once?: boolean; delay_ms?: number
 const session = create_which_key_session(
   async (mode, typed) => {
     const ask = <Answer>(message: ListKeys | ReadRepeatPreview) => browser.runtime.sendMessage(message) as Promise<Answer>;
-    const [panel, repeat] = await Promise.all([ask<WhichKeyPanel>({ type: "list_keys", mode, prefix: typed }), ask<string | undefined>({ type: "read_repeat_preview" }).catch(() => undefined)]);
+    const [panel, repeat] = await Promise.all([ask<WhichKeyPanel>({ type: "list_keys", mode, prefix: typed }), refused_as(ask<string | undefined>({ type: "read_repeat_preview" }), undefined)]);
     return repeat === undefined ? panel : { ...panel, repeat };
   },
   show_panel,

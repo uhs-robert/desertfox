@@ -5,6 +5,7 @@ import { STALE_MOVE_REFUSAL } from "../shared/messages.ts";
 import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckBindingAnswer, ListBindings, ListBindingsAnswer } from "../shared/messages.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import { parse_sequence } from "../shared/keys/index.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 // The check refuses a text that holds this, so such a row is read-only here.
 const STEP_JOINER = " ; ";
@@ -139,7 +140,7 @@ export function create_keys_session(deps: KeysDeps) {
 
   // A snippet saved or removed since the last read changes the names, so every read takes them again.
   async function read_names(): Promise<void> {
-    if (deps.names) state.names = await deps.names().catch(() => state.names);
+    if (deps.names) state.names = await refused_as(deps.names(), state.names);
   }
 
   async function load(): Promise<void> {

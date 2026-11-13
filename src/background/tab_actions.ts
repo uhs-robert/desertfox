@@ -1,4 +1,5 @@
 import { RuntimeRefusal } from "../shared/command.ts";
+import { ignore_refusal, refused_as } from "../shared/swallow.ts";
 
 // The one place that mutes, pins, moves and reopens tabs. Callers choose the ids: the tab commands now, the tab list
 // selection later. Each function takes a list, and a single tab is a list of one.
@@ -77,7 +78,7 @@ export async function reopen_tabs_in_container(
   const open_tab: TabActionDeps["open_tab"] = (open) => deps.open_tab({ ...open, active: false });
   const reopened: number[] = [];
   for (const tab of tabs.filter((candidate) => candidate.cookie_store_id !== cookie_store_id).toSorted((a, b) => a.index - b.index)) {
-    reopened.push(...(await reopen_in_container({ open_tab, remove: deps.remove }, tab.window_id, [tab], cookie_store_id).catch((): number[] => [])));
+    reopened.push(...(await refused_as(reopen_in_container({ open_tab, remove: deps.remove }, tab.window_id, [tab], cookie_store_id), [] as number[])));
   }
   return reopened;
 }
@@ -112,7 +113,7 @@ export const browser_group_deps: GroupDeps = {
     const tabs = await Promise.all(tab_ids.map((id) => browser.tabs.get(id)));
     return tabs.map((tab) => ({ id: tab.id!, window_id: tab.windowId!, pinned: tab.pinned, group_id: tab.groupId ?? -1 }));
   },
-  group_window: async (group_id) => (await browser.tabGroups.get(group_id).catch(() => undefined))?.windowId,
+  group_window: async (group_id) => (await ignore_refusal(browser.tabGroups.get(group_id)))?.windowId,
   group: (tab_ids, group_id) => browser.tabs.group({ tabIds: tab_ids, ...(group_id === undefined ? {} : { groupId: group_id }) }),
   ungroup: (tab_ids) => browser.tabs.ungroup(tab_ids),
   update_group: async (group_id, props) => void (await browser.tabGroups.update(group_id, props)),

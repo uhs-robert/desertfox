@@ -8,6 +8,7 @@ import type { RegisterItem, RegisterRequest } from "../shared/messages.ts";
 import { BLACK_HOLE_REGISTER, CLIPBOARD_REGISTER, register_kind, SEARCH_DIRECTION_REGISTER, SEARCH_QUERY_REGISTER, storage_name, UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "./storage_keys.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export type RegisterValue = string | BoundInvocation[];
 
@@ -93,7 +94,7 @@ export function create_register_store(deps: RegisterStoreDeps) {
       const value = stored[keys[index] as string];
       return is_register_value(value) ? [{ name, description: describe_value(value) }] : [];
     });
-    const clipboard = await deps.clipboard.read().catch(() => "");
+    const clipboard = await refused_as(deps.clipboard.read(), "");
     return clipboard === "" ? rows : [...rows, { name: CLIPBOARD_REGISTER, description: describe_value(clipboard) }];
   }
 
@@ -140,7 +141,7 @@ export const is_private_context = async (ctx: CommandContext): Promise<boolean> 
 // A register message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.
 export async function answer_register_request(store: RegisterStore, request: RegisterRequest, tab: { incognito: boolean } | undefined): Promise<RegisterValue | undefined | { ok: boolean; message?: string }> {
   if (!tab || typeof request.name !== "string") return undefined;
-  if (request.type === "register_read") return store.read(request.name, tab.incognito).catch(() => undefined);
+  if (request.type === "register_read") return refused_as(store.read(request.name, tab.incognito), undefined);
   if (typeof request.text !== "string") return { ok: false, message: "A register write needs text" };
   const writing = request.type === "register_yank" ? store.yank(request.name, request.text, tab.incognito) : store.write(request.name, request.text, tab.incognito);
   return writing.then(

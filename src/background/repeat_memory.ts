@@ -5,6 +5,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import { apply_count } from "./count.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { REPEAT_PRIVATE_STORAGE_KEY, REPEAT_STORAGE_KEY } from "./storage_keys.ts";
+import { keep_chain } from "../shared/swallow.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -29,7 +30,7 @@ export function create_repeat_memory(storage: SessionStorage, has_private_window
   let queue: Promise<unknown> = Promise.resolve();
   const in_turn = <Result>(job: () => Promise<Result>): Promise<Result> => {
     const turn = queue.then(job, job);
-    queue = turn.catch(() => undefined);
+    queue = keep_chain(turn);
     return turn;
   };
   const unqueued: RepeatMemory = {

@@ -5,6 +5,7 @@ import { page_mode } from "../page_mode.ts";
 import { site_mode } from "../site_mode.ts";
 import type { ContentHandler } from "./types.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./page.ts";
+import { best_effort } from "../../shared/swallow.ts";
 
 export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line"] as const;
 
@@ -29,7 +30,7 @@ export const mode_escape: ContentHandler = {
     // After a search, Escape takes the highlights off. Without the bundle there are none.
     if (bundles.has_handler_("find.clear")) void bundles.run_command_("find.clear", "caret", {}, "", false);
     if (bundles.has_handler_("hint.unhover")) void bundles.run_command_("hint.unhover", "hints", {}, "", false);
-    if (page_mode.is_manual_insert_()) void browser.runtime.sendMessage({ type: "leave_tab_insert" } satisfies LeaveTabInsert).catch(() => undefined);
+    if (page_mode.is_manual_insert_()) void best_effort(browser.runtime.sendMessage({ type: "leave_tab_insert" } satisfies LeaveTabInsert));
     // The end of the fullscreen also ends the media mode, so this call and the mode change agree.
     if (page_mode.get_mode_() === "media" && document.fullscreenElement) void document.exitFullscreen();
     page_mode.escape();

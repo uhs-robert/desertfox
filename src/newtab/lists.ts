@@ -1,6 +1,7 @@
 // The rows of the lists under the clock. The readers are the ones behind the tab and bookmark completion, run on the page itself: no background message, so there is no ticket gate to pass. The page must keep private tabs out on its own.
 import { is_web_url, type NewTabLink, type Settings } from "../shared/config.ts";
 import { bookmark_items, flatten_bookmarks, listed_tabs, type BookmarkNode, type TabLike } from "../background/complete_items.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export type ListRow = { label: string; url: string; tab?: { id: number; window_id: number } };
 export type ListSection = { title: string; rows: ListRow[] };
@@ -55,8 +56,8 @@ export async function read_sections(settings: ListSettings, readers: PageReaders
   const tab_cap = row_cap(settings.newtab_recent_tabs, settings.newtab_recent_tabs_max);
   const bookmark_cap = row_cap(settings.newtab_bookmarks, settings.newtab_bookmarks_max);
   const [tabs, bookmarks] = await Promise.all([
-    tab_cap > 0 ? Promise.all([readers.query_tabs(), readers.page_is_private()]).then(([found, is_private]) => recent_tab_rows(found, tab_cap, is_private)).catch(() => []) : [],
-    bookmark_cap > 0 ? readers.bookmark_tree().then((roots) => bookmark_rows(roots, bookmark_cap)).catch(() => []) : [],
+    tab_cap > 0 ? refused_as(Promise.all([readers.query_tabs(), readers.page_is_private()]).then(([found, is_private]) => recent_tab_rows(found, tab_cap, is_private)), []) : [],
+    bookmark_cap > 0 ? refused_as(readers.bookmark_tree().then((roots) => bookmark_rows(roots, bookmark_cap)), []) : [],
   ]);
   if (tabs.length > 0) sections.push({ title: "Recent tabs", rows: tabs });
   if (bookmarks.length > 0) sections.push({ title: "Bookmarks", rows: bookmarks });

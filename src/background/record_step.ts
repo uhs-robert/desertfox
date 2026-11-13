@@ -7,6 +7,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import type { Outcome } from "../shared/messages.ts";
 import { check_args, type EnumSources } from "../shared/registry/check_args.ts";
 import { as_stored, type RepeatMemory } from "./repeat_memory.ts";
+import { warn_and_go } from "../shared/swallow.ts";
 
 export type StepOrigin = {
   is_private: boolean;
@@ -40,7 +41,7 @@ export function create_step_recorder(deps: StepRecorderDeps): RecordStep {
     if (!outcome.ok || outcome.cancelled || origin.prompted || origin.skip_repeat) return;
     const repeatable = steps.filter((step) => can_repeat(deps.get_command(step.id), step));
     if (repeatable.length === 0) return;
-    await deps.repeat_memory.save(repeatable.map(as_stored), origin.is_private).catch(() => undefined);
+    await deps.repeat_memory.save(repeatable.map(as_stored), origin.is_private).catch(warn_and_go("deps.repeat_memory.save"));
   };
 }
 

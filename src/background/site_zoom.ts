@@ -7,6 +7,7 @@ import { stored_keymap } from "./keymap_source.ts";
 import { site_columns_for, site_value } from "./page_keymap.ts";
 import { SITE_ZOOM_PRIVATE_STORAGE_KEY, SITE_ZOOM_STORAGE_KEY } from "./storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
+import { keep_chain } from "../shared/swallow.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -40,7 +41,7 @@ export function create_site_zoom(deps: SiteZoomDeps) {
   return {
     // A level that changed since it was set (a config edit, `:set`) is set again.
     navigated: (tab_id: number, address: string, is_private: boolean): Promise<void> =>
-      in_turn(async () => {
+      keep_chain(in_turn(async () => {
         const site = zoom_site_of(address);
         if (site === undefined) return;
         const level = await deps.level_for(address);
@@ -52,7 +53,7 @@ export function create_site_zoom(deps: SiteZoomDeps) {
         if (now === undefined || zoom_site_of(now) !== site) return;
         await deps.set_zoom(tab_id, level);
         await deps.session.set({ [key_of(is_private)]: { ...set_before, [site]: level } });
-      }).catch(() => undefined),
+      })),
     // Firefox forgets the private zoom memory with the last private window, so the record goes too.
     clear_private_without_window: (has_private_window: () => Promise<boolean>): Promise<void> =>
       in_turn(async () => {

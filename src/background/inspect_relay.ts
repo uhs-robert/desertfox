@@ -4,6 +4,7 @@ import type { DevtoolsPick } from "../shared/messages.ts";
 import { PICK_EXPIRY_MS } from "../shared/inspect.ts";
 import type { InspectAnswer } from "../shared/inspect.ts";
 import { INSPECT_PENDING_STORAGE_KEY } from "./storage_keys.ts";
+import { keep_chain } from "../shared/swallow.ts";
 
 export type RelayPort = { postMessage: (message: DevtoolsPick) => void };
 
@@ -27,7 +28,7 @@ export function create_inspect_relay(storage: SessionStorage, now: () => number)
       await storage.set({ [INSPECT_PENDING_STORAGE_KEY]: pending });
       return result;
     });
-    queue = run.catch(() => {});
+    queue = keep_chain(run);
     return run;
   };
 

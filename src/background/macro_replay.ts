@@ -8,6 +8,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import type { RunResponse } from "../shared/messages.ts";
 import { LAST_PLAYED_REGISTER } from "../shared/register_names.ts";
 import { PAGE_READY_TIMEOUT_MS, type PageReady, type PageWatch } from "./page_ready.ts";
+import { best_effort, warn_and_go } from "../shared/swallow.ts";
 
 // How deep `@a` inside a macro may nest before the replay refuses, so a macro that plays itself ends.
 export const MAX_MACRO_DEPTH = 10;
@@ -72,7 +73,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
   let current: Replay | undefined;
 
   const refuse = async (message: string): Promise<false> => {
-    await deps.show_refusal(current?.tab_id, message).catch(() => undefined);
+    await best_effort(deps.show_refusal(current?.tab_id, message));
     return false;
   };
 
@@ -110,7 +111,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     if (after === before) return undefined;
     if (after === undefined) return "gone";
     // A tab that is still loading may have its page script already, so it holds keys from the switch on. The hold after the wait covers a page that came later.
-    await deps.hold_keys(after).catch(() => undefined);
+    await best_effort(deps.hold_keys(after));
     // The watch on the old tab saw nothing of the new one, so the new tab gets a watch of its own. It answers at once when that tab is already loaded.
     return wait_for(replay, deps.watch(after));
   }
@@ -120,7 +121,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     // The user can switch tabs during a wait. The replay follows, so a pick there opens its link at once and the tab holds its keys.
     if (before !== replay.tab_id) {
       replay.tab_id = before;
-      if (before !== undefined) await deps.hold_keys(before).catch(() => undefined);
+      if (before !== undefined) await best_effort(deps.hold_keys(before));
     }
     // Started before the step, because a navigation's `loading` can arrive before the step answers.
     const watch = before === undefined ? undefined : deps.watch(before);
@@ -135,7 +136,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
       if (replay.stopped || ready === "gone") return false;
       if (ready === "timeout") return refuse(`The page did not load within ${PAGE_READY_TIMEOUT_MS / 1000} seconds, so the macro stopped`);
       // `no_script` falls through on purpose: a macro may pass through a page DesertFox does not run on, such as about:blank, to a step that needs no page script. A later content step is refused there and names its number.
-      if (ready === "ready") await deps.hold_keys(replay.tab_id!).catch(() => undefined);
+      if (ready === "ready") await best_effort(deps.hold_keys(replay.tab_id!));
       return true;
     } finally {
       watch?.stop();
@@ -147,7 +148,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
     const resolved = register === LAST_PLAYED_REGISTER ? await deps.last_played.read(is_private) : register;
     if (resolved === undefined) throw new RuntimeRefusal("No macro has been played yet");
     // The pointer is bookkeeping for `@@`, so a failed write does not stop this play.
-    await deps.last_played.write(resolved, is_private).catch(() => undefined);
+    await deps.last_played.write(resolved, is_private).catch(warn_and_go("deps.last_played.write"));
     return resolved;
   }
 
@@ -206,7 +207,7 @@ export function create_macro_replay(deps: MacroReplayDeps) {
         const register = await resolve_register(start.register, start.is_private);
         const steps = await deps.read_macro(register, start.is_private);
         if (!steps) throw new RuntimeRefusal(`Register ${register} holds no macro`);
-        if (start.tab_id !== undefined) await deps.hold_keys(start.tab_id).catch(() => undefined);
+        if (start.tab_id !== undefined) await best_effort(deps.hold_keys(start.tab_id));
         finished = await play_passes(replay, steps, start.count ?? 1, 1, start);
       } finally {
         current = undefined;

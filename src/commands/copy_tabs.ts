@@ -12,6 +12,7 @@ import type { ListFormat } from "../content/link_list.ts";
 import { strip_resolver } from "../background/strip_patterns.ts";
 import { strip_tracking } from "../content/strip_tracking.ts";
 import { YANK_REGISTER_PARAM } from "./register_param.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export type CopyTabsDeps = {
   // The tabs a line of this window lists: its own privacy only, its own window first, each window in tab order.
@@ -45,7 +46,7 @@ export function make_copy_tabs_handler(deps: CopyTabsDeps) {
     const windows = by_window(web_tabs).map((tabs) => format_link_list(tabs.map((tab) => ({ url: strip_tracking(tab.url, patterns_for(tab.url)), text: tab.title })), args.format));
     const text = windows.join("\n\n");
     let clipboard_failed = false;
-    await deps.write_clipboard(text).catch(() => void (clipboard_failed = true));
+    clipboard_failed = !(await refused_as(deps.write_clipboard(text).then(() => true), false));
     // A private window's registers stay apart from the normal ones, as for every yank.
     await deps.store.yank(register, text, is_private);
     if (clipboard_failed) throw new RuntimeRefusal("Could not copy to the clipboard");

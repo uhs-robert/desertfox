@@ -21,6 +21,7 @@ import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../bac
 import { create_host_start_session } from "./host_start_model.ts";
 import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "./route.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
@@ -131,7 +132,7 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
 
 // What the key editor's command field offers: the command line names and aliases, the aliases of the config, and the snippets. The check validates the whole text, so these only complete the first word.
 async function command_names(): Promise<string[]> {
-  const snippets = (await browser.runtime.sendMessage({ type: "list_snippets" }).catch(() => undefined)) as ListSnippetsAnswer | undefined;
+  const snippets = (await refused_as(browser.runtime.sendMessage({ type: "list_snippets" }), undefined)) as ListSnippetsAnswer | undefined;
   const { config } = await load_effective_config();
   const names = [
     ...(await load_commands_file()).commands.flatMap((command) => [command.name ?? command.id, ...(command.aliases ?? [])]),
@@ -160,7 +161,7 @@ async function load_inputs(): Promise<Inputs> {
     build_config_status(source, config_settings, edits),
   );
   // A missing guide must not blank the other pages. The guide ships with the build, so one fetch serves every draw.
-  loaded_guide ??= await fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json() as Promise<Block[]>).catch(() => []);
+  loaded_guide ??= await refused_as<Block[], Block[]>(fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json()), []);
   return { model_: model, guide: loaded_guide, engines: Object.keys(config.search_engines) };
 }
 

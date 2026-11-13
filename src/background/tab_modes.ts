@@ -5,6 +5,7 @@
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { TAB_MODE_STORAGE_PREFIX } from "./storage_keys.ts";
+import { keep_chain } from "../shared/swallow.ts";
 
 type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 
@@ -53,7 +54,7 @@ export function create_tab_modes(storage: ModeStorage) {
   let chain: Promise<unknown> = Promise.resolve();
   const in_turn = <T>(step: () => Promise<T>): Promise<T> => {
     const run = chain.then(step);
-    chain = run.catch(() => undefined);
+    chain = keep_chain(run);
     return run;
   };
   const read = async (tab_id: number): Promise<TabModeRecord> => ((await storage.get(key_of(tab_id)))[key_of(tab_id)] as TabModeRecord | undefined) ?? {};

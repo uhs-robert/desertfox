@@ -1,3 +1,4 @@
+import { best_effort, keep_chain } from "./swallow.ts";
 // Zip reader and writer for config export and import. Pure: no Node API, so the background and the help page can both use it. It reads untrusted archives, so every guard below fails the whole archive and none is skipped silently.
 
 export interface ZipLimits {
@@ -221,7 +222,7 @@ async function inflate(compressed: Uint8Array, size: number, path: string): Prom
     }
     await writer.close();
   })();
-  feed.catch(() => {});
+  void keep_chain(feed);
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -232,8 +233,8 @@ async function inflate(compressed: Uint8Array, size: number, path: string): Prom
     }
     await feed;
   } catch (error) {
-    reader.cancel().catch(() => {});
-    writer.abort().catch(() => {});
+    void best_effort(reader.cancel());
+    void best_effort(writer.abort());
     if (error instanceof ZipError) throw error;
     throw new ZipError(`entry does not decompress: ${path}`);
   }
