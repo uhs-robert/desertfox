@@ -36,6 +36,11 @@ Phase 0 answered three questions before design work: where plain keys and Firefo
 - The content script also catches the chords, so a page that cancels keys cannot block them where the content script runs.
 - Firefox adds no startup delay of its own. A slow key listener comes from what the extension loads before it listens.
 
+### Working around the limits
+
+- Keys in PDF files: let an external viewer open them. In Firefox Settings, under Applications, set Portable Document Format to "Use system default". The built-in PDF viewer catches no plain key (see the table above).
+- A plain key such as `J` is lost when it lands on a tab that has not started loading. `Alt+j` and `Alt+k` switch tabs at once, because Firefox shortcuts need no content script, but they do not work on pages that cancel keys.
+
 ### Address bar keyword (omnibox)
 
 Measured on Firefox 160 with the key test `test/key/p31_omnibox.mjs`, which types into the real address bar. The add-on registers the manifest keyword `df`.

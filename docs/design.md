@@ -667,6 +667,18 @@ Two channels exist, stable and beta. The `update_url` in the installed build's m
 - Manual beta. `just beta` starts the beta workflow on `main` and watches the run. `just release` starts no beta, because it pushes the bump to a release branch and main still has the old version. After the release PR merges, the nightly builds the matching `x.y.z.N` beta because main changed. Run `just beta` to get it at once. On a machine whose policy follows the beta (an https `install_url`), `just release` skips the local install and keeps the beta pin. Go back to stable with `bash tools/install_policy.sh stable`.
 - Local installs. On a beta machine, never run `just install`. It overwrites the beta with a local build.
 
+## What the README promises
+
+The root README makes seven short claims. This section holds the numbers and the mechanism behind each one.
+
+- Learn as you go. A pause after a key shows a which-key popup with the keys that can follow and what each does (see [Which-key](#which-key)). The popup also shows live data: your marks under `'`, your registers under `"` and your macros under `@`. The command line lists every command and completes its flags and values.
+- Checks what you give it. Every command is defined once, with typed arguments. A key, a typed command and a config line all pass the same check, so a typo is an error with a message and never a silent no-op. A config file error names the file, line and column.
+- Light on every page. The script that DesertFox loads into each page is 18.5 KB, and the build fails if it grows past that (see [Content script size](#content-script-size)). Hints, caret mode and the command line load on first use.
+- Always ready. DesertFox runs on a background page that stays loaded and keeps its state in storage. A page gets its keys within milliseconds of starting to load (the listener is ready 11-58 ms after the first byte, see [Constraints from Firefox](#constraints-from-firefox)).
+- Grows with you. The first day needs five keys: `j`, `k`, `f`, `:` and `g?`. Macros, registers, marks, per-site rules and your own commands wait until you want them, and the popup teaches each one when you reach it.
+- Safe by design. DesertFox never evaluates text as code. The optional native host takes a fixed set of requests and cannot run a shell command.
+- Tested with real key presses. A test suite presses real keys in a real Firefox, on top of the unit tests.
+
 ## Scope
 
 | Phase | Contents |
