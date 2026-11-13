@@ -18,3 +18,6 @@ export const TOOL_NAMES = ["desertfox", ...Object.keys(PINNED_BUILDS), "none"];
 export const PAGE_NAMES = ["large", "wiki", "frames", "frames0"];
 
 export const xpi_path = (work_dir, tool) => `${work_dir}/xpi/${PINNED_BUILDS[tool].dir}/${PINNED_BUILDS[tool].dir}.xpi`;
+
+// Exit status of run.mjs when a coverage result fails its checks. rivals.mjs retries other failures (debugger timeouts) but not this one, so a bad result is never retried into a clean one.
+export const CHECK_FAILED_STATUS = 3;

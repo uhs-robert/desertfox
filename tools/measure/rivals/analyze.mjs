@@ -121,7 +121,6 @@ if (coverage_tools.length > 0) {
   const labelled_visible = (tool) => median_of(coverage_runs_of(tool).map((run) => visible_names.filter((name) => is_labelled(run, name)).length));
   markdown += `| visible targets labelled (median) | ${visible_names.length} | ${coverage_tools.map(labelled_visible).join(" | ")} |\n`;
   markdown += `| labels in total (median) | - | ${coverage_tools.map((tool) => median_of(coverage_runs_of(tool).map((run) => run.coverage.labels.length))).join(" | ")} |\n`;
-  markdown += `| duplicate and stray labels (sum, a run with either fails) | - | ${coverage_tools.map((tool) => coverage_runs_of(tool).reduce((sum, run) => sum + run.coverage.duplicates + run.coverage.stray, 0)).join(" | ")} |\n`;
 }
 markdown += `\n### Versions\n\n${tools.map((tool) => `- ${tool}: firefox ${info_of[tool].firefox}, meta ${JSON.stringify(info_of[tool].meta)}`).join("\n")}\n`;
 writeFileSync(`${out_dir}/tables.md`, markdown);
