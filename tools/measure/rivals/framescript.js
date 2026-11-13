@@ -66,4 +66,35 @@ addMessageListener("rivals:press", ({ data }) => { try {
   } catch (e) { reply({ error: String(e).slice(0, 300) }); }
 });
 
+addMessageListener("rivals:coverage", ({ data }) => { try {
+  press_char(data.char);
+  content.setTimeout(() => {
+    const labels = [];
+    const walk = (node) => {
+      if (node.nodeType !== 1) return;
+      if (hint_selectors.some((selector) => node.matches(selector))) labels.push(node.getBoundingClientRect());
+      const root = node.openOrClosedShadowRoot;
+      if (root) for (const c of root.children) walk(c);
+      for (const c of node.children) walk(c);
+    };
+    for (const el of content.document.documentElement.children) walk(el);
+    const distance = (label, r) => Math.hypot(Math.max(r.left - (label.left + label.width / 2), 0, (label.left + label.width / 2) - r.right), Math.max(r.top - (label.top + label.height / 2), 0, (label.top + label.height / 2) - r.bottom));
+    const targets = [...content.document.querySelectorAll("[data-target]")].map((el) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const inside = r.width > 0 && r.height > 0 && cx >= 0 && cy >= 0 && cx < content.innerWidth && cy < content.innerHeight;
+      const top = inside ? content.document.elementFromPoint(cx, cy) : null;
+      return { name: el.dataset.target, rect: r, visible: !!top && (top === el || el.contains(top)), labels: 0 };
+    });
+    let unmatched = 0;
+    for (const label of labels) {
+      let best = null;
+      for (const t of targets) if (t.rect.width > 0 && (best === null || distance(label, t.rect) < distance(label, best.rect))) best = t;
+      if (best && distance(label, best.rect) <= 40) best.labels++; else unmatched++;
+    }
+    reply({ label_count: labels.length, unmatched, viewport: [content.innerWidth, content.innerHeight], scroll_y: content.scrollY, targets: targets.map((t) => ({ name: t.name, visible: t.visible, labelled: t.labels > 0 })) });
+  }, data.settle_ms);
+  } catch (e) { reply({ error: String(e).slice(0, 300) }); }
+});
+
 })(); }
