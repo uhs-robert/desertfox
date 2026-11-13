@@ -52,6 +52,7 @@ function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
     find_container_store_id: async (name) => containers[name],
     listed_tabs: async () => [],
     focus_window: async (id) => void log.push(`focus ${id}`),
+    previous_tab_of: async () => undefined,
     discard: {} as TabDeps["discard"],
     toast: async () => {},
   };
