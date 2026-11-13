@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
@@ -19,6 +18,7 @@ import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import { build_config, read_commands_file } from "../../tools/build-config/build_config.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const ENGINES = `
 duck = { url = "https://duck.example/?q=%s", label = "Duck" }
@@ -54,7 +54,7 @@ fallback = "duck"
 
 // The resolved engines come from the real config build, so the test drives what a user would store.
 function stored_engines() {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-engines-"));
+  const dir = make_tmp_dir("desertfox-engines-");
   writeFileSync(join(dir, "search_engines.toml"), ENGINES);
   const commands = read_commands_file(join(import.meta.dirname, "..", "fixtures", "build-config", "commands.json"));
   return build_config(dir, commands).search_engines;

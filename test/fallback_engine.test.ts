@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { empty_config, pick_config } from "../src/background/config_load.ts";
@@ -8,11 +7,12 @@ import { url_target } from "../src/commands/url_build.ts";
 import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS, FALLBACK_ENGINE, FALLBACK_ENGINE_NAME, with_fallback_engines } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 
 function config_dir_with(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-fallback-"));
+  const dir = make_tmp_dir("desertfox-fallback-");
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
   return dir;
 }

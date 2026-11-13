@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { engine_of_page, fill_template, read_query } from "../src/shared/engines/index.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const SAMPLE = join(import.meta.dirname, "..", "examples", "engines.toml");
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 
 function build_sample(warnings: string[] = []) {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-sample-"));
+  const dir = make_tmp_dir("desertfox-sample-");
   copyFileSync(SAMPLE, join(dir, "search_engines.toml"));
   return build_config(dir, commands, warnings).search_engines;
 }

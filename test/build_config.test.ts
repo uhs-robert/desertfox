@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
@@ -10,12 +9,13 @@ import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 import { parse_snippet } from "../src/shared/config_build/snippet.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 function config_dir_with(files: Record<string, string>, base?: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
+  const dir = make_tmp_dir("desertfox-config-");
   if (base) cpSync(base, dir, { recursive: true });
   for (const [name, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });
@@ -350,7 +350,7 @@ test("a snippet modes header rejects an unknown mode name", () => {
 });
 
 test("one schema per data file offers command names", () => {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-schemas-"));
+  const dir = make_tmp_dir("desertfox-schemas-");
   write_schemas(dir, build_schemas(commands));
   assert.deepEqual(readdirSync(dir).sort(), [
     "command_aliases.schema.json", "keymap.schema.json", "quickmarks.schema.json", "search_engines.schema.json", "settings.schema.json",
@@ -543,7 +543,7 @@ test("contract: build_commands_file output feeds build-config", () => {
     runs_in: "background",
     run: () => {},
   });
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-contract-"));
+  const dir = make_tmp_dir("desertfox-contract-");
   const commands_path = join(dir, "commands.json");
   writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
   const config_dir = config_dir_with({ "keymap.toml": '[normal]\nD = "tab.close --left"' });
@@ -709,7 +709,7 @@ test("a binding may leave out the count param in a mode with counts, and a Firef
     runs_in: "background",
     run: () => {},
   });
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-count-"));
+  const dir = make_tmp_dir("desertfox-count-");
   const commands_path = join(dir, "commands.json");
   writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
   const config_dir = config_dir_with({ "keymap.toml": '[normal]\n"%" = "demo.jump"\n[browser]\n"<A-j>" = "demo.jump"' });
