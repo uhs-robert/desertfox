@@ -26,19 +26,26 @@ export function create_probe(deps: ProbeDeps) {
   let look_until = 0;
   let looking = false;
   let busy = false;
+  let again = false;
   async function tell(video: boolean): Promise<void> {
-    if (busy) return;
+    // A request that comes while a report is out is not lost: the check runs again when that report settles.
+    if (busy) return void (again = true);
     busy = true;
     const address = deps.address();
     try {
       if (!(await deps.report(video))) return;
       loaded = true;
       told_at = address;
-      if (video) seen_at = address;
+      // A report without a video clears the last address that had one, so a return to it reports again.
+      seen_at = video ? address : undefined;
     } catch {
       // A report that failed to arrive counts as refused.
     } finally {
       busy = false;
+      if (again) {
+        again = false;
+        check();
+      }
     }
   }
   async function look_again(): Promise<void> {
@@ -53,6 +60,14 @@ export function create_probe(deps: ProbeDeps) {
       looking = false;
     }
   }
+  function check(): void {
+    const address = deps.address();
+    if (seen_at === address) return;
+    if (deps.has_video()) return void tell(true);
+    if (loaded && told_at !== address) void tell(false);
+    look_until = deps.now() + PROBE_SPAN_MS;
+    void look_again();
+  }
   return {
     run(): void {
       if (!armed) {
@@ -61,12 +76,7 @@ export function create_probe(deps: ProbeDeps) {
           if (from_video && seen_at !== deps.address()) void tell(true);
         });
       }
-      const address = deps.address();
-      if (seen_at === address) return;
-      if (deps.has_video()) return void tell(true);
-      if (loaded && told_at !== address) void tell(false);
-      look_until = deps.now() + PROBE_SPAN_MS;
-      void look_again();
+      check();
     },
   };
 }

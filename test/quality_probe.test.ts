@@ -5,7 +5,8 @@ import { has_player_handle } from "../src/content/quality/find_video.ts";
 
 // A document the test controls. `sleep` parks the look-again loop until `tick`, which moves the clock on by one look. `accept` is the background's answer to a report.
 function make({ video = false } = {}) {
-  const state = { video, address: "https://site.test/a", now: 0, accept: true };
+  const state = { video, address: "https://site.test/a", now: 0, accept: true, hold: false };
+  const held: (() => void)[] = [];
   const reports: boolean[] = [];
   const watchers: ((from_video: boolean) => void)[] = [];
   const sleepers: (() => void)[] = [];
@@ -13,7 +14,11 @@ function make({ video = false } = {}) {
   const probe = create_probe({
     has_video: () => (searches++, state.video),
     address: () => state.address,
-    report: async (found) => (reports.push(found), state.accept),
+    report: (found) => {
+      reports.push(found);
+      const answer = state.accept;
+      return state.hold ? new Promise<boolean>((resolve) => held.push(() => resolve(answer))) : Promise.resolve(answer);
+    },
     watch: (on_media) => void watchers.push(on_media),
     sleep: () => new Promise<void>((resolve) => sleepers.push(resolve)),
     now: () => state.now,
@@ -24,7 +29,7 @@ function make({ video = false } = {}) {
     for (const wake of sleepers.splice(0)) wake();
     await settle();
   };
-  return { probe, state, reports, watchers, sleepers, tick, settle, searches: () => searches };
+  return { held, probe, state, reports, watchers, sleepers, tick, settle, searches: () => searches };
 }
 
 test("a document with a video reports once however often the injection runs, and arms one watch", async () => {
@@ -169,4 +174,52 @@ test("a frame with a YouTube or an hls.js handle counts, a bare frame does not",
   const hls = { document: { getElementById: () => null }, html5player: { hlsobj: { levels: [] } } };
   assert.deepEqual([bare, youtube, hls].map(has_player_handle), [false, true, true]);
   assert.equal(has_player_handle({ document: { getElementById: () => ({}) }, html5player: {} }), false);
+});
+
+test("a navigation that comes while a report is out is reported when that report settles", async () => {
+  const page = make({ video: true });
+  page.state.hold = true;
+  page.probe.run();
+  page.state.address = "https://site.test/b";
+  page.probe.run();
+  assert.deepEqual(page.reports, [true]);
+  page.held.shift()!();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, true]);
+  page.held.shift()!();
+  await page.settle();
+  page.probe.run();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, true]);
+});
+
+test("a second injection at the new address while the first report is still out adds no third report", async () => {
+  const page = make({ video: true });
+  page.state.hold = true;
+  page.probe.run();
+  page.state.address = "https://site.test/b";
+  page.probe.run();
+  page.probe.run();
+  page.held.shift()!();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, true]);
+  page.state.hold = false;
+  page.held.shift()!();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, true]);
+});
+
+test("a return to an address that had a video reports again after a no-video page in between", async () => {
+  const page = make({ video: true });
+  page.probe.run();
+  await page.settle();
+  page.state.address = "https://site.test/b";
+  page.state.video = false;
+  page.probe.run();
+  await page.settle();
+  page.state.address = "https://site.test/a";
+  page.state.video = true;
+  page.probe.run();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, false, true]);
 });
