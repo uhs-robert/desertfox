@@ -217,6 +217,10 @@ const complete_items = create_complete_items({
   is_opener: cmdline.is_opener,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
+  line_frame_url: async (tab_id) => {
+    const frame_id = await cmdline.target_of(tab_id);
+    return frame_id === undefined ? undefined : (await refused_as(browser.webNavigation.getFrame({ tabId: tab_id, frameId: frame_id }), null))?.url;
+  },
   marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
   quality_levels: async (tab_id) => quality_rows(await ignore_refusal(ask_quality_in_tab(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }))),
   quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
