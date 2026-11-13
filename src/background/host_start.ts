@@ -1,12 +1,12 @@
 // What a start does with the config folder the native host reads, when the browser holds its own copy of the files.
-// A folder that differs from a non-empty browser copy never replaces it on its own: the start stores a pending record, and the user chooses on the settings page.
+// A folder that differs replaces the browser copy on its own only while the copy holds no browser change: an import, an editor save or a snippet change makes the start store a pending record, and the user chooses on the settings page.
 
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { AUTOCONFIG_FILE } from "../shared/config_build/source_files.ts";
 import type { HostFileChange, HostStartChoice, HostStartChoiceAnswer, HostStartPending } from "../shared/messages.ts";
 import { ConfigRefusal } from "./config_reload.ts";
 import type { ConfigFilesReply } from "./native_client.ts";
-import { HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "./storage_keys.ts";
+import { HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "./storage_keys.ts";
 
 // The host writes autoconfig.toml itself, from the saved settings, and the build never reads it. Left in, it would make every saved `:set` a difference, and a folder holding only it would count as filled.
 export function compared_files(files: ConfigFiles): ConfigFiles {
@@ -42,18 +42,23 @@ export type HostStartPlan =
   | { kind: "adopt" }
   | { kind: "ask"; pending: HostStartPending };
 
-// `adopt` only when the browser copy is empty: nothing is lost, so a new host user is not asked about nothing.
-// `kept` is the folder digest the user chose to keep the browser copy over: the same folder content does not ask again.
-export async function classify_host_start(reply: ConfigFilesReply, browser_files: ConfigFiles, kept_digest: string | undefined): Promise<HostStartPlan> {
+// `applied` is the digest of the folder files the browser copy last took from the host. `kept` is the folder digest the user chose to keep the browser copy over.
+export type HostMemory = { applied?: string | undefined; kept?: string | undefined };
+
+// `adopt` when replacing the browser copy loses nothing: it is empty, or it is still the folder's files from an earlier read. A profile with no `applied` digest asks, since nothing proves its copy unedited.
+// `kept` stops the same folder content from asking again.
+export async function classify_host_start(reply: ConfigFilesReply, browser_files: ConfigFiles, memory: HostMemory): Promise<HostStartPlan> {
   if (!reply.config_dir_exists) return { kind: "ignore", reason: "missing" };
   const host = compared_files(reply.files);
   const stored = compared_files(browser_files);
   if (Object.keys(host).length === 0) return { kind: "ignore", reason: "empty" };
   if (Object.keys(stored).length === 0) return { kind: "adopt" };
   if (same_files(host, stored)) return { kind: "ignore", reason: "same" };
+  const browser_digest = await files_digest(stored);
+  if (browser_digest === memory.applied) return { kind: "adopt" };
   const host_digest = await files_digest(host);
-  if (host_digest === kept_digest) return { kind: "ignore", reason: "kept" };
-  return { kind: "ask", pending: { config_dir: reply.config_dir, host_digest, browser_digest: await files_digest(stored), changes: file_changes(host, stored) } };
+  if (host_digest === memory.kept) return { kind: "ignore", reason: "kept" };
+  return { kind: "ask", pending: { config_dir: reply.config_dir, host_digest, browser_digest, changes: file_changes(host, stored) } };
 }
 
 export async function store_host_pending(pending: HostStartPending): Promise<void> {
@@ -65,9 +70,16 @@ export async function clear_host_pending(): Promise<void> {
   await browser.storage.local.remove(HOST_START_PENDING_STORAGE_KEY);
 }
 
-export async function read_kept_digest(): Promise<string | undefined> {
-  const kept = (await browser.storage.local.get(HOST_START_KEPT_STORAGE_KEY))[HOST_START_KEPT_STORAGE_KEY];
-  return typeof kept === "string" ? kept : undefined;
+export async function read_host_memory(): Promise<HostMemory> {
+  const stored = await browser.storage.local.get([HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY]);
+  const digest_at = (key: string) => (typeof stored[key] === "string" ? (stored[key] as string) : undefined);
+  return { applied: digest_at(HOST_START_APPLIED_STORAGE_KEY), kept: digest_at(HOST_START_KEPT_STORAGE_KEY) };
+}
+
+// After every swap that took the folder's files, and after a start that found the copy equal to the folder, which seeds a profile from before the digest existed.
+export async function remember_applied(files: ConfigFiles): Promise<void> {
+  const digest = await files_digest(files);
+  if ((await read_host_memory()).applied !== digest) await browser.storage.local.set({ [HOST_START_APPLIED_STORAGE_KEY]: digest });
 }
 
 export type HostChoiceDeps = {
@@ -80,16 +92,18 @@ export type HostChoiceDeps = {
 export const CHOICE_SETTLED = "Nothing changed: the config folder and the browser copy no longer differ, or another page already chose.";
 export const CHOICE_STALE = "Nothing changed: the config folder or the browser copy changed since the list was shown. Review the new list and choose again.";
 
-// Runs in the change queue. It reads the folder again rather than trusting the start's reply, and acts only when both digests still match what the user saw.
+// Runs in the change queue. It reads the folder again rather than trusting the start's reply, and acts only when the browser copy is still the one the user saw.
+// Use the folder drops only the browser copy, so a folder changed since (the user unpacked the export into it) does not refuse. Keep remembers the folder, so it needs the folder the user saw.
 // The first answer wins: after it, a second page finds nothing to choose.
 export async function settle_host_start(choice: HostStartChoice["choice"], seen: { host_digest: string; browser_digest: string }, deps: HostChoiceDeps): Promise<{ warnings: number }> {
   const reply = await deps.read_host();
-  const plan = await classify_host_start(reply, await deps.read_browser_files(), await read_kept_digest());
+  const plan = await classify_host_start(reply, await deps.read_browser_files(), await read_host_memory());
   if (plan.kind !== "ask") {
     await clear_host_pending();
     throw new ConfigRefusal(CHOICE_SETTLED);
   }
-  if (plan.pending.host_digest !== seen.host_digest || plan.pending.browser_digest !== seen.browser_digest) {
+  const folder_moved = choice === "keep_browser" && plan.pending.host_digest !== seen.host_digest;
+  if (folder_moved || plan.pending.browser_digest !== seen.browser_digest) {
     await store_host_pending(plan.pending);
     throw new ConfigRefusal(CHOICE_STALE);
   }

@@ -10,6 +10,8 @@ export const FILES_SOURCE_STORAGE_KEY = "desertfox_files_source";
 // The host start waiting on the user's choice (`HostStartPending`), and the folder digest the user chose to keep the browser copy over. See `host_start.ts`.
 export const HOST_START_PENDING_STORAGE_KEY = "desertfox_host_start_pending";
 export const HOST_START_KEPT_STORAGE_KEY = "desertfox_host_start_kept";
+// The digest of the folder files the browser copy last took from the host (a start, Use the folder or `config.reload`). A browser copy that still matches it holds no browser change.
+export const HOST_START_APPLIED_STORAGE_KEY = "desertfox_host_start_applied";
 
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";

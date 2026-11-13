@@ -6,21 +6,21 @@ const reply = (files: Record<string, string>, config_dir_exists = true) => ({ co
 
 test("a missing folder, an empty one and one with only autoconfig.toml are ignored, whatever the browser holds", async () => {
   for (const browser_files of [{}, { "settings.toml": "a" }]) {
-    assert.deepEqual(await classify_host_start(reply({ "settings.toml": "b" }, false), browser_files, undefined), { kind: "ignore", reason: "missing" });
-    assert.deepEqual(await classify_host_start(reply({}), browser_files, undefined), { kind: "ignore", reason: "empty" });
-    assert.deepEqual(await classify_host_start(reply({ "autoconfig.toml": "x" }), browser_files, undefined), { kind: "ignore", reason: "empty" });
+    assert.deepEqual(await classify_host_start(reply({ "settings.toml": "b" }, false), browser_files, {}), { kind: "ignore", reason: "missing" });
+    assert.deepEqual(await classify_host_start(reply({}), browser_files, {}), { kind: "ignore", reason: "empty" });
+    assert.deepEqual(await classify_host_start(reply({ "autoconfig.toml": "x" }), browser_files, {}), { kind: "ignore", reason: "empty" });
   }
 });
 
 test("an empty browser copy adopts the folder, and equal files ignore autoconfig.toml on both sides", async () => {
-  assert.deepEqual(await classify_host_start(reply({ "settings.toml": "a" }), { "autoconfig.toml": "y" }, undefined), { kind: "adopt" });
-  assert.deepEqual(await classify_host_start(reply({ "settings.toml": "a", "autoconfig.toml": "x" }), { "settings.toml": "a", "autoconfig.toml": "y" }, undefined), { kind: "ignore", reason: "same" });
+  assert.deepEqual(await classify_host_start(reply({ "settings.toml": "a" }), { "autoconfig.toml": "y" }, {}), { kind: "adopt" });
+  assert.deepEqual(await classify_host_start(reply({ "settings.toml": "a", "autoconfig.toml": "x" }), { "settings.toml": "a", "autoconfig.toml": "y" }, {}), { kind: "ignore", reason: "same" });
 });
 
 test("differing files ask, with each file's change, and the kept folder digest does not ask again", async () => {
   const host = { "settings.toml": "new", "quickmarks.toml": "q", "autoconfig.toml": "x" };
   const browser_files = { "settings.toml": "old", "keymap.toml": "k" };
-  const plan = await classify_host_start(reply(host), browser_files, undefined);
+  const plan = await classify_host_start(reply(host), browser_files, {});
   assert.equal(plan.kind, "ask");
   if (plan.kind !== "ask") return;
   assert.deepEqual(plan.pending.changes, [
@@ -30,7 +30,19 @@ test("differing files ask, with each file's change, and the kept folder digest d
   ]);
   assert.equal(plan.pending.host_digest, await files_digest({ "quickmarks.toml": "q", "settings.toml": "new" }));
   assert.equal(plan.pending.browser_digest, await files_digest(browser_files));
-  assert.deepEqual(await classify_host_start(reply(host), browser_files, plan.pending.host_digest), { kind: "ignore", reason: "kept" });
+  assert.deepEqual(await classify_host_start(reply(host), browser_files, { kept: plan.pending.host_digest }), { kind: "ignore", reason: "kept" });
+});
+
+test("a browser copy still equal to the files last taken from the folder adopts, and one with browser changes asks", async () => {
+  const browser_files = { "settings.toml": "from folder" };
+  const applied = await files_digest(browser_files);
+  assert.deepEqual(await classify_host_start(reply({ "settings.toml": "edited in folder" }), browser_files, { applied }), { kind: "adopt" });
+  // An import or an editor save changed the copy since the last read.
+  assert.equal((await classify_host_start(reply({ "settings.toml": "edited in folder" }), { "settings.toml": "typed" }, { applied })).kind, "ask");
+  // A profile from before the digest existed has nothing that proves its copy unedited.
+  assert.equal((await classify_host_start(reply({ "settings.toml": "edited in folder" }), browser_files, {})).kind, "ask");
+  // An unedited copy adopts even over a folder content the user once kept the copy over.
+  assert.deepEqual(await classify_host_start(reply({ "settings.toml": "x" }), browser_files, { applied, kept: await files_digest({ "settings.toml": "x" }) }), { kind: "adopt" });
 });
 
 test("the digest ignores the order of the files and autoconfig.toml, and tells a path from its text", async () => {
