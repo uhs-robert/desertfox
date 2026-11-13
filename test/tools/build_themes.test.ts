@@ -7,8 +7,8 @@ import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const script = new URL("../../tools/build_themes.ts", import.meta.url).pathname;
 
-test("--check counts a missing module as stale and does not create it", () => {
-  const out = join(make_tmp_dir("desertfox-themes-"), "themes.ts");
+test("--check counts a missing module as stale and does not create it", (t) => {
+  const out = join(make_tmp_dir("desertfox-themes-", t), "themes.ts");
   const run = spawnSync(process.execPath, ["--no-warnings", script, "--check", "--out", out], { encoding: "utf8" });
   assert.equal(run.status, 1);
   assert.match(run.stderr, /stale/);
