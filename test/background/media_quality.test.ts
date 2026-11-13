@@ -5,17 +5,20 @@ import type { QualityReport } from "../../src/shared/quality.ts";
 
 const web = "https://video.test/watch";
 
-function make({ off = false as boolean | (() => boolean), inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined } = {}) {
+function make({ off = false as boolean | (() => boolean), inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined, frame_address = web as string | null, inject_frame = async (_tab_id: number, _frame_id: number): Promise<unknown> => [1] } = {}) {
+  const into_frame: [number, number][] = [];
   const injected: number[] = [];
   const about_blank: number[] = [];
   const quality = create_media_quality({
     is_off: async () => (typeof off === "function" ? off() : off),
     inject_all: (tab_id) => (injected.push(tab_id), inject(tab_id)),
     inject_about_blank: async (tab_id) => void about_blank.push(tab_id),
+    inject_frame: (tab_id, frame_id) => (into_frame.push([tab_id, frame_id]), inject_frame(tab_id, frame_id)),
+    frame_address: async () => frame_address ?? undefined,
     wait,
     settle_ms: 1000,
   });
-  return { quality, injected, about_blank };
+  return { quality, injected, about_blank, into_frame };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -56,7 +59,7 @@ test("a frame that refuses the script does not stop the about:blank pass", async
 });
 
 test("a tab that closed while the bundle was injected throws nothing", async () => {
-  const closing = create_media_quality({ is_off: async () => false, inject_all: async () => Promise.reject(new Error("no such tab")), inject_about_blank: async () => Promise.reject(new Error("no such tab")), wait: async () => undefined, settle_ms: 0 });
+  const closing = create_media_quality({ is_off: async () => false, inject_all: async () => Promise.reject(new Error("no such tab")), inject_about_blank: async () => Promise.reject(new Error("no such tab")), inject_frame: async () => undefined, frame_address: async () => undefined, wait: async () => undefined, settle_ms: 0 });
   await closing.tab_updated(2, { url: web }, web);
   await flush();
 });
@@ -157,4 +160,43 @@ test("a settings change that turns the rule from off to on injects the open web 
   off = false;
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [1, 3, 1, 3], "extension off then on again");
+});
+
+test("a frame whose probe found a video gets the bundle, and no other frame does", async () => {
+  const { quality, into_frame } = make();
+  await quality.probe_reported(4, 7, web);
+  assert.deepEqual(into_frame, [[4, 7]]);
+});
+
+test("a probe report from a frame that left the address it saw, or closed, loads nothing", async () => {
+  const moved = make({ frame_address: "https://video.test/other" });
+  await moved.quality.probe_reported(4, 7, web);
+  const closed = make({ frame_address: null });
+  await closed.quality.probe_reported(4, 7, web);
+  assert.deepEqual([moved.into_frame, closed.into_frame], [[], []]);
+});
+
+test("a probe report from an about:blank frame loads the bundle with no address to compare", async () => {
+  const { quality, into_frame } = make({ frame_address: null });
+  await quality.probe_reported(4, 7, "about:blank");
+  assert.deepEqual(into_frame, [[4, 7]]);
+});
+
+test("a probe report with the extension or the rule off, or with no sender, loads nothing, and a frame that refuses the bundle throws nothing", async () => {
+  const off = make({ off: true });
+  await off.quality.probe_reported(4, 7, web);
+  const nameless = make();
+  await nameless.quality.probe_reported(undefined, 7, web);
+  await nameless.quality.probe_reported(4, undefined, web);
+  assert.deepEqual([off.into_frame, nameless.into_frame], [[], []]);
+  const refusing = make({ inject_frame: async () => Promise.reject(new Error("no such frame")) });
+  await refusing.quality.probe_reported(4, 7, web);
+  assert.equal(refusing.into_frame.length, 1);
+});
+
+test("two reports from one frame (a navigation inside the document) inject the bundle twice, which the bundle's own guard answers with one listener", async () => {
+  const { quality, into_frame } = make();
+  await quality.probe_reported(4, 7, web);
+  await quality.probe_reported(4, 7, web);
+  assert.equal(into_frame.length, 2);
 });

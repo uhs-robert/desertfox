@@ -85,10 +85,15 @@ export async function ask_quality(deps: QualityDeps, tab_id: number, request: Qu
 
 export const quality_reports = create_quality_reports();
 
-// The rule's first pass leaves out `matchAboutBlank` (see `media_quality.ts` for the second).
-export const inject_quality_for_rule = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, runAt: "document_start" });
+// The rule injects the small probe, not the bundle: a frame without a video never loads `quality.js`. The first pass leaves out `matchAboutBlank` (see `media_quality.ts` for the second).
+export const inject_probe_for_rule = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality_probe.js", allFrames: true, runAt: "document_start" });
 
-export const inject_quality_about_blank = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" });
+export const inject_probe_about_blank = (tab_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality_probe.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" });
+
+// The frame whose probe reported. `matchAboutBlank`, because the probe ran there.
+export const inject_quality_into_frame = (tab_id: number, frame_id: number): Promise<unknown> => browser.tabs.executeScript(tab_id, { file: "quality.js", frameId: frame_id, matchAboutBlank: true, runAt: "document_start" });
+
+export const frame_address = (tab_id: number, frame_id: number): Promise<string | undefined> => browser.webNavigation.getFrame({ tabId: tab_id, frameId: frame_id }).then((frame) => frame?.url);
 
 export const ask_quality_in_tab = (tab_id: number, request: QualityRequest, prefer_frame?: number): Promise<QualityAnswer | undefined> =>
   ask_quality(

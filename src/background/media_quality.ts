@@ -1,4 +1,4 @@
-// The `media_quality` rule on the background side: a tab that navigates gets the `quality` bundle in every frame. Each frame reports, and the answer to a report from a frame with a video is the rule for that frame's address (`quality_report` in `main.ts`), so no frame asks for it again.
+// The `media_quality` rule on the background side: a tab that navigates gets the probe in every frame. A frame whose probe finds a video gets the `quality` bundle, which reports, and the answer to a report from a frame with a video is the rule for that frame's address (`quality_report` in `main.ts`), so no frame asks for it again.
 // A frame that loads after the tab's last event misses the rule. That is a known limit. An about:blank frame gets it from the second pass (`about_blank_pass` below), which runs `settle_ms` after the first.
 import type { QualityReport } from "../shared/quality.ts";
 import { best_effort } from "../shared/swallow.ts";
@@ -6,17 +6,21 @@ import { best_effort } from "../shared/swallow.ts";
 export type MediaQualityDeps = {
   // True when the extension is off, or the rule is `off` everywhere (the global value is `off` and no site row sets one), so no frame has anything to apply.
   is_off: () => Promise<boolean>;
-  // Runs the bundle in every frame. Rejects when any frame refuses, while the others still run it.
+  // Runs the probe in every frame. Rejects when any frame refuses, while the others still run it.
   inject_all: (tab_id: number) => Promise<unknown>;
   // The second pass, with `matchAboutBlank`, that reaches a player in an about:blank frame. It runs `settle_ms` after the first, once the frames have left their initial about:blank documents. With the flag at load, a frame under an all-off site rule left ignore mode (#466).
   inject_about_blank: (tab_id: number) => Promise<unknown>;
+  // Runs the `quality` bundle in one frame, the one whose probe found a video. Rejects when the frame is gone.
+  inject_frame: (tab_id: number, frame_id: number) => Promise<unknown>;
+  // The address the frame holds now, or undefined when the frame is gone.
+  frame_address: (tab_id: number, frame_id: number) => Promise<string | undefined>;
   wait: (ms: number) => Promise<void>;
   settle_ms: number;
 };
 
 type TabChange = { url?: string | undefined; status?: string | undefined };
 
-// A changed address (a hard load, or a `pushState` such as a click on a related video) and a finished load each inject the bundle. A finished load matters because the first update of a hard load can reach the document that is about to go away.
+// A changed address (a hard load, or a `pushState` such as a click on a related video) and a finished load each inject the probe. A finished load matters because the first update of a hard load can reach the document that is about to go away.
 export const is_trigger = (change: TabChange): boolean => change.url !== undefined || change.status === "complete";
 
 const is_web = (address: string | undefined): boolean => address !== undefined && /^https?:/.test(address);
@@ -49,6 +53,17 @@ export function create_media_quality(deps: MediaQualityDeps) {
         if (id === undefined || !is_web(url)) continue;
         await best_effort(deps.inject_all(id));
         await best_effort(deps.inject_about_blank(id));
+      }
+    },
+    // A frame's probe found a video. The bundle goes into that frame alone, unless the frame has left the address the probe saw (a navigation or a closed frame between the report and now), where the bundle would cost a page with no video. An about: frame has no address to compare.
+    async probe_reported(tab_id: number | undefined, frame_id: number | undefined, address: string): Promise<void> {
+      if (tab_id === undefined || frame_id === undefined) return;
+      try {
+        if (await deps.is_off()) return;
+        if (is_web(address) && (await deps.frame_address(tab_id, frame_id)) !== address) return;
+        await deps.inject_frame(tab_id, frame_id);
+      } catch {
+        // A frame or tab that closed has no rule to apply.
       }
     },
     async tab_updated(tab_id: number, change: TabChange, address: string | undefined): Promise<void> {

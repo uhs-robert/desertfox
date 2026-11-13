@@ -48,7 +48,7 @@ import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_media_quality, rule_for_report } from "./media_quality.ts";
-import { ask_quality_in_tab, inject_quality_about_blank, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
+import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_reports, quality_rows } from "./quality_levels.ts";
 import { tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
@@ -301,6 +301,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     quality_reports.receive(sender.tab?.id, sender.frameId, request);
     return rule_for_report(request, { is_disabled: read_disabled, value_for_frame: () => media_quality_reply(browser.storage.local, sender.url) });
   }
+  if (request?.type === "quality_probe") return void media_quality.probe_reported(sender.tab?.id, sender.frameId, request.address);
   if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
   if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
   if (request?.type === "replay_end") return macro_replay.ended();
@@ -469,8 +470,10 @@ void external_editor.resume().catch(warn_and_go("external_editor.resume"));
 
 const media_quality = create_media_quality({
   is_off: async () => (await read_disabled()) || media_quality_is_off(browser.storage.local),
-  inject_all: inject_quality_for_rule,
-  inject_about_blank: inject_quality_about_blank,
+  inject_all: inject_probe_for_rule,
+  inject_about_blank: inject_probe_about_blank,
+  inject_frame: inject_quality_into_frame,
+  frame_address,
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   settle_ms: 1000,
 });
