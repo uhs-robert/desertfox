@@ -203,7 +203,7 @@ test("the off-screen rule: empty boxes stay, each edge rejects, a box just insid
 
 // An element whose rect is read in its own window: a frame's element is judged by the frame's size, not the top window's.
 const placed = (name: string, rect: { left: number; top: number; width: number; height: number }, window_size = { innerWidth: 100, innerHeight: 50 }): Found => {
-  const element = { name, ownerDocument: { defaultView: window_size }, getBoundingClientRect: () => ({ ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height }) };
+  const element = { name, ownerDocument: { compatMode: "CSS1Compat", documentElement: { clientWidth: window_size.innerWidth, clientHeight: window_size.innerHeight }, body: null, defaultView: window_size }, getBoundingClientRect: () => ({ ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height }) };
   return { element: element as unknown as Element, frames: [] };
 };
 
@@ -213,7 +213,7 @@ test("pruning drops the off-screen boxes before the costly tests and keeps every
     placed("in view", { left: 10, top: 10, width: 10, height: 10 }),
     placed("fixed bar in view", { left: 0, top: 0, width: 100, height: 20 }),
     placed("half above the top", { left: 10, top: -5, width: 10, height: 10 }),
-    placed("clipped away inside a scroll box, rect below the view", { left: 10, top: 60, width: 10, height: 10 }),
+    placed("below the view, so dropped even inside a scroll box", { left: 10, top: 60, width: 10, height: 10 }),
     placed("zero size far away", { left: 500, top: 500, width: 0, height: 0 }),
     placed("display contents far away", { left: 0, top: 0, width: 0, height: 0 }),
     placed("right of the view", { left: 120, top: 10, width: 10, height: 10 }),
