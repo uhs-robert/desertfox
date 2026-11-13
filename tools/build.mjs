@@ -11,8 +11,10 @@ const MAX_BYTES = {
   // 48.5 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB.
   "hints.js": 48.5 * 1024,
   "caret.js": 32 * 1024,
-  "whichkey.js": 8 * 1024,
-  "cmdline.js": 4 * 1024,
+  // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the arrival guard). The bundle loads on a pause in a prefix, not on every page.
+  "whichkey.js": 8.5 * 1024,
+  // 6.5 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The bundle loads on the first `:`, not on every page.
+  "cmdline.js": 6.5 * 1024,
   "ui.js": 8 * 1024,
   // 5.5 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. The bundle loads on first use, not on every page.
   "page.js": 5.5 * 1024,

@@ -645,12 +645,31 @@ test("focus, hover and delete reach a frame, and here focuses it instead of clic
   assert.equal(page.calls.at(-1), "remove");
 });
 
+// The cue toast of `;f` goes through the background, which words it from the user's keymap.
+function with_sent_messages(body: () => void): unknown[] {
+  const sent: unknown[] = [];
+  (globalThis as unknown as { browser?: unknown }).browser = { runtime: { sendMessage: (message: unknown) => (sent.push(message), Promise.resolve()) } };
+  try {
+    body();
+  } finally {
+    delete (globalThis as unknown as { browser?: unknown }).browser;
+  }
+  return sent;
+}
+
 test("focus on a frame also focuses the frame's window, the call that enters a frame of another site", () => {
   const window_focus_calls: string[] = [];
   const page = frame({ tabIndex: 0, contentWindow: { focus: () => window_focus_calls.push("window") } });
-  page.run("focus");
+  with_sent_messages(() => page.run("focus"));
   assert.deepEqual(page.calls, ["focus"]);
   assert.deepEqual(window_focus_calls, ["window"]);
+});
+
+test("focus on a frame asks for the one-time cue, and a here pick on a frame does not", () => {
+  const focused = with_sent_messages(() => frame({ tabIndex: 0 }).run("focus"));
+  assert.deepEqual(focused, [{ type: "frame_cue" }]);
+  assert.deepEqual(with_sent_messages(() => frame({ tabIndex: 0 }).run("here")), []);
+  assert.deepEqual(with_sent_messages(() => fixture("a", { href: "https://example.com/" }).run("focus")), []);
 });
 
 test("copy_image and download send the picture address to the background", () => {
