@@ -48,10 +48,10 @@ async function build_with_cache(options) {
 // content.js builds first, on the empty cache: esbuild gives the shortest names to the first build's most used names, so content.js then depends on its own source alone. Any build before it makes a bundle's edit move content.js's size.
 const content_options = { entryPoints: { content: "src/content/main.ts" }, outdir: "dist", minify: true };
 await build_with_cache(content_options);
-await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: "dist", sourcemap: true });
-await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: "dist", sourcemap: true });
-await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", sourcemap: true });
-await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", sourcemap: true });
+await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
 const minified_entries = {
   hints: "src/content/hints/main.ts",
   caret: "src/content/caret/main.ts",
