@@ -106,8 +106,8 @@ const media_discovery = create_media_discovery({
   storage: browser.storage.session,
   tab_is_open: async (tab_id) => (await ignore_refusal(browser.tabs.get(tab_id))) !== undefined,
   which_key_delay_ms: async () => effective_settings((await get_config()).settings).which_key_delay_ms,
-  close_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "whichkey", args: {}, bundle: "whichkey" }] }, 0),
-  open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0),
+  close_panel: (tab_id) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "whichkey", args: {}, bundle: "whichkey" }] }, 0)),
+  open_panel: (tab_id) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0)),
 });
 const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
 const router = create_router(router_deps);
