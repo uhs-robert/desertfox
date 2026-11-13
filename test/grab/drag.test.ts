@@ -16,7 +16,7 @@ class FakeDataTransfer {
 }
 Object.assign(globalThis, { Event: FakeEvent, MouseEvent: FakeEvent, PointerEvent: FakeEvent, DragEvent: FakeEvent, DataTransfer: FakeDataTransfer });
 
-type Fake = { localName: string; draggable_attribute?: string; type?: string; value?: string; draggable_: boolean; log: string[]; on: Record<string, (event: FakeEvent) => boolean | void> } & Record<string, unknown>;
+type Fake = { parent?: Fake; localName: string; draggable_attribute?: string; type?: string; value?: string; draggable_: boolean; log: string[]; on: Record<string, (event: FakeEvent) => boolean | void> } & Record<string, unknown>;
 
 // One element that is also its own document: elementFromPoint answers it, and every event lands in its log.
 function element(extra: Partial<Fake> = {}): Fake {
@@ -27,7 +27,16 @@ function element(extra: Partial<Fake> = {}): Fake {
     on: {},
     isConnected: true,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 20 }),
-    closest: (selector: string) => (self.draggable_ || (self.localName === "a" && selector.includes("a[href]")) ? self : null),
+    // Models the selector's parts: an explicit draggable, and a link or picture that the page has not turned off.
+    closest: (selector: string) => {
+      for (let up: Fake | undefined = self; up; up = up.parent as Fake | undefined) {
+        const name = up.localName === "a" ? "a[href]" : up.localName;
+        const plain = selector.includes(name) && !selector.includes(`${name}:not`);
+        const unless_off = selector.includes(`${name}:not`) && up.draggable_attribute !== "false";
+        if ((up.draggable_ && selector.includes('[draggable="true"]')) || (["a", "img"].includes(up.localName) && (plain || unless_off))) return up;
+      }
+      return null;
+    },
     getAttribute: (name: string) => (name === "draggable" ? self.draggable_attribute ?? null : null),
     dispatchEvent(event: FakeEvent) {
       self.log.push(event.type);
@@ -193,4 +202,34 @@ test("a range with step any moves by a hundredth of its span instead of throwing
 
 test("a new drag starts with an uninitialized effectAllowed, as a real one does", () => {
   assert.equal(press(as_element(element({ draggable_: true })))!.data!.effectAllowed, "uninitialized");
+});
+
+test("a picture that turns dragging off inside a draggable card leaves the card as the source", () => {
+  const card = element({ draggable_: true });
+  const picture = element({ localName: "img", draggable_attribute: "false", parent: card });
+  const route = route_of(as_element(picture));
+  assert.equal(route.route, "html5");
+  assert.equal(route.source, card as unknown);
+});
+
+test("a link whose press the page cancels keeps the pointer route, as in a browser", () => {
+  const link = element({ localName: "a" });
+  link.on.mousedown = () => false;
+  const held = press(as_element(link))!;
+  assert.equal(held.route, "pointer");
+  assert.deepEqual(link.log, ["pointerdown", "mousedown"]);
+  const picture = element({ localName: "img" });
+  picture.on.pointerdown = () => false;
+  assert.equal(press(as_element(picture))!.route, "pointer");
+});
+
+test("a range with step any and max 0 steps by a hundredth of its negative span", () => {
+  const input = element({ localName: "input", type: "range", value: "-50", max: "0", min: "-100" });
+  Object.assign(input, {
+    stepUp: () => {
+      throw new Error("step any");
+    },
+  });
+  nudge(press(as_element(input))!, "right");
+  assert.equal(input.value, "-49");
 });
