@@ -7,6 +7,13 @@ export const RETRY_MS = 10;
 // The key that moves to the next tab in each tool's default keymap. Only DesertFox binds J to the next tab. Vimium, Vimium C and Tridactyl 1.25.1 bind K to it and J to the previous tab.
 export const NEXT_TAB_KEY = { desertfox: "J", vimium: "K", vimiumc: "K", tridactyl: "K" };
 
+// The middle value of sorted numbers, or the mean of the two middle values for an even count. Null for none.
+function median(sorted) {
+  if (sorted.length === 0) return null;
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 // marks: { key_a_ms, selects: [{ index, ms }] in order, presses_b_ms: [ms] }. Tab 0 is the loaded start tab, tab 1 and tab 2 start unloaded.
 // Hop A is the key in tab 0 (a loaded script) to tab 1 becoming active. Hop B starts when tab 1 becomes active and ends when tab 2 does, with a press every RETRY_MS in between.
 // Returns { error } when a hop did not happen, so run.mjs can fail the run as one that cannot measure.
@@ -24,8 +31,8 @@ export function analyze_tab_switch(marks) {
     // DesertFox holds a key that arrives before its keymap is read and replays it, so for DesertFox this counts held presses and it can land up to one press gap sooner. How the rivals treat early keys was not checked, so for them it counts presses sent before the landing.
     lost_before_landing: Math.max(0, presses.length - 1),
     presses_sent: presses.length,
-    // The measured gap between presses, the median of the differences. Null with fewer than two presses.
-    press_gap_ms: gaps.length === 0 ? null : gaps[gaps.length >> 1],
+    // The measured gap between presses, the median of the differences, the mean of the two middle ones for an even count. Null with fewer than two presses.
+    press_gap_ms: median(gaps),
     // Switches after the landing: presses that were in flight and worked as well. Zero means the landing was the only effect.
     extra_hops: marks.selects.length - 2,
   };

@@ -46,3 +46,8 @@ test("the median gap between presses is reported from the press times", () => {
   const result = analyze_tab_switch({ key_a_ms: 0, selects: [{ index: 1, ms: 10 }, { index: 2, ms: 80 }], presses_b_ms: [11, 28, 45, 62] });
   assert.equal(result.press_gap_ms, 17);
 });
+
+test("an even number of gaps reports the mean of the two middle gaps", () => {
+  const result = analyze_tab_switch({ key_a_ms: 0, selects: [{ index: 1, ms: 10 }, { index: 2, ms: 60 }], presses_b_ms: [11, 21, 51] });
+  assert.equal(result.press_gap_ms, 20);
+});
