@@ -6,15 +6,10 @@ import type { ContentHandler } from "./types.ts";
 
 export const SCROLL_TO_DEFAULT_AXIS = "y";
 
+// The page scrolls whatever its overflow says, so the overflow test is fed a value that passes.
 function page_candidate(): ScrollCandidate<Element> | undefined {
   const root = document.scrollingElement;
-  if (!root) return undefined;
-  return {
-    ref: root,
-    can_scroll_x_: root.scrollWidth > root.clientWidth,
-    can_scroll_y_: root.scrollHeight > root.clientHeight,
-    area: root.clientWidth * root.clientHeight,
-  };
+  return root ? candidate_of(root, { overflowX: "auto", overflowY: "auto" }) : undefined;
 }
 
 function focus_chain(): ScrollCandidate<Element>[] {
@@ -163,11 +158,8 @@ export const scroll_to: ContentHandler = {
       const target = scroll_target(axis);
       const percent = Number(args.percent);
       const behavior = smooth_unless(repeat || instant);
-      if (axis === "x") {
-        target.scrollTo({ left: percent_to_offset(percent, target.scrollWidth, target.clientWidth), behavior });
-      } else {
-        target.scrollTo({ top: percent_to_offset(percent, target.scrollHeight, target.clientHeight), behavior });
-      }
+      const [side, scroll_size, client_size] = axis === "x" ? (["left", target.scrollWidth, target.clientWidth] as const) : (["top", target.scrollHeight, target.clientHeight] as const);
+      target.scrollTo({ [side]: percent_to_offset(percent, scroll_size, client_size), behavior });
     });
   },
 };

@@ -24,14 +24,16 @@ export const run_content_invocation = (invocation: Invocation, count_rule: Count
     }
   });
 
-// Runs the invocations one after another and answers with the first outcome that is not done, or done when all are.
-export async function run_in_order(invocations: Invocation[], repeat?: boolean): Promise<Outcome> {
-  for (const invocation of invocations) {
-    const outcome = await run_content_invocation(invocation, "ignore", repeat);
+// Runs the invocations one after another and answers with the first outcome that is not done, or done when all are. Each runs under the count rule `rule_of` gives it.
+async function run_all(invocations: Invocation[], rule_of: (index: number) => CountBehavior, repeat?: boolean): Promise<Outcome> {
+  for (const [index, invocation] of invocations.entries()) {
+    const outcome = await run_content_invocation(invocation, rule_of(index), repeat);
     if (!outcome.ok || outcome.cancelled) return outcome;
   }
   return { ok: true };
 }
+
+export const run_in_order = (invocations: Invocation[], repeat?: boolean): Promise<Outcome> => run_all(invocations, () => "ignore", repeat);
 
 // A leaf's steps with the typed count on each. The router applies the count rule of a step it runs.
 export const counted_invocations = (steps: readonly LeafStep[], count: number | undefined): Invocation[] =>
@@ -42,11 +44,5 @@ export const counted_invocations = (steps: readonly LeafStep[], count: number | 
 
 // Runs a leaf of content steps here. A step starts after the one before it has finished, and the first runs in the caller's turn.
 // Stops at the first step that is not done, so a wait the user leaves or a failure ends the leaf.
-export async function run_content_steps(steps: readonly LeafStep[], count: number | undefined, repeat = false): Promise<Outcome> {
-  const invocations = counted_invocations(steps, count);
-  for (const [index, step] of steps.entries()) {
-    const outcome = await run_content_invocation(invocations[index]!, step.count_rule, repeat);
-    if (!outcome.ok || outcome.cancelled) return outcome;
-  }
-  return { ok: true };
-}
+export const run_content_steps = (steps: readonly LeafStep[], count: number | undefined, repeat = false): Promise<Outcome> =>
+  run_all(counted_invocations(steps, count), (index) => steps[index]!.count_rule, repeat);

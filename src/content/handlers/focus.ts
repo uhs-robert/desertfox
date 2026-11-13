@@ -13,13 +13,8 @@ export function start_content_once(start: () => void, win: Pick<Window, "addEven
     start();
   };
   loaded_flags[LOADED_FLAG] = start_once;
-  start_on_first_focus(start_once, win, already_focused);
-}
-
-// A subframe starts its content script on its first focus, so the many ad and tracking frames the user never enters stay inert. A frame that is already focused when its script loads (it navigated while focused) starts at once, because no focus event follows.
-export function start_on_first_focus(start: () => void, win: Pick<Window, "addEventListener">, already_focused: boolean): void {
-  if (already_focused) start();
-  else win.addEventListener("focus", start, { once: true });
+  if (already_focused) start_once();
+  else win.addEventListener("focus", start_once, { once: true });
 }
 
 // Window focus pulls keyboard focus out of the address bar. The blur keeps the next key from typing into a field.
