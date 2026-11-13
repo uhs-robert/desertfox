@@ -12,6 +12,8 @@ import type { MergedConfig } from "../../src/shared/config.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import type { CompiledKeymap, TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
+import { plan_slots, SLOT_COUNT } from "../../src/background/slots.ts";
+import type { SlotMap } from "../../src/background/slots.ts";
 
 const config_with = (keymap: KeymapConfig, extra: Partial<MergedConfig> = {}): MergedConfig => ({ ...empty_config(), keymap, ...extra });
 
@@ -80,6 +82,7 @@ test("the binding list tags each row with the layer that decides it", () => {
 });
 
 // The background's messages over storage in memory. One queue runs the reads and the changes one at a time, as `in_change_queue` does, so two tabs can both read before either change lands.
+// Each change plans the slots again from the stored map, as `publish` does, so a chord keeps its slot.
 function messages_over(config: MergedConfig, stored: { edits: KeymapEdits }) {
   let queue: Promise<unknown> = Promise.resolve();
   const in_queue = <T>(work: () => T): Promise<T> => {
@@ -87,12 +90,17 @@ function messages_over(config: MergedConfig, stored: { edits: KeymapEdits }) {
     queue = turn.catch(() => undefined);
     return turn;
   };
-  const state_now = (): KeymapState => ({ config, layers: { keymap: stored.edits }, compile: (layers: EditLayers) => compile_config(input_of(config, layers.keymap)) });
+  const compile = (layers: EditLayers) => compile_config(input_of(config, layers.keymap));
+  const planned_map = (previous?: SlotMap) => plan_slots(compile({ keymap: stored.edits }).compiled.modes.browser, SLOT_COUNT, previous).map;
+  let slot_map = planned_map();
+  const state_now = (): KeymapState => ({ config, layers: { keymap: stored.edits }, slot_map, compile });
   const read_keymap_state = () => in_queue(state_now);
   const change_layers = (_kind: "keymap", decide: (current: KeymapEdits, state: KeymapState) => KeymapEdits | undefined) =>
     in_queue(() => {
       const next = decide(stored.edits, state_now());
-      if (next !== undefined) stored.edits = next;
+      if (next === undefined) return;
+      stored.edits = next;
+      slot_map = planned_map(slot_map);
     });
   return create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });
 }
@@ -266,17 +274,19 @@ test("a browser chord moves when every slot is taken, because the old chord is f
 const browser_chords = (keys: string): KeymapEdits => ({ browser: Object.fromEntries([...keys].map((key) => [`<A-${key}>`, "tab.next"])) });
 
 test("two tabs saving the last free slot at once: one binds, the other is refused and nothing drops", async () => {
-  const stored = { edits: browser_chords("abcdef") };
+  // `<A-,>` is a default chord, so it plans before every edit: only the stored slot map keeps the first save's chord on the last slot.
+  const before: KeymapEdits = { browser: { "<A-,>": "", ...browser_chords("abcdefg").browser } };
+  const stored = { edits: before };
   const messages = messages_over(config_with({}), stored);
   const answers = await Promise.all([
     messages.change({ type: "change_keymap", mode: "browser", keys: "<A-y>", action: "set", text: "tab.next" }),
-    messages.change({ type: "change_keymap", mode: "browser", keys: "<A-z>", action: "set", text: "tab.prev" }),
+    messages.change({ type: "change_keymap", mode: "browser", keys: "<A-,>", action: "set", text: "tab.prev" }),
   ]);
   assert.deepEqual(answers.map((answer) => answer.ok), [true, false], JSON.stringify(answers));
   const refused = answers[1]!;
-  assert.match(refused.message, /^browser "<A-z>" not saved: .*only 10 Firefox shortcut slots/);
+  assert.match(refused.message, /^browser "<A-,>" not saved: .*only 10 Firefox shortcut slots/);
   assert.equal(!refused.ok && refused.problems?.some((problem) => /only 10 Firefox shortcut slots/.test(problem)), true, JSON.stringify(refused));
-  assert.deepEqual(stored.edits, { browser: { ...browser_chords("abcdef").browser, "<A-y>": "tab.next" } });
+  assert.deepEqual(stored.edits, { browser: { ...before.browser, "<A-y>": "tab.next" } });
 });
 
 test("a move at full slots still lands when another tab takes the last free slot first", async () => {
