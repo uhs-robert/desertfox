@@ -106,18 +106,20 @@ const is_frame = (element: Element) => element.localName === "iframe" || element
 // Matches the strong selector, or else the weak test, and records which one did.
 export type WeakTest = (element: Element) => boolean;
 
-// `only_in_view` reads each element's rect first and passes over a box wholly outside its own window, with its shadow root and frame. Its children are still visited one by one, so a positioned child that reaches into view is found. Only what the view can show reaches the weak test and the later passes.
+// `only_in_view` reads each element's rect first. A box wholly outside its own window skips `matches`, the weak test and its frame, which clips its content. A shadow root is still entered, because fixed content in it can show, and so are the children, because a positioned child can reach into view.
 export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, only_in_view = false, frames: Element[] = [], found: Found[] = []): Found[] {
   if (query.selector === "") return found;
   const doc = (root as Node).ownerDocument ?? (root as Document);
   const { width, height } = only_in_view ? viewport_size(doc, doc.defaultView ?? window) : { width: 0, height: 0 };
   for (const element of Array.from(root.querySelectorAll("*"))) {
-    if (only_in_view && is_rect_off_screen(element.getBoundingClientRect(), width, height)) continue;
-    if (element.matches(query.selector) && (query.test?.(element) ?? true)) found.push({ element, frames });
-    else if (is_weak?.(element)) found.push({ element, frames, weak: true });
+    const off_screen = only_in_view && is_rect_off_screen(element.getBoundingClientRect(), width, height);
+    if (!off_screen) {
+      if (element.matches(query.selector) && (query.test?.(element) ?? true)) found.push({ element, frames });
+      else if (is_weak?.(element)) found.push({ element, frames, weak: true });
+    }
     const shadow = shadow_root_of(element);
     if (shadow) collect(shadow, query, is_weak, only_in_view, frames, found);
-    if (is_frame(element) && frames.length < MAX_FRAME_DEPTH) {
+    if (!off_screen && is_frame(element) && frames.length < MAX_FRAME_DEPTH) {
       const inner = document_of_frame(element);
       if (inner) collect(inner, query, is_weak, only_in_view, [...frames, element], found);
     }
@@ -132,8 +134,8 @@ export type SiteSelectors = { add: string[]; remove: string[] };
 const TAKES_ADDED = new Set<HintFilter>(["all", "clickable", "every"]);
 
 // Added elements count as strong and skip the filter's test. A removed element is one inside a `hint_remove` match in its own tree: `closest` stops at a shadow root.
-export function with_site_selectors(root: ParentNode, filter: HintFilter, found: Found[], { add, remove }: SiteSelectors): Found[] {
-  const added = add.length > 0 && TAKES_ADDED.has(filter) ? collect(root, { selector: add.join(", ") }).map((item): Found => ({ ...item, added: true })) : [];
+export function with_site_selectors(root: ParentNode, filter: HintFilter, found: Found[], { add, remove }: SiteSelectors, only_in_view = false): Found[] {
+  const added = add.length > 0 && TAKES_ADDED.has(filter) ? collect(root, { selector: add.join(", ") }, undefined, only_in_view).map((item): Found => ({ ...item, added: true })) : [];
   const added_elements = new Set(added.map((item) => item.element));
   const merged = [...found.filter((item) => !added_elements.has(item.element)), ...added];
   if (remove.length === 0 || filter === "custom") return merged;

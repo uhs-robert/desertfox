@@ -176,8 +176,8 @@ test("a visible wrapper keeps its hint when the clickable child inside it is hid
   assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
 });
 
-// A fake page with real rects: each fake has a box and the root a window, so the walk can judge what is in view.
-type Placed = { name: string; local: string; top?: number; left?: number; side?: number; href?: boolean; shadow?: Placed[]; frame?: Placed[] };
+// A fake page with real rects: each fake has a box, and each root has its own window size, so the walk can judge what is in view.
+type Placed = { name: string; local: string; top?: number; left?: number; side?: number; href?: boolean; shadow?: Placed[]; frame?: Placed[]; frame_view?: { clientWidth: number; clientHeight: number } };
 function placed_root(elements: Placed[], view = { clientWidth: 100, clientHeight: 50 }): ParentNode {
   const wrap = (fake: Placed) => {
     const side = fake.side ?? 10;
@@ -189,13 +189,13 @@ function placed_root(elements: Placed[], view = { clientWidth: 100, clientHeight
       openOrClosedShadowRoot: fake.shadow ? placed_root(fake.shadow, view) : null,
       shadowRoot: null,
       get contentDocument() {
-        return fake.frame ? placed_root(fake.frame, view) : null;
+        return fake.frame ? placed_root(fake.frame, fake.frame_view ?? view) : null;
       },
       matches: (selector: string) => selector === "links" && fake.local === "a" && fake.href === true,
       getBoundingClientRect: () => ({ left, top, width: side, height: side, right: left + side, bottom: top + side }),
     };
   };
-  return { querySelectorAll: () => elements.map(wrap), compatMode: "CSS1Compat", documentElement: view, body: null, defaultView: { innerWidth: 100, innerHeight: 50 } } as unknown as ParentNode;
+  return { querySelectorAll: () => elements.map(wrap), compatMode: "CSS1Compat", documentElement: view, body: null, defaultView: { innerWidth: view.clientWidth, innerHeight: view.clientHeight } } as unknown as ParentNode;
 }
 
 test("the walk with only_in_view skips an off-screen element before matches and the weak test", () => {
@@ -207,16 +207,19 @@ test("the walk with only_in_view skips an off-screen element before matches and 
   assert.deepEqual(names(collect(page, { selector: "links" })), ["below", "shown", "empty far away"]);
 });
 
-test("an off-screen shadow host and frame element are not entered, an on-screen one is", () => {
+test("an off-screen frame element is not entered, an on-screen one is", () => {
   const inner = [{ name: "inside", local: "a", href: true }];
   const page = placed_root([
-    { name: "far host", local: "div", top: 900, shadow: inner },
-    { name: "near host", local: "div", shadow: inner },
     { name: "far frame", local: "iframe", top: 900, frame: inner },
     { name: "near frame", local: "iframe", frame: inner },
   ]);
-  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), ["inside", "inside"]);
-  assert.equal(collect(page, { selector: "links" }).length, 4);
+  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), ["inside"]);
+  assert.equal(collect(page, { selector: "links" }).length, 2);
+});
+
+test("an off-screen shadow host is not a candidate, but its shadow content in view is", () => {
+  const page = placed_root([{ name: "far host", local: "a", href: true, top: 900, shadow: [{ name: "fixed in view", local: "a", href: true }, { name: "far inside", local: "a", href: true, top: 900 }] }]);
+  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), ["fixed in view"]);
 });
 
 test("an off-screen parent does not hide an on-screen child of it", () => {
@@ -224,15 +227,25 @@ test("an off-screen parent does not hide an on-screen child of it", () => {
   assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), ["positioned child"]);
 });
 
-test("a frame is judged by its own window", () => {
-  const rect = { name: "wide", local: "a", href: true, left: 150 };
-  const page = placed_root([{ name: "frame", local: "iframe", frame: [rect] }], { clientWidth: 100, clientHeight: 50 });
-  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), []);
+test("a frame is judged by its own window, not the top one", () => {
+  const link = [{ name: "at 150", local: "a", href: true, left: 150 }];
+  const wide = placed_root([{ name: "wide frame", local: "iframe", frame: link, frame_view: { clientWidth: 300, clientHeight: 50 } }]);
+  assert.deepEqual(names(collect(wide, { selector: "links" }, undefined, true)), ["at 150"], "inside the wide frame, outside the 100 px top window");
+  const narrow = placed_root([{ name: "narrow frame", local: "iframe", frame: link, frame_view: { clientWidth: 100, clientHeight: 50 } }], { clientWidth: 400, clientHeight: 50 });
+  assert.deepEqual(names(collect(narrow, { selector: "links" }, undefined, true)), [], "outside the narrow frame, inside the 400 px top window");
 });
 
-test("a page with only off-screen candidates collects nothing, so the run ends with no mode change", () => {
+test("a page with only off-screen candidates collects nothing, and the full walk still sees them", () => {
   const page = placed_root([{ name: "a", local: "a", href: true, top: 500 }, { name: "b", local: "a", href: true, left: 500 }]);
   assert.deepEqual(collect(page, { selector: "links" }, undefined, true), []);
+  assert.equal(collect(page, { selector: "links" }).length, 2);
+});
+
+test("hint_add matches take the view cut too, so off-screen ones never reach the observer", () => {
+  const page = placed_root([{ name: "near", local: "a", href: true }, { name: "far", local: "a", href: true, top: 900 }]);
+  const sites = { add: ["links"], remove: [] };
+  assert.deepEqual(names(with_site_selectors(page, "clickable", [], sites, true)), ["near"]);
+  assert.deepEqual(names(with_site_selectors(page, "clickable", [], sites)), ["near", "far"]);
 });
 
 test("the weak test makes no style read for what collect already dropped", () => {
