@@ -1,22 +1,27 @@
-if (!this.__pb) { this.__pb = 1; (function(){
-// Frame script: runs in the content process of the test tab, with Xray access to the page.
-const SELS = [".desertfox-hint", ".vimiumHintMarker", ".LH", ".TridactylHint"];
+if (!this.__rivals_loaded) { this.__rivals_loaded = 1; (function(){
+// Frame script: runs in the content process of the test tab, with Xray access to the page, so it can read closed shadow roots.
+// It sends the key and watches for labels in one process, so one clock covers both ends.
+// Hint label classes, one per tool: DesertFox, Vimium, Vimium C (inside a closed shadow root), Tridactyl.
+const hint_selectors = [".desertfox-hint", ".vimiumHintMarker", ".LH", ".TridactylHint"];
 const now = () => content.performance.timeOrigin + content.performance.now();
-const reply = (data) => sendAsyncMessage("pb:reply", data);
+const reply = (data) => sendAsyncMessage("rivals:reply", data);
 const tip = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
-const send = (key, code, key_code) => { tip.beginInputTransactionForTests(content); const ev = new content.KeyboardEvent("", { key, code, keyCode: key_code }); tip.keydown(ev); tip.keyup(ev); };
+const send = (key, code, key_code) => {
+  tip.beginInputTransactionForTests(content);
+  const event = new content.KeyboardEvent("", { key, code, keyCode: key_code });
+  tip.keydown(event);
+  tip.keyup(event);
+};
 const press_char = (c) => send(c, "Key" + c.toUpperCase(), c.toUpperCase().charCodeAt(0));
 
-addMessageListener("pb:state", () => {
+addMessageListener("rivals:state", () => {
   const nav = content.performance.getEntriesByType("navigation")[0];
-  reply({ url: String(content.location), ready: content.document.readyState, focus: content.document.hasFocus(),
-    dcl: nav ? nav.domContentLoadedEventEnd : null, load: nav ? nav.loadEventEnd : null,
-    elements: content.document.querySelectorAll("*").length });
+  reply({ url: String(content.location), ready: content.document.readyState, dcl: nav ? nav.domContentLoadedEventEnd : null, load: nav ? nav.loadEventEnd : null });
 });
 
-addMessageListener("pb:escape", () => { send("Escape", "Escape", 27); reply(1); });
+addMessageListener("rivals:escape", () => { send("Escape", "Escape", 27); reply(1); });
 
-addMessageListener("pb:press", ({ data }) => { try {
+addMessageListener("rivals:press", ({ data }) => { try {
   const { char, timeout_ms, settle_ms } = data;
   const seen = new WeakSet();
   const watched = new WeakSet();
@@ -24,7 +29,7 @@ addMessageListener("pb:press", ({ data }) => { try {
   const observers = [];
   const scan = (node) => {
     if (node.nodeType !== 1) return;
-    if (SELS.some((s) => node.matches(s)) && !seen.has(node)) {
+    if (hint_selectors.some((selector) => node.matches(selector)) && !seen.has(node)) {
       seen.add(node); count++;
       if (first === null) { first = now(); content.requestAnimationFrame(() => { paint = now(); }); }
     }
@@ -44,20 +49,21 @@ addMessageListener("pb:press", ({ data }) => { try {
   for (const el of content.document.body ? content.document.body.children : []) { const r = el.openOrClosedShadowRoot; if (r) watch(r); }
   const t0 = now();
   press_char(char);
-  const t_sent = now();
   const finish = () => {
     if (done) return; done = true;
     for (const o of observers) o.disconnect();
-    reply({ found: first !== null, first_ms: first === null ? null : first - t0, paint_ms: paint === null ? null : paint - t0, send_ms: t_sent - t0, count });
+    reply({ found: first !== null, first_ms: first === null ? null : first - t0, paint_ms: paint === null ? null : paint - t0, count });
   };
   const started = content.performance.now();
   const tick = () => {
-    if (first !== null && content.performance.now() - Math.min(started + (first - t0), content.performance.now()) >= settle_ms) return finish();
+    // Wait settle_ms after the first label so that the count covers the whole batch.
+    const since_first_label = first === null ? 0 : content.performance.now() - (started + (first - t0));
+    if (first !== null && since_first_label >= settle_ms) return finish();
     if (content.performance.now() - started > timeout_ms) return finish();
     content.setTimeout(tick, 25);
   };
   content.setTimeout(tick, 25);
-  } catch (e) { reply({ error: String(e).slice(0, 300), line: String(e.stack).slice(0, 300) }); }
+  } catch (e) { reply({ error: String(e).slice(0, 300) }); }
 });
 
 })(); }
