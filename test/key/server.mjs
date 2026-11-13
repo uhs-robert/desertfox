@@ -2,6 +2,7 @@
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { DRAG_PAGES } from "./drag_pages.mjs";
+import { popup_frame_page, popup_frames_page } from "./popup_pages.mjs";
 
 const REPORTER = `
 const page_id = new URLSearchParams(location.search).get("id") ?? "none";
@@ -201,6 +202,10 @@ export function start_server() {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     const id = url.searchParams.get("id") ?? "none";
     if (url.pathname === "/drag") return response.end(page(`drag ${id}`, DRAG_PAGES[id.split("_")[0]] ?? ""));
+    if (url.pathname === "/popup_frames" || url.pathname === "/popup_frame") {
+      const { body, head } = url.pathname === "/popup_frames" ? popup_frames_page(id, request.socket.localPort) : popup_frame_page();
+      return response.end(page(`${url.pathname.slice(1)} ${id}`, body, head));
+    }
     if (url.pathname === "/field") {
       return response.end(page(`field ${id}`, '<input id="field" autofocus>', "<script>addEventListener('load', () => document.getElementById('field').focus())</script>"));
     }

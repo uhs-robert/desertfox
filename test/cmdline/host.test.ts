@@ -61,6 +61,13 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
   const window_focus: string[] = [];
   const calls: { id: string; args: Record<string, unknown> }[] = [];
   const observers: (() => void)[] = [];
+  // The capture listeners for blur and focusout that the host holds on the window and the document, by `target:type`.
+  const focus_loss = new Map<string, (event: unknown) => void>();
+  const focus_loss_target = (target: string) => ({
+    addEventListener: (type: string, listener: (event: unknown) => void, capture: boolean) => void (capture && focus_loss.set(`${target}:${type}`, listener)),
+    removeEventListener: (type: string, listener: (event: unknown) => void, capture: boolean) => void (capture && focus_loss.get(`${target}:${type}`) === listener && focus_loss.delete(`${target}:${type}`)),
+  });
+  const focus_loss_window = focus_loss_target("window");
   // What the host hands back to the page's key flow, in order, one entry per line that ended.
   const handed_back: (readonly string[])[] = [];
   Object.assign(globalThis, {
@@ -108,7 +115,8 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
         register_handler_: (id: string, handler: (args: Record<string, unknown>) => unknown) => void handlers.set(id, handler),
         hold_keys_until_: (promise: Promise<readonly string[]>) => void promise.then((tokens) => handed_back.push(tokens)),
       },
-      addEventListener: (type: string, listener: (event: unknown) => void) => void (window_listeners[type] = listener),
+      removeEventListener: focus_loss_window.removeEventListener,
+      addEventListener: (type: string, listener: (event: unknown) => void, capture?: boolean) => (type === "message" ? void (window_listeners[type] = listener) : focus_loss_window.addEventListener(type, listener, capture === true)),
     },
   });
   // The top frame unless a test says otherwise.
@@ -134,7 +142,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
     await until(() => frame.focused);
   };
   const page_mutated = () => observers.forEach((callback) => callback());
-  return { relays, window_focus, handed_back, modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened_, page_mutated, answer, opened_again };
+  return { focus_loss, relays, window_focus, handed_back, modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened_, page_mutated, answer, opened_again };
 }
 
 test("opening mounts the line, hands over the kept keys with a port, and a close over the port leaves it", async (t) => {
@@ -769,4 +777,64 @@ test("a subframe whose mode left a search line first still ends that search when
   assert.deepEqual(handlers.get("cmdline.find_end")!({ remote_id: "an older line", keep: false }), NO_LINE);
   await handlers.get("cmdline.find_end")!({ remote_id, keep: false });
   assert.deepEqual(calls, [{ id: "find.end", args: { keep: false } }]);
+});
+
+// A popup that closes on blur, focusout or a window blur would close when the top frame's line takes the focus. The subframe hides those events from the page for as long as it is the line's remote end.
+const FOCUS_LOSS_KEYS = ["window:blur", "window:focusout"];
+const held_keys = (focus_loss: Map<string, unknown>) => [...focus_loss.keys()].sort();
+
+test("a subframe stops the page's blur and focusout events while its remote line is open, and the listeners end with it", async (t) => {
+  const { focus_loss } = await load_host(t, "blur_held", { subframe: true, relay: () => new Promise(() => {}) });
+  assert.deepEqual(held_keys(focus_loss), [...FOCUS_LOSS_KEYS].sort());
+  let stopped = 0;
+  for (const listener of focus_loss.values()) listener({ stopImmediatePropagation: () => stopped++ });
+  assert.equal(stopped, 2);
+});
+
+test("the focus-loss listeners are gone on every way a subframe's remote line ends", async (t) => {
+  const ends = {
+    "the top frame's end": ({ handlers, relays }) => handlers.get("cmdline.end")!({ remote_id: relays[0]!.args.remote_id, tokens: [] }),
+    "Escape or Enter in the top frame's line: the focus comes back, then the end": ({ handlers, relays }) => {
+      handlers.get("cmdline.focus")!({ remote_id: relays[0]!.args.remote_id });
+      handlers.get("cmdline.end")!({ remote_id: relays[0]!.args.remote_id, tokens: [] });
+    },
+    "the focused frame hidden, which refuses the focus and still hears the end": ({ handlers, relays }) => {
+      assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: relays[0]!.args.remote_id }), NO_LINE);
+      handlers.get("cmdline.end")!({ remote_id: relays[0]!.args.remote_id, tokens: [] });
+    },
+    "the mode leaving the line, as a page change does": ({ sink }) => sink.exit(),
+  } as Record<string, (page: Awaited<ReturnType<typeof load_host>>) => void>;
+  for (const [name, end] of Object.entries(ends)) {
+    const hidden = name.includes("hidden");
+    const page = await load_host(t, `blur_end_${name.length}`, { subframe: true, frame_size: hidden ? { width: 625, height: 1 } : { width: 300, height: 200 }, relay: () => new Promise(() => {}) });
+    assert.equal(page.focus_loss.size, 2, `${name}: held while open`);
+    end(page);
+    assert.equal(page.focus_loss.size, 0, `${name}: gone after the end`);
+  }
+});
+
+test("the grace timer removes the focus-loss listeners when the top frame never ends the line", async (t) => {
+  const { focus_loss, modes } = await load_host(t, "blur_grace", { subframe: true, relay: () => ({ ok: true }) });
+  await until(() => modes.length === 2);
+  assert.equal(focus_loss.size, 0);
+});
+
+test("a subframe whose top frame has no room removes the listeners before it draws its own line", async (t) => {
+  const { focus_loss, elements } = await load_host(t, "blur_no_room", { subframe: true, relay: () => ({ ok: false, message: "No room" }) });
+  await until(() => elements.length > 0);
+  assert.equal(focus_loss.size, 0);
+});
+
+test("a second open while the line is open adds nothing, and a top frame's own line or a line drawn in the frame adds none", async (t) => {
+  const { focus_loss, handlers, relays } = await load_host(t, "blur_reopen", { subframe: true, relay: () => new Promise(() => {}) });
+  const first = [...focus_loss.values()];
+  // The line is still open, so a second open is refused and changes nothing.
+  assert.equal((handlers.get("cmdline.open")!({ text: "again" }) as { ok: boolean }).ok, false);
+  assert.deepEqual([...focus_loss.values()], first);
+  handlers.get("cmdline.end")!({ remote_id: relays[0]!.args.remote_id, tokens: [] });
+  assert.equal(focus_loss.size, 0);
+  const top = await load_host(t, "blur_top", { open_args: FOR_FRAME_5 });
+  assert.equal(top.focus_loss.size, 0, "the top frame never blocks its own focus events");
+  const own = await load_host(t, "blur_own_line");
+  assert.equal(own.focus_loss.size, 0, "a line drawn in the frame itself keeps its focus, so nothing is blocked");
 });
