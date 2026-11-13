@@ -355,6 +355,8 @@ test("the editor schema matches its output before #85, apart from the listed cha
     assert.equal(properties[name].description, undefined, name);
     properties[name].description = described_now[name]!.description;
   }
+  // `home_page` says that the open allow-list refuses most about: pages.
+  properties.home_page.description = described_now.home_page!.description;
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.

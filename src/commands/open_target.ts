@@ -77,7 +77,7 @@ export async function current_page(ctx: CommandContext): Promise<PageInfo | unde
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
-// The extension's own pages may open from the user's config and stored data, and from a request no page sent. Text a page sent, such as a hinted link, the selection or the clipboard, may not open them.
+// The extension's own pages may open from the user's config and stored data, and from typed text in a request no page sent. Text a page sent, such as a hinted link or the selection, may not open them, and neither may the clipboard or a register.
 export const own_pages: NonNullable<OwnPages> = () => browser.runtime.getURL("");
 export const own_pages_for = (ctx: CommandContext): OwnPages => (ctx.from_page ? undefined : own_pages);
 

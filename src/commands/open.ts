@@ -134,7 +134,8 @@ define("open.clipboard", {
   bridge: false,
   runs_in: "background",
   run: async (ctx, args) => {
-    const target = await typed_url_target(await text_to_open(ctx, args.register as string), own_pages_for(ctx));
+    // A page can write the clipboard and a register holds yanked page text, so this text never opens DesertFox's own pages, whoever sent the request.
+    const target = await typed_url_target(await text_to_open(ctx, args.register as string), undefined);
     await open_in(ctx, target, args.where as Where, container_of(args));
   },
   jumps: (args) => args.where === "here",
