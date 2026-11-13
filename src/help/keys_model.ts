@@ -68,7 +68,6 @@ export const tokens_of = (keys: string): string[] => {
   return parsed.tokens ?? [];
 };
 
-// A row matches when the filter is part of its keys, its command text, or its mode.
 // An editor that differs from its row (or a new one with something typed) is a draft worth keeping.
 export function is_dirty(editor: Editor): boolean {
   const { original } = editor;
@@ -78,6 +77,7 @@ export function is_dirty(editor: Editor): boolean {
 // A save on other keys than the row's own moves the binding: the old key is freed in the same change.
 const moved_from = (editor: Editor): { move_from?: string } => (editor.original && keys_of(editor.tokens) !== editor.original.keys ? { move_from: editor.original.keys } : {});
 
+// A row matches when the filter is part of its keys, its command text, its mode or its origin.
 export function matches_filter(row: BindingRow, filter: string): boolean {
   const needle = filter.trim().toLowerCase();
   return needle === "" || [row.keys, row.text, row.mode, row.origin].some((field) => field.toLowerCase().includes(needle));
@@ -86,9 +86,8 @@ export function matches_filter(row: BindingRow, filter: string): boolean {
 // The buttons a row's editor offers. Reset drops a browser edit, so it needs one. Remove unbinds what is bound.
 export function actions_of(editor: Editor): { save: boolean; remove: boolean; reset: boolean } {
   const original = editor.original;
-  const changed = original === undefined || keys_of(editor.tokens) !== original.keys || editor.text !== original.text;
   return {
-    save: !editor.busy && !(original && is_read_only(original)) && editor.tokens.length > 0 && editor.text.trim() !== "" && changed,
+    save: !editor.busy && !(original && is_read_only(original)) && editor.tokens.length > 0 && editor.text.trim() !== "" && is_dirty(editor),
     remove: !editor.busy && original !== undefined && original.origin !== "removed",
     reset: !editor.busy && original !== undefined && (original.origin === "edit" || original.origin === "removed"),
   };
