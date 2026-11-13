@@ -3,16 +3,13 @@
 <head>
 <meta charset="utf-8">
 <title>DesertFox</title>
+<link rel="icon" type="image/svg+xml" href="icons/desertfox.svg">
+<!-- First, so the theme sheet and style.css that main.ts appends win over it. -->
+<link rel="stylesheet" href="page_base.css">
 <style>
-  html { background: var(--desertfox-bg-core, #0c0e13); color-scheme: dark light; }
+  html { background: var(--desertfox-bg-core); }
   body { margin: 0; }
-  /* The defaults sit on an inner element, like every DesertFox surface. */
   .desertfox-help {
-    --desertfox-bg-core: #0c0e13;
-    --desertfox-fg-core: #f5f5dc;
-    --desertfox-primary: #7fa3c9;
-    --desertfox-font: 15px/1.5 system-ui, sans-serif;
-    --desertfox-radius: 6px;
     display: flex;
     min-height: 100vh;
     background: var(--desertfox-bg-core);

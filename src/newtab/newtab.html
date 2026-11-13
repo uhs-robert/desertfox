@@ -3,20 +3,21 @@
 <head>
 <meta charset="utf-8">
 <title>New Tab</title>
+<link rel="icon" type="image/svg+xml" href="icons/desertfox.svg">
+<!-- First, so the theme sheet and style.css that main.ts appends win over it. -->
+<link rel="stylesheet" href="page_base.css">
 <style>
   /* Declared only on this page, so no other page or script pulls the font. Until it loads, swap shows the digits in monospace. */
   @font-face { font-family: "DSEG7 Classic"; src: url("DSEG7Classic-Regular.ttf") format("truetype"); font-display: swap; }
-  /* color-scheme makes Firefox paint a canvas that matches the system before the theme loads. The Canvas fallback keeps that canvas until the theme sets the token, so a light system never shows the dark default first. */
-  html { font-size: 14px; color-scheme: light dark; background: var(--desertfox-bg-core, Canvas); }
+  html { background: var(--desertfox-bg-core); }
   html, body { margin: 0; height: 100%; }
   /* The body is the column: the page fills it, and the nav under the page keeps the bottom, so nothing overlaps at any height. */
   body { display: flex; flex-direction: column; }
-  /* Colors are var() fallbacks, never declarations: a declaration here would shadow a theme or style.css value. */
   .desertfox-newtab {
     position: relative;
-    background: var(--desertfox-bg-core, #080d13);
-    color: var(--desertfox-fg-core, #b0c8de);
-    font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--desertfox-bg-core);
+    color: var(--desertfox-fg-core);
+    font: var(--desertfox-font);
     line-height: 1.25;
   }
   /* One column: the clock area takes the room above the lists and centers the clock in it, and the lists shrink to a scroll area, so they never cover the clock. The page scrolls when both cannot fit. */
@@ -24,28 +25,28 @@
   .desertfox-newtab .time-area { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; }
   .desertfox-newtab .time { margin: 1rem; font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
   .desertfox-newtab .clock { display: block; width: 100%; max-width: 10em; margin: 0 auto; }
-  .desertfox-newtab .clock .bezel { fill: transparent; stroke: var(--desertfox-primary, #1670ad); stroke-width: 2; }
+  .desertfox-newtab .clock .bezel { fill: transparent; stroke: var(--desertfox-primary); stroke-width: 2; }
   .desertfox-newtab .clock line { transform-origin: 50px 50px; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
   .desertfox-newtab .clock.jumping line { transition: none; }
-  .desertfox-newtab .clock .hour, .desertfox-newtab .clock .minute { stroke: var(--desertfox-fg-core, #b0c8de); }
-  .desertfox-newtab .clock .second { stroke: var(--desertfox-secondary, #f0e68c); }
-  .desertfox-newtab .clock .cap { fill: var(--desertfox-bg-mantle, #1a2330); }
-  .desertfox-newtab .date { margin: 0; font-size: 1.5em; font-weight: 500; color: var(--desertfox-primary, #85a8cc); }
-  .desertfox-newtab .digital-clock { display: inline-flex; align-items: baseline; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: var(--desertfox-bg-mantle, #001400); color: var(--desertfox-primary, #4af05c); }
+  .desertfox-newtab .clock .hour, .desertfox-newtab .clock .minute { stroke: var(--desertfox-fg-core); }
+  .desertfox-newtab .clock .second { stroke: var(--desertfox-secondary); }
+  .desertfox-newtab .clock .cap { fill: var(--desertfox-bg-mantle); }
+  .desertfox-newtab .date { margin: 0; font-size: 1.5em; font-weight: 500; color: var(--desertfox-primary); }
+  .desertfox-newtab .digital-clock { display: inline-flex; align-items: baseline; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: var(--desertfox-bg-mantle); color: var(--desertfox-primary); }
   .desertfox-newtab .digital-clock .digits { font-family: "DSEG7 Classic", monospace; font-size: min(84px, 22vw); }
   .desertfox-newtab .digital-clock .meridiem { font-size: 0.75em; }
-  .desertfox-newtab .clock + .date, .desertfox-newtab .digital-clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--desertfox-border, #4e6578); }
+  .desertfox-newtab .clock + .date, .desertfox-newtab .digital-clock + .date { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--desertfox-border); }
   .desertfox-newtab .lists { flex: 0 1 auto; min-height: 6rem; overflow-y: auto; display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 1rem 3rem; padding: 0 1.5rem; }
   /* With no clock the lists are the first child and sit at the bottom. */
   .desertfox-newtab .lists:first-child { margin-top: auto; }
-  .desertfox-newtab .lists h4 { margin: 0 0 0.25rem; color: var(--desertfox-primary, #85a8cc); font-weight: 500; }
+  .desertfox-newtab .lists h4 { margin: 0 0 0.25rem; color: var(--desertfox-primary); font-weight: 500; }
   .desertfox-newtab .lists ul { margin: 0; padding: 0; list-style: none; }
-  .desertfox-newtab .lists a { display: block; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.125rem 0; color: var(--desertfox-fg-core, #b0c8de); text-decoration: none; }
-  .desertfox-newtab .lists a:hover, .desertfox-newtab .lists a:focus-visible { color: var(--desertfox-primary, #85a8cc); outline: none; }
+  .desertfox-newtab .lists a { display: block; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.125rem 0; color: var(--desertfox-fg-core); text-decoration: none; }
+  .desertfox-newtab .lists a:hover, .desertfox-newtab .lists a:focus-visible { color: var(--desertfox-primary); outline: none; }
   /* After the script-drawn page in the body column, so it has its own background. */
-  .builtin-links { flex: none; padding: 0.75rem 0 1.5rem; background: var(--desertfox-bg-core, #080d13); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
-  .builtin-links a { color: var(--desertfox-primary, #85a8cc); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }
-  .builtin-links a:hover, .builtin-links a:focus-visible { border-bottom-color: var(--desertfox-border, #4e6578); color: var(--desertfox-primary, #f0e68c); outline: none; }
+  .builtin-links { flex: none; padding: 0.75rem 0 1.5rem; background: var(--desertfox-bg-core); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
+  .builtin-links a { color: var(--desertfox-primary); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }
+  .builtin-links a:hover, .builtin-links a:focus-visible { border-bottom-color: var(--desertfox-border); color: var(--desertfox-secondary); outline: none; }
 </style>
 </head>
 <body>

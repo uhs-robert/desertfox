@@ -1,0 +1,56 @@
+/* The base of the help and new tab pages. Each page links it first, so the theme sheet and style.css, which follow it, win.
+   :where() gives every fallback here zero specificity. A theme or user rule on :root or on a page's inner element always replaces it. */
+:where(:root) {
+  --desertfox-bg-core: #0c0e13;
+  --desertfox-bg-mantle: #1a2330;
+  --desertfox-fg-core: #f5f5dc;
+  --desertfox-primary: #7fa3c9;
+  --desertfox-secondary: #f0e68c;
+  --desertfox-border: #4e6578;
+  --desertfox-font: 1rem/1.5 system-ui, sans-serif;
+  --desertfox-radius: 6px;
+  --desertfox-mono: ui-monospace, monospace;
+  --desertfox-space-1: 0.25rem;
+  --desertfox-space-2: 0.5rem;
+  --desertfox-space-3: 1rem;
+  --desertfox-space-4: 1.5rem;
+  --desertfox-text-small: 0.85rem;
+  --desertfox-text-large: 1.25rem;
+  color-scheme: dark light;
+}
+@media (prefers-color-scheme: light) {
+  :where(:root) {
+    --desertfox-bg-core: #fafaf5;
+    --desertfox-bg-mantle: #ecece4;
+    --desertfox-fg-core: #1f2430;
+    --desertfox-primary: #2b5f94;
+    --desertfox-secondary: #8a6d00;
+    --desertfox-border: #9aa5b1;
+  }
+}
+/* One size for both pages: the unit every rem on them is measured in. */
+html { font-size: 15px; }
+
+.desertfox-keycaps { display: inline-flex; flex-wrap: wrap; gap: var(--desertfox-space-1); vertical-align: middle; }
+.desertfox-keycap {
+  display: inline-block; min-width: 1.4em; padding: 0.05em 0.4em; box-sizing: border-box;
+  border: 1px solid var(--desertfox-border); border-bottom-width: 2px; border-radius: calc(var(--desertfox-radius) / 2);
+  background: var(--desertfox-bg-mantle); color: var(--desertfox-primary);
+  font: 0.9em var(--desertfox-mono); text-align: center;
+}
+
+.desertfox-card {
+  display: flex; flex-direction: column; gap: var(--desertfox-space-2); padding: var(--desertfox-space-3);
+  border: 1px solid var(--desertfox-border); border-radius: calc(var(--desertfox-radius) * 1.5);
+  background: var(--desertfox-bg-mantle); color: var(--desertfox-fg-core);
+}
+.desertfox-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--desertfox-space-2); font-weight: bold; }
+.desertfox-card-body { display: flex; flex-direction: column; gap: var(--desertfox-space-1); }
+.desertfox-card:hover { border-color: var(--desertfox-primary); }
+.desertfox-card:focus-visible, .desertfox-card:focus-within { outline: 2px solid var(--desertfox-primary); outline-offset: 2px; }
+
+.desertfox-pill {
+  display: inline-block; padding: 0.1rem 0.6rem; border: 1px solid var(--desertfox-primary); border-radius: 999px;
+  color: var(--desertfox-primary); font-size: var(--desertfox-text-small); text-decoration: none;
+}
+.desertfox-pill:hover, .desertfox-pill:focus-visible { background: color-mix(in srgb, var(--desertfox-primary) 15%, transparent); }

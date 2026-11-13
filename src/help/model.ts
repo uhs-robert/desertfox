@@ -336,5 +336,11 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "desertfox-help-tip", meaning: "The tip callout at the top of the Home and Commands pages" },
   { name: "desertfox-help-tip-label", meaning: "The bold \"Tip\" word that starts the callout" },
   { name: "desertfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
+  { name: "desertfox-keycaps", meaning: "The row of key caps that shows a key sequence, on the help and new tab pages" },
+  { name: "desertfox-keycap", meaning: "One key cap in a key sequence" },
+  { name: "desertfox-card", meaning: "A card on the help and new tab pages, with a head row, a body, and a primary ring on hover and focus" },
+  { name: "desertfox-card-head", meaning: "The top row of a card, for its title and a small control" },
+  { name: "desertfox-card-body", meaning: "The content of a card under its head" },
+  { name: "desertfox-pill", meaning: "A small rounded link or label with a primary outline" },
   { name: "desertfox-help-shadowed", meaning: "An option or key on the Site Rules page that an earlier rule already decides" },
 ];

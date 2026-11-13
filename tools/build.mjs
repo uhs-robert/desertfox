@@ -92,6 +92,9 @@ for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "po
   await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 
+// The shared base sheet of the help and new tab pages, linked by both.
+await copyFile("src/shared/page_base.css", "dist/page_base.css");
+
 // The font is copied as is with its licence: the licence reserves the name "DSEG", so a converted or edited font could not keep it.
 for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(`src/newtab/fonts/${file}`, `dist/${file}`);
 
