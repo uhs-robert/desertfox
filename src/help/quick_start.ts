@@ -167,5 +167,8 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     say("To start at a piece of text, press {caret_at_text} for caret mode or {visual_at_text} for visual mode, then type the label of the text."),
     heading("Help"),
     say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows any config warnings."),
+    heading("The native host is optional"),
+    say("DesertFox works without the native host (a small Linux helper program). In the browser you can change settings, quickmarks and site rules. You can edit the config files in the files editor on the settings page. You can import and export a zip. You can rebind keys in the Keys section of the settings page."),
+    say("The host adds three things. Press [<C-o>] in insert mode to edit a text field in your own editor. The [,f] keys open Firefox pages. The [config.reload] command reads config files from [~/.config/desertfox/]. To install the host, run [:native.install]."),
   ];
 }
