@@ -93,10 +93,12 @@ test("the , group holds the DesertFox commands", () => {
   assert.ok(compiled.modes.normal);
 });
 
-test("plain r, t and x are prefixes only", () => {
+test("plain r, t, x, tu and tU are prefixes only", () => {
   const normal = Object.keys(DEFAULT_KEYMAP.normal ?? {});
-  for (const key of ["r", "t", "x"]) assert.ok(!normal.includes(key), key);
-  for (const key of ["rr", "rh", "tt", "tT", "td", "tm", "tn", "tp", "ta", "t0", "t^", "t$", "tl", "gl", "xx", "xp"]) assert.ok(normal.includes(key), key);
+  for (const key of ["r", "t", "x", "tu", "tU", "tH"]) assert.ok(!normal.includes(key), key);
+  for (const key of ["rr", "rh", "tt", "tT", "td", "tm", "tn", "tp", "ta", "t0", "t^", "t$", "tl", "gl", "tL", "gL", "tuu", "tuh", "tul", "tUh", "tUl", "xx", "xp"]) assert.ok(normal.includes(key), key);
+  for (const key of ["tL", "gL"]) assert.deepEqual(DEFAULT_KEYMAP.normal?.[key], { id: "tab.alternate_any_window" });
+  for (const prefix of ["tu", "tU"]) assert.ok(DEFAULT_KEYMAP.group_names?.[prefix], prefix);
 });
 
 test("zz, zt and zb align the focused field", () => {

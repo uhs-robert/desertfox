@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 463 (normal 237, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 466 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -68,6 +68,7 @@ bound: 463 (normal 237, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `gT` | bound | `tab.prev` | Previous tab |  |
 | `ga` | bound | `tab.goto_audible` | Go to audible tab |  |
 | `gl` | bound | `tab.alternate` | Last used tab |  |
+| `gL` | bound | `tab.alternate_any_window` | Last used tab, any window |  |
 | `gp` | bound | `tab.split_other` | Other pane |  |
 | `gP` | bound | `tab.split_swap` | Swap panes |  |
 | `gF` | bound | `frame.exit` | Focus top page |  |
@@ -114,10 +115,12 @@ bound: 463 (normal 237, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `t^` | bound | `tab.goto 1` | First tab |  |
 | `t$` | bound | `tab.goto -1` | Last tab |  |
 | `tl` | bound | `tab.alternate` | Last used tab |  |
-| `tu` | bound | `tab.unload` | Unload tab |  |
-| `tU` | bound | `tab.load` | Load tab |  |
-| `tH` | bound | `tab.unload --all-before` | Unload tabs before this one |  |
-| `tL` | bound | `tab.unload --all-after` | Unload tabs after this one |  |
+| `tL` | bound | `tab.alternate_any_window` | Last used tab, any window |  |
+| `tuu` | bound | `tab.unload` | Unload tab |  |
+| `tuh` | bound | `tab.unload --all-before` | Unload tabs before this one |  |
+| `tul` | bound | `tab.unload --all-after` | Unload tabs after this one |  |
+| `tUh` | bound | `tab.load --all-before` | Load tabs before this one |  |
+| `tUl` | bound | `tab.load --all-after` | Load tabs after this one |  |
 | `tga` | bound | `tabgroup.add` (prompts) | Add tab to a group |  |
 | `tgA` | bound | `tabgroup.add` | Add tab to a new group |  |
 | `tgd` | bound | `tabgroup.remove` | Remove tab from group |  |
@@ -287,6 +290,8 @@ Which-key group names:
 - `>`: Move tab
 - `t`: Tabs
 - `tg`: Tab groups
+- `tu`: Unload tabs
+- `tU`: Load tabs
 - `w`: Windows
 - `y`: Copy
 - `b`: Bookmark

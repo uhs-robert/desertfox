@@ -51,6 +51,8 @@ function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
     find_container_store_id: async (name) => containers[name],
     listed_tabs: async () => [],
     focus_window: async (id) => void log.push(`focus ${id}`),
+    tab_place: async () => undefined,
+    last_used_tab_of: async () => undefined,
     discard: {} as TabDeps["discard"],
     toast: async () => {},
   };
@@ -533,6 +535,36 @@ test("tab.alternate refuses with no previous tab, or one that is gone or current
     const { handlers, log, deps } = make_fake(make_tabs(3));
     deps.discard = { alternate_of: async () => previous } as unknown as TabDeps["discard"];
     await assert.rejects(handlers.alternate(ctx_at(102)), /no previous tab/);
+    assert.deepEqual(log, []);
+  }
+});
+
+// Tab 102 in window 1 is current. 201 is in window 2, 301 in private window 3.
+const PLACES: Record<number, { window_id: number; incognito: boolean }> = { 102: { window_id: 1, incognito: false }, 101: { window_id: 1, incognito: false }, 201: { window_id: 2, incognito: false }, 301: { window_id: 3, incognito: true } };
+
+function make_any_window(previous: number | undefined) {
+  const fake = make_fake(make_tabs(3));
+  fake.deps.tab_place = async (id) => PLACES[id];
+  fake.deps.last_used_tab_of = async (incognito) => (incognito ? undefined : previous);
+  return fake;
+}
+
+test("tab.alternate_any_window activates the previous tab and focuses its window", async () => {
+  const { handlers, log } = make_any_window(201);
+  await handlers.alternate_any_window(ctx_at(102));
+  assert.deepEqual(log, ["activate 201", "focus 2"]);
+});
+
+test("tab.alternate_any_window leaves focus alone when the previous tab is in this window", async () => {
+  const { handlers, log } = make_any_window(101);
+  await handlers.alternate_any_window(ctx_at(102));
+  assert.deepEqual(log, ["activate 101"]);
+});
+
+test("tab.alternate_any_window refuses with no previous tab, a closed one, the current one, or one of the other privacy", async () => {
+  for (const previous of [undefined, 999, 102, 301]) {
+    const { handlers, log } = make_any_window(previous);
+    await assert.rejects(handlers.alternate_any_window(ctx_at(102)), /no previous tab/);
     assert.deepEqual(log, []);
   }
 });
