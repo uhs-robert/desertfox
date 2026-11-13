@@ -2,7 +2,7 @@
 
 Key notation, the prefix tree compiler and the matcher. Pure TypeScript, no browser APIs.
 
-- `token.ts`: the normalized key token and `event_to_token`. The compiler and the content script both use it, so a keymap sequence and a keydown meet in one form.
+- `token.ts`: the normalized key token and `event_to_token`. The compiler and the content script both use it, so a keymap sequence and a keydown meet in one form. `physical_token` gives the Latin letter on the physical key of a plain letter of another script, for the `layout_fallback` setting.
 - `notation.ts`: parses a sequence such as `gx$` or `<AC-Escape>` into tokens.
 - `compiler.ts`: builds the `CompiledKeymap`, gives every leaf its which-key label (the binding `label`, else the command label with the phrases of the args the binding sets, and the binding `intent` when it has one), expands `search_keys`, `container_keys` and `site_keys` (the `s/<letter>` and `S/<letter>` leaves, which carry their candidate engines in `site_search`), expands `modifiers` into variant keys that the registry validator accepts (the modifier label names the group), puts `group_names` on the branches, and warns about shadowed or unknown entries.
 - `prune_tree.ts`: copies a mode's tree with the `pass` or `only` sequences of a `site_rules` row applied, and `frees_of` names the keys a rule hands to the page. The compiler, the background (which trims each page's tree) and which-key share it. The content script does not import it.

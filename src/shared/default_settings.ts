@@ -27,6 +27,7 @@ export const DEFAULT_STRIP_TRACKING_PARAMS: Settings["strip_tracking_params"] = 
 export const DEFAULT_STRIP_TRACKING: Settings["strip_tracking"] = true;
 export const DEFAULT_MEDIA_QUALITY: Settings["media_quality"] = "max";
 export const DEFAULT_EDITOR_EXT: Settings["editor_ext"] = "";
+export const DEFAULT_LAYOUT_FALLBACK: Settings["layout_fallback"] = true;
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
 export const DEFAULT_PALETTE: Settings["palette"] = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: Settings["light_intensity"] = 3;
@@ -77,6 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   strip_tracking: DEFAULT_STRIP_TRACKING,
   media_quality: DEFAULT_MEDIA_QUALITY,
   editor_ext: DEFAULT_EDITOR_EXT,
+  layout_fallback: DEFAULT_LAYOUT_FALLBACK,
   mode_indicator: DEFAULT_MODE_INDICATOR,
   palette: DEFAULT_PALETTE,
   light_intensity: DEFAULT_LIGHT_INTENSITY,

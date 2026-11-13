@@ -212,6 +212,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
       return decide(matcher, token, repeat);
     },
     reset_sequence_,
+    // The typed token, or `physical` when the keymap binds the typed one nowhere here.
+    layout_token_: (token: string, physical: string | null): string => (physical !== null && matcher && !matcher.binds_after_(deps.get_mode_(), held_tokens(), token) ? physical : token),
     // The first call also replays the held keys. Later calls swap the keymap.
     set_matcher_: (next: Matcher, next_browser_chords?: TreeBranch) => {
       matcher = next;

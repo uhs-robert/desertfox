@@ -13,7 +13,8 @@
 //
 // Layout: the token follows `event.key`, so a character binding means the character the user types.
 // A Ctrl/Alt/Meta chord on a letter from another script falls back to `event.code`, so `<C-d>` still works
-// on a Cyrillic layout.
+// on a Cyrillic layout. A plain letter of another script keeps its own token. The setting `layout_fallback` lets the
+// caller swap in `physical_token` when the typed token binds nothing, so Cyrillic text and `f` targets still work.
 
 export type KeyEventLike = {
   key: string;
@@ -33,6 +34,12 @@ export const is_chord = (token: string): boolean => /^<[ACM][ACMS]*-/.test(token
 
 export function format_token(mods: string, name: string): string {
   return mods === "" && name.length > 1 ? `<${name}>` : mods === "" ? name : `<${mods}-${name}>`;
+}
+
+// The Latin letter on the physical key of a plain letter from another script, or null. Shift makes it upper case.
+export function physical_token(event: KeyEventLike): string | null {
+  const letter = /^Key([A-Z])$/.exec(event.code)?.[1];
+  return letter && /^[^\x00-\x7f]$/u.test(event.key) && is_letter(event.key) ? (event.shiftKey ? letter : letter.toLowerCase()) : null;
 }
 
 // Returns null for a key press that is only a modifier or has no usable key.

@@ -89,6 +89,8 @@ export type CompiledKeymap = {
   which_key_skip?: string[];
   // A tree stored before this setting has none, and the panel keeps square corners.
   which_key_border?: WhichKeyBorder;
+  // Set to false only when `layout_fallback` is off. Absent means on.
+  layout_fallback?: false;
 };
 
 // What the background sends a page: the keymap without `site_rules`, its normal tree already trimmed when the page's rule lists keys.
