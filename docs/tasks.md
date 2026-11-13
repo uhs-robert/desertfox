@@ -23,7 +23,7 @@ Example: `toast_ms`, commit `2ad2c9ed`.
 2. Add its editor text to `src/shared/settings_docs.ts`.
 3. Run `just settings-defaults`. It rewrites `src/shared/default_settings.ts` and `src/shared/setting_completion.ts`. Never edit them.
 4. Add the setting to `EXPECTATIONS` and `ACCEPTS` in `test/settings_contract.test.ts`.
-5. Read the value where the feature runs. Content code takes it from the compiled keymap (`src/shared/prefix_tree.ts`, `src/shared/keys/compiler.ts`), Name the new field in the `CompiledKeymap` type in `src/shared/prefix_tree.ts` and in the test fixtures that build a compiled keymap by hand. Raise `COMPILED_KEYMAP_VERSION` in the same file, so a stored tree of the old shape is recompiled. Do not import `settings_schema.ts` in the content script or the command line page.
+5. Read the value where the feature runs. Content code takes it from the compiled keymap (`src/shared/prefix_tree.ts`, `src/shared/keys/compiler.ts`). Name the new field in the `CompiledKeymap` type in `src/shared/prefix_tree.ts` and in the test fixtures that build a compiled keymap by hand. Raise `COMPILED_KEYMAP_VERSION` in the same file, so a stored tree of the old shape is recompiled. Do not import `settings_schema.ts` in the content script or the command line page.
 6. Add the setting to the settings table in [`design.md`](design.md).
 7. A setting that needs state kept apart from the config writes through `create_write_queue` in `src/background/store_turns.ts`, as `src/background/previous_tab.ts` and `src/background/window_focus.ts` do. Never hand-roll a queue.
 
