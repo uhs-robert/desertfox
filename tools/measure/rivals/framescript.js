@@ -1,6 +1,6 @@
 if (!this.__rivals_loaded) { this.__rivals_loaded = 1; (function(){
 // Frame script: runs in the content process of the test tab, with Xray access to the page, so it can read closed shadow roots.
-// It sends the key and watches for labels in one process, so one clock covers both ends.
+// For the timing pages it sends the key and watches for labels in one process, so one clock covers both ends. The live-site check sends its keys from the parent process instead (run.mjs).
 // Hint label classes, one per tool: DesertFox, Vimium, Vimium C (inside a closed shadow root), Tridactyl.
 const hint_selectors = [".desertfox-hint", ".vimiumHintMarker", ".LH", ".TridactylHint"];
 // Visits every hint label under node, and calls on_root for each shadow root on the way (Xray access reads closed roots too).
@@ -92,26 +92,14 @@ addMessageListener("rivals:coverage", ({ data }) => { try {
 });
 
 
-// The live-site checks (PAGES=sites). State between messages lives here: the targets of the last hint check, so the activation check knows the element its label sits on.
+// The live-site checks (PAGES=sites). run.mjs sends every key of these checks through the parent process, so here a check is a pair: one message reads or arms before the key, one reads after it.
+// This script reports facts only. sites.mjs judges them. State between messages lives here: the targets of the last hint check, the scrollable elements of the last baseline and the armed activation.
 let last_targets = [];
-const sleep = (ms) => new Promise((resolve) => content.setTimeout(resolve, ms));
+let scrollables = [];
+let armed = null;
 const plain_rect = (r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
 const in_viewport = (rect) => rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < content.innerHeight && rect.left < content.innerWidth;
 const describe = (el) => (el ? el.localName + (el.id ? "#" + el.id : "") : "none");
-// Uppercase keys go out with Shift held, as a typed capital would.
-const press_keys = async (keys, gap_ms = 80) => {
-  for (const c of keys) {
-    const upper = c !== c.toLowerCase();
-    tip.beginInputTransactionForTests(content);
-    const shift = new content.KeyboardEvent("", { key: "Shift", code: "ShiftLeft", keyCode: 16 });
-    if (upper) tip.keydown(shift);
-    const event = new content.KeyboardEvent("", { key: c, code: "Key" + c.toUpperCase(), keyCode: c.toUpperCase().charCodeAt(0), shiftKey: upper });
-    tip.keydown(event);
-    tip.keyup(event);
-    if (upper) tip.keyup(shift);
-    await sleep(gap_ms);
-  }
-};
 const visible_labels = () => {
   const labels = [];
   for (const el of content.document.documentElement.children) walk_hints(el, (label) => {
@@ -132,102 +120,53 @@ const answer = (name, job) => addMessageListener("rivals:" + name, ({ data }) =>
 
 answer("page_info", async () => ({ url: String(content.location), title: content.document.title, text: (content.document.body?.innerText ?? "").slice(0, 3000), content_type: content.document.contentType }));
 
-answer("scroll_check", async ({ keys, wait_ms }) => {
-  const scrolled = [...content.document.querySelectorAll("*")].filter((el) => el.scrollHeight > el.clientHeight).map((el) => [el, el.scrollTop]);
-  const window_y = content.scrollY;
-  const active = describe(content.document.activeElement);
-  await press_keys(keys);
-  await sleep(wait_ms);
-  let element_dy = 0, element = "none";
-  for (const [el, top] of scrolled) if (Math.abs(el.scrollTop - top) > Math.abs(element_dy)) { element_dy = el.scrollTop - top; element = describe(el); }
-  return { window_dy: content.scrollY - window_y, element_dy, element, active };
-});
-
-answer("hints", async ({ keys, settle_ms }) => {
-  const targets = visible_targets();
-  last_targets = targets;
-  await press_keys(keys);
-  await sleep(settle_ms);
-  return { labels: visible_labels(), targets: targets.map((el, i) => ({ name: String(i), rect: plain_rect(el.getBoundingClientRect()) })) };
-});
-
-answer("label_count", async () => visible_labels().length);
-
-answer("keys", async ({ keys }) => { await press_keys(keys); return 1; });
-
-// Watches what typing the label does: a click or a focus on the page, or a navigation away. A tool can focus or click another element first, so any event on the labelled target counts, and the first event is the fallback.
-// The page's timers stop once it unloads, so a navigation answers at once.
-// A user's click at the label's spot lands on the element on top there, under the label. The label sits on the tool's own target, which can be an element the rig's target list missed or an overlay over it (YouTube lays one over its buttons). So that element, its inside, and its ancestors short of the body count as the target too.
-const has_hint = (el) => { let found = false; walk_hints(el, () => { found = true; }); return found; };
-const element_under_label = (at) => (at ? content.document.elementsFromPoint(at.x, at.y).find((el) => !has_hint(el)) ?? null : null);
-const is_under_label = (el, under) => !!under && (el === under || under.contains(el) || (el.contains(under) && el !== content.document.body && el !== content.document.documentElement));
-answer("activate", ({ keys, target, at, wait_ms }) => new Promise((resolve) => {
-  const expected = last_targets[Number(target)];
-  const under = element_under_label(at);
-  let first = null;
-  const finish = (seen) => {
-    content.removeEventListener("click", on_event, true);
-    content.removeEventListener("focusin", on_event, true);
-    content.removeEventListener("pagehide", on_leave, true);
-    resolve(seen ?? first ?? { event: null });
+// The baseline of the scroll check, taken just before the key: the window's offset and each element that can scroll vertically, with the area of it inside the viewport. sites.mjs picks the main scroller from them.
+answer("scroll_baseline", async () => {
+  const can_scroll = (el) => el.scrollHeight > el.clientHeight + 1 && ["auto", "scroll", "overlay"].includes(content.getComputedStyle(el).overflowY);
+  scrollables = [...content.document.querySelectorAll("*")].filter(can_scroll);
+  const visible_area = (el) => {
+    const rect = el.getBoundingClientRect();
+    return Math.max(0, Math.min(rect.right, content.innerWidth) - Math.max(rect.left, 0)) * Math.max(0, Math.min(rect.bottom, content.innerHeight) - Math.max(rect.top, 0));
   };
+  return { window_y: content.scrollY, viewport_area: content.innerWidth * content.innerHeight, candidates: scrollables.map((el, index) => ({ index, name: describe(el), visible_area: visible_area(el), top: el.scrollTop })) };
+});
+answer("scroll_now", async () => ({ window_y: content.scrollY, tops: scrollables.map((el) => el.scrollTop) }));
+
+answer("hint_targets", async () => {
+  last_targets = visible_targets();
+  return last_targets.map((el, i) => ({ name: String(i), rect: plain_rect(el.getBoundingClientRect()) }));
+});
+answer("top_labels", async () => visible_labels());
+
+// Arms the activation check before run.mjs types the label: a click or a focus on the page, and a page hide when it navigates. The first event on the labelled target or inside it wins, else the first event is kept, so sites.mjs sees what happened.
+// A navigation into another content process takes this script's state with it, so run.mjs keeps the expected address returned here and compares the new address itself.
+answer("arm_activation", async ({ target }) => {
+  const expected = last_targets[Number(target)] ?? null;
+  const record = { event: null, relation: null, tag: null, navigated: false };
   const on_event = (event) => {
     const el = event.target;
-    const seen = { event: event.type === "focusin" ? "focus" : "click", tag: describe(el), on_target: !!expected && (el === expected || expected.contains(el) || el.contains(expected)), under_label: is_under_label(el, under) };
-    if (seen.on_target || seen.under_label) finish(seen);
-    first ??= seen;
+    const relation = !expected ? "other" : el === expected ? "self" : expected.contains(el) ? "inside" : "other";
+    if (record.event && (record.relation !== "other" || relation === "other")) return;
+    Object.assign(record, { event: event.type === "focusin" ? "focus" : "click", relation, tag: describe(el) });
   };
-  const on_leave = () => finish({ event: "navigated" });
-  content.addEventListener("click", on_event, true);
-  content.addEventListener("focusin", on_event, true);
-  content.addEventListener("pagehide", on_leave, true);
-  void press_keys(keys).then(() => content.setTimeout(() => finish(null), wait_ms));
-}));
-
-// Follows the focus from the top document into each focused frame of the same origin. A frame of another origin cannot be read from here, so the path stops at it.
-const innermost_focus = () => {
-  let doc = content.document;
-  const path = [];
-  for (;;) {
-    const active = doc.activeElement;
-    path.push(describe(active));
-    if (!active || !["iframe", "frame"].includes(active.localName)) return { doc, active, path, cross_origin: false };
-    const inner = active.contentDocument;
-    if (!inner) return { doc, active, path: [...path, "(frame of another origin)"], cross_origin: true };
-    doc = inner;
-  }
-};
-const focus_path = () => {
-  const { active, path, cross_origin } = innermost_focus();
-  const takes_typing = cross_origin || (!!active && (active.isContentEditable || ["input", "textarea", "select"].includes(active.localName)));
-  return { path: path.join(" > "), takes_typing, cross_origin };
-};
-
-answer("focus_path", async () => focus_path());
+  const on_hide = () => { record.navigated = true; };
+  const page = content;
+  page.addEventListener("click", on_event, true);
+  page.addEventListener("focusin", on_event, true);
+  page.addEventListener("pagehide", on_hide, true);
+  armed = { record, disarm: () => { for (const [type, listener] of [["click", on_event], ["focusin", on_event], ["pagehide", on_hide]]) page.removeEventListener(type, listener, true); } };
+  return { expected_href: expected?.localName === "a" ? expected.href : null, tag: describe(expected) };
+});
+answer("activation_result", async () => {
+  if (!armed) return null;
+  armed.disarm();
+  const { record } = armed;
+  armed = null;
+  return record;
+});
 
 // DesertFox's mode badge carries the mode label for its key test, in the top document.
 answer("desertfox_mode", async () => content.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null);
-
-// Infers a tool's mode from what it does with its scroll key. The tools listen in the capture phase on the window and stop a key they take, so a capture listener added after theirs, on the focused document's window, sees the key only if the tool let it through. Capture also runs before the page's own handlers on the field can stop the key.
-answer("probe_key", async ({ keys }) => {
-  const { doc, cross_origin } = innermost_focus();
-  if (cross_origin) return null;
-  const seen = { reached: false, prevented: false };
-  const on_key = (event) => { seen.reached = true; seen.prevented = event.defaultPrevented; };
-  doc.defaultView.addEventListener("keydown", on_key, true);
-  await press_keys(keys);
-  await sleep(300);
-  doc.defaultView.removeEventListener("keydown", on_key, true);
-  return seen;
-});
-
-// The tool's own leave key, Escape for every tool here, and the focus path before and after it.
-answer("leave_key", async () => {
-  const before = focus_path();
-  send("Escape", "Escape", 27);
-  await sleep(600);
-  return { before, after: focus_path() };
-});
 
 answer("video_state", async () => { const video = largest_video(); return video ? { paused: video.paused, volume: video.muted ? 0 : video.volume } : null; });
 

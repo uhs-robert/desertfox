@@ -1,14 +1,14 @@
 // One tool alone in a fresh headless Firefox profile, over the pages. Run by rivals.mjs, which sets RIVALS_DIR, PASS and PAGES.
 // usage: node run.mjs <tool> [runs]
 // Per page it records load times, the time from the hint key to the first label, and the memory of the page and extension processes.
-import { connect_rdp, install_temporary_addon, evaluate_in_chrome } from "../../../test/key/rdp.mjs";
+import { connect_rdp, install_temporary_addon, evaluate_in_browsing_context, evaluate_in_chrome } from "../../../test/key/rdp.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, describe_mode_on_load, judge_activation, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, NORMAL_ACTIONS, page_wall, pick_activation, SITES, TOOL_KEYS } from "./sites.mjs";
+import { as_action, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -222,7 +222,145 @@ async function tab_switch_run(next_key) {
   return { ...timing, selects: marks.selects, presses_b_ms: marks.presses_b_ms };
 }
 
-// One site for the live-site check, in the three steps of sites.mjs. Typing a label comes last because it can leave the page.
+// The live-site check (PAGES=sites), in the three steps of sites.mjs, on one page load.
+// A user's key reaches the focused frame because the parent process routes it there. A key made inside the top page's process never reaches a frame of another origin. So every key of this check goes in through the parent process, into the browser window.
+// Key names longer than one character are named keys. Uppercase goes out with Shift held, as a typed capital would.
+const NAMED_KEY_CODES = { Escape: 27 };
+const press_keys = (keys, gap_ms = 80) => chrome_long(`{
+  const win = Services.wm.getMostRecentWindow("navigator:browser");
+  const browser = win.gBrowser.selectedBrowser;
+  if (win.document.activeElement !== browser) browser.focus();
+  const tip = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
+  const wait = (ms) => new Promise((resolve) => win.setTimeout(resolve, ms));
+  const named_codes = ${JSON.stringify(NAMED_KEY_CODES)};
+  for (const key of ${JSON.stringify([...keys])}) {
+    tip.beginInputTransactionForTests(win);
+    const named = key.length > 1;
+    const upper = !named && key !== key.toLowerCase();
+    const shift = new win.KeyboardEvent("", { key: "Shift", code: "ShiftLeft", keyCode: 16 });
+    if (upper) tip.keydown(shift);
+    const event = new win.KeyboardEvent("", named ? { key, code: key, keyCode: named_codes[key] } : { key, code: "Key" + key.toUpperCase(), keyCode: key.toUpperCase().charCodeAt(0), shiftKey: upper });
+    tip.keydown(event);
+    tip.keyup(event);
+    if (upper) tip.keyup(shift);
+    await wait(${gap_ms});
+  }
+  return 1;
+}`, 20000);
+
+const current_url = () => chrome(`${selected_browser}.currentURI.spec`);
+
+// The browsing contexts of the selected tab, each with the content process that holds it. A frame of the tools' own pages (moz-extension) is the tool's interface, not the page, so it is left out for every tool alike.
+const page_contexts = () => chrome(`(async () => {
+  const found = [];
+  const walk = (context) => {
+    const global = context.currentWindowGlobal;
+    if (global && !global.documentURI?.spec.startsWith("moz-extension:")) found.push({ context_id: context.id, pid: global.domProcess?.osPid ?? null, top: !context.parent });
+    for (const child of context.children) walk(child);
+  };
+  walk(${selected_browser}.browsingContext);
+  return found;
+})()`);
+
+// The chain from the top page down to the frame that holds the focus, which Firefox tracks in the parent process for every origin. Empty when the focus is outside the page.
+const focus_contexts = () => chrome(`(async () => {
+  const top_id = ${selected_browser}.browsingContext.id;
+  const chain = [];
+  for (let context = Services.focus.focusedContentBrowsingContext; context; context = context.parent) chain.unshift({ context_id: context.id, pid: context.currentWindowGlobal?.domProcess?.osPid ?? null });
+  return chain.length > 0 && chain[0].context_id === top_id ? chain : [];
+})()`);
+
+// The readers below run in the content process that holds a frame, given the frame's window. Each is passed as source, so it must not use anything outside itself.
+function read_focused_element(frame_window) {
+  const doc = frame_window.document;
+  const el = doc.activeElement;
+  if (!el) return { tag: "none" };
+  return { tag: el.localName, id: el.id, type: el.localName === "input" ? (el.type || "text").toLowerCase() : null, editable: el.isContentEditable, design_mode: doc.designMode === "on", read_only: Boolean(el.readOnly), disabled: Boolean(el.disabled) };
+}
+// The probe lives on the process console's global between the arm and the read.
+function arm_probe(frame_window) {
+  const seen = { reached: false, prevented: false };
+  const on_key = (event) => { seen.reached = true; seen.prevented = event.defaultPrevented; };
+  frame_window.addEventListener("keydown", on_key, true);
+  globalThis.__rivals_probe = { frame_window, on_key, seen };
+  return 1;
+}
+function read_probe() {
+  const probe = globalThis.__rivals_probe;
+  if (!probe) return null;
+  probe.frame_window.removeEventListener("keydown", probe.on_key, true);
+  delete globalThis.__rivals_probe;
+  return probe.seen;
+}
+function count_visible_labels(frame_window, selectors) {
+  let count = 0;
+  const visit = (node) => {
+    if (node.nodeType !== 1) return;
+    if (selectors.some((selector) => node.matches(selector))) {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < frame_window.innerHeight && rect.left < frame_window.innerWidth && node.checkVisibility({ opacityProperty: true, visibilityProperty: true })) count++;
+    }
+    const root = node.openOrClosedShadowRoot;
+    if (root) for (const child of root.children) visit(child);
+    for (const child of node.children) visit(child);
+  };
+  if (frame_window.document.documentElement) visit(frame_window.document.documentElement);
+  return count;
+}
+// The same label classes as framescript.js.
+const HINT_SELECTORS = [".desertfox-hint", ".vimiumHintMarker", ".LH", ".TridactylHint"];
+
+const in_context = (context, reader, ...args) => evaluate_in_browsing_context(rdp, context, `(frame_window) => (${reader})(frame_window, ...${JSON.stringify(args)})`);
+
+async function focus_now() {
+  try {
+    const chain = [];
+    for (const context of await focus_contexts()) {
+      const facts = context.pid ? await in_context(context, read_focused_element) : null;
+      if (!facts || facts.error) return { ...focus_of(null), path: `unreadable (${facts?.error ?? "frame gone"})` };
+      chain.push(facts);
+    }
+    return focus_of(chain);
+  } catch (error) {
+    return { ...focus_of(null), path: `unreadable (${String(error.message ?? error).slice(0, 120)})` };
+  }
+}
+
+// What the tool's scroll key did in the focused document: whether the page saw it after the tool's own capture listener had its turn.
+async function probe_mode(keys) {
+  const focused = (await focus_contexts()).at(-1);
+  if (!focused?.pid) return null;
+  await in_context(focused, arm_probe);
+  await press_keys(keys);
+  await sleep(300);
+  const seen = await in_context(focused, read_probe);
+  return seen?.error ? null : seen;
+}
+
+// Visible labels in every frame of the tab, or in every frame but the top page. A frame the rig could not read is counted, so a zero is never claimed for it.
+async function count_labels({ frames_only }) {
+  let labels = 0, unread = 0;
+  for (const context of await page_contexts()) {
+    if (frames_only && context.top) continue;
+    // Null means the frame closed before the read, which leaves nothing to count.
+    const count = context.pid ? await in_context(context, count_visible_labels, HINT_SELECTORS).catch((error) => ({ error: String(error) })) : { error: "no content process" };
+    if (typeof count === "number") labels += count;
+    else if (count !== null) unread++;
+  }
+  return { labels, unread };
+}
+
+// The baseline is read just before the key, so a page that moved on its own before it does not count.
+async function scroll_check(keys) {
+  const focus = await focus_now();
+  const baseline = await ask_page("scroll_baseline", {}, 10000);
+  await press_keys(keys);
+  await sleep(1000);
+  const after = await ask_page("scroll_now", {}, 5000);
+  const main = main_scroller(baseline.candidates, baseline.viewport_area);
+  return { window_dy: after.window_y - baseline.window_y, main_dy: main ? after.tops[main.index] - main.top : 0, main: main?.name ?? null, active: focus.path };
+}
+
 // A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
 // open_page polls every 100 ms, so a live page gets about 30 s to load.
 const LIVE_LOAD_ATTEMPTS = 300;
@@ -254,19 +392,21 @@ async function check_site(site) {
     catch (error) { record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) }; }
   };
 
-  // Step 1. The probe key changes the page (it scrolls or types), so steps 2 and 3 start from a fresh load.
+  // Step 1. Every tool gets the same probe key, DesertFox too, so all four meet the same page in step 2.
   await run_check("mode_on_load", async () => {
-    const focus = await ask_page("focus_path", {}, 5000);
+    const focus = await focus_now();
     const desertfox_mode = tool === "desertfox" ? await ask_page("desertfox_mode", {}, 5000) : null;
-    const probe = desertfox_mode ? null : await ask_page("probe_key", { keys: keys.scroll_down }, 5000);
+    const probe = await probe_mode(keys.scroll_down);
     return { ...describe_mode_on_load({ focus, probe, desertfox_mode }), focus, probe };
   });
-  if (!(await load_live(url))) { for (const name of check_names.slice(1)) record.checks[name] = { status: "error", reason: "the page did not load again" }; return record; }
 
   // Step 2.
   await run_check("leave", async () => {
-    const left = await ask_page("leave_key", {}, 5000);
-    return { ...judge_leave(left), ...left };
+    const before = await focus_now();
+    await press_keys(["Escape"]);
+    await sleep(600);
+    const after = await focus_now();
+    return { ...judge_leave({ before, after }), before, after };
   });
 
   // Step 3.
@@ -274,7 +414,7 @@ async function check_site(site) {
   const press_and_compare = async (key, read, judge, wait_ms) => {
     if (!key) return no_key;
     const before = await ask_page(read, {}, 5000);
-    await ask_page("keys", { keys: key }, 5000);
+    await press_keys(key);
     await sleep(wait_ms);
     return judge(before, await ask_page(read, {}, 5000));
   };
@@ -282,7 +422,14 @@ async function check_site(site) {
   const wait_for_embed = async () => {
     for (let waited = 0; waited < 20000; waited += 500) { if (await ask_page("embed_state", {}, 5000)) return; await sleep(500); }
   };
-  const show_hints = () => ask_page("hints", { keys: keys.hint, settle_ms: 1500 }, 15000);
+  const show_hints = async () => {
+    const targets = await ask_page("hint_targets", {}, 10000);
+    await press_keys(keys.hint);
+    await sleep(1500);
+    const labels = await ask_page("top_labels", {}, 5000);
+    const in_frames = await count_labels({ frames_only: true });
+    return { labels, targets, frame_labels: in_frames.labels };
+  };
   let shown = null;
   const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
@@ -290,31 +437,33 @@ async function check_site(site) {
     cell_move: () => press_and_compare(keys.scroll_down, "name_box", judge_cell_move, 1000),
     jk_clash: async () => {
       const post_before = await ask_page("post_focus", {}, 5000);
-      const scroll = await ask_page("scroll_check", { keys: keys.scroll_down, wait_ms: 1000 }, 10000);
+      const scroll = await scroll_check(keys.scroll_down);
       const post_after = await ask_page("post_focus", {}, 5000);
-      return judge_jk_clash({ scrolled: scroll.window_dy !== 0 || scroll.element_dy !== 0, post_focus_moved: post_after !== null && post_after !== post_before });
+      return judge_jk_clash({ scrolled: judge_scroll(scroll).status === "pass", post_focus_moved: post_after !== null && post_after !== post_before });
     },
     embed_play_pause: async () => { await wait_for_embed(); return press_and_compare(keys.play_pause, "embed_state", judge_play_pause, 2500); },
     embed_volume: () => press_and_compare(keys.volume_down, "embed_state", judge_volume, 1500),
-    scroll: async () => judge_scroll(await ask_page("scroll_check", { keys: keys.scroll_down, wait_ms: 1000 }, 10000)),
-    hints: async () => { shown = await show_hints(); return judge_hints(shown.labels, shown.targets); },
+    scroll: async () => judge_scroll(await scroll_check(keys.scroll_down)),
+    hints: async () => { shown = await show_hints(); return judge_hints(shown.labels, shown.targets, shown.frame_labels); },
     hints_escape: async () => {
-      if (!shown?.labels.length) return { status: "fail", reason: "no labels to leave" };
-      await ask_page("escape");
+      if (!shown?.labels.length && !shown?.frame_labels) return { status: "fail", reason: "no labels to leave" };
+      await press_keys(["Escape"]);
       await sleep(800);
-      return judge_escape(await ask_page("label_count", {}, 5000));
+      const left = await count_labels({ frames_only: false });
+      return judge_escape(left.labels, left.unread);
     },
     activate: async () => {
       const again = await show_hints();
       const pick = pick_activation(again.labels, again.targets);
       if (!pick) return { status: "fail", reason: "no label on a visible target to type" };
-      const url_before = await chrome(`${selected_browser}.currentURI.spec`);
-      // A navigation into another content process cuts the frame script off before it answers, so a missing answer with a new address is a navigation.
-      const reply = await ask_page("activate", { ...pick, wait_ms: 3000 }, 15000).catch(async (error) => {
-        if ((await chrome(`${selected_browser}.currentURI.spec`)) !== url_before) return { event: "navigated" };
-        throw error;
-      });
-      return { ...judge_activation(reply), typed: pick.keys };
+      const armed = await ask_page("arm_activation", { target: pick.target }, 5000);
+      const url_before = await current_url();
+      await press_keys(pick.keys);
+      await sleep(3000);
+      // A navigation into another content process takes the frame script's state with it, and then only the address can tell.
+      const seen = await ask_page("activation_result", {}, 5000).catch(() => null);
+      const url_after = await current_url();
+      return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag };
     },
   };
   for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
@@ -356,7 +505,14 @@ try {
       const only_sites = process.env.SITES?.split(",");
       for (const site of SITES.filter((entry) => !only_sites || only_sites.includes(entry.name))) {
         // One site that hangs the debugger must not cost the other sites their results.
-        const record = await check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries(["mode_on_load", "leave", ...site.extra, ...NORMAL_ACTIONS].map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
+        const run_site = () => check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries(["mode_on_load", "leave", ...site.extra, ...NORMAL_ACTIONS].map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
+        let record = await run_site();
+        // A timeout says nothing about the tool, so the site runs once more. The first record stays in the data, marked, and the table scores the retry.
+        if (timed_out(record)) {
+          result.runs.push({ page, run: 0, site: site.name, ...record, retried: true });
+          log_row({ site: site.name, retried: "a check timed out" });
+          record = await run_site();
+        }
         result.runs.push({ page, run: 0, site: site.name, ...record });
         log_row({ site: site.name, ...Object.fromEntries(Object.entries(record.checks).map(([name, check]) => [name, `${check.status}: ${check.reason}`])) });
       }

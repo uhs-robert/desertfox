@@ -2,8 +2,10 @@
 // A live page changes under the rig, so a run is a dated snapshot of these sites, not a repeatable benchmark.
 // Each site runs in three steps, the way a user meets it:
 // 1. Mode on load (`mode_on_load`), information only: where the focus is, through frames, and the tool's mode. A tool that starts in insert mode where the site focused a field is right.
-// 2. Leave (`leave`), scored: the tool's own leave key, and whether the focus really left the field, also when the field is inside a frame.
+// 2. Leave (`leave`), scored: the tool's own leave key, and whether the focused element, in whatever frame holds it, still takes typing.
 // 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked.
+// All three run on one page load. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
+// The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 
 // `extra` names the per-site actions of step 3, run before the generic ones. `path` instead of `url` is a page that pages.mjs serves.
@@ -29,7 +31,7 @@ export const SITES = [
   // The viewer binds j to the next page itself, so a scroll there is not the tool's.
   { name: "pdf_viewer", url: "https://arxiv.org/pdf/1706.03762", extra: [], note: "Firefox runs no extension content script in its PDF viewer, and the viewer scrolls on its own j" },
   // A local page on 127.0.0.1 with the live YouTube player in an iframe, so the player is cross-site to the page the keys go to.
-  { name: "youtube_embed", path: "yt_embed", extra: ["embed_play_pause", "embed_volume"], note: "the rig reads labels in the top document only, so the hint checks cover the link beside the player and not the player's own buttons" },
+  { name: "youtube_embed", path: "yt_embed", extra: ["embed_play_pause", "embed_volume"], note: "the hint checks match labels to targets of the top document, so they cover the link beside the player and not the player's own buttons. Labels inside the player frame count only for Escape out of hints" },
 ];
 
 export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
@@ -65,11 +67,18 @@ export function page_wall({ url, title, text }) {
   return null;
 }
 
-// scroll: { window_dy, element_dy, element, active } from the frame script, the largest change of the window and of any scrollable element.
-export function judge_scroll({ window_dy, element_dy, element, active }) {
-  if (window_dy !== 0) return pass(`window moved ${Math.round(window_dy)} px`);
-  if (element_dy !== 0) return pass(`${element} moved ${Math.round(element_dy)} px`);
-  return fail(`nothing scrolled (focus on ${active})`);
+// The page's main scroller, when the window itself does not scroll: the scrollable element with the largest visible area, if it covers at least a quarter of the viewport. A carousel, a chat list or a code line is never the main scroller, so its own movement cannot pass a scroll check.
+// candidates: [{ index, visible_area }] of the elements that can scroll vertically.
+export function main_scroller(candidates, viewport_area) {
+  const largest = [...candidates].sort((a, b) => b.visible_area - a.visible_area)[0];
+  return largest && largest.visible_area >= viewport_area / 4 ? largest : null;
+}
+
+// scroll: { window_dy, main_dy, main, active }, each change against a baseline taken just before the key. main names the main scroller, or null when the page has none.
+export function judge_scroll({ window_dy, main_dy, main, active }) {
+  if (Math.abs(window_dy) >= 1) return pass(`window moved ${Math.round(window_dy)} px`);
+  if (main && Math.abs(main_dy) >= 1) return pass(`main scroller ${main} moved ${Math.round(main_dy)} px`);
+  return fail(`nothing scrolled: neither the window nor ${main ? `the main scroller ${main}` : "a main scroller (none found)"} moved (focus on ${active})`);
 }
 
 // Labels sit on or right next to their target, so a label within MAX_DISTANCE of a target counts for it, as on the coverage page.
@@ -84,12 +93,13 @@ const target_of = (label, targets) => {
   return nearest;
 };
 
-// labels: [{ text, rect }] visible in the viewport. targets: [{ name, rect }], the visible links, buttons and fields.
-export function judge_hints(labels, targets) {
-  if (labels.length === 0) return fail(`no labels (${targets.length} visible targets)`);
+// labels: [{ text, rect }] visible in the top document's viewport. targets: [{ name, rect }], the visible links, buttons and fields of the top document. frame_labels: the labels visible inside the page's frames, which cannot sit on a top-document target.
+export function judge_hints(labels, targets, frame_labels = 0) {
+  const in_frames = frame_labels > 0 ? `, ${frame_labels} more inside frames` : "";
+  if (labels.length === 0) return fail(`no labels on the page${in_frames} (${targets.length} visible targets)`);
   const labelled = new Set(labels.map((label) => target_of(label, targets)?.name).filter((name) => name !== undefined));
-  if (labelled.size === 0) return fail(`${labels.length} labels, none on a visible target`);
-  return pass(`${labels.length} labels, ${labelled.size} of ${targets.length} visible targets labelled`);
+  if (labelled.size === 0) return fail(`${labels.length} labels${in_frames}, none on a visible target`);
+  return pass(`${labels.length} labels${in_frames}, ${labelled.size} of ${targets.length} visible targets labelled`);
 }
 
 const rect_contains = (outer, inner) => outer.left <= inner.left && outer.top <= inner.top && outer.right >= inner.right && outer.bottom >= inner.bottom;
@@ -122,33 +132,70 @@ export function pick_activation(labels, targets) {
   return null;
 }
 
-export const judge_escape = (labels_left) => (labels_left === 0 ? pass("all labels gone") : fail(`${labels_left} labels still shown`));
-
-// reply: { event: "click" | "focus" | "navigated" | null, on_target, under_label, tag }. under_label is the element a user's click at the label's spot lands on, or its inside, or an ancestor short of the body.
-export function judge_activation(reply) {
-  if (!reply.event) return fail("typing the label did nothing the page saw");
-  if (reply.event === "navigated") return pass("the page navigated");
-  if (reply.on_target) return pass(`${reply.event} on the labelled ${reply.tag}`);
-  if (reply.under_label) return pass(`${reply.event} on ${reply.tag}, under the label`);
-  return fail(`${reply.event} on ${reply.tag}, not the labelled target`);
+// labels_left counts the labels visible in the top document and in every frame. unread_frames counts the frames the rig could not read, so a zero there is not proof.
+export function judge_escape(labels_left, unread_frames = 0) {
+  if (labels_left > 0) return fail(`${labels_left} labels still shown`);
+  if (unread_frames > 0) return { status: "unknown", reason: `no label left where the rig could read, ${unread_frames} frames unread` };
+  return pass("all labels gone, frames included");
 }
 
-// A focus path runs from the top document into each focused frame: { path, takes_typing, cross_origin }. takes_typing is true when the innermost focused element is a field or editable. A focused frame of another origin cannot be read, so it counts as one that may take typing.
-// probe: what the tool's scroll key did on a copy of the page, { reached, prevented }, read in the focused document after the tool had its turn. desertfox_mode: the label DesertFox's mode badge shows, read from its `data-desertfox-mode` attribute.
+// Two addresses are the same page when they differ only in the fragment.
+export function same_address(a, b) {
+  const without_fragment = (url) => { const parsed = new URL(url); parsed.hash = ""; return parsed.href; };
+  try { return without_fragment(a) === without_fragment(b); } catch { return false; }
+}
+
+// One rule for every tool, wherever it draws its label: typing the label must click or focus the labelled target or an element inside it, or navigate to the target's own address when it is a link.
+// A click on an ancestor never counts, because a wrapper or the body holds every target.
+// reply: { event: "click" | "focus" | null, relation: "self" | "inside" | "other", tag, navigated } from the page, plus expected_href (the link's address, or null), url_before and url_after from the parent process.
+export function judge_activation({ event, relation, tag, navigated, expected_href, url_before, url_after }) {
+  if (event && relation !== "other") return pass(`${event} on the labelled ${tag}${relation === "inside" ? " (an element inside it)" : ""}`);
+  if (navigated || (url_after && url_after !== url_before)) {
+    if (expected_href && url_after && same_address(url_after, expected_href)) return pass(`navigated to the link's address`);
+    return fail(`navigated to ${String(url_after).slice(0, 80)}, ${expected_href ? `not the link's address ${expected_href.slice(0, 80)}` : "but the target is not a link"}`);
+  }
+  if (event) return fail(`${event} on ${tag}, not the labelled target or inside it`);
+  return fail("typing the label did nothing the page saw");
+}
+
+// Input types that take typed text. A checkbox, a button or a range takes keys only as shortcuts.
+const TEXT_INPUT_TYPES = new Set(["text", "search", "email", "url", "tel", "password", "number", "date", "datetime-local", "month", "time", "week"]);
+
+// facts: the focused element of one document, { tag, id, type, editable, design_mode, read_only, disabled }, as the page reports it. A select takes typed letters to pick an option.
+export function takes_typing(facts) {
+  if (!facts) return false;
+  if (["input", "textarea", "select"].includes(facts.tag)) {
+    if (facts.disabled || facts.read_only) return false;
+    return facts.tag !== "input" || TEXT_INPUT_TYPES.has(facts.type);
+  }
+  return Boolean(facts.editable || facts.design_mode);
+}
+
+const describe_facts = (facts) => (facts ? facts.tag + (facts.id ? `#${facts.id}` : "") : "none");
+
+// chain: the focused element of each document from the top page down to the focused frame, which can be of another origin, or null when a document could not be read. An empty chain means the focus is in the browser's own window, not the page.
+// Only the innermost element decides: a frame whose own document holds no field does not take typing.
+export function focus_of(chain) {
+  if (!chain) return { readable: false, path: "unreadable", takes_typing: null };
+  if (chain.length === 0) return { readable: true, path: "(browser window, not the page)", takes_typing: false };
+  return { readable: true, path: chain.map(describe_facts).join(" > "), takes_typing: takes_typing(chain.at(-1)) };
+}
+
+// focus: from focus_of. probe: what the tool's scroll key did, { reached, prevented }, read in the focused document after the tool had its turn, or null. desertfox_mode: the label DesertFox's mode badge shows, read from its `data-desertfox-mode` attribute. The rivals have no such badge, so their mode is inferred and is weaker evidence.
 export function describe_mode_on_load({ focus, probe, desertfox_mode }) {
   const where = `focus ${focus.path}${focus.takes_typing ? " (takes typing)" : ""}`;
   if (desertfox_mode) return { status: "info", reason: `${where}; mode ${desertfox_mode.toLowerCase()} (read from the mode badge)` };
-  if (focus.cross_origin) return { status: "info", reason: `${where}; mode unknown: the focused frame is of another origin, so the probe key cannot be watched` };
   if (!probe) return { status: "info", reason: `${where}; mode unknown (no probe answer)` };
   const mode = probe.reached && !probe.prevented ? "insert or passing keys: the page got the scroll key" : "normal: the tool took the scroll key before the page";
   return { status: "info", reason: `${where}; mode inferred ${mode}` };
 }
 
-// before and after are focus paths around the tool's leave key.
+// before and after come from focus_of, around the tool's leave key. A focus the rig could not read is unknown, never a fail.
 export function judge_leave({ before, after }) {
+  if (!before.readable || !after.readable) return { status: "unknown", reason: `the focus could not be read (before: ${before.path}, after: ${after.path})` };
   if (!before.takes_typing) return pass(`no field had the focus (${before.path})`);
   if (!after.takes_typing) return pass(`left ${before.path}, focus now ${after.path}`);
-  return fail(`focus stayed in ${after.path}`);
+  return fail(`focus stayed in ${after.path}, which takes typing`);
 }
 
 // A video state is { paused, volume } with volume 0 to 1, or null when the page has no video.
@@ -179,25 +226,35 @@ export function judge_jk_clash({ scrolled, post_focus_moved }) {
   return scrolled ? pass("the tool's j scrolled, X's own j did not run") : fail("neither the tool nor X acted on j");
 }
 
-// The cell for one check: the status when all runs agree, else each run's status.
+// A check that errored on a timeout says nothing about the tool, so run.mjs runs the site once more and keeps both records.
+const TIMEOUT_REASON = /timeout|no answer|did not finish|never answered/i;
+export const timed_out = (record) => Object.values(record.checks).some((check) => check.status === "error" && TIMEOUT_REASON.test(check.reason));
+
+// The cell for one check over the passes: the status more than half the runs got, or `split` with each status when none did. majority: the status, null on a split. A run's record is its own, so the reason shown comes from a run with the majority status.
 export function cell_of(results) {
-  if (results.length === 0) return "-";
-  const statuses = results.map((result) => result.status);
-  return statuses.every((status) => status === statuses[0]) ? statuses[0] : statuses.join("/");
+  if (results.length === 0) return { text: "-", majority: null };
+  const counts = new Map();
+  for (const { status } of results) counts.set(status, (counts.get(status) ?? 0) + 1);
+  const [status, count] = [...counts].sort((a, b) => b[1] - a[1])[0];
+  if (count * 2 <= results.length) return { text: `split ${results.map((result) => result.status).join("/")}`, majority: null };
+  return { text: count === results.length ? status : `${status} ${count}/${results.length}`, majority: status };
 }
 
-// The markdown table of a live-site run: a row per site and check, a column per tool. runs_of: { tool: [{ site, checks: { name: { status, reason } } }] }, one entry per pass.
-// The reason shows when every run agrees, so a split cell stays short.
+// A record replaced by a retry stays in the JSON but takes no part in the cell.
+export const scored_runs = (runs) => runs.filter((run) => !run.retried);
+
+// The markdown table of a live-site run: a row per site and check, a column per tool. runs_of: { tool: [{ site, checks: { name: { status, reason } } }] }, one entry per pass and retry.
+// A cell shows the majority status with the reason from one of its runs. A split cell shows only the statuses.
 export function sites_table(runs_of, tools) {
   const site_names = SITES.map((site) => site.name).filter((name) => tools.some((tool) => runs_of[tool].some((run) => run.site === name)));
   let markdown = `| site | check | ${tools.join(" | ")} |\n|---|---|${tools.map(() => "---").join("|")}|\n`;
   for (const site of site_names) {
-    const check_names = [...new Set(tools.flatMap((tool) => runs_of[tool].filter((run) => run.site === site).flatMap((run) => Object.keys(run.checks))))];
+    const check_names = [...new Set(tools.flatMap((tool) => scored_runs(runs_of[tool]).filter((run) => run.site === site).flatMap((run) => Object.keys(run.checks))))];
     for (const check of check_names) {
       const cells = tools.map((tool) => {
-        const results = runs_of[tool].filter((run) => run.site === site && run.checks[check]).map((run) => run.checks[check]);
-        const cell = cell_of(results);
-        return results.length > 0 && !cell.includes("/") ? `${cell}: ${results[0].reason}` : cell;
+        const results = scored_runs(runs_of[tool]).filter((run) => run.site === site && run.checks[check]).map((run) => run.checks[check]);
+        const { text, majority } = cell_of(results);
+        return majority ? `${text}: ${results.find((result) => result.status === majority).reason}` : text;
       });
       markdown += `| ${site} | ${check} | ${cells.map((cell) => cell.replaceAll("|", "\\|")).join(" | ")} |\n`;
     }

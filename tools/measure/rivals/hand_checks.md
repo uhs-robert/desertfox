@@ -18,9 +18,9 @@ The rig (`PAGES=sites`) cannot log in, so these sites are checked by hand. Fill 
 
 Run three steps on each site, the same way the rig does (`sites.mjs`).
 
-1. Mode on load (information, not scored). Load the page and touch nothing. Note where the focus is, also inside a frame, and the extension's mode. DesertFox shows its mode in the badge. For the others, infer the mode: press `j` and see whether it scrolls (normal mode) or types into the field or does nothing (insert mode, or the key went past the extension). Starting in insert mode where the site focused a field is right. Reload before step 2.
-2. Leave (scored). Press the extension's leave key, `Escape` for all four. Pass when the focus really leaves the field, also a field inside a frame. Fail when the field keeps the focus, or when the extension acts as if in normal mode while its keys still go into the field.
-3. Normal-mode actions (scored, pass or blocked). Scroll with `j`. Show hints with `f` on the visible links and buttons. Type one label and check that it clicks or focuses its target. Show hints again and press `Escape`: every label goes. Then the extra row under each site.
+1. Mode on load (information, not scored). Load the page and touch nothing. Note where the focus is, also inside a frame, and the extension's mode. DesertFox shows its mode in the badge. For the others, infer the mode: press `j` and see whether it scrolls (normal mode) or types into the field or does nothing (insert mode, or the key went past the extension). Starting in insert mode where the site focused a field is right. Do not reload: steps 2 and 3 follow on the same page, as in the rig.
+2. Leave (scored). Press the extension's leave key, `Escape` for all four. Pass when the focused element no longer takes typing, in whatever frame it sits: a blur inside the frame passes as well as a move to the page. Fail when the field keeps the focus, or when the extension acts as if in normal mode while its keys still go into the field.
+3. Normal-mode actions (scored, pass or blocked). Scroll with `j`. Show hints with `f` on the visible links and buttons. Type one label and check that it clicks or focuses its target or an element inside it, or opens that link's own address. A click on a wrapper around the target does not count. Show hints again and press `Escape`: every label goes. Then the extra row under each site.
 
 ## Run details
 
