@@ -66,16 +66,15 @@
     font-family: ui-monospace, monospace;
   }
   .desertfox-help-usage { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  /* The role tokens may not reach this page, so each falls back to the page's own colours. */
   .desertfox-help-code {
-    --code-bg: var(--desertfox-bg-mantle, color-mix(in srgb, var(--desertfox-fg-core) 6%, var(--desertfox-bg-core)));
-    --code-border: var(--desertfox-border, color-mix(in srgb, var(--desertfox-fg-core) 25%, transparent));
+    --code-bg: var(--desertfox-bg-mantle);
+    --code-border: var(--desertfox-border);
     margin: .75rem 0; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--desertfox-radius);
   }
   .desertfox-help-inline-code {
     padding: .1em .35em; font-size: .9em; border-radius: calc(var(--desertfox-radius) / 2);
-    background: var(--desertfox-bg-mantle, color-mix(in srgb, var(--desertfox-fg-core) 6%, var(--desertfox-bg-core)));
-    border: 1px solid var(--desertfox-border, color-mix(in srgb, var(--desertfox-fg-core) 25%, transparent));
+    background: var(--desertfox-bg-mantle);
+    border: 1px solid var(--desertfox-border);
   }
   .desertfox-help-code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .5rem .25rem 1rem; min-height: 1.75rem; }
   .desertfox-help-code-lang { font: .8em ui-monospace, monospace; opacity: .6; }
@@ -98,7 +97,7 @@
   .desertfox-help-current { outline: 2px solid var(--desertfox-primary); }
   .desertfox-help-tip {
     margin: 0 0 1rem; padding: .6rem .9rem; border-left: 4px solid var(--desertfox-primary); border-radius: var(--desertfox-radius);
-    background: var(--desertfox-bg-mantle, color-mix(in srgb, var(--desertfox-fg-core) 6%, var(--desertfox-bg-core)));
+    background: var(--desertfox-bg-mantle);
   }
   .desertfox-help-tip-label { color: var(--desertfox-primary); }
   .desertfox-help-warnings { color: var(--desertfox-primary); }
