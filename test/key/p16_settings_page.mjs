@@ -4,7 +4,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["help", "config"];
 
-export async function run_cases({ run_case, poll_until, rdp, extension_id, take_shot, expect, sleep }) {
+export async function run_cases({ run_case, press_keys, poll_until, rdp, extension_id, take_shot, expect, sleep }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#/settings"))`;
   const in_page = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
@@ -53,20 +53,30 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, take_
     return top >= 0 && top < view.innerHeight / 2 && view.document.activeElement === heading ? "reached" : "heading at " + top + " of " + view.innerHeight;
   `);
   const section_slugs = () => in_any(`return [...view.document.querySelectorAll(".desertfox-help-sections:not([hidden]) a")].map((link) => decodeURIComponent(link.getAttribute("href").split("/")[1]));`);
-  const settle = () => in_any(`return new Promise((resolve) => view.setTimeout(resolve, 1200));`);
+  // The heading must be reached once the page is full, so a poll on the state replaces a fixed wait.
+  const settle_on = async (slug) => {
+    await poll_until(`the ${slug} heading to be reached`, async () => (await reached(slug)) === "reached", { timeout_ms: 3000 }).catch(() => undefined);
+    return reached(slug);
+  };
+  const open_fresh = async (slug) => {
+    await close_tabs();
+    await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#section=settings/${slug}") }).then(() => true)`);
+    await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
+  };
+  const scroll_y = () => in_any(`return Math.round(view.scrollY);`);
+  // A box that grows resizes the page body, which is what pulls a held heading back into view.
+  const grow_page = () => in_any(`const filler = view.document.createElement("div"); filler.style.height = "40px"; view.document.querySelector(".desertfox-help-page").append(filler); return new Promise((resolve) => view.requestAnimationFrame(() => view.requestAnimationFrame(resolve)));`);
 
   await run_case("settings page: every sidebar section link reaches its heading, from a click and from a fresh load", async () => {
     await close_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
     await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
-    await settle();
     const slugs = await section_slugs();
     expect(slugs.length > 3 && slugs[0] === "keys", `the sidebar listed ${JSON.stringify(slugs)}`);
     const failures = [];
     for (const slug of slugs) {
       await in_any(`view.scrollTo(0, 0); view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/${slug}']").click();`);
-      await settle();
-      const state = await reached(slug);
+      const state = await settle_on(slug);
       if (state !== "reached") failures.push(`${slug}: ${state}`);
     }
     expect(failures.length === 0, `links that missed their heading: ${failures.join("; ")}`);
@@ -74,19 +84,37 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, take_
     // The same link again, after the reader scrolled away, fires no hashchange.
     await in_any(`view.scrollTo(0, 0);`);
     await in_any(`view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/${slugs.at(-1)}']").click();`);
-    await settle();
-    expect((await reached(slugs.at(-1))) === "reached", `the same-hash click ended at ${await reached(slugs.at(-1))}`);
+    const same_hash = await settle_on(slugs.at(-1));
+    expect(same_hash === "reached", `the same-hash click ended at ${same_hash}`);
 
     const fresh_failures = [];
     for (const slug of slugs) {
-      await close_tabs();
-      await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#section=settings/${slug}") }).then(() => true)`);
-      await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
-      await settle();
-      const state = await reached(slug);
+      await open_fresh(slug);
+      const state = await settle_on(slug);
       if (state !== "reached") fresh_failures.push(`${slug}: ${state}`);
     }
     expect(fresh_failures.length === 0, `fresh loads that missed their heading: ${fresh_failures.join("; ")}`);
+    await close_tabs();
+  });
+
+  await run_case("settings page: a reader who scrolls during the load is not pulled back to the heading", async () => {
+    // The hold lasts 5 s from the render, so each step below runs inside it.
+    await open_fresh("new-tab");
+    await in_any(`view.dispatchEvent(new view.WheelEvent("wheel")); view.scrollTo(0, 0);`);
+    await grow_page();
+    const after_wheel = await scroll_y();
+    expect(after_wheel === 0, `a wheel scroll was pulled back to ${after_wheel}`);
+
+    await open_fresh("new-tab");
+    await press_keys("j");
+    await poll_until("the j key to scroll the page", async () => (await scroll_y()) > 0, { timeout_ms: 3000 }).catch(() => undefined);
+    // The key scrolls smoothly, so the position is read once two reads a frame pair apart agree.
+    const settled_y = () => in_any(`return new Promise((resolve) => { const first = view.scrollY; view.requestAnimationFrame(() => view.requestAnimationFrame(() => resolve(first === view.scrollY ? Math.round(first) : -1))); });`);
+    await poll_until("the key scroll to stop", async () => (await settled_y()) >= 0, { timeout_ms: 3000 });
+    const after_key = await settled_y();
+    await grow_page();
+    const after_growth = await settled_y();
+    expect(after_growth === after_key, `a bound key scroll went from ${after_key} to ${after_growth} after the page grew`);
     await close_tabs();
   });
 }
