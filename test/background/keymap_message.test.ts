@@ -9,6 +9,7 @@ import type { EditLayers, KeymapEdits } from "../../src/background/edit_layers.t
 import { binding_rows, create_keymap_messages, exportable_key_edits } from "../../src/background/keymap_message.ts";
 import type { KeymapState } from "../../src/background/keymap_message.ts";
 import type { MergedConfig } from "../../src/shared/config.ts";
+import { STALE_MOVE_REFUSAL } from "../../src/shared/messages.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import type { CompiledKeymap, TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
@@ -247,7 +248,7 @@ test("a move is refused when the old key changed since the row was shown", async
   const messages = messages_over(config_with({}), stored);
   const refused = await messages.change({ type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J", move_from_text: "tab.next" });
   assert.equal(refused.ok, false);
-  assert.match(refused.ok ? "" : refused.message, /J changed since you opened it/);
+  assert.equal(refused.ok ? "" : refused.message, `J ${STALE_MOVE_REFUSAL}`);
   assert.deepEqual(stored.edits, { normal: { J: "tab.close" } });
   const allowed = await messages.change({ type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J", move_from_text: "tab.close" });
   assert.equal(allowed.ok, true);
