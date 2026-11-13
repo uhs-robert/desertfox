@@ -793,3 +793,24 @@ test("layout fallback: a replayed key is judged without the keys queued behind i
   flow.release();
   assert.deepEqual(ran, ["down", "down"]);
 });
+
+test("layout fallback: a sink gets the physical letter beside the typed one, and none when the setting is off or for a chord", () => {
+  const got: (string | null | undefined)[][] = [];
+  const sink = { on_token_: (token: string, physical?: string | null) => (got.push([token, physical]), "handled") } as unknown as Sink;
+  const { flow } = make_flow(false, false, sink);
+  flow.set_matcher_(create_matcher(keymap));
+  flow.handle_token_("о", false, undefined, "j");
+  flow.handle_token_("<C-о>", false, undefined, null);
+  flow.set_layout_fallback_(false);
+  flow.handle_token_("о", false, undefined, "j");
+  assert.deepEqual(got, [["о", "j"], ["<C-о>", null], ["о", null]]);
+});
+
+test("layout fallback: a key held before the keymap arrives reaches a sink with its physical letter", () => {
+  const got: (string | null | undefined)[][] = [];
+  const sink = { on_token_: (token: string, physical?: string | null) => (got.push([token, physical]), "handled") } as unknown as Sink;
+  const { flow } = make_flow(false, false, sink);
+  flow.handle_token_("о", false, undefined, "j");
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(got, [["о", "j"]]);
+});

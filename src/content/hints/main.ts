@@ -57,6 +57,7 @@ type Session = {
   action: HintAction;
   // Keys typed while the elements are still being found.
   waiting_tokens_: string[];
+  waiting_physical_: (string | null | undefined)[];
   // Rapid mode picks again after each pick.
   rapid: boolean;
   // `frames=all_frames`: the labels cover every frame of the tab, and this frame owns the keyboard. See `src/background/hint_frames.ts`.
@@ -434,7 +435,7 @@ function register(host: BundleHostApi): void {
     current.ready = { ...labeled, picker, view, stop_following_: follow_windows(windows_of(found), view.reposition), relayed_: JSON.stringify({ type: "hint_frames_typed", session_id: labeled.session_id_, typed: "" }) };
     void browser.runtime.sendMessage({ type: "record_timing", name: "hint.build", ms: performance.now() - started_ms } satisfies RecordTiming).catch(() => undefined);
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
-    while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!);
+    while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!, current.waiting_physical_.shift());
   }
 
   // The view holds this frame's labels only. The other frames hear the typed prefix through the background. In text mode they get "/" with the matching labels and the active one, because no label holds "/".
@@ -473,10 +474,10 @@ function register(host: BundleHostApi): void {
   // The rest of a typed word still arrives after the key that made the match unique, and it would run as normal keys or as labels of the next round. So that pick waits, with hint mode still open, and the keys are dropped.
   const PICK_GRACE_MS = 300;
 
-  function handle_token(current: Session, token: string): "handled" | "pass" {
+  function handle_token(current: Session, token: string, physical?: string | null): "handled" | "pass" {
     if (current.settling_) return is_hint_char(token) || is_text_key(token) ? "handled" : "pass";
     const ready = current.ready!;
-    const outcome = ready.picker.on_token_(token);
+    const outcome = ready.picker.on_token_(token, physical);
     if (outcome.kind === "pass") return "pass";
     if (outcome.kind === "rotate") {
       ready.view.rotate_overlaps_();
@@ -520,11 +521,12 @@ function register(host: BundleHostApi): void {
   host.register_handler_("heading.clear", () => clear_snapshot());
 
   host.register_sink_("hint", {
-    on_token_: (token) => {
+    on_token_: (token, physical) => {
       if (!session) return "pass";
-      if (session.ready) return handle_token(session, token);
+      if (session.ready) return handle_token(session, token, physical);
       if (!is_hint_char(token) && !is_text_key(token)) return "pass";
       session.waiting_tokens_.push(token);
+      session.waiting_physical_.push(physical);
       return "handled";
     },
     exit: end_session,
@@ -555,7 +557,7 @@ function register(host: BundleHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", across_frames_: args.frames === "all_frames", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", across_frames_: args.frames === "all_frames", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true, started_ms);

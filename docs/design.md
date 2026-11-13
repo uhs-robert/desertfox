@@ -189,7 +189,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 
 - On a layout whose letters are not Latin (Cyrillic, Greek, Hebrew, Arabic and others), a plain letter whose typed character binds nothing acts as the Latin letter on its physical key (`event.code`). Shift gives upper case. A Latin letter outside ASCII, such as the Turkish `ı`, never swaps.
 - A typed character that binds something never changes, so Latin layouts see no difference. A Ctrl, Alt or Meta chord has no fallback here: `token.ts` already maps it.
-- A mode with a sink (hint mode) gets the typed letter, so its text filter keeps it.
+- A mode with a sink (hint mode) gets the typed letter and the physical one beside it. Label mode takes the typed letter when it continues a label, else the physical one, so Latin labels work on a Cyrillic layout. Text mode (after `/`) takes the typed letter only, so its filter keeps the typed text. With the setting off the sink gets no physical letter.
 - The `layout_fallback` setting (default on) controls it. The compiled keymap carries `layout_fallback: false` only when off, and `key_flow` reads it on each install, so a config reload applies it.
 - Only the content script applies it. A key typed before the keymap reply is held with its physical letter and replays under the rule. The command line page does not apply it: its default keymap binds no plain letter, and a letter typed in the line stays text.
 - Letters only. No punctuation key was measured as needed.

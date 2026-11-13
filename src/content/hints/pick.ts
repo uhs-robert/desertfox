@@ -62,7 +62,7 @@ export function create_picker(labels: readonly string[], texts: () => readonly (
     return text_outcome(matches.length === 1 && next.trim() !== "" ? matches[0] : undefined);
   }
 
-  function on_label_token(token: string): KeyOutcome {
+  function on_label_token(token: string, physical?: string | null): KeyOutcome {
     if (token === "/") {
       typed = "";
       text = "";
@@ -78,19 +78,20 @@ export function create_picker(labels: readonly string[], texts: () => readonly (
       return label_outcome();
     }
     if (!is_hint_char(token)) return { kind: "pass" };
+    // The typed letter first, so custom non-Latin `hint_letters` work. The key's Latin letter only when the typed one fits no label.
     const next = typed + token.toLowerCase();
     const { still_possible_, complete } = narrow(labels, next);
     // A letter that continues no label is taken and dropped, so a slip does not leak into the page.
-    if (still_possible_.length === 0) return label_outcome();
+    if (still_possible_.length === 0) return physical ? on_label_token(physical) : label_outcome();
     typed = next;
     return label_outcome(complete);
   }
 
   return {
     typed: () => typed,
-    on_token_: (token: string): KeyOutcome => {
+    on_token_: (token: string, physical?: string | null): KeyOutcome => {
       if (is_chord(token)) return { kind: "pass" };
-      return text === undefined ? on_label_token(token) : on_text_token(token, text);
+      return text === undefined ? on_label_token(token, physical) : on_text_token(token, text);
     },
   };
 }
