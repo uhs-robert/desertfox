@@ -5,6 +5,9 @@ import type { Choice } from "./choose_level.ts";
 // `pick` switches the player to this level now.
 export type PlayerLevel = Choice & { label: string; active: boolean; pick: () => void };
 
+// Percent, 0 to 100.
+export type PlayerVolume = { get: () => number | undefined; set: (volume: number) => void };
+
 export type Driver = {
   // Ascending by height. Empty while the player does not know its levels yet.
   levels: () => PlayerLevel[];

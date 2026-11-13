@@ -34,6 +34,7 @@ function player(fields: Partial<Player> = {}): Player & { calls: string[] } {
 
 function frame(entries: { player: Player; area: number }[], pip: { element: unknown } = { element: null }, full: { element: unknown } = { element: null }, pin: { player?: Player } = {}): FrameView {
   return {
+    site_volume: () => undefined,
     players: () => entries.map((entry) => ({ ...entry, pinned_: entry.player === pin.player })),
     pip_element: () => pip.element,
     exit_pip: async () => void (pip.element = null),
@@ -186,7 +187,7 @@ test("volume rounds to whole percent, and seek stops at the duration", async () 
   const view = frame([{ player: video, area: 5 }]);
   await apply_in_frame(view, apply({ action: "volume", value: "up" }));
   await apply_in_frame(view, apply({ action: "seek", value: "up" }));
-  assert.deepEqual([video.volume, video.currentTime], [0.43, 100]);
+  assert.deepEqual([video.volume, video.currentTime], [0.38, 100]);
 });
 
 test("picture-in-picture takes the largest video, never audio, and the next press closes it", async () => {

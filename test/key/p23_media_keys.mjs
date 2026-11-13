@@ -59,8 +59,8 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await wait_event(mark, report(top, "ratechange", (event) => event.rate === 1.25), "the top video at 1.25x");
     mark = events.length;
     await press_keys("a", "V");
-    await wait_event(mark, report(top, "volumechange", (event) => event.volume === 0.9), "the top video at 90%");
-    await wait_toast("Volume 90%");
+    await wait_event(mark, report(top, "volumechange", (event) => event.volume === 0.95), "the top video at 95%");
+    await wait_toast("Volume 95%");
     mark = events.length;
     await press_keys("a", "l");
     await wait_event(mark, report(top, "seeked", (event) => Math.round(event.time) === 10), "the top video at 10 s");
@@ -95,7 +95,7 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await run_line("loop");
     await wait_toast("Loop off");
     await run_line("info");
-    await poll_until("the info line", async () => /^0:\d\d of 0:30, 2x, volume 90%, paused$/.test(await read_toast()));
+    await poll_until("the info line", async () => /^0:\d\d of 0:30, 2x, volume 95%, paused$/.test(await read_toast()));
   });
 
   await run_case("media seek end and percent move the video, percent reading the count", async () => {

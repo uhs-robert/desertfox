@@ -61,10 +61,10 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, media(id, "seeked", "big", (event) => Math.round(event.time) === 10), "the large video at 10 s");
     mark = events.length;
     await press_keys("3", "j");
-    await wait_event(mark, media(id, "volumechange", "big", (event) => Math.abs(event.volume - 0.7) < 0.001), "three steps down, 70 percent");
+    await wait_event(mark, media(id, "volumechange", "big", (event) => Math.abs(event.volume - 0.85) < 0.001), "three steps down, 85 percent");
     mark = events.length;
     await press_keys("k");
-    await wait_event(mark, media(id, "volumechange", "big", (event) => Math.abs(event.volume - 0.8) < 0.001), "80 percent");
+    await wait_event(mark, media(id, "volumechange", "big", (event) => Math.abs(event.volume - 0.9) < 0.001), "90 percent");
     mark = events.length;
     await press_keys("m");
     await wait_event(mark, media(id, "volumechange", "big", (event) => event.muted === true), "muted");
@@ -139,28 +139,28 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     await press_keys("-k", "Escape");
     await poll_until("the labels gone", async () => (await hint_label_count()) === 0);
-    await j_is_media(id, 0.9);
+    await j_is_media(id, 0.95);
     await press_keys(":");
     await wait_cmdline((line) => line.open, "the line to open");
     await close_cmdline();
-    await j_is_media(id, 0.8);
+    await j_is_media(id, 0.9);
     await press_keys(":");
     await wait_cmdline((line) => line.open, "the line to open");
     await type_in_line("media speed 2");
     const mark = events.length;
     await press_keys("-k", "Return");
     await wait_event(mark, media(id, "ratechange", "big", (event) => event.rate === 2), "the line's command at 2x");
-    await j_is_media(id, 0.7);
+    await j_is_media(id, 0.85);
     // A pick that clicks a button leaves the mode where it was.
     await press_keys(";b");
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     await press_keys("a");
     await poll_until("the labels gone", async () => (await hint_label_count()) === 0);
-    await j_is_media(id, 0.6);
+    await j_is_media(id, 0.8);
     await press_keys("q");
     await wait_cmdline((line) => line.open && line.value === "media quality ", 'the line to open with "media quality "');
     await close_cmdline();
-    await j_is_media(id, 0.5);
+    await j_is_media(id, 0.75);
   });
 
   await run_case(";M pins the hinted video, the keys act on it until the mode ends, and a new start drops the pin", async () => {
@@ -238,7 +238,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     const entered = await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "player", "fullscreen to start");
     expect(entered.element === "player", "the player box did not go fullscreen");
     await expect_absent(mark, id, indicator(id, "NORMAL"), "the mode left when the fullscreen started");
-    await j_is_media(id, 0.9);
+    await j_is_media(id, 0.95);
     mark = events.length;
     await press_keys("F");
     await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "", "fullscreen to end");
@@ -253,7 +253,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await press_keys("e");
     await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "player", "fullscreen to start");
     await hidden(mark, id);
-    await j_is_media(id, 0.9);
+    await j_is_media(id, 0.95);
     mark = events.length;
     await press_keys("-k", "Escape");
     await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "", "fullscreen to end");
@@ -274,7 +274,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, (event) => event.page_id === id && event.type === "media_fullscreen" && event.element === "", "fullscreen to end");
     await wait_cmdline((line) => !line.open, "the line to close with the fullscreen");
     await expect_absent(mark, id, indicator(id, "NORMAL"), "the mode ended with the fullscreen");
-    await j_is_media(id, 0.9);
+    await j_is_media(id, 0.95);
   });
 
   await run_case("the site's own key that leaves the fullscreen returns the mode to normal, and the key reaches the page in the mode", async () => {
@@ -336,7 +336,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await press_keys("a", "a");
     await shown(mark, id);
     await focus_frame(id);
-    await j_is_media(`${id}_inner`, 0.9);
+    await j_is_media(`${id}_inner`, 0.95);
     await focus_top(id);
     mark = events.length;
     await press_keys("-k", "Escape");
@@ -356,7 +356,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await press_keys("a", "a");
     await shown(mark, id);
     await focus_frame(id);
-    await j_is_media(`${id}_inner`, 0.9);
+    await j_is_media(`${id}_inner`, 0.95);
     const escape_mark = events.length;
     await press_keys("-k", "Escape");
     // The frame keeps the focus in normal mode, so the badge reads FRAME.
@@ -426,9 +426,9 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     // The barrier key reaches the frame that holds the focus, and the top frame draws the badge.
     await expect_absent(mark, line_frame === "frame" ? `${id}_inner` : id, indicator(id, "NORMAL"), "the mode ended with the fullscreen");
     // The focus stays in the frame of the line, so the other frame takes the second key.
-    await j_is_media(`${id}_inner`, 0.9);
+    await j_is_media(`${id}_inner`, 0.95);
     await (line_frame === "frame" ? focus_top : focus_frame)(id);
-    await j_is_media(`${id}_inner`, 0.8);
+    await j_is_media(`${id}_inner`, 0.9);
   };
 
   await run_case("Escape on the line of the framed player's frame in fullscreen keeps the mode in every frame", () => line_escape_in_framed_fullscreen("p29_host_line_frame", "frame"));

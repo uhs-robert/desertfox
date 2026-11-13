@@ -1,5 +1,6 @@
 // What the `media` bundle does in one frame: find the media elements, describe them for the background's choice, and change the chosen ones.
 
+import type { PlayerVolume } from "../quality/driver.ts";
 import { shadow_root_of } from "../shadow.ts";
 import { FRAME_RULE, SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
 import type { LevelRule, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../../shared/media.ts";
@@ -26,6 +27,8 @@ export type Player = {
 export type FrameView = {
   // `pinned` marks the video `;M` pinned in this frame, while it is still on the page.
   players: () => { player: Player; area: number; pinned_?: boolean }[];
+  // The site player's own volume control, when the page has one: it puts back a volume written to the element.
+  site_volume: () => PlayerVolume | undefined;
   pip_element: () => unknown;
   exit_pip: () => Promise<void>;
   fullscreen_element: () => unknown;
@@ -144,7 +147,7 @@ function state_of(player: Player, view: FrameView, captions: MediaState["caption
   return {
     captions,
     rate: player.playbackRate,
-    volume: player.volume,
+    volume: (view.site_volume()?.get() ?? player.volume * 100) / 100,
     muted: player.muted,
     position: player.currentTime,
     duration: Number.isFinite(player.duration) ? player.duration : null,
@@ -161,7 +164,13 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   // Without a value the command only reports, and even an equal write of currentTime seeks.
   if (value === undefined && (action === "speed" || action === "volume" || action === "seek")) return;
   if (action === "speed") player.playbackRate = next_level(player.playbackRate, value, times, SPEED_RULE);
-  else if (action === "volume") player.volume = Math.round(next_level(player.volume * 100, value, times, VOLUME_RULE)) / 100;
+  else if (action === "volume") {
+    const site = view.site_volume();
+    const now = site?.get() ?? player.volume * 100;
+    const next = Math.round(next_level(now, value, times, VOLUME_RULE));
+    if (site) site.set(next);
+    else player.volume = next / 100;
+  }
   else if (action === "seek") player.currentTime = next_level(player.currentTime, value, times, { ...SEEK_RULE, max: Number.isFinite(player.duration) ? player.duration : SEEK_RULE.max });
   // An element that plays pauses, one that does not plays. The audible and playing targets hold only elements that play.
   else if (action === "play_pause") return is_playing(player) ? player.pause() : within_grace(player.play());
