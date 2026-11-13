@@ -1,6 +1,6 @@
 // One helper per reason an error is dropped, so the name at the call site says why. The lint rule `no-restricted-syntax` in eslint.config.mjs bans a silent `.catch` handler written inline.
 // Plain functions that return a promise: the content bundle shares this file, so no classes and no strings per call.
-// The helpers use `.then(undefined, handler)`, which the rule does not match, and no shared inner function: each one minifies smaller that way.
+// This file is exempt from that rule by a files entry in eslint.config.mjs. `ignore_refusal` uses `.catch((_error) => undefined)` because that minifies smaller than `.then(undefined, ...)`, and `best_effort` is the same function so a bundle carries one copy.
 
 /** The browser refuses an expected case: a stale tab, window or container id, a tab that closed. The result is undefined. */
 export function ignore_refusal<T>(promise: Promise<T>): Promise<T | undefined> {
