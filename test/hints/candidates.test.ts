@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -199,6 +199,32 @@ test("the off-screen rule: empty boxes stay, each edge rejects, a box just insid
   assert.equal(off(box(10, 51, 10, 10)), true, "below the window");
   assert.equal(off(box(-9, 10, 10, 10)), false, "one pixel inside on the left");
   assert.equal(off(box(100, 50, 10, 10)), false, "touching the right and bottom edge");
+});
+
+// An element whose rect is read in its own window: a frame's element is judged by the frame's size, not the top window's.
+const placed = (name: string, rect: { left: number; top: number; width: number; height: number }, window_size = { innerWidth: 100, innerHeight: 50 }): Found => {
+  const element = { name, ownerDocument: { defaultView: window_size }, getBoundingClientRect: () => ({ ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height }) };
+  return { element: element as unknown as Element, frames: [] };
+};
+
+test("pruning drops the off-screen boxes before the costly tests and keeps every box that may show", () => {
+  const found = [
+    placed("below", { left: 10, top: 900, width: 10, height: 10 }),
+    placed("in view", { left: 10, top: 10, width: 10, height: 10 }),
+    placed("fixed bar in view", { left: 0, top: 0, width: 100, height: 20 }),
+    placed("half above the top", { left: 10, top: -5, width: 10, height: 10 }),
+    placed("clipped away inside a scroll box, rect below the view", { left: 10, top: 60, width: 10, height: 10 }),
+    placed("zero size far away", { left: 500, top: 500, width: 0, height: 0 }),
+    placed("display contents far away", { left: 0, top: 0, width: 0, height: 0 }),
+    placed("right of the view", { left: 120, top: 10, width: 10, height: 10 }),
+  ];
+  assert.deepEqual(names(drop_off_screen(found)), ["in view", "fixed bar in view", "half above the top", "zero size far away", "display contents far away"]);
+});
+
+test("pruning uses the window of the element, so a frame's box is judged by the frame's size", () => {
+  const rect = { left: 150, top: 10, width: 10, height: 10 };
+  const found = [placed("in a wide frame", rect, { innerWidth: 300, innerHeight: 50 }), placed("in the narrow top window", rect)];
+  assert.deepEqual(names(drop_off_screen(found)), ["in a wide frame"]);
 });
 
 test("the roving group rule is part of the weak menu selector, so plain-list menus are found", () => {

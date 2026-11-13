@@ -12,7 +12,7 @@ import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
-import { collect, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
+import { collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
 import { clean_letters, make_labels, narrow } from "./labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
@@ -118,7 +118,8 @@ async function shown_of(current: Pick<Session, "filter" | "action" | "lower_text
   return current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
 }
 
-async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
+async function keep_visible_ones(all_candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
+  const candidates = drop_off_screen(all_candidates);
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
   const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
