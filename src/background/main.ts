@@ -392,7 +392,7 @@ browser.runtime.onInstalled.addListener(({ reason }) => {
   );
 });
 
-browser.commands.onCommand.addListener(async (slot_name: string) => {
+browser.commands.onCommand.addListener((slot_name: string) => void (async () => {
   // Before the slot table and the off gate: the toggle must work while off, and it is the only shortcut that does.
   if (slot_name === TOGGLE_COMMAND) return toolbar.toggle();
   await get_config();
@@ -402,7 +402,7 @@ browser.commands.onCommand.addListener(async (slot_name: string) => {
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   const mode = active?.id === undefined ? "normal" : await tab_modes.recall(active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });
-});
+})());
 
 // A fake browser in a test may lack the API, and so may a Firefox without the manifest key.
 if (browser.omnibox) {
@@ -426,8 +426,8 @@ if (browser.omnibox) {
     record_history: cmdline.record,
   });
   browser.omnibox.setDefaultSuggestion({ description: OMNIBOX_HINT });
-  browser.omnibox.onInputChanged.addListener((text, suggest) => omnibox.changed(text, suggest).catch(() => undefined));
-  browser.omnibox.onInputEntered.addListener((text, disposition) => omnibox.entered(text, disposition).catch((error: unknown) => router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) }).catch(() => undefined)));
+  browser.omnibox.onInputChanged.addListener((text, suggest) => void omnibox.changed(text, suggest).catch(() => undefined));
+  browser.omnibox.onInputEntered.addListener((text, disposition) => void omnibox.entered(text, disposition).catch((error: unknown) => router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) }).catch(() => undefined)));
 }
 
 const site_zoom = create_site_zoom({
@@ -476,7 +476,7 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   void jump_leave.updated({ tab_id, incognito: tab.incognito, url: tab.url, status: tab.status }, change).catch(() => undefined);
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   void hint_frames.navigated(tab_id, change).catch(() => undefined);
-  return tab_modes.forget_on_navigation(tab_id, change);
+  void tab_modes.forget_on_navigation(tab_id, change);
 });
 
 browser.tabs.onRemoved.addListener((tab_id) => void jump_leave.forget(tab_id).catch(() => undefined));
@@ -490,7 +490,7 @@ browser.history.onTitleChanged.addListener(history_cache.title_changed);
 browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
 void history_cache.start();
 
-browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
+browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => void previous_tabs.activated(windowId, previousTabId));
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void external_editor.orphan(tab_id).catch(() => undefined);
@@ -500,7 +500,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void hint_frames.forget(tab_id).catch(() => undefined);
   void tab_media.forget(tab_id).catch(() => undefined);
   void media_discovery.forget(tab_id).catch(() => undefined);
-  return tab_modes.forget(tab_id);
+  void tab_modes.forget(tab_id);
 });
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
