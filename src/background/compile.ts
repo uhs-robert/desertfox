@@ -81,7 +81,8 @@ function with_keymap_edits(input: CompileInput, warnings: string[]): KeymapConfi
   const file_keymap: KeymapConfig = { ...input.config.keymap };
   const resolved: Keymap = {};
   for (const [mode, table] of edits) {
-    const bindings: ModeBindings = {};
+    // No prototype, so a `__proto__` sequence is a key and not the inherited setter. The merge spreads it, which copies it as a key.
+    const bindings: ModeBindings = Object.create(null);
     for (const [sequence, text] of Object.entries(table ?? {})) {
       // keymap.d writes "" to unbind, and the merge reads null as that.
       const binding = text === "" ? null : resolve_entry(text, `keymap edits: ${mode} skipped "${sequence}"`);

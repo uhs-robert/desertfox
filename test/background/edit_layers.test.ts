@@ -72,6 +72,8 @@ test("a stored edit layer keeps only known modes, good sequences and text", asyn
     browser: { J: "tab.next", "<A-x>": "tab.next" },
   };
   assert.deepEqual(await load_layers(), { keymap: { normal: { J: "tab.close" }, browser: { "<A-x>": "tab.next" } } });
+  local[KEYMAP_EDITS_STORAGE_KEY] = { normal: { "<C-D>": "tab.close" } };
+  assert.deepEqual(await load_layers(), { keymap: { normal: { "<C-d>": "tab.close" } } });
   local[KEYMAP_EDITS_STORAGE_KEY] = "junk";
   assert.deepEqual(await load_layers(), { keymap: {} });
 });
