@@ -9,8 +9,8 @@ test("ignore_refusal passes a value and turns a rejection into undefined", async
     assert.equal(await ignore_refusal(refuse()), undefined);
 });
 
-test("best_effort resolves to undefined on a value and on a rejection", async () => {
-    assert.equal(await best_effort(Promise.resolve(7)), undefined);
+test("best_effort never rejects: a value passes through and a rejection gives undefined", async () => {
+    assert.equal(await best_effort(Promise.resolve(7)), 7);
     assert.equal(await best_effort(refuse()), undefined);
 });
 
@@ -36,4 +36,9 @@ test("warn_and_go logs the label and the error, then returns undefined", async (
     assert.equal(result, undefined);
     assert.equal(warn.mock.callCount(), 1);
     assert.deepEqual(warn.mock.calls[0]!.arguments, ["desertfox: a bridge update failed", error]);
+});
+
+test("warn_and_go returns its fallback after the warning", async (context) => {
+    context.mock.method(console, "warn", () => undefined);
+    assert.deepEqual(await Promise.reject(new Error("boom")).catch(warn_and_go("a read", [] as string[])), []);
 });
