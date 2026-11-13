@@ -11,7 +11,7 @@ export const read_only_note = (reload_key: string): string => `You cannot change
 
 // A group takes the settings whose name starts with one of its prefixes. A setting that matches none lands in the last group. `intro` is the one sentence under the group's heading.
 export const GROUPS: { title: string; intro: string; prefixes: string[] }[] = [
-  { title: "Appearance", intro: "Colors, the mode badge and the which-key panel.", prefixes: ["palette", "light_", "mode_indicator", "which_key_"] },
+  { title: "Appearance", intro: "Colors, the mode badge and the which-key panel.", prefixes: ["theme", "light_", "mode_indicator", "which_key_"] },
   { title: "New tab", intro: "What the new tab page shows.", prefixes: ["newtab_", "new_tab_page", "home_page"] },
   { title: "Search", intro: "Which search engine runs by default and how a search opens.", prefixes: ["default_engine", "search_", "container_"] },
   { title: "Command line and completion", intro: "How the command line looks and what it suggests as you type.", prefixes: ["cmdline_", "completion_", "open_completion", "history_completion_"] },
@@ -49,7 +49,7 @@ export function control_of(row: SettingListRow, engines: string[]): Control {
     case "text_list": return { type: "text_list" };
     case "table_list": return { type: "link_list" };
     case "custom":
-      return row.name === "palette" ? { type: "select", options: keep_current(row.allowed ?? []) } : { type: "text", suggestions: [] };
+      return row.name === "theme" ? { type: "select", options: keep_current(row.allowed ?? []) } : { type: "text", suggestions: [] };
     case "text":
       return row.name === "default_engine" ? { type: "select", options: keep_current(engines) } : { type: "text", suggestions: [] };
     case "line": return { type: "text", suggestions: (row.allowed ?? []) as string[] };

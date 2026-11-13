@@ -29,7 +29,7 @@ export const DEFAULT_MEDIA_QUALITY: Settings["media_quality"] = "auto";
 export const DEFAULT_EDITOR_EXT: Settings["editor_ext"] = "";
 export const DEFAULT_LAYOUT_FALLBACK: Settings["layout_fallback"] = true;
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
-export const DEFAULT_PALETTE: Settings["palette"] = "oasis_moonlight";
+export const DEFAULT_THEME: Settings["theme"] = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: Settings["light_intensity"] = 3;
 export const DEFAULT_SEARCH_PREFIXES: Settings["search_prefixes"] = {"here":"s","tab":"S"};
 export const DEFAULT_CONTAINER_PREFIXES: Settings["container_prefixes"] = {"reopen":"c","tab":"C"};
@@ -80,7 +80,7 @@ export const DEFAULT_SETTINGS: Settings = {
   editor_ext: DEFAULT_EDITOR_EXT,
   layout_fallback: DEFAULT_LAYOUT_FALLBACK,
   mode_indicator: DEFAULT_MODE_INDICATOR,
-  palette: DEFAULT_PALETTE,
+  theme: DEFAULT_THEME,
   light_intensity: DEFAULT_LIGHT_INTENSITY,
   search_prefixes: DEFAULT_SEARCH_PREFIXES,
   container_prefixes: DEFAULT_CONTAINER_PREFIXES,

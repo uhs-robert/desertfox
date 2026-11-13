@@ -38,7 +38,7 @@
       "default": "always",
       "description": "When the mode badge shows: always (NORMAL too), not_normal, or off"
     },
-    "palette": {
+    "theme": {
       "type": "string",
       "minLength": 1,
       "examples": [

@@ -19,8 +19,8 @@ export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 // Where the config came from and the settings in force: `CONFIG_STATUS_STORAGE_KEY`, defined in `shared/storage_watch.ts` for the pages that follow it.
 export { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 
-// The palette name the desktop last pushed over the bridge. `palette = "desktop"` follows it. Local storage, so it stays on this machine and survives a restart.
-export const DESKTOP_PALETTE_STORAGE_KEY = "desertfox_desktop_palette";
+// The theme name the desktop last pushed over the bridge. `theme = "desktop"` follows it. Local storage, so it stays on this machine and survives a restart.
+export const DESKTOP_THEME_STORAGE_KEY = "desertfox_desktop_theme";
 
 // What the host updater remembers (`host_update.ts`): the last attempt, the version whose failure showed its toast, a blocked version and the notice shown.
 export const HOST_UPDATE_STORAGE_KEY = "desertfox_host_update";

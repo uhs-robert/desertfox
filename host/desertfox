@@ -4,7 +4,7 @@
   desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
-  desertfox theme <palette>           tell DesertFox which palette the desktop uses, or keep it for the next start while the bridge is down
+  desertfox theme <theme>           tell DesertFox which theme the desktop uses, or keep it for the next start while the bridge is down
   desertfox events                    print each event of the bridge as one JSON line until the bridge ends
 
 The tab commands need `bridge_share_tabs` on in DesertFox, and never see a private window:
@@ -47,14 +47,14 @@ TIMEOUT_S = 15
 CAPTURE_TIMEOUT_S = 345
 # Longer than the 3 s a starting host waits for the lock, so a host that is starting has bound its socket before this gives up.
 LOCK_RETRY_S = 5
-# The same shape as PALETTE_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
-PALETTE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+# The same shape as THEME_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
+THEME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]
        desertfox state [--json]
        desertfox events
-       desertfox theme <palette>
+       desertfox theme <theme>
        desertfox tabs [--current] [--json]
        desertfox activate <id> [--preface <nonce>]
        desertfox clear-preface <window id> [--preface <nonce>]
@@ -305,7 +305,7 @@ def write_atomically(path, content):
         raise
 
 
-def keep_palette_if_no_host(palette):
+def keep_theme_if_no_host(theme):
     """True after writing theme.json, False when a host holds bridge.lock. The host loads theme.json only after it takes
     the lock, so a write under the lock is never lost to a host that starts at the same moment."""
     folder = bridge_folder()
@@ -316,7 +316,7 @@ def keep_palette_if_no_host(palette):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return False
-        write_atomically(os.path.join(folder, "theme.json"), {"palette": palette})
+        write_atomically(os.path.join(folder, "theme.json"), {"theme": theme})
         return True
     finally:
         os.close(lock)
@@ -324,11 +324,11 @@ def keep_palette_if_no_host(palette):
 
 def do_theme(words):
     if len(words) != 1:
-        raise Usage("theme takes one palette name")
-    palette = words[0]
-    if not PALETTE_PATTERN.fullmatch(palette):
-        raise Usage("a palette name starts with a letter or digit, then letters, digits, _ and -, at most 64 characters in all")
-    request = {"verb": "theme", "palette": palette}
+        raise Usage("theme takes one theme name")
+    theme = words[0]
+    if not THEME_PATTERN.fullmatch(theme):
+        raise Usage("a theme name starts with a letter or digit, then letters, digits, _ and -, at most 64 characters in all")
+    request = {"verb": "theme", "theme": theme}
     deadline = time.monotonic() + LOCK_RETRY_S
     while True:
         try:
@@ -336,10 +336,10 @@ def do_theme(words):
         except NoListener:
             # No host: keep the name for the one the browser starts next. A held lock means a host is starting, so ask again.
             try:
-                if keep_palette_if_no_host(palette):
+                if keep_theme_if_no_host(theme):
                     return EXIT_DONE
             except OSError as error:
-                raise BridgeDown("the bridge is not running and the palette could not be kept: %s" % error)
+                raise BridgeDown("the bridge is not running and the theme could not be kept: %s" % error)
             if time.monotonic() >= deadline:
                 raise BridgeDown("a bridge host holds the lock but does not answer")
             time.sleep(0.05)

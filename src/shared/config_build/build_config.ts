@@ -2,11 +2,11 @@
 // Pure: it takes raw file text and the command list, so the extension and the build-config tool share it.
 
 import type { CommandMeta } from "../command.ts";
-import { CONFIG_FORMAT_VERSION, DEFAULT_PALETTE, type MergedConfig, type SnippetEntry } from "../config.ts";
+import { CONFIG_FORMAT_VERSION, DEFAULT_THEME, type MergedConfig, type SnippetEntry } from "../config.ts";
 import type { Registry } from "../registry/index.ts";
 import { build_commands_file } from "../registry/index.ts";
 import { built_in_theme_names } from "../theme/load.ts";
-import { DESKTOP_PALETTE, type LocalTheme, type Theme } from "../theme/roles.ts";
+import { DESKTOP_THEME, type LocalTheme, type Theme } from "../theme/roles.ts";
 import { build_registry, check_config, resolve_bindings } from "./check.ts";
 import { ConfigErrors } from "./errors.ts";
 import { merge_layers, origin_key } from "./merge.ts";
@@ -20,14 +20,14 @@ export function commands_of_registry(registry: Registry): CommandMeta[] {
   return build_commands_file(registry).commands;
 }
 
-// Also rejects a palette that names no theme at all.
+// Also rejects a `theme` setting that names no theme at all.
 function pick_local_theme(merged: MergedData, local_themes: Record<string, Theme>, built_in_names: readonly string[], problems: string[]): LocalTheme | undefined {
-  const name = merged.settings.palette ?? DEFAULT_PALETTE;
+  const name = merged.settings.theme ?? DEFAULT_THEME;
   if (Object.hasOwn(local_themes, name)) return { name, colors: local_themes[name]! };
-  if (name === DESKTOP_PALETTE || built_in_names.includes(name)) return undefined;
-  const file = merged.origins.get(origin_key("settings", "palette")) ?? "config";
+  if (name === DESKTOP_THEME || built_in_names.includes(name)) return undefined;
+  const file = merged.origins.get(origin_key("settings", "theme")) ?? "config";
   const known = new Set([...Object.keys(local_themes), ...built_in_names]);
-  problems.push(`${file}: palette: no theme named "${name}" (known: ${[...known].join(", ")})`);
+  problems.push(`${file}: theme: no theme named "${name}" (known: ${[...known].join(", ")})`);
   return undefined;
 }
 
@@ -53,7 +53,7 @@ export function build_config(files: ConfigFiles, commands: CommandMeta[], warnin
   const problems: string[] = [];
   const sources = parse_source_files(files, dir_label, problems);
   const merged = merge_layers(sources.layers, problems);
-  // Every local theme file is checked, not only the one `palette` names, so a broken file fails before it is picked.
+  // Every local theme file is checked, not only the one `theme` names, so a broken file fails before it is picked.
   const local_theme = pick_local_theme(merged, parse_theme_files(theme_files_of(files), labeled_path(dir_label, "themes"), problems), built_in_names, problems);
 
   const snippets: SnippetEntry[] = [];

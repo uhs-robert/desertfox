@@ -9,7 +9,7 @@ import { DEFAULT_SETTINGS } from "./default_settings.ts";
 import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 
 export type { Settings } from "./settings_table.ts";
-export { DEFAULT_LIGHT_INTENSITY, DEFAULT_MODE_INDICATOR, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "./default_settings.ts";
+export { DEFAULT_LIGHT_INTENSITY, DEFAULT_MODE_INDICATOR, DEFAULT_THEME, DEFAULT_SETTINGS } from "./default_settings.ts";
 
 export const CONFIG_FORMAT_VERSION = 2;
 
@@ -98,7 +98,7 @@ export type MergedConfig = {
   snippets: SnippetEntry[];
   // User CSS as text: `style.css` then `style.d/*.css`.
   css: string;
-  // Present only when `palette` names a theme in the config directory.
+  // Present only when `theme` names a theme in the config directory.
   local_theme?: LocalTheme;
 };
 

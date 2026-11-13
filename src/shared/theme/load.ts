@@ -1,4 +1,4 @@
-// Finds the theme a `palette` name stands for. Only the background imports this module: it holds every theme table.
+// Finds the theme a `theme` name stands for. Only the background imports this module: it holds every theme table.
 
 import { DEFAULT_LIGHT_INTENSITY } from "../config.ts";
 import { OASIS_THEMES, REPO_THEMES } from "../themes.ts";
@@ -37,7 +37,7 @@ export function oasis_theme(name: string): OasisTheme | undefined {
   return { dark: unpack(packed.dark), light: Object.fromEntries(LIGHT_INTENSITIES.map((intensity) => [intensity, unpack(packed.light[intensity])])) as OasisTheme["light"] };
 }
 
-// Every name `palette` accepts apart from the user's own theme files: the Oasis themes, then the contributed ones.
+// Every name `theme` accepts apart from the user's own theme files: the Oasis themes, then the contributed ones.
 export function built_in_theme_names(): string[] {
   return [...BUILT_IN_THEME_NAMES];
 }

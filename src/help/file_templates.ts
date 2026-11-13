@@ -6,7 +6,7 @@ const TEMPLATES: [RegExp, string][] = [
   [/^command_aliases(\.d\/.*)?\.toml$/, '# An extra command line name for a command.\n# g = "open.search"\n'],
   [/^quickmarks(\.d\/.*)?\.toml$/, '# One letter or digit and an address.\n# g = "https://github.com"\n'],
   [/^settings(\.d\/.*)?\.toml$/, "# Any setting from the list above, for example:\n# hint_letters = \"asdf\"\n"],
-  [/^themes\//, '# A theme. Pick it with the palette setting. A [light] table works the same way.\n[dark]\nbg_core = "#1a1b26"\nfg_core = "#c0caf5"\nprimary = "#7aa2f7"\naccent = "#bb9af7"\n'],
+  [/^themes\//, '# A theme. Pick it with the theme setting. A [light] table works the same way.\n[dark]\nbg_core = "#1a1b26"\nfg_core = "#c0caf5"\nprimary = "#7aa2f7"\naccent = "#bb9af7"\n'],
   [/^style(\.d\/.*)?\.css$/, "/* Your CSS for DesertFox pages. */\n"],
   [/^snippets\//, "// id: user.my_snippet\n// label: My snippet\n// intent: Say what it does.\n// matches: https://example.com/*\n"],
 ];

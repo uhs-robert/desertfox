@@ -7,7 +7,7 @@ import type { SettingOverrides } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
-import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 
 test("an edit wins over the config, a temp edit wins over a saved one, and the rest of the config stays", () => {
   const settings = apply_edits({ which_key_delay_ms: 100, hint_letters: "ab" }, { saved: { which_key_delay_ms: 500, light_intensity: 2 }, temp: { which_key_delay_ms: 900 } });
@@ -259,33 +259,33 @@ test("a saved site rule list survives the load, since the popup saves it", () =>
 
 const dark_of = (name: string) => load_theme(name, 3)!.dark;
 
-test("a pushed palette is stored always and republishes only while palette is desktop", async () => {
+test("a pushed theme is stored always and republishes only while theme is desktop", async () => {
   const { local } = install_fake_browser({ value: files_config({}) });
   const startup = await fresh_startup("push_follow");
   await startup.get_config();
   const before = local[THEME_STORAGE_KEY];
-  await startup.set_desktop_palette("oasis_dune");
-  assert.equal(local[DESKTOP_PALETTE_STORAGE_KEY], "oasis_dune");
+  await startup.set_desktop_theme("oasis_dune");
+  assert.equal(local[DESKTOP_THEME_STORAGE_KEY], "oasis_dune");
   assert.deepEqual(local[THEME_STORAGE_KEY], before);
-  await change_temp(startup, (current) => ({ ...current, palette: "desktop" }));
+  await change_temp(startup, (current) => ({ ...current, theme: "desktop" }));
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_dune"));
-  await startup.set_desktop_palette("oasis_rose");
+  await startup.set_desktop_theme("oasis_rose");
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_rose"));
-  await change_temp(startup, (current) => ({ ...current, palette: "oasis_abyss" }));
-  await startup.set_desktop_palette("oasis_dune");
+  await change_temp(startup, (current) => ({ ...current, theme: "oasis_abyss" }));
+  await startup.set_desktop_theme("oasis_dune");
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_abyss"));
-  assert.equal(local[DESKTOP_PALETTE_STORAGE_KEY], "oasis_dune");
+  assert.equal(local[DESKTOP_THEME_STORAGE_KEY], "oasis_dune");
 });
 
-test("palette desktop with nothing pushed shows oasis_moonlight", async () => {
-  const { local } = install_fake_browser({ value: files_config({ palette: "desktop" }) });
+test("theme desktop with nothing pushed shows oasis_moonlight", async () => {
+  const { local } = install_fake_browser({ value: files_config({ theme: "desktop" }) });
   const startup = await fresh_startup("push_none");
   await startup.get_config();
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_moonlight"));
 });
 
 test("a repeat of the stored name republishes, so a retry after a failed publish applies the theme", async () => {
-  const { local } = install_fake_browser({ value: files_config({ palette: "desktop" }) });
+  const { local } = install_fake_browser({ value: files_config({ theme: "desktop" }) });
   const startup = await fresh_startup("push_retry");
   await startup.get_config();
   const storage = (globalThis as unknown as { browser: { storage: { local: { set: (values: Record<string, unknown>) => Promise<void> } } } }).browser.storage.local;
@@ -298,8 +298,8 @@ test("a repeat of the stored name republishes, so a retry after a failed publish
     }
     return real_set(values);
   };
-  await assert.rejects(startup.set_desktop_palette("oasis_dune"), /storage failed/);
+  await assert.rejects(startup.set_desktop_theme("oasis_dune"), /storage failed/);
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_moonlight"));
-  await startup.set_desktop_palette("oasis_dune");
+  await startup.set_desktop_theme("oasis_dune");
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_dune"));
 });

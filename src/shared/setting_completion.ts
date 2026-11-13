@@ -275,7 +275,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
-    "name": "palette",
+    "name": "theme",
     "settable": true,
     "is_toggle": false,
     "is_list": false,

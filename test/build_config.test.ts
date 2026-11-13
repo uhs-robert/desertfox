@@ -97,9 +97,9 @@ test("mode_indicator must be always, not_normal or off", () => {
   assert.match(problems_of(dir).join("\n"), /settings\.toml: mode_indicator: .*not_normal/);
 });
 
-test("palette must name a theme, and the error lists the known names", () => {
-  const dir = config_dir_with({ "settings.toml": 'palette = "neon"', "themes/mine.toml": LOCAL_THEME });
-  assert.match(problems_of(dir).join("\n"), /settings\.toml: palette: no theme named "neon" \(known: mine, .*moonlight/);
+test("theme must name a theme, and the error lists the known names", () => {
+  const dir = config_dir_with({ "settings.toml": 'theme = "neon"', "themes/mine.toml": LOCAL_THEME });
+  assert.match(problems_of(dir).join("\n"), /settings\.toml: theme: no theme named "neon" \(known: mine, .*moonlight/);
 });
 
 test("cmdline_prompt takes 1 to 8 characters on one line", () => {
@@ -112,8 +112,8 @@ test("cmdline_prompt takes 1 to 8 characters on one line", () => {
   }
 });
 
-test("a bare palette name such as moonlight is an error that lists the oasis_ names", () => {
-  assert.match(problems_of(config_dir_with({ "settings.toml": 'palette = "moonlight"' })).join("\n"), /settings\.toml: palette: no theme named "moonlight" \(known: oasis_abyss, .*oasis_moonlight/);
+test("a bare theme name such as moonlight is an error that lists the oasis_ names", () => {
+  assert.match(problems_of(config_dir_with({ "settings.toml": 'theme = "moonlight"' })).join("\n"), /settings\.toml: theme: no theme named "moonlight" \(known: oasis_abyss, .*oasis_moonlight/);
 });
 
 test("light_intensity is a whole number from 1 to 5, and defaults to 3 by being absent", () => {
@@ -133,8 +133,8 @@ test("a local theme that still uses the old role names is an error", () => {
 
 const LOCAL_THEME = '[dark]\nbg_core = "#101010"\nfg_core = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n';
 
-test("palette picks a local theme from the config directory's themes folder", () => {
-  const dir = config_dir_with({ "settings.toml": 'palette = "mine"', "themes/mine.toml": LOCAL_THEME });
+test("theme picks a local theme from the config directory's themes folder", () => {
+  const dir = config_dir_with({ "settings.toml": 'theme = "mine"', "themes/mine.toml": LOCAL_THEME });
   const config = build_config(dir, commands);
   assert.equal(config.local_theme?.name, "mine");
   assert.equal(config.local_theme?.colors.light.bg_core, "#101010");
@@ -142,18 +142,18 @@ test("palette picks a local theme from the config directory's themes folder", ()
 });
 
 test("a local theme wins over a repo theme of the same name", () => {
-  const dir = config_dir_with({ "settings.toml": 'palette = "shared"', "themes/shared.toml": LOCAL_THEME });
+  const dir = config_dir_with({ "settings.toml": 'theme = "shared"', "themes/shared.toml": LOCAL_THEME });
   assert.equal(build_config(dir, commands, [], ["shared"]).local_theme?.colors.dark.bg_core, "#101010");
 });
 
 test("a repo theme or an Oasis theme needs no local theme in the output", () => {
-  const repo = config_dir_with({ "settings.toml": 'palette = "shared"' });
+  const repo = config_dir_with({ "settings.toml": 'theme = "shared"' });
   assert.equal(build_config(repo, commands, [], ["shared"]).local_theme, undefined);
-  const builtin = config_dir_with({ "settings.toml": 'palette = "oasis_cactus"', "themes/mine.toml": LOCAL_THEME });
+  const builtin = config_dir_with({ "settings.toml": 'theme = "oasis_cactus"', "themes/mine.toml": LOCAL_THEME });
   assert.equal(build_config(builtin, commands).local_theme, undefined);
 });
 
-test("every local theme file is checked, even one palette does not pick", () => {
+test("every local theme file is checked, even one theme does not pick", () => {
   const dir = config_dir_with({ "themes/broken.toml": '[dark]\nbg_core = "#000"\nfg_core = "nope"\nprimary = "#fff"\naccent = "#fff"\nbg_mantel = "#111"', "themes/notes.txt": "x" });
   const problems = problems_of(dir).join("\n");
   assert.match(problems, /themes\/broken\.toml: \[dark\] fg_core: expected a color/);

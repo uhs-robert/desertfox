@@ -7,7 +7,7 @@
 import type { BoundInvocation } from "./invocation.ts";
 import { BUILT_IN_PAGE, DEFAULT_SITE_ROW_NAMES, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
-import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "./theme/roles.ts";
+import { DESKTOP_THEME, LIGHT_INTENSITIES } from "./theme/roles.ts";
 
 type EnumValue = string | number | boolean;
 
@@ -96,8 +96,8 @@ export const SETTINGS_TABLE = {
   editor_ext: { kind: "custom", schema: { type: "string", pattern: "^[A-Za-z0-9]{0,10}$" }, default: "", per_site: true },
   layout_fallback: { kind: "boolean", default: true },
   mode_indicator: { kind: "enum", values: ["always", "not_normal", "off"], default: "always" },
-  // The theme names are examples, not an enum: a theme file in the config directory takes any name. `desktop` follows the palette the desktop pushed over the bridge.
-  palette: { kind: "custom", schema: { type: "string", minLength: 1, examples: [DESKTOP_PALETTE, ...BUILT_IN_THEME_NAMES] }, default: "oasis_moonlight" },
+  // The theme names are examples, not an enum: a theme file in the config directory takes any name. `desktop` follows the theme the desktop pushed over the bridge.
+  theme: { kind: "custom", schema: { type: "string", minLength: 1, examples: [DESKTOP_THEME, ...BUILT_IN_THEME_NAMES] }, default: "oasis_moonlight" },
   light_intensity: { kind: "enum", values: LIGHT_INTENSITIES, default: 3 },
   // A live change to a prefix could collide with other keys, so `:set` refuses the prefix tables.
   search_prefixes: { kind: "text_table", keys: ["here", "tab"], default: { here: "s", tab: "S" }, settable: false },

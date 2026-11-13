@@ -377,7 +377,7 @@ export type SettingListRow = {
   allowed?: unknown[];
 };
 
-// `message` is the line `:set` would toast, including a warning that a default engine or palette names nothing.
+// `message` is the line `:set` would toast, including a warning that a default engine or theme names nothing.
 export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: string } | { ok: false; message: string };
 
 export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };

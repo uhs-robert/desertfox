@@ -40,8 +40,8 @@ export type BridgeDeps = {
   run_command: (command_text: string, tab_id?: number) => Promise<BridgeAnswer>;
   list_commands: () => CommandMeta[];
   tab_verb: (verb: TabVerb, request: Record<string, unknown>) => Promise<TabAnswer>;
-  // Stores the palette the desktop pushed. Called only with a built-in theme name.
-  set_desktop_palette: (name: string) => Promise<void>;
+  // Stores the theme the desktop pushed. Called only with a built-in theme name.
+  set_desktop_theme: (name: string) => Promise<void>;
   warn: (text: string) => void;
   // Gets the `release_version` of the host in its ready frame (undefined for a host from before the updater), so an older host can be updated.
   host_ready: (release_version: unknown) => void;
@@ -51,7 +51,7 @@ export type BridgeDeps = {
 
 // A request over this is refused before it is parsed.
 export const MAX_COMMAND_CHARS = 4096;
-export const MAX_PALETTE_CHARS = 64;
+export const MAX_THEME_CHARS = 64;
 
 export const FIRST_RETRY_MS = 1000;
 export const MAX_RETRY_MS = 60_000;
@@ -100,22 +100,22 @@ export function create_bridge(deps: BridgeDeps) {
     }
   }
 
-  type Asked = { verb: "run"; command: string; tab_id?: number } | { verb: "list" } | { verb: "theme"; palette: string } | { verb: TabVerb; fields: Record<string, unknown> };
+  type Asked = { verb: "run"; command: string; tab_id?: number } | { verb: "list" } | { verb: "theme"; theme: string } | { verb: TabVerb; fields: Record<string, unknown> };
 
-  // The one check of a pushed palette: only a built-in theme name, so a socket client changes nothing else. Any other name is ignored and logged, and the current theme stays.
-  async function set_palette(name: string): Promise<object> {
+  // The one check of a pushed theme: only a built-in theme name, so a socket client changes nothing else. Any other name is ignored and logged, and the current theme stays.
+  async function set_theme(name: string): Promise<object> {
     if (!BUILT_IN_THEME_NAMES.includes(name)) {
-      deps.warn(`desertfox: the desktop pushed the palette "${name}", which is not a built-in theme, so it was ignored`);
+      deps.warn(`desertfox: the desktop pushed the theme "${name}", which is not a built-in theme, so it was ignored`);
       return { ok: false, message: "no built-in theme has that name" };
     }
-    await deps.set_desktop_palette(name);
+    await deps.set_desktop_theme(name);
     return { ok: true };
   }
 
   async function answer_of(request: Asked): Promise<object> {
     try {
       if (request.verb === "list") return { ok: true, commands: deps.list_commands() };
-      if (request.verb === "theme") return await set_palette(request.palette);
+      if (request.verb === "theme") return await set_theme(request.theme);
       if (request.verb !== "run") return share_tabs ? await deps.tab_verb(request.verb, request.fields) : TABS_OFF;
       if (request.command.length > MAX_COMMAND_CHARS) return { ok: false, message: "the command text is too long" };
       if (request.tab_id !== undefined && !share_tabs) return TABS_OFF;
@@ -126,9 +126,9 @@ export function create_bridge(deps: BridgeDeps) {
     }
   }
 
-  function asked_by(request: { verb?: unknown; command?: unknown; tab_id?: unknown; palette?: unknown }): Asked | undefined {
+  function asked_by(request: { verb?: unknown; command?: unknown; tab_id?: unknown; theme?: unknown }): Asked | undefined {
     if (request.verb === "list") return { verb: "list" };
-    if (request.verb === "theme") return typeof request.palette === "string" && request.palette.length <= MAX_PALETTE_CHARS ? { verb: "theme", palette: request.palette } : undefined;
+    if (request.verb === "theme") return typeof request.theme === "string" && request.theme.length <= MAX_THEME_CHARS ? { verb: "theme", theme: request.theme } : undefined;
     if (request.verb === "run" && typeof request.command === "string") {
       if (request.tab_id === undefined) return { verb: "run", command: request.command };
       return Number.isInteger(request.tab_id) ? { verb: "run", command: request.command, tab_id: request.tab_id as number } : undefined;
@@ -139,7 +139,7 @@ export function create_bridge(deps: BridgeDeps) {
 
   // The host sends only the fixed verbs. Anything else is dropped, and a request without an integer id has nobody to answer.
   function request_from_host(which: BridgePort, message: unknown): void {
-    const request = message as { verb?: unknown; request_id?: unknown; command?: unknown; tab_id?: unknown; palette?: unknown } | null;
+    const request = message as { verb?: unknown; request_id?: unknown; command?: unknown; tab_id?: unknown; theme?: unknown } | null;
     if (typeof request !== "object" || request === null || !Number.isInteger(request.request_id)) return;
     const request_id = request.request_id as number;
     const asked = asked_by(request);

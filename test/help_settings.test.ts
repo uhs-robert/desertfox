@@ -68,7 +68,7 @@ test("each setting kind gets its control", async () => {
     assert.equal(kind("site_rules"), "read_only");
     assert.equal(kind("open_completion"), "ordered_list");
     assert.equal(kind("default_engine"), "select");
-    assert.equal(kind("palette"), "select");
+    assert.equal(kind("theme"), "select");
     for (const name of ["search_prefixes", "container_prefixes"]) assert.equal(kind(name), "read_only");
     assert.equal(kind("newtab_links"), "link_list");
   }
@@ -87,12 +87,12 @@ test("a list of links commits as a whole, and a link with a bad address stays a 
   assert.deepEqual(session.field("newtab_links")!.row.value, []);
 });
 
-test("an enum keeps its typed options, and a palette in force that no list names stays selectable", async () => {
-  const { session } = await make({ palette: "my_theme" });
+test("an enum keeps its typed options, and a theme in force that no list names stays selectable", async () => {
+  const { session } = await make({ theme: "my_theme" });
   const clock = session.field("newtab_clock")!.control;
   assert.ok(clock.type === "select" && clock.options.includes(true) && clock.options.includes("analog"));
-  const palette = session.field("palette")!.control;
-  assert.ok(palette.type === "select" && palette.options.includes("my_theme"));
+  const theme = session.field("theme")!.control;
+  assert.ok(theme.type === "select" && theme.options.includes("my_theme"));
 });
 
 test("checks as you type use the setting's own check", () => {

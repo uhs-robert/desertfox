@@ -18,9 +18,9 @@ import { build_config_status, load_config, load_edits, load_files_source, store_
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
-import { DESKTOP_PALETTE } from "../shared/theme/roles.ts";
+import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
-import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP } from "./toolbar.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
@@ -88,7 +88,7 @@ async function start(): Promise<MergedConfig> {
 async function compile_input(config: MergedConfig, layers: EditLayers): Promise<CompileInput> {
   return {
     config,
-    desktop_palette: await pushed_palette(),
+    desktop_theme: await pushed_theme(),
     default_keymap: DEFAULT_KEYMAP,
     default_site_rows: DEFAULT_SITE_ROWS,
     get_command: (command_id) => registry.get(command_id),
@@ -155,17 +155,17 @@ async function layered_build(step: LoadStep, engines: EngineEdits, aliases: Alia
   return build;
 }
 
-async function pushed_palette(): Promise<string | undefined> {
-  const pushed = (await browser.storage.local.get(DESKTOP_PALETTE_STORAGE_KEY))[DESKTOP_PALETTE_STORAGE_KEY];
+async function pushed_theme(): Promise<string | undefined> {
+  const pushed = (await browser.storage.local.get(DESKTOP_THEME_STORAGE_KEY))[DESKTOP_THEME_STORAGE_KEY];
   return typeof pushed === "string" ? pushed : undefined;
 }
 
-// The bridge stores the palette the desktop pushed. It republishes only while `palette` follows the desktop, so a push never moves a theme the user chose by name. A repeat of the stored name still republishes, so a retry after a failed publish applies it.
-export function set_desktop_palette(name: string): Promise<void> {
+// The bridge stores the theme the desktop pushed. It republishes only while `theme` follows the desktop, so a push never moves a theme the user chose by name. A repeat of the stored name still republishes, so a retry after a failed publish applies it.
+export function set_desktop_theme(name: string): Promise<void> {
   return in_change_queue(async () => {
-    await browser.storage.local.set({ [DESKTOP_PALETTE_STORAGE_KEY]: name });
+    await browser.storage.local.set({ [DESKTOP_THEME_STORAGE_KEY]: name });
     const config = await get_config();
-    if (config.settings.palette === DESKTOP_PALETTE) await publish(await (load_step as Promise<LoadStep>), await load_edits());
+    if (config.settings.theme === DESKTOP_THEME) await publish(await (load_step as Promise<LoadStep>), await load_edits());
   });
 }
 
