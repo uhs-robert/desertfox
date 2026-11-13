@@ -12,11 +12,11 @@ Median time from the `f` key to the first hint label, cold (first press on a fre
 | Article | 77 | 20 | 68 | 86 |
 | 100 iframes | 57 | 65 | 93 | 235 |
 
-DesertFox stays under a tenth of a second on every page. It looks inside off-screen sections, because CSS can place visible content there, such as an open dropdown or a modal. Vimium C skips them on large pages, which is faster and misses targets (next section).
+DesertFox's median stays under a tenth of a second on every page. It looks inside off-screen sections, because CSS can place visible content there, such as an open dropdown or a modal. Vimium C skips them on very large pages and misses targets there (next section).
 
 ## Coverage on very large pages
 
-The test page has 16,000 filler elements and is about 29 screens tall. Targets sit in zero-size off-screen wrappers, pulled into view by CSS. Cell: runs of 3 in which the tool labeled the target after `f`. The Vimium C build is 2.12.3. Vimium C prunes off-screen boxes only on pages of at least 15,000 elements and more than 20 screens, so smaller pages gave every tool full coverage.
+The test page has 16,000 filler elements and is about 29 screens tall. Targets sit in zero-size off-screen wrappers, pulled into view by CSS. Cell: runs of 3 in which the tool labeled the target after `f`. The Vimium C build is 2.12.3. Vimium C prunes off-screen boxes only on pages of at least 15,000 elements and more than 20 screens, so pages below that threshold gave every tool full coverage.
 
 | Target | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
