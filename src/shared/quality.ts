@@ -13,6 +13,7 @@ export type QualityAnswer = { levels: QualityLevel[]; chosen?: string; skipped?:
 export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean; has_video: boolean };
 
 // What the probe sends when its frame holds a video, and the address it saw it at. The background then loads the `quality` bundle into that frame.
+// The answer to it is whether the bundle was injected.
 export type QualityProbe = { type: "quality_probe"; address: string };
 
 // The probe leaves what it found on the frame's window for the bundle, which has no search of its own inside shadow roots.

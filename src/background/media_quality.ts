@@ -56,14 +56,17 @@ export function create_media_quality(deps: MediaQualityDeps) {
       }
     },
     // A frame's probe found a video. The bundle goes into that frame alone, unless the frame has left the address the probe saw (a navigation or a closed frame between the report and now), where the bundle would cost a page with no video. An about: frame has no address to compare.
-    async probe_reported(tab_id: number | undefined, frame_id: number | undefined, address: string): Promise<void> {
-      if (tab_id === undefined || frame_id === undefined) return;
+    // The answer tells the probe whether the bundle was injected. After a refusal (the rule is off, the frame moved on or closed) the probe stays ready to report again, so turning the rule on at the same address still reaches the frame.
+    async probe_reported(tab_id: number | undefined, frame_id: number | undefined, address: string): Promise<boolean> {
+      if (tab_id === undefined || frame_id === undefined) return false;
       try {
-        if (await deps.is_off()) return;
-        if (is_web(address) && (await deps.frame_address(tab_id, frame_id)) !== address) return;
+        if (await deps.is_off()) return false;
+        if (is_web(address) && (await deps.frame_address(tab_id, frame_id)) !== address) return false;
         await deps.inject_frame(tab_id, frame_id);
+        return true;
       } catch {
         // A frame or tab that closed has no rule to apply.
+        return false;
       }
     },
     async tab_updated(tab_id: number, change: TabChange, address: string | undefined): Promise<void> {
