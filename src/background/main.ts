@@ -248,9 +248,14 @@ void reload_config_at_start();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
-  const response = await fetch(browser.runtime.getURL("starter_engines.toml"));
-  if (!response.ok) throw new ConfigRefusal("The starter engines file starter_engines.toml is missing from this build.");
-  return response.text();
+  const missing = new ConfigRefusal("The starter engines file starter_engines.toml is missing from this build.");
+  try {
+    const response = await fetch(browser.runtime.getURL("starter_engines.toml"));
+    if (response.ok) return await response.text();
+  } catch {
+    // Firefox rejects the fetch of a missing extension file instead of answering with a bad status, so both mean the same.
+  }
+  throw missing;
 }
 const engine_messages = create_engine_messages({ read_engine_state, change_layers, read_starter: read_starter_engines });
 const keymap_messages = create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });

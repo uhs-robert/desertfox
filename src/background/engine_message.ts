@@ -89,11 +89,6 @@ export function create_engine_messages(deps: EngineMessageDeps) {
     return `Removed the engine ${name}.`;
   }
 
-  async function clear(): Promise<string> {
-    await deps.change_layers("engines", (current) => (Object.keys(current.engines ?? {}).length + Object.keys(current.letters ?? {}).length === 0 ? undefined : {}));
-    return "Removed every engine added in the browser.";
-  }
-
   // Skips a table by its name when the files or the layer have one. The sample's duck replaces the built-in one, which no file defines, and the answer says so.
   // The work is in `decide`, on the layer of its own queue turn, so a save that landed since the read is kept.
   async function starter(state: EngineState): Promise<string> {
@@ -127,7 +122,6 @@ export function create_engine_messages(deps: EngineMessageDeps) {
       const state = await deps.read_engine_state();
       if (request.action === "set") return { ok: true, message: await set(request) };
       if (request.action === "remove") return { ok: true, message: await remove(String(request.name)) };
-      if (request.action === "clear") return { ok: true, message: await clear() };
       if (request.action === "starter") return { ok: true, message: await starter(state) };
       return { ok: false, message: `unknown action ${JSON.stringify((request as { action: unknown }).action)}` };
     } catch (error) {

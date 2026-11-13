@@ -391,12 +391,11 @@ export type EngineRow = { name: string; url: string; label: string; keyword?: st
 export type ListEngines = { type: "list_engines" };
 export type ListEnginesAnswer = { ok: true; engines: EngineRow[] } | { ok: false; message: string };
 
-// From an extension page: one change of the engines layer. `set` adds an engine, or replaces the one of that name. `remove` drops one, `clear` drops them all. `starter` adds the sample engines whose names no file or layer table holds yet.
+// From an extension page: one change of the engines layer. `set` adds an engine, or replaces the one of that name. `remove` drops one. `starter` adds the sample engines whose names no file or layer table holds yet.
 // The background builds the config with the change and refuses it, with every problem, when the build does, before anything is stored.
 export type ChangeEngines =
   | { type: "change_engines"; action: "set"; name: string; url: string; keyword?: string; letter?: string }
   | { type: "change_engines"; action: "remove"; name: string }
-  | { type: "change_engines"; action: "clear" }
   | { type: "change_engines"; action: "starter" };
 export type ChangeEnginesAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 

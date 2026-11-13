@@ -18,12 +18,13 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the engines section to load", () => in_page(`return !!view && view.document.querySelector(".desertfox-engines input") !== null && !view.document.querySelector(".desertfox-engines").textContent.includes("Loading");`).catch(() => false), { timeout_ms: 10000 });
   }
 
-  // One change drops every engine and letter, so the teardown costs one publish and leaves no orphan letter.
+  // The layer is cleared in storage and one publish follows through the toolbar switch, so no engine is removed one by one and no letter stays behind.
   on_teardown(async () => {
     const stored = await layer();
     if (Object.keys(stored.engines ?? {}).length + Object.keys(stored.letters ?? {}).length > 0) {
       await open_settings();
-      await in_page(`return view.browser.runtime.sendMessage({ type: "change_engines", action: "clear" });`);
+      await in_page(`return view.browser.storage.local.set({ desertfox_engine_edits: {} }).then(() => view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: true })).then(() => view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: false }));`);
+      await poll_until("the engines layer to be gone from the config", () => in_background(`browser.storage.local.get("desertfox_layered_config").then((got) => got.desertfox_layered_config == null)`));
     }
     await close_settings_tabs();
   });
