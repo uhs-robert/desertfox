@@ -85,7 +85,7 @@ export type CompiledKeymap = {
   // How long the ui bundle keeps a toast: `toast_error_ms` for an error, `toast_ms` for every other kind.
   toast_ms: number;
   toast_error_ms: number;
-  // Where each grab starts its step, in pixels. A tree stored before this setting has none, and the step is the default.
+  // Where each grab starts its step, in pixels. Absent only in a hand-built tree, which means the default.
   grab_step_px?: number;
   // Typed-key strings (tokens joined) of the prefixes that open no panel by themselves. Absent when none.
   which_key_skip?: string[];

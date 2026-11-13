@@ -1,7 +1,7 @@
 // Synthetic drag input for the grab bundle, in three routes picked by the source element. A draggable element gets DragEvents with a new DataTransfer, because mouse events never start a native drag. A range input gets a value plus `input` and `change`, because mouse events do not move one. Any other element gets the pointer and mouse sequence of a press, moves and a release.
 // Every route ends in `release` or `abort`, so a page never keeps a button or a drag open.
-import { MAX_GRAB_STEP_PX, MIN_GRAB_STEP_PX } from "../../shared/grab_steps.ts";
 
+import { MAX_GRAB_STEP_PX, MIN_GRAB_STEP_PX } from "../../shared/grab_steps.ts";
 
 export type Point = { x: number; y: number };
 export type Route = "html5" | "range" | "pointer";
