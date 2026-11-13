@@ -94,6 +94,10 @@ test("layout fallback: a Cyrillic letter on a Latin key", () => {
   // Greek and Hebrew letters, and keys that are not letters, have the same rule.
   assert.equal(physical_token(cyrillic("ξ", "KeyJ")), "j");
   assert.equal(physical_token(cyrillic("ח", "KeyJ")), "j");
+  assert.equal(physical_token(cyrillic("ش", "KeyA")), "a");
+  // A Latin letter outside ASCII is a Latin layout's own key, so it never swaps.
+  assert.equal(physical_token(cyrillic("ı", "KeyI")), null);
+  assert.equal(physical_token(cyrillic("ß", "KeyS")), null);
   assert.equal(physical_token(cyrillic("Enter", "Enter")), null);
   assert.equal(physical_token(cyrillic("1", "Digit1")), null);
 });

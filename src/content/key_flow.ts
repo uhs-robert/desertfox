@@ -118,8 +118,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   // The typed token, or `physical` when the setting is on and the keymap binds the typed one nowhere here. A sink gets the typed letter, so hint mode's text filter keeps it.
   let layout_fallback = true;
-  const layout_token = (token: string, physical: string | null | undefined): string =>
-    physical && layout_fallback && matcher && !deps.sink_of_(deps.get_mode_()) && !matcher.binds_after_(deps.get_mode_(), held_tokens(), token) ? physical : token;
+  // `ahead` is the keys the check reads through: the held queue for a key still waiting, none for a key being replayed (the walk is then at that key).
+  const layout_token = (token: string, physical: string | null | undefined, ahead: readonly string[] = held_tokens()): string =>
+    physical && layout_fallback && matcher && !deps.sink_of_(deps.get_mode_()) && !matcher.binds_after_(deps.get_mode_(), ahead, token) ? physical : token;
 
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
@@ -132,12 +133,14 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean, physical?: string | null): KeyDecision => {
     const mode = deps.get_mode_();
+    const typed_token = token;
+    token = layout_token(token, physical);
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
     if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
     if (!matcher && is_chord(token) && !DEFAULT_CHORDS.test(token)) return "pass";
     if (!matcher || browser_chord_in(mode, token) || waits_for_replay(matcher, mode, token)) {
-      held_keys.push({ token_: token, on_replay_pass_, repeat, physical_: physical });
+      held_keys.push({ token_: typed_token, on_replay_pass_, repeat, physical_: physical });
       return "cancel";
     }
     const last_held = held_keys.at(-1)?.token_;
@@ -203,7 +206,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
       const { token_: token, on_replay_pass_, repeat, physical_ } = held_keys.shift()!;
       if (token === SEQUENCE_BREAK) reset_sequence_();
-      else if (decide(matcher, layout_token(token, physical_), repeat === true) === "pass") on_replay_pass_?.();
+      else if (decide(matcher, layout_token(token, physical_, []), repeat === true) === "pass") on_replay_pass_?.();
     }
   };
 
