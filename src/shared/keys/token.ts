@@ -39,7 +39,7 @@ export function format_token(mods: string, name: string): string {
 // The Latin letter on the physical key of a plain letter from another script, or null. Shift makes it upper case.
 export function physical_token(event: KeyEventLike): string | null {
   const letter = /^Key([A-Z])$/.exec(event.code)?.[1];
-  return letter && /^[^\x00-\x7f]$/u.test(event.key) && is_letter(event.key) ? (event.shiftKey ? letter : letter.toLowerCase()) : null;
+  return letter && /^\p{L}$/u.test(event.key) && !/^[a-z]$/i.test(event.key) ? (event.shiftKey ? letter : letter.toLowerCase()) : null;
 }
 
 // Returns null for a key press that is only a modifier or has no usable key.
