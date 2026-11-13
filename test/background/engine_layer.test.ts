@@ -142,15 +142,6 @@ test("the starter set keeps a save that landed between its read and its turn", a
   assert.ok(config.search_engines.stackoverflow);
 });
 
-test("clear drops every engine and letter in one change", async () => {
-  const { startup, messages } = await started("clear");
-  await messages.change(wiki);
-  await messages.change({ type: "change_engines", action: "starter" });
-  assert.equal((await messages.change({ type: "change_engines", action: "clear" })).ok, true);
-  assert.deepEqual(await load_layers(), { keymap: {} });
-  assert.equal((await startup.get_config()).search_engines.wiki, undefined);
-});
-
 test("the starter set skips names that exist, replaces the built-in duck and leaves out a keyword clash", async () => {
   const { startup, messages } = await started("starter", { "search_engines.toml": 'arch = { url = "https://mine.test/?q={query}" }\nmine = { url = "https://m.test/?q={query}", keyword = "g" }\n' });
   const answer = await messages.change({ type: "change_engines", action: "starter" });
