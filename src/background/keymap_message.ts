@@ -8,7 +8,8 @@ import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
 import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
-import { plan_slots } from "./slots.ts";
+import { plan_slots, SLOT_COUNT } from "./slots.ts";
+import type { SlotMap } from "./slots.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import type { Registry } from "../shared/registry/index.ts";
 import { print_command } from "../shared/registry/print_command.ts";
@@ -18,7 +19,8 @@ import { by_spelling, normalized_keys } from "./edit_layers.ts";
 import type { EditLayers, KeymapEdits } from "./edit_layers.ts";
 
 // Read in the change queue. `compile` compiles the config in force under the given layers.
-export type KeymapState = { config: MergedConfig; layers: EditLayers; compile: (layers: EditLayers) => CompileOutput };
+// `slot_map` is the chord-to-slot map in force, so the slot check plans as the next publish will.
+export type KeymapState = { config: MergedConfig; layers: EditLayers; slot_map?: SlotMap; compile: (layers: EditLayers) => CompileOutput };
 
 export type KeymapMessageDeps = {
   default_keymap: KeymapConfig;
@@ -101,7 +103,7 @@ function with_key_edit(edits: KeymapEdits, mode: KeymapMode, keys: string, text:
 const is_mode = (mode: unknown): mode is KeymapMode => (KEYMAP_MODES as readonly unknown[]).includes(mode);
 
 // Diffs a compile with the candidate against one without it, so the answer holds only what this binding adds.
-export function check_candidate(state: KeymapState, registry: Registry, request: { mode: unknown; keys: unknown; text: unknown }): { saves: boolean; problems: string[]; warnings: string[]; shadows: { keys: string; text: string }[] } {
+export function check_candidate(state: KeymapState, registry: Registry, request: { mode: unknown; keys: unknown; text: unknown }): { saves: boolean; problems: string[]; warnings: string[]; shadows: { keys: string; text: string }[]; keys?: string } {
   const none = { saves: false, warnings: [], shadows: [] };
   if (!is_mode(request.mode)) return { problems: [`unknown mode ${JSON.stringify(request.mode)}`], ...none };
   if (typeof request.keys !== "string" || typeof request.text !== "string") return { problems: ["the binding needs keys and a command text"], ...none };
@@ -111,7 +113,7 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   const problems: string[] = [];
   if (text !== "") config_entry_resolver(registry, state.config, problems)(text, `${mode} "${normalized.keys}"`);
   if (text.includes(STEP_JOINER)) problems.push(`${mode} "${normalized.keys}": a binding of several steps is edited in the config files`);
-  if (problems.length > 0) return { problems, ...none };
+  if (problems.length > 0) return { problems, keys: normalized.keys, ...none };
 
   const before = state.compile(state.layers);
   const after = state.compile({ ...state.layers, keymap: with_key_edit(state.layers.keymap, mode, normalized.keys, text) });
@@ -127,13 +129,13 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   let saves = text === "" || near_after.has(normalized.keys);
   if (mode === "browser" && text !== "") {
     // The slots are planned at publish, so a chord past the last free slot would compile and still do nothing.
-    const slot_warnings_before = new Set(plan_slots(before.compiled.modes.browser).warnings);
-    const after_plan = plan_slots(after.compiled.modes.browser);
+    const slot_warnings_before = new Set(plan_slots(before.compiled.modes.browser, SLOT_COUNT, state.slot_map).warnings);
+    const after_plan = plan_slots(after.compiled.modes.browser, SLOT_COUNT, state.slot_map);
     warnings.push(...after_plan.warnings.filter((warning) => !slot_warnings_before.has(warning)));
     const shortcut = to_firefox_shortcut(normalized.keys).shortcut;
     saves &&= after_plan.assignments.some((assignment) => assignment.shortcut === shortcut);
   }
-  return { saves, problems: [], warnings, shadows };
+  return { saves, problems: [], warnings, shadows, keys: normalized.keys };
 }
 
 // The edits as the export writes them: only the ones in force, since an import refuses a whole config over one binding the build rejects. `skipped` holds the compile's reason for each one left out.

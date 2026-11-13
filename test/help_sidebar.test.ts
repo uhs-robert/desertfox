@@ -103,7 +103,7 @@ const links = (list: FakeNode) => (list.children as FakeNode[]).map((link) => li
 
 test("the settings group lists the setting groups as sections", () => {
   const by_page = Object.fromEntries(group_nodes(render({ page: "home" })).map((group) => [group.page, links(group.list)]));
-  assert.deepEqual(by_page["Settings"]?.slice(0, 2), ["#section=settings/appearance", "#section=settings/new-tab"]);
+  assert.deepEqual(by_page["Settings"]?.slice(0, 3), ["#section=settings/keys", "#section=settings/appearance", "#section=settings/new-tab"]);
 });
 
 test("every page with sections has a group, and Home has none", () => {

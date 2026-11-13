@@ -11,6 +11,8 @@ import type { HelpModel } from "./model.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
 import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
+import { create_key_capture, mount_keys } from "./keys_page.ts";
+import type { ListSnippetsAnswer } from "../shared/messages.ts";
 import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { mount_files } from "./files_page.ts";
@@ -21,6 +23,9 @@ import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "./route.ts";
 
 let stop_settings: (() => void) | undefined;
+let stop_keys: (() => void) | undefined;
+// Its one window listener is registered below, ahead of `content.js` and the drawer's Escape handler.
+const key_capture = create_key_capture();
 // The hold of the mounted import section. A new mount replaces it, and the old one can no longer change the gate.
 let transfer_hold: UserCssHold = NO_USER_CSS_HOLD;
 // The same for the files editor, so its consent card and the import review never release each other.
@@ -46,9 +51,13 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   const route = parse_route(location.hash);
   stop_settings?.();
   stop_settings = undefined;
+  stop_keys?.();
+  stop_keys = undefined;
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
+  const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
+  if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
   const host_start_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-host-start") : null;
   draw_host_start = host_start_box ? mount_host_start(host_start_box, host_start_session, (message) => browser.runtime.sendMessage(message)) : () => undefined;
   draw_host_start();
@@ -78,6 +87,18 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   } else {
     window.scrollTo(0, 0);
   }
+}
+
+// What the key editor's command field offers: the command line names and aliases, the aliases of the config, and the snippets. The check validates the whole text, so these only complete the first word.
+async function command_names(): Promise<string[]> {
+  const snippets = (await browser.runtime.sendMessage({ type: "list_snippets" }).catch(() => undefined)) as ListSnippetsAnswer | undefined;
+  const { config } = await load_effective_config();
+  const names = [
+    ...(await load_commands_file()).commands.flatMap((command) => [command.name ?? command.id, ...(command.aliases ?? [])]),
+    ...Object.keys(config.command_aliases),
+    ...(snippets?.ok ? snippets.snippets.flatMap((snippet) => (snippet.id ? [snippet.id] : [])) : []),
+  ];
+  return [...new Set(names)].sort();
 }
 
 type Inputs = { model_: HelpModel; guide: Block[]; engines: string[] };
@@ -111,6 +132,7 @@ async function draw(first: boolean): Promise<void> {
   else update_config_source(current.model_);
 }
 
+window.addEventListener("keydown", key_capture.on_keydown, true);
 window.addEventListener("keydown", close_drawer_on_escape, true);
 window.addEventListener("blur", close_drawer_on_window_blur);
 window.addEventListener("hashchange", () => current && show_route(current.model_, current.guide, current.engines, "moved"));

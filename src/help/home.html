@@ -134,6 +134,17 @@
   .desertfox-settings-message:empty { display: none; }
   .desertfox-host-start:not(:empty) { margin-bottom: 1rem; padding: 0 1rem .75rem; border: 1px solid var(--desertfox-primary); border-radius: var(--desertfox-radius); }
   .desertfox-settings-error { color: var(--desertfox-primary); }
+  .desertfox-keys-tools { margin-bottom: .5rem; }
+  .desertfox-keys-mode h3 { display: inline-block; margin-right: .5rem; }
+  .desertfox-keys-table { width: 100%; }
+  .desertfox-keys-row { cursor: pointer; }
+  .desertfox-keys-row:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 8%, transparent); }
+  .desertfox-keys-editor-cell { padding: .5rem .6rem; border: 1px solid var(--desertfox-primary); border-radius: var(--desertfox-radius); }
+  .desertfox-keys-editor-line { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+  .desertfox-keys-capture { min-width: 12rem; min-height: 1.6rem; cursor: text; }
+  .desertfox-keys-capture:focus { outline: 2px solid var(--desertfox-primary); }
+  .desertfox-keys-capture kbd { margin-right: .3rem; }
+  .desertfox-keys-command { min-width: 20rem; flex: 1; }
   /* Narrow screens: the sidebar becomes a drawer that slides over the page from the left, opened by the menu button in a bar that stays on top. */
   @media (max-width: 40rem) {
     html { scroll-padding-top: 3.5rem; }

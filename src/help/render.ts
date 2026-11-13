@@ -249,7 +249,11 @@ function settings_page(model: HelpModel): HTMLElement[] {
     el("h2", undefined, "Config files"),
     el("p", undefined, "Edit the config files stored in the browser. A save rebuilds the config at once. When the build fails, the files and the config stay as they were. What you save here counts as your own config: no import check runs, so paste only text you trust. With the native host installed, a start that finds different files in the config folder asks before it replaces these."),
     el("div", "desertfox-files"),
-    el("div", "desertfox-settings", ...page_sections("settings", []).flatMap((section, index) => {
+    // `main.ts` fills `.desertfox-keys` from the background. Its heading is the first section, ahead of the setting groups.
+    section_heading("settings", page_sections("settings", [])[0]!),
+    el("p", undefined, "Rebind a key without the native host. A key edit is a browser layer on top of keymap.toml, the same way a saved setting sits on top of settings.toml. It applies at once, survives a config.reload and goes into the config export."),
+    el("div", "desertfox-keys"),
+    el("div", "desertfox-settings", ...page_sections("settings", []).slice(1).flatMap((section, index) => {
       const group = el("div", "desertfox-settings-group");
       group.setAttribute("data-group", GROUPS[index]!.title);
       return [section_heading("settings", section), group];
@@ -341,6 +345,7 @@ export function sections_from_titles(titles: string[]): Section[] {
   });
 }
 
+const KEYS_SECTION = "Keys";
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
@@ -348,7 +353,7 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
   const quick_start = Array.isArray(source) ? source : source.quick_start;
   switch (page) {
     case "home": return [];
-    case "settings": return sections_from_titles(GROUPS.map((group) => group.title));
+    case "settings": return sections_from_titles([KEYS_SECTION, ...GROUPS.map((group) => group.title)]);
     case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);

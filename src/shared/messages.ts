@@ -373,7 +373,8 @@ export type ListBindingsAnswer = { ok: true; bindings: BindingRow[] } | { ok: fa
 // `problems` are reasons the text or keys do not read. `warnings` are the compile warnings the binding adds. `shadows` are the bindings it replaces or drops.
 // `saves` is false when a save would be refused: the text does not read, or the compile skips the binding (a warning says why). `ok` false means the check itself failed.
 export type CheckBinding = { type: "check_binding"; mode: KeymapMode; keys: string; text: string };
-export type CheckBindingAnswer = { ok: true; saves: boolean; problems: string[]; warnings: string[]; shadows: { keys: string; text: string }[] } | { ok: false; message: string };
+// `keys` is the sequence in the spelling the background stores, absent when the sequence does not parse.
+export type CheckBindingAnswer = { ok: true; saves: boolean; problems: string[]; warnings: string[]; shadows: { keys: string; text: string }[]; keys?: string } | { ok: false; message: string };
 
 // From an extension page: one key edit. `set` binds `text`, `remove` unbinds the key, `reset` drops the edit so the file or default binding shows again.
 // The answer carries the row after the change, absent when the key is then unbound. A refused set carries the check's problems and warnings.
