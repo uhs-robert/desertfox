@@ -31,7 +31,7 @@ export function mount_host_start(container: HTMLElement, session: HostStartSessi
       el("h2", undefined, "The config folder differs from the browser copy"),
       el("p", undefined, "The native host reads ", el("code", undefined, pending.config_dir), ". Its files differ from the config files stored in the browser, which stay in force until you choose. Using the folder changes these files:"),
       el("ul", undefined, ...pending.changes.map(({ path, kind }) => el("li", undefined, el("code", undefined, path), `: ${CHANGE_TEXT[kind]}`))),
-      el("p", undefined, "Your saved edits stay on top either way. To keep the browser files in the folder, export them, unpack the zip into the folder, then use the folder."),
+      el("p", undefined, "Your saved edits stay on top either way. To keep the browser files in the folder, export them, unpack the zip into the folder, then use the folder. The zip carries your saved edits in its settings file too, so the folder then holds them as well."),
       el(
         "div",
         "desertfox-settings-body",

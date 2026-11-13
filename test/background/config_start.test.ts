@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
 import { IMPORT_DIR_LABEL } from "../../src/background/config_import.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { answer_host_start_choice, CHOICE_SETTLED, CHOICE_STALE } from "../../src/background/host_start.ts";
 import type { HostStartChoice, HostStartPending } from "../../src/shared/messages.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
@@ -36,7 +36,7 @@ function answer(startup: Startup, choice: HostStartChoice["choice"], seen: HostS
   return answer_host_start_choice({ type: "host_start_choice", choice, host_digest: seen.host_digest, browser_digest: seen.browser_digest }, startup.choose_host_start);
 }
 
-test("a start with a changed folder only asks, and using the folder keeps a saved edit on top", async () => {
+test("a start applies a changed folder at once while the browser copy holds no browser change, and a saved edit stays on top", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local, fake } = install_fake_browser(host);
   const first = await fresh_startup("changed_first");
@@ -48,7 +48,32 @@ test("a start with a changed folder only asks, and using the folder keeps a save
   const toasts = watch_toasts(fake);
   const restarted = await fresh_startup("changed_second");
   await restarted.reload_config_at_start();
-  assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "ab", which_key_delay_ms: 5 });
+  assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "xy", which_key_delay_ms: 5 });
+  assert.equal(pending_of(local), undefined);
+  assert.deepEqual(toasts, []);
+
+  // The start that applied it remembers it too, so the next folder edit applies as well.
+  host.files = settings_file('hint_letters = "zx"\n');
+  const third = await fresh_startup("changed_third");
+  await third.reload_config_at_start();
+  assert.equal((await third.get_config()).settings.hint_letters, "zx");
+  assert.equal(pending_of(local), undefined);
+});
+
+test("a start with a changed folder asks when an editor save changed the browser copy, and using the folder keeps a saved edit on top", async () => {
+  const host = { files: settings_file('hint_letters = "ab"\n') };
+  const { local, fake } = install_fake_browser(host);
+  const first = await fresh_startup("edited_first");
+  await first.get_config();
+  await first.reload_config();
+  await first.change_edits((current) => ({ ...current, saved: { ...current.saved, which_key_delay_ms: 5 } }));
+  await first.save_config_file("settings.toml", 'hint_letters = "typed"\n', 'hint_letters = "ab"\n');
+
+  host.files = settings_file('hint_letters = "xy"\n');
+  const toasts = watch_toasts(fake);
+  const restarted = await fresh_startup("edited_second");
+  await restarted.reload_config_at_start();
+  assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "typed", which_key_delay_ms: 5 });
   assert.deepEqual(pending_of(local)?.changes, [{ path: "settings.toml", kind: "replaced" }]);
   assert.equal(toasts.length, 1);
   assert.match(toasts[0]!, /differs.*Settings page/);
@@ -58,9 +83,34 @@ test("a start with a changed folder only asks, and using the folder keeps a save
   assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "xy", which_key_delay_ms: 5 });
   assert.equal(pending_of(local), undefined);
 
-  const third = await fresh_startup("changed_third");
+  // Using the folder counts as a read from the host: the next folder edit applies at once.
+  host.files = settings_file('hint_letters = "zx"\n');
+  const third = await fresh_startup("edited_third");
   await third.reload_config_at_start();
-  assert.equal((await third.get_config()).settings.hint_letters, "xy");
+  assert.equal((await third.get_config()).settings.hint_letters, "zx");
+  assert.equal(pending_of(local), undefined);
+});
+
+test("a profile from before the applied digest asks once, and a start that finds the folder equal remembers it", async () => {
+  const host = { files: settings_file('hint_letters = "ab"\n') };
+  const { local } = install_fake_browser(host);
+  await stored_run("upgrade");
+  delete local[HOST_START_APPLIED_STORAGE_KEY];
+  host.files = settings_file('hint_letters = "xy"\n');
+  const asked = await fresh_startup("upgrade_asked");
+  await asked.reload_config_at_start();
+  assert.equal((await asked.get_config()).settings.hint_letters, "ab");
+  assert.notEqual(pending_of(local), undefined);
+
+  delete local[HOST_START_PENDING_STORAGE_KEY];
+  host.files = settings_file('hint_letters = "ab"\n');
+  const seeded = await fresh_startup("upgrade_seeded");
+  await seeded.reload_config_at_start();
+  assert.equal(typeof local[HOST_START_APPLIED_STORAGE_KEY], "string");
+  host.files = settings_file('hint_letters = "xy"\n');
+  const followed = await fresh_startup("upgrade_followed");
+  await followed.reload_config_at_start();
+  assert.equal((await followed.get_config()).settings.hint_letters, "xy");
   assert.equal(pending_of(local), undefined);
 });
 
@@ -204,23 +254,27 @@ test("keeping the browser copy stays quiet at the next start, and a later change
   assert.notEqual(pending_of(local), undefined);
   assert.equal(toasts.length, 1);
   assert.equal((await third.get_config()).settings.hint_letters, "mine");
+  assert.equal((await answer(third, "use_folder", pending_of(local))).ok, true);
+  assert.equal(local[HOST_START_KEPT_STORAGE_KEY], undefined);
 });
 
-test("an answer after the folder changed is refused, and the question is asked again with the new folder", async () => {
+test("after the folder changed, keeping is refused and asked again, and using the folder takes the folder as it is now", async () => {
   const host = { files: settings_file('hint_letters = "disk"\n') };
   const { local } = install_fake_browser(host);
   await imported_run("folder_moved", local, settings_file('hint_letters = "mine"\n'));
   const startup = await fresh_startup("folder_moved_start");
   await startup.reload_config_at_start();
   const seen = pending_of(local);
+  // The user unpacked the export into the folder after the banner showed.
   host.files = settings_file('hint_letters = "disk2"\n');
-  const answered = await answer(startup, "use_folder", seen);
-  assert.deepEqual(answered, { ok: false, message: CHOICE_STALE });
+  const kept = await answer(startup, "keep_browser", seen);
+  assert.deepEqual(kept, { ok: false, message: CHOICE_STALE });
   assert.equal((await startup.get_config()).settings.hint_letters, "mine");
   assert.notEqual(pending_of(local)?.host_digest, seen?.host_digest);
   assert.equal(pending_of(local)?.browser_digest, seen?.browser_digest);
-  assert.equal((await answer(startup, "use_folder", pending_of(local))).ok, true);
+  assert.equal((await answer(startup, "use_folder", seen)).ok, true);
   assert.equal((await startup.get_config()).settings.hint_letters, "disk2");
+  assert.equal(pending_of(local), undefined);
 });
 
 test("an editor save, an import or a reload while the question is pending clears it, and the old answer is refused", async () => {

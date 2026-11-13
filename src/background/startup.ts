@@ -29,7 +29,7 @@ import type { ConfigImportPreview, SnippetPreview } from "../shared/messages.ts"
 import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
-import { classify_host_start, clear_host_pending, has_config_files, read_kept_digest, settle_host_start, store_host_pending } from "./host_start.ts";
+import { classify_host_start, clear_host_pending, has_config_files, read_host_memory, remember_applied, settle_host_start, store_host_pending } from "./host_start.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
@@ -222,14 +222,14 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
     // An empty build here would replace the user's config with the defaults, most likely because the host reads the wrong folder.
     if (!reply.config_dir_exists) throw new ConfigRefusal(missing_folder_message(reply.config_dir));
     if (!has_config_files(reply.files)) throw new ConfigRefusal(empty_folder_message(reply.config_dir));
-    const { warnings } = await apply_files(reply.files, reply.config_dir, "reload");
+    const { warnings } = await apply_host_files(reply.files, reply.config_dir);
     return { config_dir: reply.config_dir, warnings };
   });
 }
 
 // Runs once per start. Edits made to the files while the browser was closed reach the stored build here, without a `config.reload`.
 // No permission, no host, a host error, or a missing or empty config folder keep the stored config and only warn on the console. Most users have no host, and the installer never creates the folder.
-// A folder that differs from a filled browser copy replaces nothing: the start stores what it would change, and the user chooses on the settings page (`host_start.ts`).
+// A folder that differs replaces the browser copy only while the copy holds no browser change. Otherwise the start stores what it would change, and the user chooses on the settings page (`host_start.ts`).
 // A broken file keeps the stored config too, and a toast names the problem so the user learns the edit failed.
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
@@ -246,7 +246,7 @@ export async function reload_config_at_start(): Promise<void> {
   await in_change_queue(async () => {
     await get_config();
     if (swap_count !== swaps_before) return;
-    const plan = await classify_host_start(reply, (await load_files_source()).files, await read_kept_digest());
+    const plan = await classify_host_start(reply, (await load_files_source()).files, await read_host_memory());
     if (plan.kind === "ask") {
       await store_host_pending(plan.pending);
       await toast_start(HOST_DIFFERS_MESSAGE, "warning");
@@ -255,11 +255,12 @@ export async function reload_config_at_start(): Promise<void> {
     if (plan.kind === "ignore") {
       if (plan.reason === "missing") console.warn(missing_folder_message(reply.config_dir));
       if (plan.reason === "empty") console.warn(empty_folder_message(reply.config_dir));
+      if (plan.reason === "same") await remember_applied(reply.files);
       await clear_host_pending();
       return;
     }
     try {
-      await apply_files(reply.files, reply.config_dir, "reload");
+      await apply_host_files(reply.files, reply.config_dir);
     } catch (error) {
       if (!(error instanceof ConfigRefusal)) throw error;
       await toast_start(error.message, "error");
@@ -269,13 +270,20 @@ export async function reload_config_at_start(): Promise<void> {
 
 const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";
 
+// Every swap to the folder's files goes through here, so the next start can tell an unedited browser copy from one with browser changes.
+async function apply_host_files(files: ConfigFiles, config_dir: string): Promise<{ warnings: number }> {
+  const applied = await apply_files(files, config_dir, "reload");
+  await remember_applied(files);
+  return applied;
+}
+
 // The answer to the settings page's question. In the change queue, so it never interleaves with a save, an import or a reload.
 export function choose_host_start(choice: HostStartChoice["choice"], seen: { host_digest: string; browser_digest: string }): Promise<{ warnings: number }> {
   return in_change_queue(() =>
     settle_host_start(choice, seen, {
       read_host: () => native_host.read_config(),
       read_browser_files: async () => (await load_files_source()).files,
-      apply_folder: (files, config_dir) => apply_files(files, config_dir, "reload"),
+      apply_folder: apply_host_files,
     }),
   );
 }
