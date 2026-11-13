@@ -187,7 +187,18 @@ test("a browser chord past the last free Firefox slot is refused by the check", 
   assert.equal(past.ok && !past.saves && past.warnings.some((warning) => /only 10 Firefox shortcut slots/.test(warning)), true, JSON.stringify(past));
 });
 
-test("the export keeps only the edits that read", () => {
-  const state = { config: config_with({}), layers: { keymap: { normal: { J: "tab.close", K: "", x: "user.gone" } } } };
-  assert.deepEqual(exportable_key_edits(state, registry), { edits: { normal: { J: "tab.close", K: "" } }, skipped: [`normal "x": unknown command "user.gone"`] });
+test("the export keeps only the edits in force: one that does not read and one the compile skips stay out", () => {
+  const config = config_with({});
+  const layers: EditLayers = { keymap: { normal: { J: "tab.close", K: "", x: "user.gone" }, visual: { zz: "tab.next" } } };
+  const exported = exportable_key_edits({ config, layers, compile: (other) => compile_config(input_of(config, other.keymap)) });
+  assert.deepEqual(exported.edits, { normal: { J: "tab.close", K: "" } });
+  assert.equal(exported.skipped.length, 2);
+  assert.match(exported.skipped[0]!, /^keymap edits: normal skipped "x": unknown command "user.gone"/);
+  assert.match(exported.skipped[1]!, /^visual: skipped "zz": tab.next runs in normal mode/);
+});
+
+test("a repeat remove says the key is already unbound", async () => {
+  const messages = messages_over(config_with({}), { edits: { normal: { J: "" } } });
+  const again = await messages.change({ type: "change_keymap", mode: "normal", keys: "J", action: "remove" });
+  assert.deepEqual(again, { ok: false, message: 'Nothing to change: it is already unbound on normal "J".' });
 });

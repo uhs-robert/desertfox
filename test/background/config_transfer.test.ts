@@ -7,6 +7,7 @@ import { load_files_source } from "../../src/background/config_load.ts";
 import { build_config, commands_of_registry } from "../../src/shared/config_build/build_config.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { load_layers } from "../../src/background/edit_layers.ts";
+import { exportable_key_edits } from "../../src/background/keymap_message.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
@@ -131,4 +132,20 @@ test("a key edit that runs a snippet refuses its removal, and the export answer 
 
   const exported = await answer_config_transfer({ type: "export_config" }, { read_files: async () => ({}), read_saved: async () => ({}), read_keymap_edits: async () => ({ edits: { normal: { J: "tab.close" } }, skipped: ['normal "x": unknown command "user.gone"'] }), remove: startup.remove_snippet });
   assert.deepEqual(exported, { ok: true, config_files: { "keymap.d/zz-saved-edits.toml": '[normal]\nJ = "tab.close"\n' }, snippet_files: {}, skipped_key_edits: ['normal "x": unknown command "user.gone"'] });
+});
+
+test("the export leaves out a key edit whose snippet header no longer allows its mode, and names it", async () => {
+  const header = (modes: string) => `// id: stale.modes\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\n// modes: ${modes}\nglobalThis.ran = true;\n`;
+  const host = { files: { "snippets/s.js": header("normal, visual") } as Files };
+  install_fake_browser(host);
+  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  await startup.get_config();
+  await startup.reload_config();
+  await startup.change_layers("keymap", () => ({ normal: { J: "tab.close" }, visual: { zz: "stale.modes" } }));
+  host.files = { "snippets/s.js": header("normal") };
+  await startup.reload_config();
+  const { edits, skipped } = exportable_key_edits(await startup.read_keymap_state());
+  assert.deepEqual(edits, { normal: { J: "tab.close" } });
+  assert.equal(skipped.length, 1);
+  assert.match(skipped[0]!, /^visual: skipped "zz": stale\.modes runs in normal mode/);
 });

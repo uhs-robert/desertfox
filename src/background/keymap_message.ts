@@ -136,13 +136,17 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   return { saves, problems: [], warnings, shadows };
 }
 
-// The edits as the export writes them: only the ones that read against the config in force, since an import refuses a whole config over one unknown command.
-export function exportable_key_edits(state: Pick<KeymapState, "config" | "layers">, registry: Registry): { edits: KeymapEdits; skipped: string[] } {
+// The edits as the export writes them: only the ones in force, since an import refuses a whole config over one binding the build rejects. `skipped` holds the compile's reason for each one left out.
+export function exportable_key_edits(state: KeymapState): { edits: KeymapEdits; skipped: string[] } {
+  const compiled = state.compile(state.layers);
   const skipped: string[] = [];
-  const resolve = config_entry_resolver(registry, state.config, skipped);
   const edits: KeymapEdits = {};
   for (const [mode, table] of Object.entries(state.layers.keymap) as [KeymapMode, Record<string, string>][]) {
-    const kept = Object.entries(table).filter(([keys, text]) => text === "" || resolve(text, `${mode} "${keys}"`) !== undefined);
+    const kept = Object.entries(table).filter(([keys, text]) => {
+      const reason = text === "" ? undefined : skip_reason(mode, keys, compiled);
+      if (reason !== undefined) skipped.push(reason);
+      return reason === undefined;
+    });
     if (kept.length > 0) edits[mode] = Object.fromEntries(kept);
   }
   return { edits, skipped };
@@ -158,14 +162,18 @@ export function key_edits_running(command_id: string, state: Pick<KeymapState, "
   );
 }
 
-// An edit the compile dropped shows why, instead of showing in force. A text that does not read leaves the binding under it, a skip leaves no leaf.
+// Why the compile dropped the edit of a binding (not an unbind) on `keys`, or undefined when it is in force. A text that does not read leaves the binding under it, a skip leaves no leaf.
+function skip_reason(mode: KeymapMode, keys: string, compiled: CompileOutput): string | undefined {
+  const reason = compiled.warnings.find((warning) => warning.startsWith(`keymap edits: ${mode} skipped "${keys}":`) || warning.startsWith(`${mode}: skipped "${keys}":`));
+  const has_leaf = leaves_near(compiled.compiled.modes[mode], parse_sequence(keys).tokens ?? []).has(keys);
+  return reason ?? (has_leaf ? undefined : `${mode}: skipped "${keys}": the compile skips it`);
+}
+
+// An edit the compile dropped shows why, instead of showing in force.
 function with_skipped_edits(rows: BindingRow[], compiled: CompileOutput): BindingRow[] {
   return rows.map((row) => {
-    if (row.origin !== "edit") return row;
-    const reason = compiled.warnings.find((warning) => warning.startsWith(`keymap edits: ${row.mode} skipped "${row.keys}":`) || warning.startsWith(`${row.mode}: skipped "${row.keys}":`));
-    const has_leaf = leaves_near(compiled.compiled.modes[row.mode], parse_sequence(row.keys).tokens ?? []).has(row.keys);
-    if (reason === undefined && has_leaf) return row;
-    return { ...row, skipped: reason ?? "the compile skips it" };
+    const reason = row.origin === "edit" ? skip_reason(row.mode, row.keys, compiled) : undefined;
+    return reason === undefined ? row : { ...row, skipped: reason };
   });
 }
 
@@ -211,10 +219,12 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
       }
       let row: BindingRow | undefined;
       let changed = false;
+      let already_unbound = false;
       await deps.change_layers("keymap", (current, config) => {
         // A key only an edit binds is unbound by dropping the edit. Unbinding a file or default binding takes an empty text.
         const file_bindings = by_spelling(config.keymap[mode] ?? {});
         const underlying = Object.hasOwn(file_bindings, keys) ? file_bindings[keys] : deps.default_keymap[mode]?.[keys];
+        already_unbound = action === "remove" && Boolean(underlying) && current[mode]?.[keys] === "";
         const text = action === "set" ? request.text : action === "remove" && underlying ? "" : undefined;
         const next = with_key_edit(current, mode, keys, text);
         row = rows_of(config, next).find((candidate) => candidate.mode === mode && candidate.keys === keys);
@@ -222,7 +232,7 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
         return changed ? next : undefined;
       });
       // A key only a generator binds (`search_keys` and the like), or bound nowhere, has nothing here to change.
-      if (!changed) return { ok: false, message: `Nothing to change: ${{ set: "it already runs that text", remove: "no file or default binding to remove", reset: "no edit to reset" }[action]} on ${mode} "${keys}".` };
+      if (!changed) return { ok: false, message: `Nothing to change: ${{ set: "it already runs that text", remove: already_unbound ? "it is already unbound" : "no file or default binding to remove", reset: "no edit to reset" }[action]} on ${mode} "${keys}".` };
       const done = { set: `Bound ${keys} in ${mode} mode`, remove: `Unbound ${keys} in ${mode} mode`, reset: `Reset ${keys} in ${mode} mode` }[action];
       return { ok: true, ...(row && { row }), message: done };
     } catch (error) {
