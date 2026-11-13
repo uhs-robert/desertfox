@@ -41,14 +41,42 @@ function site_candidate(): ScrollCandidate<Element> | undefined {
   }
 }
 
+// The box the whole-page scan chose, per axis. Weak, so a removed box is not held.
+const kept_box: Partial<Record<ScrollAxis, WeakRef<Element>>> = {};
+
+const forget_kept_boxes = () => {
+  delete kept_box.x;
+  delete kept_box.y;
+};
+
+// A box that is gone or no longer scrolls on the axis fails the re-check, and the scan runs again.
+function kept_candidates(axis: ScrollAxis): ScrollCandidate<Element>[] {
+  const element = kept_box[axis]?.deref();
+  if (!element?.isConnected) return [];
+  const candidate = candidate_of(element);
+  return (axis === "x" ? candidate.can_scroll_x_ : candidate.can_scroll_y_) ? [candidate] : [];
+}
+
 export function scroll_target(axis: ScrollAxis): Element {
+  let scanned = false;
   const target = pick_scroll_target(
     site_candidate(),
     focus_chain(),
     page_candidate(),
-    () => Array.from(document.querySelectorAll("*"), (element) => candidate_of(element)),
+    () => {
+      const kept = kept_candidates(axis);
+      if (kept.length) return kept;
+      scanned = true;
+      return Array.from(document.querySelectorAll("*"), (element) => candidate_of(element));
+    },
     axis,
   );
+  if (scanned && target) {
+    kept_box[axis] = new WeakRef(target);
+    // The same function added twice is one listener.
+    addEventListener("focusin", forget_kept_boxes, true);
+    addEventListener("pointerdown", forget_kept_boxes, true);
+  }
   return target ?? document.scrollingElement ?? document.documentElement;
 }
 
