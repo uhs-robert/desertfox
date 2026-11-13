@@ -1,6 +1,6 @@
 # Task checklists
 
-The files to touch for the three most common changes, in order. Each list comes from a real commit. Read the README of each folder you touch and the matching part of [`design.md`](design.md) after the list, not before. Checks for every task: `just test`, then `just key-test-changed`.
+The files to touch for the three most common changes, in order. Each list comes from a real commit. Read the README of each folder you touch and the matching part of [`design.md`](design.md). Checks for every task: `just test`, then `just key-test-changed`.
 
 ## Add a command
 
@@ -23,7 +23,7 @@ Example: `toast_ms`, commit `2ad2c9ed`.
 2. Add its editor text to `src/shared/settings_docs.ts`.
 3. Run `just settings-defaults`. It rewrites `src/shared/default_settings.ts` and `src/shared/setting_completion.ts`. Never edit them.
 4. Add the setting to `EXPECTATIONS` and `ACCEPTS` in `test/settings_contract.test.ts`.
-5. Read the value where the feature runs. Content code takes it from the compiled keymap (`src/shared/prefix_tree.ts`, `src/shared/keys/compiler.ts`), and the format version goes up when the stored shape changes. Do not import `settings_schema.ts` in the content script or the command line page.
+5. Read the value where the feature runs. Content code takes it from the compiled keymap (`src/shared/prefix_tree.ts`, `src/shared/keys/compiler.ts`), Name the new field in the `CompiledKeymap` type in `src/shared/prefix_tree.ts` and in the test fixtures that build a compiled keymap by hand. Raise `COMPILED_KEYMAP_VERSION` in the same file, so a stored tree of the old shape is recompiled. Do not import `settings_schema.ts` in the content script or the command line page.
 6. Add the setting to the settings table in [`design.md`](design.md).
 7. A setting that needs state kept apart from the config writes through `create_write_queue` in `src/background/store_turns.ts`, as `src/background/previous_tab.ts` and `src/background/window_focus.ts` do. Never hand-roll a queue.
 
@@ -32,8 +32,8 @@ Example: `toast_ms`, commit `2ad2c9ed`.
 Example: the `prompt` action, commit `f51dcc82`.
 
 1. Add the action in `src/content/hints/actions.ts`. A larger action gets its own file in `src/content/hints/`, as `prompt_line.ts` does. Wire the pick in `src/content/hints/main.ts`.
-2. Add the action to the params of `hint.run` in `src/commands/hint.ts`.
+2. In `src/commands/hint.ts`, add the action to `values`, `value_when` (the condition that allows it), `short`, `value_labels` and `description` of the action param, and to the intent text. Add a case to `test/registry/value_when.test.ts`.
 3. Bind a key in `src/background/default_keymap.ts`, then run `just docs-gen`.
 4. Add unit tests in `test/hints/`, and a case in `test/key/p6_hints.mjs`. Add one in `test/key/p6_frames.mjs` when the action behaves differently in a frame.
 5. Run `just build`. It fails when `content.js` passes its size guard. Hint code lives in the on-demand `hints` bundle, so keep it out of `content.js`: see "Content script size" in [`AGENTS.md`](../AGENTS.md).
-6. Add the action to the list in [`src/content/hints/README.md`](../src/content/hints/README.md).
+6. In [`src/content/hints/README.md`](../src/content/hints/README.md), add a bullet for a new file and extend the `actions.ts` entry.

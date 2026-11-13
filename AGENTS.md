@@ -18,7 +18,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | The default keys, generated          | [`docs/keymap.md`](docs/keymap.md)                     |
 | Measured Firefox behavior            | [`docs/firefox-behavior.md`](docs/firefox-behavior.md) |
 | Code map, one line per source folder | [`src/README.md`](src/README.md)                       |
-| Add a command, setting or hint action | [`docs/tasks.md`](docs/tasks.md)                       |
+| Task checklists                      | [`docs/tasks.md`](docs/tasks.md)                       |
 
 If code and the design disagree, stop and ask the maintainer. Do not change the design to match the code without the maintainer's approval.
 
