@@ -239,7 +239,8 @@ sign_only:
     rm -rf web-ext-artifacts
     # web-ext 10.7.0 does not create the folder before it downloads the xpi.
     mkdir -p web-ext-artifacts
-    node_modules/.bin/web-ext sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts
+    # The four page bundles build with source maps for local debugging. The store xpi leaves them out.
+    node_modules/.bin/web-ext sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts --ignore-files "**/*.map"
     ls web-ext-artifacts/*.xpi
 
 # Copy the signed add-on into a Firefox profile. Firefox loads it at the next start. No sudo.
