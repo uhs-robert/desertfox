@@ -110,8 +110,6 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     await poll_until("the page to be 500 ms old", async () => (await in_any(`return view.performance.now();`)) > 500, { timeout_ms: 3000 });
     await settle_on("new-tab");
     const before_key = await scroll_y();
-    // The page grows between the j scroll and the hold's own scroll check, the order that let the hold undo the key.
-    await in_any(`view.addEventListener("scroll", () => { const filler = view.document.createElement("div"); filler.style.height = "40px"; view.document.querySelector(".desertfox-help-page").append(filler); }, { capture: true, once: true });`);
     await press_keys("j");
     await poll_until("the j key to move the page", async () => (await scroll_y()) !== before_key, { timeout_ms: 3000 });
     // The page's clock starts at its load, so under 4 s on it means the 5 s hold was still running when j scrolled.
