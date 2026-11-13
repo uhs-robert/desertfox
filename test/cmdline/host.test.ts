@@ -122,7 +122,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
   const opened_again = () => handlers.get("cmdline.open")!({ text: "again" }) as { ok: false; message: string };
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
   // An open port keeps Node running, so a failed test would hang.
-  t.after(() => frame?.posted.forEach((posted) => posted.transfer.forEach((port) => port.close())));
+  t.after(() => elements.forEach((element) => element.posted.forEach((posted) => posted.transfer.forEach((port) => port.close()))));
   const on_window = (message: unknown, source: unknown) => window_listeners.message!({ data: { desertfox_cmdline: message }, source });
   // The page answers `start` once the background took its ticket.
   const ready = async () => {
@@ -620,7 +620,7 @@ test("a subframe sends the line to the top frame with its own mode and scroll pl
 });
 
 test("a top frame with no room, or none at all, leaves the line to the subframe, with the keys the top frame did not take", async (t) => {
-  for (const top_answer of [{ ok: false, message: "No room for the line" }, undefined]) {
+  for (const top_answer of [{ ok: false, message: "No room" }, undefined]) {
     let answer_open!: (outcome: unknown) => void;
     const { sink, frame_of, ready_here } = await (async () => {
       const page = await load_host(t, `remote_no_room_${String(top_answer?.ok)}`, { subframe: true, relay: (relayed) => (relayed.id === "cmdline.open" ? new Promise((resolve) => (answer_open = resolve)) : NO_LINE) });
@@ -707,7 +707,7 @@ test("the top frame draws a subframe's line with that frame's scroll place, and 
 
 test("a top frame too short for the line refuses it, so the subframe draws its own", async (t) => {
   const { elements, answer, modes } = await load_host(t, "top_no_room", { open_args: FOR_FRAME_5, window_height: 100 });
-  assert.deepEqual(await answer, { ok: false, message: "No room for the line" });
+  assert.deepEqual(await answer, { ok: false, message: "No room" });
   assert.deepEqual([elements, modes], [[], []]);
 });
 
@@ -760,4 +760,13 @@ test("a subframe whose mode left the line first, as the end of a fullscreen does
   assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: "an older line" }), NO_LINE);
   assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id }), { ok: true });
   assert.deepEqual(window_focus, ["window"]);
+});
+
+test("a subframe whose mode left a search line first still ends that search when the top frame says so", async (t) => {
+  const { relays, handlers, sink, calls } = await load_host(t, "remote_exit_search", { subframe: true, search: () => {}, relay: () => new Promise(() => {}), command: async () => ({ ok: true }) });
+  const remote_id = relays[0]!.args.remote_id;
+  sink.exit();
+  assert.deepEqual(handlers.get("cmdline.find_end")!({ remote_id: "an older line", keep: false }), NO_LINE);
+  await handlers.get("cmdline.find_end")!({ remote_id, keep: false });
+  assert.deepEqual(calls, [{ id: "find.end", args: { keep: false } }]);
 });

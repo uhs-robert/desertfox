@@ -25,7 +25,8 @@ const HAND_BACK_TIMEOUT_MS = 1000;
 
 // A top frame shorter than this has no room for the line, so the line draws in the frame that holds the keys.
 const NO_ROOM_PX = 120;
-const NO_ROOM = "No room for the line";
+// The subframe reads this refusal and draws the line itself, so the user never sees it.
+const NO_ROOM = "No room";
 // A frame asked for a line it no longer holds, or a top frame asked for a frame that is gone.
 const NOT_HERE: Outcome = { ok: false, message: "The frame is gone" };
 // After the line's answer, a subframe that has not heard the end of the line from the top frame ends it on its own.
@@ -377,8 +378,9 @@ if (!page.desertfox_cmdline_ready) {
     return host.run_command_("find.live", "caret", { text: args.text, report });
   });
   host.register_handler_("cmdline.find_end", (args): Outcome | Promise<Outcome> => {
-    if (!remote || !asked_of_this_line(args)) return NOT_HERE;
-    remote.search_open_ = false;
+    // As with the focus, a frame whose mode left the line first still ends that line's search.
+    if (args.remote_id !== sent_line_id) return NOT_HERE;
+    if (remote) remote.search_open_ = false;
     return host.run_command_("find.end", "caret", { keep: args.keep === true });
   });
   host.register_handler_("cmdline.headings_ask", (args): Outcome | Promise<Outcome> => {
