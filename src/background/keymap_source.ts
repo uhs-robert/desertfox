@@ -7,7 +7,7 @@ type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 type ChangeEvent = Pick<typeof browser.storage.onChanged, "addListener">;
 
 // Callers share the one object and must not change it.
-export type KeymapSource = { read: () => Promise<CompiledKeymap | undefined> };
+export type KeymapSource = { read: () => Promise<CompiledKeymap | undefined>; drop: () => void };
 
 export function create_keymap_source(storage: KeymapStorage, changed: ChangeEvent): KeymapSource {
   let copy: { value: CompiledKeymap | undefined } | undefined;
@@ -31,13 +31,15 @@ export function create_keymap_source(storage: KeymapStorage, changed: ChangeEven
     return reading;
   };
   const read = async (): Promise<CompiledKeymap | undefined> => (copy ? copy.value : (filling ?? fill()));
-  changed.addListener((changes, area) => {
-    if (area !== "local" || !(COMPILED_KEYMAP_STORAGE_KEY in changes)) return;
+  const drop = () => {
     generation++;
     copy = undefined;
     filling = undefined;
+  };
+  changed.addListener((changes, area) => {
+    if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) drop();
   });
-  return { read };
+  return { read, drop };
 }
 
 // Made when the module loads, so its listener runs before any listener added later, and those can read the new map at once.
@@ -48,3 +50,6 @@ export async function stored_keymap(storage: KeymapStorage): Promise<CompiledKey
   if (browser_source === undefined || storage !== browser.storage.local) return (await storage.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   return browser_source.read();
 }
+
+// For the writer of the keymap, right after its `set` resolves: the change event may reach the background after the reply, and a read in that gap would see the old map. The event still covers writes from other contexts.
+export const drop_keymap = (): void => browser_source?.drop();

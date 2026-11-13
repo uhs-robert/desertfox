@@ -33,6 +33,7 @@ import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
+import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, has_config_files, read_host_memory, remember_applied, settle_host_start, store_host_pending } from "./host_start.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
@@ -116,6 +117,7 @@ async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers)
     [THEME_STORAGE_KEY]: theme,
     [USER_CSS_STORAGE_KEY]: config.css,
   });
+  drop_keymap();
   await tell_tabs_tree_changed();
   return { config, warnings: all_warnings };
 }
