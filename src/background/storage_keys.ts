@@ -139,3 +139,6 @@ export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";
 export const HINT_FRAMES_STORAGE_PREFIX = "desertfox_hint_frames_";
 // The open external-editor jobs, `{ [job]: { job, tab_id, token, frame_id, is_private, orphaned? } }`, in `storage.session`, so a restarted background resumes collecting. See `external_editor.ts`.
 export const EDITOR_JOBS_STORAGE_KEY = "desertfox_editor_jobs";
+
+// Prefix of one `storage.session` key per tab whose command line draws in the top frame for a subframe. The value is that subframe's id, and a command run from the line acts there. Replaced by the next line, removed when the tab closes, the frame navigates or the frame hides.
+export const CMDLINE_TARGET_STORAGE_PREFIX = "desertfox_cmdline_target_";

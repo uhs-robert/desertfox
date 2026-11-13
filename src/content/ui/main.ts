@@ -5,6 +5,7 @@ import { show_mode_label } from "../mode_indicator.ts";
 import type { ToastKind } from "../../shared/messages.ts";
 import { mode_label } from "./mode_label.ts";
 import type { BadgeState } from "./mode_label.ts";
+import { relay } from "../relay.ts";
 import { show_toast } from "../toast.ts";
 
 type UiWindow = { desertfox_host: BundleHostApi; desertfox_ui_ready?: true };
@@ -13,7 +14,12 @@ const page = window as unknown as UiWindow;
 // A second run would hold fresh badge and toast state and leave the first copy's surfaces on the page.
 if (!page.desertfox_ui_ready) {
   page.desertfox_ui_ready = true;
-  page.desertfox_host.register_handler_("ui.toast", (args) => show_toast(args.message as string, args.duration_ms as number, args.kind as ToastKind | undefined));
+  // The top frame draws every toast, so one from a frame the user cannot see still reaches them. A top frame that does not answer leaves it here.
+  page.desertfox_host.register_handler_("ui.toast", (args) => {
+    const draw = () => show_toast(args.message as string, args.duration_ms as number, args.kind as ToastKind | undefined);
+    if (window === window.top) return draw();
+    void relay("top", "ui.toast", { message: args.message, duration_ms: args.duration_ms, kind: args.kind }).then((shown) => shown || draw());
+  });
   page.desertfox_host.register_handler_("ui.badge", (args) => {
     const { mode, pass_next, setting, recording, site_label } = args as unknown as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.

@@ -9,6 +9,7 @@ const LINE_FRAME = 3;
 // `slow_set` makes every write take a timer turn, as a real storage write does.
 // `stuck_ticket` is a ticket whose lookup never finishes, as a flood of guesses can hold up storage.
 function make({ slow_set = false, stuck_ticket = "" } = {}) {
+  const gone_frames = new Set<number>();
   const data: Record<string, unknown> = {};
   const storage = {
     get: async (key: string) => (key in data ? { [key]: data[key] } : {}),
@@ -34,10 +35,11 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     container_stores: async () => [{ name: "default", cookie_store_id: "firefox-default" }],
     page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, prompt: ">> ", all_windows: false, statusbar_widgets: ["url", "tabs"] }),
     tab_count: async (window_id) => (window_id === 10 ? 4 : 0),
+    frame_exists: async (_tab_id, frame_id) => !gone_frames.has(frame_id),
   });
   // Opens the line the way the host and the page do: a ticket for tab 7, redeemed from the line's frame in tab 7.
   const open = async () => (await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10))!;
-  return { service, open, session_data };
+  return { service, open, session_data, gone_frames };
 }
 
 test("the status is the tab's address and place in its window, and the widgets come from the settings", async () => {

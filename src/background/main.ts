@@ -8,6 +8,9 @@ import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
+import { create_frame_overlay } from "./frame_overlay.ts";
+import { relay_plan } from "../shared/relay.ts";
+import { stored_keymap } from "./keymap_source.ts";
 import { history_cache } from "./history_cache.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
 import { create_previous_tabs } from "./previous_tab.ts";
@@ -180,12 +183,27 @@ const cmdline = create_cmdline_service({
   // A failed query must not stop the line from opening.
   tab_count: async (window_id) => (await refused_as(browser.tabs.query({ windowId: window_id }), [])).length,
   container_stores,
+  frame_exists: async (tab_id, frame_id) => {
+    const frame = await refused_as(browser.webNavigation.getFrame({ tabId: tab_id, frameId: frame_id }), null);
+    return frame !== null && frame !== undefined && !frame.errorOccurred;
+  },
   page_config: async () => {
     const config = await get_config();
     const settings = effective_settings(config.settings);
     return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
   },
 });
+
+const frame_overlay = create_frame_overlay({
+  focused_child: tab_modes.focused_child,
+  focus_top: (tab_id) => best_effort(send_to_tab(tab_id, { type: "focus_page" }, 0)),
+  forget_line_target: cmdline.forget_target_frame,
+  keymap: () => stored_keymap(browser.storage.local),
+  commands: () => registry.list().map(command_meta),
+  toast_in_top: (tab_id, message, duration_ms) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "ui.toast", args: { message, kind: "info", duration_ms }, bundle: "ui" }] }, 0)),
+});
+// A frame that navigates is a new document: the line opened for the old one must not aim at it.
+browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdline.forget_target_frame(tabId, frameId).catch(warn_and_go("cmdline.forget_target_frame")));
 
 const previous_tabs = create_previous_tabs(browser.storage.session);
 
@@ -360,7 +378,13 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
   if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(warn_and_go("jump_leave.leave"));
-  if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
+  if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id, Number.isInteger(request.target_frame) ? request.target_frame : undefined);
+  if (request?.type === "relay") {
+    const plan = relay_plan(request, sender.frameId);
+    return plan && sender.tab?.id !== undefined ? send_to_tab(sender.tab.id, { type: "run_in_content", invocations: [plan.invocation] }, plan.frame_id) : Promise.resolve({ ok: false, message: "relay refused" });
+  }
+  if (request?.type === "frame_hidden" && sender.tab?.id !== undefined && sender.frameId) return frame_overlay.hidden(sender.tab.id, sender.frameId);
+  if (request?.type === "frame_cue" && sender.tab?.id !== undefined) return frame_overlay.cue(sender.tab.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
@@ -411,6 +435,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.key_ran"));
   return get_config().then(async (config) => {
     await macro_replay.wait_unless_from(sender.tab?.id);
+    // A line drawn in the top frame for a subframe's keys runs its command in that subframe, if that frame is still there.
+    const frame_id = (request.from_line === true ? await cmdline.target_of(sender.tab?.id) : undefined) ?? sender.frameId;
     const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
     const settled = with_site_engines(request.invocations, config.search_engines, page);
     if ("unfit_letter" in settled) {
@@ -424,7 +450,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       may_prompt: true,
       ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
-      ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
+      ...(frame_id === undefined ? {} : { frame_id }),
       ...(!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL("")) && { from_page: true }),
     });
   });

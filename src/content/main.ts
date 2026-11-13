@@ -19,6 +19,7 @@ import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } fro
 import { badge_state } from "./badge_state.ts";
 import { set_toast_durations, show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
+import { watch_frame_hide } from "./frame_hide_watch.ts";
 import { page_mode } from "./page_mode.ts";
 import { fullscreen_step, takes_media_step } from "./mode_state.ts";
 import { site_mode } from "./site_mode.ts";
@@ -41,7 +42,8 @@ let page_reply: PageKeymap | undefined;
 function refresh_mode_indicator(): void {
   // A child frame's pass-next flag does not reach the top frame, so the badge shows its mode alone.
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
-  const site_label = focused_frame_mode ? undefined : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
+  // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
+  const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
   show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label));
 }
 
@@ -410,6 +412,7 @@ function start(): void {
   });
 
   void ask_keymap();
+  if (window !== window.top) watch_frame_hide(() => void send_to_background({ type: "frame_hidden" }));
 }
 
 start_content_once(start, window, window === window.top || document.hasFocus());

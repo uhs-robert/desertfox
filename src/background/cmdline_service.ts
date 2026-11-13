@@ -1,7 +1,7 @@
 // What the command line page asks of the background: the history to walk, the commands and the lists that bare words read from.
 
 import type { CmdlineOpened } from "../shared/messages.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TARGET_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
 
 export const HISTORY_LIMIT = 100;
@@ -19,6 +19,8 @@ export type CmdlineServiceDeps = {
   // Read on every open, after the config has loaded.
   page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "prompt" | "all_windows" | "statusbar_widgets">>;
   tab_count: (window_id: number) => Promise<number>;
+  // False once the frame is gone from the tab.
+  frame_exists: (tab_id: number, frame_id: number) => Promise<boolean>;
 };
 
 // A repeated command moves to the newest place instead of filling the cap with copies.
@@ -46,11 +48,29 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
 
   return {
     // The host asks before it mounts the line and hands the ticket to its own frame only.
-    issue_ticket: async (tab_id: number | undefined): Promise<string | undefined> => {
+    // A line for a subframe's keys names that frame, and every other line clears the name, so a closed line's frame never carries over.
+    issue_ticket: async (tab_id: number | undefined, target_frame?: number): Promise<string | undefined> => {
       if (tab_id === undefined) return undefined;
       const ticket = deps.new_ticket();
-      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id, [CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]: ticket });
+      const target_key = CMDLINE_TARGET_STORAGE_PREFIX + tab_id;
+      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id, [CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]: ticket, ...(target_frame !== undefined && { [target_key]: target_frame }) });
+      if (target_frame === undefined) await deps.tickets.remove(target_key);
       return ticket;
+    },
+    // The frame a command from this tab's line acts in, or undefined when there is none or it is gone. A gone frame is forgotten, so the command runs where the line is.
+    target_of: async (tab_id: number | undefined): Promise<number | undefined> => {
+      if (tab_id === undefined) return undefined;
+      const key = CMDLINE_TARGET_STORAGE_PREFIX + tab_id;
+      const frame_id: unknown = (await deps.tickets.get(key))[key];
+      if (typeof frame_id !== "number") return undefined;
+      if (await deps.frame_exists(tab_id, frame_id)) return frame_id;
+      await deps.tickets.remove(key);
+      return undefined;
+    },
+    // The frame navigated or hid: its document is not the one the line was opened for.
+    forget_target_frame: async (tab_id: number, frame_id: number): Promise<void> => {
+      const key = CMDLINE_TARGET_STORAGE_PREFIX + tab_id;
+      if ((await deps.tickets.get(key))[key] === frame_id) await deps.tickets.remove(key);
     },
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
     open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined, tab: { url?: string | undefined; index?: number | undefined } = {}, incognito = false): Promise<CmdlineOpened | undefined> => {
@@ -77,10 +97,10 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       const key = CMDLINE_OPENER_STORAGE_PREFIX + tab_id;
       return (await deps.tickets.get(key))[key] === frame_id;
     },
-    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove([CMDLINE_OPENER_STORAGE_PREFIX + tab_id, CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]),
+    forget_opener: (tab_id: number): Promise<void> => deps.tickets.remove([CMDLINE_OPENER_STORAGE_PREFIX + tab_id, CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id, CMDLINE_TARGET_STORAGE_PREFIX + tab_id]),
     // A new page in the tab is not the page that opened the line, and its own embedded copy of the line page must get nothing.
     forget_opener_on_navigation: async (tab_id: number, change: { status?: string | undefined }): Promise<void> => {
-      if (change.status === "loading") await deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id);
+      if (change.status === "loading") await deps.tickets.remove([CMDLINE_OPENER_STORAGE_PREFIX + tab_id, CMDLINE_TARGET_STORAGE_PREFIX + tab_id]);
     },
     // For a browser-wide history clear: the typed lines hold page addresses. Waits for the writes before it, so a late record cannot bring the old list back.
     clear_history: (): Promise<void> => {
