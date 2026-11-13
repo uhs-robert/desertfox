@@ -331,8 +331,8 @@ test("a click on the open row again keeps its draft, and a move sends the old te
 });
 
 test("a move after a refresh sends the text the row had when it opened, also from a reopened draft", async () => {
-  // The background refuses each move, as it does when the old key changed, so the editor stays on its draft.
-  const { session, sent, set_rows } = make([J, K], (message) => (message.type === "change_keymap" ? { ok: false, message: "J changed since you opened it. Open the row again." } : { ok: true, saves: true, problems: [], warnings: [], shadows: [] }));
+  // The background refuses each move for another reason, so the editor stays on its draft and has seen no refusal of the old key.
+  const { session, sent, set_rows } = make([J, K], (message) => (message.type === "change_keymap" ? { ok: false, message: 'normal "X" not saved: the compile skips it' } : { ok: true, saves: true, problems: [], warnings: [], shadows: [] }));
   const last_move = () => sent.filter((message) => message.type === "change_keymap").at(-1);
   await session.load();
   session.open_row(J);
@@ -354,4 +354,26 @@ test("a move after a refresh sends the text the row had when it opened, also fro
   assert.deepEqual(session.state.open?.tokens, ["X"]);
   await session.save();
   assert.equal(last_move()?.move_from_text, "tab.next");
+});
+
+test("after the refusal of a stale move, opening the row again moves from the text it shows now", async () => {
+  const stale = "J changed since you opened it. Open the row again.";
+  const moved = row({ keys: "X", text: "tab.next", origin: "edit" });
+  const { session, sent, set_rows } = make([J, K], (message) =>
+    message.type !== "change_keymap" ? { ok: true, saves: true, problems: [], warnings: [], shadows: [] } : message.move_from_text === "tab.close" ? { ok: true, row: moved, message: "Moved J to X in normal mode" } : { ok: false, message: stale },
+  );
+  const moves = () => sent.filter((message) => message.type === "change_keymap").map((message) => message.move_from_text);
+  await session.load();
+  session.open_row(J);
+  session.capture("X");
+  const newer_J = row({ keys: "J", text: "tab.close", origin: "edit" });
+  set_rows([newer_J, K]);
+  await session.refresh();
+  await session.save();
+  assert.equal(session.state.open?.message?.text, stale);
+  session.open_row(K);
+  session.open_row(newer_J);
+  await session.save();
+  assert.deepEqual(moves(), ["tab.next", "tab.close"]);
+  assert.equal(session.state.open?.original?.keys, "X");
 });

@@ -17,6 +17,8 @@ export const RESERVED_CHORDS_NOTE = "Firefox keeps some chords for itself, such 
 export const is_read_only = (row: BindingRow): boolean => row.text.includes(STEP_JOINER);
 export const row_id = (mode: KeymapMode, keys: string): string => `${mode}\u0000${keys}`;
 const NEW_SUFFIX = "\u0000new";
+// Part of the background's refusal of a move whose old key changed since the editor opened (`keymap_message.ts`).
+const STALE_MOVE_REFUSAL = "changed since you opened it";
 
 export type CheckView =
   | { state: "waiting" }
@@ -275,7 +277,7 @@ export function create_keys_session(deps: KeysDeps) {
   }
 
   // One request at a time. The editor follows the answer: the row it now edits, or a plain editor on the same keys when the row is gone.
-  async function change(editor: Editor, request: Omit<ChangeKeymap, "type">, applied: (answer: Extract<ChangeKeymapAnswer, { ok: true }>) => void): Promise<void> {
+  async function change(editor: Editor, request: Omit<ChangeKeymap, "type">, applied: (answer: Extract<ChangeKeymapAnswer, { ok: true }>) => void): Promise<ChangeKeymapAnswer> {
     stop_check();
     editor.busy = true;
     deps.on_change("editor");
@@ -288,6 +290,7 @@ export function create_keys_session(deps: KeysDeps) {
       editor.message = { ok: false, text: [answer.message, ...(("problems" in answer && answer.problems) || []).filter((problem) => !answer.message.includes(problem))].join("\n") };
     }
     deps.on_change("editor");
+    return answer;
   }
 
   const settle = (editor: Editor, row: BindingRow | undefined): void => {
@@ -312,7 +315,9 @@ export function create_keys_session(deps: KeysDeps) {
   async function save(): Promise<void> {
     const editor = state.open;
     if (!editor || !actions_of(editor).save) return;
-    await change(editor, { mode: editor.mode, keys: keys_of(editor.tokens), action: "set", text: editor.text, ...moved_from(editor) }, (answer) => settle(editor, answer.row));
+    const saved = await change(editor, { mode: editor.mode, keys: keys_of(editor.tokens), action: "set", text: editor.text, ...moved_from(editor) }, (answer) => settle(editor, answer.row));
+    // The refusal showed the user that the old key changed, so the next save moves from the row as it reads now, as "Open the row again" promises.
+    if (!saved.ok && saved.message.includes(STALE_MOVE_REFUSAL)) editor.opened_text = editor.original?.text;
   }
 
   async function remove(): Promise<void> {
