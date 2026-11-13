@@ -8,6 +8,7 @@ import type { TabActionDeps } from "../background/tab_actions.ts";
 import { browser_discard_deps, describe_result, set_unloaded } from "../background/tab_discard.ts";
 import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
+import { shared_previous_tabs } from "../background/previous_tab.ts";
 import { get_config } from "../background/startup.ts";
 import { best_match } from "../shared/score.ts";
 import { site_key } from "../shared/site_key.ts";
@@ -40,6 +41,8 @@ export type TabDeps = TabActionDeps & {
   // The tabs the line lists, the same list the completion shows: the line's window, or every window, and only tabs of the line's privacy.
   listed_tabs: (ctx: CommandContext) => Promise<ListedTab[]>;
   focus_window: (window_id: number) => Promise<void>;
+  // The tab the window was on before the current one.
+  previous_tab_of: (window_id: number) => Promise<number | undefined>;
   // What `tab.unload` and `tab.load` act through.
   discard: DiscardDeps;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
@@ -158,7 +161,7 @@ export function make_tab_handlers(deps: TabDeps) {
     },
     alternate: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
-      const previous_id = await deps.discard.alternate_of(current_window_id(ctx));
+      const previous_id = await deps.previous_tab_of(current_window_id(ctx));
       const target = tabs.find((tab) => tab.id === previous_id && tab.id !== current.id);
       if (!target) throw new RuntimeRefusal("no previous tab");
       await deps.activate(target.id);
@@ -340,6 +343,7 @@ export const browser_tab_deps: TabDeps = {
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: tab.windowId, incognito: tab.incognito }, settings.completion_all_windows === true);
   },
   focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
+  previous_tab_of: (window_id) => shared_previous_tabs().previous_of(window_id),
   discard: browser_discard_deps,
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "tab.unload", message, kind),
 };

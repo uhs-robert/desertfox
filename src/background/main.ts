@@ -13,7 +13,7 @@ import { relay_plan } from "../shared/relay.ts";
 import { stored_keymap } from "./keymap_source.ts";
 import { history_cache } from "./history_cache.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
-import { create_previous_tabs } from "./previous_tab.ts";
+import { shared_previous_tabs } from "./previous_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import type { Asker } from "./complete_items.ts";
@@ -202,7 +202,7 @@ const frame_cue = create_frame_cue({
 // A frame that navigates is a new document: the line opened for the old one must not aim at it.
 browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdline.forget_target_frame(tabId, frameId).catch(warn_and_go("cmdline.forget_target_frame")));
 
-const previous_tabs = create_previous_tabs(browser.storage.session);
+const previous_tabs = shared_previous_tabs();
 
 const open_help = create_open_help({
   is_opener: cmdline.is_opener,
