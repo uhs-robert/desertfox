@@ -4,7 +4,7 @@ import "../../src/background/command_modules.ts";
 import { load_layers } from "../../src/background/edit_layers.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
 import { export_files } from "../../src/background/config_transfer.ts";
-import { ENGINE_EDITS_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { ENGINE_EDITS_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { load_effective_config } from "../../src/background/config_load.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../../src/shared/prefix_tree.ts";
@@ -169,4 +169,20 @@ test("a stored engines layer keeps only checked tables and one-key letters", asy
   assert.deepEqual((await load_layers()).engines, { engines: { a: { url: "u" } }, letters: { w: "a" } });
   local[ENGINE_EDITS_STORAGE_KEY] = "junk";
   assert.deepEqual(await load_layers(), { keymap: {} });
+});
+
+test("an engine table holding a value the TOML writer refuses is left out as a refusal", async () => {
+  const { build_layered } = await import("../../src/background/engine_layer.ts");
+  const built = build_layered({ "settings.toml": "" }, "config", [], { engines: { bad: { url: "https://b.test/?q={query}", hosts: [null] } } });
+  assert.deepEqual(built.dropped.map((piece) => piece.name), ["bad"]);
+});
+
+test("an engine edit that changes what a search binding runs replans the Firefox shortcut slot", async () => {
+  const { startup, messages, local } = await started("chord_slot");
+  const slot_invocations = () => JSON.stringify(Object.values(local[SLOT_TABLE_STORAGE_KEY] as Record<string, unknown>));
+  await messages.change(wiki);
+  await startup.change_layers("keymap", () => ({ browser: { "<A-w>": "search wiki" } }));
+  assert.match(slot_invocations(), /"engine":"wiki"/);
+  await messages.change({ type: "change_engines", action: "remove", name: "wiki" });
+  assert.doesNotMatch(slot_invocations(), /"engine":"wiki"/);
 });

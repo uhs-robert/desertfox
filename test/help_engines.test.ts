@@ -38,3 +38,21 @@ test("a save sends the fields and clears the form, a refusal keeps it and shows 
   assert.equal(engines.state.message?.ok, true);
   assert.equal(engines.state.form.name, "");
 });
+
+test("a save that lands after Edit was picked keeps the edited draft", async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { session: engines } = session(async (message) => {
+    if (message.type === "list_engines") return { ok: true, engines: [] };
+    await gate;
+    return { ok: true, message: "Saved." };
+  });
+  engines.set_field("name", "wiki");
+  engines.set_field("url", "https://w.test/?q={query}");
+  const saving = engines.save();
+  engines.edit({ name: "other", url: "https://o.test/?q={query}", label: "other", children: 0 } as never);
+  release();
+  await saving;
+  assert.equal(engines.state.form.name, "other");
+  assert.equal(engines.state.editing, "other");
+});
