@@ -74,8 +74,14 @@ export function is_dirty(editor: Editor): boolean {
   return original === undefined ? editor.tokens.length > 0 || editor.text !== "" : keys_of(editor.tokens) !== original.keys || editor.text !== original.text;
 }
 
-// A save on other keys than the row's own moves the binding: the old key is freed in the same change.
-const moved_from = (editor: Editor): { move_from?: string } => (editor.original && keys_of(editor.tokens) !== editor.original.keys ? { move_from: editor.original.keys } : {});
+// The keys a save would free: a save on other keys than the row's own moves the binding.
+export const freed_keys = (editor: Editor): string | undefined => (editor.original && keys_of(editor.tokens) !== editor.original.keys ? editor.original.keys : undefined);
+
+// The old text goes along, so the background refuses the move when another tab changed the old key since the row was shown.
+const moved_from = (editor: Editor): { move_from?: string; move_from_text?: string } => {
+  const keys = freed_keys(editor);
+  return keys === undefined ? {} : { move_from: keys, move_from_text: editor.original!.text };
+};
 
 // A row matches when the filter is part of its keys, its command text, its mode or its origin.
 export function matches_filter(row: BindingRow, filter: string): boolean {
@@ -177,14 +183,15 @@ export function create_keys_session(deps: KeysDeps) {
 
   function open_row(row: BindingRow): void {
     const id = row_id(row.mode, row.keys);
-    const kept = drafts.get(id);
+    // The open row is not in `drafts` yet, so a click on it again must find it here or its edits are lost.
+    const kept = state.open?.id === id ? state.open : drafts.get(id);
     if (kept) kept.original = row;
     show(kept ?? { id, mode: row.mode, original: row, tokens: tokens_of(row.keys), fresh: true, text: row.text, check: { state: "waiting" }, busy: false });
   }
 
   function open_new(mode: KeymapMode): void {
     const id = `${mode}${NEW_SUFFIX}`;
-    show(drafts.get(id) ?? { id, mode, tokens: [], fresh: false, text: "", check: { state: "waiting" }, busy: false });
+    show((state.open?.id === id ? state.open : drafts.get(id)) ?? { id, mode, tokens: [], fresh: false, text: "", check: { state: "waiting" }, busy: false });
   }
 
   // Closing keeps the draft of an edited row, so coming back finds it.
