@@ -694,7 +694,7 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await wait_read((read) => read.text === "find_words aa\n\nf", "N before the anchor to select aa up to the anchor");
   });
 
-  await run_case("a click in visual mode keeps the anchor, takes the caret end, and n then steps from there", async () => {
+  await run_case("a click in visual mode ends it at the next key, and n then steps from the click in caret mode", async () => {
     const page_id = "find_vis_click";
     await open_page("find_words", page_id, { new_tab: true });
     await start_visual(page_id);
@@ -704,9 +704,11 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     const mark_click = events.length;
     await in_active_tab(`(() => { const text = [...document.querySelectorAll("p")].find((p) => p.textContent === "find_words bb").firstChild; getSelection().collapse(text, 0); return true; })()`);
     await wait_event(mark_click, (event) => is_selection_of(page_id)(event) && event.text === "", "the page to report the collapsed selection");
-    // Visual mode keeps its anchor on a click and takes the clicked text as the caret end, so n goes on from bb to cc.
+    // The click ends visual mode, as in vim, so n runs in caret mode from the click on bb and goes on to cc.
+    const mark = events.length;
     await press_keys("n");
-    await wait_read((read) => read.anchor === "find_words find_vis_" && read.focus === "find_words cc", "n to go from the click on bb to cc with the anchor on the title");
+    await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge after the click");
+    await wait_read((read) => read.text === "f" && read.anchor === "find_words cc", "n to go from the click on bb to the caret on cc");
   });
 
   await run_case("a fresh visual session after an earlier search: n goes to the first match after the caret", async () => {
@@ -724,13 +726,16 @@ export async function run_cases({ rdp, extension_id, run_case, expect, expect_ab
     await wait_read((read) => read.text === "find_words aa\n\nf", "n from the new caret to go from aa to bb");
   });
 
-  await run_case("visual / after a click searches from the clicked text, not from the caret the session held before", async () => {
+  await run_case("/ after a click in visual mode searches in caret mode from the clicked text, not from the caret the session held before", async () => {
     const page_id = "find_vis_open_click";
     await open_page("find_words", page_id, { new_tab: true });
     await start_visual(page_id);
     await in_active_tab(`(() => { const text = [...document.querySelectorAll("p")].find((p) => p.textContent === "find_words cc").firstChild; getSelection().collapse(text, 1); return true; })()`);
-    await wait_read((read) => read.focus === "find_words cc", "visual mode to take the click as the caret end");
+    await wait_read((read) => read.focus === "find_words cc", "the page to hold the click");
+    const mark = events.length;
     await search_in_visual("/find_words");
+    // The / key takes the click first, so the search runs in caret mode.
+    await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge after the click");
     // The caret is one character into cc, so the next match wraps to the title. From the stale caret on the title it would be aa.
     await wait_read((read) => read.focus?.startsWith("find_words find_vis_") && read.focus_offset <= 1, "the search to wrap to the title");
   });

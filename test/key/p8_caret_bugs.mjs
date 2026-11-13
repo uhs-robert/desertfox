@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count, sleep }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
   async function press_and_wait_for_badge(page_id, keys, label) {
@@ -430,6 +430,82 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     // The title is "caret move_find". l as a motion lands on "a". l as a find target would jump to the "l" of "line".
     const last = await press_and_wait_for_move(page_id, "l", "l to move the caret");
     expect(last.text === "a", `the caret is on ${JSON.stringify(last.text)}, expected "a"`);
+    await escape_to_normal(page_id);
+  });
+
+  // A session command from normal mode enters its mode first, so the badge shows the session it made.
+  await run_case(":caret.move from normal mode starts caret mode", async () => {
+    const page_id = "move_normal";
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await run_line(":caret.move --unit=char");
+    await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge");
+    await wait_event(mark, is_selection_of(page_id), "a caret selection");
+    await escape_to_normal(page_id);
+  });
+
+  // The session starts at the first visible text, the "c" of the title "caret object_normal".
+  await run_case(":visual.object from normal mode starts visual mode and selects the object", async () => {
+    const page_id = "object_normal";
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await run_line(":visual.object --object=word");
+    await wait_event(mark, badge_is(page_id, "VISUAL"), "the VISUAL badge");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "caret ", 'the word "caret " selected');
+    await escape_to_normal(page_id);
+  });
+
+  // Normal mode holds no selection, so a command that acts on one has nothing to act on.
+  for (const [line, page_id] of [
+    [":visual.act --action=yank", "act_normal"],
+    [":visual.open", "open_normal"],
+  ]) {
+    await run_case(`${line} from normal mode refuses and starts no session`, async () => {
+      await open_page("caret", page_id, { new_tab: true });
+      const mark = events.length;
+      await run_line(line);
+      await wait_cmdline((state) => !state.open, "the line to close");
+      // The refusal shows a toast, which proves the command ran.
+      await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, "the refusal toast");
+      await expect_absent(mark, page_id, (event) => is_selection_of(page_id)(event) || badge_is(page_id, "CARET")(event) || badge_is(page_id, "VISUAL")(event), "a session after the command");
+    });
+  }
+
+  // A macro reaches a handler without the keymap's mode, so visual.act can run in caret mode. Caret mode holds no selection, so it refuses, and the search the step asks for never opens.
+  await run_case("visual.act replayed in caret mode refuses and searches nothing", async () => {
+    const page_id = "act_caret";
+    const steps = [
+      { id: "mode.set", args: { mode: "caret" } },
+      { id: "visual.act", args: { action: "search" } },
+    ];
+    await evaluate_in_background(rdp, extension_id, `browser.storage.local.set({ desertfox_register_b: ${JSON.stringify(steps)} })`);
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await press_keys("@", "b");
+    await wait_event(mark, badge_is(page_id, "CARET"), "the replay to enter caret mode");
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, "the refusal toast");
+    // A failed replay drops the keys typed while it ran, the barrier key too, so the check waits for the replay to end.
+    await sleep(500);
+    await expect_absent(mark, page_id, (event) => event.type === "tree_read" && event.page_id === "search_result", "a search opened from caret mode", { report_delay_ms: 500 });
+    await escape_to_normal(page_id);
+  });
+
+  // The harness has no pointer, so the click is a collapsed selection, which is all the caret code reads. The next key sees it: visual mode ends before the keymap reads that key, so the key runs in caret mode from the click.
+  await run_case("a click in visual mode ends it, and the next key runs in caret mode from the click", async () => {
+    const page_id = "click_visual";
+    await open_page("caret", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await press_and_wait_for_badge(page_id, "v", "VISUAL");
+    await barrier(page_id);
+    const mark_click = events.length;
+    // The "l" of "second line here".
+    await in_active_tab(`(() => { getSelection().collapse(document.querySelectorAll("p")[1].firstChild, 7); return true; })()`);
+    await wait_event(mark_click, is_selection_of(page_id), "the click report");
+    // v has no binding in visual mode. In caret mode it starts visual mode at the caret, so a visual selection of the clicked "l" shows the key ran in caret mode. The badge goes through CARET within one task, so the page sees only VISUAL.
+    const mark = events.length;
+    await press_keys("v");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "l", 'v to select the "l" of line');
+    expect((await in_active_tab("String(getSelection())")) === "l", "the click did not start a visual selection at the clicked letter");
     await escape_to_normal(page_id);
   });
 

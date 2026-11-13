@@ -5,7 +5,6 @@
 import { page_selection_cursor, selection_span } from "./page_selection.ts";
 import { CARET_NAMES, create_painter } from "./find_paint.ts";
 import { apply_selection_colors, clear_selection_colors, keep_selection_colors } from "./selection_colors.ts";
-import { with_caret } from "./selection_state.ts";
 import type { CaretMode, Cursor, Span } from "./selection_state.ts";
 import { documents_of } from "./text_model.ts";
 import type { TextModel } from "./text_model.ts";
@@ -102,12 +101,12 @@ export function create_selection_mirror() {
         }
       }),
 
-    // Where something else put a selection of the model since the last paint, as a cursor: a drag whole, in either mode, because the next key may switch the mode. A click keeps the anchor when `extend` is set and takes the click. Undefined when no selection moved into the model's text.
-    foreign_cursor_(model: TextModel, cursor: Cursor, extend: boolean): Cursor | undefined {
+    // Where something else put a selection of the model since the last paint: a drag whole as a cursor, in either mode, because the next key may switch the mode, and a click as the index it landed on. Undefined when no selection moved into the model's text.
+    foreign_move_(model: TextModel): Cursor | number | undefined {
       for (const selection of selections_of(model)) {
         if (same_ends(ends_of(selection), painted.find((record) => record.selection === selection)?.ends ?? [])) continue;
         const found = selection_span(model, selection);
-        if (found) return page_selection_cursor(model, selection) ?? with_caret(cursor, found.first, extend);
+        if (found) return page_selection_cursor(model, selection) ?? found.first;
       }
     },
 

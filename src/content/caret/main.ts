@@ -15,8 +15,9 @@ import { create_page_text } from "./page_text.ts";
 import { select_object } from "./text_object.ts";
 import { scroll_to_index, screen_line_target } from "./screen_line.ts";
 import { create_selection_mirror, selections_of } from "./selection_mirror.ts";
-
-import { is_visual, line_span, retarget, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
+import { create_sessions, SESSION_MODES } from "./caret_session.ts";
+import type { Session } from "./caret_session.ts";
+import { is_visual, line_span, selected_text, selected_span, swap_ends, with_caret } from "./selection_state.ts";
 import type { CaretMode, Cursor, Span } from "./selection_state.ts";
 import { frame_document, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
@@ -31,14 +32,6 @@ const page_text = create_page_text();
 const mirror = create_selection_mirror();
 const find = create_find(page.desertfox_host, browser_find_deps(page_text, mirror));
 
-// `span_` is the text the last paint drew, which `y`, `p`, `*` and `#` act on.
-type Session = { model_: TextModel; cursor: Cursor; mode: CaretMode; goal_x_: number | undefined; span_: Span };
-let session: Session | undefined;
-// Counts visual starts, so a copy can tell its own visual run from a later one in the same session.
-let visual_runs = 0;
-// The caret or visual session a `/` or `?` started from. The command line takes the mode while it is open, and the session waits for the end of the search.
-let searching_from: Session | undefined;
-
 // The last find for `;` and `,`. Per page, and not a register.
 let last_find: CharFind | undefined;
 
@@ -48,7 +41,7 @@ let char_matches: { model_: TextModel; char: string; from: number[] } | undefine
 
 // `view.current` is where the match the caret stands at or next to sits. A find that found nothing has none, and a new model has other positions, so both fall back to the caret.
 function show_char_matches(view: FindView<FindColors>): void {
-  const open = session;
+  const open = sessions.open_();
   // The session is gone, or a frame or shadow host left the page under the find.
   if (!open || !last_find || !trees_alive(open.model_)) return find_mode.end();
   if (!view.colors) return;
@@ -101,7 +94,7 @@ function paint(open: Session): void {
 
 // Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the page's own drag (whole in visual mode, its release end in caret mode), else the caret's place in the page's own selection if it is on screen, else the first visible text.
 // A string is the reason no session could start.
-function start_session(mode: CaretMode): Session | string {
+function start_session(mode: CaretMode): { model_: TextModel; cursor: Cursor } | string {
   const target = page.desertfox_caret_target;
   delete page.desertfox_caret_target;
   const is_other_site_frame = target !== undefined && (target.localName === "iframe" || target.localName === "frame") && !frame_document(target);
@@ -115,61 +108,34 @@ function start_session(mode: CaretMode): Session | string {
   const dragged = target === undefined ? selections_of(model).flatMap((selection) => page_selection_cursor(model, selection) ?? [])[0] : undefined;
   // A search position is valid only while no selection came after it, so it is newer than any drag and wins.
   const searched = target === undefined ? find.position(model) : undefined;
-  if (is_visual(mode) && dragged && searched === undefined) return { model_: model, cursor: dragged, mode, goal_x_: undefined, span_: selected_span(dragged) };
+  if (is_visual(mode) && dragged && searched === undefined) return { model_: model, cursor: dragged };
   const caret = target === undefined ? (searched ?? dragged?.caret ?? first_visible_index(model)) : model.start_index_;
   if (caret === undefined) return "No text here";
-  const cursor = { anchor: caret, caret };
-  return { model_: model, cursor, mode, goal_x_: undefined, span_: selected_span(cursor) };
-}
-
-// The page changed its text since the session read it, so the session reads it again. The caret keeps its character if that is still on the page.
-// The page selection stays as painted until the next paint: the search reads it to tell its match from a later click.
-function catch_up(open: Session): Session | undefined {
-  if (page_text.is_current(open.model_)) return open;
-  const model = page_text.current();
-  if (model.text === "") return undefined;
-  const carry = (index: number) => page_text.carry(open.model_, index, model);
-  const caret = carry(open.cursor.caret) ?? first_visible_index(model);
-  const anchor = is_visual(open.mode) ? (carry(open.cursor.anchor) ?? caret) : caret;
-  return retarget(open, model, { anchor, caret });
-}
-
-function end_session(): void {
-  mirror.clear();
-  session = undefined;
-  find_mode.end();
-  release_if_idle();
+  return { model_: model, cursor: { anchor: caret, caret } };
 }
 
 // With no session open and no search that goes on, nothing reads the page text, so the page stops being watched.
 function release_if_idle(): void {
-  if (!session && !find.uses_page_text_()) page_text.release();
+  if (!sessions.open_() && !find.uses_page_text_()) page_text.release();
 }
 
-// A string is the failure message. The mode went back to normal then.
-function ensure_session(mode: CaretMode): Session | string {
-  const mode_changed = !session || session.mode !== mode;
-  // Something else moved a page selection since the last paint, such as a find, a drag or a click (no mouse listener, so it takes effect at the next key).
-  // Adopted with the model the drag was made on: the catch-up can drop the node it ends in from the next model.
-  const moved = session && mirror.foreign_cursor_(session.model_, session.cursor, is_visual(session.mode));
-  if (moved) Object.assign(session!, { cursor: moved, goal_x_: undefined });
-  if (session) session = catch_up(session);
-  if (!session) {
-    const started = start_session(mode);
-    if (typeof started === "string") {
-      page.desertfox_host.set_mode_("normal");
-      return started;
-    }
-    session = started;
-  }
-  // Caret mode shows one character, so leaving visual mode drops the anchor.
-  if (mode === "caret") session.cursor = { anchor: session.cursor.caret, caret: session.cursor.caret };
-  session.mode = mode;
-  paint(session);
-  if (mode_changed && is_visual(mode)) visual_runs++;
-  if (mode_changed) void mirror.set_mode_colors_(mode);
-  return session;
-}
+const sessions = create_sessions({
+  host: page.desertfox_host,
+  page_text,
+  start_: start_session,
+  foreign_move_: (open) => mirror.foreign_move_(open.model_),
+  first_visible_: first_visible_index,
+  paint_: paint,
+  set_mode_colors_: (mode) => void mirror.set_mode_colors_(mode),
+  ended_: () => {
+    mirror.clear();
+    find_mode.end();
+    release_if_idle();
+  },
+});
+
+// What a handler answers when it got no session: the reason, or nothing more to say when the sink's entry already showed it.
+const no_session = (failed: string | undefined): Outcome => (failed ? { ok: false, message: failed } : { ok: true, cancelled: true });
 
 // The caret goes to the count-th match, and the match is the current one for the highlights. With fewer matches the caret stays.
 function move_to_find(open: Session, find: CharFind, count: number, again: boolean): void {
@@ -180,16 +146,16 @@ function move_to_find(open: Session, find: CharFind, count: number, again: boole
   paint(open);
 }
 
-const SESSION_MODES: readonly ExitDestination[] = ["caret", "visual", "visual_line"];
-
 const sink_for = (mode: CaretMode) => ({
   // Showing the caret on entry is what makes entering the mode draw it at once.
   enter: () => {
     find_mode.end();
-    const started = ensure_session(mode);
-    if (typeof started === "string") page.desertfox_host.show_toast_(started);
+    const failed = sessions.enter_(mode);
+    if (failed) page.desertfox_host.show_toast_(failed);
   },
   on_token_: (token: string): "handled" | "pass" => {
+    // A click ended the visual mode, so the keymap reads this key in caret mode.
+    if (mode !== "caret" && sessions.take_click_()) return "pass";
     // Escape only ends the find, in the visual modes too.
     if (find_mode.is_live_()) return find_mode.on_token_(token);
     if (mode === "caret" || !is_escape(token)) return "pass";
@@ -198,19 +164,17 @@ const sink_for = (mode: CaretMode) => ({
     return "handled";
   },
   live_: find_mode.is_live_,
-  // Between caret and the visual modes the highlight stays. Every other way out clears it.
   exit: (destination: ExitDestination) => {
-    const is_search_line = destination === "cmdline" && searching_from !== undefined && searching_from === session;
     find_mode.end();
-    if (!SESSION_MODES.includes(destination) && !is_search_line) end_session();
+    sessions.exit_(destination);
   },
 });
 
 // The key layer read the target, so a find key is a plain command. A line (`:caret.find x`) runs in normal mode, where there is no session to move.
 const handle_find = (args: Record<string, unknown>): Outcome | undefined => {
   if (!SESSION_MODES.includes(page.desertfox_host.get_mode())) return;
-  const open = ensure_session(session?.mode ?? "caret");
-  if (typeof open === "string") return { ok: false, message: open };
+  const open = sessions.current_();
+  if (typeof open !== "object") return no_session(open);
   last_find = { char: args.char as string, direction: (args.direction as CharFind["direction"]) ?? "forward", till: args.till === true };
   find_mode.start();
   move_to_find(open, last_find, args.count as number, false);
@@ -218,8 +182,8 @@ const handle_find = (args: Record<string, unknown>): Outcome | undefined => {
 };
 
 const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
-  const open = ensure_session(session?.mode ?? "caret");
-  if (typeof open === "string") return { ok: false, message: open };
+  const open = sessions.require_("caret");
+  if (typeof open !== "object") return no_session(open);
   if (args.unit === "find_repeat") {
     if (!last_find) return;
     const reversed = args.direction === "back";
@@ -253,7 +217,7 @@ function run_in_background(id: string, args: Record<string, unknown>): Promise<O
 
 const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> | undefined => {
   find_mode.end();
-  const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
+  const open = sessions.selected_();
   if (typeof open === "string") return { ok: false, message: open };
   const action = args.action as "yank" | "swap" | "search";
   if (action === "swap") {
@@ -263,10 +227,10 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
   }
   const text = selected_text(open.model_.text, open.span_);
   if (action === "search") return run_in_background("open.search", { query: text });
-  const run = visual_runs;
+  const run = open.generation_;
   // Visual mode stays until the copy is done, so a refused copy leaves the selection to retry.
   return yank_text(navigator.clipboard, text, args.register as string | undefined, {
-    is_same_session_: () => visual_runs === run && session === open && is_visual(open.mode),
+    is_same_session_: () => sessions.is_run_(run) && is_visual(open.mode),
     toast: page.desertfox_host.show_toast_,
     leave_visual_: () => page.desertfox_host.set_mode_("caret"),
   });
@@ -275,9 +239,8 @@ const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> |
 // A refused object leaves the selection as it was. Line visual mode widens every selection to whole lines, so an object leaves it for character visual mode, as in vim.
 const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
   find_mode.end();
-  if (session?.mode === "visual_line") page.desertfox_host.set_mode_("visual");
-  const open = ensure_session("visual");
-  if (typeof open === "string") return { ok: false, message: open };
+  const open = sessions.require_("visual");
+  if (typeof open !== "object") return no_session(open);
   const cursor = select_object(open.model_.text, open.cursor, args as Parameters<typeof select_object>[2]);
   if (!cursor) return { ok: false, message: `No ${args.object} here` };
   open.cursor = cursor;
@@ -288,7 +251,7 @@ const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
 // Line breaks inside the selection are spaces, so a URL or a search sees one line. A blank selection stays selected.
 const handle_open = (args: Record<string, unknown>): Outcome | Promise<Outcome> => {
   find_mode.end();
-  const open = ensure_session(session?.mode === "visual_line" ? "visual_line" : "visual");
+  const open = sessions.selected_();
   if (typeof open === "string") return { ok: false, message: open };
   const text = selected_text(open.model_.text, open.span_).replace(/\s+/g, " ").trim();
   if (text === "") return { ok: false, message: "Nothing to open in the selection" };
@@ -307,6 +270,7 @@ const escape_regex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
 // What `*` and `#` search for and where it starts. A visual selection is searched as text. Otherwise it is the word under the caret, whole.
 // With no session the start of the visible text stands in for the caret.
 function word_target(): { pattern: string; from: DomPoint } | string {
+  const session = sessions.open_();
   const model = session?.model_ ?? page_text.current();
   if (model.text === "") return "No text here";
   const at = session ? undefined : (find.position(model) ?? first_visible_index(model));
@@ -326,21 +290,12 @@ function word_target(): { pattern: string; from: DomPoint } | string {
   return { pattern, from: model.point_at_(first) };
 }
 
-// A session searches from its caret, so it first catches up with the page. Normal mode has no session.
-const open_session_now = () => (session ? ensure_session(session.mode) : undefined);
-
-// No caret can show on a page that lost all its text, so the session ends, as an entry on such a page does.
-function end_empty_session(): void {
-  end_session();
-  if (SESSION_MODES.includes(page.desertfox_host.get_mode())) page.desertfox_host.set_mode_("normal");
-}
-
 // After a search the session catches up with the page, and with `take_match` its caret goes to the current match. It paints when either changed something.
 // A match in text the page added since the session read it needs the catch-up first.
 function follow_search(open: Session, take_match: boolean): void {
   const model_before = open.model_;
   // Paint runs before the next mode change, so a frame that left the page must leave the model first.
-  if (!catch_up(open)) return end_empty_session();
+  if (!sessions.read_again_(open)) return sessions.end_empty_();
   const landed = take_match ? find.position(open.model_) : undefined;
   if (landed !== undefined) {
     open.cursor = with_caret(open.cursor, landed, is_visual(open.mode));
@@ -351,14 +306,20 @@ function follow_search(open: Session, take_match: boolean): void {
 
 const found_match = (outcome: Outcome) => outcome.ok && !("cancelled" in outcome && outcome.cancelled);
 
-// `n` and `N`: step to the match, and an open session takes its caret there.
+// A search step follows only the run it started from, so it takes the generation before its await: a mode switch to another visual run bumps the generation on the same session object.
+function follow_step(started: Session | undefined, run: number | undefined, outcome: Outcome): void {
+  if (started && sessions.is_run_(run)) follow_search(started, found_match(outcome));
+}
+
+// `n` and `N`: step to the match, and an open session takes its caret there. A session searches from its caret, so it first catches up with the page. Normal mode has no session.
 async function find_step(reverse: boolean): Promise<Outcome> {
   find_mode.end();
   try {
-    const started = open_session_now();
+    const started = sessions.current_();
     if (typeof started === "string") return { ok: false, message: started };
+    const run = started?.generation_;
     const outcome = await find.step(reverse, started && started.model_.point_at_(started.cursor.caret));
-    if (session) follow_search(session, found_match(outcome));
+    follow_step(started, run, outcome);
     return outcome;
   } finally {
     release_if_idle();
@@ -370,24 +331,17 @@ async function find_step(reverse: boolean): Promise<Outcome> {
 async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
   find_mode.end();
   try {
-    const started = open_session_now();
+    const started = sessions.current_();
     if (typeof started === "string") return { ok: false, message: started };
     const target = word_target();
     if (typeof target === "string") return { ok: false, message: target };
+    const run = started?.generation_;
     const outcome = await find.jump(target.pattern, direction, target.from);
-    if (session) follow_search(session, found_match(outcome));
+    follow_step(started, run, outcome);
     return outcome;
   } finally {
     release_if_idle();
   }
-}
-
-// The search line closed on a session. Enter takes the caret to the match, and either way the mode goes back to the session's.
-async function end_session_search(from: Session, keep: boolean): Promise<void> {
-  if (session !== from) return;
-  // Painted before the mode change, because entering the mode adopts any page selection that differs from the last paint.
-  follow_search(from, keep);
-  if (session === from) page.desertfox_host.set_mode_(from.mode);
 }
 
 // A bundle may run twice, and a second run would hold fresh state next to the first.
@@ -407,9 +361,9 @@ if (!page.desertfox_caret_ready) {
     find_mode.end();
     const direction = args.direction === "backward" ? "backward" : "forward";
     if (args.source === "word") return find_word(direction);
-    const started = open_session_now();
+    const started = sessions.current_();
     if (typeof started === "string") return { ok: false, message: started };
-    searching_from = started;
+    sessions.hold_for_search_();
     find.begin(direction, started?.model_.point_at_(started.cursor.caret));
     return page.desertfox_host.run_command_("cmdline.open", "cmdline", { search: direction });
   });
@@ -420,9 +374,8 @@ if (!page.desertfox_caret_ready) {
   page.desertfox_host.register_handler_("find.end", async (args) => {
     const keep = args.keep === true;
     await find.end(keep);
-    const from = searching_from;
-    searching_from = undefined;
-    if (from) await end_session_search(from, keep);
+    // The search line closed on a session. Enter takes the caret to the match, and either way the mode goes back to the session's.
+    sessions.release_search_((open) => follow_search(open, keep));
     release_if_idle();
   });
   page.desertfox_host.register_handler_("find.clear", () => find.clear());
