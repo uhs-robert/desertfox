@@ -110,6 +110,7 @@ Smooth scrolls restart each other. Three `scrollBy` calls of 400 px in one tick 
 
 These are Firefox defaults that the design relies on. Nobody has measured them in this project yet.
 
+- Events that a content script creates, such as the mouse and drag events of the grab keys (`;g`, `;G`), have `isTrusted` false. A page that checks `isTrusted` ignores them, so the drag does not work there. Pages that do not check it follow the drag. See [Move and click](../README.md#-features).
 - When focus is in page content and not in a field, `/` starts Quick Find and `'` starts links-only Quick Find. DesertFox cancels both keys outside insert, ignore, hint and cmdline mode, see [Keys and modes](design.md#keys-and-modes).
 
 ## Iframe color-scheme and the first paint (issue 243)
