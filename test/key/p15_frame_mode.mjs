@@ -16,9 +16,10 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     }`);
   // The badge is read from the page, not from the page's indicator reports: two reports sent 1 ms apart can reach the server out of order.
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
-  async function expect_badge_and_mode(label) {
+  // A child frame that holds the focus in normal mode shows FRAME on the badge, and the stored mode stays normal.
+  async function expect_badge_and_mode(label, mode = label === "FRAME" ? "normal" : label.toLowerCase()) {
     let seen;
-    await poll_until(`the ${label} badge and stored tab mode`, async () => (seen = [await badge(), await stored_tab_mode()]).join() === [label, label.toLowerCase()].join(), { timeout_ms: 3000, expected_timeout: true }).catch(() =>
+    await poll_until(`the ${label} badge and stored tab mode`, async () => (seen = [await badge(), await stored_tab_mode()]).join() === [label, mode].join(), { timeout_ms: 3000, expected_timeout: true }).catch(() =>
       expect(false, `the badge and the stored tab mode are ${seen}, expected ${label}`),
     );
   }
@@ -237,7 +238,7 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await sleep(700);
     expect((await frame_focus_count()) === 2, `the frame took the focus ${await frame_focus_count()} times, expected 2: at load and once after the hand-off`);
     expect((await in_active_tab(`document.activeElement.id`)) === "input_frame", "the hidden frame does not hold the focus the page gave it");
-    await expect_badge_and_mode("NORMAL");
+    await expect_badge_and_mode("FRAME");
     // The next Escape hands off once more, and the page answers once more.
     await press_keys("-k", "Escape");
     await poll_until("the page to focus its frame a third time", async () => (await frame_focus_count()) >= 3);
@@ -320,7 +321,7 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await in_active_tab(`{ const inner = document.getElementById("same").contentDocument; inner.body.insertBefore(inner.createElement("input"), inner.body.firstChild).focus(); }`);
     await expect_badge_and_mode("INSERT");
     await press_keys("-k", "Escape");
-    await expect_badge_and_mode("NORMAL");
+    await expect_badge_and_mode("FRAME");
     const same_frame_scroll_y = () => in_active_tab(`document.getElementById("same").contentWindow.scrollY`);
     await press_keys("j");
     await poll_until("j to scroll the visible frame", async () => (await same_frame_scroll_y()) > 0);
@@ -351,7 +352,7 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
     await poll_until("the cross-origin frame's start report to claim the focus in normal mode", async () => (start_claim = await focused_child())?.frame_id > 0 && start_claim.mode === "normal", { timeout_ms: 3000, expected_timeout: true }).catch(() =>
       expect(false, `the start report of the cross-origin frame left the focused child as ${JSON.stringify(start_claim)}`),
     );
-    await expect_badge_and_mode("NORMAL");
+    await expect_badge_and_mode("FRAME");
     // The top page cannot reach into the other site's frame, so the field is added from the extension.
     const focus_field_in_cross_frame = `if (location.search.includes("p15_frames_cross")) { const field = document.querySelector("input") ?? document.body.insertBefore(document.createElement("input"), document.body.firstChild); field.focus(); }`;
     await active_tab(`(tab) => browser.tabs.executeScript(tab.id, { allFrames: true, code: ${JSON.stringify(focus_field_in_cross_frame)} }).then(() => true)`);

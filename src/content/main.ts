@@ -41,7 +41,8 @@ let page_reply: PageKeymap | undefined;
 function refresh_mode_indicator(): void {
   // A child frame's pass-next flag does not reach the top frame, so the badge shows its mode alone.
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
-  const site_label = focused_frame_mode ? undefined : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
+  // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
+  const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
   show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label));
 }
 
@@ -350,8 +351,10 @@ function start(): void {
   });
   // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
   // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
-  // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
+  // A child frame also reports on blur, so its claim on the focus ends. A claim it sent from a field's blur can reach the background after the report of the frame that took the focus, which would leave the badge on FRAME.
+  // The top frame needs no blur report: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
   listen("focus", report_mode, false);
+  if (window !== window.top) listen("blur", report_mode, false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen("pageshow", report_mode, false);
@@ -404,6 +407,8 @@ function start(): void {
       sync_mode_to_focus();
     } else if (message.type === "frame_mode") {
       focused_frame_mode = message.mode;
+      // Only the top frame hears `frame_mode`. Its watch on the focused child frame lives in the ui bundle, loaded when a child first takes the focus.
+      if (message.mode || bundles.has_handler_("ui.frame_watch")) void bundles.run_command_("ui.frame_watch", "ui", { on: !!message.mode }, "", false);
       refresh_mode_indicator();
     }
     else if (message.type === "tree_updated") void ask_keymap();

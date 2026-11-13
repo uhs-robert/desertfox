@@ -27,6 +27,8 @@ export type RunRequest = {
   mode: Mode;
   // Set by the hints bundle on its link opens, so `.` keeps showing hints. The background honors it for a lone `open.url` only.
   from_hints?: true;
+  // Set by the command line host. A line that draws in the top frame for a subframe's keys runs the command in that subframe.
+  from_line?: true;
 };
 
 // `focus` says whether the frame's own document holds the keyboard focus. The tab shows the mode of the frame that does.
@@ -78,8 +80,23 @@ export type WhichKeyRow = {
 };
 
 // From the `cmdline` host script when it mounts the line. The answer is a one-time ticket, or undefined outside a tab.
+// `target_frame` is the frame whose keys opened a line that draws in the top frame: a command run from that line acts there.
 export type IssueCmdlineTicket = {
   type: "issue_cmdline_ticket";
+  target_frame?: number;
+};
+
+// A frame asks the background to run one handler of a bundle in the top frame (`to: "top"`) or in another frame of its tab. Only the handlers `relay_plan` knows pass, each in its own direction. The background adds `from_frame` to the args.
+export type Relay = {
+  type: "relay";
+  to: "top" | number;
+  id: string;
+  args: Record<string, unknown>;
+};
+
+// The `;f` pick focused a frame: the background shows the one-time toast in the top frame.
+export type FrameCue = {
+  type: "frame_cue";
 };
 
 // From the command line page when it opens: asks for the history, the commands, and the lists the grammar needs to read bare words.
@@ -567,7 +584,7 @@ export type HintFramesUnhover = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | Relay | FrameCue | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

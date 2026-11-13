@@ -2,7 +2,7 @@
 
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
 import { selector_of } from "./selector_of.ts";
-import type { MediaPin } from "../../shared/messages.ts";
+import type { FrameCue, MediaPin } from "../../shared/messages.ts";
 import { parent_across_shadow, player_box } from "../player_box.ts";
 import { best_effort } from "../../shared/swallow.ts";
 
@@ -248,7 +248,12 @@ function pin_media(target: Target): void | Refusal {
 export function perform(action: HintAction, target: Target, deps: ActionDeps, with_background = false): void | Refusal | Promise<unknown> {
   const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
-  if (action === "focus") return focus_target(target);
+  if (action === "focus") {
+    focus_target(target);
+    // Only `;f` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see.
+    if (is_frame_element(target)) void best_effort(browser.runtime.sendMessage({ type: "frame_cue" } satisfies FrameCue));
+    return;
+  }
   if (action === "hover") return hover(target);
   if (action === "double_click") return double_click_like_a_mouse(target, pointer_from);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);

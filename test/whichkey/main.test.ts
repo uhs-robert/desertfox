@@ -7,9 +7,11 @@ test("help.whichkey asks for the keys of the mode the host reports", async () =>
   const asked: unknown[] = [];
   let mode = "caret";
   Object.assign(globalThis, {
-    window: { desertfox_host: { register_handler_: (id: string, run: BundleHandler) => handlers.set(id, run), get_mode: () => mode } },
+    window: { addEventListener: () => {}, desertfox_host: { register_handler_: (id: string, run: BundleHandler) => handlers.set(id, run), get_mode: () => mode } },
     browser: { runtime: { sendMessage: (message: unknown) => (asked.push(message), new Promise(() => {})) } },
   });
+  const fake_window = (globalThis as unknown as { window: { top?: unknown } }).window;
+  fake_window.top = fake_window;
   await import("../../src/content/whichkey/main.ts");
   handlers.get("help.whichkey")!({});
   mode = "visual";
