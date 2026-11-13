@@ -300,7 +300,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     quality_reports.receive(sender.tab?.id, sender.frameId, request);
     return rule_for_report(request, { is_disabled: read_disabled, value_for_frame: () => media_quality_reply(browser.storage.local, sender.url) });
   }
-  if (request?.type === "quality_probe") return void media_quality.probe_reported(sender.tab?.id, sender.frameId, request.address);
+  if (request?.type === "quality_probe") return media_quality.probe_reported(sender.tab?.id, sender.frameId, request.address);
   if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
   if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
   if (request?.type === "replay_end") return macro_replay.ended();

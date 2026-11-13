@@ -496,8 +496,6 @@ if (kind.includes("shadow")) {
 if (kind.includes("blank")) {
   const blank = document.createElement("iframe");
   document.body.append(blank);
-  // The probe looks for a video element, as every real hls.js page has one.
-  blank.contentDocument.body.append(blank.contentDocument.createElement("video"));
   blank.contentDocument.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
 }
 // An in-site navigation: the address changes first, and the next video starts at the site's own level 800 ms later.

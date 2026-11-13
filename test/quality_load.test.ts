@@ -40,7 +40,7 @@ async function load_page({ videos, off = false }: Page) {
     const probe = create_probe({
       has_video: () => video,
       address: () => web,
-      report: () => void quality.probe_reported(1, frame_id, web),
+      report: () => quality.probe_reported(1, frame_id, web),
       watch: () => undefined,
       sleep: () => new Promise<void>((wake) => timers.push(wake)),
       now: () => 0,

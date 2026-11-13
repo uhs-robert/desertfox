@@ -459,11 +459,11 @@ Counted from the unit tests (`test/quality_load.test.ts`) against a fake backgro
 | Message or work, per frame | Before | After |
 | --- | --- | --- |
 | `quality.js` injections | 3 | 0 (the 3 probe injections remain, and a frame with a video loads the bundle once) |
-| `quality_report` messages | 3 | 3 |
+| `quality_report` messages | 3 | 0 (a frame with a video sends 1, from the bundle) |
 | `quality_rule` messages | 3 | 0 (the message is gone) |
 | `read_media_quality` messages | 11 | 0 (the message is gone) |
 | Keymap reads in the background | 11 | 0 |
 | Driver probes | 100 | 0 |
 | Timers that wait | one poll for 10 s | one 2 s look-again timer for 10 s |
 
-The off check reads the keymap once per trigger, about 3 reads per hard load for the whole tab, not per frame. With the rule `off` everywhere (the global value `off`, no site row sets one) the count is 0 injections. A frame with a video costs one keymap read per report, which is 3 per load. Each report that comes from a frame with a video carries the rule in its answer. The 200-frame page that cost about 2,200 `read_media_quality` messages in 10 s now costs none.
+The off check reads the keymap once per trigger, about 3 reads per hard load for the whole tab, not per frame. With the rule `off` everywhere (the global value `off`, no site row sets one) the count is 0 injections. A frame with a video costs one keymap read per load. Each report that comes from a frame with a video carries the rule in its answer. The 200-frame page that cost about 2,200 `read_media_quality` messages in 10 s now costs none.
