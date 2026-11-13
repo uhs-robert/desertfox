@@ -94,7 +94,6 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   filter.type = "search";
   filter.placeholder = "Filter by keys, command or mode";
   filter.setAttribute("aria-label", "Filter bindings");
-  filter;
   filter.addEventListener("input", () => session.set_filter(filter.value));
   const status = el("p", "desertfox-settings-error");
   status.setAttribute("role", "status");
