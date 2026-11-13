@@ -37,6 +37,8 @@ let stop_quickmarks: (() => void) | undefined;
 let stop_section_hold: (() => void) | undefined;
 // Its one window listener is registered below, ahead of `content.js` and the drawer's Escape handler.
 const key_capture = create_key_capture();
+// Registered here, ahead of `content.js`, whose own capture listener stops a bound key such as j before any listener added later. Any key ends the section hold.
+window.addEventListener("keydown", () => stop_section_hold?.(), { capture: true, passive: true });
 // The hold of the mounted import section. A new mount replaces it, and the old one can no longer change the gate.
 let transfer_hold: UserCssHold = NO_USER_CSS_HOLD;
 // The same for the files editor, so its consent card and the import review never release each other.
@@ -59,8 +61,8 @@ browser.storage.onChanged.addListener((changes, area) => {
 
 const SECTION_HOLD_MS = 5000;
 
-// The Keys, files and settings boxes fill in after the render and push the headings below them down, so a heading scrolled to at render time ends up far off screen. Scroll to it again as the page grows, until the reader scrolls or types or the load is over.
-// A bound key such as j never reaches a keydown listener here, because earlier capture listeners stop it. So a scroll to a place the hold did not set also ends it, which covers a scrollbar drag too.
+// The Keys, files and settings boxes fill in after the render and push the headings below them down, so a heading scrolled to at render time ends up far off screen. Scroll to it again as the page grows, until the reader scrolls or types or the load is over. The keydown stop is registered at the top of the file.
+// A scroll to a place the hold did not set also ends it, which covers a scrollbar drag too.
 // The scroll event of the hold's own scrollIntoView can arrive after the page grew again. A scroll event with a changed page height is therefore not judged: it only moves the expected position.
 function hold_section_in_view(heading: HTMLElement): void {
   const page = document.querySelector(".desertfox-help-page");
@@ -74,7 +76,7 @@ function hold_section_in_view(heading: HTMLElement): void {
     held_height = root.scrollHeight;
   });
   observer.observe(page);
-  const reader_events = ["wheel", "touchstart", "pointerdown", "keydown"];
+  const reader_events = ["wheel", "touchstart", "pointerdown"];
   const on_scroll = () => {
     if (root.scrollHeight !== held_height) {
       held_y = window.scrollY;
