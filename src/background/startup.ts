@@ -5,7 +5,8 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
-import type { CompileInput, CompileOutput } from "./compile.ts";
+import type { CompileInput } from "./compile.ts";
+import type { KeymapState } from "./keymap_message.ts";
 import { load_layers, store_layers } from "./edit_layers.ts";
 import type { EditLayers, LayerKind } from "./edit_layers.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -17,7 +18,7 @@ import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.t
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP } from "./toolbar.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
-import type { SlotMap, SlotPlan } from "./slots.ts";
+import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
 import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
@@ -177,11 +178,12 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
 }
 
 // `change_edits` for one edit layer, in the same queue, so a key edit and a `:set` never publish over each other.
-export function change_layers<K extends LayerKind>(kind: K, decide: (current: EditLayers[K], config: MergedConfig) => EditLayers[K] | undefined): Promise<void> {
+// `decide` gets the key editor's state of this turn, so its slot check sees every change that landed before it.
+export function change_layers<K extends LayerKind>(kind: K, decide: (current: EditLayers[K], state: KeymapState) => EditLayers[K] | undefined): Promise<void> {
   return in_change_queue(async () => {
     const config = await get_config();
     const before = await load_layers();
-    const changed = decide(before[kind], config);
+    const changed = decide(before[kind], await keymap_state(config, before));
     if (changed === undefined) return;
     const next: EditLayers = { ...before, [kind]: changed };
     const step = await (load_step as Promise<LoadStep>);
@@ -202,14 +204,15 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: Ed
   });
 }
 
-// What the key editor reads, in the change queue so a change still writing or rolling back is not seen half done: the config in force, the stored layers, and a compile of that config under any layers.
-export function read_keymap_state(): Promise<{ config: MergedConfig; layers: EditLayers; slot_map: SlotMap; compile: (layers: EditLayers) => CompileOutput }> {
-  return in_change_queue(async () => {
-    const config = await get_config();
-    const layers = await load_layers();
-    const input = await compile_input(config, layers);
-    return { config, layers, slot_map: await read_slot_map(), compile: (other) => compile_config({ ...input, keymap_edits: other.keymap }) };
-  });
+// The config in force, the stored layers, the slot map and a compile of that config under any layers.
+async function keymap_state(config: MergedConfig, layers: EditLayers): Promise<KeymapState> {
+  const input = await compile_input(config, layers);
+  return { config, layers, slot_map: await read_slot_map(), compile: (other) => compile_config({ ...input, keymap_edits: other.keymap }) };
+}
+
+// What the key editor reads, in the change queue so a change still writing or rolling back is not seen half done.
+export function read_keymap_state(): Promise<KeymapState> {
+  return in_change_queue(async () => keymap_state(await get_config(), await load_layers()));
 }
 
 // Publishes again under the current edits, for a change that is not an edit: the toolbar switch. It runs in the change queue like the edits.

@@ -26,7 +26,8 @@ export type KeymapMessageDeps = {
   default_keymap: KeymapConfig;
   registry: Registry;
   read_keymap_state: () => Promise<KeymapState>;
-  change_layers: (kind: "keymap", decide: (current: KeymapEdits, config: MergedConfig) => KeymapEdits | undefined) => Promise<void>;
+  // `decide` gets the state read in the same queue turn as the change, so no other tab's change lands between them.
+  change_layers: (kind: "keymap", decide: (current: KeymapEdits, state: KeymapState) => KeymapEdits | undefined) => Promise<void>;
 };
 
 // The text keymap.toml would write for an invocation. A prompted param goes back into the args, and the leading `:` marks the prompt.
@@ -186,6 +187,16 @@ function with_skipped_edits(rows: BindingRow[], compiled: CompileOutput): Bindin
   });
 }
 
+// Why a set would not land, or undefined when it lands. A move checks with its old key freed, so a full set of slots has room for the new chord.
+function set_refusal(state: KeymapState, deps: KeymapMessageDeps, request: { mode: KeymapMode; keys: string; text: string; old_keys: string | undefined }): { ok: false; message: string; problems: string[] } | undefined {
+  const { mode, keys, old_keys } = request;
+  const checked = old_keys === undefined ? state : { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, mode, old_keys) } };
+  const verdict = check_candidate(checked, deps.registry, request);
+  if (verdict.saves) return undefined;
+  const problems = [...verdict.problems, ...verdict.warnings];
+  return { ok: false, message: `${mode} "${keys}" not saved: ${problems[0] ?? "the compile skips it"}`, problems };
+}
+
 const failure = (error: unknown): { ok: false; message: string } => ({ ok: false, message: error instanceof Error ? error.message : String(error) });
 
 export function create_keymap_messages(deps: KeymapMessageDeps) {
@@ -230,19 +241,16 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
     try {
       if (action === "set") {
         if (typeof request.text !== "string" || request.text.trim() === "") return { ok: false, message: "the edit names no command" };
-        // The check and the change are two queue turns: a reload between them can still make the text bad, and then the compile drops it with a warning.
-        let state = await deps.read_keymap_state();
-        if (old_keys !== undefined) state = { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, mode, old_keys) } };
-        const verdict = check_candidate(state, deps.registry, { mode, keys, text: request.text });
-        if (!verdict.saves) {
-          const problems = [...verdict.problems, ...verdict.warnings];
-          return { ok: false, message: `${mode} "${keys}" not saved: ${problems[0] ?? "the compile skips it"}`, problems };
-        }
+        // A fast path only: another tab can take the last free slot before the change runs, so the change checks again in its own turn.
+        const early = set_refusal(await deps.read_keymap_state(), deps, { mode, keys, text: request.text, old_keys });
+        if (early) return early;
       }
       let row: BindingRow | undefined;
       let changed = false;
       let already_unbound = false;
-      await deps.change_layers("keymap", (current, config) => {
+      let refused: ReturnType<typeof set_refusal>;
+      await deps.change_layers("keymap", (current, state) => {
+        const { config } = state;
         // A key only an edit binds is unbound by dropping the edit. Unbinding a file or default binding takes an empty text.
         const file_bindings = by_spelling(config.keymap[mode] ?? {});
         const underlying = Object.hasOwn(file_bindings, keys) ? file_bindings[keys] : deps.default_keymap[mode]?.[keys];
@@ -252,12 +260,17 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
           const shown = rows_of(config, current).find((candidate) => candidate.mode === mode && candidate.keys === old_keys)?.text ?? "";
           if (shown !== request.move_from_text) throw new Error(`${old_keys} changed since you opened it. Open the row again.`);
         }
+        if (action === "set" && text !== undefined) {
+          refused = set_refusal(state, deps, { mode, keys, text, old_keys });
+          if (refused) return undefined;
+        }
         const set = with_key_edit(current, mode, keys, text);
         const next = old_keys === undefined ? set : without_binding(set, config, deps.default_keymap, mode, old_keys);
         row = rows_of(config, next).find((candidate) => candidate.mode === mode && candidate.keys === keys);
         changed = JSON.stringify(next) !== JSON.stringify(current);
         return changed ? next : undefined;
       });
+      if (refused) return refused;
       // A key only a generator binds (`search_keys` and the like), or bound nowhere, has nothing here to change.
       if (!changed) return { ok: false, message: `Nothing to change: ${{ set: "it already runs that text", remove: already_unbound ? "it is already unbound" : "no file or default binding to remove", reset: "no edit to reset" }[action]} on ${mode} "${keys}".` };
       const done = { set: old_keys === undefined ? `Bound ${keys} in ${mode} mode` : `Moved ${old_keys} to ${keys} in ${mode} mode`, remove: `Unbound ${keys} in ${mode} mode`, reset: `Reset ${keys} in ${mode} mode` }[action];
