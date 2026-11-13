@@ -53,7 +53,7 @@ async function stop_firefox() {
   await firefox_exited;
   clearTimeout(timer);
 }
-for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { stop_firefox().finally(() => process.exit(130)); });
+for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { void stop_firefox().finally(() => process.exit(130)); });
 
 let rdp;
 for (let attempt = 0; attempt < 120 && !rdp; attempt++) {
@@ -75,7 +75,10 @@ async function chrome_long(async_code, limit_ms) {
     const stored = await chrome(`globalThis.${slot} ?? null`);
     if (typeof stored === "string") {
       await chrome(`(delete globalThis.${slot}, 1)`);
-      return JSON.parse(stored);
+      const value = JSON.parse(stored);
+      // The wrapper above stores a rejection as { error }, and a failed job must fail the run, not pass as a result.
+      if (value !== null && typeof value === "object" && Object.keys(value).length === 1 && typeof value.error === "string") throw new Error(`chrome job failed: ${value.error}`);
+      return value;
     }
   }
   throw new Error("long job timeout");
@@ -153,7 +156,7 @@ try {
   }
   log_row(result.meta);
   for (const page of page_names) {
-    // Run -1 is a warm-up. It stays in the data as the cold first press of a fresh browser, and the analysis leaves it out of the medians.
+    // Run -1 is a warm-up. It stays in the data as the first press on this page in this browser process (only the first page of a tool starts in a fresh browser), and the analysis leaves it out of the medians.
     for (let run = -1; run < timed_runs; run++) {
       await navigate("about:blank");
       await sleep(700);
@@ -193,6 +196,8 @@ try {
       result.runs.push(run_record);
       log_row({ page, run, dcl: run_record.dcl, load: run_record.load, first_press_ms: run_record.press1?.first_ms, labels: run_record.press1?.count, second_press_ms: run_record.press2?.first_ms, content_rss: run_record.mem_load.content_rss, ext_rss: run_record.mem_load.ext_rss });
     }
+    // The error rows stay in the data for diagnosis. A page with no timed run at all fails the tool, so rivals.mjs retries it.
+    if (!result.runs.some((run_record) => run_record.page === page && run_record.run >= 0 && !run_record.error)) throw new Error(`no timed run of ${page} loaded`);
   }
 } catch (error) {
   result.error = String(error.stack ?? error);
