@@ -2,7 +2,7 @@
 # This workflow holds the AMO signing key and decides what code every beta install runs. Rules that keep it safe:
 #   - It never runs for a pull request or a fork. The only triggers are the schedule and a manual dispatch, and the dispatch takes no input.
 #   - The AMO key exists only in the sign job, which runs in the beta-signing environment on main. That job installs with npm ci --ignore-scripts, runs no build and runs only the sign_only recipe on a dist/ that the build job made.
-#   - The build job runs the repo's build with no secret and no write token. The publish job holds the write token, installs no npm dependency and runs no build tool. This keeps build code away from the AMO key and from the write token. It does not stop a compromised build from producing a bad dist/ that gets signed: the review of dependency changes is the guard for that.
+#   - The test and build jobs install with npm ci --ignore-scripts. The build job runs the repo's build with no secret and no write token. The publish job holds the write token, installs no npm dependency and runs no build tool. This keeps build code away from the AMO key and from the write token. It does not stop a compromised build from producing a bad dist/ that gets signed: the review of dependency changes is the guard for that.
 #   - A dispatch from another branch runs plan and test only.
 #   - GH_TOKEN is set only on the steps that run gh.
 name: beta
@@ -99,7 +99,7 @@ jobs:
         with:
           node-version: 24
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-      - run: npm ci --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: just test
 
   # Builds with no secret and no write token, and hands dist/ and the stamped hosts to the sign job as an artifact.
@@ -140,7 +140,7 @@ jobs:
         with:
           node-version: 24
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-      - run: npm ci --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Stamp the beta version and update_url in the runner's copy
         run: |
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[1-9][0-9]*$ ]]; then

@@ -422,24 +422,27 @@ release:
     # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
     command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
     gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
-    if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
+    # The key lives in shell variables that are never exported, so the build and install steps below cannot read it. Only the sign command gets it. A key already in the environment moves into those variables first.
+    amo_key="${WEB_EXT_API_KEY:-}"
+    amo_secret="${WEB_EXT_API_SECRET:-}"
+    unset WEB_EXT_API_KEY WEB_EXT_API_SECRET
+    if [ -z "$amo_key" ] || [ -z "$amo_secret" ]; then
         for tool in rbw jq; do
             command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
         done
         rbw unlocked >/dev/null 2>&1 || { echo "release needs an unlocked rbw vault. Run 'rbw unlock', then retry." >&2; exit 1; }
         entry_json=$(rbw get --raw "$AMO_RBW_ENTRY") || { echo "release could not read the rbw entry '$AMO_RBW_ENTRY'." >&2; exit 1; }
-        WEB_EXT_API_KEY=$(jq -r '.notes // ""' <<<"$entry_json" | grep -o -m1 'user:[0-9]*:[0-9]*' || true)
-        if [ -z "$WEB_EXT_API_KEY" ]; then
+        amo_key=$(jq -r '.notes // ""' <<<"$entry_json" | grep -o -m1 'user:[0-9]*:[0-9]*' || true)
+        if [ -z "$amo_key" ]; then
             echo "The notes of rbw entry '$AMO_RBW_ENTRY' hold no issuer (user:N:N)." >&2
             exit 1
         fi
-        WEB_EXT_API_SECRET=$(jq -r '.data.password // ""' <<<"$entry_json")
+        amo_secret=$(jq -r '.data.password // ""' <<<"$entry_json")
         unset entry_json
-        if [ -z "$WEB_EXT_API_SECRET" ]; then
+        if [ -z "$amo_secret" ]; then
             echo "The password of rbw entry '$AMO_RBW_ENTRY' is empty." >&2
             exit 1
         fi
-        export WEB_EXT_API_KEY WEB_EXT_API_SECRET
     fi
     just release_bump
     version=$(jq -r .version src/manifest.json)
@@ -450,7 +453,7 @@ release:
         echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json, so its hosts could not update. Nothing was signed. Fix the build, undo the bump with 'git checkout -- package.json package-lock.json src/manifest.json', then rerun 'just release'." >&2
         exit 1
     fi
-    just sign
+    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just sign_only
     just release_install
     just release_commit_push
     xpi=$(ls web-ext-artifacts/*.xpi)
