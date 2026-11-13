@@ -128,6 +128,33 @@ class ReadConfigTest(ConfigDirCase):
             file.write(b"a\xffb")
         self.assertEqual(self.read()["files"]["style.css"], "a�b")
 
+    def test_a_fifo_is_skipped_without_blocking_and_reported_as_an_entry_naming_it(self):
+        os.mkfifo(os.path.join(self.config, "style.css"))
+        os.makedirs(os.path.join(self.config, "snippets"))
+        os.mkfifo(os.path.join(self.config, "snippets", "a.js"))
+        self.put("settings.toml", "a = 1\n")
+        reply = self.read()
+        self.assertTrue(reply["ok"])
+        self.assertEqual(reply["files"], {"settings.toml": "a = 1\n", "style.css/": "", "snippets/a.js/": ""})
+
+    def test_a_file_over_one_mib_is_skipped_and_one_of_exactly_one_mib_is_read(self):
+        exact = self.put("settings.toml", "a" * host.MAX_CONFIG_FILE_BYTES)
+        over = self.put("style.css", "a" * (host.MAX_CONFIG_FILE_BYTES + 1))
+        self.assertEqual(len(host.read_text(exact)), host.MAX_CONFIG_FILE_BYTES)
+        self.assertIsNone(host.read_text(over))
+        self.assertEqual(host.read_files(self.config), {"settings.toml": "a" * host.MAX_CONFIG_FILE_BYTES, "style.css/": ""})
+
+    def test_a_link_follows_to_a_regular_file_but_a_link_to_a_big_file_is_skipped(self):
+        outside = os.path.join(self.tmp.name, "outside")
+        os.makedirs(outside)
+        with open(os.path.join(outside, "small"), "w", encoding="utf-8") as file:
+            file.write("a = 1\n")
+        with open(os.path.join(outside, "big"), "wb") as file:
+            file.write(b"x" * (host.MAX_CONFIG_FILE_BYTES + 1))
+        os.symlink(os.path.join(outside, "small"), os.path.join(self.config, "settings.toml"))
+        os.symlink(os.path.join(outside, "big"), os.path.join(self.config, "style.css"))
+        self.assertEqual(self.read()["files"], {"settings.toml": "a = 1\n", "style.css/": ""})
+
     def test_unreadable_file_is_an_error_naming_it(self):
         path = self.put("settings.toml", "a = 1\n")
         os.chmod(path, 0)
@@ -139,12 +166,15 @@ class ReadConfigTest(ConfigDirCase):
         self.assertIn("settings.toml", reply["error"])
 
     def test_reply_above_the_cap_is_a_clear_error_and_below_it_passes(self):
-        self.put("snippets/big.js", "x" * (host.MAX_REPLY_BYTES + 10))
+        # Each file is under the per-file cap, so only the sum crosses the reply cap.
+        half = host.MAX_REPLY_BYTES // 2 + 10
+        self.put("snippets/a.js", "x" * half)
+        self.put("snippets/b.js", "x" * half)
         reply = self.read()
         self.assertFalse(reply["ok"])
         self.assertIn("over Firefox's", reply["error"])
         self.assertIn(str(host.MAX_REPLY_BYTES), reply["error"])
-        self.put("snippets/big.js", "x" * (host.MAX_REPLY_BYTES - 2000))
+        self.put("snippets/b.js", "x" * (host.MAX_REPLY_BYTES // 2 - 2000))
         self.assertTrue(self.read()["ok"])
 
     def test_reading_writes_nothing(self):

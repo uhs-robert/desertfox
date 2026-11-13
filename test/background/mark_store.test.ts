@@ -104,6 +104,17 @@ test("cleanup drops the private marks only when no private window is open", asyn
   assert.equal(local.values.size, 1);
 });
 
+test("clear_normal drops the local and global marks of the normal windows and keeps the private ones", async () => {
+  const { store, local } = make();
+  await store.run(set("a", 50), false);
+  await store.run(set("A", 60, "https://b.test/"), false);
+  await store.run(set("a", 70), true);
+  await store.clear_normal();
+  assert.equal(local.values.has(MARK_STORAGE_KEY), false);
+  assert.deepEqual(await store.items("https://a.test/p", false), []);
+  assert.equal((await store.items("https://a.test/p", true)).length, 1);
+});
+
 test("the wiring cleans at start and when a window closes", async () => {
   const { store, session } = make();
   await store.run(set("a", 50), true);

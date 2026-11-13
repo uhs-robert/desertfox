@@ -5,7 +5,7 @@ import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDL
 
 export const HISTORY_LIMIT = 100;
 
-type HistoryStorage = Pick<typeof browser.storage.local, "get" | "set">;
+type HistoryStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 type TicketStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
 export type CmdlineServiceDeps = {
@@ -80,6 +80,12 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     // A new page in the tab is not the page that opened the line, and its own embedded copy of the line page must get nothing.
     forget_opener_on_navigation: async (tab_id: number, change: { status?: string | undefined }): Promise<void> => {
       if (change.status === "loading") await deps.tickets.remove(CMDLINE_OPENER_STORAGE_PREFIX + tab_id);
+    },
+    // For a browser-wide history clear: the typed lines hold page addresses. Waits for the writes before it, so a late record cannot bring the old list back.
+    clear_history: (): Promise<void> => {
+      const cleared = last_write.then(() => deps.storage.remove(CMDLINE_HISTORY_STORAGE_KEY));
+      last_write = cleared.catch(() => undefined);
+      return cleared;
     },
     record: (text: string, from_private_window: boolean): Promise<void> => {
       if (from_private_window || text.trim() === "") return Promise.resolve();

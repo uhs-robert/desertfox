@@ -36,6 +36,7 @@ import os
 import re
 import secrets
 import signal
+import stat
 import ssl
 import struct
 import subprocess
@@ -50,6 +51,7 @@ HOST_VERSION = 1
 # `just release_stamp` replaces "dev" with the release version in the shipped copy only. A host that says "dev" runs from a
 # checkout or the main branch, so it never updates itself.
 RELEASE_VERSION = "dev"
+MAX_CONFIG_FILE_BYTES = 1024 * 1024
 # Firefox drops a host reply above 1 MiB, so the host refuses to send one and says why.
 MAX_REPLY_BYTES = 1024 * 1024
 # The request size is not limited by Firefox. The host stops reading a request this large, which only a bug would send.
@@ -88,22 +90,39 @@ def visible_entries(directory):
 
 
 def read_text(path):
+    """The text of a regular file of at most MAX_CONFIG_FILE_BYTES, or None for any other file.
+    Opens without blocking and judges the open descriptor, so a FIFO swapped in after a check cannot hang the host."""
     try:
-        with open(path, "rb") as file:
-            return file.read().decode("utf-8", errors="replace")
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     except OSError as error:
         raise HostError(f"cannot read {path}: {error.strerror or error}") from error
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return None
+        with os.fdopen(descriptor, "rb", closefd=False) as file:
+            raw = file.read(MAX_CONFIG_FILE_BYTES + 1)
+    except OSError as error:
+        raise HostError(f"cannot read {path}: {error.strerror or error}") from error
+    finally:
+        os.close(descriptor)
+    return None if len(raw) > MAX_CONFIG_FILE_BYTES else raw.decode("utf-8", errors="replace")
 
 
 def read_files(directory):
-    """Raw text by path relative to `directory`. A folder entry is `<path>/` with empty text, as the tool reader makes it."""
+    """Raw text by path relative to `directory`. A folder entry is `<path>/` with empty text, as the tool reader makes it.
+    A file the host will not read (not a regular file, or over MAX_CONFIG_FILE_BYTES) gets the same folder entry,
+    so the config build reports an error that names it and config.reload keeps the current config."""
     files = {}
     for name in visible_entries(directory):
         if name in (AUTOCONFIG_NAME, EDITOR_CONFIG_NAME):
             continue
         path = os.path.join(directory, name)
         if not os.path.isdir(path):
-            files[name] = read_text(path) if name in KNOWN_FILES else ""
+            if name not in KNOWN_FILES:
+                files[name] = ""
+                continue
+            text = read_text(path)
+            files[name if text is not None else name + "/"] = "" if text is None else text
         elif name not in KNOWN_DIRS:
             files[name + "/"] = ""
         else:
@@ -111,8 +130,9 @@ def read_files(directory):
                 entry_path = os.path.join(path, entry)
                 if os.path.isdir(entry_path):
                     files[f"{name}/{entry}/"] = ""
-                else:
-                    files[f"{name}/{entry}"] = read_text(entry_path)
+                    continue
+                text = read_text(entry_path)
+                files[f"{name}/{entry}" if text is not None else f"{name}/{entry}/"] = "" if text is None else text
     return files
 
 

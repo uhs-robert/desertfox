@@ -16,6 +16,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
       if (slow_set) await tick();
       Object.assign(data, items);
     },
+    remove: async (key: string) => void delete data[key],
   } as unknown as Parameters<typeof create_cmdline_service>[0]["storage"];
   const session_data: Record<string, unknown> = {};
   const tickets = {
@@ -50,6 +51,16 @@ test("history keeps order, oldest first", async () => {
   const { service, open } = make();
   for (const text of ["a", "b", "c"]) await service.record(text, false);
   assert.deepEqual((await open()).history, ["a", "b", "c"]);
+});
+
+test("clearing the history waits for the pending writes and empties the list", async () => {
+  const { service, open } = make({ slow_set: true });
+  await service.record("a", false);
+  void service.record("b", false);
+  await service.clear_history();
+  assert.deepEqual((await open()).history, []);
+  await service.record("c", false);
+  assert.deepEqual((await open()).history, ["c"]);
 });
 
 test("a line offers the containers, and a private line offers none", async () => {
