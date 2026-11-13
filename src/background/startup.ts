@@ -16,8 +16,8 @@ import { DESKTOP_PALETTE } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP } from "./toolbar.ts";
-import { apply_slot_plan, plan_slots, release_slots, slot_table } from "./slots.ts";
-import type { SlotPlan } from "./slots.ts";
+import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
+import type { SlotMap, SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
 import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
@@ -97,7 +97,13 @@ async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers)
 
   // Read at every publish, so a restart with the switch off, a `:set` and a reload all store the empty keymap.
   const disabled = (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
-  const plan = step.slots?.plan ?? plan_slots(compiled.modes.browser);
+  // The map is read and written only here, and a publish runs in the change queue or before any other, so two saves never read the same map.
+  // A fresh plan is stored before the slots are applied. A failed publish puts the old map back with the rest (`change_layers`, `apply_files`).
+  let plan = step.slots?.plan;
+  if (!plan) {
+    plan = plan_slots(compiled.modes.browser, SLOT_COUNT, await read_slot_map());
+    await store_slot_map(plan.map);
+  }
   if (disabled) {
     // A taken chord would still be eaten by Firefox, so the page would lose it while off.
     await release_slots(plan, browser.commands);
@@ -179,23 +185,29 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: Ed
     if (changed === undefined) return;
     const next: EditLayers = { ...before, [kind]: changed };
     const step = await (load_step as Promise<LoadStep>);
+    const slot_map_before = await read_slot_map();
     // A publish keeps the slot plan of the load, so a change of the browser chords drops it, both ways: the rollback must put the old chords back too.
     const moves_chords = JSON.stringify(before.keymap.browser ?? {}) !== JSON.stringify(next.keymap.browser ?? {});
     const publish_layers = async (layers: EditLayers) => {
       if (moves_chords) delete step.slots;
       return publish(step, await load_edits(), layers);
     };
-    await commit_change(before, next, { store: store_layers, publish: publish_layers });
+    // The rollback stores `before`: the chord-to-slot map goes back with it, or the old chords would plan from the new map.
+    const store = async (layers: EditLayers) => {
+      await store_layers(layers);
+      if (layers === before) await store_slot_map(slot_map_before);
+    };
+    await commit_change(before, next, { store, publish: publish_layers });
   });
 }
 
 // What the key editor reads, in the change queue so a change still writing or rolling back is not seen half done: the config in force, the stored layers, and a compile of that config under any layers.
-export function read_keymap_state(): Promise<{ config: MergedConfig; layers: EditLayers; compile: (layers: EditLayers) => CompileOutput }> {
+export function read_keymap_state(): Promise<{ config: MergedConfig; layers: EditLayers; slot_map: SlotMap; compile: (layers: EditLayers) => CompileOutput }> {
   return in_change_queue(async () => {
     const config = await get_config();
     const layers = await load_layers();
     const input = await compile_input(config, layers);
-    return { config, layers, compile: (other) => compile_config({ ...input, keymap_edits: other.keymap }) };
+    return { config, layers, slot_map: await read_slot_map(), compile: (other) => compile_config({ ...input, keymap_edits: other.keymap }) };
   });
 }
 
@@ -221,6 +233,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
   // From here the registry holds the new snippets while the tabs still run the old keymap.
   // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
   const config_before = current_config as Promise<MergedConfig>;
+  const slot_map_before = await read_slot_map();
   let commit!: (config: MergedConfig | Promise<MergedConfig>) => void;
   current_config = new Promise<MergedConfig>((resolve) => (commit = resolve));
   try {
@@ -244,6 +257,8 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     } catch {
       // The publish below still puts the old keymap back.
     }
+    // The failed publish may have stored a map planned from the new keymap.
+    await store_slot_map(slot_map_before).catch(() => undefined);
     await publish({ loaded: current_step.loaded, load_warnings: current_step.load_warnings }, edits).catch(() => undefined);
     commit(config_before);
     throw error;

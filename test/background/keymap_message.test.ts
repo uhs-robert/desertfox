@@ -92,7 +92,7 @@ function messages_over(config: MergedConfig, stored: { edits: KeymapEdits }) {
 test("the check reports only what the binding adds, and the bindings it replaces or drops", async () => {
   const messages = messages_over(config_with({ normal: { zq: { id: "tab.close" } } }), { edits: {} });
   const replaces = await messages.check({ type: "check_binding", mode: "normal", keys: "J", text: "tab.close" });
-  assert.deepEqual(replaces, { ok: true, saves: true, problems: [], warnings: [], shadows: [{ keys: "J", text: "tab.next" }] });
+  assert.deepEqual(replaces, { ok: true, saves: true, problems: [], warnings: [], shadows: [{ keys: "J", text: "tab.next" }], keys: "J" });
 
   // The drop of a default it extends is news, not a refusal.
   const extends_default = await messages.check({ type: "check_binding", mode: "normal", keys: "Jx", text: "tab.close" });

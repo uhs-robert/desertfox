@@ -12,16 +12,38 @@ export function slot_name(index: number): string {
 
 export type SlotAssignment = { slot_name: string; shortcut: string; invocations: BoundInvocation[] };
 
+// The chord (as the keymap spells it) to the slot it holds. A chord keeps its slot until its binding goes, so an edit elsewhere never moves it.
+export type SlotMap = Record<string, string>;
+
+export const SLOT_MAP_STORAGE_KEY = "desertfox_slot_map";
+
 export type SlotPlan = {
   assignments: SlotAssignment[];
   unused_slot_names: string[];
   warnings: string[];
+  // What to store for the next plan: the slot of every assigned chord.
+  map: SlotMap;
 };
 
-export function plan_slots(browser_root: TreeBranch | undefined, slot_count = SLOT_COUNT): SlotPlan {
-  const assignments: SlotAssignment[] = [];
+// A stored map that is not the expected shape, or names a slot twice or a slot that does not exist, keeps only its sound entries.
+export function sound_slot_map(stored: unknown, slot_count = SLOT_COUNT): SlotMap {
+  const map: SlotMap = {};
+  if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return map;
+  const taken = new Set<string>();
+  const valid = new Set(Array.from({ length: slot_count }, (_, index) => slot_name(index)));
+  for (const [chord, slot] of Object.entries(stored)) {
+    if (typeof slot !== "string" || !valid.has(slot) || taken.has(slot)) continue;
+    taken.add(slot);
+    map[chord] = slot;
+  }
+  return map;
+}
+
+// A chord already in `previous` keeps its slot, and a new one takes the first free slot, so no chord moves when another is added or removed.
+// With an empty `previous` the chords fill the slots in keymap order, which is the assignment the first release made: that is the migration.
+export function plan_slots(browser_root: TreeBranch | undefined, slot_count = SLOT_COUNT, previous: SlotMap = {}): SlotPlan {
   const warnings: string[] = [];
-  let skipped_for_room = 0;
+  const chords: { token: string; shortcut: string; invocations: BoundInvocation[] }[] = [];
 
   for (const [token, node] of Object.entries(browser_root?.children ?? {})) {
     if (node.kind === "branch") {
@@ -33,23 +55,52 @@ export function plan_slots(browser_root: TreeBranch | undefined, slot_count = SL
       warnings.push(`browser: skipped "${token}": ${converted.error}`);
       continue;
     }
-    if (assignments.length >= slot_count) {
+    chords.push({ token, shortcut: converted.shortcut, invocations: node.steps.map((step) => step.invocation) });
+  }
+
+  const remembered = sound_slot_map(previous, slot_count);
+  const slot_of = new Map<string, string>();
+  const taken = new Set<string>();
+  for (const { token } of chords) {
+    const slot = remembered[token];
+    if (slot !== undefined) {
+      slot_of.set(token, slot);
+      taken.add(slot);
+    }
+  }
+  let skipped_for_room = 0;
+  for (const { token } of chords) {
+    if (slot_of.has(token)) continue;
+    const free = Array.from({ length: slot_count }, (_, index) => slot_name(index)).find((name) => !taken.has(name));
+    if (free === undefined) {
       skipped_for_room++;
       continue;
     }
-    assignments.push({
-      slot_name: slot_name(assignments.length),
-      shortcut: converted.shortcut,
-      invocations: node.steps.map((step) => step.invocation),
-    });
+    slot_of.set(token, free);
+    taken.add(free);
   }
   if (skipped_for_room > 0) {
     warnings.push(`browser: ${skipped_for_room} chord(s) skipped, only ${slot_count} Firefox shortcut slots exist`);
   }
 
+  const assignments: SlotAssignment[] = chords
+    .filter(({ token }) => slot_of.has(token))
+    .map(({ token, shortcut, invocations }) => ({ slot_name: slot_of.get(token)!, shortcut, invocations }))
+    .sort((a, b) => slot_index(a.slot_name) - slot_index(b.slot_name));
+  const map: SlotMap = Object.fromEntries(chords.filter(({ token }) => slot_of.has(token)).map(({ token }) => [token, slot_of.get(token)!]));
   const used = new Set(assignments.map((assignment) => assignment.slot_name));
   const unused_slot_names = Array.from({ length: slot_count }, (_, index) => slot_name(index)).filter((name) => !used.has(name));
-  return { assignments, unused_slot_names, warnings };
+  return { assignments, unused_slot_names, warnings, map };
+}
+
+const slot_index = (name: string): number => Number(name.slice("slot_".length));
+
+export async function read_slot_map(): Promise<SlotMap> {
+  return sound_slot_map((await browser.storage.local.get(SLOT_MAP_STORAGE_KEY))[SLOT_MAP_STORAGE_KEY]);
+}
+
+export async function store_slot_map(map: SlotMap): Promise<void> {
+  await browser.storage.local.set({ [SLOT_MAP_STORAGE_KEY]: map });
 }
 
 export type SlotTable = Record<string, BoundInvocation[]>;

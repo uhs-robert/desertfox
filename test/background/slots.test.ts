@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_slot_plan, plan_slots, release_slots, slot_table } from "../../src/background/slots.ts";
+import { apply_slot_plan, plan_slots, release_slots, SLOT_MAP_STORAGE_KEY, slot_table } from "../../src/background/slots.ts";
+import "../../src/background/command_modules.ts";
+import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 import type { TreeBranch, TreeNode } from "../../src/shared/prefix_tree.ts";
 
 function leaf(id: string): TreeNode {
@@ -70,4 +72,83 @@ test("release resets every slot, assigned or not, and survives a refusal", async
     },
   });
   assert.deepEqual(reset, ["slot_1", "slot_2", "slot_3"]);
+});
+
+const chords = (keys: string[]): TreeBranch => root(Object.fromEntries(keys.map((key) => [key, leaf("x.y")])));
+const slot_of = (plan: ReturnType<typeof plan_slots>) => Object.fromEntries(plan.assignments.map((a) => [a.shortcut, a.slot_name]));
+
+test("migration: with no stored map the chords take the slots the keymap order gave them", () => {
+  const plan = plan_slots(chords(["<A-a>", "<A-b>", "<A-c>"]));
+  assert.deepEqual(plan.map, { "<A-a>": "slot_1", "<A-b>": "slot_2", "<A-c>": "slot_3" });
+  // The map the first run stores gives the same plan back.
+  assert.deepEqual(slot_of(plan_slots(chords(["<A-a>", "<A-b>", "<A-c>"]), 10, plan.map)), slot_of(plan));
+});
+
+test("removing a chord frees its slot and no later chord shifts", () => {
+  const first = plan_slots(chords(["<A-a>", "<A-b>", "<A-c>"]));
+  const after = plan_slots(chords(["<A-a>", "<A-c>"]), 10, first.map);
+  assert.deepEqual(after.map, { "<A-a>": "slot_1", "<A-c>": "slot_3" });
+  assert.ok(after.unused_slot_names.includes("slot_2"));
+});
+
+test("a new chord takes the first free slot, even ahead of an older chord in the tree", () => {
+  const first = plan_slots(chords(["<A-a>", "<A-b>", "<A-c>"]));
+  const without_b = plan_slots(chords(["<A-a>", "<A-c>"]), 10, first.map);
+  // `<A-d>` sorts first in the tree and still lands in the freed slot_2, and `<A-c>` stays on slot_3.
+  const added = plan_slots(chords(["<A-d>", "<A-a>", "<A-c>"]), 10, without_b.map);
+  assert.deepEqual(added.map, { "<A-d>": "slot_2", "<A-a>": "slot_1", "<A-c>": "slot_3" });
+});
+
+test("a full set keeps its chords and refuses the new one, whatever its place in the tree", () => {
+  const keys = "abcdefghij".split("").map((key) => `<A-${key}>`);
+  const full = plan_slots(chords(keys));
+  const plan = plan_slots(chords(["<A-z>", ...keys]), 10, full.map);
+  assert.deepEqual(plan.map, full.map);
+  assert.match(plan.warnings.join("\n"), /1 chord\(s\) skipped/);
+});
+
+test("a damaged map keeps only its sound entries", () => {
+  const plan = plan_slots(chords(["<A-a>", "<A-b>", "<A-c>"]), 10, { "<A-a>": "slot_2", "<A-b>": "slot_2", "<A-c>": "slot_99", "<A-gone>": "slot_1" });
+  assert.deepEqual(plan.map, { "<A-a>": "slot_2", "<A-b>": "slot_1", "<A-c>": "slot_3" });
+  assert.deepEqual(plan_slots(chords(["<A-a>"]), 10, "junk" as never).map, { "<A-a>": "slot_1" });
+});
+
+type Startup = typeof import("../../src/background/startup.ts");
+async function started(tag: string, files: Files = { "settings.toml": "" }) {
+  const browser = install_fake_browser({ files });
+  const startup = (await import(`../../src/background/startup.ts?slots_${tag}`)) as Startup;
+  await startup.get_config();
+  return { startup, ...browser };
+}
+const set_browser = (startup: Startup, browser_edits: Record<string, string>) => startup.change_layers("keymap", (current) => ({ ...current, browser: browser_edits }));
+
+const DEFAULTS = { "<A-j>": "slot_1", "<A-k>": "slot_2", "<A-,>": "slot_3" };
+
+test("the first publish stores the map the old order gave, and saves race on nothing", async () => {
+  const { startup, local } = await started("race");
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], DEFAULTS);
+  // Two saves started together: the second reads the map the first stored.
+  await Promise.all([set_browser(startup, { "<A-x>": "tab.close" }), set_browser(startup, { "<A-x>": "tab.close", "<A-y>": "tab.next" })]);
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_4", "<A-y>": "slot_5" });
+  // Removing a default frees slot_1, and the next chord takes it.
+  await set_browser(startup, { "<A-j>": "", "<A-y>": "tab.next" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { "<A-k>": "slot_2", "<A-,>": "slot_3", "<A-y>": "slot_5" });
+  await set_browser(startup, { "<A-j>": "", "<A-y>": "tab.next", "<A-z>": "tab.close" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { "<A-k>": "slot_2", "<A-,>": "slot_3", "<A-y>": "slot_5", "<A-z>": "slot_1" });
+});
+
+test("a failed publish puts the stored map back with the layers", async () => {
+  const { startup, local, fake } = await started("rollback");
+  await set_browser(startup, { "<A-x>": "tab.close", "<A-y>": "tab.next" });
+  const before = structuredClone(local[SLOT_MAP_STORAGE_KEY]);
+  const working = fake.tabs.query;
+  fake.tabs.query = async () => {
+    throw new Error("tabs down");
+  };
+  await assert.rejects(set_browser(startup, { "<A-y>": "tab.next", "<A-w>": "tab.close" }), /tabs down/);
+  fake.tabs.query = working;
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], before);
+  // The next save plans from the restored map: the failed save's chord left no slot taken.
+  await set_browser(startup, { "<A-x>": "tab.close", "<A-y>": "tab.next", "<A-v>": "tab.close" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_4", "<A-y>": "slot_5", "<A-v>": "slot_6" });
 });
