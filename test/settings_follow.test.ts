@@ -161,7 +161,7 @@ test("redrawing the new tab page swaps the page and keeps one clock timer and on
   mock.timers.enable({ apis: ["setInterval"] });
   try {
     const { body, page_listeners } = install_fakes();
-    const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false };
+    const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, cached_icons: async () => new Map() };
     const settings = effective_settings({ newtab_clock: true, newtab_links: [{ name: "Docs", url: "https://docs.example/" }] } as never);
     const body_node = body as unknown as HTMLElement;
     await render_new_tab(body_node, settings, readers);
@@ -200,7 +200,7 @@ test("a failed read during a redraw keeps the old page and its one clock, and st
     // A fresh copy of the module, because it remembers the page of the earlier tests.
     const fresh_module = "../src/newtab/render.ts?failed_read";
     const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
-    const good = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false };
+    const good = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, cached_icons: async () => new Map() };
     const settings = effective_settings({ newtab_clock: true, newtab_recent_tabs: true } as never);
     const body_node = body as unknown as HTMLElement;
     await render_new_tab(body_node, settings, good);

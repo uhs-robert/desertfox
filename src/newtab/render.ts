@@ -1,6 +1,7 @@
 // The built-in page: the clock (analog or digital), the date and the lists of links.
 import type { Settings } from "../shared/config.ts";
 import { browser_page_readers, read_sections, type ListSection, type PageReaders } from "./lists.ts";
+import { draw_tile } from "./tile.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
@@ -19,7 +20,7 @@ export function date_text(time: Date): string {
   return time.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
 
-// Every row is a plain anchor, so hints reach it. A recent tab row switches to its tab instead of opening a second copy.
+// Every row is one card that is one anchor, so hints reach it once. A recent tab row switches to its tab instead of opening a second copy.
 export function draw_sections(sections: readonly ListSection[]): HTMLElement {
   const lists = document.createElement("div");
   lists.className = "lists";
@@ -30,12 +31,10 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
       heading.textContent = section.title;
       list.append(heading);
     }
-    const items = document.createElement("ul");
+    const items = document.createElement("div");
+    items.className = "tiles";
     for (const row of section.rows) {
-      const anchor = document.createElement("a");
-      anchor.href = row.url;
-      anchor.textContent = row.label;
-      anchor.title = row.url;
+      const anchor = draw_tile(row);
       const tab = row.tab;
       if (tab) {
         anchor.addEventListener("click", (event) => {
@@ -43,9 +42,7 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
           void browser.tabs.update(tab.id, { active: true }).then(() => browser.windows.update(tab.window_id, { focused: true }));
         });
       }
-      const item = document.createElement("li");
-      item.append(anchor);
-      items.append(item);
+      items.append(anchor);
     }
     list.append(items);
     lists.append(list);
