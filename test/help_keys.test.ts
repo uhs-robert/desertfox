@@ -219,10 +219,10 @@ test("the capture takes keys only while its box has focus, and leaves no listene
     assert.deepEqual([event.prevented, event.stopped], [true, true], event.key);
   }
   assert.deepEqual(got, ["j", "<C-d>", "<BS>", "<cancel>", "<S-Escape>", "<save>"]);
-  // Tab and Shift+Tab move the focus as usual: not taken, not captured.
+  // Tab and Shift+Tab move the focus as usual: not captured and not prevented, but hidden from the content script.
   for (const event of [press({ key: "Tab" }), press({ key: "Tab", shiftKey: true })]) {
     capture.on_keydown(event as never);
-    assert.deepEqual([event.prevented, event.stopped], [false, false], event.key);
+    assert.deepEqual([event.prevented, event.stopped], [false, true], event.key);
   }
   assert.equal(got.length, 6);
 
@@ -283,9 +283,9 @@ test("a save on other keys moves the binding: one change names the old keys, and
   session.capture("X");
   assert.equal(actions_of(session.state.open!).save, true);
   await fire();
-  assert.deepEqual(sent.find((message) => message.type === "check_binding"), { type: "check_binding", mode: "normal", keys: "X", text: "tab.next", move_from: "J" });
+  assert.deepEqual(sent.find((message) => message.type === "check_binding"), { type: "check_binding", mode: "normal", keys: "X", text: "tab.next", move_from: "J", move_from_text: "tab.next" });
   await session.save();
-  assert.deepEqual(sent.at(-1), { type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J" });
+  assert.deepEqual(sent.at(-1), { type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J", move_from_text: "tab.next" });
   assert.equal(session.state.open?.original?.keys, "X");
   assert.equal(session.state.open?.id, row_id("normal", "X"));
 });
@@ -310,4 +310,22 @@ test("a refresh reads the command names again, and a new open counts once", asyn
   assert.deepEqual(session.state.names, ["tab.next", "user.new"]);
   session.open_row(J);
   assert.equal(session.state.opened, 1);
+});
+
+test("a click on the open row again keeps its draft, and a move sends the old text", async () => {
+  const { session, sent } = make([J]);
+  await session.load();
+  session.open_row(J);
+  session.set_text("tab.close");
+  session.open_row(J);
+  assert.equal(session.state.open?.text, "tab.close");
+  session.open_new("normal");
+  session.capture("x");
+  session.open_new("normal");
+  assert.deepEqual(session.state.open?.tokens, ["x"]);
+  session.open_row(J);
+  session.capture("Q");
+  await session.save();
+  const change = sent.filter((message) => message.type === "change_keymap").at(-1);
+  assert.deepEqual([change?.move_from, change?.move_from_text], ["J", "tab.next"]);
 });

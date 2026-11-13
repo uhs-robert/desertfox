@@ -13,9 +13,10 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const close_settings_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
   const layer = () => in_background(`browser.storage.local.get("desertfox_keymap_edits").then((got) => got.desertfox_keymap_edits ?? {})`);
-  const row_of = (mode, keys) => `[...view.document.querySelectorAll("[data-keys-row]")].find((row) => row.getAttribute("data-keys-row") === ${JSON.stringify(`${mode}\u0000${keys}`)})`;
-  const shown_keys = () => in_page(`return [...view.document.querySelectorAll('[data-keys="capture"] kbd')].map((kbd) => kbd.textContent);`);
-  const capture_focused = () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('[data-keys="capture"]');`);
+  // The row's Edit button, found by its accessible name. \`.closest("tr")\` gives the row.
+  const row_of = (mode, keys) => `view.document.querySelector(${JSON.stringify(`[aria-label="Edit ${keys} in ${mode} mode"]`)})`;
+  const shown_keys = () => in_page(`return [...view.document.querySelectorAll(".desertfox-keys-capture kbd")].map((kbd) => kbd.textContent);`);
+  const capture_focused = () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('.desertfox-keys-capture');`);
 
   // Key edits are stored state, and a failed case can leave some. The reset goes through the background's own message, so the compiled keymap follows the stored layer.
   const reset_edits = () => in_page(`return view.browser.storage.local.get("desertfox_keymap_edits").then(async (got) => { for (const [mode, table] of Object.entries(got.desertfox_keymap_edits ?? {})) for (const keys of Object.keys(table)) await view.browser.runtime.sendMessage({ type: "change_keymap", mode, keys, action: "reset" }); return true; });`);
@@ -31,14 +32,14 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   async function open_settings() {
     await close_settings_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings"), active: true }).then(() => true)`);
-    await poll_until("the Keys section to list the bindings", () => in_page(`return !!view && view.document.querySelectorAll("[data-keys-row]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
+    await poll_until("the Keys section to list the bindings", () => in_page(`return !!view && view.document.querySelectorAll(".desertfox-keys-row").length > 20;`).catch(() => false), { timeout_ms: 10000 });
   }
 
   async function focus_capture(mode, keys) {
-    if (keys === undefined) await in_page(`view.document.querySelector('[data-keys="add"][data-mode="${mode}"]').click();`);
+    if (keys === undefined) await in_page(`view.document.querySelector('[aria-label="Add a binding in ${mode} mode"]').click();`);
     else await in_page(`${row_of(mode, keys)}.click();`);
-    await poll_until("the editor to open", () => in_page(`return !!view.document.querySelector('[data-keys="editor"]')?.isConnected;`).catch(() => false));
-    await in_page(`view.document.querySelector('[data-keys="capture"]').focus();`);
+    await poll_until("the editor to open", () => in_page(`return !!view.document.querySelector('.desertfox-keys-editor')?.isConnected;`).catch(() => false));
+    await in_page(`view.document.querySelector('.desertfox-keys-capture').focus();`);
     await poll_until("the capture box to hold the focus", capture_focused);
   }
 
@@ -52,8 +53,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the capture box to show four keys", async () => (await shown_keys()).length === 4);
     expect(JSON.stringify(await shown_keys()) === JSON.stringify(["j", "g", "g", "i"]), `captured ${JSON.stringify(await shown_keys())}`);
     await sleep(300);
-    const after = await in_page(`return { y: view.scrollY, focused: view.document.activeElement.getAttribute("data-keys") };`);
-    expect(after.y === before_y && after.focused === "capture", `the page reacted to a captured key: ${JSON.stringify({ before_y, after })}`);
+    const after = await in_page(`return { y: view.scrollY, focused: view.document.activeElement.classList.contains("desertfox-keys-capture") };`);
+    expect(after.y === before_y && after.focused, `the page reacted to a captured key: ${JSON.stringify({ before_y, after })}`);
 
     await press_keys("-k", "BackSpace");
     await poll_until("Backspace to drop the last key", async () => (await shown_keys()).length === 3);
@@ -63,14 +64,14 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await press_keys("-k", "Escape");
     await poll_until("Escape to cancel the capture", async () => !(await capture_focused()) && (await shown_keys()).length === 0);
 
-    await in_page(`view.document.querySelector('[data-keys="capture"]').focus();`);
+    await in_page(`view.document.querySelector('.desertfox-keys-capture').focus();`);
     await poll_until("the capture box to take the focus again", capture_focused);
     await press_keys("x");
     await poll_until("x to be captured", async () => (await shown_keys()).length === 1);
-    await in_page(`view.document.querySelector('[data-keys="clear"]').click();`);
+    await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Clear").click();`);
     await poll_until("Clear to empty the sequence", async () => (await shown_keys()).length === 0);
     // The control: once the box is blurred the page runs its own keys again, so the stillness above was the capture.
-    await in_page(`view.document.querySelector('[data-keys="filter"]').focus(); view.document.activeElement.blur(); view.document.body.focus(); view.scrollTo(0, 0);`);
+    await in_page(`view.document.querySelector('[aria-label="Filter bindings"]').focus(); view.document.activeElement.blur(); view.document.body.focus(); view.scrollTo(0, 0);`);
     await poll_until("the page body to hold the focus", () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.body;`));
     await press_keys("G");
     await poll_until("G to scroll the page once the box is blurred", async () => (await in_page(`return view.scrollY;`)) > 0);
@@ -83,10 +84,10 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     expect((await scroll_delta_by_press("p36_j", ["j"])) > 0, "j did not scroll the test page, so the page cannot show a rebound J");
     await open_settings();
     await in_page(`${row_of("normal", "J")}.click();`);
-    await poll_until("the editor to open on J", () => in_page(`return view.document.querySelector('[data-keys="command"]')?.value === "tab.next";`).catch(() => false));
-    await in_page(`const input = view.document.querySelector('[data-keys="command"]'); input.value = "scroll.pixels --dy=300"; input.dispatchEvent(new view.Event("input"));`);
-    await poll_until("the check to allow the save", () => in_page(`return !view.document.querySelector('[data-keys="save"]').disabled && view.document.querySelector('[data-keys="check"]').textContent.includes("saves");`).catch(() => false));
-    await in_page(`view.document.querySelector('[data-keys="save"]').click();`);
+    await poll_until("the editor to open on J", () => in_page(`return view.document.querySelector('.desertfox-keys-command')?.value === "tab.next";`).catch(() => false));
+    await in_page(`const input = view.document.querySelector('.desertfox-keys-command'); input.value = "scroll.pixels --dy=300"; input.dispatchEvent(new view.Event("input"));`);
+    await poll_until("the check to allow the save", () => in_page(`return ![...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").disabled && view.document.querySelector('.desertfox-keys-check').textContent.includes("saves");`).catch(() => false));
+    await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").click();`);
     await poll_until("the edit to be stored", async () => (await layer()).normal?.J === "scroll.pixels --dy=300");
 
     await in_background(`browser.tabs.update(${test_tab}, { active: true }).then(() => true)`);
@@ -96,19 +97,19 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await in_background(`browser.tabs.query({ url: "*://*/*" }).then(() => true)`);
     const settings_tab = await in_background(`browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("/home.html")).id)`);
     await in_background(`browser.tabs.update(${settings_tab}, { active: true }).then(() => true)`);
-    await poll_until("the saved row to show its origin", () => in_page(`return ${row_of("normal", "J")}?.textContent.includes("saved");`).catch(() => false));
+    await poll_until("the saved row to show its origin", () => in_page(`return ${row_of("normal", "J")}?.closest("tr").textContent.includes("saved");`).catch(() => false));
     await in_page(`${row_of("normal", "J")}.click();`);
-    await poll_until("Reset to be offered", () => in_page(`const reset = view.document.querySelector('[data-keys="reset"]'); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
-    await in_page(`view.document.querySelector('[data-keys="reset"]').click();`);
+    await poll_until("Reset to be offered", () => in_page(`const reset = [...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset"); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
+    await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset").click();`);
     await poll_until("Reset to drop the edit", async () => (await layer()).normal?.J === undefined);
 
     // Remove unbinds a shipped key with an empty edit, and Reset brings it back.
     await in_page(`${row_of("normal", "K")}.click();`);
-    await poll_until("the editor to open on K", () => in_page(`return view.document.querySelector('[data-keys="command"]')?.value === "tab.prev";`).catch(() => false));
-    await in_page(`view.document.querySelector('[data-keys="remove"]').click();`);
+    await poll_until("the editor to open on K", () => in_page(`return view.document.querySelector('.desertfox-keys-command')?.value === "tab.prev";`).catch(() => false));
+    await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Remove").click();`);
     await poll_until("Remove to store the unbind", async () => (await layer()).normal?.K === "");
-    await poll_until("Reset to be offered on the unbound row", () => in_page(`const reset = view.document.querySelector('[data-keys="reset"]'); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
-    await in_page(`view.document.querySelector('[data-keys="reset"]').click();`);
+    await poll_until("Reset to be offered on the unbound row", () => in_page(`const reset = [...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset"); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
+    await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset").click();`);
     await poll_until("Reset to bring K back", async () => (await layer()).normal?.K === undefined);
     await close_settings_tabs();
   });
@@ -123,7 +124,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the new key to replace the old", async () => JSON.stringify(await shown_keys()) === JSON.stringify(["Q"]));
     await press_keys("-k", "Tab");
     await poll_until("Tab to leave the box and not be captured", async () => !(await capture_focused()) && (await shown_keys()).length === 1);
-    await in_page(`view.document.querySelector('[data-keys="capture"]').focus();`);
+    await in_page(`view.document.querySelector('.desertfox-keys-capture').focus();`);
     await poll_until("the box to take the focus again", capture_focused);
     await press_keys("-k", "Return");
     await poll_until("Enter to store the move", async () => (await layer()).normal?.Q === "tab.prev" && (await layer()).normal?.K === "");
@@ -147,8 +148,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     expect(!(await disabled()), "the captured Ctrl+Alt+D switched the add-on off");
 
     // The control: with the filter box focused the same chord is not captured and does fire, so the result above means something.
-    await in_page(`view.document.querySelector('[data-keys="filter"]').focus();`);
-    await poll_until("the filter box to hold the focus", () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('[data-keys="filter"]');`));
+    await in_page(`view.document.querySelector('[aria-label="Filter bindings"]').focus();`);
+    await poll_until("the filter box to hold the focus", () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('[aria-label="Filter bindings"]');`));
     await press_keys(...ALT("k"));
     await poll_until("Alt+K to switch tabs once the box is not focused", async () => !(await on_settings_tab()));
     await close_settings_tabs();

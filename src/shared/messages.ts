@@ -372,14 +372,14 @@ export type ListBindingsAnswer = { ok: true; bindings: BindingRow[] } | { ok: fa
 // From an extension page: what saving `text` on `keys` would do. Nothing is stored. `text` "" checks an unbind.
 // `problems` are reasons the text or keys do not read. `warnings` are the compile warnings the binding adds. `shadows` are the bindings it replaces or drops.
 // `saves` is false when a save would be refused: the text does not read, or the compile skips the binding (a warning says why). `ok` false means the check itself failed.
-// `move_from` names the keys the row had, when the save moves it: the old key is freed first, as a `change_keymap` set with the same field does.
+// `move_from` names the keys the row had, when the save moves it: the old key is freed first, as a `change_keymap` set with the same field does. `move_from_text` is the text the row showed there: a change refuses the move when the old key holds other text by then.
 export type CheckBinding = { type: "check_binding"; mode: KeymapMode; keys: string; text: string; move_from?: string };
 // `keys` is the sequence in the spelling the background stores, absent when the sequence does not parse.
 export type CheckBindingAnswer = { ok: true; saves: boolean; problems: string[]; warnings: string[]; shadows: { keys: string; text: string }[]; keys?: string } | { ok: false; message: string };
 
 // From an extension page: one key edit. `set` binds `text`, `remove` unbinds the key, `reset` drops the edit so the file or default binding shows again.
 // The answer carries the row after the change, absent when the key is then unbound. A refused set carries the check's problems and warnings.
-export type ChangeKeymap = { type: "change_keymap"; mode: KeymapMode; keys: string; action: "set" | "remove" | "reset"; text?: string; move_from?: string };
+export type ChangeKeymap = { type: "change_keymap"; mode: KeymapMode; keys: string; action: "set" | "remove" | "reset"; text?: string; move_from?: string; move_from_text?: string };
 export type ChangeKeymapAnswer = { ok: true; row?: BindingRow; message: string } | { ok: false; message: string; problems?: string[] };
 
 // What the toolbar popup asks. Only a top-level extension page may send them.

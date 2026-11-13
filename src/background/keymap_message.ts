@@ -248,6 +248,10 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
         const underlying = Object.hasOwn(file_bindings, keys) ? file_bindings[keys] : deps.default_keymap[mode]?.[keys];
         already_unbound = action === "remove" && Boolean(underlying) && current[mode]?.[keys] === "";
         const text = action === "set" ? request.text : action === "remove" && underlying ? "" : undefined;
+        if (old_keys !== undefined && typeof request.move_from_text === "string") {
+          const shown = rows_of(config, current).find((candidate) => candidate.mode === mode && candidate.keys === old_keys)?.text ?? "";
+          if (shown !== request.move_from_text) throw new Error(`${old_keys} changed since you opened it. Open the row again.`);
+        }
         const set = with_key_edit(current, mode, keys, text);
         const next = old_keys === undefined ? set : without_binding(set, config, deps.default_keymap, mode, old_keys);
         row = rows_of(config, next).find((candidate) => candidate.mode === mode && candidate.keys === keys);

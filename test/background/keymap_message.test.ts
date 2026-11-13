@@ -225,3 +225,31 @@ test("a set with move_from frees the old key in the same change: a default is un
   assert.equal(refused.ok, false);
   assert.equal(stored.edits.normal?.X, "tab.next");
 });
+
+test("a move is refused when the old key changed since the row was shown", async () => {
+  const stored = { edits: { normal: { J: "tab.close" } } as KeymapEdits };
+  const messages = messages_over(config_with({}), stored);
+  const refused = await messages.change({ type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J", move_from_text: "tab.next" });
+  assert.equal(refused.ok, false);
+  assert.match(refused.ok ? "" : refused.message, /J changed since you opened it/);
+  assert.deepEqual(stored.edits, { normal: { J: "tab.close" } });
+  const allowed = await messages.change({ type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J", move_from_text: "tab.close" });
+  assert.equal(allowed.ok, true);
+  assert.deepEqual(stored.edits, { normal: { J: "", X: "tab.next" } });
+});
+
+test("a browser chord moves when every slot is taken, because the old chord is freed first", async () => {
+  const browser: Record<string, string> = {};
+  for (const key of "abcdefg") browser[`<A-${key}>`] = "tab.next";
+  // The shipped keymap holds three browser chords, so ten slots are full.
+  const stored = { edits: { browser } as KeymapEdits };
+  const messages = messages_over(config_with({}), stored);
+  const added = await messages.check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
+  assert.equal(added.ok && added.saves, false, "an eleventh chord must be refused");
+  const moved_check = await messages.check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next", move_from: "<A-a>" });
+  assert.equal(moved_check.ok && moved_check.saves, true, JSON.stringify(moved_check));
+  const moved = await messages.change({ type: "change_keymap", mode: "browser", keys: "<A-z>", action: "set", text: "tab.next", move_from: "<A-a>", move_from_text: "tab.next" });
+  assert.equal(moved.ok, true, JSON.stringify(moved));
+  assert.equal(stored.edits.browser?.["<A-a>"], undefined);
+  assert.equal(stored.edits.browser?.["<A-z>"], "tab.next");
+});
