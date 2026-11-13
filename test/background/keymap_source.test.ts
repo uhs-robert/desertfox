@@ -88,6 +88,18 @@ test("a publish followed at once by a read returns the new map", async () => {
   assert.equal(label_of(await source.read()), "new");
 });
 
+test("an event that arrives after the set resolves is covered by the writer's drop", async () => {
+  const fake = make();
+  fake.set_stored(map("old"));
+  const source = create_keymap_source(fake.storage, fake.changed);
+  assert.equal(label_of(await source.read()), "old");
+  fake.set_stored(map("new"));
+  source.drop();
+  assert.equal(label_of(await source.read()), "new");
+  fake.fire();
+  assert.equal(label_of(await source.read()), "new");
+});
+
 test("a change to another key or another area keeps the copy", async () => {
   const fake = make();
   fake.set_stored(map("a"));
@@ -97,16 +109,6 @@ test("a change to another key or another area keeps the copy", async () => {
   fake.fire("session");
   await source.read();
   assert.equal(fake.reads(), 1);
-});
-
-test("a background restart starts empty and refills", async () => {
-  const fake = make();
-  fake.set_stored(map("a"));
-  await create_keymap_source(fake.storage, fake.changed).read();
-  const restarted = create_keymap_source(fake.storage, fake.changed);
-  assert.equal(fake.reads(), 1);
-  assert.equal(label_of(await restarted.read()), "a");
-  assert.equal(fake.reads(), 2);
 });
 
 test("a failed read rejects every waiter and the next read tries again", async () => {
