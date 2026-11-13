@@ -49,7 +49,7 @@ export function create_host_update(deps: HostUpdateDeps) {
   type Phase = { kind: "idle" } | { kind: "updating" } | { kind: "failed"; reason: string };
   let phase: Phase = { kind: "idle" };
   let config_standing: HostStanding = "current";
-  let running: Promise<void> | undefined;
+  let running: Promise<unknown> | undefined;
   const listeners: (() => void)[] = [];
 
   const reason_of = (error: unknown): string => (error instanceof Error ? error.message : String(error));

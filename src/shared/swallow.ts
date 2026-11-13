@@ -4,13 +4,11 @@
 
 /** The browser refuses an expected case: a stale tab, window or container id, a tab that closed. The result is undefined. */
 export function ignore_refusal<T>(promise: Promise<T>): Promise<T | undefined> {
-    return promise.then(undefined, () => undefined);
+    return promise.catch((_error) => undefined);
 }
 
-/** A message or call whose receiver may be gone or deaf: a tab or frame with no listener, a toast, a focus. The result is not used. */
-export function best_effort(promise: Promise<unknown>): Promise<void> {
-    return promise.then(() => {}, () => {});
-}
+/** A message or call whose receiver may be gone or deaf: a tab or frame with no listener, a toast, a focus. The result is not used. Same function as ignore_refusal, so a bundle that uses both carries one copy. */
+export const best_effort = ignore_refusal;
 
 /** The tail of a queue. The caller of the queued run gets the real error, and the chain must stay alive for the next turn. */
 export function keep_chain(promise: Promise<unknown>): Promise<void> {

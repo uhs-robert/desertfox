@@ -38,7 +38,7 @@ import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
 import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
 import { arm_leave_watch } from "../page/leave_watch.ts";
-import { best_effort, ignore_refusal, refused_as } from "../../shared/swallow.ts";
+import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
 
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element; desertfox_content_loaded?: true | (() => void) };
@@ -171,7 +171,7 @@ const SITE_SELECTORS_WAIT_MS = 2000;
 // Asked at every `hint.run`, so a settings edit or a new address applies from the next run on. A rapid session keeps what its run read.
 // A selector that does not parse drops out with one notice for the run, and the rest still apply.
 async function read_site_selectors(show_toast: (message: string) => void): Promise<SiteSelectors> {
-  const asked = refused_as(browser.runtime.sendMessage({ type: "read_hint_selectors" }), undefined);
+  const asked = ignore_refusal(browser.runtime.sendMessage({ type: "read_hint_selectors" }));
   const reply = (await Promise.race([asked, new Promise((resolve) => setTimeout(resolve, SITE_SELECTORS_WAIT_MS))])) as { hint_add?: string[]; hint_remove?: string[] } | undefined;
   const bad: string[] = [];
   const parsed = (selectors: string[] | undefined) => (selectors ?? []).filter((selector) => parses_as_selector(selector) || (bad.push(selector), false));
@@ -300,7 +300,7 @@ function register(host: BundleHostApi): void {
   // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode as Escape does, so hints opened from media mode return to it.
   arm_leave_watch(host).listen_(() => session && !picking && host.escape_());
   // The picks of other frames' hovers, by session id, until Escape releases them. Each release waits for its pick's answer and names its pick, so a late one cannot clear a newer hover.
-  let hovers_across: { session_id: string; answered: Promise<void> }[] = [];
+  let hovers_across: { session_id: string; answered: Promise<unknown> }[] = [];
   // The ids an end reached while this frame waited for its start answer. The end can overtake the answer, which would then show hint mode on a dead session. Cleared when no start waits.
   const ended_ids = new Set<string>();
 
@@ -364,7 +364,7 @@ function register(host: BundleHostApi): void {
     starting++;
     let answer: HintFramesStartAnswer | undefined;
     try {
-      const asked = refused_as(browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length, texts: texts_of(found) } satisfies HintFramesStart), undefined);
+      const asked = ignore_refusal(browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length, texts: texts_of(found) } satisfies HintFramesStart));
       answer = (await Promise.race([asked, new Promise((resolve) => setTimeout(resolve, ACROSS_START_WAIT_MS))])) as HintFramesStartAnswer | undefined;
       // A late answer drew labels in the other frames, which this frame no longer picks from.
       if (!answer) void asked.then((late: HintFramesStartAnswer | undefined) => late?.ok && send_across({ type: "hint_frames_end", session_id: late.session_id }));
