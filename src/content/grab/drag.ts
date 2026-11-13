@@ -18,6 +18,8 @@ export type Held = {
   start_value?: string;
   // The pointer route: the page cancelled pointerdown, so a browser would send no mouse events for the rest of the press.
   no_mouse?: true;
+  // The page cancelled the press (pointerdown or mousedown), so a browser starts no native drag of a link or picture.
+  cancelled_down?: boolean;
   // Set once the closing events went out, so a second release or abort sends nothing. A stopped drive and a later grab can then never double up.
   ended?: true;
 };
@@ -47,10 +49,10 @@ const fire = (target: EventTarget, event: Event): boolean => {
   }
 };
 
-export function route_of(element: Element): { route: Route; source: HTMLElement } {
-  // A link and a picture drag with no attribute, unless the page turns it off.
-  const draggable = element.closest<HTMLElement>('[draggable="true"],a[href],img');
-  if (draggable && draggable.getAttribute("draggable") !== "false") return { route: "html5", source: draggable };
+// A link and a picture drag with no attribute, unless the page turns it off, and a browser starts that drag only when the page did not cancel the press. `by_default` is that condition, so a pointer widget made of pictures keeps the pointer route.
+export function route_of(element: Element, by_default = true): { route: Route; source: HTMLElement } {
+  const draggable = element.closest<HTMLElement>(by_default ? '[draggable="true"],a[href]:not([draggable="false"]),img:not([draggable="false"])' : '[draggable="true"]');
+  if (draggable) return { route: "html5", source: draggable };
   const is_range = element.localName === "input" && (element as HTMLInputElement).type === "range";
   return { route: is_range ? "range" : "pointer", source: element as HTMLElement };
 }
@@ -65,7 +67,7 @@ function send_pointer(held: Held, phase: "down" | "move" | "up", target: Element
   const init = { ...init_at(point), button: phase === "move" ? -1 : 0, buttons: phase === "up" ? 0 : 1 };
   const kept = fire(target, new PointerEvent(`pointer${phase}`, { ...init, pointerId: MOUSE_POINTER_ID, pointerType: "mouse", isPrimary: true }));
   if (phase === "down" && !kept) held.no_mouse = true;
-  if (!held.no_mouse) fire(target, new MouseEvent(`mouse${phase}`, init));
+  if (!held.no_mouse && !fire(target, new MouseEvent(`mouse${phase}`, init)) && phase === "down") held.cancelled_down = true;
 }
 
 // A press comes first on every route but the range, as a browser presses before it drags, and the route is read after it. A library such as SortableJS sets `draggable` in its own pointerdown handler, so the element is not draggable until then.
@@ -79,7 +81,7 @@ export function press(element: Element): Held | undefined {
     return held;
   }
   send_pointer(held, "down", element, start);
-  const { route, source } = route_of(element);
+  const { route, source } = route_of(element, !held.no_mouse && !held.cancelled_down);
   if (route !== "html5") return held;
   // Firefox starts a new DataTransfer at none, where a real drag starts uninitialized, which the page reads as every effect allowed.
   Object.assign(held, { route, source, data: Object.assign(new DataTransfer(), { effectAllowed: "uninitialized" }) });
@@ -135,7 +137,7 @@ export function nudge(held: Held, direction: Direction): void {
     input.stepUp(sign);
   } catch {
     // A range with step "any" has no step, so it moves by 1% of its span.
-    input.value = String(+before + (sign * ((+input.max || 100) - +input.min)) / 100);
+    input.value = String(+before + (sign * (Number(input.max || 100) - Number(input.min || 0))) / 100);
   }
   if (input.value !== before) fire(input, new Event("input", { bubbles: true }));
 }
