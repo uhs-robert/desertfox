@@ -60,6 +60,15 @@ test("double_click is refused for the links filter", () => {
   assert.equal(check_args(hint, { action: "double_click", filter: "buttons" }).ok, true);
 });
 
+test("the grabs take the draggable and every filters and refuse links", () => {
+  for (const action of ["grab", "grab_move"]) {
+    assert.equal(check_args(hint, { action, filter: "draggable" }).ok, true, action);
+    assert.equal(check_args(hint, { action, filter: "every" }).ok, true, action);
+    assert.equal(check_args(hint, { action, filter: "buttons" }).ok, true, action);
+    assert.equal(check_args(hint, { action, filter: "links" }).ok, false, action);
+  }
+});
+
 test("a value with no rule is allowed with any sibling value", () => {
   for (const name of ["here", "delete", "focus", "hover", "caret"]) assert.equal(check_args(hint, { action: name, filter: "buttons" }).ok, true, name);
 });

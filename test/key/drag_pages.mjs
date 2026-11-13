@@ -8,6 +8,13 @@ export const DRAG_PAGES = {
 dst.addEventListener("dragover", (e) => e.preventDefault());
 dst.addEventListener("drop", (e) => { e.preventDefault(); dst.textContent = "dropped"; });
 </script>`,
+  // Only #grabbable and #cursor_box belong to the draggable group. A link, a plain button and a plain div do not.
+  group: `
+<a id="plain_link" href="/drag?id=link_elsewhere" style="display:block;width:80px;height:30px">link</a>
+<button id="plain_button" style="display:block;width:80px;height:30px">button</button>
+<div id="plain_div" style="width:80px;height:30px;background:#ccc">div</div>
+<div id="grabbable" draggable="true" style="width:80px;height:30px;background:#9cf">drag</div>
+<div id="cursor_box" style="width:80px;height:30px;background:#fc9;cursor:grab">cursor</div>`,
   h5: `
 <div id="src" draggable="true" style="width:80px;height:40px;background:#9cf">src</div>
 <div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>

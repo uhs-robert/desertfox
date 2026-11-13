@@ -7,7 +7,7 @@ import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "frames" | "custom";
+export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "media" | "images" | "frames" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -69,6 +69,32 @@ export const is_every_target = (element: Element): boolean => {
   return box.width > 0 && box.height > 0;
 };
 
+// What a drag moves. A plain link, image or button is out unless it sets draggable itself. The selector holds the explicit signs, the test adds the cursor a page sets on a widget it drags.
+const DRAGGABLE = [
+  '[draggable="true"]',
+  "input[type=range]",
+  "[role=slider]",
+  "[role=scrollbar]",
+  "[role=separator][aria-valuenow]",
+  "[role=separator][tabindex]",
+  "[aria-grabbed]",
+  '[aria-roledescription~="sortable" i]',
+  '[aria-roledescription~="draggable" i]',
+  ".sortable-handle, .ui-sortable-handle, .ui-draggable, .drag-handle, .resize-handle, .gutter",
+  "[data-rbd-drag-handle-draggable-id], [data-rfd-drag-handle-draggable-id], [data-dnd-draggable]",
+].join(", ");
+const DRAG_CURSORS = new Set(["grab", "grabbing", "move", "ew-resize", "ns-resize", "col-resize", "row-resize", "nwse-resize", "nesw-resize"]);
+
+// The explicit signs skip the style read. The cursor is read only for the rest, and an inherited cursor counts only where it starts, as for a pointer.
+export const is_draggable = (element: Element): boolean => {
+  if (PAGE_ROOTS.has(element.localName)) return false;
+  if (element.matches(DRAGGABLE)) return true;
+  const cursor_of_ = (target: Element) => window_of(target).getComputedStyle(target).cursor;
+  if (!DRAG_CURSORS.has(cursor_of_(element))) return false;
+  const parent = element.parentElement;
+  return parent === null || cursor_of_(parent) !== cursor_of_(element);
+};
+
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
   every: { selector: "*", test: is_every_target },
@@ -77,6 +103,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   inputs: { selector: TEXT_FIELDS },
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
+  draggable: { selector: "*", test: is_draggable },
   media: { selector: "video, audio" },
   images: { selector: "*", test: is_image },
   frames: { selector: "iframe, frame", test: is_pickable_frame },
@@ -131,7 +158,7 @@ export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, only
 export type SiteSelectors = { add: string[]; remove: string[] };
 
 // Only the filters that mean "anything to click" take added elements: a `links` or `images` label promises an address.
-const TAKES_ADDED = new Set<HintFilter>(["all", "clickable", "every"]);
+const TAKES_ADDED = new Set<HintFilter>(["all", "clickable", "every", "draggable"]);
 
 // Added elements count as strong and skip the filter's test. A removed element is one inside a `hint_remove` match in its own tree: `closest` stops at a shadow root.
 export function with_site_selectors(root: ParentNode, filter: HintFilter, found: Found[], { add, remove }: SiteSelectors, only_in_view = false): Found[] {
