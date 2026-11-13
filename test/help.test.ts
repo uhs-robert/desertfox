@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
+import "../src/background/command_modules.ts";
 import { build_help_model, group_title, STYLE_VARIABLES } from "../src/help/model.ts";
 import { read_only_note } from "../src/help/settings_model.ts";
 import { command_help_url, parse_route } from "../src/help/route.ts";
@@ -9,6 +10,7 @@ import { ROLES } from "../src/shared/theme/roles.ts";
 import { token_name } from "../src/shared/theme/tokens.ts";
 import { BUNDLE_NAMES } from "../src/shared/bundles.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
+import { registry as builtin_registry } from "../src/shared/registry/builtin.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 
 function sample() {
@@ -252,7 +254,7 @@ test("the advanced flag in the hash rides on every route form", () => {
 });
 
 test("every command group in the built command list has a plain title", () => {
-  const { commands } = JSON.parse(readFileSync(new URL("../dist/commands.json", import.meta.url), "utf8")) as { commands: { id: string }[] };
+  const { commands } = build_commands_file(builtin_registry);
   const raw = [...new Set(commands.map((command) => command.id.split(".")[0]!))].filter((group) => group_title(group) === group);
   assert.deepEqual(raw, []);
 });
