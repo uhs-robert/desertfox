@@ -9,7 +9,9 @@ import { match_regex_source, matches_any_address, matches_pattern } from "../src
 import { holds_own_focus, wire_mode_reports } from "../src/content/mode_report.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { percent_to_offset, pick_scroll_target } from "../src/content/scroll_target.ts";
-import { create_matcher } from "../src/shared/keys/index.ts";
+import { create_matcher, event_to_token, physical_token } from "../src/shared/keys/index.ts";
+import type { KeyEventLike } from "../src/shared/keys/index.ts";
+import type { Sink } from "../src/content/bundle_host.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap, is_freed } from "../src/shared/index.ts";
 import { compile_keymap } from "../src/shared/keys/index.ts";
 import { frees_of, prune_tree } from "../src/shared/keys/prune_tree.ts";
@@ -31,7 +33,7 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false, escape_to_page = false) {
+function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
@@ -43,7 +45,7 @@ function make_flow(in_field = false, escape_to_page = false) {
     leave_insert_: () => state.escape(),
     is_loading_: () => false,
     loading_sink_bundles_: () => [],
-    sink_of_: () => undefined,
+    sink_of_: () => sink,
     on_prefix_: () => {},
   });
   // The same wiring main.ts does.
@@ -729,4 +731,44 @@ test("a key repeat reaches run_leaf_ as true, and a first press, a replayed key 
   flow.handle_token_("j");
   flow.handle_token_("<A-j>", true);
   assert.deepEqual(ran, ["down!", "down", "next_tab"]);
+});
+
+const cyrillic_press = (key: string, code: string, mods: Partial<KeyEventLike> = {}): KeyEventLike => ({ key, code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods });
+const swapped = (flow: ReturnType<typeof make_flow>["flow"], event: KeyEventLike) => flow.layout_token_(event_to_token(event)!, physical_token(event));
+
+test("layout fallback: an unbound plain Cyrillic letter takes its physical key, a bound one stays", () => {
+  const { flow } = make_flow();
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(swapped(flow, cyrillic_press("о", "KeyJ")), "j");
+  assert.equal(swapped(flow, cyrillic_press("j", "KeyJ")), "j");
+});
+
+test("layout fallback: a Ctrl or Alt chord on a Cyrillic letter never becomes a plain key", () => {
+  const { flow } = make_flow();
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(swapped(flow, cyrillic_press("с", "KeyC", { ctrlKey: true })), "<C-c>");
+  assert.equal(swapped(flow, cyrillic_press("ф", "KeyA", { altKey: true })), "<A-a>");
+  assert.equal(swapped(flow, cyrillic_press("а", "KeyF", { metaKey: true })), "<M-f>");
+});
+
+test("layout fallback: a sink keeps the typed letter", () => {
+  const sink: Sink = { on_token_: () => "pass" } as unknown as Sink;
+  const { flow } = make_flow(false, false, sink);
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(swapped(flow, cyrillic_press("о", "KeyJ")), "о");
+});
+
+test("layout fallback: a Cyrillic key typed before the keymap arrives replays as its physical key", () => {
+  const { flow, ran } = make_flow();
+  assert.equal(flow.handle_token_("о", false, undefined, "j"), "cancel");
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(ran, ["down"]);
+});
+
+test("layout fallback: a key held before the keymap arrives keeps its typed letter when the setting is off", () => {
+  const { flow, ran } = make_flow();
+  flow.handle_token_("о", false, undefined, "j");
+  flow.set_layout_fallback_(false);
+  flow.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(ran, []);
 });
