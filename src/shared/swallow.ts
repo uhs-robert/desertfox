@@ -22,7 +22,7 @@ export function refused_as<T, F>(promise: Promise<T>, fallback: F): Promise<T | 
     return promise.then(undefined, () => fallback);
 }
 
-/** A `.catch` handler for a site that could hide a bug of ours. It logs and moves on, and changes no behavior. */
-export function warn_and_go(label: string): (error: unknown) => undefined {
-    return (error) => (console.warn(`desertfox: ${label}`, error), undefined);
+/** A `.catch` handler for a site that could hide a bug of ours. It logs and returns the fallback, which is undefined unless given. */
+export function warn_and_go<F = undefined>(label: string, fallback?: F): (error: unknown) => F {
+    return (error) => (console.warn(`desertfox: ${label}`, error), fallback as F);
 }

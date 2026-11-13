@@ -16,7 +16,7 @@ import { history_cache, history_row } from "./history_cache.ts";
 import { MAX_BOOST } from "../shared/score.ts";
 import { browser_register_store } from "./register_store.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
-import { refused_as } from "../shared/swallow.ts";
+import { refused_as, warn_and_go } from "../shared/swallow.ts";
 
 export type TabLike = {
   id?: number | undefined;
@@ -462,7 +462,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
       if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await refused_as(fetch_items(kind, asker), kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, tab_boost: {}, sites: [], quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []);
+      const items = await fetch_items(kind, asker).catch(warn_and_go("complete_items.fetch", kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, tab_boost: {}, sites: [], quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };
