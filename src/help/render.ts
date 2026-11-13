@@ -444,22 +444,51 @@ export const section_hash = (page: PageId, slug: string): string => `#section=${
 type SectionLink = { link: HTMLElement; heading_id: string };
 let section_links: SectionLink[] = [];
 
-// The link of the section the reader is in gets aria-current="location". That is the last heading at or above `line`, or the last heading of all once the page is scrolled to its end, where a short last section never reaches the line.
-// `top_of` gives a heading's distance from the viewport top, or undefined when it is not on the page or hidden.
-export function mark_current_section(entries: SectionLink[], top_of: (heading_id: string) => number | undefined, line: number, at_end: boolean): void {
+// The link of the section the reader is in gets aria-current="location". That is the last heading at or above `line`, or the last heading of all when `at_end`, where a short last section never reaches the line.
+// `top_of` gives a heading's distance from the viewport top, or undefined when it is not on the page or hidden. Returns the current link, and writes an attribute only where it changes.
+export function mark_current_section(entries: SectionLink[], top_of: (heading_id: string) => number | undefined, line: number, at_end: boolean): HTMLElement | undefined {
   const placed = entries.flatMap((entry) => {
     const top = top_of(entry.heading_id);
     return top === undefined ? [] : [{ entry, top }];
   });
   const above = placed.filter(({ top }) => top <= line);
-  const current = at_end && placed.length > 0 ? placed.reduce((a, b) => (b.top >= a.top ? b : a)) : above.reduce<(typeof placed)[number] | undefined>((a, b) => (a === undefined || b.top >= a.top ? b : a), undefined);
+  const last_of = (rows: typeof placed) => rows.reduce<(typeof placed)[number] | undefined>((a, b) => (a === undefined || b.top >= a.top ? b : a), undefined);
+  const current = last_of(at_end ? placed : above)?.entry;
   for (const entry of entries) {
-    if (entry === current?.entry) entry.link.setAttribute("aria-current", "location");
-    else entry.link.removeAttribute("aria-current");
+    const marked = entry.link.getAttribute("aria-current") === "location";
+    if (entry === current && !marked) entry.link.setAttribute("aria-current", "location");
+    else if (entry !== current && marked) entry.link.removeAttribute("aria-current");
   }
+  return current?.link;
 }
 
+// A page that does not scroll has no end to reach, so its last section is not marked for that.
+export const at_page_end = (scroll_y: number, window_height: number, page_height: number): boolean => page_height > window_height + 2 && scroll_y + window_height >= page_height - 2;
+
 const CURRENT_LINE_FRACTION = 0.3;
+let sidebar_scroller: HTMLElement | undefined;
+let marked_link: HTMLElement | undefined;
+let page_watcher: { disconnect(): void } | undefined;
+
+// The sidebar scrolls on its own, so a long list can hide the current link. Only the sidebar moves, never the page.
+function scroll_sidebar_to(bar: HTMLElement, link: HTMLElement): void {
+  const bar_box = bar.getBoundingClientRect();
+  const link_box = link.getBoundingClientRect();
+  if (link_box.top < bar_box.top) bar.scrollTop += link_box.top - bar_box.top;
+  else if (link_box.bottom > bar_box.bottom) bar.scrollTop += link_box.bottom - bar_box.bottom;
+}
+
+export function refresh_current_section(): void {
+  const top_of = (id: string) => {
+    const heading = document.getElementById(id);
+    return heading && heading.getClientRects().length > 0 ? heading.getBoundingClientRect().top : undefined;
+  };
+  const at_end = at_page_end(window.scrollY, window.innerHeight, document.documentElement.scrollHeight);
+  const current = mark_current_section(section_links, top_of, window.innerHeight * CURRENT_LINE_FRACTION, at_end);
+  if (current !== marked_link && current && sidebar_scroller && current.getClientRects().length > 0) scroll_sidebar_to(sidebar_scroller, current);
+  marked_link = current;
+}
+
 let mark_queued = false;
 
 // One scroll listener for the whole page, throttled to one run per frame. It reads the links of the latest render, so a redraw needs no new listener.
@@ -468,32 +497,25 @@ function queue_current_section(): void {
   mark_queued = true;
   requestAnimationFrame(() => {
     mark_queued = false;
-    const top_of = (id: string) => {
-      const heading = document.getElementById(id);
-      return heading && heading.getClientRects().length > 0 ? heading.getBoundingClientRect().top : undefined;
-    };
-    const root = document.documentElement;
-    mark_current_section(section_links, top_of, window.innerHeight * CURRENT_LINE_FRACTION, window.scrollY + window.innerHeight >= root.scrollHeight - 2);
-    keep_current_link_visible();
+    refresh_current_section();
   });
 }
 
-// The sidebar scrolls on its own, so a long list can hide the current link. Only the sidebar moves, never the page.
-function keep_current_link_visible(): void {
-  const bar = document.querySelector<HTMLElement>(`#${SIDEBAR_ID}`);
-  const link = bar?.querySelector<HTMLElement>('.desertfox-help-sections a[aria-current="location"]');
-  if (!bar || !link || link.getClientRects().length === 0) return;
-  const bar_box = bar.getBoundingClientRect();
-  const link_box = link.getBoundingClientRect();
-  if (link_box.top < bar_box.top) bar.scrollTop += link_box.top - bar_box.top;
-  else if (link_box.bottom > bar_box.bottom) bar.scrollTop += link_box.bottom - bar_box.bottom;
-}
-
 let scroll_listener_added = false;
-function follow_scroll_for_current_section(): void {
+// A layout change with no scroll (a block opens, the filter hides rows, a box fills in) moves the headings, so the page content is watched too.
+function follow_current_section(sidebar_node: HTMLElement, page: HTMLElement): void {
+  sidebar_scroller = sidebar_node;
+  marked_link = undefined;
   if (!scroll_listener_added && typeof window !== "undefined" && window.addEventListener) {
     scroll_listener_added = true;
     window.addEventListener("scroll", queue_current_section, { passive: true });
+  }
+  page_watcher?.disconnect();
+  page_watcher = undefined;
+  if (typeof ResizeObserver === "function") {
+    const watcher = new ResizeObserver(queue_current_section);
+    watcher.observe(page);
+    page_watcher = watcher;
   }
   queue_current_section();
 }
@@ -655,5 +677,5 @@ export function render_help(root: HTMLElement, full_model: HelpModel, route: Rou
   wire_drawer(help, menu_toggle, sidebar_node, backdrop, heading);
   root.replaceChildren(help);
   sidebar_node.scrollTop = old_scroll_top;
-  follow_scroll_for_current_section();
+  follow_current_section(sidebar_node, page);
 }

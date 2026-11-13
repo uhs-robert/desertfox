@@ -36,3 +36,15 @@ test("the help page keeps a 16px root and sets its font through the token a them
   assert.match(rule, /font: var\(--desertfox-font\);/);
   assert.ok(!/(^|[\s;])font-size:/.test(rule), "a font-size longhand would beat the theme's --desertfox-font");
 });
+
+test("every control rule sits entirely in :where(), and the key capture box is covered", () => {
+  const html = read("src/help/home.html");
+  assert.match(html, /:where\(\.desertfox-help-page :is\([^\n]*, \.desertfox-settings-input\)\)/, "the capture box is a div with the input class, so the input rule must name that class");
+  for (const state of ["button", "button:hover:not(:disabled)", "button:disabled"]) assert.ok(html.includes(`:where(.desertfox-help-page ${state}) {`), state);
+  assert.ok(!/:where\(\.desertfox-help-page\) button/.test(html), "a selector part outside :where() would beat class rules");
+});
+
+test("heading sizes follow the body size", () => {
+  const html = read("src/help/home.html");
+  for (const level of ["h1", "h2", "h3"]) assert.match(html, new RegExp(`\\.desertfox-help ${level} \\{[^}]*font-size: [\\d.]+em`), level);
+});
