@@ -1,6 +1,7 @@
 // Connects `create_bridge` to the browser: the native port, the window and tab queries and the events that publish or stream.
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
+import { stored_keymap } from "./keymap_source.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { Mode } from "../shared/command.ts";
 import { BRIDGE_HOST_NAME, create_bridge } from "./bridge.ts";
@@ -85,7 +86,7 @@ export const browser_tab_switch = (): TabSwitch =>
 export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mode>, bridge_run: ReturnType<typeof browser_bridge_run>, tab_switch: TabSwitch, set_desktop_palette: BridgeDeps["set_desktop_palette"], host_ready: BridgeDeps["host_ready"]): BridgeDeps => ({
   connect: () => browser.runtime.connectNative(BRIDGE_HOST_NAME),
   read_settings: async () => {
-    const keymap = current_keymap((await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY))[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+    const keymap = current_keymap(await stored_keymap(browser.storage.local));
     return { bridge: keymap?.bridge === true, share_tabs: keymap?.bridge === true && keymap.bridge_share_tabs === true };
   },
   permission_granted: () => browser.permissions.contains({ permissions: ["nativeMessaging"] }),

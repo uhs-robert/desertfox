@@ -6,11 +6,14 @@ export const areas = ["keys"];
 const KEYMAP_DELAY_MS = 2500;
 
 export async function run_cases({ run_case, in_background, url_of, wait_event, events, expect, sleep, press_keys, in_active_tab }) {
-  const delay_keymap_reads = (on) => in_background(`(() => {
+  // The background keeps the keymap in memory (keymap_source.ts) and drops it on a change to the key, so turning the delay on rewrites the key to force the next read through the wrapped `get`.
+  const delay_keymap_reads = (on) => in_background(`(async () => {
     const local = browser.storage.local;
     if (!${on}) { if (local.get.original) local.get = local.get.original; return 0; }
     const original = local.get.original ?? local.get;
     local.get = Object.assign((keys) => (keys === "desertfox_compiled_keymap" ? new Promise((resolve) => setTimeout(resolve, ${KEYMAP_DELAY_MS})).then(() => original.call(local, keys)) : original.call(local, keys)), { original });
+    const stored = (await original.call(local, "desertfox_compiled_keymap")).desertfox_compiled_keymap;
+    if (stored) await local.set({ desertfox_compiled_keymap: { ...stored, cache_drop_probe: Date.now() } });
     return 1;
   })()`);
 
