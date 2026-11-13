@@ -37,7 +37,7 @@ const all_off_at = (compiled: CompiledKeymap, url: string): boolean => normal_tr
 
 function feed_keys(compiled: CompiledKeymap, url: string, keys: string[]): string {
   const matcher = matcher_for(compiled, url);
-  return keys.map((key) => matcher.feed("normal", key).kind).at(-1)!;
+  return keys.map((key) => matcher.feed("normal", key).kind_).at(-1)!;
 }
 
 test("pass of a leaf frees that key and keeps the rest", () => {
@@ -118,19 +118,19 @@ const SLASH_KEYMAP: KeymapConfig = { normal: { "/": { id: "a.find" }, f: { id: "
 test("a passed or unlisted single key that the flow would cancel or count reaches the page", () => {
   const passed = compile_keymap(SLASH_KEYMAP, { site_rules: [{ site: "https://a.test/*", pass: "/ 5" }] }, resolve).compiled;
   const matcher = matcher_for(passed, "https://a.test/");
-  assert.equal(matcher.feed("normal", "/").kind, "no_match");
+  assert.equal(matcher.feed("normal", "/").kind_, "no_match");
   assert.equal(matcher.passes_("normal", "/"), true);
   assert.equal(matcher.passes_("normal", "j"), false);
   // 5 is no count digit here: the next key is not given a count of 5.
-  assert.equal(matcher.feed("normal", "5").kind, "no_match");
-  assert.equal(matcher.feed("normal", "f").kind, "match");
+  assert.equal(matcher.feed("normal", "5").kind_, "no_match");
+  assert.equal(matcher.feed("normal", "f").kind_, "match");
   const only = compile_keymap(SLASH_KEYMAP, { site_rules: [{ site: "https://a.test/*", only: "f" }] }, resolve).compiled;
   const only_matcher = matcher_for(only, "https://a.test/");
   for (const key of ["/", "'", "3", "j"]) assert.equal(only_matcher.passes_("normal", key), true, key);
-  assert.equal(only_matcher.feed("normal", "3").kind, "no_match");
+  assert.equal(only_matcher.feed("normal", "3").kind_, "no_match");
   assert.equal(only_matcher.passes_("normal", "f"), false);
   // Another page keeps the count and the Quick Find cancel.
-  assert.equal(matcher_for(only, "https://b.test/").feed("normal", "3").kind, "pending");
+  assert.equal(matcher_for(only, "https://b.test/").feed("normal", "3").kind_, "pending");
 });
 
 test("which-key lists only the keys the page's rule leaves", async () => {
@@ -155,7 +155,7 @@ test("no rules leaves the key out", () => {
 test("a passed key the tree never binds still reaches the page", () => {
   const { compiled } = compile_keymap(SLASH_KEYMAP, { site_rules: [{ site: "https://a.test/*", pass: "'" }] }, resolve);
   const matcher = matcher_for(compiled, "https://a.test/");
-  assert.equal(matcher.feed("normal", "'").kind, "no_match");
+  assert.equal(matcher.feed("normal", "'").kind_, "no_match");
   assert.equal(matcher.passes_("normal", "'"), true);
 });
 
@@ -163,13 +163,13 @@ test("only keeps the one-shot pass and the ways into and out of ignore mode", ()
   const keymap: KeymapConfig = { normal: { f: { id: "a.f" }, j: { id: "a.j" }, "<C-v>": { id: "a.v" }, "<S-Escape>": { id: "a.i" }, "<Escape>": { id: "a.e" } } };
   const { compiled } = compile_keymap(keymap, { site_rules: [{ site: "https://a.test/*", only: "f" }] }, resolve);
   const matcher = matcher_for(compiled, "https://a.test/");
-  for (const key of ["f", "<C-v>", "<S-Escape>"]) assert.equal(matcher.feed("normal", key).kind, "match", key);
-  assert.equal(matcher.feed("normal", "j").kind, "no_match");
+  for (const key of ["f", "<C-v>", "<S-Escape>"]) assert.equal(matcher.feed("normal", key).kind_, "match", key);
+  assert.equal(matcher.feed("normal", "j").kind_, "no_match");
   // Normal-mode Escape goes to the page. Insert mode has its own tree, which no rule prunes.
-  assert.equal(matcher.feed("normal", "<Escape>").kind, "no_match");
+  assert.equal(matcher.feed("normal", "<Escape>").kind_, "no_match");
   assert.equal(matcher.passes_("normal", "<Escape>"), true);
   const insert = compile_keymap({ ...keymap, insert: { "<Escape>": { id: "a.e" } } }, { site_rules: [{ site: "https://a.test/*", only: "f" }] }, resolve).compiled;
-  assert.equal(create_matcher(insert).feed("insert", "<Escape>").kind, "match");
+  assert.equal(create_matcher(insert).feed("insert", "<Escape>").kind_, "match");
 });
 
 test("an unusable keymap never changes the mode, and a later usable one still enters ignore", () => {

@@ -46,18 +46,18 @@ export function key_command_id(keymap: CompiledKeymap | undefined, sequence: str
   const none = { error: `${sequence} has no normal-mode binding` };
   if (!keymap) return none;
   const matcher = create_matcher(keymap, frees);
-  let result: MatchResult = { kind: "no_match" };
+  let result: MatchResult = { kind_: "no_match" };
   let consumed = 0;
   for (const token of tokens) {
     result = matcher.feed("normal", token);
     consumed += 1;
-    if (result.kind !== "pending") break;
+    if (result.kind_ !== "pending") break;
   }
   // Keys left after a complete binding are no binding, so `jx` is not `j`.
-  if (result.kind === "match") return consumed === tokens.length ? { id: result.leaf.steps[0]!.invocation.id } : none;
-  const capture = result.kind === "pending" ? result.node.children[ANY_KEY] : undefined;
+  if (result.kind_ === "match") return consumed === tokens.length ? { id: result.leaf.steps[0]!.invocation.id } : none;
+  const capture = result.kind_ === "pending" ? result.node.children[ANY_KEY] : undefined;
   if (capture?.kind === "leaf") return { id: capture.steps[0]!.invocation.id };
-  return result.kind === "pending" ? { error: `${sequence} is the start of longer keys, not a command` } : none;
+  return result.kind_ === "pending" ? { error: `${sequence} is the start of longer keys, not a command` } : none;
 }
 
 // The keys as the page at `address` receives them: its site rules bind, free or prune keys. No address gives the global tree.

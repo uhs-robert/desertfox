@@ -16,11 +16,11 @@ import { registry } from "../src/shared/registry/builtin.ts";
 const compiled = (user_keymap: Record<string, unknown> = {}): CompiledKeymap =>
   compile_config({ config: { ...empty_config(), keymap: user_keymap as never }, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: {} }).compiled;
 const storage_of = (keymap: CompiledKeymap) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) }) as never;
-const first_step = (result: ReturnType<ReturnType<typeof create_matcher>["feed"]>) => (result.kind === "match" ? result.leaf.steps[0]!.invocation : undefined);
+const first_step = (result: ReturnType<ReturnType<typeof create_matcher>["feed"]>) => (result.kind_ === "match" ? result.leaf.steps[0]!.invocation : undefined);
 
 test("q then a register key is macro.record with that register", () => {
   const matcher = create_matcher(compiled());
-  assert.equal(matcher.feed("normal", "q").kind, "pending");
+  assert.equal(matcher.feed("normal", "q").kind_, "pending");
   assert.deepEqual(first_step(matcher.feed("normal", "a")), { id: "macro.record", args: { reg: "a" } });
 });
 
@@ -35,7 +35,7 @@ test("while recording, q alone stops, and the reply names the register", async (
 test("a page that is not recording keeps the record key and sends no register", async () => {
   const reply = (await page_keymap_for(storage_of(compiled()), ["https://a.test/"]))!;
   assert.equal(reply.recording, undefined);
-  assert.equal(create_matcher(reply.keymap).feed("normal", "q").kind, "pending");
+  assert.equal(create_matcher(reply.keymap).feed("normal", "q").kind_, "pending");
 });
 
 test("the stop key follows a user binding of macro.record", async () => {

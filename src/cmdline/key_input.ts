@@ -12,9 +12,9 @@ export type KeyOutcome =
 
 export function run_token(matcher: TokenMatcher, session: Session, token: string): KeyOutcome {
   const result = matcher.feed("cmdline", token);
-  if (result.kind === "no_match") return { kind: "unbound" };
+  if (result.kind_ === "no_match") return { kind: "unbound" };
   // Swallowed, and the matcher stays on the sequence for the next token.
-  if (result.kind === "pending") return { kind: "effect", effect: { kind: "render" } };
+  if (result.kind_ === "pending") return { kind: "effect", effect: { kind: "render" } };
   return { kind: "effect", effect: run_steps(session, result.leaf.steps.map((step) => step.invocation)) };
 }
 

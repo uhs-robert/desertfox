@@ -102,15 +102,15 @@ test("every media key runs a command that allows the media mode", () => {
 
 test("the matcher reads 5l as a count, 0 as the start and 50% as a percent in the media mode", () => {
   const matcher = create_matcher(compiled());
-  const leaf_of = (result: ReturnType<typeof matcher.feed>) => (result.kind === "match" ? { count: result.count, action: result.leaf.steps[0]!.invocation.args?.action, value: result.leaf.steps[0]!.invocation.args?.value } : result);
-  assert.deepEqual(matcher.feed("media", "5").kind, "pending");
+  const leaf_of = (result: ReturnType<typeof matcher.feed>) => (result.kind_ === "match" ? { count: result.count, action: result.leaf.steps[0]!.invocation.args?.action, value: result.leaf.steps[0]!.invocation.args?.value } : result);
+  assert.deepEqual(matcher.feed("media", "5").kind_, "pending");
   assert.deepEqual(leaf_of(matcher.feed("media", "l")), { count: 5, action: "seek", value: "up" });
   assert.deepEqual(leaf_of(matcher.feed("media", "0")), { count: undefined, action: "seek", value: "reset" });
   matcher.feed("media", "5");
   matcher.feed("media", "0");
   assert.deepEqual(leaf_of(matcher.feed("media", "%")), { count: 50, action: "seek", value: "percent" });
   // Digits are plain keys outside the counting modes.
-  assert.equal(matcher.feed("hint", "5").kind === "pending", false);
+  assert.equal(matcher.feed("hint", "5").kind_ === "pending", false);
 });
 
 test("a percent key with no count is refused when it runs, since the count fills the times param", () => {

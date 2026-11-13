@@ -5,10 +5,10 @@ import type { CompiledKeymap, LeafStep, TreeBranch, TreeLeaf } from "../prefix_t
 import { REGISTER_KEY } from "../register_names.ts";
 
 export type MatchResult =
-  | { kind: "match"; leaf: TreeLeaf; count?: number }
+  | { kind_: "match"; leaf: TreeLeaf; count?: number }
   // `register_keys_` is `"` while the register name is awaited and `"a` once it is typed. It sits beside `typed` and not in it, so a count can follow it.
-  | { kind: "pending"; node: TreeBranch; typed_: string[]; count?: number; register_keys_?: string; keys: string[] }
-  | { kind: "no_match" };
+  | { kind_: "pending"; node: TreeBranch; typed_: string[]; count?: number; register_keys_?: string; keys: string[] }
+  | { kind_: "no_match" };
 
 const MAX_COUNT_DIGITS = 6;
 
@@ -40,18 +40,18 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
       walk_mode = mode;
     }
     const root = keymap.modes[mode as keyof CompiledKeymap["modes"]];
-    if (!root) return { kind: "no_match" };
+    if (!root) return { kind_: "no_match" };
     node ??= root;
-    if (passes_(mode, token)) return reset(), { kind: "no_match" };
+    if (passes_(mode, token)) return reset(), { kind_: "no_match" };
 
     keys = [...keys, token];
     const progress = () => ({ ...(count_digits && { count: Number(count_digits) }), ...(register_keys_ && { register_keys_ }), keys });
     // `"` and a register name go before a command, and a count may stand on either side of them.
     const awaiting_name = register_keys_ === '"';
     if (awaiting_name || (token === '"' && !register_keys_ && mode !== "media" && COUNT_MODES.includes(mode) && typed.length === 0 && !root.children[token])) {
-      if (awaiting_name && !REGISTER_KEY.test(token)) return reset(), { kind: "no_match" };
+      if (awaiting_name && !REGISTER_KEY.test(token)) return reset(), { kind_: "no_match" };
       register_keys_ += token;
-      return { kind: "pending", node: root, typed_: typed, ...progress() };
+      return { kind_: "pending", node: root, typed_: typed, ...progress() };
     }
 
     const is_digit = /^[0-9]$/.test(token);
@@ -63,7 +63,7 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
       (count_digits !== "" || (token !== "0" && !root.children[token]));
     if (key_is_count_digit) {
       count_digits += token;
-      return { kind: "pending", node: root, typed_: typed, ...progress() };
+      return { kind_: "pending", node: root, typed_: typed, ...progress() };
     }
 
     // A branch with an `ANY_KEY` child waits for one printable key, and a space counts. Any other token breaks the sequence, as a stray key would.
@@ -72,7 +72,7 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
     const info = progress();
     if (!next) {
       reset();
-      return { kind: "no_match" };
+      return { kind_: "no_match" };
     }
     if (next.kind === "leaf") {
       reset();
@@ -81,31 +81,31 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
         step.capture || (register && step.register)
           ? { ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, ...(step.capture && { [step.capture]: typed_char }), ...(register && step.register && { register }) } } }
           : step;
-      return { kind: "match", leaf: { ...next, steps: next.steps.map(fill) }, ...info };
+      return { kind_: "match", leaf: { ...next, steps: next.steps.map(fill) }, ...info };
     }
     node = next;
     typed = [...typed, token];
-    return { kind: "pending", node: next, typed_: typed, ...info };
+    return { kind_: "pending", node: next, typed_: typed, ...info };
   };
 
   // A key that breaks a half-typed sequence gets one more try as a first key, so Enter after a stray prefix key still submits.
   const feed = (mode: string, token: string): MatchResult => {
     const in_progress = typed.length > 0 || count_digits + register_keys_ !== "";
     const result = walk(mode, token);
-    return result.kind === "no_match" && in_progress ? walk(mode, token) : result;
+    return result.kind_ === "no_match" && in_progress ? walk(mode, token) : result;
   };
 
   // Whether `token` binds after the keys in `ahead`: it adds a count digit or starts, continues or ends a binding. The walk is left as it was.
   // A completed binding in `ahead` can change the mode the later keys replay in, so every key after it counts as binding.
   const binds_after_ = (mode: string, ahead: readonly string[], token: string): boolean => {
     const saved = [walk_mode, node, typed, count_digits, register_keys_, keys] as const;
-    let result: MatchResult = { kind: "no_match" };
+    let result: MatchResult = { kind_: "no_match" };
     for (const key of [...ahead, token]) {
-      if (result.kind === "match") break;
+      if (result.kind_ === "match") break;
       result = feed(mode, key);
     }
     [walk_mode, node, typed, count_digits, register_keys_, keys] = saved;
-    return result.kind !== "no_match";
+    return result.kind_ !== "no_match";
   };
 
   return { feed, reset, binds_after_, passes_ };

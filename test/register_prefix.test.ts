@@ -36,7 +36,7 @@ function tree_of(normal: Record<string, unknown>): CompiledKeymap {
 
 const tree = () => tree_of({ y: { id: "test.yank" }, x: { id: "test.yank", args: { register: "z" } }, j: { id: "test.down" }, gg: { id: "test.down" }, "<Escape>": { id: "test.down" } });
 // A binding that no register reached keeps the empty default the compiler filled in.
-const register_of = (result: MatchResult) => (result.kind === "match" ? result.leaf.steps[0]!.invocation.args?.register || undefined : "no match");
+const register_of = (result: MatchResult) => (result.kind_ === "match" ? result.leaf.steps[0]!.invocation.args?.register || undefined : "no match");
 const feed_all = (matcher: ReturnType<typeof create_matcher>, keys: string[], mode = "normal") => keys.map((key) => matcher.feed(mode, key)).at(-1)!;
 
 test("the compiler flags a step whose command has a register param, and no other", () => {
@@ -67,8 +67,8 @@ test("the default keymap flags the yanks and the open, and the insert paste has 
 test("the prefix attaches its register to the next command, in the compiled steps and not the tree", () => {
   const keymap = tree();
   const matcher = create_matcher(keymap);
-  assert.equal(matcher.feed("normal", '"').kind, "pending");
-  assert.equal(matcher.feed("normal", "a").kind, "pending");
+  assert.equal(matcher.feed("normal", '"').kind_, "pending");
+  assert.equal(matcher.feed("normal", "a").kind_, "pending");
   assert.equal(register_of(matcher.feed("normal", "y")), "a");
   // The register is spent: the next command has none, and the stored tree is untouched.
   assert.equal(register_of(feed_all(matcher, ["y"])), undefined);
@@ -78,11 +78,11 @@ test("the prefix attaches its register to the next command, in the compiled step
 test("a count stands before or after the prefix", () => {
   const matcher = create_matcher(tree());
   const before = feed_all(matcher, ["3", '"', "a", "y"]);
-  assert.deepEqual([before.kind === "match" && before.count, register_of(before)], [3, "a"]);
+  assert.deepEqual([before.kind_ === "match" && before.count, register_of(before)], [3, "a"]);
   const after = feed_all(matcher, ['"', "b", "2", "y"]);
-  assert.deepEqual([after.kind === "match" && after.count, register_of(after)], [2, "b"]);
+  assert.deepEqual([after.kind_ === "match" && after.count, register_of(after)], [2, "b"]);
   const prompt = feed_all(matcher, ['"', "c", "1", "2", "j"]);
-  assert.equal(prompt.kind === "match" && prompt.count, 12);
+  assert.equal(prompt.kind_ === "match" && prompt.count, 12);
 });
 
 test("the prefix names every kind of register the special registers", () => {
@@ -100,32 +100,32 @@ test("the prefix names every kind of register the special registers", () => {
 test("the prefix reports its keys beside the typed ones, so which-key and Backspace can read it", () => {
   const matcher = create_matcher(tree());
   const waiting = matcher.feed("normal", '"');
-  assert.deepEqual(waiting.kind === "pending" && [waiting.typed_, waiting.register_keys_], [[], '"']);
+  assert.deepEqual(waiting.kind_ === "pending" && [waiting.typed_, waiting.register_keys_], [[], '"']);
   const named = matcher.feed("normal", "a");
-  assert.deepEqual(named.kind === "pending" && [named.typed_, named.register_keys_], [[], '"a']);
+  assert.deepEqual(named.kind_ === "pending" && [named.typed_, named.register_keys_], [[], '"a']);
   const inside = matcher.feed("normal", "g");
-  assert.deepEqual(inside.kind === "pending" && [inside.typed_, inside.register_keys_], [["g"], '"a']);
+  assert.deepEqual(inside.kind_ === "pending" && [inside.typed_, inside.register_keys_], [["g"], '"a']);
 });
 
 test("an invalid name or a key with no binding ends the prefix, and the key gets its one retry as a first key", () => {
   const matcher = create_matcher(tree());
   matcher.feed("normal", '"');
-  assert.equal(matcher.feed("normal", "!").kind, "no_match");
+  assert.equal(matcher.feed("normal", "!").kind_, "no_match");
   assert.equal(register_of(feed_all(matcher, ["y"])), undefined);
   // `"a` then a key with no binding: no match, and the register is gone.
   matcher.feed("normal", '"');
   matcher.feed("normal", "a");
-  assert.equal(matcher.feed("normal", "Z").kind, "no_match");
+  assert.equal(matcher.feed("normal", "Z").kind_, "no_match");
   assert.equal(register_of(feed_all(matcher, ["y"])), undefined);
   // Escape cancels the prefix and then runs as a first key.
   matcher.feed("normal", '"');
   const escape = matcher.feed("normal", "<Escape>");
-  assert.equal(escape.kind === "match" && escape.leaf.steps[0]!.invocation.id, "test.down");
+  assert.equal(escape.kind_ === "match" && escape.leaf.steps[0]!.invocation.id, "test.down");
   assert.equal(register_of(feed_all(matcher, ["y"])), undefined);
   // A digit is no register name, so it starts a count on its retry.
   matcher.feed("normal", '"');
   const digit = matcher.feed("normal", "1");
-  assert.deepEqual(digit.kind === "pending" && [digit.count, digit.register_keys_], [1, undefined]);
+  assert.deepEqual(digit.kind_ === "pending" && [digit.count, digit.register_keys_], [1, undefined]);
 });
 
 test("a mode change between the register and the command drops the register", () => {
@@ -137,13 +137,13 @@ test("a mode change between the register and the command drops the register", ()
 
 test("in insert mode `\"` is an ordinary key", () => {
   const matcher = create_matcher(tree());
-  assert.equal(matcher.feed("insert", '"').kind, "no_match");
-  assert.equal(matcher.feed("insert", "j").kind, "match");
+  assert.equal(matcher.feed("insert", '"').kind_, "no_match");
+  assert.equal(matcher.feed("insert", "j").kind_, "match");
 });
 
 test("a user binding of `\"` wins over the prefix", () => {
   const matcher = create_matcher(tree_of({ '"': { id: "test.down" }, y: { id: "test.yank" } }));
-  assert.equal(matcher.feed("normal", '"').kind, "match");
+  assert.equal(matcher.feed("normal", '"').kind_, "match");
 });
 
 test("binds_after_ reads ahead through the prefix and leaves the walk as it was", () => {
@@ -159,7 +159,7 @@ test("a key the site hands to the page does not join a pending prefix", () => {
   const matcher = create_matcher(tree(), (token) => token === "a");
   matcher.feed("normal", '"');
   assert.equal(matcher.passes_("normal", "a"), false);
-  assert.equal(matcher.feed("normal", "a").kind, "pending");
+  assert.equal(matcher.feed("normal", "a").kind_, "pending");
 });
 
 function make_flow(keymap = tree()) {
@@ -350,7 +350,7 @@ test("an unbound quote in the media mode is no register prefix, so it reaches th
   const keymap = tree();
   const media_keymap = { ...keymap, modes: { ...keymap.modes, media: keymap.modes.normal } } as CompiledKeymap;
   const matcher = create_matcher(media_keymap);
-  assert.equal(matcher.feed("media", '"').kind, "no_match");
-  assert.equal(matcher.feed("media", "3").kind, "pending");
-  assert.equal(matcher.feed("media", "j").kind, "match");
+  assert.equal(matcher.feed("media", '"').kind_, "no_match");
+  assert.equal(matcher.feed("media", "3").kind_, "pending");
+  assert.equal(matcher.feed("media", "j").kind_, "match");
 });

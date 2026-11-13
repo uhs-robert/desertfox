@@ -99,11 +99,11 @@ test("a binding that sets the key has no capture", () => {
 });
 
 const capture_tree = (): CompiledKeymap => compiled({ m: { id: "test.mark" }, w: { id: "test.wait" }, "<Escape>": { id: "test.down" }, gg: { id: "test.down" }, j: { id: "test.down" } }).compiled;
-const slot_of = (result: ReturnType<ReturnType<typeof create_matcher>["feed"]>) => (result.kind === "match" ? result.leaf.steps[0]!.invocation.args?.slot : undefined);
+const slot_of = (result: ReturnType<ReturnType<typeof create_matcher>["feed"]>) => (result.kind_ === "match" ? result.leaf.steps[0]!.invocation.args?.slot : undefined);
 
 test("the matcher fills the key param from the next printable token", () => {
   const matcher = create_matcher(capture_tree());
-  assert.equal(matcher.feed("normal", "m").kind, "pending");
+  assert.equal(matcher.feed("normal", "m").kind_, "pending");
   const result = matcher.feed("normal", "x");
   assert.equal(slot_of(result), "x");
 });
@@ -112,29 +112,29 @@ test("a capture key that is itself a prefix is a value, not a step in the tree",
   const matcher = create_matcher(capture_tree());
   matcher.feed("normal", "m");
   assert.equal(slot_of(matcher.feed("normal", "g")), "g");
-  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(matcher.feed("normal", "g").kind_, "pending");
   // The tree is back at its root: `j` is a plain key.
-  assert.equal(matcher.feed("normal", "j").kind, "match");
+  assert.equal(matcher.feed("normal", "j").kind_, "match");
 });
 
 test("a count before the capturing key reaches the match", () => {
   const matcher = create_matcher(capture_tree());
   matcher.feed("normal", "5");
-  assert.equal(matcher.feed("normal", "m").kind, "pending");
+  assert.equal(matcher.feed("normal", "m").kind_, "pending");
   const result = matcher.feed("normal", "q");
-  assert.equal(result.kind === "match" && result.count, 5);
+  assert.equal(result.kind_ === "match" && result.count, 5);
   assert.equal(slot_of(result), "q");
   // The count does not leak into the next sequence.
   const next = matcher.feed("normal", "j");
-  assert.equal(next.kind === "match" && next.count, undefined);
+  assert.equal(next.kind_ === "match" && next.count, undefined);
 });
 
 test("Escape ends a pending capture and runs as a first key", () => {
   const matcher = create_matcher(capture_tree());
   matcher.feed("normal", "m");
   const result = matcher.feed("normal", "<Escape>");
-  assert.equal(result.kind === "match" && result.leaf.steps[0]!.invocation.id, "test.down");
-  assert.equal(matcher.feed("normal", "j").kind, "match");
+  assert.equal(result.kind_ === "match" && result.leaf.steps[0]!.invocation.id, "test.down");
+  assert.equal(matcher.feed("normal", "j").kind_, "match");
   // A second Escape does not find a stale capture.
   matcher.feed("normal", "m");
   matcher.feed("normal", "<Escape>");
@@ -144,9 +144,9 @@ test("Escape ends a pending capture and runs as a first key", () => {
 test("a chord or named key does not fill the param", () => {
   const matcher = create_matcher(capture_tree());
   matcher.feed("normal", "m");
-  assert.equal(matcher.feed("normal", "<C-a>").kind, "no_match");
+  assert.equal(matcher.feed("normal", "<C-a>").kind_, "no_match");
   matcher.feed("normal", "m");
-  assert.equal(matcher.feed("normal", "<Tab>").kind, "no_match");
+  assert.equal(matcher.feed("normal", "<Tab>").kind_, "no_match");
 });
 
 test("a space fills the key param as a space character", () => {
@@ -169,7 +169,7 @@ test("binds_after_ reads ahead through a capture and leaves the walk as it was",
   assert.equal(matcher.binds_after_("normal", [], "z"), true);
   assert.equal(slot_of(matcher.feed("normal", "z")), "z");
   assert.equal(matcher.binds_after_("normal", ["m"], "z"), true);
-  assert.equal(matcher.feed("normal", "q").kind, "no_match");
+  assert.equal(matcher.feed("normal", "q").kind_, "no_match");
 });
 
 function make_flow() {
@@ -258,8 +258,8 @@ test("the router refuses a key the pattern rejects, repeats a content command by
     const matcher = create_matcher(tree);
     const results = keys.map((key) => matcher.feed("normal", key));
     const last = results.at(-1)!;
-    assert.equal(last.kind, "match");
-    const match = last as Extract<typeof last, { kind: "match" }>;
+    assert.equal(last.kind_, "match");
+    const match = last as Extract<typeof last, { kind_: "match" }>;
     return create_router(deps).run({ invocations: match.leaf.steps.map((step) => ({ ...step.invocation, ...(match.count === undefined ? {} : { count: match.count }) })), mode: "normal" });
   };
   assert.equal((await run(["m", "1"])).ok, false);
