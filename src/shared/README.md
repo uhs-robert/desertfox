@@ -7,6 +7,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `keymap.ts`: keymap data as written by the user.
 - `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script. Its `format_version` is bumped when the shape changes, and `current_keymap` hides an older one until the background recompiles at its next start. A `SiteRule` holds its `bind` as normalized key to tokens and leaf.
 - `messages.ts`: messages between content script and background.
+- `relay.ts`: the handlers a frame may ask the background to run in another frame of its tab (`relay` message), each with its bundle and direction: to the top frame, or to a frame named by id. The background adds the sender's `from_frame`.
 - `container_store.ts`: the name and cookie store id of the container-less store, shared by the background and the `open` commands.
 - `group_name.ts`: the label of a native tab group (its title, or title plus `#id` when empty or shared) and the lookup of a typed label.
 - `tab_model_port.ts`: the port names of the live tab model, the plain one and its `:normal` and `:private` forms.
