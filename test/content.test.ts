@@ -33,7 +33,7 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined) {
+function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
@@ -43,7 +43,7 @@ function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefi
     take_pass_next_: state.take_pass_next_,
     run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
     leave_insert_: () => state.escape(),
-    is_loading_: () => false,
+    is_loading_: () => loading.on,
     loading_sink_bundles_: () => [],
     sink_of_: () => sink,
     on_prefix_: () => {},
@@ -771,4 +771,25 @@ test("layout fallback: a key held before the keymap arrives keeps its typed lett
   flow.set_layout_fallback_(false);
   flow.set_matcher_(create_matcher(keymap));
   assert.deepEqual(ran, []);
+});
+
+test("layout fallback: a Cyrillic key typed during a load with the keymap in place is held, not sent to the page", () => {
+  const loading = { on: true };
+  const { flow, ran } = make_flow(false, false, undefined, loading);
+  flow.set_matcher_(create_matcher(keymap));
+  assert.equal(flow.handle_token_("о", false, undefined, "j"), "cancel");
+  loading.on = false;
+  flow.release();
+  assert.deepEqual(ran, ["down"]);
+});
+
+test("layout fallback: a replayed key is judged without the keys queued behind it", () => {
+  const loading = { on: true };
+  const { flow, ran } = make_flow(false, false, undefined, loading);
+  flow.set_matcher_(create_matcher(keymap));
+  flow.handle_token_("о", false, undefined, "j");
+  flow.handle_token_("j");
+  loading.on = false;
+  flow.release();
+  assert.deepEqual(ran, ["down", "down"]);
 });

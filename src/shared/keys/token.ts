@@ -39,7 +39,7 @@ export function format_token(mods: string, name: string): string {
 // The Latin letter on the physical key of a plain letter from another script, or null. Shift makes it upper case. A chord has none: Ctrl+с is not Ctrl+c, so Firefox keeps its own shortcut.
 export function physical_token(event: KeyEventLike): string | null {
   const letter = /^Key([A-Z])$/.exec(event.code)?.[1];
-  return letter && !(event.ctrlKey || event.altKey || event.metaKey) && /^\p{L}$/u.test(event.key) && !/^[a-z]$/i.test(event.key) ? (event.shiftKey ? letter : letter.toLowerCase()) : null;
+  return letter && !(event.ctrlKey || event.altKey || event.metaKey) && /^\p{L}$/u.test(event.key) && !/^\p{Script=Latin}$/u.test(event.key) ? (event.shiftKey ? letter : letter.toLowerCase()) : null;
 }
 
 // Returns null for a key press that is only a modifier or has no usable key.

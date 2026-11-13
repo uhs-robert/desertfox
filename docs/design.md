@@ -187,7 +187,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 
 ### Layout fallback
 
-- On a Cyrillic, Greek or Hebrew layout, a plain letter whose typed character binds nothing acts as the Latin letter on its physical key (`event.code`). Shift gives upper case.
+- On a layout whose letters are not Latin (Cyrillic, Greek, Hebrew, Arabic and others), a plain letter whose typed character binds nothing acts as the Latin letter on its physical key (`event.code`). Shift gives upper case. A Latin letter outside ASCII, such as the Turkish `ı`, never swaps.
 - A typed character that binds something never changes, so Latin layouts see no difference. A Ctrl, Alt or Meta chord has no fallback here: `token.ts` already maps it.
 - A mode with a sink (hint mode) gets the typed letter, so its text filter keeps it.
 - The `layout_fallback` setting (default on) controls it. The compiled keymap carries `layout_fallback: false` only when off, and `key_flow` reads it on each install, so a config reload applies it.
