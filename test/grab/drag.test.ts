@@ -59,6 +59,8 @@ test("a page that cancels dragstart refuses the grab", () => {
   const source = element({ draggable_: true });
   source.on.dragstart = () => false;
   assert.equal(press(as_element(source)), undefined);
+  // The press went out before the page cancelled, so the release must follow it.
+  assert.deepEqual(source.log, ["pointerdown", "mousedown", "dragstart", "pointerup", "mouseup"]);
 });
 
 test("a cancelled pointerdown sends no mouse events for the rest of the press", () => {
