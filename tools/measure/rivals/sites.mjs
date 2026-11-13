@@ -1,8 +1,12 @@
-// The live-site check (PAGES=sites): the site list, each tool's default keys, and the pure judges that turn what run.mjs saw into pass or fail with a reason. test/rivals_sites.test.ts covers the judges.
+// The live-site check (PAGES=sites): the site list, each tool's default keys, and the pure judges that turn what run.mjs saw into a status with a reason. test/rivals_sites.test.ts covers the judges.
 // A live page changes under the rig, so a run is a dated snapshot of these sites, not a repeatable benchmark.
+// Each site runs in three steps, the way a user meets it:
+// 1. Mode on load (`mode_on_load`), information only: where the focus is, through frames, and the tool's mode. A tool that starts in insert mode where the site focused a field is right.
+// 2. Leave (`leave`), scored: the tool's own leave key, and whether the focus really left the field, also when the field is inside a frame.
+// 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 
-// Every site gets the generic checks. `extra` names the per-site checks run before them, on the fresh page. `path` instead of `url` is a page that pages.mjs serves.
+// `extra` names the per-site actions of step 3, run before the generic ones. `path` instead of `url` is a page that pages.mjs serves.
 // Picked for stable public URLs: Google's own API sample doc and sheet, the first YouTube video, Notion's official public page.
 export const SITES = [
   { name: "youtube", url: "https://www.youtube.com/watch?v=jNQXAC9IVRw", extra: ["play_pause", "volume"] },
@@ -28,9 +32,10 @@ export const SITES = [
   { name: "youtube_embed", path: "yt_embed", extra: ["embed_play_pause", "embed_volume"], note: "the rig reads labels in the top document only, so the hint checks cover the link beside the player and not the player's own buttons" },
 ];
 
-export const GENERIC_CHECKS = ["scroll", "hints", "escape", "activate"];
+export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
 
-// Each tool's own default keys, read from its default keymap. Null means the default keymap binds no key for it, which fails the check.
+// Each tool's own default keys, read from its default keymap. Null means the default keymap binds no key for it, which blocks the action.
+// Every tool documents Escape as the key that leaves insert mode and a field, so the frame script sends Escape for step 2.
 // Vimium 2.4.2, Vimium C 2.12.3 and Tridactyl 1.25.1 bind no key that plays, pauses or sets the volume of a video (read from the pinned builds; Tridactyl's `playpause` is for text to speech).
 export const TOOL_KEYS = {
   desertfox: { scroll_down: "j", hint: "f", play_pause: "ap", volume_down: "aV" },
@@ -42,7 +47,10 @@ export const TOOL_KEYS = {
 const pass = (reason) => ({ status: "pass", reason });
 const fail = (reason) => ({ status: "fail", reason });
 
-// The page a site shows a fresh headless profile instead of the real one. A wall is not a fail of any tool, so every check of the site takes its status.
+// A normal-mode action of step 3 is pass or blocked: a judge's fail means the action did not happen.
+export const as_action = (result) => (result.status === "fail" ? { ...result, status: "blocked" } : result);
+
+// The page a site shows a fresh headless profile instead of the real one. A wall is not a fail of any tool, so every check of the site takes its status, `wall` or `login`.
 const LOGIN_URL = /\/(login|signin|sign_in|i\/flow\/login)\b|accounts\.google\.com\/|ServiceLogin/i;
 const BLOCKED_URL = /^https:\/\/consent\.|\/sorry\/|captcha/i;
 const BLOCKED_TEXT = [/unusual traffic/i, /verify (that )?you are (a )?human/i, /are you a robot/i, /enter the characters you see/i, /blocked by network security/i, /sign in to confirm you.re not a bot/i, /before you continue to/i, /access denied/i];
@@ -50,10 +58,10 @@ const BLOCKED_TITLE = /^just a moment|^attention required|^access denied/i;
 
 export function page_wall({ url, title, text }) {
   if (LOGIN_URL.test(url)) return { status: "login", reason: `redirected to a login page (${url.slice(0, 80)})` };
-  if (BLOCKED_URL.test(url)) return { status: "blocked", reason: `redirected to a wall (${url.slice(0, 80)})` };
-  if (BLOCKED_TITLE.test(title)) return { status: "blocked", reason: `wall page: ${title.slice(0, 60)}` };
+  if (BLOCKED_URL.test(url)) return { status: "wall", reason: `redirected to a wall (${url.slice(0, 80)})` };
+  if (BLOCKED_TITLE.test(title)) return { status: "wall", reason: `wall page: ${title.slice(0, 60)}` };
   const hit = BLOCKED_TEXT.find((pattern) => pattern.test(text));
-  if (hit) return { status: "blocked", reason: `wall text: ${text.match(hit)[0]}` };
+  if (hit) return { status: "wall", reason: `wall text: ${text.match(hit)[0]}` };
   return null;
 }
 
@@ -84,30 +92,63 @@ export function judge_hints(labels, targets) {
   return pass(`${labels.length} labels, ${labelled.size} of ${targets.length} visible targets labelled`);
 }
 
+const rect_contains = (outer, inner) => outer.left <= inner.left && outer.top <= inner.top && outer.right >= inner.right && outer.bottom >= inner.bottom;
+const same_rect = (a, b) => rect_contains(a, b) && rect_contains(b, a);
+// Two targets with one box are an element and its child, so the first stands for both.
+const innermost = (targets) => targets.filter((target, index) => !targets.some((other, other_index) => (same_rect(target.rect, other.rect) ? other_index < index : rect_contains(target.rect, other.rect))));
+
+// How much nearer one target must be than the next for the last fallback of pick_activation. Under half the 25 px reach, so a label between two targets never counts.
+const CLEAR_MARGIN = 8;
+
 // The label to type for the activation check, so the check knows which element should react. On a dense page a label is near several targets and the nearest can be the neighbour of the real one.
-// So the first choice is a label with exactly one target near it, and the fallback a label whose center lies inside exactly one target.
+// So the first choice is a label with exactly one target near it, then a label whose center lies inside exactly one target, then a label clearly nearer one target than any other (a toolbar of touching buttons).
 export function pick_activation(labels, targets) {
   const typable = labels.filter((label) => label.text.trim());
   const pick = (label, target) => ({ keys: label.text.trim().toLowerCase(), target: target.name });
-  const targets_within = (label, limit) => targets.filter((target) => distance_to(label_center(label), target.rect) <= limit);
+  // A toolbar or a list item can be a target itself and hold targets, so only the innermost of nested targets near a label count.
+  const targets_within = (label, limit) => innermost(targets.filter((target) => distance_to(label_center(label), target.rect) <= limit));
   for (const label of typable) {
     const near = targets_within(label, MAX_DISTANCE);
-    if (near.length === 1) return pick(label, near[0]);
+    if (near.length === 1) return { ...pick(label, near[0]), at: label_center(label) };
   }
   for (const label of typable) {
     const under = targets_within(label, 0);
-    if (under.length === 1) return pick(label, under[0]);
+    if (under.length === 1) return { ...pick(label, under[0]), at: label_center(label) };
+  }
+  for (const label of typable) {
+    const [nearest, second] = targets.map((target) => ({ target, distance: distance_to(label_center(label), target.rect) })).sort((a, b) => a.distance - b.distance);
+    if (nearest && nearest.distance <= MAX_DISTANCE && (!second || second.distance - nearest.distance >= CLEAR_MARGIN)) return { ...pick(label, nearest.target), at: label_center(label) };
   }
   return null;
 }
 
 export const judge_escape = (labels_left) => (labels_left === 0 ? pass("all labels gone") : fail(`${labels_left} labels still shown`));
 
-// reply: { event: "click" | "focus" | "navigated" | null, on_target, tag }
+// reply: { event: "click" | "focus" | "navigated" | null, on_target, under_label, tag }. under_label is the element a user's click at the label's spot lands on, or its inside, or an ancestor short of the body.
 export function judge_activation(reply) {
   if (!reply.event) return fail("typing the label did nothing the page saw");
   if (reply.event === "navigated") return pass("the page navigated");
-  return reply.on_target ? pass(`${reply.event} on the labelled ${reply.tag}`) : fail(`${reply.event} on ${reply.tag}, not the labelled target`);
+  if (reply.on_target) return pass(`${reply.event} on the labelled ${reply.tag}`);
+  if (reply.under_label) return pass(`${reply.event} on ${reply.tag}, under the label`);
+  return fail(`${reply.event} on ${reply.tag}, not the labelled target`);
+}
+
+// A focus path runs from the top document into each focused frame: { path, takes_typing, cross_origin }. takes_typing is true when the innermost focused element is a field or editable. A focused frame of another origin cannot be read, so it counts as one that may take typing.
+// probe: what the tool's scroll key did on a copy of the page, { reached, prevented }, read in the focused document after the tool had its turn. desertfox_mode: the label DesertFox's mode badge shows, read from its `data-desertfox-mode` attribute.
+export function describe_mode_on_load({ focus, probe, desertfox_mode }) {
+  const where = `focus ${focus.path}${focus.takes_typing ? " (takes typing)" : ""}`;
+  if (desertfox_mode) return { status: "info", reason: `${where}; mode ${desertfox_mode.toLowerCase()} (read from the mode badge)` };
+  if (focus.cross_origin) return { status: "info", reason: `${where}; mode unknown: the focused frame is of another origin, so the probe key cannot be watched` };
+  if (!probe) return { status: "info", reason: `${where}; mode unknown (no probe answer)` };
+  const mode = probe.reached && !probe.prevented ? "insert or passing keys: the page got the scroll key" : "normal: the tool took the scroll key before the page";
+  return { status: "info", reason: `${where}; mode inferred ${mode}` };
+}
+
+// before and after are focus paths around the tool's leave key.
+export function judge_leave({ before, after }) {
+  if (!before.takes_typing) return pass(`no field had the focus (${before.path})`);
+  if (!after.takes_typing) return pass(`left ${before.path}, focus now ${after.path}`);
+  return fail(`focus stayed in ${after.path}`);
 }
 
 // A video state is { paused, volume } with volume 0 to 1, or null when the page has no video.
