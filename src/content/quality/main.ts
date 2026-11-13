@@ -7,6 +7,7 @@ import { hls_driver } from "./hls.ts";
 import type { HlsPage } from "./hls.ts";
 import { create_rule } from "./rule.ts";
 import { youtube_driver } from "./youtube.ts";
+import { ignore_refusal } from "../../shared/swallow.ts";
 import type { YouTubePage } from "./youtube.ts";
 
 type QualityWindow = QualityVideoState & { desertfox_quality_ready?: true; desertfox_quality_address?: string; desertfox_quality_rule?: ReturnType<typeof create_rule>; wrappedJSObject: YouTubePage & HlsPage };
@@ -41,7 +42,7 @@ function probe(): Driver | undefined {
 const rule = (quality_window.desertfox_quality_rule ??= create_rule({
   // Inline: the shared helper adds a function to this bundle and pushes it over its size guard (quality.js, 5120 B).
   // eslint-disable-next-line no-restricted-syntax -- an expected refusal (the extension page is gone); the swallow.ts helper costs too many bytes here
-  report: () => (browser.runtime.sendMessage(report()) as Promise<string | undefined>).catch(() => undefined),
+  report: () => ignore_refusal(browser.runtime.sendMessage(report()) as Promise<string | undefined>),
   has_media,
   probe,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
