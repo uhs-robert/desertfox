@@ -163,13 +163,16 @@ type Box = { left: number; top: number; right: number; bottom: number; width: nu
 export const is_rect_off_screen = (rect: Box, view_width: number, view_height: number): boolean =>
   rect.width > 0 && rect.height > 0 && (rect.bottom < 0 || rect.right < 0 || rect.top > view_height || rect.left > view_width);
 
+// Reads the rect of its own window, so an element in a frame is judged by the frame's viewport.
+export const is_element_off_screen = (element: Element): boolean => {
+  const view = element.ownerDocument.defaultView ?? window;
+  return is_rect_off_screen(element.getBoundingClientRect(), view.innerWidth, view.innerHeight);
+};
+
 const dom_styles: ClickStyles = {
   cursor_of_: (element) => (element.ownerDocument.defaultView ?? window).getComputedStyle(element).cursor,
   parent_of: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
-  is_off_screen_: (element) => {
-    const view = element.ownerDocument.defaultView ?? window;
-    return is_rect_off_screen(element.getBoundingClientRect(), view.innerWidth, view.innerHeight);
-  },
+  is_off_screen_: is_element_off_screen,
 };
 
 // Only the filters that mean "anything clickable" look for weak candidates. `links`, `buttons`, `inputs` and `custom` are exact.
@@ -195,6 +198,9 @@ export function drop_redundant_weak(found: Found[]): Found[] {
   }
   return found.filter((item) => !dropped.has(item.element));
 }
+
+// No rect read follows a write, so the layout flushes once. A box outside its window cannot intersect it, so dropping it here spares `keep_visible` the observer hop and the style reads.
+export const drop_off_screen = (found: Found[]): Found[] => found.filter((item) => !is_element_off_screen(item.element));
 
 // Visibility comes first: a wrapper must not give way to a hidden or off-screen candidate that gets no hint.
 export const keep_visible_deduplicated = (found: Found[], probe: PageProbe<Found>): Found[] => drop_redundant_weak(keep_visible(found, probe));
