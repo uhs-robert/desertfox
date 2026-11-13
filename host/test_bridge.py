@@ -984,6 +984,34 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(link.ask("run", {"command": "x"}, 1), {"ok": False, "message": "the extension is not connected"})
         self.assertEqual(out.getvalue(), b"")
 
+    def test_a_request_that_comes_while_the_ready_frame_goes_out_is_sent_after_it(self):
+        import io
+
+        results = []
+        askers = []
+
+        class AsksOnReady(io.BytesIO):
+            """Asks from another thread once the ready frame is written: an extension that read it and a client that connected at once."""
+
+            def flush(self):
+                if askers:
+                    return
+                askers.append(threading.Thread(target=lambda: results.append(link.ask("list", {}, liveness_s()))))
+                askers[0].start()
+                # Long enough for a refusal to land. A link that is already open holds the asker on the write guard instead.
+                askers[0].join(0.3)
+
+        out = AsksOnReady()
+        link = self.module.ExtensionLink(out)
+        link.say_ready()
+        deadline = time.monotonic() + liveness_s()
+        while not link.pending and not results and time.monotonic() < deadline:
+            time.sleep(0.01)
+        link.answered({"verb": "reply", "request_id": 1, "ok": True})
+        askers[0].join(liveness_s())
+        self.assertEqual(results, [{"verb": "reply", "request_id": 1, "ok": True}])
+        self.assertEqual([frame.get("verb", "ready") for frame in ThemeKeeperTest.frames(self, out.getvalue())], ["ready", "list"])
+
     def test_requests_over_the_pending_cap_are_refused_at_once(self):
         import io
 

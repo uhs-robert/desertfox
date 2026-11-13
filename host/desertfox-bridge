@@ -531,13 +531,15 @@ class ExtensionLink:
         # Requests being answered, from the start of the answer to the end of the write to the client. Shutdown waits for these, not for `pending`, which empties before the write.
         self.busy = 0
         self.next_id = 1
-        # False until the ready frame is out, so a request can never reach the extension before it.
+        # False until say_ready, so a request before it is refused and never reaches the extension.
         self.open = False
 
     def say_ready(self):
         with self.write_guard:
-            send_message(self.stdout, {"ready": True, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION})
+            # Open before the frame goes out: an extension that reads it can at once trigger a client request, which must
+            # not be refused. A request that comes now waits on the write guard, so it still goes out after the frame.
             self.open = True
+            send_message(self.stdout, {"ready": True, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION})
 
     def start(self, verb, fields):
         """Sends one request and returns its Waiting, which `wait` turns into the reply. A request that cannot go out comes back already failed."""
