@@ -520,3 +520,19 @@ test("tab.unload with site and a named tab in another window selects the site in
   await handlers.unload(ctx_at(100), unload_args({ tab: "9", side: "site" }));
   assert.deepEqual(log.filter((entry) => entry.startsWith("discard")).sort(), ["discard 100", "discard 101", "discard 200"].sort());
 });
+
+test("tab.alternate activates the previous tab of the window", async () => {
+  const { handlers, log, deps } = make_fake(make_tabs(3));
+  deps.discard = { alternate_of: async (window_id: number) => (window_id === 1 ? 101 : undefined) } as unknown as TabDeps["discard"];
+  await handlers.alternate(ctx_at(102));
+  assert.deepEqual(log, ["activate 101"]);
+});
+
+test("tab.alternate refuses with no previous tab, or one that is gone or current", async () => {
+  for (const previous of [undefined, 999, 102]) {
+    const { handlers, log, deps } = make_fake(make_tabs(3));
+    deps.discard = { alternate_of: async () => previous } as unknown as TabDeps["discard"];
+    await assert.rejects(handlers.alternate(ctx_at(102)), /no previous tab/);
+    assert.deepEqual(log, []);
+  }
+});

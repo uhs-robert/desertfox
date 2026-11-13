@@ -22,6 +22,7 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "help.key": [/has no normal-mode binding/],
+  "tab.alternate": [/no previous tab/],
   "tab.goto_audible": [/no tab is playing sound/],
   "tab.switch": [/matches .* equally, use a number/],
   "tab.move": [/matches .* equally/],

@@ -35,3 +35,9 @@ export function create_previous_tabs(storage: PreviousTabStorage) {
       }),
   };
 }
+
+// One instance serves the activation listener and the commands that read it, so a read right after a switch waits on that switch's write.
+let shared: ReturnType<typeof create_previous_tabs> | undefined;
+export function shared_previous_tabs() {
+  return (shared ??= create_previous_tabs(browser.storage.session));
+}
