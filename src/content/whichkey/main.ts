@@ -22,7 +22,7 @@ const relayed = create_relayed_panel(show_panel, hide_panel);
 let relayed_seq = performance.timeOrigin;
 let relayed_open = false;
 const draw = (panel: WhichKeyPanel): void => {
-  if (window === window.top) return show_panel(panel);
+  if (window === window.top) return relayed.show_own_(panel);
   relayed_open = true;
   const mine = ++relayed_seq;
   // A top frame that does not answer leaves the panel here, unless a newer draw or an erase came since.

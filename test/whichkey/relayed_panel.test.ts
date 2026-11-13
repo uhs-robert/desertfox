@@ -48,3 +48,11 @@ test("a message with no count is dropped", () => {
   relayed.draw_({ from_frame: 5, panel: panel("a") });
   assert.deepEqual(drawn, []);
 });
+
+test("a late erase from a frame never hides the top frame's own panel", () => {
+  const { relayed, drawn, panel } = fixture();
+  relayed.draw_({ from_frame: 5, seq: 1, panel: panel("a") });
+  relayed.show_own_(panel("top"));
+  relayed.erase_({ from_frame: 5, seq: 2 });
+  assert.deepEqual(drawn, ["show a", "show top"]);
+});

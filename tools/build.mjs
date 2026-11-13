@@ -12,7 +12,8 @@ const MAX_BYTES = {
   "hints.js": 48.5 * 1024,
   "caret.js": 32 * 1024,
   // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
-  "whichkey.js": 8.5 * 1024,
+  // 9 KB (owner approved): the top frame keeps its own panel when a subframe's late erase arrives (`relayed_panel.ts`, #619).
+  "whichkey.js": 9 * 1024,
   // 6.5 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The bundle loads on the first `:`, not on every page.
   "cmdline.js": 6.5 * 1024,
   "ui.js": 8 * 1024,
