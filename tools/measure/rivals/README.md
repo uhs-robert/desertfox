@@ -30,6 +30,13 @@ qutebrowser was checked from source (a2a9c9d) and not run. Its hint code tests e
 
 Only DesertFox has built-in keyboard drag of elements (`;g`, `;G`). Checked from source: Vimium, Vimium C (2.12.3, the newest build), Tridactyl, qutebrowser, Surfingkeys, Vieb and cVim have none. Tridactyl `hint -h` selects text and moves nothing. Surfingkeys can do it with a user script. Other tools were not checked.
 
+## Table rows from source
+
+Read from source in November 2026 (Vimium 49a3942, Vimium C 3188526, Tridactyl a296f07, qutebrowser a2a9c9d).
+
+- **Key integrations for specific sites.** DesertFox ships one: Google Sheets, with `hjkl` cell movement, `x`, `y` and `p` through the page clipboard, and a visual range. Vimium has hint rules for Google Drive and the Docs file list (`siteSpecificClickables` in `link_hints.js`), but nothing for keys. Vimium C has no per-site rule table. Tridactyl treats `role=application` elements, which Google Sheets uses, as handling their own keys and stops capturing there, which gives no `hjkl` and no clipboard. qutebrowser ships site quirks (`content.site_specific_quirks`), such as a user-agent change for Google Docs, and none changes keys in a sheet.
+- **Script on every page and frame.** From each tool's `manifest.json` (the pinned store builds for the rivals): DesertFox, Vimium and Vimium C set `all_frames` and so load their script in every frame. Tridactyl does not set it, so its script loads in the top page only. Sizes are as shipped.
+
 ## Rerun
 
 ```
