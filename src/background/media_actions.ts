@@ -49,19 +49,31 @@ async function frames_of(deps: MediaDeps, tab_id: number): Promise<number[]> {
   return listed.length > 0 ? listed : [0];
 }
 
-// Each answer belongs to the request that asked for it, so two keys pressed fast never read each other's scans, and a late answer is dropped with its timed-out request.
-async function ask_scans(deps: MediaDeps, tab_id: number, frame_ids: number[]): Promise<FrameScan[]> {
-  const answers = await Promise.all(frame_ids.map(async (frame_id) => ({ frame_id, answer: await within(deps.ask(tab_id, frame_id, { type: "media_scan" }), deps.scan_timeout_ms) })));
-  return answers.flatMap(({ frame_id, answer }) => (is_scan(answer) ? [{ ...answer, frame_id }] : []));
+type Ask = { frame_id: number; scan?: MediaScan; no_listener: boolean };
+
+// Each answer belongs to the request that asked for it, so two keys pressed fast never read each other's scans, and a late answer is dropped with its timed-out request. A frame that rejects or answers something else has no listener (its document is new, or only `content.js` runs there) and needs the bundle. A frame that times out is busy or hung, and injecting it would only add a second wait, so it is left alone.
+async function ask_scans(deps: MediaDeps, tab_id: number, frame_ids: number[]): Promise<Ask[]> {
+  return Promise.all(
+    frame_ids.map(async (frame_id): Promise<Ask> => {
+      const settled = await new Promise<{ answer?: unknown; rejected?: true; timed_out?: true }>((resolve) => {
+        const timer = setTimeout(() => resolve({ timed_out: true }), deps.scan_timeout_ms);
+        deps.ask(tab_id, frame_id, { type: "media_scan" }).then(
+          (answer) => resolve({ answer }),
+          () => resolve({ rejected: true }),
+        ).finally(() => clearTimeout(timer));
+      });
+      return is_scan(settled.answer) ? { frame_id, scan: settled.answer, no_listener: false } : { frame_id, no_listener: !settled.timed_out };
+    }),
+  );
 }
 
-// Asks every frame first: a frame that ran the bundle for an earlier key answers at once, so a key costs no injection. Only when no frame answers (the first key on a page, or after it navigated) is the bundle injected, one frame at a time so a hung frame holds the key for one `scan_timeout_ms` and no longer. A frame that refuses the script, never answers or is gone counts as one with no media.
+// Asks every frame first: a frame that ran the bundle for an earlier key answers at once, so a key costs no injection. The bundle goes by frame id into each frame that has no listener (the first key on a page, a frame created or navigated since), each call cut off after `scan_timeout_ms`, and only those frames are asked again. A frame that refuses the script, never answers or is gone counts as one with no media. The list order is not defined, so the scans are sorted by frame id: ties go to the lowest.
 async function scan_frames(deps: MediaDeps, tab_id: number): Promise<FrameScan[]> {
-  const frame_ids = await frames_of(deps, tab_id);
-  const answered = await ask_scans(deps, tab_id, frame_ids);
-  if (answered.length > 0) return answered;
-  await Promise.all(frame_ids.map((frame_id) => within(deps.inject(tab_id, frame_id), deps.scan_timeout_ms)));
-  return ask_scans(deps, tab_id, frame_ids);
+  const first = await ask_scans(deps, tab_id, await frames_of(deps, tab_id));
+  const bare = first.filter((ask) => ask.no_listener).map((ask) => ask.frame_id);
+  await Promise.all(bare.map((frame_id) => within(deps.inject(tab_id, frame_id), deps.scan_timeout_ms)));
+  const second = bare.length > 0 ? await ask_scans(deps, tab_id, bare) : [];
+  return [...first, ...second].flatMap((ask) => (ask.scan ? [{ ...ask.scan, frame_id: ask.frame_id }] : [])).sort((a, b) => a.frame_id - b.frame_id);
 }
 
 // The scan with the largest positive measure. Ties go to the first, the lowest frame id.

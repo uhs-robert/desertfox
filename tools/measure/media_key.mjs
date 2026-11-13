@@ -12,6 +12,10 @@ const CASES = [
   { name: "20 frames", frames: 20 },
   { name: "20 frames, one refuses scripts", frames: 20, extra: "refuse" },
   { name: "20 frames, one never answers", frames: 20, extra: "hang" },
+  // The video sits in the extra frame only (the top video is tiny), so the key acts only if the frame was reached.
+  { name: "20 frames, video in an about:blank frame", frames: 20, extra: "blank" },
+  { name: "20 frames, video in a srcdoc frame", frames: 20, extra: "srcdoc" },
+  { name: "20 frames, video in a data: frame", frames: 20, extra: "data" },
 ];
 const ROUNDS = 6;
 rmSync(root, { recursive: true, force: true });
@@ -29,12 +33,21 @@ const server = createServer((request, response) => {
   const frames = Number(url.searchParams.get("frames"));
   const extra = url.searchParams.get("extra");
   const hang_origin = `http://localhost:${request.socket.localPort}`;
-  const extra_frame = extra === "refuse" ? '<iframe src="data:text/html,refused"></iframe><iframe sandbox srcdoc="<p>refused</p>"></iframe>' : extra === "hang" ? `<iframe src="${hang_origin}/hang"></iframe>` : "";
-  const video = '<video id="video" src="/tone.wav" loop style="display:block;width:320px;height:180px"></video>';
+  const extra_frame = extra === "refuse" ? '<iframe src="data:text/html,refused"></iframe><iframe sandbox srcdoc="<p>refused</p>"></iframe>' : extra === "hang" ? `<iframe src="${hang_origin}/hang"></iframe>` : extra === "blank" ? '<iframe id="blank"></iframe>' : extra === "srcdoc" ? '<iframe srcdoc="<video id=v src=/tone.wav loop style=display:block;width:320px;height:180px></video>"></iframe>' : extra === "data" ? `<iframe src="data:text/html,${encodeURIComponent(`<video id=v src="${hang_origin}/tone.wav" loop style="display:block;width:320px;height:180px"></video><script>var v=document.getElementById("v");v.volume=0.5;setTimeout(function(){v.addEventListener("volumechange",function(){parent.postMessage("vol","*")})},250)</script>`)}"></iframe>` : "";
+  const in_extra = ["blank", "srcdoc", "data"].includes(extra);
+  const video = `<video id="video" src="/tone.wav" loop style="display:block;width:${in_extra ? 10 : 320}px;height:${in_extra ? 10 : 180}px"></video>`;
   response.end(`<!doctype html><title>media</title>${video}${Array.from({ length: frames - 1 }, (_, i) => `<iframe src="/frame?i=${i}"></iframe>`).join("")}${extra_frame}<script>
     const video = document.getElementById("video"); video.volume = 0.5;
     // The listener comes after the volume set above has fired its own event.
-    addEventListener("DOMContentLoaded", () => setTimeout(() => { video.addEventListener("volumechange", () => { document.title = "vol " + Date.now(); }); document.title = "loaded"; }, 200));</script>`);
+    addEventListener("DOMContentLoaded", () => setTimeout(() => {
+      const watch = (media) => { media.volume = 0.5; setTimeout(() => media.addEventListener("volumechange", () => { document.title = "vol " + Date.now(); }), 50); };
+      const blank = document.getElementById("blank");
+      if (blank) { const inner = blank.contentDocument.createElement("video"); inner.src = location.origin + "/tone.wav"; inner.loop = true; inner.style = "display:block;width:320px;height:180px"; blank.contentDocument.body.append(inner); watch(inner); }
+      const srcdoc = ${JSON.stringify(extra === "srcdoc")} ? document.querySelector("iframe[srcdoc]") : null;
+      if (srcdoc) watch(srcdoc.contentDocument.getElementById("v"));
+      addEventListener("message", (event) => { if (event.data === "vol") document.title = "vol " + Date.now(); });
+      // The top video's title differs when the extra frame holds the video, so a null action time means the key went to the wrong video.
+      video.addEventListener("volumechange", () => { document.title = ${JSON.stringify(in_extra)} ? "top " + Date.now() : "vol " + Date.now(); }); document.title = "loaded"; }, 200));</script>`);
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
