@@ -22,7 +22,7 @@ const shared_files = [
 // First match wins, so order matters: the no-area rule sits before folder globs such as help/**, and find_* before caret/**.
 export const area_rules = [
   // Docs and icons carry no behavior a key test reads.
-  { globs: ["src/**/README.md", "src/icons/**"], areas: [] },
+  { globs: ["src/**/README.md", "src/icons/**", "src/**/*.d.ts"], areas: [] },
   // The schema validates the settings the help page edits and the config reads.
   { globs: shared_files, areas: area_names },
   // page.ts holds the reload-clear command, which p22 tests, so it also selects the keys and cmdline pieces.
@@ -61,7 +61,7 @@ export const area_rules = [
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
   { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
   {
-    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
+    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,tab_split,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
     areas: ["tabs"],
   },
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready,address_arrival,jump_store,jump_step,jump_leave}.ts", "src/commands/{mark,jump}.ts", "src/shared/{mark_names,jump_names}.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },

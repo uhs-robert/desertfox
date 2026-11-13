@@ -19,6 +19,8 @@ export type TabInfo = {
   id: number;
   index: number;
   pinned: boolean;
+  // -1 for a tab in no split view.
+  split_id: number;
   active: boolean;
   audible: boolean;
   muted: boolean;
@@ -76,6 +78,18 @@ export function make_tab_handlers(deps: TabDeps) {
     return index;
   }
 
+  // Firefox moves a split view as one unit, so the place is where the pair starts. A move onto the partner's place swaps the two tabs instead,
+  // and `tab.split_swap` is the key for that, so one step right jumps the tab after the pair over it.
+  async function move_split_pair(tabs: TabInfo[], current: TabInfo, target: number | undefined, offset: number, first_place: number): Promise<void> {
+    const pair = tabs.filter((tab) => tab.split_id === current.split_id);
+    const start = Math.min(...pair.map((tab) => tab.index));
+    const place = Math.min(Math.max(target ?? start + offset, first_place), tabs.length - pair.length);
+    if (place === start) return;
+    const step_over = place === start + 1 ? tabs.find((tab) => tab.index === start + pair.length) : undefined;
+    if (step_over) await move_tabs(deps, [step_over.id], start);
+    else await move_tabs(deps, [pair.find((tab) => tab.index === start)!.id], place);
+  }
+
   // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject, except `site`, which acts on the subject too. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
   async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
     const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
@@ -128,6 +142,7 @@ export function make_tab_handlers(deps: TabDeps) {
       // Firefox ignores a move across the pinned boundary, so land at the nearest place on the tab's own side.
       const pinned_count = tabs.filter((tab) => tab.pinned).length;
       const own_side = current.pinned ? { first: 0, last: pinned_count - 1 } : { first: pinned_count, last: tabs.length - 1 };
+      if (current.split_id !== -1) return move_split_pair(tabs, current, target, args.offset, own_side.first);
       await move_tabs(deps, [current.id], Math.min(Math.max(wanted, own_side.first), own_side.last));
     },
     duplicate: async (ctx: CommandContext) => {
@@ -280,6 +295,7 @@ function to_tab_info(tab: browser.tabs.Tab): TabInfo {
     id: tab.id ?? -1,
     index: tab.index,
     pinned: tab.pinned,
+    split_id: tab.splitViewId ?? -1,
     active: tab.active,
     audible: tab.audible ?? false,
     muted: tab.mutedInfo?.muted ?? false,

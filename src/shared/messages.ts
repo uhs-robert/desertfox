@@ -159,6 +159,7 @@ export type TabItem = {
   audible?: true;
   muted?: true;
   discarded?: true;
+  split?: true;
 };
 
 // How much use raises a row's match score, see `Candidate.boost` in `shared/score.ts`. The background sends it, absent when 0.
@@ -634,6 +635,8 @@ export type TabRow = {
   container_icon: string;
   // The native tab group of the tab, -1 for none, as Firefox reports it. The group's own fields are in the groups table.
   group_id: number;
+  // The split view of the tab, -1 for none, as Firefox reports it. The two tabs of a split view share one id.
+  split_id: number;
 };
 
 // A native tab group. `color` is Firefox's own color name.

@@ -21,6 +21,7 @@ function make_tabs(count: number, overrides: Partial<TabInfo>[] = []): TabInfo[]
     id: 100 + index,
     index,
     pinned: false,
+    split_id: -1,
     // Every fixture tab counts as active unless a test says otherwise, so the focus rules apply to whichever tab a test closes.
     active: true,
     audible: false,
@@ -109,6 +110,33 @@ test("tab.move with a place number takes that place, negative counts from the en
   await handlers.move(ctx_at(100), move_args({ tab: "9" }));
   await handlers.move(ctx_at(103), move_args({ tab: "-9" }));
   assert.deepEqual(log, ["move 100 2", "move 100 3", "move 103 2", "move 100 3", "move 103 0"]);
+});
+
+// Four tabs, the two middle ones split: Firefox moves the pair as one unit, so these moves never touch one tab of it.
+const split_strip = (count = 6, start = 1) => make_tabs(count, Array.from({ length: count }, (_, index) => (index === start || index === start + 1 ? { split_id: 7 } : {})));
+
+test("tab.move of a split tab moves the pair by its first tab, whichever tab the key came from", async () => {
+  const { handlers, log } = make_fake(split_strip());
+  await handlers.move(ctx_at(102), move_args({ offset: -1 }));
+  await handlers.move(ctx_at(101), move_args({ tab: "4" }));
+  assert.deepEqual(log, ["move 101 0", "move 101 3"]);
+});
+
+test("tab.move one step right of a split tab moves the tab after the pair over it, because a move onto the partner swaps", async () => {
+  const { handlers, log } = make_fake(split_strip());
+  await handlers.move(ctx_at(101), move_args({ offset: 1 }));
+  assert.deepEqual(log, ["move 103 1"]);
+});
+
+test("tab.move of a split tab stops with the whole pair inside the strip and does nothing at its own place", async () => {
+  const { handlers, log } = make_fake(split_strip());
+  await handlers.move(ctx_at(101), move_args({ offset: 9 }));
+  await handlers.move(ctx_at(101), move_args({ offset: 0 }));
+  await handlers.move(ctx_at(102), move_args({ offset: -9 }));
+  assert.deepEqual(log, ["move 101 4", "move 101 0"]);
+  const at_end = make_fake(split_strip(6, 4));
+  await at_end.handlers.move(ctx_at(104), move_args({ offset: 1 }));
+  assert.deepEqual(at_end.log, []);
 });
 
 test("tab.move with a tab name takes the picked tab's place", async () => {

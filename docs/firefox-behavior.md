@@ -405,6 +405,22 @@ Measured in Firefox 160 in the key test (`test/key/p32_tab_groups.mjs`).
 - `browser.tabGroups` is absent from the background page when the manifest lacks the `tabGroups` permission, so the permission is required.
 - Not measured: whether the permission adds an install prompt line, whether the active tab of a collapsed group keeps the group open, and whether groups exist in private windows. These need a person.
 
+## Split view (split-view)
+
+Measured in Firefox 160 in the key test, with probe pieces that opened a split through chrome code (`gBrowser.addTabSplitView`, as the tab context menu does) and drove it through `browser.tabs`. The extension API cannot create or end a split. Firefox 153, the manifest minimum, was not run.
+
+- `tabs.Tab.splitViewId` is -1 (`browser.tabs.SPLIT_VIEW_ID_NONE`) for a tab in no split view. The two tabs of a split share one positive id, and each new split gets a new id. The two tabs are adjacent in the strip. The selected tab of the pair is `active` and `highlighted`. The other is neither. `@types/firefox-webext-browser` lacks the field, so `src/split_view_types.d.ts` declares it.
+- `tabs.update(other, { active: true })` makes the other tab the active one, keeps the split and moves keyboard focus to its page. The browser's focused element is the selected tab's `browser` before and after. `onActivated` fires.
+- Creating a split fires `onUpdated` with `splitViewId` for both tabs.
+- `tabs.remove` of either tab ends the split. The other tab stays with id -1 and becomes active. `tabs.update({ pinned: true })` on one tab ends it too (the pinned tab moves to the pinned area). `tabs.discard` of the non-selected tab keeps the split and marks that tab discarded. Discarding the selected tab does nothing, as for any active tab.
+- `tabs.group` on one tab of a pair puts both in the group, and `tabs.ungroup` of one takes both out. The pair keeps its split id.
+- `tabs.move` on one tab of a pair moves both and keeps their order, and the pair starts at the given index (clamped so both fit). It never ends the split, also when the place is not adjacent. This differs from the blog post that announced Firefox 150.
+- `tabs.move` onto the partner's own place swaps the two tabs and keeps the split. There is no swap call in `browser.tabs`, so a swap is a move of one tab onto the other's place. Only the moved tab gets an `onMoved` event.
+- So the pair cannot move one place right through its own tab: the first tab to the next place swaps. A move of the first tab to an earlier place, or two or more places right, moves the pair whole. A move of the tab after the pair to the pair's first place puts that tab in front of the pair and moves the pair one place right (key test `p35_split_view`).
+- A tab outside the pair moved onto a place inside the pair lands after the pair, and the pair stays whole.
+- Firefox places a new split's two tabs at the end of the strip. Not measured: private windows, a split inside a collapsed group, and Firefox 153 to 159.
+- Session restore (`sessions.restore`, the tab sessions in `session_store.ts`) is not measured. The stored fields (address, title, pinned, active) carry no split id, and the extension cannot create a split, so a restore loses it.
+
 ## The Navigation API in a content script (jump-list)
 
 Measured in Firefox 160 in the key test, with a throwaway piece that listened from the content script world (`executeScript`) on same-origin test pages.

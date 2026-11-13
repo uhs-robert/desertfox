@@ -1164,6 +1164,19 @@ describe("native tab groups", () => {
     assert.deepEqual(snapshot.groups, [{ id: 5, window_id: 1, title: "Work", color: "blue", collapsed: true }]);
   });
 
+  test("a tab carries its split view id, -1 for none, and an update that ends the split patches both tabs", async () => {
+    const f = make([tab(1, 1, 0, { splitViewId: 3 }), tab(2, 1, 1, { splitViewId: 3 }), tab(3, 1, 2)]);
+    await f.model.start();
+    const p = await f.connect_port();
+    const snapshot = p.messages[0];
+    if (snapshot?.type !== "snapshot") return assert.fail("no snapshot");
+    assert.deepEqual(snapshot.tabs.map((row) => row.split_id), [3, 3, -1]);
+    f.fire("onUpdated", 1, { splitViewId: -1 }, tab(1, 1, 0, { splitViewId: -1 }));
+    f.fire("onUpdated", 2, { splitViewId: -1 }, tab(2, 1, 1, { splitViewId: -1 }));
+    f.run_timers();
+    assert.deepEqual(patch_of(p.messages[1]).upserts.map((row) => [row.id, row.split_id]), [[1, -1], [2, -1]]);
+  });
+
   test("a created group patches the table and sends no tab rows", async () => {
     const f = make([tab(1, 1, 0)]);
     await f.model.start();

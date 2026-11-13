@@ -565,6 +565,15 @@ Firefox native tab groups (`tabs.group`, 138, and `tabGroups`, 139, under `stric
 - The manifest needs the `tabGroups` permission. Measured in Firefox 160: without it `browser.tabGroups` is absent (see `docs/firefox-behavior.md`).
 - The model keeps `group_id` per tab (-1 for none) and a groups table. A patch carries `groups` and `groups_removed` only when some changed. A group event patches the table. A removed group also clears the `group_id` of its tabs in the same patch. A group move reads the tabs again, because its tabs change index and Firefox may report it as tab moves or not.
 
+### Split view
+
+Firefox split view shows two tabs side by side in one window. The extension API (`tabs.Tab.splitViewId`, Firefox 149) reads a split and moves within it, and creating or ending one is Firefox's alone (see `docs/firefox-behavior.md`, "Split view").
+
+- `gp` (`tab.split_other`) moves focus to the other tab of the split the tab is in, and `gP` (`tab.split_swap`) swaps the two. Both refuse with "This tab is not in a split view" otherwise. The handlers sit in `src/background/tab_split.ts` over an injected `TabSplitDeps`. A swap is a `tabs.move` of the partner onto the tab's place, because there is no swap call.
+- The tab model keeps `split_id` per tab (-1 for none). A tab list row of a split tab shows a split flag next to the pinned and unloaded flags.
+- `tab.next`, `tab.prev` and `tab.goto` count the two tabs of a pair as two stops, so `gp` is the jump to the other pane.
+- `tab.close` closes one tab, and the other tab stays and takes the focus. `tab.move` moves the pair as one unit: the move acts on the pair's first tab, the place is where the pair starts, and one step right moves the tab after the pair over it, because a move onto the partner's place would swap. Pinning one tab of a pair ends the split. A tab group command on one tab acts on both.
+- A session restore loses the split. The saved tabs carry no split id, and the extension cannot create a split.
 ### Live tab model
 
 - The background keeps one map of tab rows (`src/background/tab_model.ts`), built from one `tabs.query` and kept current from tab events. It stores nothing, because one query rebuilds it. Each row carries the tab's site key (`src/shared/site_key.ts`) and a favicon only when the list rule allows it. Changes batch on a 30 ms flush and go to clients on the port `desertfox_tab_model` as a snapshot, then patches (`TabRow` and the messages are in `src/shared/messages.ts`).

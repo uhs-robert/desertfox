@@ -92,6 +92,7 @@ function entry_of(tab: Tab, window_numbers: WindowNumbers, containers: Container
       container_color: container?.color ?? "",
       container_icon: container?.icon ?? "",
       group_id: tab.groupId ?? -1,
+      split_id: tab.splitViewId ?? -1,
     },
   };
 }
@@ -99,7 +100,7 @@ function entry_of(tab: Tab, window_numbers: WindowNumbers, containers: Container
 const group_row_of = (group: Group): GroupRow => ({ id: group.id, window_id: group.windowId, title: group.title ?? "", color: group.color, collapsed: group.collapsed });
 
 // The fields an update may change. Position, `active`, `previous` and `window_number` stay the model's own, because their events arrive in order and the tab object in an update can be stale.
-const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container", "container_name", "container_color", "container_icon", "group_id"] as const;
+const UPDATABLE = ["title", "url", "favicon_url", "site", "pinned", "muted", "audible", "discarded", "container", "container_name", "container_color", "container_icon", "group_id", "split_id"] as const;
 // A tab unloaded while it still loads reads about:blank with no title. The row keeps the address it had.
 const ADDRESS_FIELDS: ReadonlySet<keyof TabRow> = new Set(["title", "url", "site"]);
 const is_unloaded_blank = (row: TabRow) => row.discarded && row.url === "about:blank";
