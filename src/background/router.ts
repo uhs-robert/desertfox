@@ -17,7 +17,8 @@ export type ActiveTab = { tab_id: number; window_id: number; url: string | undef
 
 export type RouterDeps = {
   get_command: (command_id: string) => CommandDef | undefined;
-  get_enum_sources: () => Promise<EnumSources>;
+  // With a command, only the sources its params read need to be filled. Without one, every source.
+  get_enum_sources: (command?: CommandDef) => Promise<EnumSources>;
   active_tab: () => Promise<ActiveTab | undefined>;
   // Undefined when the tab is gone.
   get_tab: (tab_id: number) => Promise<ActiveTab | undefined>;
@@ -130,7 +131,8 @@ export function create_router(deps: RouterDeps): Router {
     // Keys stop in the page, so this catches what does not come from a key: a slot chord, a snippet call, a line that was open.
     if (await deps.is_disabled()) return { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } };
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
-    const is_private = (await read_now(request, true)).active?.incognito === true;
+    const first_now = await read_now(request, true);
+    const is_private = first_now.active?.incognito === true;
     const prompted = new Set<BoundInvocation>();
     const fail_at = async (index: number, message: string): Promise<RunResponse> => {
       await record_step(request.invocations, { ok: false, message, failed_step: index }, { is_private });
@@ -145,8 +147,7 @@ export function create_router(deps: RouterDeps): Router {
       if (over) return fail_at(index, over);
     }
     for (const [index, invocation] of request.invocations.entries()) {
-      const is_first = index === 0;
-      const outcome = await run_one(invocation, request, prompted, is_first).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
+      const outcome = await run_one(invocation, request, prompted, index === 0 ? first_now : undefined).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
       if (outcome.ok && outcome.cancelled) {
         await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
@@ -160,10 +161,10 @@ export function create_router(deps: RouterDeps): Router {
     return { ok: true };
   }
 
-  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, is_first: boolean): Promise<Outcome> {
+  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, first_now: Now | undefined): Promise<Outcome> {
     // Before the tab read, permission checks and validation, so a slow preflight shows in the time.
     const started_ms = performance.now();
-    const { active, context } = await read_now(request, is_first);
+    const { active, context } = first_now ?? (await read_now(request, false));
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
 
@@ -175,7 +176,7 @@ export function create_router(deps: RouterDeps): Router {
       return open_line(command, args, param, context, active, prefill);
     };
     // A count before a key that opens the line is dropped.
-    const sources = await deps.get_enum_sources();
+    const sources = await deps.get_enum_sources(command);
     if (invocation.prompt && request.may_prompt) {
       // The fixed args must be good. Only the prompted param may be left out.
       const fixed = check_args(command, invocation.args, sources);
@@ -278,7 +279,7 @@ export function create_router(deps: RouterDeps): Router {
     // so the rest of the sequence does not run against a page that is still loading, and no refusal shows.
     const had_page = await deps.has_content_script(tab_id);
     try {
-      return outcome_of_reply(await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources() })));
+      return outcome_of_reply(await deps.open_cmdline(tab_id, frame_id ?? 0, print_command(command, typed, { open_param, sources: await deps.get_enum_sources(command) })));
     } catch {
       return had_page ? cancelled : refuse(`${command.label} needs a page DesertFox runs on`);
     }
