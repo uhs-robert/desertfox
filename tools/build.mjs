@@ -14,8 +14,8 @@ const MAX_BYTES = {
   // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
   // 9 KB (owner approved): the top frame keeps its own panel when a subframe's late erase arrives (`relayed_panel.ts`, #619).
   "whichkey.js": 9 * 1024,
-  // 6.5 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The bundle loads on the first `:`, not on every page.
-  "cmdline.js": 6.5 * 1024,
+  // 7 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The subframe also hides its focus loss from the page while the line is open (#634), so a popup that closes on blur stays open. The bundle loads on the first `:`, not on every page.
+  "cmdline.js": 7 * 1024,
   "ui.js": 8 * 1024,
   // 5.5 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. The bundle loads on first use, not on every page.
   "page.js": 5.5 * 1024,

@@ -292,10 +292,21 @@ if (!page.desertfox_cmdline_ready) {
     else current.typed_.push(token);
   };
 
+  // While the top frame's line holds the focus, the subframe loses it. A popup that closes on blur or focusout would close with it, so the page hears neither. Capture on the window sees every blur and focusout of the document and its elements before any listener below it, so the window alone is enough. Adding the same listener twice is a no-op.
+  const swallow_focus_loss = (event: Event) => event.stopImmediatePropagation();
+  const hold_focus_loss = (held: boolean) => {
+    for (const type of ["blur", "focusout"]) window[held ? "addEventListener" : "removeEventListener"](type, swallow_focus_loss, true);
+  };
+  // Every way the subframe stops being a line's remote end, so no listener outlives the line.
+  const end_remote_state = () => {
+    remote = undefined;
+    hold_focus_loss(false);
+  };
+
   // The subframe's own end of a line the top frame draws. The top frame says when the line ended and hands over the keys its frame got late.
   const end_remote = (current: Remote, tokens: readonly string[]) => {
     if (remote !== current) return;
-    remote = undefined;
+    end_remote_state();
     if (current.search_open_) void host.run_command_("find.end", "caret", { keep: false });
     host.hold_keys_until_(Promise.resolve([...tokens, ...current.late_]));
     host.escape_();
@@ -316,7 +327,7 @@ if (!page.desertfox_cmdline_ready) {
     exit: () => {
       // The mode ended some other way (a page change): the line in the top frame has nobody to type for.
       if (remote) void relay("top", "cmdline.token", { token: "<Escape>" });
-      remote = undefined;
+      end_remote_state();
       unmount();
     },
   });
@@ -333,11 +344,12 @@ if (!page.desertfox_cmdline_ready) {
     const current: Remote = { id_: crypto.randomUUID(), sent_: [], ending_: false, late_: [], search_open_: args.search !== undefined };
     const from_mode = host.get_mode();
     remote = current;
+    hold_focus_loss(true);
     sent_line_id = current.id_;
     host.set_mode_("cmdline");
     const outcome = await relay_outcome("top", "cmdline.open", { text: args.text, search: args.search, mode: from_mode, remote_id: current.id_, scroll: read_scroll() });
     if (remote === current && (outcome === undefined || (!outcome.ok && outcome.message === NO_ROOM))) {
-      remote = undefined;
+      end_remote_state();
       return open_here(args, from_mode, current.sent_);
     }
     // The line is over. The top frame normally says so first, and this ends it when its message never comes.
