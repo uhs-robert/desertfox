@@ -283,7 +283,7 @@ test("a save on other keys moves the binding: one change names the old keys, and
   session.capture("X");
   assert.equal(actions_of(session.state.open!).save, true);
   await fire();
-  assert.deepEqual(sent.find((message) => message.type === "check_binding"), { type: "check_binding", mode: "normal", keys: "X", text: "tab.next", move_from: "J", move_from_text: "tab.next" });
+  assert.deepEqual(sent.find((message) => message.type === "check_binding"), { type: "check_binding", mode: "normal", keys: "X", text: "tab.next", move_from: "J" });
   await session.save();
   assert.deepEqual(sent.at(-1), { type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J", move_from_text: "tab.next" });
   assert.equal(session.state.open?.original?.keys, "X");
