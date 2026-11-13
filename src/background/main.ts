@@ -8,7 +8,7 @@ import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
-import { create_frame_overlay } from "./frame_overlay.ts";
+import { create_frame_cue } from "./frame_cue.ts";
 import { relay_plan } from "../shared/relay.ts";
 import { stored_keymap } from "./keymap_source.ts";
 import { history_cache } from "./history_cache.ts";
@@ -194,10 +194,7 @@ const cmdline = create_cmdline_service({
   },
 });
 
-const frame_overlay = create_frame_overlay({
-  focused_child: tab_modes.focused_child,
-  focus_top: (tab_id) => best_effort(send_to_tab(tab_id, { type: "focus_page" }, 0)),
-  forget_line_target: cmdline.forget_target_frame,
+const frame_cue = create_frame_cue({
   keymap: () => stored_keymap(browser.storage.local),
   commands: () => registry.list().map(command_meta),
   toast_in_top: (tab_id, message, duration_ms) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "ui.toast", args: { message, kind: "info", duration_ms }, bundle: "ui" }] }, 0)),
@@ -383,8 +380,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const plan = relay_plan(request, sender.frameId);
     return plan && sender.tab?.id !== undefined ? send_to_tab(sender.tab.id, { type: "run_in_content", invocations: [plan.invocation] }, plan.frame_id) : Promise.resolve({ ok: false, message: "relay refused" });
   }
-  if (request?.type === "frame_hidden" && sender.tab?.id !== undefined && sender.frameId) return frame_overlay.hidden(sender.tab.id, sender.frameId);
-  if (request?.type === "frame_cue" && sender.tab?.id !== undefined) return frame_overlay.cue(sender.tab.id);
+  if (request?.type === "frame_cue" && sender.tab?.id !== undefined) return frame_cue(sender.tab.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);

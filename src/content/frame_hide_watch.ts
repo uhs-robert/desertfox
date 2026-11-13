@@ -1,14 +1,37 @@
-// A subframe tells the background when it goes from shown to hidden, so the keys can return to the top frame. A frame that starts hidden and grows (a panel that animates open) is not hidden: only a frame that was shown can hide.
+// The top frame watches the child frame that holds the keys, and takes the focus back when that frame hides: `display: none` on it or a parent, `visibility: hidden`, opacity 0, or a side too small to show.
+// The top frame watches and not the child, because a frame of another site cannot see its own frame element, and no event fires for a style change.
+// A frame that starts hidden and then shows (a panel that animates open) is not hidden: only a frame that was shown can hide. Where it sits does not count, as in hidden_frame.ts.
+// A frame nested in the focused one is out of reach: the top frame sees only its own child.
 
-import { is_too_small_to_show } from "./hidden_frame.ts";
+import { is_hidden_frame } from "./hidden_frame.ts";
 
-export function watch_frame_hide(report: () => void, win: Pick<Window, "addEventListener" | "innerWidth" | "innerHeight"> = window): void {
+const CHECK_MS = 300;
+
+type FrameElement = Element & { contentWindow?: unknown };
+
+const is_shown = (frame: Element): boolean => frame.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && !is_hidden_frame(frame);
+
+// The answer turns the watch on while a child frame holds the focus, and off when the top frame has it back.
+export function create_frame_hide_watch(take_focus_back: () => void, doc: Pick<Document, "activeElement"> = document): (child_focused: boolean) => void {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let watched: Element | undefined;
   let shown = false;
   const check = () => {
-    const now = !is_too_small_to_show({ width: win.innerWidth, height: win.innerHeight });
-    if (shown && !now) report();
+    const frame = doc.activeElement as FrameElement | null;
+    // The command line or a field of the top frame holds the focus for now.
+    if (!frame?.contentWindow) return;
+    if (frame !== watched) [watched, shown] = [frame, false];
+    const now = is_shown(frame);
+    if (shown && !now) take_focus_back();
     shown = now;
   };
-  win.addEventListener("resize", check);
-  check();
+  // A mode change in the child arms it again, which must not forget that the frame was shown.
+  return (child_focused) => {
+    if (child_focused) timer ??= setInterval(check, CHECK_MS);
+    else {
+      clearInterval(timer);
+      timer = undefined;
+      watched = undefined;
+    }
+  };
 }
