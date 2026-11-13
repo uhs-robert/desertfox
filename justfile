@@ -25,7 +25,7 @@ oasis-themes oasis_nvim_dir: install_deps
 build: install_deps
     npm run --silent build
 
-# Check docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
+# Check docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, lint for floating and misused promises, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail

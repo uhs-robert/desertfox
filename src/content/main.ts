@@ -267,14 +267,14 @@ function install_matcher(reply: PageKeymap | undefined): void {
   }
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
-  if (step === "enter") bundles.set_mode_("ignore");
+  if (step === "enter") void bundles.set_mode_("ignore");
   // A field that took the focus while the ask was pending already put the frame in insert mode, and media must not overwrite it.
   else if (first_install && reply?.join && (reply.join === "insert" || (page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element())))) {
     media_by_step = true;
-    bundles.set_mode_(reply.join);
+    void bundles.set_mode_(reply.join);
   }
   else {
-    if (step === "leave") bundles.set_mode_("normal");
+    if (step === "leave") void bundles.set_mode_("normal");
     if ((first_install || step === "leave") && is_editable_element(deepest_focused_element())) bundles.in_mode_order_(page_mode.focus_entered_editable_);
   }
   // A page that focused its field before the rules arrived, or a rule edit, changes what the focus is. Only a change resyncs, so a manual mode stays.
@@ -355,7 +355,7 @@ function start(): void {
     const next = on ? fullscreen_step(page_mode.get_mode_(), true) : page_mode.media_ended_(own);
     if (next) {
       media_by_step = !own;
-      bundles.set_mode_(next);
+      void bundles.set_mode_(next);
     }
   };
   // On the document, where the event bubbles to. A site's own fullscreen button fires it as much as a key does.
@@ -394,7 +394,7 @@ function start(): void {
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
     else if (message.type === "media" && takes_media_step(message, browser.runtime.getFrameId(window))) media_step(message.on);
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
-      bundles.set_mode_(message.mode);
+      void bundles.set_mode_(message.mode);
       sync_mode_to_focus();
     } else if (message.type === "frame_mode") {
       focused_frame_mode = message.mode;
