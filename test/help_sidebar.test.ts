@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { close_drawer_on_escape, close_drawer_on_window_blur, mark_current_section, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
+import { at_page_end, close_drawer_on_escape, close_drawer_on_window_blur, mark_current_section, refresh_current_section, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
 import { parse_route, site_rules_help_url } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
@@ -35,6 +35,7 @@ class FakeNode {
   }
   replaceChildren(...nodes: (FakeNode | string)[]) { this.children = []; this.append(...nodes); }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
+  getAttribute(name: string) { return this.attributes[name] ?? null; }
   removeAttribute(name: string) { delete this.attributes[name]; }
   addEventListener(name: string, listener: FakeListener) { this.listeners[name] = listener; }
   matches(selector: string): boolean {
@@ -52,6 +53,9 @@ class FakeNode {
     return node === this || (node?.parent ? this.contains(node.parent) : false);
   }
   focus() { fake_document.activeElement = this; }
+  rect_top = 0;
+  rect_height = 20;
+  getBoundingClientRect() { return { top: this.rect_top, bottom: this.rect_top + this.rect_height }; }
   scrollIntoView() {}
   getClientRects() { return this.shown ? [{}] : []; }
   find_all(test: (node: FakeNode) => boolean): FakeNode[] {
@@ -530,4 +534,100 @@ test("the section link of the last heading above the line is the current one, an
   assert.deepEqual(current(), ["c"], "scrolled to the end");
   mark({ a: -900, b: -300, c: undefined });
   assert.deepEqual(current(), ["b"], "a hidden heading is skipped");
+});
+
+test("a page that does not scroll has no end, so its last section is not marked for reaching it", () => {
+  assert.equal(at_page_end(0, 800, 800), false);
+  assert.equal(at_page_end(0, 800, 801), false);
+  assert.equal(at_page_end(0, 800, 2000), false);
+  assert.equal(at_page_end(1200, 800, 2000), true);
+  const entries = ["a", "b"].map((heading_id) => ({ link: new FakeNode("a") as unknown as HTMLElement, heading_id }));
+  mark_current_section(entries, (id) => ({ a: 300, b: 500 })[id], 100, at_page_end(0, 800, 800));
+  assert.equal(entries.filter(({ link }) => (link as unknown as FakeNode).attributes["aria-current"]).length, 0);
+});
+
+test("the mark writes an attribute only when the current link changes", () => {
+  const writes: string[] = [];
+  const link = (name: string) => {
+    const node = new FakeNode("a");
+    const set = node.setAttribute.bind(node);
+    const remove = node.removeAttribute.bind(node);
+    node.setAttribute = (key, value) => { writes.push(`set ${name}`); set(key, value); };
+    node.removeAttribute = (key) => { writes.push(`remove ${name}`); remove(key); };
+    return node as unknown as HTMLElement;
+  };
+  const entries = [{ link: link("a"), heading_id: "a" }, { link: link("b"), heading_id: "b" }];
+  const tops = { a: 10, b: 500 };
+  assert.equal(mark_current_section(entries, (id) => tops[id as "a" | "b"], 100, false), entries[0]!.link);
+  mark_current_section(entries, (id) => tops[id as "a" | "b"], 100, false);
+  mark_current_section(entries, (id) => tops[id as "a" | "b"], 100, false);
+  assert.deepEqual(writes, ["set a"]);
+  tops.b = 50;
+  mark_current_section(entries, (id) => tops[id as "a" | "b"], 100, false);
+  assert.deepEqual(writes, ["set a", "remove a", "set b"]);
+});
+
+test("the section mark: one scroll listener, a re-mark after each render, fresh links, and the sidebar scrolls only on a change", () => {
+  const globals = globalThis as Record<string, unknown>;
+  const saved = { window: globals["window"], requestAnimationFrame: globals["requestAnimationFrame"], ResizeObserver: globals["ResizeObserver"] };
+  const listeners: string[] = [];
+  const frames: (() => void)[] = [];
+  const observed: { page: unknown; disconnected: boolean }[] = [];
+  const view = { scrollY: 0, innerHeight: 1000, addEventListener: (name: string) => listeners.push(name) };
+  globals["window"] = view;
+  globals["requestAnimationFrame"] = (callback: () => void) => frames.push(callback);
+  globals["ResizeObserver"] = class { record = { page: undefined as unknown, disconnected: false }; constructor(_callback: unknown) { observed.push(this.record); } observe(page: unknown) { this.record.page = page; } disconnect() { this.record.disconnected = true; } };
+  const run_frames = () => { while (frames.length > 0) frames.shift()!(); };
+  try {
+    (fake_document as unknown as { documentElement: unknown }).documentElement = { scrollHeight: 5000 };
+    const draw = (root: FakeNode) => {
+      reset_group_state();
+      fake_document.body = root;
+      (globalThis as { document?: unknown }).document = fake_document;
+      render_help(root as never, { quick_start: [], groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," } } as never, { page: "commands" }, []);
+    };
+    const first = new FakeNode("body");
+    draw(first);
+    const heading_tops = (root: FakeNode, tops: Record<string, number>) => {
+      for (const node of root.find_all((candidate) => candidate.id.startsWith("commands-"))) node.rect_top = tops[node.id] ?? 5000;
+    };
+    // The headings sit in the tree only once the page has them, so the test puts them there by hand.
+    const add_headings = (root: FakeNode) => { for (const id of ["commands-scroll", "commands-tab"]) { const heading = new FakeNode("h2"); heading.id = id; root.append(heading); } };
+    add_headings(first);
+    heading_tops(first, { "commands-scroll": -300, "commands-tab": 40 });
+    run_frames();
+    const bar = first.find_all(by_class("desertfox-help-sidebar"))[0]!;
+    const current_of = (root: FakeNode) => root.find_all((node) => node.attributes["aria-current"] === "location").map((node) => node.children[0]);
+    assert.deepEqual(current_of(first), ["Tab"].map((name) => (group_nodes(first).find((group) => group.page === "Commands")!.list.find_all((node) => node.tag === "a").find((node) => String(node.children[0]).toLowerCase().includes(name.toLowerCase()))!.children[0])));
+    assert.equal(listeners.filter((name) => name === "scroll").length, 1);
+    assert.equal(observed.length, 1);
+    assert.equal(observed[0]!.page, first.find_all((node) => node.tag === "main")[0]);
+    // A second render builds new links, replaces the observer and adds no second listener, and the frame after it marks the new links.
+    const second = new FakeNode("body");
+    draw(second);
+    add_headings(second);
+    heading_tops(second, { "commands-scroll": 60, "commands-tab": 4000 });
+    assert.equal(observed.length, 2);
+    assert.equal(observed[0]!.disconnected, true);
+    assert.equal(listeners.filter((name) => name === "scroll").length, 1);
+    assert.equal(current_of(second).length, 0, "no mark before the frame runs");
+    run_frames();
+    assert.equal(current_of(second).length, 1);
+    assert.equal(current_of(first).length, 1, "the links of the first render are not touched");
+    // The sidebar moves only when the current link changes: a frame with the same current link leaves its scroll alone.
+    const bar2 = second.find_all(by_class("desertfox-help-sidebar"))[0]!;
+    bar2.rect_top = 0;
+    bar2.rect_height = 100;
+    for (const link of second.find_all((node) => node.tag === "a" && (node.attributes["href"] ?? "").startsWith("#section=commands/"))) link.rect_top = 500;
+    bar2.scrollTop = 7;
+    refresh_current_section();
+    assert.equal(bar2.scrollTop, 7, "same current link, no sidebar scroll");
+    heading_tops(second, { "commands-scroll": -500, "commands-tab": 50 });
+    refresh_current_section();
+    assert.ok(bar2.scrollTop > 7, "a new current link below the sidebar view scrolls it");
+  } finally {
+    globals["window"] = saved.window;
+    globals["requestAnimationFrame"] = saved.requestAnimationFrame;
+    globals["ResizeObserver"] = saved.ResizeObserver;
+  }
 });

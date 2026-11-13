@@ -32,7 +32,7 @@
   .desertfox-help-sidebar {
     position: sticky; top: 0; align-self: flex-start;
     box-sizing: border-box; flex: none; width: 12rem; height: 100vh; padding: 1rem; overflow-y: auto;
-    display: flex; flex-direction: column; gap: .25rem;
+    display: flex; flex-direction: column; gap: .25rem; overscroll-behavior: contain;
     background: color-mix(in srgb, var(--desertfox-fg-core) 6%, var(--desertfox-bg-core));
   }
   .desertfox-help-brand { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; color: var(--desertfox-primary); font-weight: bold; }
@@ -68,11 +68,12 @@
   .desertfox-help-support-note { opacity: .7; text-align: center; }
   .desertfox-help-sidebar .desertfox-help-support-link { padding: .25rem .6rem; border: 1px solid var(--desertfox-primary); border-radius: 999px; color: var(--desertfox-primary); text-align: center; }
   .desertfox-help-sidebar .desertfox-help-support-link:hover { background: color-mix(in srgb, var(--desertfox-primary) 15%, transparent); }
+  /* Heading sizes are in em, so they follow the body size a theme sets in --desertfox-font. */
   /* The page title is primary and the section titles are plain text over a rule, so the two levels read as different things. */
-  .desertfox-help h1 { margin: 0 0 var(--desertfox-space-3); color: var(--desertfox-primary); font-size: 1.75rem; line-height: 1.2; }
-  .desertfox-help h2 { margin: var(--desertfox-space-4) 0 var(--desertfox-space-3); padding-bottom: var(--desertfox-space-1); border-bottom: 1px solid var(--desertfox-border); font-size: 1.25rem; line-height: 1.3; }
+  .desertfox-help h1 { margin: 0 0 var(--desertfox-space-3); color: var(--desertfox-primary); font-size: 1.85em; line-height: 1.2; }
+  .desertfox-help h2 { margin: var(--desertfox-space-4) 0 var(--desertfox-space-3); padding-bottom: var(--desertfox-space-1); border-bottom: 1px solid var(--desertfox-border); font-size: 1.35em; line-height: 1.3; }
   .desertfox-help h1:focus, .desertfox-help h2:focus { outline: none; }
-  .desertfox-help h3 { margin: 0 0 var(--desertfox-space-1); font-size: 1.05rem; }
+  .desertfox-help h3 { margin: 0 0 var(--desertfox-space-1); font-size: 1.1em; }
   /* data-accent (render.ts) picks the bar color per command group. A card with none, such as a site rule, takes primary. */
   .desertfox-help-command { --bar: var(--desertfox-primary); }
   .desertfox-help-command[data-accent="1"] { --bar: var(--desertfox-accent); }
@@ -166,16 +167,16 @@
   .desertfox-settings-advanced > summary { cursor: pointer; font-weight: bold; font-size: 1.2em; }
   .desertfox-settings-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
   /* One look for every form control. :where() keeps the specificity at zero, so a class rule below (Copy, the section toggles) still wins. */
-  :where(.desertfox-help-page :is(input:not([type="checkbox"], [type="radio"]), select, textarea)) {
+  :where(.desertfox-help-page :is(input:not([type="checkbox"], [type="radio"]), select, textarea, .desertfox-settings-input)) {
     max-width: 100%; box-sizing: border-box; padding: .25rem .5rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius);
     background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: inherit;
   }
-  :where(.desertfox-help-page) button {
+  :where(.desertfox-help-page button) {
     padding: .2rem .75rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius);
     background: var(--desertfox-bg-mantle); color: var(--desertfox-fg-core); font: inherit; cursor: pointer;
   }
-  :where(.desertfox-help-page) button:hover:not(:disabled) { border-color: var(--desertfox-primary); color: var(--desertfox-primary); }
-  :where(.desertfox-help-page) button:disabled { opacity: .4; cursor: default; }
+  :where(.desertfox-help-page button:hover:not(:disabled)) { border-color: var(--desertfox-primary); color: var(--desertfox-primary); }
+  :where(.desertfox-help-page button:disabled) { opacity: .4; cursor: default; }
   .desertfox-help-page :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--desertfox-primary); outline-offset: 1px; }
   .desertfox-settings-input[aria-invalid="true"] { border-color: var(--desertfox-error); }
   .desertfox-settings-order-row { display: flex; align-items: center; gap: .4rem; margin-bottom: .2rem; }
