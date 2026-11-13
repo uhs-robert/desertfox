@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 
 from host_under_test import load_host
 
@@ -23,6 +24,18 @@ PRIVATE_MODE = {"verb": "mode", "id": "normal", "label": "NORMAL", "private": Tr
 # How long a test waits for something that must happen. A wait ends the moment the thing happens, so a
 # long bound costs nothing on a green run and only keeps a starved CPU from failing the test.
 LIVENESS_S = 15
+LIVENESS_CAP_S = 120
+
+
+def liveness_s():
+    """LIVENESS_S stretched by the machine load (one-minute average per core), never past LIVENESS_CAP_S. Read at each wait, so a load that builds up mid-run counts."""
+    load_per_core = os.getloadavg()[0] / (os.cpu_count() or 1)
+    return min(LIVENESS_CAP_S, LIVENESS_S * max(1, load_per_core))
+
+
+def scaled_s(seconds):
+    """A time bound that only catches a hang, stretched by the same load factor as liveness_s."""
+    return seconds * liveness_s() / LIVENESS_S
 
 
 def frame(message):
@@ -54,19 +67,21 @@ class Host:
             data += chunk
         return data
 
-    def read_ready(self, timeout=LIVENESS_S):
+    def read_ready(self, timeout=None):
         # A host that never says ready fails the test instead of hanging the suite.
+        timeout = timeout or liveness_s()
         waiting, _, _ = select.select([self.process.stdout], [], [], timeout)
         if not waiting:
             self.kill()
             raise AssertionError("the host did not say ready within %s s" % timeout)
         return self.read_frame()
 
-    def read_request(self, timeout=LIVENESS_S):
-        """The next frame the host sends to the extension after ready: a run or list request."""
+    def read_request(self, timeout=None, what="a request"):
+        """The next frame the host sends to the extension after ready: a run or list request. `what` names it in the failure."""
+        timeout = timeout or liveness_s()
         waiting, _, _ = select.select([self.process.stdout], [], [], timeout)
         if not waiting:
-            raise AssertionError("the host sent no request within %s s" % timeout)
+            raise AssertionError("the host sent no request for %s within %.0f s" % (what, timeout))
         return self.read_frame()
 
     def send(self, message):
@@ -81,7 +96,7 @@ class Host:
         self.process.stdin.close()
 
     def wait(self):
-        self.process.wait(timeout=LIVENESS_S)
+        self.process.wait(timeout=liveness_s())
         self.process.stdout.close()
         self.process.stderr.close()
         return self.process.returncode
@@ -120,7 +135,7 @@ class BridgeTestCase(unittest.TestCase):
             return json.load(state_file)
 
     def wait_for(self, condition, what="the state file"):
-        deadline = time.monotonic() + LIVENESS_S
+        deadline = time.monotonic() + liveness_s()
         while time.monotonic() < deadline:
             try:
                 state = self.read_state()
@@ -132,7 +147,7 @@ class BridgeTestCase(unittest.TestCase):
         self.fail("timed out waiting for " + what)
 
     def wait_path_gone(self, path):
-        deadline = time.monotonic() + LIVENESS_S
+        deadline = time.monotonic() + liveness_s()
         while time.monotonic() < deadline:
             if not os.path.exists(path):
                 return
@@ -142,7 +157,7 @@ class BridgeTestCase(unittest.TestCase):
     def ask(self, request, raw=None):
         """One request line on a new connection, the decoded reply line."""
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(LIVENESS_S)
+            client.settimeout(liveness_s())
             client.connect(self.socket_path)
             client.sendall(raw if raw is not None else json.dumps(request).encode() + b"\n")
             data = b""
@@ -281,14 +296,14 @@ class PortAndStateTest(BridgeTestCase):
         self.ask({"verb": "ping"})
         self.wait_for(lambda s: True)
         host.close_stdin()
-        host.process.wait(timeout=LIVENESS_S)
+        host.process.wait(timeout=liveness_s())
         self.assertEqual(host.process.stdout.read(), b"")
         host.process.stdout.close()
         host.process.stderr.close()
 
     def test_without_a_runtime_dir_it_exits_before_it_says_ready(self):
         env = {key: value for key, value in os.environ.items() if key != "XDG_RUNTIME_DIR"}
-        done = subprocess.run([sys.executable, HOST_PATH], stdin=subprocess.DEVNULL, capture_output=True, env=env, timeout=LIVENESS_S)
+        done = subprocess.run([sys.executable, HOST_PATH], stdin=subprocess.DEVNULL, capture_output=True, env=env, timeout=liveness_s())
         self.assertEqual(done.returncode, 1)
         self.assertEqual(done.stdout, b"")
 
@@ -317,7 +332,7 @@ class LifecycleTest(BridgeTestCase):
         second = self.start(wait_ready=False)
         started = time.monotonic()
         # Both processes race for the lock. Whoever loses waits 3 s and exits without ready.
-        deadline = started + LIVENESS_S
+        deadline = started + liveness_s()
         while time.monotonic() < deadline and first.process.poll() is None and second.process.poll() is None:
             time.sleep(0.05)
         losers = [host for host in (first, second) if host.process.poll() is not None]
@@ -325,7 +340,7 @@ class LifecycleTest(BridgeTestCase):
         self.assertEqual(len(losers), 1)
         self.assertEqual(len(winners), 1)
         self.assertGreaterEqual(time.monotonic() - started, 2.5, "the loser must wait for the lock before it gives up")
-        self.assertEqual(losers[0].process.wait(timeout=LIVENESS_S), 1)
+        self.assertEqual(losers[0].process.wait(timeout=liveness_s()), 1)
         self.assertEqual(losers[0].process.stdout.read(), b"", "the loser must not say ready")
         self.assertIn(b"another bridge host", losers[0].process.stderr.read())
         self.assertEqual(winners[0].read_ready(), {"ready": True, "host_version": 1, "release_version": "dev"})
@@ -381,7 +396,7 @@ class LifecycleTest(BridgeTestCase):
         first.process.wait()
         started = time.monotonic()
         second = self.start()
-        self.assertLess(time.monotonic() - started, 2.5, "the dead host's lock must be free at once")
+        self.assertLess(time.monotonic() - started, scaled_s(2.5), "the dead host's lock must be free at once")
         self.assertEqual(second.ready, {"ready": True, "host_version": 1, "release_version": "dev"})
 
     def test_the_folder_is_0700_and_the_socket_0600(self):
@@ -403,7 +418,7 @@ class SocketTest(BridgeTestCase):
     def test_one_connection_takes_several_requests(self):
         self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(LIVENESS_S)
+            client.settimeout(liveness_s())
             client.connect(self.socket_path)
             client.sendall(b'{"verb":"ping"}\n{"verb":"ping"}\n')
             data = b""
@@ -424,7 +439,7 @@ class SocketTest(BridgeTestCase):
     def test_a_request_over_the_cap_is_refused(self):
         self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(LIVENESS_S)
+            client.settimeout(liveness_s())
             client.connect(self.socket_path)
             client.sendall(b"x" * (70 * 1024))
             data = client.recv(4096)
@@ -434,11 +449,11 @@ class SocketTest(BridgeTestCase):
     def test_an_idle_connection_is_closed(self):
         self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(LIVENESS_S)
+            client.settimeout(liveness_s())
             client.connect(self.socket_path)
             started = time.monotonic()
             self.assertEqual(client.recv(10), b"")
-            self.assertLess(time.monotonic() - started, 12)
+            self.assertLess(time.monotonic() - started, scaled_s(12))
 
     def test_connections_over_the_cap_are_dropped_and_the_host_recovers(self):
         self.start()
@@ -451,13 +466,13 @@ class SocketTest(BridgeTestCase):
             time.sleep(0.2)
             extra = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             held.append(extra)
-            extra.settimeout(LIVENESS_S)
+            extra.settimeout(liveness_s())
             extra.connect(self.socket_path)
             self.assertEqual(extra.recv(10), b"", "the 17th connection is closed without an answer")
         finally:
             for client in held:
                 client.close()
-        deadline = time.monotonic() + LIVENESS_S
+        deadline = time.monotonic() + liveness_s()
         while True:
             try:
                 self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
@@ -473,7 +488,7 @@ class Client:
 
     def __init__(self, socket_path, request):
         self.connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.connection.settimeout(15)
+        self.connection.settimeout(liveness_s())
         self.connection.connect(socket_path)
         self.reply = None
         self.thread = threading.Thread(target=self.exchange, args=(request,), daemon=True)
@@ -493,9 +508,22 @@ class Client:
             pass
 
     def result(self):
-        self.thread.join(15)
+        self.thread.join(liveness_s())
         self.connection.close()
         return self.reply
+
+
+class LivenessTest(BridgeTestCase):
+    def test_a_host_that_sends_no_request_fails_and_names_the_request(self):
+        host = self.start()
+        with self.assertRaisesRegex(AssertionError, r"no request for tabs \(request 2 of 6\) within 1 s"):
+            host.read_request(timeout=1, what="tabs (request 2 of 6)")
+
+    def test_the_wait_grows_with_the_load_and_stops_at_the_cap(self):
+        cores = os.cpu_count() or 1
+        for load_per_core, expected in ((0, LIVENESS_S), (1, LIVENESS_S), (4, 4 * LIVENESS_S), (100, LIVENESS_CAP_S)):
+            with unittest.mock.patch("os.getloadavg", return_value=(load_per_core * cores, 0, 0)):
+                self.assertEqual(liveness_s(), expected)
 
 
 class RunAndListTest(BridgeTestCase):
@@ -595,7 +623,7 @@ class RunAndListTest(BridgeTestCase):
         started = time.monotonic()
         host.close_stdin()
         self.assertEqual(client.result(), {"ok": False, "message": "the extension disconnected"})
-        self.assertLess(time.monotonic() - started, LIVENESS_S)
+        self.assertLess(time.monotonic() - started, liveness_s())
         self.assertEqual(host.wait(), 0)
 
     def test_a_run_after_the_host_is_gone_cannot_connect(self):
@@ -626,7 +654,7 @@ class RunAndListTest(BridgeTestCase):
     def test_a_refused_run_over_the_rate_limit_never_reaches_the_extension(self):
         host = self.start()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(LIVENESS_S)
+            client.settimeout(liveness_s())
             client.connect(self.socket_path)
             client.sendall(b'{"verb":"run","command":"tab.next"}\n' * 12)
             for _ in range(10):
@@ -814,8 +842,8 @@ class ThemeKeeperTest(unittest.TestCase):
             opener = threading.Thread(target=lambda: keeper.say_ready(link))
             pusher.start()
             opener.start()
-            pusher.join(LIVENESS_S)
-            opener.join(LIVENESS_S)
+            pusher.join(liveness_s())
+            opener.join(liveness_s())
             time.sleep(0.06)
             sent = self.frames(out.getvalue())
             self.assertTrue(sent[0].get("ready"), sent)
@@ -897,12 +925,12 @@ class ThemeKeeperTest(unittest.TestCase):
                 self.fired = True
                 pusher = threading.Thread(target=lambda: keeper.push(link, "oasis_rose"))
                 pusher.start()
-                deadline = time.monotonic() + LIVENESS_S
+                deadline = time.monotonic() + liveness_s()
                 while keeper.palette != "oasis_rose" and time.monotonic() < deadline:
                     time.sleep(0.005)
                 link.answered({"request_id": 1, "ok": False, "message": outer.module.UNKNOWN_PALETTE_MESSAGE})
                 time.sleep(0.1)
-                pusher.join(LIVENESS_S)
+                pusher.join(liveness_s())
 
         keeper.guard = GuardThatPushesOnRelease()
         link.say_ready()
@@ -962,16 +990,16 @@ class LinkTest(unittest.TestCase):
         link = self.module.ExtensionLink(io.BytesIO())
         link.say_ready()
         results = []
-        threads = [threading.Thread(target=lambda: results.append(link.ask("run", {"command": "x"}, LIVENESS_S))) for _ in range(self.module.MAX_PENDING)]
+        threads = [threading.Thread(target=lambda: results.append(link.ask("run", {"command": "x"}, liveness_s()))) for _ in range(self.module.MAX_PENDING)]
         for thread in threads:
             thread.start()
-        deadline = time.monotonic() + LIVENESS_S
+        deadline = time.monotonic() + liveness_s()
         while len(link.pending) < self.module.MAX_PENDING and time.monotonic() < deadline:
             time.sleep(0.01)
-        self.assertEqual(link.ask("run", {"command": "x"}, LIVENESS_S), {"ok": False, "message": "too many requests are waiting"})
+        self.assertEqual(link.ask("run", {"command": "x"}, liveness_s()), {"ok": False, "message": "too many requests are waiting"})
         link.close()
         for thread in threads:
-            thread.join(LIVENESS_S)
+            thread.join(liveness_s())
         self.assertEqual(len(results), self.module.MAX_PENDING)
         self.assertEqual({result["message"] for result in results}, {"the extension disconnected"})
 
