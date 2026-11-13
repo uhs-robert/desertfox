@@ -1,0 +1,61 @@
+// The browser edit layers over the config files, one storage key per kind. Each one wins over the files and survives a reload, an import and a files editor save.
+// Saved settings are not in this table: they have their own temp layer, schema and host mirror (`config_load.ts`). They share only the change queue and the publish.
+
+import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
+import type { KeymapMode } from "../shared/keymap.ts";
+import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
+import { KEYMAP_EDITS_STORAGE_KEY } from "./storage_keys.ts";
+
+// Mode to key sequence to the command text, as keymap.toml writes it. `""` unbinds a default or file binding.
+export type KeymapEdits = Partial<Record<KeymapMode, Record<string, string>>>;
+
+export type EditLayers = { keymap: KeymapEdits };
+export type LayerKind = keyof EditLayers;
+
+type LayerSpec<K extends LayerKind> = {
+  storage_key: string;
+  // Keeps what is still valid. A stored value from an older version or a hand edit is dropped, not trusted.
+  check: (stored: unknown) => EditLayers[K];
+};
+
+const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// A Firefox shortcut takes one chord Firefox accepts, so `browser` keys get its check, as the config build does.
+export function key_problem(mode: KeymapMode, keys: string): string | undefined {
+  return mode === "browser" ? to_firefox_shortcut(keys).error : parse_sequence(keys).error;
+}
+
+// The sequence as the compiled tree spells it, so `<a-j>` and `<A-j>` are one edit and replace the default `<A-j>`.
+export function normalized_keys(mode: KeymapMode, keys: string): { keys: string; tokens: string[] } | { problem: string } {
+  const problem = key_problem(mode, keys);
+  if (problem !== undefined) return { problem };
+  const tokens = parse_sequence(keys).tokens!;
+  return { keys: tokens.join(""), tokens };
+}
+
+function checked_keymap_edits(stored: unknown): KeymapEdits {
+  if (!is_record(stored)) return {};
+  const edits: KeymapEdits = {};
+  for (const [mode, table] of Object.entries(stored)) {
+    if (!(KEYMAP_MODES as readonly string[]).includes(mode) || !is_record(table)) continue;
+    const kept = Object.entries(table).filter(([keys, text]) => keys !== "" && typeof text === "string" && key_problem(mode as KeymapMode, keys) === undefined);
+    if (kept.length > 0) edits[mode as KeymapMode] = Object.fromEntries(kept) as Record<string, string>;
+  }
+  return edits;
+}
+
+export const EDIT_LAYERS: { [K in LayerKind]: LayerSpec<K> } = {
+  keymap: { storage_key: KEYMAP_EDITS_STORAGE_KEY, check: checked_keymap_edits },
+};
+
+const KINDS = Object.keys(EDIT_LAYERS) as LayerKind[];
+
+export async function load_layers(): Promise<EditLayers> {
+  const stored = await browser.storage.local.get(KINDS.map((kind) => EDIT_LAYERS[kind].storage_key));
+  return Object.fromEntries(KINDS.map((kind) => [kind, EDIT_LAYERS[kind].check(stored[EDIT_LAYERS[kind].storage_key])])) as EditLayers;
+}
+
+// One `set`, so the kinds never part.
+export async function store_layers(layers: EditLayers): Promise<void> {
+  await browser.storage.local.set(Object.fromEntries(KINDS.map((kind) => [EDIT_LAYERS[kind].storage_key, layers[kind]])));
+}

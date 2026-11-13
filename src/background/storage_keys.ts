@@ -31,6 +31,9 @@ export const FIREFOX_PAGE_NOTICE_STORAGE_KEY = "desertfox_firefox_page_notice";
 // Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
 
+// Mode to key sequence to command text, the key edits the settings page saved (`edit_layers.ts`). Global, private windows included.
+export const KEYMAP_EDITS_STORAGE_KEY = "desertfox_keymap_edits";
+
 // Setting name to the value `:set --temp` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
 export const TEMP_SETTINGS_STORAGE_KEY = "desertfox_temp_settings";
 

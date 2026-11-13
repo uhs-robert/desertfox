@@ -9,6 +9,7 @@ import type { WhichKeyBorder } from "./config.ts";
 import type { SettingTag } from "./setting_list.ts";
 import type { SettingRow, Settings } from "./settings_table.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
+import type { KeymapMode } from "./keymap.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
 // the background falls back to a notification where no content script exists.
@@ -360,6 +361,24 @@ export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: 
 
 export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };
 
+// One key binding as the key editor lists it. `text` is the command as keymap.toml writes it, empty for a removed binding. `origin` names the layer that decides it: the shipped default, the config files, a browser edit, or an unbind by either. `default_text` is the shipped binding a file or edit replaced.
+export type BindingRow = { mode: KeymapMode; keys: string; text: string; origin: "default" | "file" | "edit" | "removed"; default_text?: string };
+
+// From an extension page: every binding of every mode, except the ones generators make (`search_keys` and the like). The answer is a ListBindingsAnswer.
+export type ListBindings = { type: "list_bindings" };
+export type ListBindingsAnswer = { ok: true; bindings: BindingRow[] } | { ok: false; message: string };
+
+// From an extension page: what saving `text` on `keys` would do. Nothing is stored. `text` "" checks an unbind.
+// `problems` are reasons the text or keys do not read. `warnings` are the compile warnings the binding adds. `shadows` are the bindings it replaces or drops.
+// `saves` is false when a save would be refused: the text does not read, or the compile skips the binding (a warning says why). `ok` false means the check itself failed.
+export type CheckBinding = { type: "check_binding"; mode: KeymapMode; keys: string; text: string };
+export type CheckBindingAnswer = { ok: true; saves: boolean; problems: string[]; warnings: string[]; shadows: { keys: string; text: string }[] } | { ok: false; message: string };
+
+// From an extension page: one key edit. `set` binds `text`, `remove` unbinds the key, `reset` drops the edit so the file or default binding shows again.
+// The answer carries the row after the change, absent when the key is then unbound. A refused set carries the check's problems and warnings.
+export type ChangeKeymap = { type: "change_keymap"; mode: KeymapMode; keys: string; action: "set" | "remove" | "reset"; text?: string };
+export type ChangeKeymapAnswer = { ok: true; row?: BindingRow; message: string } | { ok: false; message: string; problems?: string[] };
+
 // What the toolbar popup asks. Only a top-level extension page may send them.
 export type ToolbarRequest =
   | { type: "toolbar_set_disabled"; disabled: boolean }
@@ -436,7 +455,7 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From the `media` bundle in each frame the background injected it into, with that frame's media. The frame comes from the message sender.
 export type MediaReport = {

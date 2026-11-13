@@ -5,7 +5,8 @@
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
-import type { KeymapConfig } from "../shared/keymap.ts";
+import type { Keymap, KeymapConfig, KeymapMode, ModeBindings } from "../shared/keymap.ts";
+import type { KeymapEdits } from "./edit_layers.ts";
 import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { Prompt } from "../shared/invocation.ts";
@@ -31,21 +32,27 @@ export type CompileInput = {
   default_site_rows?: readonly DefaultSiteRow[];
   get_command: (command_id: string) => Pick<CommandDef, "id" | "label" | "params" | "runs_in" | "count" | "modes" | "bundle" | "jumps"> | undefined;
   enum_sources: EnumSources;
-  // Parses the text of a site bind that a browser edit set, since only a config file goes through the build. Absent means such a bind is skipped with a warning.
+  // Parses the text of a site bind or a key edit that a browser edit set, since only a config file goes through the build. Absent means such a bind is skipped with a warning, and the key edits are left out.
   registry?: Registry;
+  // The key edits of the settings page. They win over keymap.toml and the defaults.
+  keymap_edits?: KeymapEdits;
   // The palette the desktop last pushed. `palette = "desktop"` shows it, or the default while none was pushed.
   desktop_palette?: string | undefined;
 };
 
 export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warnings: string[] };
 
+// Resolves binding text as the config build does, with the config's command aliases and engine names. Each problem goes to `problems`.
+export function config_entry_resolver(registry: Registry, config: Pick<MergedConfig, "search_engines" | "command_aliases">, problems: string[]) {
+  const { search_engines, command_aliases } = config;
+  const aliased: Registry = { ...registry, find: (word) => registry.find(word) ?? (Object.hasOwn(command_aliases, word) && !/\s/.test(word) ? registry.get(command_aliases[word]!) : undefined) };
+  return make_entry_resolver(aliased, { search_engines: Object.keys(search_engines) }, problems);
+}
+
 // A browser edit saves a bind as typed, so its text resolves here with the parser of the config build. A bad step is a warning and drops that bind.
 function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, warnings: string[]): Settings["site_rules"] {
   if (input.registry === undefined) return rows;
-  const { search_engines, command_aliases } = input.config;
-  const registry = input.registry;
-  const aliased: Registry = { ...registry, find: (word) => registry.find(word) ?? (Object.hasOwn(command_aliases, word) && !/\s/.test(word) ? registry.get(command_aliases[word]!) : undefined) };
-  const resolve_entry = make_entry_resolver(aliased, { search_engines: Object.keys(search_engines) }, warnings);
+  const resolve_entry = config_entry_resolver(input.registry, input.config, warnings);
   const resolve_table = (table: BindingTable, scope: string, site: string): never => {
     const resolved: Record<string, unknown> = {};
     for (const [sequence, entry] of Object.entries(table)) {
@@ -61,9 +68,32 @@ function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, 
   });
 }
 
+// The keymap of the files with the key edits on top. A text that does not resolve is a warning and drops that edit, so the file or default binding stays.
+function with_keymap_edits(input: CompileInput, warnings: string[]): KeymapConfig {
+  const edits = Object.entries(input.keymap_edits ?? {});
+  if (edits.length === 0) return input.config.keymap;
+  if (input.registry === undefined) {
+    warnings.push("keymap edits: skipped, no command list to read them with");
+    return input.config.keymap;
+  }
+  const resolve_entry = config_entry_resolver(input.registry, input.config, warnings);
+  const resolved: Keymap = {};
+  for (const [mode, table] of edits) {
+    const bindings: ModeBindings = {};
+    for (const [sequence, text] of Object.entries(table ?? {})) {
+      // keymap.d writes "" to unbind, and the merge reads null as that.
+      const binding = text === "" ? null : resolve_entry(text, `keymap edits: ${mode} skipped "${sequence}"`);
+      if (binding !== undefined) bindings[sequence] = binding;
+    }
+    resolved[mode as KeymapMode] = bindings;
+  }
+  return merge_keymaps(input.config.keymap, resolved);
+}
+
 export function compile_config(input: CompileInput): CompileOutput {
-  const keymap = merge_keymaps(input.default_keymap, input.config.keymap);
   const resolve_warnings: string[] = [];
+  const user_keymap = with_keymap_edits(input, resolve_warnings);
+  const keymap = merge_keymaps(input.default_keymap, user_keymap);
   const user_rows = with_resolved_binds(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules, input, resolve_warnings);
   // The shipped rows rank after the user's, so a user row decides each column first.
   const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off);
@@ -78,7 +108,7 @@ export function compile_config(input: CompileInput): CompileOutput {
       // The prompted param is filled when the key runs, as in keep_node.
       return result.ok || (prompt !== undefined && result.missing_param === prompt.param);
     } };
-  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, input.config.keymap), row_sources);
+  }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, user_keymap), row_sources);
 
   const set_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
   const requested_palette = set_palette === DESKTOP_PALETTE ? (input.desktop_palette ?? DEFAULT_PALETTE) : set_palette;
