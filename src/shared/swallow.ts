@@ -23,6 +23,6 @@ export function refused_as<T, F>(promise: Promise<T>, fallback: F): Promise<T | 
 }
 
 /** A `.catch` handler for a site that could hide a bug of ours. It logs and moves on, and changes no behavior. */
-export function warn_and_go(label: string): (error: unknown) => void {
-    return (error) => console.warn(`desertfox: ${label}`, error);
+export function warn_and_go(label: string): (error: unknown) => undefined {
+    return (error) => (console.warn(`desertfox: ${label}`, error), undefined);
 }
