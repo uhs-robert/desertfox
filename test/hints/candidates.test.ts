@@ -74,10 +74,11 @@ test("the clickable selector adds roving-tabindex items", () => {
 });
 
 // A fake page element for the click sign: a tag, a cursor, a parent and attributes.
-type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean };
+type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean; off_screen?: boolean };
 const dom_styles = {
   cursor_of_: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
   parent_of: (e: Element) => ((e as unknown as Dom).parent ?? null) as unknown as Element | null,
+  is_off_screen_: (e: Element) => (e as unknown as Dom).off_screen === true,
 };
 const el = (d: Dom) =>
   Object.assign(d, {
@@ -174,6 +175,24 @@ test("a visible wrapper keeps its hint when the clickable child inside it is hid
     is_reachable_at_: () => true,
   };
   assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
+});
+
+test("an off-screen element is not weak and costs no style read", () => {
+  const reads: string[] = [];
+  const counting = { ...dom_styles, cursor_of_: (e: Element) => (reads.push((e as unknown as Dom).name), dom_styles.cursor_of_(e)) };
+  const weak_test = make_weak_test(counting);
+  assert.equal(weak_test(el({ name: "below", local: "div", cursor: "pointer", off_screen: true })), false);
+  assert.deepEqual(reads, []);
+  assert.equal(weak_test(el({ name: "shown", local: "div", cursor: "pointer" })), true);
+  assert.deepEqual(reads, ["shown"]);
+});
+
+test("an off-screen weak wrapper does not hide the visible link in it", () => {
+  const wrapper = el({ name: "wrapper", local: "div", cursor: "pointer", off_screen: true, plain: true });
+  const child = el({ name: "child", local: "a", parent: wrapper as unknown as Dom });
+  const found = collect({ querySelectorAll: () => [wrapper, child] } as unknown as ParentNode, { selector: "a[href]" }, make_weak_test(dom_styles));
+  assert.deepEqual(names_of(found), ["child"]);
+  assert.deepEqual(names_of(drop_redundant_weak(found)), ["child"]);
 });
 
 test("the roving group rule is part of the weak menu selector, so plain-list menus are found", () => {
