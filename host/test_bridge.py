@@ -989,6 +989,14 @@ class LinkTest(unittest.TestCase):
 
         results = []
         askers = []
+        open_checked = threading.Event()
+
+        class SignalsOnRelease(threading.Condition):
+            """The link's pending guard. The asker leaves it right after the open check, refused or not."""
+
+            def __exit__(self, *exc):
+                super().__exit__(*exc)
+                open_checked.set()
 
         class AsksOnReady(io.BytesIO):
             """Asks from another thread once the ready frame is written: an extension that read it and a client that connected at once."""
@@ -998,11 +1006,13 @@ class LinkTest(unittest.TestCase):
                     return
                 askers.append(threading.Thread(target=lambda: results.append(link.ask("list", {}, liveness_s()))))
                 askers[0].start()
-                # Long enough for a refusal to land. A link that is already open holds the asker on the write guard instead.
-                askers[0].join(0.3)
+                # The ready write stays in progress until the asker has checked `open`, however slow its thread is to start.
+                if not open_checked.wait(liveness_s()):
+                    raise AssertionError("the asker never checked whether the link is open")
 
         out = AsksOnReady()
         link = self.module.ExtensionLink(out)
+        link.pending_guard = SignalsOnRelease()
         link.say_ready()
         deadline = time.monotonic() + liveness_s()
         while not link.pending and not results and time.monotonic() < deadline:
