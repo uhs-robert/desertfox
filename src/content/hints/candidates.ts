@@ -7,7 +7,7 @@ import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "media" | "images" | "frames" | "custom";
+export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -97,6 +97,10 @@ export const is_draggable = (element: Element): boolean => {
   return parent === null || style_of(parent).cursor !== style.cursor;
 };
 
+// What a swipe moves: a carousel container by class, a scroll-snap box, or anything a drag moves.
+const SWIPEABLE = ".swiper, .splide, .embla, .glide, .slick-list, .flickity-viewport";
+export const is_swipeable = (element: Element): boolean => is_draggable(element) || (!PAGE_ROOTS.has(element.localName) && (element.matches(SWIPEABLE) || window_of(element).getComputedStyle(element).scrollSnapType !== "none"));
+
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
   every: { selector: "*", test: is_every_target },
@@ -106,6 +110,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   links: { selector: LINKS },
   prose: { selector: "*", test: has_own_text },
   draggable: { selector: "*", test: is_draggable },
+  swipeable: { selector: "*", test: is_swipeable },
   media: { selector: "video, audio" },
   images: { selector: "*", test: is_image },
   frames: { selector: "iframe, frame", test: is_pickable_frame },

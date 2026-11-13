@@ -106,7 +106,7 @@ test("a key whose required param comes from a prompt still gets variants", () =>
 test("the default modifiers give the owner's keys and no stacked or refused ones", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  for (const keys of [["r", "l"], ["B", "l"], ["W", "l"], ["h", "a"], ["x", "a"], ["2", "a"], ["B", "I"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
+  for (const keys of [["r", "l"], ["B", "l"], ["n", "l"], ["h", "a"], ["x", "a"], ["2", "a"], ["B", "I"]]) assert.ok(node_at(compiled, ";", ...keys), keys.join(""));
   assert.equal(args_at(compiled, ";", "h", "a")?.action, "hover");
   assert.equal(args_at(compiled, ";", "2", "a")?.action, "double_click");
   assert.equal(node_at(compiled, ";", "2", "l"), undefined);
@@ -126,6 +126,14 @@ test("the grab modifiers give ;gg and ;Gg for the draggable group, ;ga and ;gb f
   }
 });
 
+test(";w swipes the swipeable group, ;n is the new-window modifier, and ;W and ;w differ in more than case", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  assert.deepEqual([args_at(compiled, ";", "w")?.action, args_at(compiled, ";", "w")?.filter], ["grab_swipe", "swipeable"]);
+  assert.equal(args_at(compiled, ";", "n", "l")?.action, "window");
+  assert.equal(node_at(compiled, ";", "W"), undefined);
+});
+
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
@@ -133,7 +141,7 @@ test("the ;o modifier derives an inspect variant of the filter keys and none of 
   for (const [key, filter] of [["a", "every"], ["l", "links"], ["t", "prose"], ["I", "images"], ["i", "inputs"], ["b", "buttons"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "o", key)?.action, args_at(compiled, ";", "o", key)?.filter], ["inspect", filter], key);
   }
-  for (const keys of [["B", "a"], ["W", "a"], ["d", "a"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
+  for (const keys of [["B", "a"], ["n", "a"], ["d", "a"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
   for (const keys of [["o", "s"], ["o", "v"], ["o", ";"], ["o", "o"], ["o", "y"], ["o", "B"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
@@ -158,7 +166,7 @@ test("the default picture keys: ;d reaches images, links and media", () => {
   for (const [key, filter] of [["I", "images"], ["l", "links"], ["m", "media"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "d", key)?.action, args_at(compiled, ";", "d", key)?.filter], ["download", filter], key);
   }
-  // `;a` labels every element, most of which have no address to save, and `;Ba` and `;Wa` likewise.
+  // `;a` labels every element, most of which have no address to save, and `;Ba` and `;na` likewise.
   for (const key of ["B", "i", "t", "f", "a"]) assert.equal(node_at(compiled, ";", "d", key), undefined, key);
 });
 

@@ -80,6 +80,32 @@ document.addEventListener("pointerup", (e) => {
   dragged = null;
 });
 </script>`,
+  // Three swipe targets, one per swipe route. The scroll-snap box scrolls natively. The two carousels take a pointer sequence: they turn a slide when the drag passes 40% of the width (strict pages ignore an untrusted one) and count presses and releases, so a test sees a button left down. The link is a carousel whose slide would start a native drag if the route were html5.
+  swipe: `
+<style>.box{width:300px;height:100px;margin:10px;display:block;overflow:hidden;background:#eee}.snap{overflow-x:auto;scroll-snap-type:x mandatory;white-space:nowrap}.snap div{display:inline-block;width:300px;height:100px;scroll-snap-align:start}.slide{float:left;width:300px;height:100px}</style>
+<div id="snap" class="box snap"><div style="background:#9cf">a</div><div style="background:#fc9">b</div><div style="background:#cf9">c</div></div>
+<div id="car" class="box swiper"><div id="track" style="width:900px;transition:none"><div class="slide" style="background:#9cf">a</div><div class="slide" style="background:#fc9">b</div><div class="slide" style="background:#cf9">c</div></div></div>
+<a id="link" class="box swiper" href="/drag?id=link_elsewhere"><div style="width:900px"><div class="slide" style="background:#9cf">a</div><div class="slide" style="background:#fc9">b</div><div class="slide" style="background:#cf9">c</div></div></a>
+<script>
+const strict = location.search.includes("strict");
+document.addEventListener("dragstart", () => { document.body.dataset.dragstart = String(+(document.body.dataset.dragstart || 0) + 1); });
+for (const box of [car, link]) {
+  let from = null;
+  box.dataset.index = "0";
+  box.dataset.pressed = "0";
+  box.dataset.downs = "0";
+  box.dataset.ups = "0";
+  box.addEventListener("pointerdown", (e) => { if (strict && !e.isTrusted) return; from = e.clientX; box.dataset.pressed = "1"; box.dataset.downs = String(+box.dataset.downs + 1); });
+  document.addEventListener("pointerup", (e) => {
+    if (from === null) return;
+    const dx = e.clientX - from;
+    from = null;
+    box.dataset.pressed = "0";
+    box.dataset.ups = String(+box.dataset.ups + 1);
+    if (Math.abs(dx) > 120) box.dataset.index = String(Math.max(0, Math.min(2, +box.dataset.index + (dx < 0 ? 1 : -1))));
+  });
+}
+</script>`,
   sortable: `
 <style>li{height:30px;margin:4px;background:#9cf;list-style:none}ul{width:200px;padding:0}</style>
 <ul id="list"><li id="i1">one</li><li id="i2">two</li><li id="i3">three</li></ul>

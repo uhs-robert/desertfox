@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_swipeable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -470,6 +470,25 @@ test("the draggable filter keeps explicit drag signs and grab cursors where they
   const pointer_card = fake("div", false);
   touch_none.add(pointer_card);
   assert.equal(is_draggable(pointer_card), true);
+});
+
+test("the swipeable filter keeps carousel containers, scroll-snap boxes and what a drag moves, and no plain box or page root", (context) => {
+  const global_scope = globalThis as unknown as { getComputedStyle?: unknown };
+  const snaps = new Set<unknown>();
+  global_scope.getComputedStyle = (element: unknown) => ({ cursor: "auto", touchAction: "auto", scrollSnapType: snaps.has(element) ? "x mandatory" : "none" });
+  context.after(() => delete global_scope.getComputedStyle);
+  assert.equal(query_for("swipeable", undefined).selector, "*");
+  const fake = (local: string, matching: string) => ({ localName: local, parentElement: null, ownerDocument: { defaultView: globalThis }, matches: (selector: string) => selector.includes(matching) }) as unknown as Element;
+  assert.equal(is_swipeable(fake("div", ".swiper")), true);
+  assert.equal(is_swipeable(fake("div", ".splide")), true);
+  assert.equal(is_swipeable(fake("div", "[draggable")), true);
+  const snap = fake("div", "none");
+  snaps.add(snap);
+  assert.equal(is_swipeable(snap), true);
+  assert.equal(is_swipeable(fake("div", "none")), false);
+  const root = fake("body", ".swiper");
+  snaps.add(root);
+  assert.equal(is_swipeable(root), false);
 });
 
 test("hint_add matches are added for the draggable filter too", () => {

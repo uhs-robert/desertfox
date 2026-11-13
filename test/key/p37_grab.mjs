@@ -319,6 +319,72 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     expect((await read('document.getElementById("dst").textContent')) === "dst", "Escape dropped the element");
   });
 
+  const attr_of = (id, name) => read(`document.getElementById("${id}").dataset.${name}`);
+
+  await run_case(";w labels the three swipe targets, and l flings a carousel one slide at a time until Escape", async () => {
+    const page_id = "swipe_car";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
+    await press_keys(";w");
+    await labels_up("labels of the swipeable group");
+    expect((await hint_label_count()) === 3, `the snap box, the carousel and the link are the group, got ${await hint_label_count()} labels`);
+    const label = await label_of("#car");
+    await press_keys(label);
+    await labels_gone("labels gone after the pick");
+    await wait_badge(mark, page_id, "GRAB");
+    await press_keys("l");
+    await poll_until("slide 1", async () => (await attr_of("car", "index")) === "1", { timeout_ms: 5000 });
+    await press_keys("l");
+    await poll_until("slide 2", async () => (await attr_of("car", "index")) === "2", { timeout_ms: 5000 });
+    await press_keys("h");
+    await poll_until("back to slide 1", async () => (await attr_of("car", "index")) === "1", { timeout_ms: 5000 });
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    await sleep(200);
+    expect((await attr_of("car", "downs")) === (await attr_of("car", "ups")) && (await attr_of("car", "pressed")) === "0", "a press was left down after Escape");
+    expect((await attr_of("car", "index")) === "1", "the carousel moved after Escape");
+  });
+
+  await run_case(";w on a scroll-snap box lands on the next slide with no pointer press", async () => {
+    await open_page("drag", "swipe_snap", { new_tab: true });
+    await press_keys(";w");
+    await pick("#snap");
+    await press_keys("l");
+    await poll_until("the box on slide 2", async () => Math.abs(parseFloat(await read('document.getElementById("snap").scrollLeft')) - 300) < 2, { timeout_ms: 5000 });
+    await press_keys("h");
+    await poll_until("the box back on slide 1", async () => parseFloat(await read('document.getElementById("snap").scrollLeft')) < 2, { timeout_ms: 5000 });
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case(";w on a link slide sends no dragstart and still swipes", async () => {
+    const page_id = "swipe_link";
+    await open_page("drag", page_id, { new_tab: true });
+    await press_keys(";w");
+    await pick("#link");
+    await press_keys("l");
+    await poll_until("the link carousel on slide 1", async () => (await attr_of("link", "index")) === "1", { timeout_ms: 5000 });
+    expect(!(await read("document.body.dataset.dragstart")), "the fling sent a dragstart");
+    const mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    expect((await attr_of("link", "downs")) === (await attr_of("link", "ups")), "a press was left down on the link");
+  });
+
+  await run_case(";w then l and Escape at once leaves no pointer pressed and the mode closed", async () => {
+    const page_id = "swipe_escape";
+    await open_page("drag", page_id, { new_tab: true });
+    await press_keys(";w");
+    await pick("#car");
+    await press_keys("l", "l", "l", "-k", "Escape");
+    await sleep(600);
+    expect((await attr_of("car", "downs")) === (await attr_of("car", "ups")) && (await attr_of("car", "pressed")) === "0", `a press was left down: ${await attr_of("car", "downs")} downs, ${await attr_of("car", "ups")} ups`);
+    const at = await attr_of("car", "index");
+    await press_keys("l");
+    await sleep(300);
+    expect((await attr_of("car", "index")) === at, "l flung after Escape");
+  });
+
   // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.
   for (const [second, label] of [[";ga", "a grab"], [";a", "a plain hint"]]) {
     await run_case(`;gg then Escape, and ${second} on the same page still shows labels (${label})`, async () => {

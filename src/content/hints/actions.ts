@@ -6,14 +6,14 @@ import type { FrameCue, MediaPin } from "../../shared/messages.ts";
 import { parent_across_shadow, player_box } from "../player_box.ts";
 import { best_effort } from "../../shared/swallow.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "prompt" | "grab" | "grab_move";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "prompt" | "grab" | "grab_move" | "grab_swipe";
 
 export type Place = "here" | "tab" | "background" | "window";
 
 export const OPEN_PLACES: readonly HintAction[] = ["tab", "background", "window"];
 
 // The actions that hand the pick to a mode bundle: the caret bundle for caret and visual, the grab bundle for the grabs.
-export type ModeAction = "caret" | "visual" | "grab" | "grab_move";
+export type ModeAction = "caret" | "visual" | "grab" | "grab_move" | "grab_swipe";
 
 export const starts_mode = (action: HintAction): action is ModeAction => /^(?:caret|visual|grab)/.test(action);
 

@@ -62,7 +62,7 @@ const BASE_SECTIONS: KeymapConfig = {
   modifiers: {
     ";r": { rapid: true, label: "Rapid" },
     ";B": { action: "background", label: "Background tab" },
-    ";W": { action: "window", label: "New window" },
+    ";n": { action: "window", label: "New window" },
     ";d": { action: "download", label: "Download" },
     ";o": { action: "inspect", label: "Inspect" },
     ";h": { action: "hover", label: "Hover" },
@@ -359,6 +359,7 @@ const BASE_SECTIONS: KeymapConfig = {
     // `;g` and `;G` are modifiers, so these two keys are the draggable group under them: the filter letter `g` follows the modifier `g`.
     ";gg": { id: "hint.run", args: { action: "grab", filter: "draggable" }, label: "Grab an element and drop it on a target", variant_label: "Draggable" },
     ";Gg": { id: "hint.run", args: { action: "grab_move", filter: "draggable" }, label: "Grab an element and move it with the keys", variant_label: "Draggable" },
+    ";w": { id: "hint.run", args: { action: "grab_swipe", filter: "swipeable" }, label: "Swipe a carousel or slider with the keys" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },

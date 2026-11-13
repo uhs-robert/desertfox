@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 466 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 468 (normal 241, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -261,6 +261,7 @@ bound: 466 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
 | `;gg` | bound | `hint --grab --draggable` | Grab an element and drop it on a target |  |
 | `;Gg` | bound | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
+| `;w` | bound | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
@@ -341,6 +342,7 @@ Which-key group names:
 | `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
 | `;gg` | bound | `hint --grab --draggable` | Grab an element and drop it on a target |  |
 | `;Gg` | bound | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
+| `;w` | bound | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |

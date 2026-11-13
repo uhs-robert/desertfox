@@ -69,6 +69,12 @@ test("the grabs take the draggable and every filters and refuse links", () => {
   }
 });
 
+test("swipe takes the swipeable and every filters and refuses the rest", () => {
+  assert.equal(check_args(hint, { action: "grab_swipe", filter: "swipeable" }).ok, true);
+  assert.equal(check_args(hint, { action: "grab_swipe", filter: "every" }).ok, true);
+  for (const filter of ["links", "buttons", "draggable"]) assert.equal(check_args(hint, { action: "grab_swipe", filter }).ok, false, filter);
+});
+
 test("a value with no rule is allowed with any sibling value", () => {
   for (const name of ["here", "delete", "focus", "hover", "caret"]) assert.equal(check_args(hint, { action: name, filter: "buttons" }).ok, true, name);
 });

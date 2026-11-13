@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abort, drive, move_to, nudge, press, press_point, release, route_of, scale_step } from "../../src/content/grab/drag.ts";
+import { abort, drive, fling, move_to, nudge, press, press_point, release, route_of, scale_step, snap_scroll, start_fling } from "../../src/content/grab/drag.ts";
 
 // Node has no DOM events. The fakes keep the type, the init and the data transfer.
 class FakeEvent {
@@ -276,4 +276,68 @@ test("the step keys halve and double the move within limits, and leave a range i
   assert.equal(held.step, 192);
   const input = element({ localName: "input", type: "range", value: "0" });
   assert.equal(scale_step(press(as_element(input))!, 2), undefined);
+});
+
+test("a fling on a link or picture forces the pointer route and sends no dragstart", async () => {
+  const slide = element({ localName: "a" });
+  const { held, to } = start_fling(as_element(slide), "right");
+  assert.equal(held.route, "pointer");
+  await fling(held, to);
+  assert.equal(slide.log.includes("dragstart"), false);
+  assert.deepEqual([slide.log[0], slide.log.at(-1)], ["pointerdown", "mouseup"]);
+});
+
+test("the key names the way the view moves, so the pointer goes the other way by 60% of the box", () => {
+  const slide = element();
+  const start = start_fling(as_element(slide), "right");
+  assert.deepEqual(start.to, { x: 50 - 60, y: 10 });
+  assert.deepEqual(start_fling(as_element(slide), "left").to, { x: 50 + 60, y: 10 });
+  assert.deepEqual(start_fling(as_element(slide), "down").to, { x: 50, y: 10 - 12 });
+});
+
+test("a fling is four moves and one release", async () => {
+  const slide = element();
+  const { held, to } = start_fling(as_element(slide), "right");
+  await fling(held, to);
+  assert.equal(slide.log.filter((type) => type === "pointermove").length, 4);
+  assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
+});
+
+test("an abort in the middle of a fling releases once and the fling sends nothing more", async () => {
+  const slide = element();
+  const { held, to } = start_fling(as_element(slide), "left");
+  const flinging = fling(held, to);
+  abort(held);
+  await flinging;
+  assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
+  assert.equal(slide.log.filter((type) => type === "pointermove").length, 0);
+});
+
+test("a second fling after an abort presses again and never leaves the first pressed", async () => {
+  const slide = element();
+  const first = start_fling(as_element(slide), "right");
+  const first_flight = fling(first.held, first.to);
+  abort(first.held);
+  const second = start_fling(as_element(slide), "right");
+  await Promise.all([first_flight, fling(second.held, second.to)]);
+  const downs = slide.log.filter((type) => type === "pointerdown").length;
+  assert.equal(downs, 2);
+  assert.equal(slide.log.filter((type) => type === "pointerup").length, 2);
+});
+
+test("a scroll-snap box scrolls by one view and gets no pointer events, and a box with no room is skipped", () => {
+  const scrolls: unknown[] = [];
+  const snap = element({ clientWidth: 300, scrollWidth: 900, clientHeight: 100, scrollHeight: 100, scrollBy: (init: unknown) => scrolls.push(init) });
+  const slide = element({ parent: snap, parentElement: snap });
+  const styles = new Map<unknown, string>([[snap, "x mandatory"]]);
+  (globalThis as Record<string, unknown>).getComputedStyle = (target: unknown) => ({ scrollSnapType: styles.get(target) ?? "none" });
+  try {
+    assert.equal(snap_scroll(as_element(slide), "right"), true);
+    assert.equal(snap_scroll(as_element(slide), "left"), true);
+    assert.deepEqual(scrolls, [{ left: 300, top: 0, behavior: "smooth" }, { left: -300, top: 0, behavior: "smooth" }]);
+    assert.equal(snap_scroll(as_element(slide), "down"), false);
+    assert.deepEqual([slide.log, snap.log], [[], []]);
+  } finally {
+    delete (globalThis as Record<string, unknown>).getComputedStyle;
+  }
 });
