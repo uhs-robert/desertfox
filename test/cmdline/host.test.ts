@@ -606,7 +606,7 @@ test("a page with no scrolling element starts the line with a null scroll", asyn
 // A focused subframe keeps the keys while the top frame draws the line. These tests drive both ends: the subframe's (`subframe: true`) and the top frame's, which `open_args` marks as a line for frame 5.
 const FOR_FRAME_5 = { from_frame: 5, remote_id: "line-1", mode: "insert", scroll: { top: 40, max: 900 } };
 const relayed_ids = (relays: Relayed[]) => relays.map((relayed) => relayed.id);
-const NO_LINE = { ok: false, message: "The frame is not there" };
+const NO_LINE = { ok: false, message: "The frame is gone" };
 
 test("a subframe sends the line to the top frame with its own mode and scroll place, and its keys follow", async (t) => {
   const { relays, modes, sink, elements } = await load_host(t, "remote_open", { subframe: true, scrolling_element: { scrollTop: 30, scrollHeight: 1000, clientHeight: 400 }, relay: () => new Promise(() => {}) });
@@ -750,4 +750,14 @@ test("a subframe that refuses the focus still hears the end, and the late keys s
     assert.deepEqual(handed_back, [takes_focus ? [] : ["x"]]);
     assert.equal(frame.focused, takes_focus, "the line's frame keeps no focus either way, the page's blur or the subframe takes it");
   }
+});
+
+test("a subframe whose mode left the line first, as the end of a fullscreen does, still takes the focus back for that line", async (t) => {
+  const { relays, handlers, sink, window_focus } = await load_host(t, "remote_exit_focus", { subframe: true, relay: () => new Promise(() => {}) });
+  const remote_id = relays[0]!.args.remote_id;
+  sink.exit();
+  assert.deepEqual(relays.at(-1)?.args, { token: "<Escape>" });
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: "an older line" }), NO_LINE);
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id }), { ok: true });
+  assert.deepEqual(window_focus, ["window"]);
 });
