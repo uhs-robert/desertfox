@@ -433,6 +433,63 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await escape_to_normal(page_id);
   });
 
+  // A session command from normal mode enters its mode first, so the badge shows the session it made.
+  await run_case(":caret.move from normal mode starts caret mode", async () => {
+    const page_id = "move_normal";
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await run_line(":caret.move --unit=char");
+    await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge");
+    await wait_event(mark, is_selection_of(page_id), "a caret selection");
+    await escape_to_normal(page_id);
+  });
+
+  // The session starts at the first visible text, the "c" of the title "caret object_normal".
+  await run_case(":visual.object from normal mode starts visual mode and selects the object", async () => {
+    const page_id = "object_normal";
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await run_line(":visual.object --object=word");
+    await wait_event(mark, badge_is(page_id, "VISUAL"), "the VISUAL badge");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "caret ", 'the word "caret " selected');
+    await escape_to_normal(page_id);
+  });
+
+  // Normal mode holds no selection, so a command that acts on one has nothing to act on.
+  for (const [line, page_id] of [
+    [":visual.act --action=yank", "act_normal"],
+    [":visual.open", "open_normal"],
+  ]) {
+    await run_case(`${line} from normal mode refuses and starts no session`, async () => {
+      await open_page("caret", page_id, { new_tab: true });
+      const mark = events.length;
+      await run_line(line);
+      await wait_cmdline((state) => !state.open, "the line to close");
+      // The refusal shows a toast, which proves the command ran.
+      await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, "the refusal toast");
+      await expect_absent(mark, page_id, (event) => is_selection_of(page_id)(event) || badge_is(page_id, "CARET")(event) || badge_is(page_id, "VISUAL")(event), "a session after the command");
+    });
+  }
+
+  // The harness has no pointer, so the click is a collapsed selection, which is all the caret code reads. The next key sees it: visual mode ends and the key runs in caret mode, where v starts visual mode at the click.
+  await run_case("a click in visual mode ends it, and the next key runs in caret mode from the click", async () => {
+    const page_id = "click_visual";
+    await open_page("caret", page_id, { new_tab: true });
+    await press_and_wait_for_move(page_id, "gV", "the caret on the title");
+    await press_and_wait_for_badge(page_id, "v", "VISUAL");
+    await barrier(page_id);
+    const mark_click = events.length;
+    // The "l" of "second line here".
+    await in_active_tab(`(() => { getSelection().collapse(document.querySelectorAll("p")[1].firstChild, 7); return true; })()`);
+    await wait_event(mark_click, is_selection_of(page_id), "the click report");
+    const mark = events.length;
+    await press_keys("v");
+    const caret_badge = await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge after the click");
+    await wait_event(events.indexOf(caret_badge), badge_is(page_id, "VISUAL"), "v to start visual mode again");
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "l", 'the visual selection on the "l" of line');
+    await escape_to_normal(page_id);
+  });
+
   // Pages that add trees after the session started. The sheet probes count the adopted sheets with a rule for the selection or the caret cell on each tree.
   const selection_sheets_of = (tree) => `[...${tree}.adoptedStyleSheets].filter((sheet) => [...sheet.cssRules].some((rule) => /::selection|::highlight\\(oasis-caret\\)/.test(rule.cssText))).length`;
   const root_styles = (host_selector) => selection_sheets_of(`document.querySelector(${JSON.stringify(host_selector)}).shadowRoot`);
