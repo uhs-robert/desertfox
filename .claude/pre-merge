@@ -4,3 +4,4 @@
 set -euo pipefail
 npm ci --ignore-scripts --no-audit --no-fund >&2
 npm run lint
+npm run build
