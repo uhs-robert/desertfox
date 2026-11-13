@@ -34,7 +34,7 @@ function player(fields: Partial<Player> = {}): Player & { calls: string[] } {
 
 function frame(entries: { player: Player; area: number }[], pip: { element: unknown } = { element: null }, full: { element: unknown } = { element: null }, pin: { player?: Player } = {}): FrameView {
   return {
-    site_volume: () => undefined,
+    site_player: () => undefined,
     site_controls: () => false,
     players: () => entries.map((entry) => ({ ...entry, pinned_: entry.player === pin.player })),
     pip_element: () => pip.element,
