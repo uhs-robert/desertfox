@@ -21,6 +21,26 @@ define("grab.move", {
   bundle: "grab",
 });
 
+define("grab.step", {
+  completion: "hidden",
+  modes: ["grab"],
+  label: "Change the grab step",
+  intent: "Halve or double the step of a move key. A range keeps its own.",
+  params: [
+    {
+      name: "scale",
+      type: "enum",
+      values: ["finer", "coarser"],
+      value_labels: { finer: "finer", coarser: "coarser" },
+      description: { finer: "Halve the step.", coarser: "Double the step." },
+    },
+  ],
+  bridge: false,
+  runs_in: "content",
+  repeatable: false,
+  bundle: "grab",
+});
+
 define("grab.drop", {
   completion: "hidden",
   modes: ["grab"],
@@ -36,7 +56,7 @@ define("grab.cancel", {
   completion: "hidden",
   modes: ["grab"],
   label: "Cancel the grab",
-  intent: "Put the grabbed element back, drop it and leave grab mode.",
+  intent: "Leave grab mode. A range input and a draggable element go back to where they began, and a pointer drag is released where it is.",
   bridge: false,
   runs_in: "content",
   repeatable: false,

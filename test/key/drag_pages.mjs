@@ -36,6 +36,16 @@ vol.addEventListener("pointerdown", () => { down = true; });
 document.addEventListener("pointermove", (e) => { if (down) vol.setAttribute("aria-valuenow", String(Math.round(e.clientX - vol.getBoundingClientRect().left))); });
 document.addEventListener("pointerup", () => { down = false; });
 </script>`,
+  // A volume slider that reads the pointer position as its value (the YouTube case): the value is the pointer's x over the box, on press and on every move. The thumb starts right of the middle.
+  abs: `
+<div id="vol" role="slider" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100" tabindex="0" style="width:100px;height:20px;background:#ddd"></div>
+<script>
+let down = false;
+const set_from = (e) => { const box = vol.getBoundingClientRect(); vol.setAttribute("aria-valuenow", String(Math.round(Math.min(100, Math.max(0, e.clientX - box.left))))); };
+vol.addEventListener("pointerdown", (e) => { down = true; set_from(e); });
+document.addEventListener("pointermove", (e) => { if (down) set_from(e); });
+document.addEventListener("pointerup", () => { down = false; });
+</script>`,
   h5: `
 <div id="src" draggable="true" style="width:80px;height:40px;background:#9cf">src</div>
 <div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>
@@ -44,7 +54,7 @@ const strict = location.search.includes("strict");
 const log = (ev, e, extra = {}) => send("drag", { ev, trusted: e.isTrusted, types: e.dataTransfer ? [...e.dataTransfer.types] : null, ...extra });
 src.addEventListener("dragstart", (e) => { log("dragstart", e); if (strict && !e.isTrusted) return; e.dataTransfer.setData("text/plain", "payload"); e.dataTransfer.effectAllowed = "move"; });
 dst.addEventListener("dragenter", (e) => e.preventDefault());
-dst.addEventListener("dragover", (e) => e.preventDefault());
+dst.addEventListener("dragover", (e) => { e.preventDefault(); dst.dataset.y = String(Math.round(e.clientY)); });
 dst.addEventListener("drop", (e) => {
   e.preventDefault();
   const data = e.dataTransfer.getData("text/plain");

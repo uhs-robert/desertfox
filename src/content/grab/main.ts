@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { Outcome } from "../../shared/messages.ts";
-import { abort, center_of, drive, nudge, press, release } from "./drag.ts";
+import { abort, center_of, drive, nudge, press, release, scale_step } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 
 type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
@@ -15,7 +15,7 @@ const NOTHING_HELD = refused("Nothing is grabbed");
 
 // The page's reaction cannot be read, so the words say what ran and nothing about what it did.
 const DROPPED_TOAST = "Grab dropped";
-const KEYS_TOAST = "Grab: h j k l move, Enter drops, Escape cancels";
+const KEYS_TOAST = "Grab: h j k l move, [ ] step, Enter drops, Escape cancels";
 
 function register(host: BundleHostApi): void {
   // The element held in grab mode.
@@ -25,7 +25,7 @@ function register(host: BundleHostApi): void {
   // The drag of a `hint --grab` in flight.
   let driving: Held | undefined;
 
-  // The one way a drag ends early: the sink's `exit` calls it for Escape, a second command, a page that goes hidden, and the keys call `escape_` to reach it. The drag goes back to its start and releases there, at once, so nothing it sends is late.
+  // The one way a drag ends early: the sink's `exit` calls it for Escape, a second command, a page that goes hidden, and the keys call `escape_` to reach it. `abort` ends it at once, so nothing it sends is late.
   function end_all(): void {
     const stopping = [held, driving];
     held = driving = source = undefined;
@@ -87,6 +87,13 @@ function register(host: BundleHostApi): void {
   host.register_handler_("grab.move", (args): Outcome => {
     if (!held) return NOTHING_HELD;
     nudge(held, args.direction as Direction);
+    return ran;
+  });
+
+  host.register_handler_("grab.step", (args): Outcome => {
+    if (!held) return NOTHING_HELD;
+    const step = scale_step(held, args.scale === "finer" ? 0.5 : 2);
+    host.show_toast_(step === undefined ? "A range input keeps its own step" : `Grab step ${step} px`);
     return ran;
   });
 
