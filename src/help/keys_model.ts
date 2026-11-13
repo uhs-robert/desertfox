@@ -82,7 +82,7 @@ export const freed_keys = (editor: Editor): string | undefined => (editor.origin
 // The old text goes along, so the background refuses the move when another tab changed the old key since the row was shown.
 const moved_from = (editor: Editor): { move_from?: string; move_from_text?: string } => {
   const keys = freed_keys(editor);
-  return keys === undefined ? {} : { move_from: keys, move_from_text: editor.opened_text ?? editor.original!.text };
+  return keys === undefined ? {} : { move_from: keys, ...(editor.opened_text !== undefined && { move_from_text: editor.opened_text }) };
 };
 
 // A row matches when the filter is part of its keys, its command text, its mode or its origin.
@@ -187,11 +187,8 @@ export function create_keys_session(deps: KeysDeps) {
     const id = row_id(row.mode, row.keys);
     // The open row is not in `drafts` yet, so a click on it again must find it here or its edits are lost.
     const kept = state.open?.id === id ? state.open : drafts.get(id);
-    if (kept) {
-      kept.original = row;
-      // Opening the row again shows its text now, so a move checks against that text, as the refusal message asks.
-      kept.opened_text = row.text;
-    }
+    // A kept draft keeps the text it opened on, so a move still refuses when another tab changed the row since.
+    if (kept) kept.original = row;
     show(kept ?? { id, mode: row.mode, original: row, opened_text: row.text, tokens: tokens_of(row.keys), fresh: true, text: row.text, check: { state: "waiting" }, busy: false });
   }
 

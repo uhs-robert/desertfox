@@ -329,3 +329,29 @@ test("a click on the open row again keeps its draft, and a move sends the old te
   const change = sent.filter((message) => message.type === "change_keymap").at(-1);
   assert.deepEqual([change?.move_from, change?.move_from_text], ["J", "tab.next"]);
 });
+
+test("a move after a refresh sends the text the row had when it opened, also from a reopened draft", async () => {
+  // The background refuses each move, as it does when the old key changed, so the editor stays on its draft.
+  const { session, sent, set_rows } = make([J, K], (message) => (message.type === "change_keymap" ? { ok: false, message: "J changed since you opened it. Open the row again." } : { ok: true, saves: true, problems: [], warnings: [], shadows: [] }));
+  const last_move = () => sent.filter((message) => message.type === "change_keymap").at(-1);
+  await session.load();
+  session.open_row(J);
+  session.capture("X");
+  // Another tab rebinds J, and the storage event refreshes this page.
+  const newer_J = row({ keys: "J", text: "tab.close", origin: "edit" });
+  set_rows([newer_J, K]);
+  await session.refresh();
+  assert.equal(session.state.open?.original?.text, "tab.close");
+  await session.save();
+  assert.deepEqual([last_move()?.move_from, last_move()?.move_from_text], ["J", "tab.next"]);
+
+  // A click on the open row, or a draft opened again from another row, still names the text the move started from.
+  session.open_row(newer_J);
+  await session.save();
+  assert.equal(last_move()?.move_from_text, "tab.next");
+  session.open_row(K);
+  session.open_row(newer_J);
+  assert.deepEqual(session.state.open?.tokens, ["X"]);
+  await session.save();
+  assert.equal(last_move()?.move_from_text, "tab.next");
+});
