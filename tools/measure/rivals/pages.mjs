@@ -52,6 +52,7 @@ export function page_body(name) {
     for (let i = 0; i < frame_count; i++) body += `<iframe src="/frame?i=${i}" width="300" height="80"></iframe>`;
     return body;
   }
+  if (name === "tab") return `<!doctype html><title>tab</title><body><p>tab</p></body>`;
   if (name === "coverage") return coverage_body();
   if (name === "frame") return `<!doctype html><title>f</title><body>${links(20, "f")}</body>`;
   return null;

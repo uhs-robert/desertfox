@@ -74,6 +74,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Built-in key integrations for specific sites | ✅ | 🟡 hint rules for Drive and Docs only | ❌ | ❌ | ❌ |
 | Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
 | Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
@@ -87,7 +88,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Script loaded on every page | 18.5 KB | 254 KB | 94 KB | 1.1 MB | n/a |
+| Script loaded on every page and frame | 18.5 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
 

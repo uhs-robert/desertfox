@@ -8,6 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
+import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
 const tool = process.argv[2];
@@ -132,6 +133,89 @@ async function remove_policy_addon() {
   throw new Error("the policy-installed DesertFox is still present: the run would be biased");
 }
 
+// Navigates the selected tab to the page and waits until it has loaded. Returns the last page state and whether it loaded, so a failed load keeps its diagnosis.
+async function open_page(page) {
+  await navigate("about:blank");
+  await sleep(700);
+  await navigate(`${base_url}/${page}`);
+  let page_state = null;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    await sleep(100);
+    try {
+      await load_frame_script();
+      page_state = await ask_page("state");
+    } catch { continue; }
+    if (page_state?.ready === "complete" && page_state.load > 0 && page_state.url.startsWith(base_url)) return { page_state, loaded: true };
+  }
+  return { page_state, loaded: false };
+}
+
+// One tab-switch run. Tab 0 is loaded and active, tabs 1 and 2 are loaded once and then discarded, so Firefox has to load them on arrival.
+// The key in tab 0 switches to tab 1 (hop A, the control: a loaded script catches it). From the moment tab 1 becomes active a press goes out every RETRY_MS until tab 2 becomes active (hop B).
+// Everything runs in one chrome job on one clock, so the debugger round trips are outside the interval. Races, all counted in the record and not hidden:
+// - The first press is queued with setTimeout(0) from the TabSelect handler, so it never runs inside the event dispatch.
+// - A press sent while the old page or no page owns focus is lost. The record counts presses sent before the landing.
+// - A press in flight at the landing can still work and switch again (extra_hops), because the loop stops only when the landing event runs.
+// - Tab 1 loads while hop B runs, so server and parse time are inside the interval for every tool alike (the server answers in a few ms and sends no-store). Tab 2 starts to load only after the interval.
+// - The press gap is longer than RETRY_MS because the parent process is busy restoring tab 1, so presses_b_ms is kept in the run record and analyze.mjs reports the measured gap.
+async function tab_switch_run(next_key) {
+  const marks = await chrome_long(`{
+    const win = Services.wm.getMostRecentWindow("navigator:browser");
+    const tabbrowser = win.gBrowser;
+    const now = () => win.performance.now();
+    const wait = (ms) => new Promise((resolve) => win.setTimeout(resolve, ms));
+    const principal = Services.scriptSecurityManager.getSystemPrincipal();
+    while (tabbrowser.tabs.length > 1) tabbrowser.removeTab(tabbrowser.tabs[tabbrowser.tabs.length - 1]);
+    const tabs = [tabbrowser.tabs[0]];
+    for (const n of [1, 2]) {
+      const tab = tabbrowser.addTab(${JSON.stringify(base_url)} + "/tab?n=" + n, { triggeringPrincipal: principal, skipAnimation: true });
+      tabs.push(tab);
+      for (let waited = 0; waited < 5000 && (tab.hasAttribute("busy") || tab.linkedBrowser.currentURI.spec === "about:blank"); waited += 50) await wait(50);
+    }
+    tabbrowser.selectedTab = tabs[0];
+    await wait(300);
+    for (const tab of tabs.slice(1)) tabbrowser.discardBrowser(tab, true);
+    await wait(500);
+    const pending_at_start = tabs.slice(1).map((tab) => tab.hasAttribute("pending"));
+    tabbrowser.selectedBrowser.focus();
+    await wait(300);
+    const tip = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
+    const press = () => {
+      tip.beginInputTransactionForTests(win);
+      const shift = new win.KeyboardEvent("", { key: "Shift", code: "ShiftLeft", keyCode: 16 });
+      const key = new win.KeyboardEvent("", { key: ${JSON.stringify(next_key)}, code: ${JSON.stringify("Key" + next_key)}, keyCode: ${next_key.charCodeAt(0)}, shiftKey: true });
+      tip.keydown(shift); tip.keydown(key); tip.keyup(key); tip.keyup(shift);
+    };
+    const marks = { selects: [], presses_b_ms: [], key_a_ms: null, pending_at_start, retry_ms: ${RETRY_MS} };
+    let landed = false;
+    let arrived_ms = null;
+    const tick = () => {
+      if (landed || now() - arrived_ms > 6000) return;
+      marks.presses_b_ms.push(now());
+      press();
+      win.setTimeout(tick, ${RETRY_MS});
+    };
+    const on_select = (event) => {
+      const index = tabs.indexOf(event.target);
+      marks.selects.push({ index, ms: now() });
+      if (index === 1 && arrived_ms === null) { arrived_ms = now(); tabbrowser.selectedBrowser.focus(); win.setTimeout(tick, 0); }
+      if (index === 2 && arrived_ms !== null) landed = true;
+    };
+    tabbrowser.tabContainer.addEventListener("TabSelect", on_select);
+    marks.key_a_ms = now();
+    press();
+    for (let waited = 0; waited < 9000 && !landed; waited += 20) await wait(20);
+    await wait(600);
+    tabbrowser.tabContainer.removeEventListener("TabSelect", on_select);
+    while (tabbrowser.tabs.length > 1) tabbrowser.removeTab(tabbrowser.tabs[tabbrowser.tabs.length - 1]);
+    return marks;
+  }`, 40000);
+  if (!marks.pending_at_start.every(Boolean)) throw new CheckFailed(`tabs 1 and 2 were not unloaded at the start (pending: ${marks.pending_at_start})`);
+  const timing = analyze_tab_switch(marks);
+  if (timing.error) throw new CheckFailed(`tab switch cannot be measured: ${timing.error}`);
+  return { ...timing, selects: marks.selects, presses_b_ms: marks.presses_b_ms };
+}
+
 const result = { tool, base_url, firefox: "", meta: {}, runs: [] };
 const log_row = (row) => console.log(JSON.stringify(row));
 try {
@@ -159,21 +243,22 @@ try {
   }
   log_row(result.meta);
   for (const page of page_names) {
+    if (page === "tabswitch") {
+      if (!addon) continue;
+      // Default settings for every tool, nothing turned off. The warm-up run (-1) covers the first load after install, and the timed runs are warm.
+      result.meta.tabswitch = { next_key: NEXT_TAB_KEY[tool], retry_ms: RETRY_MS, cache: "server sends cache-control: no-store, so each tab load fetches the page again; the browser start-up cache and the extension's script cache are warm after run -1", settings: "extension defaults", early_keys: "DesertFox holds keys that arrive before its keymap is read and replays them. How Vimium, Vimium C and Tridactyl treat early keys was not checked, so a press count for them is presses sent before landing, not proven lost presses" };
+      for (let run = -1; run < timed_runs; run++) {
+        if (!(await open_page("tab")).loaded) throw new Error("the start tab did not load");
+        await sleep(1500);
+        const tabswitch = await tab_switch_run(NEXT_TAB_KEY[tool]);
+        result.runs.push({ page, run, tabswitch });
+        log_row({ page, run, first_hop_ms: tabswitch.first_hop_ms, arrive_to_land_ms: tabswitch.arrive_to_land_ms, lost: tabswitch.lost_before_landing, press_gap_ms: tabswitch.press_gap_ms, extra_hops: tabswitch.extra_hops });
+      }
+      continue;
+    }
     // Run -1 is a warm-up. It stays in the data as the first press on this page in this browser process (only the first page of a tool starts in a fresh browser), and the analysis leaves it out of the medians.
     for (let run = -1; run < timed_runs; run++) {
-      await navigate("about:blank");
-      await sleep(700);
-      await navigate(`${base_url}/${page}`);
-      let page_state = null;
-      let loaded = false;
-      for (let attempt = 0; attempt < 150 && !loaded; attempt++) {
-        await sleep(100);
-        try {
-          await load_frame_script();
-          page_state = await ask_page("state");
-        } catch { continue; }
-        loaded = page_state?.ready === "complete" && page_state.load > 0 && page_state.url.startsWith(base_url);
-      }
+      const { page_state, loaded } = await open_page(page);
       if (!loaded) { result.runs.push({ page, run, error: "not loaded", page_state }); continue; }
       await sleep(1500);
       await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
