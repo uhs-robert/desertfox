@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
 import { load_effective_config } from "../../src/background/config_load.ts";
-import { create_settings_messages, is_extension_page } from "../../src/background/settings_message.ts";
+import { create_settings_messages } from "../../src/background/settings_message.ts";
+import { is_extension_page } from "../../src/background/extension_page.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 

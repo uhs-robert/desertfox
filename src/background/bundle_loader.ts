@@ -13,14 +13,14 @@ export type BundleLoaderDeps = {
   inject: (target: BundleTarget, file: string) => Promise<void>;
   // Asks an extension page to add the script tag itself. Resolves once the script has run.
   add_script_tag: (target: BundleTarget, file: string) => Promise<void>;
-  // The `moz-extension://` address of this add-on. A sender under it is an extension page.
-  extension_origin: () => string;
+  // Whether the sender is one of this add-on's own top-level pages (`is_extension_page`).
+  is_extension_page: (sender: LoadSender) => boolean;
   // Firefox can leave an injection into a navigating frame unanswered. Past this the load fails, so the page stops holding keys.
   timeout_ms: number;
 };
 
 // The sender of a runtime message. Firefox sets `documentId`, and the bundled types do not list it.
-export type LoadSender = { url?: string | undefined; tab?: { id?: number | undefined } | undefined; frameId?: number | undefined; documentId?: string | undefined };
+export type LoadSender = { id?: string | undefined; url?: string | undefined; tab?: { id?: number | undefined; url?: string | undefined } | undefined; frameId?: number | undefined; documentId?: string | undefined };
 
 const failure = (message: string): RunResponse => ({ ok: false, refusal: { id: "desertfox", message } });
 
@@ -58,7 +58,7 @@ export function create_bundle_loader(deps: BundleLoaderDeps) {
     // The entry for a `load_bundle` message. The name is checked here because the sender is a page script.
     answer: (sender: LoadSender, name: unknown): Promise<RunResponse> => {
       if (sender.tab?.id === undefined || !is_bundle_name(name)) return Promise.resolve(failure("DesertFox: unknown bundle request"));
-      return load({ tab_id: sender.tab.id, frame_id: sender.frameId ?? 0, document_id: sender.documentId ?? "", in_extension_page: sender.url?.startsWith(deps.extension_origin()) ?? false }, name);
+      return load({ tab_id: sender.tab.id, frame_id: sender.frameId ?? 0, document_id: sender.documentId ?? "", in_extension_page: deps.is_extension_page(sender) }, name);
     },
   };
 }

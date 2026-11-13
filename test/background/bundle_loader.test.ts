@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_bundle_loader } from "../../src/background/bundle_loader.ts";
+import { is_extension_page } from "../../src/background/extension_page.ts";
 import type { BundleTarget } from "../../src/background/bundle_loader.ts";
 
 type Pending = { target: BundleTarget; file: string; route: "inject" | "page_tag"; settle: (error?: Error) => void };
@@ -12,7 +13,7 @@ function make_loader(timeout_ms = 1000) {
     new Promise<void>((resolve, reject) => {
       pending.push({ target, file, route: kind, settle: (error) => (error ? reject(error) : resolve()) });
     });
-  const loader = create_bundle_loader({ timeout_ms, inject: route("inject"), add_script_tag: route("page_tag"), extension_origin: () => "moz-extension://abc/" });
+  const loader = create_bundle_loader({ timeout_ms, inject: route("inject"), add_script_tag: route("page_tag"), is_extension_page: (sender) => is_extension_page(sender, "abc", "moz-extension://abc/") });
   return { loader, pending };
 }
 
@@ -108,7 +109,7 @@ test("answer takes the tab, frame and document from the sender and checks the na
 
 test("a request from an extension page asks the page for a script tag, and a website's goes to executeScript", async () => {
   const { loader, pending } = make_loader();
-  const from_page = loader.answer({ url: "moz-extension://abc/home.html", tab: { id: 1 }, frameId: 0, documentId: "d" }, "text");
+  const from_page = loader.answer({ id: "abc", url: "moz-extension://abc/home.html", tab: { id: 1, url: "moz-extension://abc/home.html" }, frameId: 0, documentId: "d" }, "text");
   const from_site = loader.answer({ url: "https://example.com/", tab: { id: 2 }, frameId: 0, documentId: "e" }, "text");
   const lookalike = loader.answer({ url: "https://example.com/moz-extension://abc/", tab: { id: 3 }, frameId: 0, documentId: "f" }, "text");
   assert.deepEqual(pending.map((entry) => entry.route), ["page_tag", "inject", "inject"]);
@@ -118,7 +119,7 @@ test("a request from an extension page asks the page for a script tag, and a web
 
 test("two requests for one bundle from an extension page ask for one tag and both resolve after it ran", async () => {
   const { loader, pending } = make_loader();
-  const sender = { url: "moz-extension://abc/home.html", tab: { id: 1 }, frameId: 0, documentId: "d" };
+  const sender = { id: "abc", url: "moz-extension://abc/home.html", tab: { id: 1, url: "moz-extension://abc/home.html" }, frameId: 0, documentId: "d" };
   let resolved = 0;
   const first = loader.answer(sender, "editor").then((answer) => (resolved++, answer));
   const second = loader.answer(sender, "editor").then((answer) => (resolved++, answer));
@@ -131,7 +132,7 @@ test("two requests for one bundle from an extension page ask for one tag and bot
 
 test("a tag that fails to load answers the could-not-load refusal, and a later request tries again", async () => {
   const { loader, pending } = make_loader();
-  const sender = { url: "moz-extension://abc/home.html", tab: { id: 1 }, frameId: 0, documentId: "d" };
+  const sender = { id: "abc", url: "moz-extension://abc/home.html", tab: { id: 1, url: "moz-extension://abc/home.html" }, frameId: 0, documentId: "d" };
   const failed = loader.answer(sender, "text");
   pending[0]!.settle(new Error("text.js did not load"));
   const answer = await failed;

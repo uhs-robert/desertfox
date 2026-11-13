@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build_help_model, STYLE_VARIABLES } from "../src/help/model.ts";
 import { command_help_url, parse_route } from "../src/help/route.ts";
@@ -248,4 +248,15 @@ test("the advanced flag in the hash rides on every route form", () => {
   assert.deepEqual(parse_route("#section=commands/debug?advanced"), { page: "commands", section: "debug", advanced: true });
   assert.deepEqual(parse_route("#command=debug.restart?advanced"), { page: "commands", command: "debug.restart", advanced: true });
   assert.deepEqual(parse_route("#/commands"), { page: "commands" });
+});
+
+test("every extension page that tags content.js also registers the bundle request listener", () => {
+  const src = new URL("../src/", import.meta.url);
+  for (const folder of readdirSync(src, { withFileTypes: true }).filter((entry) => entry.isDirectory())) {
+    for (const html_file of readdirSync(new URL(`${folder.name}/`, src)).filter((name) => name.endsWith(".html"))) {
+      if (!readFileSync(new URL(`${folder.name}/${html_file}`, src), "utf8").includes('<script src="content.js">')) continue;
+      const page_script = readFileSync(new URL(`${folder.name}/main.ts`, src), "utf8");
+      assert.match(page_script, /listen_for_bundle_requests\(\)/, `${folder.name}/${html_file} tags content.js, so ${folder.name}/main.ts must call listen_for_bundle_requests`);
+    }
+  }
 });
