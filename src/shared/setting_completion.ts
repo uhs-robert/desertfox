@@ -525,7 +525,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
   },
   {
     "name": "newtab_links",
-    "settable": false,
+    "settable": true,
     "is_toggle": false,
     "is_list": false,
     "expectation": "a list of tables with \"label\", an http or https \"url\" and an optional \"group\"",

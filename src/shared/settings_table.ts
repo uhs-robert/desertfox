@@ -127,8 +127,8 @@ export const SETTINGS_TABLE = {
   newtab_bookmarks_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_recent_tabs: { kind: "boolean", default: false },
   newtab_recent_tabs_max: { kind: "number", whole: true, min: 0, default: 8 },
-  // A list of tables has no typed form, so `:set` refuses it.
-  newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [], settable: false },
+  // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
+  newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [] },
 } as const satisfies Record<string, SettingRow>;
 
 type Table = typeof SETTINGS_TABLE;

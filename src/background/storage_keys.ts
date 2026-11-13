@@ -37,7 +37,10 @@ export const KEYMAP_EDITS_STORAGE_KEY = "desertfox_keymap_edits";
 // Engines the settings page added, and their key letters (`edit_layers.ts`). Global, private windows included.
 export const ENGINE_EDITS_STORAGE_KEY = "desertfox_engine_edits";
 
-// The config the files build gives with the engines layer built in, written with each publish. `null` when the layer is empty, then the files config in force is the one stored under `FILES_CONFIG_STORAGE_KEY`. Pages read the config themselves, so they follow this one.
+// Command aliases the settings page added (`edit_layers.ts`): alias name to command id. Global, private windows included.
+export const ALIAS_EDITS_STORAGE_KEY = "desertfox_alias_edits";
+
+// The config the files build gives with the engines and aliases layers built in, written with each publish. `null` when both are empty, then the files config in force is the one stored under `FILES_CONFIG_STORAGE_KEY`. Pages read the config themselves, so they follow this one.
 export const LAYERED_CONFIG_STORAGE_KEY = "desertfox_layered_config";
 
 // Setting name to the value `:set --temp` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.

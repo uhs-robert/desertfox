@@ -113,12 +113,75 @@ function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widge
   };
 }
 
+type Link = { label: string; url: string; group?: string };
+
+// One row per link: label, address and group, with a button to drop it. A row with nothing typed is no link, so Add link never puts an empty table in the value.
+function link_list_widget(name: string, hooks: Hooks): Widget {
+  const box = el("div", "desertfox-settings-links");
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-label", name);
+  const rows = el("div", undefined);
+  const row_nodes: { node: HTMLElement; read: () => Link & { group: string } }[] = [];
+  const read = (): Link[] =>
+    row_nodes
+      .map((row) => row.read())
+      .filter((link) => link.label !== "" || link.url !== "" || link.group !== "")
+      .map(({ group, ...link }) => (group === "" ? link : { ...link, group }));
+
+  function add_row(link: Link = { label: "", url: "" }): void {
+    const input = (label: string, placeholder: string, value: string) => {
+      const field = el("input", "desertfox-settings-input") as HTMLInputElement;
+      field.type = "text";
+      field.placeholder = placeholder;
+      field.value = value;
+      field.spellcheck = false;
+      field.setAttribute("aria-label", `${name} ${label}`);
+      field.addEventListener("input", () => hooks.typing(read()));
+      field.addEventListener("change", () => hooks.commit(read()));
+      return field;
+    };
+    const label = input("label", "Label", link.label);
+    const url = input("address", "https://example.com/", link.url);
+    const group = input("group", "Group (optional)", link.group ?? "");
+    const remove = el("button", "desertfox-settings-move", "Remove") as HTMLButtonElement;
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Remove the link ${link.label}`);
+    const node = el("div", "desertfox-settings-order-row", label, url, group, remove);
+    const row = { node, read: () => ({ label: label.value, url: url.value, group: group.value }) };
+    remove.addEventListener("click", () => {
+      row_nodes.splice(row_nodes.indexOf(row), 1);
+      node.remove();
+      hooks.commit(read());
+    });
+    row_nodes.push(row);
+    rows.append(node);
+  }
+
+  const add = el("button", "desertfox-settings-move", "Add link") as HTMLButtonElement;
+  add.type = "button";
+  add.addEventListener("click", () => {
+    add_row();
+    (rows.lastElementChild?.querySelector("input") as HTMLInputElement | null)?.focus();
+  });
+  box.append(rows, add);
+  return {
+    node: box,
+    read,
+    write: (value) => {
+      row_nodes.length = 0;
+      rows.replaceChildren();
+      for (const link of Array.isArray(value) ? (value as Link[]) : []) add_row(link);
+    },
+  };
+}
+
 function widget_of(field: Field, hooks: Hooks): Widget | undefined {
   const name = field.row.name;
   switch (field.control.type) {
     case "checkbox": return checkbox_widget(name, hooks);
     case "select": return select_widget(name, field.control.options, hooks);
     case "ordered_list": return ordered_list_widget(name, field.control.items, hooks);
+    case "link_list": return link_list_widget(name, hooks);
     case "number":
     case "text":
     case "text_list": return text_widget(name, field.control, hooks);

@@ -5,12 +5,12 @@ import { field_problems } from "../shared/engine_fields.ts";
 import { parse_toml_text } from "../shared/config_build/source_files.ts";
 import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEnginesAnswer } from "../shared/messages.ts";
 import { ConfigRefusal } from "./config_reload.ts";
-import type { EngineEdits } from "./edit_layers.ts";
+import type { AliasEdits, EngineEdits } from "./edit_layers.ts";
 import { dropped_warning, fresh_drops } from "./engine_layer.ts";
 import type { DroppedPiece, LayeredBuild } from "./engine_layer.ts";
 
-// Read in the change queue (`read_engine_state`). `trial` builds the config under another layer and changes nothing.
-export type EngineState = { config: MergedConfig; engines: EngineEdits; kept: EngineEdits; dropped: DroppedPiece[]; trial: (other: EngineEdits) => LayeredBuild };
+// Read in the change queue (`read_engine_state`). `trial` builds the config under another engines layer, with the aliases in force, and changes nothing. `aliases` and `kept_aliases` ride along because one build covers both layers.
+export type EngineState = { config: MergedConfig; engines: EngineEdits; aliases: AliasEdits; kept: EngineEdits; kept_aliases: AliasEdits; dropped: DroppedPiece[]; trial: (other: EngineEdits) => LayeredBuild };
 
 export type EngineMessageDeps = {
   read_engine_state: () => Promise<EngineState>;
@@ -27,7 +27,7 @@ function rows_of(engines: EngineEdits, dropped: DroppedPiece[]): EngineRow[] {
   const letters = Object.entries(engines.letters ?? {});
   return Object.entries(engines.engines ?? {}).map(([name, table]) => {
     const letter = letters.find(([, engine]) => engine === name)?.[0];
-    const left_out = dropped.find((piece) => piece.name === name)?.problems[0];
+    const left_out = dropped.find((piece) => piece.kind === "engines" && piece.name === name)?.problems[0];
     const children = Object.entries(table).filter(([key, value]) => key !== "params" && is_table(value) && Object.keys(value).join() !== "only").length;
     return {
       name,

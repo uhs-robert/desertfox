@@ -260,7 +260,14 @@ function settings_page(model: HelpModel): HTMLElement[] {
     section_heading("settings", page_sections("settings", [])[1]!),
     el("p", undefined, "Add a search engine without the native host. An engine added here is a browser layer on top of search_engines.toml. It applies at once, survives a config.reload and goes into the config export. The key letter binds s and S to it."),
     el("div", "desertfox-engines"),
-    el("div", "desertfox-settings", ...page_sections("settings", []).slice(2).flatMap((section, index) => {
+    // `main.ts` fills `.desertfox-aliases` and `.desertfox-quickmarks`.
+    section_heading("settings", page_sections("settings", [])[2]!),
+    el("p", undefined, "Add a command alias without the native host. An alias added here is a browser layer on top of command_aliases.toml. It applies at once, survives a config.reload and goes into the config export."),
+    el("div", "desertfox-aliases"),
+    section_heading("settings", page_sections("settings", [])[3]!),
+    el("p", undefined, "The quickmarks that ", el("code", undefined, "quickmark.add"), " saves and ", el("code", undefined, "quickmark.open"), " opens. A quickmark saved here is the same one the command saves, and it goes into the config export. Entries of quickmarks.toml show too, and a saved one with the same key wins over them."),
+    el("div", "desertfox-quickmarks"),
+    el("div", "desertfox-settings", ...page_sections("settings", []).slice(4).flatMap((section, index) => {
       const group = el("div", "desertfox-settings-group");
       group.setAttribute("data-group", GROUPS[index]!.title);
       return [section_heading("settings", section), group];
@@ -354,6 +361,8 @@ export function sections_from_titles(titles: string[]): Section[] {
 
 const KEYS_SECTION = "Keys";
 const ENGINES_SECTION = "Search engines";
+const ALIASES_SECTION = "Aliases";
+const QUICKMARKS_SECTION = "Quickmarks";
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
@@ -361,7 +370,7 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
   const quick_start = Array.isArray(source) ? source : source.quick_start;
   switch (page) {
     case "home": return [];
-    case "settings": return sections_from_titles([KEYS_SECTION, ENGINES_SECTION, ...GROUPS.map((group) => group.title)]);
+    case "settings": return sections_from_titles([KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ...GROUPS.map((group) => group.title)]);
     case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);

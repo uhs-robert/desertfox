@@ -4,7 +4,7 @@
 import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
-import { ENGINE_EDITS_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY } from "./storage_keys.ts";
+import { ALIAS_EDITS_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 
 // Mode to key sequence to the command text, as keymap.toml writes it. `""` unbinds a default or file binding.
 export type KeymapEdits = Partial<Record<KeymapMode, Record<string, string>>>;
@@ -13,8 +13,11 @@ export type KeymapEdits = Partial<Record<KeymapMode, Record<string, string>>>;
 // `engines` is a table per engine name with child tables inside, and the build is the only judge of the fields. `letters` maps a key letter to an engine name, as `[search_keys]` does: the form's key letter lives and dies with its engine, and keymap.d carries it on export.
 export type EngineEdits = { engines?: Record<string, Record<string, unknown>>; letters?: Record<string, string> };
 
+// The command aliases the browser adds, alias name to command id, as command_aliases.toml writes them. The build checks the name and the target.
+export type AliasEdits = Record<string, string>;
+
 // A layer with nothing in it is left out of `load_layers` unless it is `keymap`, which every reader already expects.
-export type EditLayers = { keymap: KeymapEdits; engines?: EngineEdits };
+export type EditLayers = { keymap: KeymapEdits; engines?: EngineEdits; aliases?: AliasEdits };
 export type LayerKind = keyof EditLayers;
 export type LayerOf<K extends LayerKind> = NonNullable<EditLayers[K]>;
 
@@ -70,14 +73,26 @@ function checked_engine_edits(stored: unknown): EngineEdits {
   return edits;
 }
 
+// Only the shape. The build judges the name and the target, and drops an entry it refuses.
+function checked_alias_edits(stored: unknown): AliasEdits {
+  if (!is_record(stored)) return {};
+  return Object.fromEntries(Object.entries(stored).filter(([name, target]) => name !== "" && typeof target === "string" && target !== "")) as AliasEdits;
+}
+
 export const EDIT_LAYERS: { [K in LayerKind]: LayerSpec<K> } = {
   keymap: { storage_key: KEYMAP_EDITS_STORAGE_KEY, check: checked_keymap_edits, optional: false },
   engines: { storage_key: ENGINE_EDITS_STORAGE_KEY, check: checked_engine_edits, optional: true },
+  aliases: { storage_key: ALIAS_EDITS_STORAGE_KEY, check: checked_alias_edits, optional: true },
 };
 
 // The engines layer, empty when none is stored.
 export const engine_edits_of = (layers: EditLayers): EngineEdits => layers.engines ?? {};
 export const has_engine_edits = (edits: EngineEdits): boolean => Object.keys(edits.engines ?? {}).length > 0 || Object.keys(edits.letters ?? {}).length > 0;
+
+export const alias_edits_of = (layers: EditLayers): AliasEdits => layers.aliases ?? {};
+
+// The layers the build folds into the config: the ones that are files of the config folder when exported.
+export const has_build_edits = (layers: EditLayers): boolean => has_engine_edits(engine_edits_of(layers)) || Object.keys(alias_edits_of(layers)).length > 0;
 
 const KINDS = Object.keys(EDIT_LAYERS) as LayerKind[];
 
