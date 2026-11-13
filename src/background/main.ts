@@ -62,7 +62,7 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_keymap_state, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_engine_state, read_keymap_state, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -75,6 +75,9 @@ import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
 import { answer_host_start_choice } from "./host_start.ts";
 import { create_keymap_messages, exportable_key_edits } from "./keymap_message.ts";
+import { create_engine_messages } from "./engine_message.ts";
+import { ConfigRefusal } from "./config_reload.ts";
+import { dropped_warning } from "./engine_layer.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
@@ -243,6 +246,13 @@ host_update.on_updated(() => bridge.reconnect());
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config });
+// The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
+async function read_starter_engines(): Promise<string> {
+  const response = await fetch(browser.runtime.getURL("starter_engines.toml"));
+  if (!response.ok) throw new ConfigRefusal("The starter engines file starter_engines.toml is missing from this build.");
+  return response.text();
+}
+const engine_messages = create_engine_messages({ read_engine_state, change_layers, read_starter: read_starter_engines });
 const keymap_messages = create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -258,13 +268,17 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (page_request.type === "list_bindings") return keymap_messages.list();
     return page_request.type === "check_binding" ? keymap_messages.check(page_request) : keymap_messages.change(page_request);
   }
+  if (page_request?.type === "list_engines" || page_request?.type === "change_engines") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change engines" });
+    return page_request.type === "list_engines" ? engine_messages.list() : engine_messages.change(page_request);
+  }
   if (page_request?.type === "preview_config_import" || page_request?.type === "commit_config_import") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may import a config" });
     return answer_config_import(page_request, { preview: preview_config_import, commit: import_config });
   }
   if (page_request?.type === "export_config" || page_request?.type === "list_snippets" || page_request?.type === "remove_snippet") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or change snippets" });
-    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state()), remove: remove_snippet });
+    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state()), read_engine_edits: async () => { const state = await read_engine_state(); return { edits: state.kept, skipped: state.dropped.map(dropped_warning) }; }, remove: remove_snippet });
   }
   if (page_request?.type === "config_files") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may edit the config files" });

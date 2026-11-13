@@ -8,15 +8,18 @@ import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } fr
 import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
-import { load_layers, store_layers } from "./edit_layers.ts";
-import type { EditLayers, LayerKind } from "./edit_layers.ts";
+import { engine_edits_of, has_engine_edits, load_layers, store_layers } from "./edit_layers.ts";
+import type { EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
+import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
+import type { EngineState } from "./engine_message.ts";
+import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { DESKTOP_PALETTE } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
-import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_PALETTE_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP } from "./toolbar.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
@@ -53,6 +56,10 @@ type LoadStep = {
   load_warnings: string[];
   // Found on the first publish of a load. A `:set` keeps it: it refuses the prefix settings, the only ones that move keys.
   slots?: { plan: SlotPlan; table: ReturnType<typeof slot_table>; warnings: string[]; applied: boolean };
+  // The files the load built, when the load knows them. Otherwise the engines layer reads them from storage the first time it builds.
+  source?: FilesSource;
+  // The last build of the engines layer over the files, so a `:set` publish does not build again. Keyed by the layer.
+  layered?: { key: string; build: LayeredBuild };
 };
 
 // Derived from storage on every start, so a restart loses nothing.
@@ -94,8 +101,13 @@ async function compile_input(config: MergedConfig, layers: EditLayers): Promise<
 // `warnings` is the whole list the help page shows: load, compile and shortcut slots.
 // The edit layers are read from storage unless given, so every publish keeps them on top of the files.
 async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers): Promise<{ config: MergedConfig; warnings: string[] }> {
-  const config = with_edits(step.loaded.config, edits);
-  const { compiled, theme, warnings } = compile_config(await compile_input(config, layers ?? (await load_layers())));
+  const in_force = layers ?? (await load_layers());
+  const engines = engine_edits_of(in_force);
+  const layered = has_engine_edits(engines) ? await layered_build(step, engines) : undefined;
+  const config = with_edits(layered?.loaded.config ?? step.loaded.config, edits);
+  const { compiled, theme, warnings } = compile_config(await compile_input(config, in_force));
+  // The build repeats the warnings of the files build, which the load warnings hold already.
+  const layer_warnings = layered ? [...layered.loaded.warnings.filter((warning) => !step.load_warnings.includes(warning)), ...layered.dropped.map(dropped_warning)] : [];
 
   // Read at every publish, so a restart with the switch off, a `:set` and a reload all store the empty keymap.
   const disabled = (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
@@ -114,13 +126,14 @@ async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers)
     const applied = await apply_slot_plan(plan, browser.commands);
     step.slots = { plan, table: slot_table({ ...plan, assignments: applied.applied }), warnings: [...plan.warnings, ...applied.warnings], applied: true };
   }
-  const all_warnings = [...step.load_warnings, ...warnings, ...step.slots.warnings];
+  const all_warnings = [...step.load_warnings, ...layer_warnings, ...warnings, ...step.slots.warnings];
   for (const warning of all_warnings) console.warn(`desertfox: ${warning}`);
 
   await browser.storage.local.set({
     [COMPILED_KEYMAP_STORAGE_KEY]: disabled ? OFF_KEYMAP : compiled,
     [WARNINGS_STORAGE_KEY]: all_warnings,
     [CONFIG_STATUS_STORAGE_KEY]: build_config_status(step.loaded.source, step.loaded.config.settings, edits),
+    [LAYERED_CONFIG_STORAGE_KEY]: layered?.stored.config ?? null,
     [SLOT_TABLE_STORAGE_KEY]: step.slots.table,
     [THEME_STORAGE_KEY]: theme,
     [USER_CSS_STORAGE_KEY]: config.css,
@@ -128,6 +141,18 @@ async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers)
   drop_keymap();
   await tell_tabs_tree_changed();
   return { config, warnings: all_warnings };
+}
+
+// The commands the build checks snippet ids against: the built-in ones, so the snippets of the last load stay out.
+const built_in_commands = () => commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
+
+async function layered_build(step: LoadStep, engines: EngineEdits): Promise<LayeredBuild> {
+  const key = JSON.stringify(engines);
+  if (step.layered?.key === key) return step.layered.build;
+  step.source ??= await load_files_source();
+  const build = build_layered(step.source.files, step.source.dir_label, built_in_commands(), engines);
+  step.layered = { key, build };
+  return build;
 }
 
 async function pushed_palette(): Promise<string | undefined> {
@@ -180,14 +205,20 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
 
 // `change_edits` for one edit layer, in the same queue, so a key edit and a `:set` never publish over each other.
 // `decide` gets the key editor's state of this turn, so its slot check sees every change that landed before it.
-export function change_layers<K extends LayerKind>(kind: K, decide: (current: EditLayers[K], state: KeymapState) => EditLayers[K] | undefined): Promise<void> {
+export function change_layers<K extends LayerKind>(kind: K, decide: (current: LayerOf<K>, state: KeymapState) => LayerOf<K> | undefined): Promise<void> {
   return in_change_queue(async () => {
     const config = await get_config();
     const before = await load_layers();
-    const changed = decide(before[kind], await keymap_state(config, before));
+    const changed = decide((before[kind] ?? {}) as LayerOf<K>, await keymap_state(config, before));
     if (changed === undefined) return;
     const next: EditLayers = { ...before, [kind]: changed };
     const step = await (load_step as Promise<LoadStep>);
+    // An engines edit is refused for what it breaks, before anything is stored. An engine the files already broke stays out of the way, so it can still be removed.
+    if (kind === "engines" && has_engine_edits(engine_edits_of(next))) {
+      const known = has_engine_edits(engine_edits_of(before)) ? (await layered_build(step, engine_edits_of(before))).dropped : [];
+      const fresh = fresh_drops(await layered_build(step, engine_edits_of(next)), known);
+      if (fresh.length > 0) throw refusal_of(fresh);
+    }
     const slot_map_before = await read_slot_map();
     // A publish keeps the slot plan of the load, so a change of the browser chords drops it, both ways: the rollback must put the old chords back too.
     const moves_chords = JSON.stringify(before.keymap.browser ?? {}) !== JSON.stringify(next.keymap.browser ?? {});
@@ -216,6 +247,18 @@ export function read_keymap_state(): Promise<KeymapState> {
   return in_change_queue(async () => keymap_state(await get_config(), await load_layers()));
 }
 
+export function read_engine_state(): Promise<EngineState> {
+  return in_change_queue(async () => {
+    const config = await get_config();
+    const engines = engine_edits_of(await load_layers());
+    const step = await (load_step as Promise<LoadStep>);
+    const current = has_engine_edits(engines) ? await layered_build(step, engines) : undefined;
+    step.source ??= await load_files_source();
+    const { files, dir_label } = step.source;
+    return { config, engines, kept: current?.kept ?? {}, dropped: current?.dropped ?? [], trial: (other) => build_layered(files, dir_label, built_in_commands(), other) };
+  });
+}
+
 // Publishes again under the current edits, for a change that is not an edit: the toolbar switch. It runs in the change queue like the edits.
 export function republish(): Promise<void> {
   const again = change_queue.then(async () => {
@@ -232,8 +275,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
   await get_config();
   const current_step = await (load_step as Promise<LoadStep>);
   // The build checks snippet ids against the built-in commands, so the snippets of the last load stay out.
-  const built_in_commands = commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
-  const { stored, loaded } = build_files_config(files, dir_label, built_in_commands, action);
+  const { stored, loaded } = build_files_config(files, dir_label, built_in_commands(), action);
   const edits = await load_edits();
   // From here the registry holds the new snippets while the tabs still run the old keymap.
   // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
@@ -245,7 +287,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     // Before the publish, so a key bound to a snippet resolves.
     const snippet_warnings = snippets.register(loaded.config.snippets);
     // No slots: the new keymap can move the browser chords, so the publish plans them again.
-    const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings] };
+    const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings], source: { files, dir_label } };
     const published = await publish(step, edits);
     // One `set`, so the config and the files it was built from never part.
     await browser.storage.local.set({ [FILES_CONFIG_STORAGE_KEY]: stored, [FILES_SOURCE_STORAGE_KEY]: { files, dir_label } satisfies FilesSource });

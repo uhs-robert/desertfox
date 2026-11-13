@@ -384,6 +384,22 @@ export type ChangeKeymap = { type: "change_keymap"; mode: KeymapMode; keys: stri
 export const STALE_MOVE_REFUSAL = "changed since you opened it. Open the row again.";
 export type ChangeKeymapAnswer = { ok: true; row?: BindingRow; message: string } | { ok: false; message: string; problems?: string[] };
 
+// One engine the settings page added, as the Search engines section lists it. A table of the browser layer, children inside it counted. `url` is empty for a table that holds only children. `letter` is the key letter that searches it. `left_out` is the reason the build dropped it after a files edit: it then runs nowhere.
+export type EngineRow = { name: string; url: string; label: string; keyword?: string; letter?: string; children: number; left_out?: string };
+
+// From an extension page: the engines of the browser layer. The answer is a ListEnginesAnswer.
+export type ListEngines = { type: "list_engines" };
+export type ListEnginesAnswer = { ok: true; engines: EngineRow[] } | { ok: false; message: string };
+
+// From an extension page: one change of the engines layer. `set` adds an engine, or replaces the one of that name. `remove` drops one, `clear` drops them all. `starter` adds the sample engines whose names no file or layer table holds yet.
+// The background builds the config with the change and refuses it, with every problem, when the build does, before anything is stored.
+export type ChangeEngines =
+  | { type: "change_engines"; action: "set"; name: string; url: string; keyword?: string; letter?: string }
+  | { type: "change_engines"; action: "remove"; name: string }
+  | { type: "change_engines"; action: "clear" }
+  | { type: "change_engines"; action: "starter" };
+export type ChangeEnginesAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
+
 // What the toolbar popup asks. Only a top-level extension page may send them.
 export type ToolbarRequest =
   | { type: "toolbar_set_disabled"; disabled: boolean }
@@ -425,8 +441,8 @@ export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; me
 
 // From an extension page: the files an export writes, raw. The page builds the two zips. `config_files` holds the config files and the saved browser edits as TOML, `snippet_files` the installed snippets, both keyed by their path in the zip.
 export type ExportConfig = { type: "export_config" };
-// `skipped_key_edits` names the key edits left out because their text no longer reads, so an import does not refuse the whole config over them.
-export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string>; skipped_key_edits?: string[] } | { ok: false; message: string };
+// `skipped_key_edits` names the key edits left out because their text no longer reads, so an import does not refuse the whole config over them. `skipped_engine_edits` does the same for the engines the build dropped.
+export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string>; skipped_key_edits?: string[]; skipped_engine_edits?: string[] } | { ok: false; message: string };
 
 // From an extension page: the installed snippets for the list on the settings page. The header fields are absent when the header does not parse.
 export type ListSnippets = { type: "list_snippets" };
@@ -461,7 +477,7 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };
