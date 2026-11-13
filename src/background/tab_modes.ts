@@ -72,8 +72,6 @@ export function create_tab_modes(storage: ModeStorage) {
         if (JSON.stringify(record) !== JSON.stringify(before)) await storage.set({ [key_of(tab_id)]: record });
         return { child_mode, tell_top: child_mode !== shown_child_mode(before) || report.frame_id === TOP_FRAME };
       }),
-    // The child frame whose document holds the keyboard focus, or undefined when the top frame does.
-    focused_child: (tab_id: number): Promise<number | undefined> => in_turn(async () => (await read(tab_id)).focused_child?.frame_id),
     recall: (tab_id: number): Promise<Mode> => in_turn(async () => mode_of_record(await read(tab_id))),
     forget,
     // A new page starts in normal mode and its content script reports again, so the old page's mode must not outlive it, also where the new page runs no content script.
