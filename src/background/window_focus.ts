@@ -6,7 +6,7 @@ import { create_write_queue } from "./store_turns.ts";
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set">;
 
 // `windows.onFocusChanged` reports this id when focus leaves every Firefox window.
-const NO_WINDOW = -1;
+export const NO_WINDOW = -1;
 
 export async function read_recent_window_ids(storage: SessionStorage): Promise<number[]> {
   const stored = (await storage.get(WINDOW_FOCUS_STORAGE_KEY))[WINDOW_FOCUS_STORAGE_KEY];

@@ -9,6 +9,8 @@ import { browser_discard_deps, describe_result, set_unloaded } from "../backgrou
 import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
 import { get_config } from "../background/startup.ts";
+import { shared_last_used_tabs } from "../background/last_used_tab.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 import { best_match } from "../shared/score.ts";
 import { site_key } from "../shared/site_key.ts";
 import { define } from "../shared/registry/builtin.ts";
@@ -40,6 +42,10 @@ export type TabDeps = TabActionDeps & {
   // The tabs the line lists, the same list the completion shows: the line's window, or every window, and only tabs of the line's privacy.
   listed_tabs: (ctx: CommandContext) => Promise<ListedTab[]>;
   focus_window: (window_id: number) => Promise<void>;
+  // Undefined when the tab is gone.
+  tab_place: (tab_id: number) => Promise<{ window_id: number; incognito: boolean } | undefined>;
+  // The tab used before the current one in any window of this privacy.
+  last_used_tab_of: (incognito: boolean) => Promise<number | undefined>;
   // What `tab.unload` and `tab.load` act through.
   discard: DiscardDeps;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
@@ -160,6 +166,15 @@ export function make_tab_handlers(deps: TabDeps) {
       const target = tabs.find((tab) => tab.id === previous_id && tab.id !== current.id);
       if (!target) throw new RuntimeRefusal("no previous tab");
       await deps.activate(target.id);
+    },
+    alternate_any_window: async (ctx: CommandContext) => {
+      const current = await deps.tab_place(require_tab_id(ctx));
+      if (!current) throw new RuntimeRefusal("the active tab is gone");
+      const previous_id = await deps.last_used_tab_of(current.incognito);
+      const target = previous_id === undefined || previous_id === ctx.tab_id ? undefined : await deps.tab_place(previous_id);
+      if (previous_id === undefined || !target || target.incognito !== current.incognito) throw new RuntimeRefusal("no previous tab");
+      await deps.activate(previous_id);
+      if (target.window_id !== ctx.window_id) await deps.focus_window(target.window_id);
     },
     goto_audible: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
@@ -338,6 +353,11 @@ export const browser_tab_deps: TabDeps = {
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: tab.windowId, incognito: tab.incognito }, settings.completion_all_windows === true);
   },
   focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
+  tab_place: async (tab_id) => {
+    const tab = await ignore_refusal(browser.tabs.get(tab_id));
+    return tab?.windowId === undefined ? undefined : { window_id: tab.windowId, incognito: tab.incognito };
+  },
+  last_used_tab_of: (incognito) => shared_last_used_tabs().previous_of(incognito),
   discard: browser_discard_deps,
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "tab.unload", message, kind),
 };
@@ -435,6 +455,14 @@ define("tab.alternate", {
   bridge: true,
   runs_in: "background",
   run: (ctx) => handlers.alternate(ctx),
+});
+
+define("tab.alternate_any_window", {
+  label: "Last used tab, any window",
+  intent: "Switch to the last used tab in any window. Its window takes the focus. A private window switches only among private tabs. It ignores a count.",
+  bridge: true,
+  runs_in: "background",
+  run: (ctx) => handlers.alternate_any_window(ctx),
 });
 
 define("tab.goto_audible", {

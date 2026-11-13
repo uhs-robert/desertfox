@@ -23,6 +23,7 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "help.key": [/has no normal-mode binding/],
   "tab.alternate": [/no previous tab/],
+  "tab.alternate_any_window": [/no previous tab/],
   "tab.goto_audible": [/no tab is playing sound/],
   "tab.switch": [/matches .* equally, use a number/],
   "tab.move": [/matches .* equally/],

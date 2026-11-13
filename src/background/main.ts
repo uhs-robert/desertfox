@@ -14,6 +14,7 @@ import { stored_keymap } from "./keymap_source.ts";
 import { history_cache } from "./history_cache.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
 import { shared_previous_tabs } from "./previous_tab.ts";
+import { shared_last_used_tabs } from "./last_used_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
 import type { Asker } from "./complete_items.ts";
@@ -203,6 +204,9 @@ const frame_cue = create_frame_cue({
 browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdline.forget_target_frame(tabId, frameId).catch(warn_and_go("cmdline.forget_target_frame")));
 
 const previous_tabs = shared_previous_tabs();
+const last_used_tabs = shared_last_used_tabs();
+// Queued before any event, so the events of this start apply on top of the seed.
+void last_used_tabs.seed();
 
 const open_help = create_open_help({
   is_opener: cmdline.is_opener,
@@ -237,6 +241,9 @@ const complete_items = create_complete_items({
 });
 
 track_window_focus(browser.storage.session, browser.windows);
+// Focusing another window changes the tab in view without a `tabs.onActivated`.
+browser.windows.onFocusChanged.addListener((window_id) => void last_used_tabs.focused(window_id));
+browser.windows.onRemoved.addListener((window_id) => void last_used_tabs.window_removed(window_id));
 
 const inspect_relay = create_inspect_relay(browser.storage.session, Date.now);
 // Only the extension's own devtools page may register, because a content script can open a port too.
@@ -568,11 +575,15 @@ browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
 browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_removed(removal, { marks: browser_mark_store, cmdline }).catch(warn_and_go("clear_on_history_removed")));
 void history_cache.start();
 
-browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => void previous_tabs.activated(windowId, previousTabId));
+browser.tabs.onActivated.addListener(({ tabId, windowId, previousTabId }) => {
+  void previous_tabs.activated(windowId, previousTabId);
+  void last_used_tabs.activated(tabId, windowId);
+});
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void external_editor.orphan(tab_id).catch(warn_and_go("external_editor.orphan"));
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
+  void last_used_tabs.removed(tab_id);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
   void hint_frames.forget(tab_id).catch(warn_and_go("hint_frames.forget"));

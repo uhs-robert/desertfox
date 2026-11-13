@@ -369,15 +369,15 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
     }
   });
 
-  await run_case("tu unloads the current tab after switching to a loaded one", async () => {
+  await run_case("tuu unloads the current tab after switching to a loaded one", async () => {
     await open_page("page", "p9u_current", { new_tab: true });
     const tab_id = await background(`(async () => (await browser.tabs.query({ active: true, currentWindow: true }))[0].id)()`);
-    await press_keys("tu");
-    await poll_until("tu to unload the tab", async () => (await background(`browser.tabs.get(${tab_id}).then((tab) => tab.discarded)`)) === true);
+    await press_keys("tuu");
+    await poll_until("tuu to unload the tab", async () => (await background(`browser.tabs.get(${tab_id}).then((tab) => tab.discarded)`)) === true);
     const after = await background(`browser.tabs.get(${tab_id}).then((tab) => ({ discarded: tab.discarded, active: tab.active }))`);
     await background(`browser.tabs.remove(${tab_id})`);
-    expect(after.discarded === true, "tu did not unload the tab");
-    expect(after.active === false, "tu left the unloaded tab active");
+    expect(after.discarded === true, "tuu did not unload the tab");
+    expect(after.active === false, "tuu left the unloaded tab active");
   });
 
   // Called straight on the browser, with the index tab.attach uses for a pinned tab: the end of the pinned tabs. Firefox ignores a move of a
