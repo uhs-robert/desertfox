@@ -321,7 +321,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;
-    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true));
+    const stamp = external_editor.navigation_stamp(tab_id);
+    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true, stamp));
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
   if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(() => undefined);

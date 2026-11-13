@@ -1,6 +1,7 @@
 // The external editor jobs. The page sends the text of a field, the host opens the user's editor on it, and this module collects the result and hands it back to the frame that asked.
 // The jobs live in `storage.session` and the collect loops are derived from them, so a restarted background resumes the loops with `resume`.
 // A job whose page is gone (the tab closed, reloaded or navigated) is orphaned, not dropped: its loop keeps collecting, so the user's saved text still lands in the unnamed register.
+// A press stamps the tab's navigation count when its message arrives. An `open` whose page navigated or closed before its turn refuses and starts no editor, so the gone page leaves no live job behind.
 
 import { current_keymap } from "../shared/prefix_tree.ts";
 import { stored_keymap } from "./keymap_source.ts";
@@ -45,6 +46,11 @@ export function create_external_editor(deps: ExternalEditorDeps) {
   const in_turn = create_write_queue();
   // The loops of this background's life. A loop outlives a turn, so the set stops `resume` from starting a second one.
   const collecting = new Set<string>();
+  // Kept in memory only, an exception to the rule that state is stored: after a background restart the race window is open again, as before this guard.
+  // A message that arrives after the loading event of the next page stamps the new count and is not caught.
+  // A closed tab keeps its entry: deleting it would reset the count to 0, the stamp of a press made before any navigation.
+  const navigations = new Map<number, number>();
+  const navigation_stamp = (tab_id: number): number => navigations.get(tab_id) ?? 0;
 
   const read_jobs = async (): Promise<Jobs> => ((await deps.session.get(EDITOR_JOBS_STORAGE_KEY))[EDITOR_JOBS_STORAGE_KEY] as Jobs | undefined) ?? {};
   const write_jobs = (jobs: Jobs) => deps.session.set({ [EDITOR_JOBS_STORAGE_KEY]: jobs });
@@ -114,18 +120,24 @@ export function create_external_editor(deps: ExternalEditorDeps) {
   }
 
   // The tab closed or loaded another page. The editor stays open for the user and its loop goes on, but the result goes to the register, not into the new page.
-  const orphan = (tab_id: number): Promise<void> =>
-    in_turn(async () => {
+  // Counts before it queues, so a press stamped before the navigation sees the change in its own turn.
+  const orphan = (tab_id: number): Promise<void> => {
+    navigations.set(tab_id, navigation_stamp(tab_id) + 1);
+    return in_turn(async () => {
       const jobs = await read_jobs();
       const mine = Object.values(jobs).filter((held) => held.tab_id === tab_id && !held.orphaned);
       for (const held of mine) held.orphaned = true;
       if (mine.length > 0) await write_jobs(jobs);
     });
+  };
 
   return {
+    // Take it synchronously when the message arrives, before any await, and pass it to `open`.
+    navigation_stamp,
     // One live job per tab, and two presses in a row queue behind each other, so the second sees the first's job.
-    open: (tab_id: number, frame_id: number, request: EditorOpen, ext: string | undefined, is_private: boolean): Promise<EditorAnswer> =>
+    open: (tab_id: number, frame_id: number, request: EditorOpen, ext: string | undefined, is_private: boolean, stamp: number): Promise<EditorAnswer> =>
       in_turn(async (): Promise<EditorAnswer> => {
+        if (navigation_stamp(tab_id) !== stamp) return { ok: false, message: "The page was gone before the editor started" };
         const jobs = await read_jobs();
         if (live_job_of(jobs, tab_id)) return { ok: false, message: "An editor is already open for this tab" };
         let job: string;
