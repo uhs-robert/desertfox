@@ -24,11 +24,13 @@ export function el(tag: string, class_name: string | undefined, ...children: Chi
 function key_list(rows: KeyRow[]): HTMLElement {
   const cell = el("div", "desertfox-help-keys");
   if (rows.length === 0) {
-    cell.append(el("span", "desertfox-help-muted", "no keys"));
+    const none = el("span", "desertfox-help-muted", "-");
+    none.setAttribute("aria-label", "no keys");
+    cell.append(none);
     return cell;
   }
   for (const row of rows) {
-    const line = el("div", undefined, el("span", "desertfox-help-mode", row.mode), key_caps(row.keys));
+    const line = el("div", "desertfox-help-key-line", el("span", "desertfox-help-mode", row.mode), key_caps(row.keys));
     if (row.args) line.append(" ", el("span", "desertfox-help-muted", row.args));
     cell.append(line);
   }
@@ -54,17 +56,20 @@ function page_link(text: string, id: PageId): HTMLElement {
 
 export const command_anchor = (id: string): string => `command-${id}`;
 
-function command_card(command: CommandRow): HTMLElement {
+// The card color cycles over the groups, so a reader sees where one group ends. The stylesheet maps the number to a role color.
+const GROUP_ACCENTS = 5;
+
+function command_card(command: CommandRow, group_index: number): HTMLElement {
   const card = el(
     "section",
     "desertfox-help-command",
-    el("h3", undefined, command.label, " ", el("code", "desertfox-help-muted", command.id)),
+    el("div", "desertfox-help-command-head", el("h3", undefined, command.label, " ", el("code", "desertfox-help-muted", command.id)), key_list(command.keys)),
     el("p", undefined, command.intent),
     el("pre", "desertfox-help-usage", command.usage),
     params_table(command),
-    key_list(command.keys),
   );
   card.id = command_anchor(command.id);
+  card.setAttribute("data-accent", String(group_index % GROUP_ACCENTS));
   return card;
 }
 
@@ -106,6 +111,7 @@ function inline_node(inline: Inline): Child {
   switch (inline.kind) {
     case "text": return inline.text;
     case "code": return el("code", "desertfox-help-inline-code", inline.text);
+    case "keys": return key_caps(inline.text);
     case "link": {
       const link = el("a", undefined, inline.text);
       link.setAttribute("href", inline.href);
@@ -218,7 +224,7 @@ function commands_page(model: HelpModel, advanced: boolean, hidden_count: number
     el("p", undefined, "Every command DesertFox has. Run a command from the command line or with a key. Search this page with the browser's find (Ctrl+F)."),
     block_node(model.tip),
     ...(hidden_count > 0 || advanced ? [advanced_toggle(advanced, hidden_count)] : []),
-    ...model.groups.flatMap((group, index) => [section_heading("commands", sections[index]!), ...group.commands.map(command_card)]),
+    ...model.groups.flatMap((group, index) => [section_heading("commands", sections[index]!), ...group.commands.map((command) => command_card(command, index))]),
   ];
 }
 

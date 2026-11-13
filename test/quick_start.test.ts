@@ -16,7 +16,7 @@ const any_command = { runs_in: "content" as const, label: "x", count: "ignore" a
 const compile = (keymap: typeof DEFAULT_KEYMAP) => compile_keymap(keymap, {}, () => any_command).compiled;
 
 function codes_of(blocks: Block[]): string[] {
-  const code_of = (inlines: Inline[]) => inlines.filter((inline) => inline.kind === "code").map((inline) => inline.text);
+  const code_of = (inlines: Inline[]) => inlines.filter((inline) => (inline.kind === "code" || inline.kind === "keys")).map((inline) => inline.text);
   return blocks.flatMap((block) => (block.kind === "paragraph" ? code_of(block.inlines) : block.kind === "list" ? block.items.flatMap(code_of) : []));
 }
 

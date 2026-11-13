@@ -7,8 +7,11 @@
 <!-- First, so the theme sheet and style.css that main.ts appends win over it. -->
 <link rel="stylesheet" href="page_base.css">
 <style>
-  /* The help layout is measured in 16px rems (sidebar 12rem, column 60rem), so the page keeps that root. The text stays 15px. */
+  /* The help layout is measured in 16px rems (sidebar 12rem, column 60rem), so the page keeps that root up to 1600px wide.
+     Above 1600px the root grows in a straight line to 18px at 3440px, and the column cap below grows with it, so a wide screen shows bigger text and a wider column.
+     The text size comes from --desertfox-font on .desertfox-help, which a theme can replace. */
   html { background: var(--desertfox-bg-core); font-size: 16px; }
+  @media (min-width: 1600px) { html { font-size: clamp(16px, calc(16px + (100vw - 1600px) * 2 / 1840), 18px); } }
   body { margin: 0; }
   /* Set here, below the base, so the theme sheet that follows can still replace it. */
   .desertfox-help {
@@ -18,8 +21,14 @@
     background: var(--desertfox-bg-core);
     color: var(--desertfox-fg-core);
     font: var(--desertfox-font);
+    accent-color: var(--desertfox-primary);
   }
-  .desertfox-help-page { box-sizing: border-box; flex: 1; min-width: 0; max-width: 60rem; padding: 1rem 2rem 4rem; }
+  .desertfox-help-page { box-sizing: border-box; flex: 1; min-width: 0; max-width: clamp(60rem, calc(60rem + (100vw - 1600px) * .5), 110rem); padding: var(--desertfox-space-3) 2rem 4rem; }
+  /* Prose keeps a readable line even when the column is wide. Cards and tables use the full column. */
+  .desertfox-help-page :is(p, li, .desertfox-help-tip) { max-width: 80ch; }
+  /* Wide screens: the capped column sits in the middle of the space right of the sidebar. The auto margins take only what the column leaves after it grew to its cap. */
+  @media (min-width: 1600px) { .desertfox-help-page { margin-inline: auto; } }
+  .desertfox-help-page a { color: var(--desertfox-primary); text-underline-offset: .15em; }
   .desertfox-help-sidebar {
     position: sticky; top: 0; align-self: flex-start;
     box-sizing: border-box; flex: none; width: 12rem; height: 100vh; padding: 1rem; overflow-y: auto;
@@ -35,7 +44,7 @@
   .desertfox-help-menu-toggle { padding: .4rem; border: 0; border-radius: var(--desertfox-radius); background: none; color: var(--desertfox-fg-core); cursor: pointer; }
   .desertfox-help-menu-toggle:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); }
   .desertfox-help-menu-toggle svg { display: block; width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-  .desertfox-help-sidebar a { padding: .25rem .5rem; border-radius: var(--desertfox-radius); color: var(--desertfox-fg-core); text-decoration: none; }
+  .desertfox-help-sidebar a { display: block; box-sizing: border-box; min-height: 1.9rem; padding: .3rem .5rem; border-radius: var(--desertfox-radius); color: var(--desertfox-fg-core); line-height: 1.3; text-decoration: none; }
   .desertfox-help-sidebar a:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); }
   .desertfox-help-sidebar a[aria-current="page"] { color: var(--desertfox-primary); background: color-mix(in srgb, var(--desertfox-primary) 15%, transparent); }
   .desertfox-help-nav-row { display: flex; align-items: center; gap: .25rem; }
@@ -46,8 +55,11 @@
   @media (prefers-reduced-motion: reduce) { .desertfox-help-sections-toggle svg { transition: none; } }
   .desertfox-help-sections-toggle:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); }
   .desertfox-help-sections { display: flex; flex-direction: column; margin-left: 1rem; font-size: .9em; }
+  /* Section links read like body links. The one for the section on screen takes secondary (render.ts sets aria-current="location" as the page scrolls). */
+  .desertfox-help-sections a { min-height: 0; color: var(--desertfox-primary); }
+  .desertfox-help-sections a[aria-current="location"] { color: var(--desertfox-secondary); font-weight: 600; }
   .desertfox-help-sections[hidden] { display: none; }
-  .desertfox-help-sidebar .desertfox-help-support { display: flex; flex-direction: column; gap: .35rem; margin-top: auto; padding: .6rem .7rem; border: 1px solid var(--desertfox-primary); border-radius: calc(var(--desertfox-radius) * 2); font-size: .85em; }
+  .desertfox-help-sidebar .desertfox-help-support { flex: none; display: flex; flex-direction: column; gap: .35rem; margin-top: auto; padding: .6rem .7rem; border: 1px solid var(--desertfox-primary); border-radius: calc(var(--desertfox-radius) * 2); font-size: .85em; }
   .desertfox-help-support-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem; font-weight: bold; text-align: center; }
   .desertfox-help-support-heart { flex: none; transform-origin: center; width: 1.1em; height: 1.1em; fill: var(--desertfox-primary); }
   .desertfox-help-support:hover .desertfox-help-support-heart { animation: desertfox-help-heart-pulse 400ms ease-out 1; }
@@ -56,19 +68,34 @@
   .desertfox-help-support-note { opacity: .7; text-align: center; }
   .desertfox-help-sidebar .desertfox-help-support-link { padding: .25rem .6rem; border: 1px solid var(--desertfox-primary); border-radius: 999px; color: var(--desertfox-primary); text-align: center; }
   .desertfox-help-sidebar .desertfox-help-support-link:hover { background: color-mix(in srgb, var(--desertfox-primary) 15%, transparent); }
-  .desertfox-help h1, .desertfox-help h2 { color: var(--desertfox-primary); }
-  .desertfox-help h1:focus { outline: none; }
-  .desertfox-help h3 { margin: 0 0 .25rem; }
+  /* The page title is primary and the section titles are plain text over a rule, so the two levels read as different things. */
+  .desertfox-help h1 { margin: 0 0 var(--desertfox-space-3); color: var(--desertfox-primary); font-size: 1.75rem; line-height: 1.2; }
+  .desertfox-help h2 { margin: var(--desertfox-space-4) 0 var(--desertfox-space-3); padding-bottom: var(--desertfox-space-1); border-bottom: 1px solid var(--desertfox-border); font-size: 1.25rem; line-height: 1.3; }
+  .desertfox-help h1:focus, .desertfox-help h2:focus { outline: none; }
+  .desertfox-help h3 { margin: 0 0 var(--desertfox-space-1); font-size: 1.05rem; }
+  /* data-accent (render.ts) picks the bar color per command group. A card with none, such as a site rule, takes primary. */
+  .desertfox-help-command { --bar: var(--desertfox-primary); }
+  .desertfox-help-command[data-accent="1"] { --bar: var(--desertfox-accent); }
+  .desertfox-help-command[data-accent="2"] { --bar: var(--desertfox-info); }
+  .desertfox-help-command[data-accent="3"] { --bar: var(--desertfox-ok); }
+  .desertfox-help-command[data-accent="4"] { --bar: var(--desertfox-secondary); }
   .desertfox-help-command {
-    margin: 1rem 0;
+    margin: var(--desertfox-space-3) 0;
     padding: .75rem 1rem;
-    border: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 25%, transparent);
+    border: 1px solid var(--desertfox-border);
+    border-left: 4px solid var(--bar);
     border-radius: var(--desertfox-radius);
+    background: var(--desertfox-bg-mantle);
   }
+  .desertfox-help-command p { margin: var(--desertfox-space-1) 0; }
+  .desertfox-help-command-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--desertfox-space-1) var(--desertfox-space-3); }
+  .desertfox-help-command-head h3 { margin: 0; }
+  .desertfox-help-keys { display: flex; flex-direction: column; align-items: flex-end; gap: var(--desertfox-space-1); font-size: .9em; }
+  .desertfox-help-key-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--desertfox-space-2); }
   .desertfox-help-usage, .desertfox-help kbd, .desertfox-help code {
     font-family: ui-monospace, monospace;
   }
-  .desertfox-help-usage { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .desertfox-help-usage { margin: var(--desertfox-space-2) 0; padding: .35rem .6rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); white-space: pre-wrap; overflow-wrap: anywhere; }
   .desertfox-help-code {
     --code-bg: var(--desertfox-bg-mantle);
     --code-border: var(--desertfox-border);
@@ -94,7 +121,7 @@
   .desertfox-help-code-body { margin: 0; padding: 0 1rem .75rem; font-family: ui-monospace, monospace; white-space: pre; overflow-x: auto; scrollbar-color: color-mix(in srgb, var(--desertfox-fg-core) 35%, transparent) transparent; }
   .desertfox-help [hidden] { display: none; }
   .desertfox-help kbd { color: var(--desertfox-primary); }
-  .desertfox-help-mode { display: inline-block; min-width: 4.5rem; margin-right: .5rem; opacity: .6; }
+  .desertfox-help-mode { padding: 0 .55rem; border-radius: 999px; background: color-mix(in srgb, var(--desertfox-primary) 18%, transparent); font-size: .8em; line-height: 1.5; }
   .desertfox-help-muted { opacity: .6; }
   .desertfox-help-shadowed { opacity: .5; }
   .desertfox-help-current { outline: 2px solid var(--desertfox-primary); }
@@ -103,17 +130,25 @@
     background: var(--desertfox-bg-mantle);
   }
   .desertfox-help-tip-label { color: var(--desertfox-primary); }
-  .desertfox-help-warnings { color: var(--desertfox-primary); }
+  .desertfox-help-warnings { color: var(--desertfox-warn); }
   .desertfox-help table { border-collapse: collapse; margin: .5rem 0; }
   .desertfox-help-params, .desertfox-help-site-rules { width: 100%; }
+  .desertfox-help-params { table-layout: fixed; }
+  .desertfox-help-params th { color: color-mix(in srgb, var(--desertfox-fg-core) 70%, transparent); font-size: .85em; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .desertfox-help-params th:nth-child(1) { width: 14%; }
+  .desertfox-help-params th:nth-child(2) { width: 10%; }
+  .desertfox-help-params th:nth-child(3) { width: 16%; }
+  .desertfox-help-params th:nth-child(4) { width: 30%; }
+  .desertfox-help-params tr + tr { border-top: 1px solid color-mix(in srgb, var(--desertfox-border) 60%, transparent); }
   .desertfox-help-engines { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
   .desertfox-help-engines th:nth-child(1) { width: 24%; }
   .desertfox-help-engines th:nth-child(2) { width: 28%; }
   .desertfox-help-engines th:nth-child(3) { width: 20%; }
   .desertfox-help-engines summary { cursor: pointer; }
   .desertfox-help-badge { display: inline-block; padding: 0 .4rem; border-radius: var(--desertfox-radius); font-size: .8em; background: color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
-  .desertfox-help th, .desertfox-help td { padding: .1rem 1rem .1rem 0; text-align: left; vertical-align: top; }
-  .desertfox-help-params td:nth-child(n+4) { overflow-wrap: anywhere; }
+  .desertfox-settings-row[data-changed="true"] .desertfox-help-badge { background: color-mix(in srgb, var(--desertfox-ok) 20%, transparent); color: var(--desertfox-ok); }
+  .desertfox-help th, .desertfox-help td { padding: .3rem 1rem .3rem 0; text-align: left; vertical-align: top; }
+  .desertfox-help-params :is(th, td) { overflow-wrap: anywhere; }
   /* overflow-wrap: anywhere lowers the cell's minimum width, so a long URL wraps and the tag column stays on screen. */
   .desertfox-settings-row { display: flex; flex-direction: column; gap: .25rem; padding: .6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
   .desertfox-settings-head { display: flex; align-items: center; gap: .5rem; }
@@ -130,10 +165,19 @@
   .desertfox-settings-advanced[open] { padding-bottom: 50vh; }
   .desertfox-settings-advanced > summary { cursor: pointer; font-weight: bold; font-size: 1.2em; }
   .desertfox-settings-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
-  .desertfox-settings-input { max-width: 100%; box-sizing: border-box; padding: .25rem .4rem; border: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 40%, transparent); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: inherit; }
-  .desertfox-settings-input[aria-invalid="true"] { border-color: var(--desertfox-primary); }
-  .desertfox-settings-install, .desertfox-settings-reset, .desertfox-settings-move { padding: .15rem .6rem; border: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 40%, transparent); border-radius: var(--desertfox-radius); background: none; color: var(--desertfox-fg-core); font: inherit; cursor: pointer; }
-  .desertfox-settings-reset:disabled, .desertfox-settings-move:disabled { opacity: .4; cursor: default; }
+  /* One look for every form control. :where() keeps the specificity at zero, so a class rule below (Copy, the section toggles) still wins. */
+  :where(.desertfox-help-page :is(input:not([type="checkbox"], [type="radio"]), select, textarea)) {
+    max-width: 100%; box-sizing: border-box; padding: .25rem .5rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius);
+    background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: inherit;
+  }
+  :where(.desertfox-help-page) button {
+    padding: .2rem .75rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius);
+    background: var(--desertfox-bg-mantle); color: var(--desertfox-fg-core); font: inherit; cursor: pointer;
+  }
+  :where(.desertfox-help-page) button:hover:not(:disabled) { border-color: var(--desertfox-primary); color: var(--desertfox-primary); }
+  :where(.desertfox-help-page) button:disabled { opacity: .4; cursor: default; }
+  .desertfox-help-page :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--desertfox-primary); outline-offset: 1px; }
+  .desertfox-settings-input[aria-invalid="true"] { border-color: var(--desertfox-error); }
   .desertfox-settings-order-row { display: flex; align-items: center; gap: .4rem; margin-bottom: .2rem; }
   .desertfox-settings-links .desertfox-settings-order-row { flex-wrap: wrap; }
   .desertfox-transfer-input { display: none; }
@@ -141,10 +185,10 @@
   .desertfox-files-text { width: 100%; box-sizing: border-box; font-family: monospace; }
   .desertfox-transfer-snippet, .desertfox-transfer-installed { display: flex; flex-direction: column; gap: .25rem; padding: .6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
   .desertfox-transfer-code { max-height: 16rem; overflow: auto; margin: 0; padding: .5rem; border-radius: var(--desertfox-radius); background: color-mix(in srgb, var(--desertfox-fg-core) 8%, var(--desertfox-bg-core)); white-space: pre-wrap; }
-  .desertfox-transfer-warning { color: var(--desertfox-primary); font-weight: bold; }
+  .desertfox-transfer-warning { color: var(--desertfox-warn); font-weight: bold; }
   .desertfox-settings-message:empty { display: none; }
-  .desertfox-host-start:not(:empty) { margin-bottom: 1rem; padding: 0 1rem .75rem; border: 1px solid var(--desertfox-primary); border-radius: var(--desertfox-radius); }
-  .desertfox-settings-error { color: var(--desertfox-primary); }
+  .desertfox-host-start:not(:empty) { margin-bottom: 1rem; padding: 0 1rem .75rem; border: 1px solid var(--desertfox-warn); border-radius: var(--desertfox-radius); }
+  .desertfox-settings-error { color: var(--desertfox-error); }
   .desertfox-keys-tools { margin-bottom: .5rem; }
   .desertfox-engines-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; margin-bottom: .4rem; }
   .desertfox-engines-field { display: flex; flex-direction: column; gap: .2rem; }
@@ -158,6 +202,8 @@
   .desertfox-keys-capture:focus { outline: 2px solid var(--desertfox-primary); }
   .desertfox-keys-capture kbd { margin-right: .3rem; }
   .desertfox-keys-command { min-width: 20rem; flex: 1; }
+  /* A short window: the support card sits after the links in the scroll, so it cannot cover them. */
+  @media (max-height: 45rem) { .desertfox-help-sidebar .desertfox-help-support { margin-top: var(--desertfox-space-3); } }
   /* Narrow screens: the sidebar becomes a drawer that slides over the page from the left, opened by the menu button in a bar that stays on top. */
   @media (max-width: 40rem) {
     html { scroll-padding-top: 3.5rem; }
@@ -195,6 +241,7 @@
     /* Visually hidden, not display:none, so screen readers keep the column headers. */
     .desertfox-help-params tr:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .desertfox-help-params tr { margin: .5rem 0; }
+    .desertfox-help-keys, .desertfox-help-key-line { align-items: flex-start; justify-content: flex-start; }
     .desertfox-help-params td:empty { display: none; }
     .desertfox-help-params td::before { opacity: .6; margin-right: .5rem; }
     .desertfox-help-params td:nth-child(1)::before { content: "option"; }

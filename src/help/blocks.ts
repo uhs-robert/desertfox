@@ -3,6 +3,8 @@
 export type Inline =
   | { kind: "text"; text: string }
   | { kind: "code"; text: string }
+  // A key sequence the keymap gives, drawn as one cap per key.
+  | { kind: "keys"; text: string }
   | { kind: "link"; text: string; href: string };
 
 export type Block =
