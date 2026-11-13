@@ -39,7 +39,7 @@ function checked_keymap_edits(stored: unknown): KeymapEdits {
   for (const [mode, table] of Object.entries(stored)) {
     if (!(KEYMAP_MODES as readonly string[]).includes(mode) || !is_record(table)) continue;
     const kept = Object.entries(table).filter(([keys, text]) => keys !== "" && typeof text === "string" && key_problem(mode as KeymapMode, keys) === undefined);
-    if (kept.length > 0) edits[mode as KeymapMode] = Object.fromEntries(kept) as Record<string, string>;
+    if (kept.length > 0) edits[mode as KeymapMode] = by_spelling(Object.fromEntries(kept) as Record<string, string>);
   }
   return edits;
 }

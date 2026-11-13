@@ -43,6 +43,14 @@ test("an edit that does not read warns and drops, so the binding under it stays"
   assert.match(warnings[0]!, /^keymap edits: normal skipped "J": /);
 });
 
+test("a __proto__ edit compiles as a key", () => {
+  const { compiled, warnings } = compile_config(input_of(config_with({}), JSON.parse('{"normal":{"__proto__":"tab.close"}}')));
+  let node: { children?: Record<string, unknown> } | undefined = compiled.modes.normal;
+  for (const key of "__proto__") node = node?.children?.[key] as typeof node;
+  assert.equal((node as unknown as TreeLeaf).steps[0]!.invocation.id, "tab.close");
+  assert.equal(warnings.some((warning) => warning.includes("__proto__")), false);
+});
+
 test("without a command list the key edits are left out with one warning", () => {
   const { registry: _left_out, ...input } = input_of(config_with({}), { normal: { J: "tab.close" } });
   const { compiled, warnings } = compile_config(input);
