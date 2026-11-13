@@ -614,7 +614,7 @@ test("a subframe sends the line to the top frame with its own mode and scroll pl
   assert.deepEqual(modes, ["cmdline"]);
   const [open] = relays;
   assert.equal(open!.to, "top");
-  assert.deepEqual({ ...open!.args, remote_id: "id" }, { text: "open ", mode: "normal", remote_id: "id", scroll: { top: 30, max: 600 } });
+  assert.deepEqual({ ...open!.args, remote_id: "id" }, { text: "open ", search: undefined, mode: "normal", remote_id: "id", scroll: { top: 30, max: 600 } });
   assert.equal(sink.on_token_("a"), "handled");
   assert.deepEqual(relays.at(-1), { type: "relay", to: "top", id: "cmdline.token", args: { token: "a" } });
 });
@@ -661,17 +661,36 @@ test("a subframe that is too small to show refuses the focus, so the top frame k
   assert.deepEqual(window_focus, []);
 });
 
-test("a subframe whose top frame never says the line ended leaves it after a grace time", async (t) => {
-  const { modes } = await load_host(t, "remote_grace", { subframe: true, relay: (relayed) => (relayed.id === "cmdline.open" ? { ok: true } : undefined), command: async () => ({ ok: true }) });
-  await until(() => modes.length === 2);
-  assert.deepEqual(modes, ["cmdline", "normal"]);
+test("a subframe's search runs in the subframe, sends its status up, and ends there once", async (t) => {
+  const { relays, handlers, calls } = await load_host(t, "remote_search", {
+    subframe: true,
+    search: () => {},
+    relay: (relayed) => (relayed.id === "cmdline.open" ? new Promise(() => {}) : { ok: true }),
+    command: async (id, args) => {
+      if (id === "find.live") (args.report as (status: string) => void)("1 of 3");
+      return { ok: true };
+    },
+  });
+  const remote_id = relays[0]!.args.remote_id;
+  assert.deepEqual(handlers.get("cmdline.find_text")!({ remote_id: "an older line", text: "a" }), NO_LINE);
+  await handlers.get("cmdline.find_text")!({ remote_id, text: "ab" });
+  assert.deepEqual(relays.at(-1), { type: "relay", to: "top", id: "cmdline.find_status", args: { text: "1 of 3" } });
+  await handlers.get("cmdline.find_end")!({ remote_id, keep: true });
+  handlers.get("cmdline.end")!({ remote_id, tokens: [] });
+  assert.deepEqual(
+    calls.map((call) => [call.id, call.args.keep ?? call.args.text]),
+    [
+      ["find.live", "ab"],
+      ["find.end", true],
+    ],
+  );
 });
 
-test("a page search in a subframe draws its line in that frame, which searches itself", async (t) => {
-  const { relays, elements, modes } = await load_host(t, "remote_search_here", { subframe: true, search: () => {}, relay: () => new Promise(() => {}) });
-  assert.deepEqual(relays, [], "nothing goes to the top frame");
-  assert.equal(elements.length, 2, "the line is drawn here");
-  assert.deepEqual(modes, ["cmdline"]);
+test("a subframe whose top frame never says the line ended leaves it after a grace time, and ends its search unkept", async (t) => {
+  const { modes, calls } = await load_host(t, "remote_grace", { subframe: true, search: () => {}, relay: (relayed) => (relayed.id === "cmdline.open" ? { ok: true } : undefined), command: async () => ({ ok: true }) });
+  await until(() => modes.length === 2);
+  assert.deepEqual(modes, ["cmdline", "normal"]);
+  assert.deepEqual(calls, [{ id: "find.end", args: { keep: false } }]);
 });
 
 test("the top frame draws a subframe's line with that frame's scroll place, and takes keys from that frame only", async (t) => {
@@ -698,6 +717,25 @@ test("a key relayed after the top frame's line closed is refused, so the subfram
   assert.deepEqual(handlers.get("cmdline.token")!({ from_frame: 5, token: "j" }), NO_LINE);
 });
 
+test("the top frame's search line searches the subframe, shows the status that frame sends, and ends the search there", async (t) => {
+  const { relays, handlers, frame, ready, page_opened_, calls, answer } = await load_host(t, "top_search", { open_args: { ...FOR_FRAME_5, search: "forward" }, relay: (relayed) => (relayed.id === "cmdline.find_end" ? { ok: true } : { ok: true }) });
+  await ready();
+  await page_opened_();
+  const received = collect_messages(frame);
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "find_text", text: "ab" } });
+  await until(() => relays.length === 1);
+  assert.deepEqual(relays[0], { type: "relay", to: 5, id: "cmdline.find_text", args: { remote_id: "line-1", text: "ab" } });
+  handlers.get("cmdline.find_status")!({ from_frame: 6, text: "a stranger's" });
+  handlers.get("cmdline.find_status")!({ from_frame: 5, text: "1 of 3" });
+  await until(() => received.some((message) => message.kind === "find_status"));
+  assert.deepEqual(received.filter((message) => message.kind === "find_status"), [{ kind: "find_status", text: "1 of 3" }]);
+  frame.posted[0]!.transfer[0]!.postMessage({ desertfox_cmdline: { kind: "find_commit" } });
+  assert.deepEqual(await answer, { ok: true });
+  assert.deepEqual(relayed_ids(relays).slice(1, 3), ["cmdline.find_end", "cmdline.focus"]);
+  assert.deepEqual(relays[1]!.args, { remote_id: "line-1", keep: true });
+  assert.deepEqual(calls, [], "no search in the top frame");
+});
+
 test("a subframe that refuses the focus still hears the end, and the late keys stay in the top frame", async (t) => {
   for (const takes_focus of [false, true]) {
     const { relays, frame, ready, page_opened_, handed_back } = await load_host(t, `top_focus_${takes_focus}`, { open_args: FOR_FRAME_5, relay: (relayed) => (relayed.id === "cmdline.focus" ? (takes_focus ? { ok: true } : NO_LINE) : { ok: true }) });
@@ -722,4 +760,13 @@ test("a subframe whose mode left the line first, as the end of a fullscreen does
   assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: "an older line" }), NO_LINE);
   assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id }), { ok: true });
   assert.deepEqual(window_focus, ["window"]);
+});
+
+test("a subframe whose mode left a search line first still ends that search when the top frame says so", async (t) => {
+  const { relays, handlers, sink, calls } = await load_host(t, "remote_exit_search", { subframe: true, search: () => {}, relay: () => new Promise(() => {}), command: async () => ({ ok: true }) });
+  const remote_id = relays[0]!.args.remote_id;
+  sink.exit();
+  assert.deepEqual(handlers.get("cmdline.find_end")!({ remote_id: "an older line", keep: false }), NO_LINE);
+  await handlers.get("cmdline.find_end")!({ remote_id, keep: false });
+  assert.deepEqual(calls, [{ id: "find.end", args: { keep: false } }]);
 });

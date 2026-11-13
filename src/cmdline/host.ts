@@ -41,6 +41,8 @@ type Remote = {
   ending_: boolean;
   // The keys that wait for the end: those after the focus came back, and those the top frame did not take.
   late_: string[];
+  // A page search whose find session in this frame has not ended. It must end here even when the top frame never says so.
+  search_open_: boolean;
 };
 
 type Open = {
@@ -105,7 +107,7 @@ if (!page.desertfox_cmdline_ready) {
     current.removal_watch_.disconnect();
     if (current.asked_headings_ && !current.submitted_) clear_headings(current);
     const target = current.target_;
-    if (current.search_) current.search_ended_ = host.run_command_("find.end", "caret", { keep: current.committed_ });
+    if (current.search_) current.search_ended_ = target ? relay_outcome(target.frame_, "cmdline.find_end", { remote_id: target.id_, keep: current.committed_ }).then((outcome) => outcome ?? { ok: true }) : host.run_command_("find.end", "caret", { keep: current.committed_ });
     // The focus goes back to the subframe whose keys opened the line, if it still takes it. Otherwise the page gets it as usual.
     const focus_back = target ? relay(target.frame_, "cmdline.focus", { remote_id: target.id_ }) : undefined;
     host.hold_keys_until_(
@@ -250,7 +252,10 @@ if (!page.desertfox_cmdline_ready) {
         else void host.run_command_("heading.list", "hints", { report }).then((outcome) => outcome.ok || report([]));
       } else if (message.kind === "find_text") {
         const report = (status: string) => tell({ kind: "find_status", text: status });
-        void host.run_command_("find.live", "caret", { text: message.text, report }).then((outcome) => outcome.ok || report(outcome.message));
+        // A subframe's search runs in that frame, which sends its status back with `cmdline.find_status`.
+        const target = current.target_;
+        const searched = target ? relay_outcome(target.frame_, "cmdline.find_text", { remote_id: target.id_, text: message.text }).then((outcome) => outcome ?? NOT_HERE) : host.run_command_("find.live", "caret", { text: message.text, report });
+        void searched.then((outcome) => outcome.ok || report(outcome.message));
       } else if (message.kind === "find_commit") {
         current.committed_ = true;
         let ended!: (outcome: Outcome) => void;
@@ -291,6 +296,7 @@ if (!page.desertfox_cmdline_ready) {
   const end_remote = (current: Remote, tokens: readonly string[]) => {
     if (remote !== current) return;
     remote = undefined;
+    if (current.search_open_) void host.run_command_("find.end", "caret", { keep: false });
     host.hold_keys_until_(Promise.resolve([...tokens, ...current.late_]));
     host.escape_();
   };
@@ -324,12 +330,12 @@ if (!page.desertfox_cmdline_ready) {
 
   // The keys come to this subframe, and the top frame draws the line. A top frame that cannot show it leaves the line to this frame, with the keys sent so far.
   async function open_remote(args: Record<string, unknown>): Promise<Outcome> {
-    const current: Remote = { id_: crypto.randomUUID(), sent_: [], ending_: false, late_: [] };
+    const current: Remote = { id_: crypto.randomUUID(), sent_: [], ending_: false, late_: [], search_open_: args.search !== undefined };
     const from_mode = host.get_mode();
     remote = current;
     sent_line_id = current.id_;
     host.set_mode_("cmdline");
-    const outcome = await relay_outcome("top", "cmdline.open", { text: args.text, mode: from_mode, remote_id: current.id_, scroll: read_scroll() });
+    const outcome = await relay_outcome("top", "cmdline.open", { text: args.text, search: args.search, mode: from_mode, remote_id: current.id_, scroll: read_scroll() });
     if (remote === current && (outcome === undefined || (!outcome.ok && outcome.message === NO_ROOM))) {
       remote = undefined;
       return open_here(args, from_mode, current.sent_);
@@ -346,8 +352,7 @@ if (!page.desertfox_cmdline_ready) {
     // From a subframe's relay, the line is for that frame's keys.
     const frame = typeof args.from_frame === "number" && typeof args.remote_id === "string" ? { frame_: args.from_frame, id_: args.remote_id } : undefined;
     if (frame && window.innerHeight < NO_ROOM_PX) return { ok: false, message: NO_ROOM };
-    // A page search in a subframe draws its line in that frame, which searches itself.
-    if (!frame && window !== window.top && args.search === undefined) return open_remote(args);
+    if (!frame && window !== window.top) return open_remote(args);
     if (!frame) return open_here(args, host.get_mode());
     return open_here(args, (args.mode as string | undefined) ?? host.get_mode(), [], frame, (args.scroll as Open["scroll_"] | undefined) ?? null);
   });
@@ -357,6 +362,7 @@ if (!page.desertfox_cmdline_ready) {
   // A key for no open line is refused, so the subframe keeps it.
   host.register_handler_("cmdline.token", (args): Outcome | void => (open && from_target(args) && typeof args.token === "string" ? take_token(open, args.token) : NOT_HERE));
   host.register_handler_("cmdline.headings", (args) => void (open && from_target(args) && send(open.port_, { kind: "headings", items: args.items as HeadingItem[] })));
+  host.register_handler_("cmdline.find_status", (args) => void (open && from_target(args) && send(open.port_, { kind: "find_status", text: args.text as string })));
   const asked_of_this_line = (args: Record<string, unknown>) => remote?.id_ === args.remote_id;
   // The top frame hands the focus back. A frame that is hidden now, or that no longer holds this line, refuses, and the top frame keeps the focus.
   host.register_handler_("cmdline.focus", (args): Outcome => {
@@ -366,6 +372,17 @@ if (!page.desertfox_cmdline_ready) {
     return { ok: true };
   });
   host.register_handler_("cmdline.end", (args) => void (remote && asked_of_this_line(args) && end_remote(remote, Array.isArray(args.tokens) ? (args.tokens as string[]) : [])));
+  host.register_handler_("cmdline.find_text", (args): Outcome | Promise<Outcome> => {
+    if (!asked_of_this_line(args)) return NOT_HERE;
+    const report = (text: string) => void relay("top", "cmdline.find_status", { text });
+    return host.run_command_("find.live", "caret", { text: args.text, report });
+  });
+  host.register_handler_("cmdline.find_end", (args): Outcome | Promise<Outcome> => {
+    // As with the focus, a frame whose mode left the line first still ends that line's search.
+    if (args.remote_id !== sent_line_id) return NOT_HERE;
+    if (remote) remote.search_open_ = false;
+    return host.run_command_("find.end", "caret", { keep: args.keep === true });
+  });
   host.register_handler_("cmdline.headings_ask", (args): Outcome | Promise<Outcome> => {
     if (args.clear === true) return host.run_command_("heading.clear", "hints", {});
     if (!asked_of_this_line(args)) return NOT_HERE;
