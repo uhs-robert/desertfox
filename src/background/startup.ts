@@ -198,7 +198,7 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: Ed
       if (layers === before) await store_slot_map(slot_map_before);
     };
     await commit_change(before, next, { store, publish: publish_layers });
-    void autoconfig.mirror((await load_edits()).saved, next.keymap);
+    if (JSON.stringify(next.keymap) !== JSON.stringify(before.keymap)) void autoconfig.mirror((await load_edits()).saved, next.keymap);
   });
 }
 

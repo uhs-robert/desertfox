@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { test } from "node:test";
+import { parse } from "smol-toml";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
@@ -311,6 +312,42 @@ test("a rolled back key edit writes nothing, and removing every edit writes the 
   await set_keys(startup, {});
   await settle();
   assert.deepEqual(writes_of(sent).at(-1), "");
+});
+
+test("a rolled back :set writes nothing", async () => {
+  const { sent, fake } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("mirror_set_rollback");
+  await startup.get_config();
+  const working = fake.tabs.query;
+  fake.tabs.query = async () => {
+    throw new Error("tabs down");
+  };
+  await assert.rejects(startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } })), /tabs down/);
+  fake.tabs.query = working;
+  await settle();
+  assert.deepEqual(writes_of(sent), []);
+});
+
+test("a table-valued saved setting and key edits write one TOML document", async () => {
+  const { sent } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("mirror_tables");
+  await startup.get_config();
+  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy", site_rules: [{ site: "a.test", off: true }] } }));
+  await set_keys(startup, { normal: { J: "tab.close" } });
+  await settle();
+  const toml = writes_of(sent).at(-1) as string;
+  assert.deepEqual(JSON.parse(JSON.stringify(parse(toml))), { hint_letters: "xy", site_rules: [{ site: "a.test", off: true }], normal: { J: "tab.close" } });
+});
+
+test("a layer change that leaves the key edits as they were does not write", async () => {
+  const { sent } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("mirror_unchanged_keys");
+  await startup.get_config();
+  await set_keys(startup, { normal: { J: "tab.close" } });
+  await settle();
+  await startup.change_layers("keymap", (current) => ({ ...current }));
+  await settle();
+  assert.equal(writes_of(sent).length, 1);
 });
 
 test("a host failure on the autoconfig write keeps the edit and warns once", async () => {
