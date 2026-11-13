@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { best_match, MAX_BOOST, rank, score_candidate } from "../src/shared/score.ts";
+import { best_match, type Candidate, MAX_BOOST, rank, score_candidate } from "../src/shared/score.ts";
 
 const names = (query: string, list: string[]) => rank(query, list.map((name) => ({ name }))).map((item) => item.name);
 
@@ -79,4 +79,54 @@ test("several groups ranked as one list: the group breaks an equal score before 
   const items = [{ name: "a longer git name", group: 0 }, { name: "the git", group: 1 }];
   assert.deepEqual(rank("git", items, (item) => item.group).map((item) => item.name), ["a longer git name", "the git"]);
   assert.deepEqual(rank("git", items).map((item) => item.name), ["the git", "a longer git name"]);
+});
+
+
+// Order recorded from the scorer before the query was parsed once per list. A change here is a change in what the user sees first.
+type Row = Candidate & { group?: number };
+const varied_rows: Row[] = [
+  { name: "tab.close", description: "Close the tab.", keywords: ["shut"] },
+  { name: "tab.close_others", description: "Close every other tab" },
+  { name: "tab.next", description: "Go to the next tab.", also_named: ["tab.forward"] },
+  { name: "window.close", description: "Close the window" },
+  { name: "GitHub Issues", description: "https://github.com/issues", boost: 0.3 },
+  { name: "GitHub Pull Requests", description: "https://github.com/pulls" },
+  { name: "git", description: "version control", boost: 0.6 },
+  { name: "Gitea", description: "https://gitea.io" },
+  { name: "tracing", description: "Trace calls" },
+  { name: "Tab Groups", description: "Manage groups of tabs", keywords: ["tc", "collapse"] },
+  { name: "toggleCamelCase", description: "camel humps" },
+  { name: "history.clear", description: "Forget visited pages", keywords: ["tab", "close"] },
+  { name: "bookmark-add", description: "Save this page as a bookmark" },
+  { name: "Bookmarks Toolbar", description: "" },
+  { name: "open (new tab)", description: "Open a URL in a new tab" },
+  { name: "reload", description: "Reload the page", also_named: ["refresh", "r"] },
+  { name: "reload_hard", description: "Reload ignoring the cache" },
+  { name: "settings.theme", description: "Pick a colour theme", keywords: ["dark", "light"] },
+  { name: "x1y2z3", description: "digits 42" },
+  { name: "Mail  inbox", description: "  spaced   out  " },
+  { name: "same", group: 1 }, { name: "same", group: 0 }, { name: "also same" },
+];
+const expected_order: [string, string[]][] = [
+  ["tc", ["tab.close","tab.close_others","toggleCamelCase","tracing","history.clear","reload_hard","Tab Groups","GitHub Issues","GitHub Pull Requests"]],
+  ["tab", ["tab.next","tab.close","Tab Groups","open (new tab)","tab.close_others","history.clear","bookmark-add"]],
+  ["tab.", ["tab.next","tab.close","tab.close_others"]],
+  ["git", ["git","GitHub Issues","Gitea","GitHub Pull Requests","x1y2z3","reload_hard","history.clear"]],
+  ["GIT hub", ["GitHub Issues","GitHub Pull Requests"]],
+  ["close tab", ["tab.close","tab.close_others","history.clear"]],
+  ["rel", ["reload","reload_hard","tracing"]],
+  ["ref", ["reload"]],
+  ["  tab  close ", ["tab.close","tab.close_others","history.clear"]],
+  ["42", ["x1y2z3"]],
+  ["bm", ["bookmark-add","Bookmarks Toolbar","GitHub Issues","GitHub Pull Requests"]],
+  ["is", ["GitHub Issues","history.clear","settings.theme","window.close","GitHub Pull Requests","bookmark-add","x1y2z3"]],
+  ["same", ["same","same","also same"]],
+  ["zzz", []],
+  ["", ["tab.close","tab.close_others","tab.next","window.close","GitHub Issues","GitHub Pull Requests","git","Gitea","tracing","Tab Groups","toggleCamelCase","history.clear","bookmark-add","Bookmarks Toolbar","open (new tab)","reload","reload_hard","settings.theme","x1y2z3","Mail  inbox","same","same","also same"]],
+];
+
+test("the order of a varied list holds for every query", () => {
+  for (const [query, order] of expected_order) {
+    assert.deepEqual(rank(query, varied_rows, (row) => row.group ?? 0).map((row) => row.name), order, JSON.stringify(query));
+  }
 });

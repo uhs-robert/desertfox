@@ -90,9 +90,11 @@ function match_term(term: string, text: string): Hit | null {
   return { score, positions };
 }
 
+const query_terms = (query: string): string[] => query.toLowerCase().split(/\s+/).filter(Boolean);
+
 // Every space-separated term must hit the name, the description or a keyword. Only the name hits get positions.
-export function score_candidate(query: string, candidate: Candidate): Hit | null {
-  const terms = query.toLowerCase().split(/\s+/).filter((term) => term !== "");
+// A list passes `terms` so the query is split once; a single row leaves it out.
+export function score_candidate(query: string, candidate: Candidate, terms: string[] = query_terms(query)): Hit | null {
   // A final period ends the sentence and is not a letter to match, or `tab.` would find every "...the tab."
   const description = candidate.description?.replace(/\.$/, "");
   const keywords = (candidate.keywords ?? []).join(" ");
@@ -119,9 +121,10 @@ export function score_candidate(query: string, candidate: Candidate): Hit | null
 // Best first. A tie goes to the lower `group_of` when the caller ranks several groups as one list, then to the shorter name, then to the order of the source. An empty query keeps the source order.
 export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0): Ranked<Item>[] {
   if (query.trim() === "") return items.map((item) => ({ ...item, positions: [] }));
+  const terms = query_terms(query);
   const hits: { item: Item; hit: Hit; order: number }[] = [];
   items.forEach((item, order) => {
-    const hit = score_candidate(query, item);
+    const hit = score_candidate(query, item, terms);
     if (hit) hits.push({ item, hit, order });
   });
   hits.sort((left, right) => right.hit.score - left.hit.score || group_of(left.item) - group_of(right.item) || left.item.name.length - right.item.name.length || left.order - right.order);
