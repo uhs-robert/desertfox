@@ -194,14 +194,29 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(visual_rows !== normal_rows, `visual mode listed ${visual_rows} rows, the same as normal mode`);
   });
 
-  await run_case("the chord shows the panel in insert mode with a field focused, and Escape returns to normal", async () => {
+  await run_case("the chord shows the panel in insert mode with a field focused and leaves the field and the mode alone", async () => {
     await open_page("page", "wk_insert", { new_tab: true });
     await in_active_tab(`document.body.insertAdjacentHTML("afterbegin", '<input id="wk_input">'); 0`);
     await press_keys("I");
     await poll_until("the INSERT badge", async () => events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT");
     const rows = await rows_after([...CHORD], "insert", "wk_insert");
     expect(rows > 0, "the insert panel listed no keys");
+    expect((await in_active_tab(`document.activeElement.id + "|" + document.activeElement.value`)) === "wk_input|", "the chord moved the focus or typed into the field");
+    expect(events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT", "the chord left insert mode");
     await close_panel_of("wk_insert");
+  });
+
+  // keymap.d binds zq in insert mode. The first z is a half-typed sequence, which must not open the panel after the delay.
+  await run_case("a half-typed insert sequence shows no panel after the pause", async () => {
+    // The Escape of the case before left insert mode.
+    await press_keys("I");
+    await poll_until("the INSERT badge", async () => events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT");
+    const mark = events.length;
+    await press_keys("z");
+    await sleep(which_key_delay_ms * 3);
+    expect(whichkey_events(mark, "wk_insert").every((event) => event.value === ""), "the pause panel opened in insert mode");
+    await press_keys("x");
+    await press_keys("-k", "Escape");
   });
 
   await run_case("the chord shows the panel in hint mode", async () => {
@@ -210,6 +225,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     const rows = await rows_after([...CHORD], "hint", "wk_hint");
     expect(rows > 0, "the hint panel listed no keys");
+    expect((await hint_label_count()) > 0, "the panel removed the hint labels");
     await close_panel_of("wk_hint");
   });
 
