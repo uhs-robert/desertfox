@@ -139,6 +139,8 @@ export function create_mark_store(deps: MarkStoreDeps) {
       }),
     // The global mark of one key, or nothing.
     global_of: async (key: string, is_private: boolean): Promise<GlobalMark | undefined> => (await read_all(is_private)).globals[key],
+    // Drops every mark of the normal windows, global ones too, for a browser-wide history clear. Quickmarks live elsewhere and the private marks are not browser history.
+    clear_normal: () => in_turn(() => deps.local().remove(MARK_STORAGE_KEY)),
     // Drops every private mark unless a private window is open. The window check runs in the queue, so a write from a window that just opened is never deleted.
     clear_private_without_window: (has_private_window: () => Promise<boolean>) =>
       in_turn(async () => {

@@ -488,6 +488,8 @@ wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_s
 browser.history.onVisited.addListener(history_cache.visited);
 browser.history.onTitleChanged.addListener(history_cache.title_changed);
 browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
+// Only "Clear all history": a partial clear sends per-address events and keeps the marks and the typed lines.
+browser.history.onVisitRemoved.addListener(({ allHistory }) => allHistory && void Promise.all([browser_mark_store.clear_normal(), cmdline.clear_history()]).catch(() => undefined));
 void history_cache.start();
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => previous_tabs.activated(windowId, previousTabId));
