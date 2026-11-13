@@ -308,6 +308,16 @@ test("a failed frame list falls back to the top frame", async () => {
   assert.deepEqual(empty_list.scanned, [0]);
 });
 
+test("a frame list that never resolves is cut off at the scan timeout and the top frame is asked", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), resident: true, apply: () => acted(1) }, 3: { scan: scan(3, { playing: 1 }), resident: true, apply: () => acted(1) } }, { scan_timeout_ms: 40, answer_timeout_ms: 5000 });
+  tab.deps.list_frames = () => new Promise(() => {});
+  const started = Date.now();
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.ok(Date.now() - started < 400);
+  assert.deepEqual(tab.scanned, [0]);
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [0]);
+});
+
 test("a frame that answers with something else counts as no media", async () => {
   const tab = fake_tab({ 0: { scan: { type: "other" }, resident: true } });
   await assert.rejects(run_media(tab.deps, ctx, { action: "play_pause" }), { message: "No video or audio on this page" });

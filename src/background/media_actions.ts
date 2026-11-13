@@ -43,10 +43,10 @@ function within<T>(pending: Promise<T>, timeout_ms: number): Promise<T | undefin
   });
 }
 
-// The frames to ask. With no list (the call failed or came back empty) the top frame is the one frame known to exist.
+// The frames to ask. With no list (the call failed, timed out or came back empty) the top frame is the one frame known to exist. The call has the scan deadline too, so a stalled listing cannot hold the key.
 async function frames_of(deps: MediaDeps, tab_id: number): Promise<number[]> {
-  const listed = await deps.list_frames(tab_id).catch(() => []);
-  return listed.length > 0 ? listed : [0];
+  const listed = await within(deps.list_frames(tab_id), deps.scan_timeout_ms);
+  return listed && listed.length > 0 ? listed : [0];
 }
 
 type Ask = { frame_id: number; scan?: MediaScan; no_listener: boolean };
