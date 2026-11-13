@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { Outcome } from "../../shared/messages.ts";
-import { abort, center_of, drive, FLING_STEPS, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
+import { abort, center_of, drive, FLING_SETTLE_MS, FLING_STEPS, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 
 type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
@@ -31,7 +31,7 @@ function register(host: BundleHostApi): void {
   function end_all(): void {
     const stopping = [held, driving];
     held = driving = source = swiping = undefined;
-    queue = { waiting: 0 };
+    queue = [];
     for (const drag of stopping) if (drag) abort(drag);
   }
 
@@ -95,18 +95,19 @@ function register(host: BundleHostApi): void {
 
   // The flings of fast keys run one after another, so each finishes before the next presses. `end_all` swaps in a new queue, and a fling that waits in the old one sees that and never starts. A key past the cap is dropped, so a held key builds no backlog.
   const MAX_WAITING_FLINGS = 4;
-  let queue = { waiting: 0 };
+  // One entry per fling that has not started.
+  let queue: true[] = [];
   let last_fling: Promise<Outcome> = Promise.resolve(ran);
   function swipe(target: Element, direction: Direction): Outcome | Promise<Outcome> {
     const mine = queue;
-    if (mine.waiting >= MAX_WAITING_FLINGS) return ran;
-    mine.waiting++;
+    if (mine.length >= MAX_WAITING_FLINGS) return ran;
+    mine.push(true);
     const turn = async (): Promise<Outcome> => {
-      mine.waiting--;
+      mine.pop();
       if (queue !== mine || snap_scroll(target, direction)) return ran;
       const { held: flung, to, pause_ms } = start_fling(target, direction);
       driving = flung;
-      await drive(flung, to, FLING_STEPS, pause_ms);
+      await drive(flung, to, FLING_STEPS, pause_ms, FLING_SETTLE_MS);
       return ran;
     };
     // A fling that threw must not leave the queue rejected for every later one.

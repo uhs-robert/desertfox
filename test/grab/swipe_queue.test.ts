@@ -28,7 +28,7 @@ await import("../../src/content/grab/main.ts");
 
 // One carousel box that logs each pointer event with where it landed and how many presses are down at once.
 function carousel() {
-  const log: { type: string; x: number; down_now: number }[] = [];
+  const log: { type: string; x: number; down_now: number; at: number }[] = [];
   let down_now = 0;
   const box: Record<string, unknown> = {
     localName: "div",
@@ -37,7 +37,7 @@ function carousel() {
     dispatchEvent(event: FakeEvent) {
       if (event.type === "pointerdown") down_now++;
       if (event.type === "pointerup") down_now--;
-      if (event.type.startsWith("pointer")) log.push({ type: event.type, x: event.clientX, down_now });
+      if (event.type.startsWith("pointer")) log.push({ type: event.type, x: event.clientX, down_now, at: Date.now() });
       return true;
     },
   };
@@ -58,6 +58,10 @@ test("two fast l presses run two flings one after the other, never two presses a
   await Promise.all([key("right"), key("right")]);
   assert.deepEqual([count("pointerdown"), count("pointerup")], [2, 2]);
   assert.ok(log.every((entry) => entry.down_now <= 1));
+  // The second fling waits for the library to settle after the first release.
+  const first_up = log.find((entry) => entry.type === "pointerup")!;
+  const second_down = log.filter((entry) => entry.type === "pointerdown")[1]!;
+  assert.ok(second_down.at - first_up.at >= 340, `the gap was ${second_down.at - first_up.at} ms`);
   exit_sink();
 });
 
