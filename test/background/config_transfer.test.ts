@@ -6,6 +6,9 @@ import { FILES_SOURCE_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { load_files_source } from "../../src/background/config_load.ts";
 import { build_config, commands_of_registry } from "../../src/shared/config_build/build_config.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
+import { load_layers } from "../../src/background/edit_layers.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
+import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
@@ -37,7 +40,7 @@ test("removing a snippet rebuilds without it, and a key that binds it refuses th
   const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
   await startup.get_config();
   await startup.reload_config();
-  const deps = { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), remove: startup.remove_snippet };
+  const deps = { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => ({}), remove: startup.remove_snippet };
 
   const removed = await answer_config_transfer({ type: "remove_snippet", path: "snippets/a.js" }, deps);
   assert.equal(removed.ok, true);
@@ -87,4 +90,31 @@ test("a saved site bind in each binding format survives export then import, as t
     const { config_files } = export_files({}, { site_rules: [{ site: "https://a.test/*", bind }] });
     assert.deepEqual(settings_in_force(config_files, {}).site_rules, [{ site: "https://a.test/*", bind: resolved }]);
   }
+});
+
+test("the key edits export as a keymap.d file that sorts after every one there", () => {
+  const edits = { normal: { J: "tab.close", K: "" }, browser: { "<A-x>": "tab.next" } };
+  assert.deepEqual(export_files({}, {}, edits).config_files, { "keymap.d/zz-saved-edits.toml": '[normal]\nJ = "tab.close"\nK = ""\n\n[browser]\n"<A-x>" = "tab.next"\n' });
+  const { config_files } = export_files({ "keymap.toml": "a", "keymap.d/zzz.toml": "b" }, {}, edits);
+  assert.deepEqual(Object.keys(config_files).sort(), ["keymap.d/zzz.toml", "keymap.d/zzz.toml-zz-saved-edits.toml", "keymap.toml"]);
+  assert.equal(config_files["keymap.d/zzz.toml"], "b");
+  assert.deepEqual(Object.keys(export_files({ "keymap.toml": "a" }, {}, {}).config_files), ["keymap.toml"]);
+});
+
+test("an export with key edits imports on a fresh profile to the same compiled keymap", async () => {
+  const files: Files = { "keymap.toml": '[normal]\nJ = "tab.prev"\n', "keymap.d/zzz.toml": '[normal]\nK = "tab.goto"\n' };
+  const source = install_fake_browser({ files });
+  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  await startup.get_config();
+  await startup.reload_config();
+  await startup.change_layers("keymap", () => ({ normal: { J: "tab.close", K: "", Jx: "tab.next" }, browser: { "<A-x>": "tab.next" } }));
+  const exported = await answer_config_transfer({ type: "export_config" }, { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => (await load_layers()).keymap, remove: startup.remove_snippet });
+  assert.equal(exported.ok, true);
+  const compiled_before = source.local[COMPILED_KEYMAP_STORAGE_KEY];
+
+  const fresh = install_fake_browser({ files: {} });
+  const restored = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  await restored.get_config();
+  await restored.import_config({ kind: "zip", bytes: write_zip((exported as { config_files: Files }).config_files) }, {});
+  assert.deepEqual(fresh.local[COMPILED_KEYMAP_STORAGE_KEY], compiled_before);
 });

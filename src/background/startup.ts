@@ -5,6 +5,9 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
+import type { CompileInput, CompileOutput } from "./compile.ts";
+import { load_layers, store_layers } from "./edit_layers.ts";
+import type { EditLayers, LayerKind } from "./edit_layers.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
@@ -69,11 +72,8 @@ async function start(): Promise<MergedConfig> {
   return (await publish(step, await load_edits())).config;
 }
 
-// Compiles the loaded config under the browser edits, stores the result and tells the tabs.
-// `warnings` is the whole list the help page shows: load, compile and shortcut slots.
-async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: MergedConfig; warnings: string[] }> {
-  const config = with_edits(step.loaded.config, edits);
-  const { compiled, theme, warnings } = compile_config({
+async function compile_input(config: MergedConfig, layers: EditLayers): Promise<CompileInput> {
+  return {
     config,
     desktop_palette: await pushed_palette(),
     default_keymap: DEFAULT_KEYMAP,
@@ -81,7 +81,16 @@ async function publish(step: LoadStep, edits: SettingEdits): Promise<{ config: M
     get_command: (command_id) => registry.get(command_id),
     registry,
     enum_sources: { search_engines: Object.keys(config.search_engines), containers: await container_names() },
-  });
+    keymap_edits: layers.keymap,
+  };
+}
+
+// Compiles the loaded config under the browser edits, stores the result and tells the tabs.
+// `warnings` is the whole list the help page shows: load, compile and shortcut slots.
+// The edit layers are read from storage unless given, so every publish keeps them on top of the files.
+async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers): Promise<{ config: MergedConfig; warnings: string[] }> {
+  const config = with_edits(step.loaded.config, edits);
+  const { compiled, theme, warnings } = compile_config(await compile_input(config, layers ?? (await load_layers())));
 
   // Read at every publish, so a restart with the switch off, a `:set` and a reload all store the empty keymap.
   const disabled = (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
@@ -128,32 +137,62 @@ let change_queue: Promise<unknown> = Promise.resolve();
 // Counts committed swaps, so the start read can tell that a newer reload or import landed while it waited on the host.
 let swap_count = 0;
 
+// Stores `next` and publishes it. On a failure it stores `before` again and publishes that, then throws.
+async function commit_change<T>(before: T, next: T, write: { store: (value: T) => Promise<void>; publish: (value: T) => Promise<{ config: MergedConfig }> }): Promise<void> {
+  try {
+    // Inside the try: a store can be several writes, and one can land while another fails.
+    await write.store(next);
+    // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
+    current_config = Promise.resolve((await write.publish(next)).config);
+  } catch (error) {
+    // Pages read the stored edits themselves, so a failed publish must not leave them ahead of the config.
+    // Best effort, so a failed rollback never hides the error that caused it.
+    await write.store(before).catch(() => undefined);
+    // Best effort: the failed publish may have written the keymap and status for `next` already.
+    await write.publish(before).catch(() => undefined);
+    throw error;
+  }
+}
+
 // `decide` gets the edits now in force and the config under them. It returns the edits to keep, or nothing to change nothing.
 export function change_edits(decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined): Promise<void> {
-  const change = change_queue.then(async () => {
+  return in_change_queue(async () => {
     const config = await get_config();
     const before = await load_edits();
     const next = decide(before, config);
     if (next === undefined) return;
-    try {
-      // Inside the try: the saved and temp layers are two writes, and one can land while the other fails.
-      await store_edits(next);
-      // Assigned after the publish succeeds, so a failed one leaves the readers the last good config.
-      const { config: published } = await publish(await (load_step as Promise<LoadStep>), next);
-      current_config = Promise.resolve(published);
-      const saved_changed = JSON.stringify(next.saved) !== JSON.stringify(before.saved);
-      if (saved_changed) void autoconfig.mirror(next.saved);
-    } catch (error) {
-      // Pages read the stored edits themselves, so a failed publish must not leave them ahead of the config.
-      // Best effort, so a failed rollback never hides the error that caused it.
-      await store_edits(before).catch(() => undefined);
-      // Best effort: the failed publish may have written the keymap and status for `next` already.
-      await publish(await (load_step as Promise<LoadStep>), before).catch(() => undefined);
-      throw error;
-    }
+    await commit_change(before, next, { store: store_edits, publish: async (edits) => publish(await (load_step as Promise<LoadStep>), edits) });
+    if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) void autoconfig.mirror(next.saved);
   });
-  change_queue = change.catch(() => undefined);
-  return change;
+}
+
+// `change_edits` for one edit layer, in the same queue, so a key edit and a `:set` never publish over each other.
+export function change_layers<K extends LayerKind>(kind: K, decide: (current: EditLayers[K], config: MergedConfig) => EditLayers[K] | undefined): Promise<void> {
+  return in_change_queue(async () => {
+    const config = await get_config();
+    const before = await load_layers();
+    const changed = decide(before[kind], config);
+    if (changed === undefined) return;
+    const next: EditLayers = { ...before, [kind]: changed };
+    const step = await (load_step as Promise<LoadStep>);
+    // A publish keeps the slot plan of the load, so a change of the browser chords drops it, both ways: the rollback must put the old chords back too.
+    const moves_chords = JSON.stringify(before.keymap.browser ?? {}) !== JSON.stringify(next.keymap.browser ?? {});
+    const publish_layers = async (layers: EditLayers) => {
+      if (moves_chords) delete step.slots;
+      return publish(step, await load_edits(), layers);
+    };
+    await commit_change(before, next, { store: store_layers, publish: publish_layers });
+  });
+}
+
+// What the key editor reads, in the change queue so a change still writing or rolling back is not seen half done: the config in force, the stored layers, and a compile of that config under any layers.
+export function read_keymap_state(): Promise<{ config: MergedConfig; layers: EditLayers; compile: (layers: EditLayers) => CompileOutput }> {
+  return in_change_queue(async () => {
+    const config = await get_config();
+    const layers = await load_layers();
+    const input = await compile_input(config, layers);
+    return { config, layers, compile: (other) => compile_config({ ...input, keymap_edits: other.keymap }) };
+  });
 }
 
 // Publishes again under the current edits, for a change that is not an edit: the toolbar switch. It runs in the change queue like the edits.
