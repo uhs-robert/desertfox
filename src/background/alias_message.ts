@@ -14,7 +14,6 @@ export type AliasMessageDeps = {
   change_layers: (kind: "aliases", decide: (current: AliasEdits) => AliasEdits | undefined) => Promise<void>;
 };
 
-
 export function rows_of(aliases: AliasEdits, dropped: DroppedPiece[]): AliasRow[] {
   return Object.entries(aliases).map(([name, target]) => {
     const left_out = dropped.find((piece) => piece.kind === "aliases" && piece.name === name)?.problems[0];

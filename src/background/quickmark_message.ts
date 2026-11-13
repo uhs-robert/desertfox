@@ -11,7 +11,6 @@ export type QuickmarkMessageDeps = {
   configured: () => Promise<QuickmarkTable>;
 };
 
-
 export function create_quickmark_messages(deps: QuickmarkMessageDeps) {
   async function list(): Promise<ListQuickmarksAnswer> {
     try {

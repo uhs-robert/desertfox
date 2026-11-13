@@ -19,11 +19,11 @@ export const KEPT_CURRENT: Record<ApplyAction, string> = {
   layer: "Edit not saved, the current config stays.",
 };
 
-// Every reason a reload or an import keeps the current config. The message is the whole toast: the cause and what to do.
-// `problems` holds every build problem when the build refused, for a page that lists them all. The message shows the first few.
 // The answer a settings page message gives for a thrown error: the text, and every build problem when the build refused.
 export const failure = (error: unknown): { ok: false; message: string; problems?: string[] } => ({ ok: false, message: error instanceof Error ? error.message : String(error), ...(error instanceof Error && "problems" in error && Array.isArray(error.problems) && { problems: error.problems as string[] }) });
 
+// Every reason a reload or an import keeps the current config. The message is the whole toast: the cause and what to do.
+// `problems` holds every build problem when the build refused, for a page that lists them all. The message shows the first few.
 export class ConfigRefusal extends Error {
   override name = "ConfigRefusal";
   problems: string[];
