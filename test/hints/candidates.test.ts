@@ -74,11 +74,10 @@ test("the clickable selector adds roving-tabindex items", () => {
 });
 
 // A fake page element for the click sign: a tag, a cursor, a parent and attributes.
-type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean; off_screen?: boolean };
+type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean };
 const dom_styles = {
   cursor_of_: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
   parent_of: (e: Element) => ((e as unknown as Dom).parent ?? null) as unknown as Element | null,
-  is_off_screen_: (e: Element) => (e as unknown as Dom).off_screen === true,
 };
 const el = (d: Dom) =>
   Object.assign(d, {
@@ -177,13 +176,69 @@ test("a visible wrapper keeps its hint when the clickable child inside it is hid
   assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
 });
 
-test("an off-screen element is not weak and costs no style read", () => {
+// A fake page with real rects: each fake has a box and the root a window, so the walk can judge what is in view.
+type Placed = { name: string; local: string; top?: number; left?: number; side?: number; href?: boolean; shadow?: Placed[]; frame?: Placed[] };
+function placed_root(elements: Placed[], view = { clientWidth: 100, clientHeight: 50 }): ParentNode {
+  const wrap = (fake: Placed) => {
+    const side = fake.side ?? 10;
+    const left = fake.left ?? 0;
+    const top = fake.top ?? 0;
+    return {
+      name: fake.name,
+      localName: fake.local,
+      openOrClosedShadowRoot: fake.shadow ? placed_root(fake.shadow, view) : null,
+      shadowRoot: null,
+      get contentDocument() {
+        return fake.frame ? placed_root(fake.frame, view) : null;
+      },
+      matches: (selector: string) => selector === "links" && fake.local === "a" && fake.href === true,
+      getBoundingClientRect: () => ({ left, top, width: side, height: side, right: left + side, bottom: top + side }),
+    };
+  };
+  return { querySelectorAll: () => elements.map(wrap), compatMode: "CSS1Compat", documentElement: view, body: null, defaultView: { innerWidth: 100, innerHeight: 50 } } as unknown as ParentNode;
+}
+
+test("the walk with only_in_view skips an off-screen element before matches and the weak test", () => {
+  const tested: string[] = [];
+  const page = placed_root([{ name: "below", local: "a", href: true, top: 900 }, { name: "shown", local: "a", href: true }, { name: "empty far away", local: "a", href: true, top: 900, side: 0 }]);
+  const found = collect(page, { selector: "links" }, (e) => (tested.push((e as unknown as { name: string }).name), false), true);
+  assert.deepEqual(names(found), ["shown", "empty far away"]);
+  assert.deepEqual(tested, []);
+  assert.deepEqual(names(collect(page, { selector: "links" })), ["below", "shown", "empty far away"]);
+});
+
+test("an off-screen shadow host and frame element are not entered, an on-screen one is", () => {
+  const inner = [{ name: "inside", local: "a", href: true }];
+  const page = placed_root([
+    { name: "far host", local: "div", top: 900, shadow: inner },
+    { name: "near host", local: "div", shadow: inner },
+    { name: "far frame", local: "iframe", top: 900, frame: inner },
+    { name: "near frame", local: "iframe", frame: inner },
+  ]);
+  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), ["inside", "inside"]);
+  assert.equal(collect(page, { selector: "links" }).length, 4);
+});
+
+test("an off-screen parent does not hide an on-screen child of it", () => {
+  const page = placed_root([{ name: "tall parent", local: "div", top: 900 }, { name: "positioned child", local: "a", href: true, top: 5 }]);
+  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), ["positioned child"]);
+});
+
+test("a frame is judged by its own window", () => {
+  const rect = { name: "wide", local: "a", href: true, left: 150 };
+  const page = placed_root([{ name: "frame", local: "iframe", frame: [rect] }], { clientWidth: 100, clientHeight: 50 });
+  assert.deepEqual(names(collect(page, { selector: "links" }, undefined, true)), []);
+});
+
+test("a page with only off-screen candidates collects nothing, so the run ends with no mode change", () => {
+  const page = placed_root([{ name: "a", local: "a", href: true, top: 500 }, { name: "b", local: "a", href: true, left: 500 }]);
+  assert.deepEqual(collect(page, { selector: "links" }, undefined, true), []);
+});
+
+test("the weak test makes no style read for what collect already dropped", () => {
   const reads: string[] = [];
   const counting = { ...dom_styles, cursor_of_: (e: Element) => (reads.push((e as unknown as Dom).name), dom_styles.cursor_of_(e)) };
-  const weak_test = make_weak_test(counting);
-  assert.equal(weak_test(el({ name: "below", local: "div", cursor: "pointer", off_screen: true })), false);
-  assert.deepEqual(reads, []);
-  assert.equal(weak_test(el({ name: "shown", local: "div", cursor: "pointer" })), true);
+  assert.equal(make_weak_test(counting)(el({ name: "shown", local: "div", cursor: "pointer" })), true);
   assert.deepEqual(reads, ["shown"]);
 });
 
