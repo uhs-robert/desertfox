@@ -45,14 +45,14 @@ test("[] sets an empty list, and no value still shows the list", () => {
   assert.equal(plan_set("next_patterns", "", "saved", NO_EDITS, config({ next_patterns: ["a.com"] })).next, undefined);
 });
 
-test("default_engine or palette naming nothing is kept with a warning", () => {
+test("default_engine or theme naming nothing is kept with a warning", () => {
   const engine = plan_set("default_engine", "nothing", "saved", NO_EDITS, config());
   assert.equal(engine.toast.kind, "warning");
   assert.deepEqual(engine.next, saved({ default_engine: "nothing" }));
   assert.equal(plan_set("default_engine", "duck", "saved", NO_EDITS, config()).toast.kind, "success");
-  assert.equal(plan_set("palette", "nothing", "saved", NO_EDITS, config()).toast.kind, "warning");
-  assert.equal(plan_set("palette", "oasis_moonlight", "saved", NO_EDITS, config()).toast.kind, "success");
-  assert.equal(plan_set("palette", "desktop", "saved", NO_EDITS, config()).toast.kind, "success");
+  assert.equal(plan_set("theme", "nothing", "saved", NO_EDITS, config()).toast.kind, "warning");
+  assert.equal(plan_set("theme", "oasis_moonlight", "saved", NO_EDITS, config()).toast.kind, "success");
+  assert.equal(plan_set("theme", "desktop", "saved", NO_EDITS, config()).toast.kind, "success");
 });
 
 test("unset removes one edit and says so for a name that is not edited", () => {

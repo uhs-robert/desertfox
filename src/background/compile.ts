@@ -14,8 +14,8 @@ import type { Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
-import { DEFAULT_LIGHT_INTENSITY, DEFAULT_PALETTE, DEFAULT_SETTINGS } from "../shared/config.ts";
-import { DESKTOP_PALETTE, LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
+import { DEFAULT_LIGHT_INTENSITY, DEFAULT_THEME, DEFAULT_SETTINGS } from "../shared/config.ts";
+import { DESKTOP_THEME, LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import type { Registry } from "../shared/registry/index.ts";
@@ -37,8 +37,8 @@ export type CompileInput = {
   registry?: Registry;
   // The key edits of the settings page. They win over keymap.toml and the defaults.
   keymap_edits?: KeymapEdits;
-  // The palette the desktop last pushed. `palette = "desktop"` shows it, or the default while none was pushed.
-  desktop_palette?: string | undefined;
+  // The theme the desktop last pushed. `theme = "desktop"` shows it, or the default while none was pushed.
+  desktop_theme?: string | undefined;
 };
 
 export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warnings: string[] };
@@ -116,19 +116,19 @@ export function compile_config(input: CompileInput): CompileOutput {
     } };
   }, { engine_labels: Object.fromEntries(Object.entries(input.config.search_engines).flatMap(([name, engine]) => (typeof engine?.label === "string" ? [[name, engine.label]] : []))) }, default_layer_of(input.default_keymap, user_keymap), row_sources);
 
-  const set_palette = input.config.settings.palette ?? DEFAULT_PALETTE;
-  const requested_palette = set_palette === DESKTOP_PALETTE ? (input.desktop_palette ?? DEFAULT_PALETTE) : set_palette;
+  const set_theme_name = input.config.settings.theme ?? DEFAULT_THEME;
+  const requested_name = set_theme_name === DESKTOP_THEME ? (input.desktop_theme ?? DEFAULT_THEME) : set_theme_name;
   let light_intensity = input.config.settings.light_intensity ?? DEFAULT_LIGHT_INTENSITY;
   if (!(LIGHT_INTENSITIES as readonly unknown[]).includes(light_intensity)) {
     warnings.push(`settings: light_intensity ${JSON.stringify(light_intensity)} is not 1 to 5, using ${DEFAULT_LIGHT_INTENSITY}`);
     light_intensity = DEFAULT_LIGHT_INTENSITY;
   }
-  const requested_theme = load_theme(String(requested_palette), light_intensity, input.config.local_theme);
+  const requested_theme = load_theme(String(requested_name), light_intensity, input.config.local_theme);
   if (!requested_theme) {
-    const local_problem = input.config.local_theme?.name === requested_palette ? local_theme_problem(input.config.local_theme.colors) : undefined;
-    warnings.push(`settings: palette "${String(requested_palette)}" ${local_problem ? `is a local theme with a problem: ${local_problem}` : "names no theme"}, using ${DEFAULT_PALETTE}`);
+    const local_problem = input.config.local_theme?.name === requested_name ? local_theme_problem(input.config.local_theme.colors) : undefined;
+    warnings.push(`settings: theme "${String(requested_name)}" ${local_problem ? `is a local theme with a problem: ${local_problem}` : "names no theme"}, using ${DEFAULT_THEME}`);
   }
-  const theme = requested_theme ?? load_theme(DEFAULT_PALETTE, light_intensity)!;
+  const theme = requested_theme ?? load_theme(DEFAULT_THEME, light_intensity)!;
 
   for (const [mode, root] of Object.entries(compiled.modes) as [string, TreeBranch][]) {
     check_branch(root, [], mode, input, warnings);

@@ -37,7 +37,7 @@ const EXPECTATIONS: Record<string, string> = {
   editor_ext: "a file extension of up to 10 letters or digits, without a dot, or empty for none",
   layout_fallback: "true or false",
   mode_indicator: '"always", "not_normal" or "off"',
-  palette: "a theme name",
+  theme: "a theme name",
   light_intensity: "a whole number from 1 to 5",
   search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
@@ -70,8 +70,8 @@ test("every setting keeps its expectation text, in the declared order", () => {
 
 test("every setting keeps its listed values", () => {
   const listed = Object.fromEntries(SETTING_NAMES.map((name) => [name, SETTING_SPECS[name].listed_values?.()]).filter(([, values]) => values !== undefined));
-  const { palette, ...rest } = listed as Record<string, readonly string[]>;
-  assert.ok(palette?.includes("oasis_moonlight"));
+  const { theme, ...rest } = listed as Record<string, readonly string[]>;
+  assert.ok(theme?.includes("oasis_moonlight"));
   assert.deepEqual(rest, {
     which_key_repeat: ["true", "false"],
     which_key_border: ["square", "round", "chamfer"],
@@ -137,7 +137,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   editor_ext: ["", "md", "py", "txt", "Mp4", "abcdefghij"],
   layout_fallback: [true, false],
   mode_indicator: ["always", "not_normal", "off"],
-  palette: ["oasis_moonlight", "no_such_theme"],
+  theme: ["oasis_moonlight", "no_such_theme"],
   light_intensity: [1, 5],
   search_prefixes: [{ here: "s", tab: "S" }, { tab: "T", here: "h" }],
   container_prefixes: [{ reopen: "c", tab: "C" }],
@@ -195,7 +195,7 @@ const REFUSES: Record<string, unknown[]> = {
   editor_ext: [1, true, ["md"], ".md", "../x", "abcdefghijk", "m d"],
   layout_fallback: ["true", 1],
   mode_indicator: ["normal", true],
-  palette: ["", 1],
+  theme: ["", 1],
   light_intensity: [0, 6, 2.5, "3"],
   search_prefixes: [{ here: "s" }, { here: "s", tab: "" }, { here: "s", tab: "S", extra: "x" }, { reopen: "c", tab: "C" }, ["s", "S"], null],
   container_prefixes: [{ here: "s", tab: "S" }],
@@ -297,7 +297,7 @@ test("the defaults stay the same", () => {
     strip_tracking: true,
     layout_fallback: true,
     mode_indicator: "always",
-    palette: "oasis_moonlight",
+    theme: "oasis_moonlight",
     light_intensity: 3,
     media_quality: "auto",
     editor_ext: "",
@@ -352,8 +352,9 @@ test("the editor schema matches its output before #85, apart from the listed cha
   properties.newtab_links.default = [];
   // A setting added after the fixture.
   properties.history_list_max = (settings_schema().properties as Record<string, unknown>).history_list_max;
-  // `desktop` joined the palette examples and its description.
-  properties.palette = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).palette));
+  // `palette` became `theme`, and `desktop` joined its examples and description.
+  delete properties.palette;
+  properties.theme = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).theme));
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.

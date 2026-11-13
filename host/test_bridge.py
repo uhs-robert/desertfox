@@ -673,18 +673,18 @@ class ThemeTest(BridgeTestCase):
     def theme_path(self):
         return os.path.join(self.state_dir, "theme.json")
 
-    def push(self, host, palette, answer=True):
+    def push(self, host, theme, answer=True):
         """Pushes over the socket, answers the host's request like the extension does and returns (reply, the request)."""
-        client = Client(self.socket_path, {"verb": "theme", "palette": palette})
+        client = Client(self.socket_path, {"verb": "theme", "theme": theme})
         request = host.read_request()
         host.send({"verb": "reply", "request_id": request["request_id"], "ok": answer})
         return client.result(), request
 
-    def test_a_push_goes_to_the_extension_with_the_palette_and_nothing_else(self):
+    def test_a_push_goes_to_the_extension_with_the_theme_and_nothing_else(self):
         host = self.start()
-        client = Client(self.socket_path, {"verb": "theme", "palette": "oasis_dune", "setting": "bridge", "value": True, "command": "config.reload"})
+        client = Client(self.socket_path, {"verb": "theme", "theme": "oasis_dune", "setting": "bridge", "value": True, "command": "config.reload"})
         request = host.read_request()
-        self.assertEqual(request, {"verb": "theme", "request_id": request["request_id"], "palette": "oasis_dune"})
+        self.assertEqual(request, {"verb": "theme", "request_id": request["request_id"], "theme": "oasis_dune"})
         host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "message": "m" * 2000, "url": "https://x"})
         reply = client.result()
         self.assertEqual(set(reply), {"ok", "message"})
@@ -692,7 +692,7 @@ class ThemeTest(BridgeTestCase):
 
     def test_a_refusal_of_the_extension_comes_back_and_the_name_is_dropped(self):
         host = self.start()
-        client = Client(self.socket_path, {"verb": "theme", "palette": "no_such"})
+        client = Client(self.socket_path, {"verb": "theme", "theme": "no_such"})
         host.send({"verb": "reply", "request_id": host.read_request()["request_id"], "ok": False, "message": "no built-in theme has that name"})
         self.assertEqual(client.result(), {"ok": False, "message": "no built-in theme has that name"})
         self.assertFalse(os.path.exists(self.theme_path()))
@@ -705,10 +705,10 @@ class ThemeTest(BridgeTestCase):
     def test_a_kept_name_the_extension_refuses_on_replay_is_dropped_and_not_replayed_again(self):
         os.makedirs(self.state_dir, mode=0o700)
         with open(self.theme_path(), "w", encoding="utf-8") as kept:
-            json.dump({"palette": "no_such"}, kept)
+            json.dump({"theme": "no_such"}, kept)
         first = self.start()
         replay = first.read_request()
-        self.assertEqual(replay["palette"], "no_such")
+        self.assertEqual(replay["theme"], "no_such")
         first.send({"verb": "reply", "request_id": replay["request_id"], "ok": False, "message": "no built-in theme has that name"})
         self.wait_path_gone(self.theme_path())
         first.close_stdin()
@@ -719,18 +719,18 @@ class ThemeTest(BridgeTestCase):
 
     def test_a_name_of_the_wrong_shape_never_reaches_the_extension_or_the_file(self):
         host = self.start()
-        for palette in (None, 5, "", "a" * 65, "../x", "has space", "line\nbreak", "--help", "-x", "_x", ["oasis_dune"], {"a": 1}):
-            reply = self.ask({"verb": "theme", "palette": palette})
-            self.assertFalse(reply["ok"], palette)
+        for theme in (None, 5, "", "a" * 65, "../x", "has space", "line\nbreak", "--help", "-x", "_x", ["oasis_dune"], {"a": 1}):
+            reply = self.ask({"verb": "theme", "theme": theme})
+            self.assertFalse(reply["ok"], theme)
         self.assertFalse(self.ask({"verb": "theme"})["ok"])
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)
         self.assertFalse(os.path.exists(self.theme_path()))
 
-    def test_the_theme_verb_is_the_only_way_to_a_palette_and_sets_no_other_setting(self):
+    def test_the_theme_verb_is_the_only_way_to_a_theme_and_sets_no_other_setting(self):
         host = self.start()
-        for request in ({"verb": "settings.set", "name": "palette", "value": "x"}, {"verb": "set", "setting": "bridge", "value": False}):
+        for request in ({"verb": "settings.set", "name": "theme", "value": "x"}, {"verb": "set", "setting": "bridge", "value": False}):
             self.assertEqual(self.ask(request), {"ok": False, "message": "unknown verb"})
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)
@@ -744,14 +744,14 @@ class ThemeTest(BridgeTestCase):
     def module_limit(self):
         return load_host("desertfox-bridge").RATE_LIMIT_REQUESTS
 
-    def test_the_last_palette_is_written_to_its_own_file(self):
+    def test_the_last_theme_is_written_to_its_own_file(self):
         host = self.start()
         self.push(host, "oasis_dune")
         self.push(host, "oasis_rose")
         with open(self.theme_path(), encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"palette": "oasis_rose"})
+            self.assertEqual(json.load(kept), {"theme": "oasis_rose"})
 
-    def test_every_connect_replays_the_kept_palette_once_right_after_ready(self):
+    def test_every_connect_replays_the_kept_theme_once_right_after_ready(self):
         first = self.start()
         self.push(first, "oasis_dune")
         first.close_stdin()
@@ -759,7 +759,7 @@ class ThemeTest(BridgeTestCase):
         for _ in range(2):
             host = self.start()
             replay = host.read_request()
-            self.assertEqual(replay, {"verb": "theme", "request_id": replay["request_id"], "palette": "oasis_dune"})
+            self.assertEqual(replay, {"verb": "theme", "request_id": replay["request_id"], "theme": "oasis_dune"})
             with self.assertRaises(AssertionError):
                 host.read_request(timeout=0.3)
             host.close_stdin()
@@ -778,14 +778,14 @@ class ThemeTest(BridgeTestCase):
         host = self.start()
         host.read_request()
         reply, request = self.push(host, "oasis_rose")
-        self.assertEqual(request["palette"], "oasis_rose")
+        self.assertEqual(request["theme"], "oasis_rose")
         self.assertTrue(reply["ok"])
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)
 
     def test_a_corrupt_theme_file_and_a_stale_temp_file_are_ignored_and_the_temp_file_is_removed(self):
         os.makedirs(self.state_dir, mode=0o700)
-        for content in (b"", b"{", b"[1]", b'{"palette": 5}', b'{"palette": "../x"}'):
+        for content in (b"", b"{", b"[1]", b'{"theme": 5}', b'{"theme": "../x"}'):
             with open(self.theme_path(), "wb") as kept:
                 kept.write(content)
             stale = os.path.join(self.state_dir, ".state.dead.tmp")
@@ -834,7 +834,7 @@ class ThemeKeeperTest(unittest.TestCase):
         for _ in range(200):
             out = io.BytesIO()
             link = self.module.ExtensionLink(out)
-            # No stored palette from the last round, or the replay would send a second name.
+            # No stored theme from the last round, or the replay would send a second name.
             if os.path.exists(self.path):
                 os.unlink(self.path)
             keeper = self.module.ThemeKeeper(self.path)
@@ -847,7 +847,7 @@ class ThemeKeeperTest(unittest.TestCase):
             time.sleep(0.06)
             sent = self.frames(out.getvalue())
             self.assertTrue(sent[0].get("ready"), sent)
-            self.assertEqual([frame.get("palette") for frame in sent[1:]], ["oasis_rose"], sent)
+            self.assertEqual([frame.get("theme") for frame in sent[1:]], ["oasis_rose"], sent)
 
     def test_a_failed_write_is_a_failed_reply_and_keeps_and_sends_nothing(self):
         import io
@@ -863,8 +863,8 @@ class ThemeKeeperTest(unittest.TestCase):
             reply = keeper.push(link, "oasis_rose")
         finally:
             os.replace = real_replace
-        self.assertEqual(reply, {"ok": False, "message": "could not keep the palette"})
-        self.assertIsNone(keeper.palette)
+        self.assertEqual(reply, {"ok": False, "message": "could not keep the theme"})
+        self.assertIsNone(keeper.theme)
         self.assertEqual(out.getvalue(), sent_before)
 
     def test_a_write_cut_short_leaves_the_old_file_and_no_temp_file(self):
@@ -883,12 +883,12 @@ class ThemeKeeperTest(unittest.TestCase):
         finally:
             os.replace = real_replace
         with open(self.path, encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"palette": "oasis_dune"})
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
         self.assertEqual(os.listdir(self.temp.name), ["theme.json"])
-        self.assertEqual(self.module.ThemeKeeper(self.path).palette, "oasis_dune")
+        self.assertEqual(self.module.ThemeKeeper(self.path).theme, "oasis_dune")
 
     def unknown_name_reply(self):
-        return {"ok": False, "request_id": 1, "message": self.module.UNKNOWN_PALETTE_MESSAGE}
+        return {"ok": False, "request_id": 1, "message": self.module.UNKNOWN_THEME_MESSAGE}
 
     def test_a_generic_failure_of_the_extension_keeps_the_name(self):
         import io
@@ -896,7 +896,7 @@ class ThemeKeeperTest(unittest.TestCase):
         keeper = self.module.ThemeKeeper(self.path)
         keeper.push(self.module.ExtensionLink(io.BytesIO()), "oasis_dune")
         keeper.drop_if_refused("oasis_dune", {"ok": False, "request_id": 1, "message": "the command failed"})
-        self.assertEqual(keeper.palette, "oasis_dune")
+        self.assertEqual(keeper.theme, "oasis_dune")
         self.assertTrue(os.path.exists(self.path))
 
     def test_a_push_right_after_the_replay_started_survives_the_refusal_of_the_replay(self):
@@ -926,16 +926,16 @@ class ThemeKeeperTest(unittest.TestCase):
                 pusher = threading.Thread(target=lambda: keeper.push(link, "oasis_rose"))
                 pusher.start()
                 deadline = time.monotonic() + liveness_s()
-                while keeper.palette != "oasis_rose" and time.monotonic() < deadline:
+                while keeper.theme != "oasis_rose" and time.monotonic() < deadline:
                     time.sleep(0.005)
-                link.answered({"request_id": 1, "ok": False, "message": outer.module.UNKNOWN_PALETTE_MESSAGE})
+                link.answered({"request_id": 1, "ok": False, "message": outer.module.UNKNOWN_THEME_MESSAGE})
                 time.sleep(0.1)
                 pusher.join(liveness_s())
 
         keeper.guard = GuardThatPushesOnRelease()
         link.say_ready()
         keeper.say_ready(link)
-        self.assertEqual(keeper.palette, "oasis_rose")
+        self.assertEqual(keeper.theme, "oasis_rose")
         self.assertTrue(os.path.exists(self.path))
 
     def test_an_unanswered_push_keeps_the_name(self):
@@ -946,8 +946,8 @@ class ThemeKeeperTest(unittest.TestCase):
         link.say_ready()
         keeper = self.module.ThemeKeeper(self.path)
         self.assertEqual(keeper.push(link, "oasis_dune"), {"ok": False, "message": "the extension did not answer in time"})
-        self.assertEqual(keeper.palette, "oasis_dune")
-        self.assertEqual(self.module.ThemeKeeper(self.path).palette, "oasis_dune")
+        self.assertEqual(keeper.theme, "oasis_dune")
+        self.assertEqual(self.module.ThemeKeeper(self.path).theme, "oasis_dune")
 
     def test_a_refusal_of_an_older_name_does_not_drop_a_newer_one(self):
         import io
@@ -955,9 +955,9 @@ class ThemeKeeperTest(unittest.TestCase):
         keeper = self.module.ThemeKeeper(self.path)
         keeper.push(self.module.ExtensionLink(io.BytesIO()), "oasis_rose")
         keeper.drop_if_refused("oasis_dune", self.unknown_name_reply())
-        self.assertEqual(keeper.palette, "oasis_rose")
+        self.assertEqual(keeper.theme, "oasis_rose")
         keeper.drop_if_refused("oasis_rose", self.unknown_name_reply())
-        self.assertIsNone(keeper.palette)
+        self.assertIsNone(keeper.theme)
         self.assertFalse(os.path.exists(self.path))
 
 

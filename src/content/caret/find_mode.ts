@@ -6,7 +6,7 @@ export type FindView<Colors> = { colors: Colors | undefined; current: number | u
 
 export type FindModeDeps<Colors> = {
   show: (view: FindView<Colors>) => void;
-  // Read for every new find, so a palette changed by `:set` shows on the next one.
+  // Read for every new find, so a theme changed by `:set` shows on the next one.
   read_colors_: () => Promise<Colors>;
   hide: () => void;
   // Calls `on_change` when the view scrolls or resizes. The returned function stops it.

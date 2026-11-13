@@ -166,7 +166,7 @@ test("the styling page lists every theme role as a variable", () => {
 
 test("the model carries the config source and apply steps for the settings page", () => {
   const { commands, compiled } = sample();
-  const status = { source: "files" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, saved: [], temp: [], configured: [] };
+  const status = { source: "files" as const, settings: { ...DEFAULT_SETTINGS, theme: "x" }, saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
   assert.equal(model.config_source, "Your settings come from the settings files in the folder");
   assert.match(model.rebuild_steps[1]!, /config\.reload/);
@@ -174,10 +174,10 @@ test("the model carries the config source and apply steps for the settings page"
 });
 
 test("effective settings keep the default prefix a config leaves out", () => {
-  const settings = effective_settings({ search_prefixes: { tab: "T" } as { here: string; tab: string }, palette: "x" });
+  const settings = effective_settings({ search_prefixes: { tab: "T" } as { here: string; tab: string }, theme: "x" });
   assert.deepEqual(settings.search_prefixes, { here: DEFAULT_SETTINGS.search_prefixes.here, tab: "T" });
   assert.deepEqual(settings.container_prefixes, DEFAULT_SETTINGS.container_prefixes);
-  assert.equal(settings.palette, "x");
+  assert.equal(settings.theme, "x");
   assert.equal(settings.hint_letters, DEFAULT_SETTINGS.hint_letters);
 });
 

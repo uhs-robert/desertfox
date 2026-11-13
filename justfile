@@ -5,7 +5,7 @@ default:
 docs-gen: install_deps
     npm run --silent docs:gen
 
-# Regenerate src/shared/themes.ts from themes/oasis/*.css and themes/*.toml, and the palette names in src/shared/setting_completion.ts.
+# Regenerate src/shared/themes.ts from themes/oasis/*.css and themes/*.toml, and the theme names in src/shared/setting_completion.ts.
 themes: install_deps
     npm run --silent themes:write
     npm run --silent completion:write

@@ -5,7 +5,7 @@ import type { RoleColors } from "./roles.ts";
 import { token_name } from "./tokens.ts";
 import { watch_stored } from "../storage_watch.ts";
 
-// The theme in force as `{ dark, light }` role colors, from the `palette` and `light_intensity` settings under any live `set`. Rewritten at every publish.
+// The theme in force as `{ dark, light }` role colors, from the `theme` and `light_intensity` settings under any live `set`. Rewritten at every publish.
 export const THEME_STORAGE_KEY = "desertfox_theme";
 
 // `style.css` then `style.d/*.css` as text, for the surfaces the content script draws. Rewritten at every publish.

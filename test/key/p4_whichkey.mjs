@@ -250,7 +250,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await run_case("screenshots of the panel and the toast under a non-default theme", async () => {
       await open_page("caret", "wk_theme", { new_tab: true });
       // The surfaces read the stored theme, so a live set changes them. A page's own variables do not reach inside a surface.
-      await run_line(":set palette oasis_cactus");
+      await run_line(":set theme oasis_cactus");
       await sleep(900);
       await send_keys("g");
       await sleep(900);

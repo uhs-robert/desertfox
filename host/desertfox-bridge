@@ -26,7 +26,7 @@ short `message`, and a tab reply to its known fields, so no page data can pass t
 keeps two caches of its own, the tab thumbnails and the tab icons (see `cache_dir`), and writes a file only for a tab
 the extension just listed. Stdout carries only protocol bytes. The host never runs anything it is sent.
 
-`theme {palette}` pushes a DesertFox palette name. The host checks only its shape, keeps the last one in $XDG_RUNTIME_DIR/desertfox/theme.json
+`theme {theme}` pushes a DesertFox theme name. The host checks only its shape, keeps the last one in $XDG_RUNTIME_DIR/desertfox/theme.json
 (which outlives the host, so the next host has it) and sends it to the extension. It sends the kept name again right after each `ready`, in the
 same step that opens the link, so a push never overtakes the replay and a name is never sent twice for one connection. The extension decides
 whether the name is a theme it knows, and the host drops the kept name when the extension refuses it. With no host running, the CLI writes theme.json itself
@@ -81,8 +81,8 @@ DRAIN_S = 1.0
 MAX_COMMAND_CHARS = 4096
 MAX_REPLY_MESSAGE_CHARS = 500
 # The text src/background/bridge.ts sends for a name that is no built-in theme.
-UNKNOWN_PALETTE_MESSAGE = "no built-in theme has that name"
-PALETTE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+UNKNOWN_THEME_MESSAGE = "no built-in theme has that name"
+THEME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 PREFACE_PATTERN = re.compile(r"[A-Za-z0-9]{1,32}")
 # Rendering one tab, a background one included, takes longer than answering from the tab list.
 CAPTURE_TIMEOUT_S = 5
@@ -173,59 +173,59 @@ def checked_mode(message):
 
 
 class ThemeKeeper:
-    """The last palette a client pushed. It lives in a file of its own, which is not removed at start or exit, so the host
+    """The last theme a client pushed. It lives in a file of its own, which is not removed at start or exit, so the host
     the browser starts next still has it. One lock covers the keep, the send and the replay, so they happen in one order."""
 
     def __init__(self, path):
         self.path = path
         self.guard = threading.Lock()
-        self.palette = self.load()
+        self.theme = self.load()
 
     def load(self):
-        """The kept name, or None for a missing file or one that does not hold a well-formed palette."""
+        """The kept name, or None for a missing file or one that does not hold a well-formed theme."""
         try:
             with open(self.path, encoding="utf-8") as kept:
-                palette = json.load(kept).get("palette")
+                theme = json.load(kept).get("theme")
         except (OSError, ValueError, AttributeError, RecursionError):
             return None
-        return palette if isinstance(palette, str) and PALETTE_PATTERN.fullmatch(palette) else None
+        return theme if isinstance(theme, str) and THEME_PATTERN.fullmatch(theme) else None
 
-    def push(self, link, palette):
-        """The reply for a client that pushed `palette`. The name is kept first, so a failed send or an extension that is not up yet loses nothing."""
+    def push(self, link, theme):
+        """The reply for a client that pushed `theme`. The name is kept first, so a failed send or an extension that is not up yet loses nothing."""
         with self.guard:
             try:
-                write_atomically(self.path, {"palette": palette})
+                write_atomically(self.path, {"theme": theme})
             except OSError as error:
                 log("could not write the theme file: %s" % error)
-                return {"ok": False, "message": "could not keep the palette"}
-            self.palette = palette
+                return {"ok": False, "message": "could not keep the theme"}
+            self.theme = theme
             if not link.open:
                 return {"ok": True, "message": "kept for when the extension connects"}
-            waiting = link.start("theme", {"palette": palette})
+            waiting = link.start("theme", {"theme": theme})
         reply = link.wait(waiting, REQUEST_TIMEOUT_S)
-        self.drop_if_refused(palette, reply)
+        self.drop_if_refused(theme, reply)
         return run_result(reply)
 
-    def drop_if_refused(self, palette, reply):
-        """Forgets `palette` when the extension itself refused it. The host cannot tell a built-in name from a typo, so the refusal is the check.
+    def drop_if_refused(self, theme, reply):
+        """Forgets `theme` when the extension itself refused it. The host cannot tell a built-in name from a typo, so the refusal is the check.
         Only the extension's unknown-name refusal counts: a timeout, a closed link or a generic failure says nothing about the name."""
-        if reply.get("ok") is not False or "request_id" not in reply or reply.get("message") != UNKNOWN_PALETTE_MESSAGE:
+        if reply.get("ok") is not False or "request_id" not in reply or reply.get("message") != UNKNOWN_THEME_MESSAGE:
             return
         with self.guard:
-            if self.palette != palette:
+            if self.theme != theme:
                 return
-            self.palette = None
+            self.theme = None
             remove_quietly(self.path)
 
     def say_ready(self, link):
-        """Opens the link and sends the kept palette in one step under the lock, so a push either comes before and is the one replayed or comes after and is sent once."""
+        """Opens the link and sends the kept theme in one step under the lock, so a push either comes before and is the one replayed or comes after and is sent once."""
         with self.guard:
             link.say_ready()
-            if self.palette is None:
+            if self.theme is None:
                 return
-            palette = self.palette
-            waiting = link.start("theme", {"palette": palette})
-        threading.Thread(target=lambda: self.drop_if_refused(palette, link.wait(waiting, REQUEST_TIMEOUT_S)), daemon=True).start()
+            theme = self.theme
+            waiting = link.start("theme", {"theme": theme})
+        threading.Thread(target=lambda: self.drop_if_refused(theme, link.wait(waiting, REQUEST_TIMEOUT_S)), daemon=True).start()
 
 
 class BridgeState:
@@ -923,11 +923,11 @@ def answer(request, state, link, limiter):
         fields = {"command": command, "tab_id": tab_id} if "tab_id" in request else {"command": command}
         return run_result(link.ask("run", fields, REQUEST_TIMEOUT_S))
     if verb == "theme":
-        palette = request.get("palette")
-        if not (isinstance(palette, str) and PALETTE_PATTERN.fullmatch(palette)):
-            return {"ok": False, "message": "theme needs a palette name of letters, digits, _ and -, at most 64 characters"}
+        theme = request.get("theme")
+        if not (isinstance(theme, str) and THEME_PATTERN.fullmatch(theme)):
+            return {"ok": False, "message": "theme needs a theme name of letters, digits, _ and -, at most 64 characters"}
         # Not rate limited: a name is checked for shape and one write, and the other verbs do not share the limit with a desktop that pushes on every reload.
-        return state.theme.push(link, palette)
+        return state.theme.push(link, theme)
     if verb == "list":
         if not limiter.admit():
             return RATE_LIMITED

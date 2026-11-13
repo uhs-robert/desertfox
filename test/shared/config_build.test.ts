@@ -53,12 +53,12 @@ test("a directory entry inside a known folder is unknown", () => {
   assert.match(problems_of({ "snippets/sub/": "" })[0]!, /^snippets\/sub: unknown file, only \.js files belong in snippets$/);
 });
 
-test("palette = \"desktop\" is accepted without a theme file", () => {
-  assert.equal(build_config({ "settings.toml": 'palette = "desktop"' }, commands, []).settings.palette, "desktop");
+test("theme = \"desktop\" is accepted without a theme file", () => {
+  assert.equal(build_config({ "settings.toml": 'theme = "desktop"' }, commands, []).settings.theme, "desktop");
 });
 
-test("a palette that names no theme is a problem", () => {
-  assert.match(problems_of({ "settings.toml": 'palette = "nope"' })[0]!, /^settings\.toml: palette: no theme named "nope"/);
+test("a theme that names no theme is a problem", () => {
+  assert.match(problems_of({ "settings.toml": 'theme = "nope"' })[0]!, /^settings\.toml: theme: no theme named "nope"/);
 });
 
 test("commands_of_registry lists the registry's commands", () => {

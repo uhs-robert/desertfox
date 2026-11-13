@@ -65,7 +65,7 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, read_engine_state, read_keymap_state, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, read_engine_state, read_keymap_state, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -263,7 +263,7 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
-const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_palette, host_update.bridge_ready);
+const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_theme, host_update.bridge_ready);
 host_update.on_updated(() => bridge.reconnect());
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();

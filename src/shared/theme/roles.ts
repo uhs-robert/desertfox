@@ -40,11 +40,11 @@ export type Variant = (typeof VARIANTS)[number];
 export type RoleColors = Record<Role, string>;
 export type Theme = Record<Variant, RoleColors>;
 
-// The theme a user's config directory holds under the palette's name, filled by tools/build-config.
+// The theme a user's config directory holds under the theme's name, filled by tools/build-config.
 export type LocalTheme = { name: string; colors: Theme };
 
-// The `palette` value that follows the theme the desktop pushed over the bridge.
-export const DESKTOP_PALETTE = "desktop";
+// The `theme` value that follows the theme the desktop pushed over the bridge.
+export const DESKTOP_THEME = "desktop";
 
 // A built-in Oasis theme has one dark set and five light sets, one per light intensity. The `light_intensity` setting picks one.
 export const LIGHT_INTENSITIES = [1, 2, 3, 4, 5] as const;

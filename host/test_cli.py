@@ -228,11 +228,11 @@ class CliTest(unittest.TestCase):
             self.assertIn("usage:", done.stderr)
         self.assertEqual(bridge.requests, [])
 
-    def test_theme_sends_the_palette_and_exits_zero_or_one_on_a_refusal(self):
+    def test_theme_sends_the_theme_and_exits_zero_or_one_on_a_refusal(self):
         bridge = self.serve({"ok": True}, {"ok": False, "message": "no built-in theme has that name"})
         done = self.cli("theme", "oasis_dune")
         self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "", ""))
-        self.assertEqual(bridge.requests[0], {"verb": "theme", "palette": "oasis_dune"})
+        self.assertEqual(bridge.requests[0], {"verb": "theme", "theme": "oasis_dune"})
         refused = self.cli("theme", "nothing")
         self.assertEqual(refused.returncode, 1)
         self.assertEqual(refused.stderr, "desertfox: no built-in theme has that name\n")
@@ -260,8 +260,8 @@ class CliTest(unittest.TestCase):
         self.assertEqual(bridge.requests, [])
         self.assertFalse(os.path.exists(self.theme_path()))
 
-    def test_the_palette_shape_is_the_same_in_the_cli_and_the_host(self):
-        self.assertEqual(load_script("desertfox").PALETTE_PATTERN.pattern, load_script("desertfox-bridge").PALETTE_PATTERN.pattern)
+    def test_the_theme_shape_is_the_same_in_the_cli_and_the_host(self):
+        self.assertEqual(load_script("desertfox").THEME_PATTERN.pattern, load_script("desertfox-bridge").THEME_PATTERN.pattern)
 
     def test_theme_without_a_bridge_keeps_the_name_and_exits_zero(self):
         runtime = os.path.join(self.runtime, "fresh")
@@ -270,12 +270,12 @@ class CliTest(unittest.TestCase):
         self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "", ""))
         folder = os.path.join(runtime, "desertfox")
         with open(os.path.join(folder, "theme.json"), encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"palette": "oasis_dune"})
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
         self.assertEqual(os.stat(folder).st_mode & 0o777, 0o700)
         self.assertEqual(sorted(os.listdir(folder)), ["bridge.lock", "theme.json"])
         self.assertEqual(self.cli("theme", "oasis_rose", runtime=runtime).returncode, 0)
         with open(os.path.join(folder, "theme.json"), encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"palette": "oasis_rose"})
+            self.assertEqual(json.load(kept), {"theme": "oasis_rose"})
 
     def test_theme_with_no_runtime_dir_exits_three(self):
         self.assertEqual(self.cli("theme", "oasis_dune", runtime="").returncode, 3)
@@ -285,22 +285,22 @@ class CliTest(unittest.TestCase):
         host = test_bridge.Host(self.runtime)
         self.addCleanup(host.kill)
         replay = host.read_request()
-        self.assertEqual((replay["verb"], replay["palette"]), ("theme", "oasis_dune"))
+        self.assertEqual((replay["verb"], replay["theme"]), ("theme", "oasis_dune"))
 
     def test_a_write_cut_short_leaves_the_old_file_and_no_temp_file(self):
         module = load_script("desertfox")
         os.environ["XDG_RUNTIME_DIR"] = self.runtime
         self.addCleanup(os.environ.pop, "XDG_RUNTIME_DIR")
-        self.assertTrue(module.keep_palette_if_no_host("oasis_dune"))
+        self.assertTrue(module.keep_theme_if_no_host("oasis_dune"))
         real_replace = os.replace
         os.replace = lambda *_args: (_ for _ in ()).throw(OSError("stopped"))
         try:
             with self.assertRaises(OSError):
-                module.keep_palette_if_no_host("oasis_rose")
+                module.keep_theme_if_no_host("oasis_rose")
         finally:
             os.replace = real_replace
         with open(self.theme_path(), encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"palette": "oasis_dune"})
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
         self.assertEqual(sorted(os.listdir(os.path.dirname(self.theme_path()))), ["bridge.lock", "theme.json"])
 
     def hold_lock(self):
@@ -324,7 +324,7 @@ class CliTest(unittest.TestCase):
         fcntl.flock(lock, fcntl.LOCK_UN)
         self.assertEqual(process.wait(test_bridge.liveness_s()), 0)
         with open(self.theme_path(), encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"palette": "oasis_dune"})
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
         process.stdout.close()
         process.stderr.close()
 
@@ -335,7 +335,7 @@ class CliTest(unittest.TestCase):
         self.assertIsNone(process.poll())
         bridge = self.serve({"ok": True})
         self.assertEqual(process.wait(test_bridge.liveness_s()), 0)
-        self.assertEqual(bridge.requests, [{"verb": "theme", "palette": "oasis_dune"}])
+        self.assertEqual(bridge.requests, [{"verb": "theme", "theme": "oasis_dune"}])
         self.assertFalse(os.path.exists(self.theme_path()))
         process.stdout.close()
         process.stderr.close()
