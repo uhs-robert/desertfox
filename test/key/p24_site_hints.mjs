@@ -22,7 +22,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until(`the hint labels on ${page_id}`, async () => (await hint_label_count()) > 0);
     await sleep(150);
     const count = await hint_label_count();
-    await press_keys("Escape");
+    await press_keys("-k", "Escape");
     await poll_until(`the labels to go on ${page_id}`, async () => (await hint_label_count()) === 0);
     return count;
   };
