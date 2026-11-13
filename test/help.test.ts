@@ -7,7 +7,12 @@ import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
 import { token_name } from "../src/shared/theme/tokens.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
+import { BUNDLE_NAMES, EXTENSION_PAGE_SKIPPED } from "../src/shared/bundles.ts";
+import { with_bundle_tags } from "../tools/page_bundle_tags.ts";
+
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
+
+const built_page = (file: string) => with_bundle_tags(readFileSync(new URL(file, import.meta.url), "utf8"), file);
 
 function sample() {
   const registry = create_registry();
@@ -100,7 +105,7 @@ test("a key row shows the binding prompt", () => {
 });
 
 test("home.html loads the content script after help.js", () => {
-  const html = readFileSync(new URL("../src/help/home.html", import.meta.url), "utf8");
+  const html = built_page("../src/help/home.html");
   const help = html.indexOf('<script src="help.js"></script>');
   const content = html.indexOf('<script src="content.js"></script>');
   assert.ok(help >= 0 && content > help);
@@ -220,9 +225,22 @@ test("a conditional default reads as the value and its condition", () => {
   assert.equal(model.groups[0]!.commands[0]!.params[0]!.default, '"" when where is tab, background or window');
 });
 
+test("every bundle is a script tag after content.js on the help and new tab pages, or skipped with a reason", () => {
+  for (const file of ["../src/help/home.html", "../src/newtab/newtab.html"]) {
+    const html = built_page(file);
+    const content = html.indexOf('<script src="content.js"></script>');
+    assert.ok(content >= 0, file);
+    for (const name of BUNDLE_NAMES) {
+      const skip_reason = EXTENSION_PAGE_SKIPPED[name];
+      if (skip_reason !== undefined) assert.notEqual(skip_reason, "", `${name} is skipped without a reason`);
+      else assert.ok(html.indexOf(`<script src="${name}.js"></script>`) > content, `${file} lacks ${name}.js after content.js`);
+    }
+  }
+});
+
 test("the help home and new tab pages load page.js by tag, because executeScript is refused there", () => {
   for (const file of ["../src/help/home.html", "../src/newtab/newtab.html"]) {
-    const html = readFileSync(new URL(file, import.meta.url), "utf8");
+    const html = built_page(file);
     assert.ok(html.indexOf('<script src="page.js"></script>') > html.indexOf('<script src="content.js"></script>'), file);
   }
 });

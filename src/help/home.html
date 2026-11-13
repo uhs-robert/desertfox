@@ -199,11 +199,6 @@
 <body><script src="help.js"></script>
 <!-- moz-extension:// pages do not match <all_urls>, so keys on this page need the content script by tag. -->
 <script src="content.js"></script>
-<script src="ui.js"></script>
-<!-- Hints, which-key, the command line and caret mode (which also holds page search) cannot load on request here, so the Quick Start keys need them by tag. -->
-<script src="hints.js"></script>
-<script src="whichkey.js"></script>
-<script src="cmdline.js"></script>
-<script src="caret.js"></script>
-<script src="page.js"></script></body>
+<!-- The build writes a script tag for every bundle here (tools/page_bundle_tags.ts), because none of them can load on request on this page. -->
+<!-- bundle-tags --></body>
 </html>

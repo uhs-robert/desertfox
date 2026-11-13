@@ -9,3 +9,6 @@ export type BundleName = (typeof BUNDLE_NAMES)[number];
 export const BUNDLE_FOR_MODE: Partial<Record<Mode, BundleName>> = { hint: "hints", caret: "caret", visual: "caret", visual_line: "caret", cmdline: "cmdline", grab: "grab" };
 
 export const is_bundle_name = (value: unknown): value is BundleName => (BUNDLE_NAMES as readonly unknown[]).includes(value);
+
+// Extension pages (help, settings, new tab) cannot take an injected bundle, so the build writes a script tag for each bundle there. This lists the bundles it leaves out, each with its reason. media.js, quality.js and quality_probe.js are not in BUNDLE_NAMES: the background injects them into web pages, so they never reach this list.
+export const EXTENSION_PAGE_SKIPPED: Partial<Record<BundleName, string>> = {};
