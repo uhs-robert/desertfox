@@ -53,8 +53,8 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       if (tab_id === undefined) return undefined;
       const ticket = deps.new_ticket();
       const target_key = CMDLINE_TARGET_STORAGE_PREFIX + tab_id;
-      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id, [CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]: ticket, ...(target_frame !== undefined && { [target_key]: target_frame }) });
-      if (target_frame === undefined) await deps.tickets.remove(target_key);
+      // One write, so a slower request for an older line cannot clear a newer line's target after it.
+      await deps.tickets.set({ [CMDLINE_TICKET_STORAGE_PREFIX + ticket]: tab_id, [CMDLINE_LATEST_TICKET_STORAGE_PREFIX + tab_id]: ticket, [target_key]: target_frame ?? null });
       return ticket;
     },
     // The frame a command from this tab's line acts in, or undefined when there is none or it is gone. A gone frame is forgotten, so the command runs where the line is.
