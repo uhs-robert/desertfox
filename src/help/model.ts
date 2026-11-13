@@ -338,6 +338,7 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "desertfox-help-command", meaning: "A command card on the Commands page. Its data-accent number (0 to 4) picks the left bar color by group" },
   { name: "desertfox-help-command-head", meaning: "The top row of a command card with the title on the left and the keys on the right" },
   { name: "desertfox-help-keys", meaning: "The keys a command card lists, one line per mode and key sequence" },
+  { name: "desertfox-help-key-line", meaning: "One line of a command card key list: the mode pill, the key caps and a note" },
   { name: "desertfox-help-mode", meaning: "The small pill that names the mode of a key in a command card" },
   { name: "desertfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
   { name: "desertfox-keycaps", meaning: "The row of key caps that shows a key sequence, on the help and new tab pages" },
