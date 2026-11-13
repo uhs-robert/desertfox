@@ -59,7 +59,7 @@ After you install DesertFox, the Quick Start page opens. It teaches scrolling, h
 
 The first day needs five keys: `j` and `k` to scroll, `f` to click, `:` for the command line and `g?` for help. Press `g?`, `,h` or `<F1>` on a normal page to open the help page. A short pause after any key shows the keys that can follow.
 
-On a page where keys never reach DesertFox, such as an `about:` page or the PDF viewer, type `df`, a space and a command in the address bar, for example `df tab.next`.
+On a page where keys never reach DesertFox, such as an `about:` page or the PDF viewer, press `<A-j>` or `<A-k>` to switch to the next or previous tab.
 
 ## 🔍 How it compares
 
