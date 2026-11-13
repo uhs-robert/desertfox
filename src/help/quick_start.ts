@@ -118,8 +118,8 @@ export function quick_start_fallbacks(commands: CommandMeta[]): { id: string; te
 
 // The key text a settings page sentence names, from the same keymap as the Quick Start text.
 export function key_text(compiled: CompiledKeymap | undefined, commands: CommandMeta[], name: "reload" | "find_anything"): string {
-  const inline = sentence(compiled, commands, `{${name}}`)[0]!;
-  return "text" in inline ? inline.text : "";
+  const [inline] = sentence(compiled, commands, `{${name}}`);
+  return inline!.text === NO_KEY ? "(no key is set for this yet)" : inline!.text;
 }
 
 // Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name.
@@ -165,12 +165,12 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     say("Other hint keys pick other actions. For example, {hint_copy} copies the address of a link."),
     heading("The command line"),
     say("Press {cmdline} to open the command line. Type a command name, such as [open], and press Enter. Tab completes the name and its words. {escape} closes the line."),
-    say("The Commands page lists every command and what it takes."),
+    say("The Commands page lists every command and what it takes. Press {find_anything} to open Find anything, a box that searches your open tabs, bookmarks and history."),
     heading("Which-key"),
     say(
       prefix === undefined
-        ? "Which-key lists the keys that can come next after a key that starts a longer sequence. No key starts a longer sequence now. You can change the wait on the Settings page."
-        : `Many keys start with a prefix. Press [${prefix}] and wait. A panel lists the keys that can come next, with a name for each. You can change the wait on the Settings page.`,
+        ? "The which-key panel lists the keys that can come next after a key that starts a longer sequence. No key starts a longer sequence now. You can change the wait on the Settings page."
+        : `Many keys start with a prefix. Press [${prefix}] and wait. The which-key panel lists the keys that can come next, with a name for each. You can change the wait on the Settings page.`,
     ),
     heading("Modes"),
     say("DesertFox has modes. In normal mode, keys run commands. In insert mode, keys go to the page, so you can type in a text field. A small badge on the page shows the mode. {escape} returns to normal mode."),

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build_help_model, group_title, STYLE_VARIABLES } from "../src/help/model.ts";
+import { read_only_note } from "../src/help/settings_model.ts";
 import { command_help_url, parse_route } from "../src/help/route.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
@@ -253,4 +254,21 @@ test("every command group in the built command list has a plain title", () => {
   const { commands } = JSON.parse(readFileSync(new URL("../dist/commands.json", import.meta.url), "utf8")) as { commands: { id: string }[] };
   const raw = [...new Set(commands.map((command) => command.id.split(".")[0]!))].filter((group) => group_title(group) === group);
   assert.deepEqual(raw, []);
+});
+
+test("the Settings page keys follow a rebound config.reload and Find anything, and an unbound one reads plainly", () => {
+  const registry = create_registry();
+  registry.define("config.reload", { name: "reload", label: "Reload", intent: "Reload.", runs_in: "background", run: () => {} });
+  registry.define("open.anything", { name: "anything", label: "Find anything", intent: "Find.", runs_in: "background", run: () => {} });
+  const compile = (normal: Record<string, unknown>) =>
+    compile_keymap({ normal } as never, {}, (id) => {
+      const command = registry.get(id);
+      return command && { runs_in: command.runs_in, label: command.label, count: "ignore" };
+    }).compiled;
+  const commands = build_commands_file(registry).commands;
+  const rebound = build_help_model(commands, compile({ "<C-r>": { id: "config.reload" }, gx: { id: "open.anything" } }), []);
+  assert.deepEqual(rebound.keys, { reload: "<C-r>", find_anything: "gx" });
+  assert.match(read_only_note(rebound.keys.reload), /press <C-r>\./);
+  const unbound = build_help_model(commands, compile({}), []);
+  assert.notEqual(unbound.keys.reload, ",r");
 });

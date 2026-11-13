@@ -85,12 +85,12 @@ const GUIDE: Block[] = [
   { kind: "heading", level: 3, text: "Trees" },
 ];
 
-function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body"), warnings: string[] = []): FakeNode {
+function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body"), warnings: string[] = [], keys = { reload: ",r", find_anything: ",," }): FakeNode {
   (globalThis as { document?: unknown }).document = fake_document;
   fake_document.body = root;
   fake_document.activeElement = null;
   if (!keep_state) reset_group_state();
-  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings, config_source: "Config files", rebuild_steps: ["step one"], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," } } as never, route, guide);
+  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings, config_source: "Config files", rebuild_steps: ["step one"], engines: [], tip: { kind: "tip", inlines: [] }, keys } as never, route, guide);
   return root;
 }
 
@@ -481,4 +481,11 @@ test("a section link to the page's own hash opens the collapsed Advanced block b
   (globalThis as { location?: unknown }).location = { hash: link.attributes["href"] };
   link.listeners["click"]!();
   assert.equal(advanced.open, true);
+});
+
+test("the Search engines intro names the Find anything key from the model, not a fixed key", () => {
+  const root = render({ page: "settings" }, false, [], new FakeNode("body"), [], { reload: "<C-r>", find_anything: "gx" });
+  const intro = root.find_all((node) => node.tag === "code" && node.children[0] === "gx");
+  assert.equal(intro.length, 1);
+  assert.equal(root.find_all((node) => node.tag === "code" && node.children[0] === ",,").length, 0);
 });

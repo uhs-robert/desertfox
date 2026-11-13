@@ -191,11 +191,11 @@ test("unmounting stops the listener, and a load that ends after it adds none", a
     await last_send;
     await new Promise((resolve) => setImmediate(resolve));
   };
-  const stop_late = mount_settings(container, send, [], events);
+  const stop_late = mount_settings(container, send, [], events, ",r");
   stop_late();
   await settled();
   assert.equal(added.length, 0);
-  const stop = mount_settings(container, send, [], events);
+  const stop = mount_settings(container, send, [], events, ",r");
   await settled();
   assert.equal(added.length, 1);
   stop();

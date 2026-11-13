@@ -75,7 +75,7 @@ test("quick start: a hint on inputs only is not picked for clicking", () => {
 
 test("quick start: the default keymap gives the keys it always gave", () => {
   const codes = codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands));
-  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", "g", "<Escape>", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", ",s", "<C-o>", ",fs", "~/.config/desertfox/", "config.reload", ":native.install"]);
+  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", ",,", "g", "<Escape>", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", ",s", "<C-o>", ",fs", "~/.config/desertfox/", "config.reload", ":native.install"]);
 });
 
 test("quick start: a binding that spells out a default still matches", () => {
