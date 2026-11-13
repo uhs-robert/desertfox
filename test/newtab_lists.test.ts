@@ -5,6 +5,7 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
 import { parse_command_line } from "../src/shared/registry/command_line.ts";
 import { bookmark_rows, link_sections, read_sections, recent_tab_rows, type PageReaders, type TabWithUse } from "../src/newtab/lists.ts";
+import { draw_tile } from "../src/newtab/tile.ts";
 import { parse_setting_text, SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { effective_settings } from "../src/shared/config.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
@@ -84,16 +85,31 @@ test("the editor schema describes the new settings", () => {
 
 const DOT = "data:image/png;base64,AAAA";
 
-test("card icon order: the tab's own icon, then the cache for its site, then none for the letter tile", () => {
-  const tabs = [tab(1, "https://a.example/x", 30, { favIconUrl: "https://a.example/i.png" }), tab(2, "https://b.example/", 20), tab(3, "https://c.example/", 10)];
-  const rows = recent_tab_rows(tabs, 8, false, new Map([["a.example", DOT], ["b.example", DOT]]));
-  assert.deepEqual(rows.map((row) => [row.host, row.icon_url]), [["a.example", "https://a.example/i.png"], ["b.example", DOT], ["c.example", undefined]]);
-  assert.ok(!("icon_url" in rows[2]!), "no icon key at all for a letter tile");
+test("recent tabs take the cached icon for their site and ignore the tab's own favIconUrl", () => {
+  const tabs = [tab(1, "https://a.example/x", 30, { favIconUrl: "https://a.example/i.png" }), tab(2, "https://b.example/", 20, { favIconUrl: DOT }), tab(3, "https://c.example/", 10)];
+  const rows = recent_tab_rows(tabs, 8, false, new Map([["b.example", DOT]]));
+  assert.deepEqual(rows.map((row) => [row.host, row.icon_url]), [["a.example", undefined], ["b.example", DOT], ["c.example", undefined]]);
+  assert.ok(!("icon_url" in rows[0]!), "no icon key at all for a letter tile");
 });
 
-test("a favIconUrl that is not http(s) or a small data: URL is dropped", () => {
-  const tabs = [tab(1, "https://a.example/", 3, { favIconUrl: "chrome://branding/icon.png" }), tab(2, "https://b.example/", 2, { favIconUrl: `data:image/png;base64,${"A".repeat(3000)}` })];
-  assert.deepEqual(recent_tab_rows(tabs, 8, false).map((row) => row.icon_url), [undefined, undefined]);
+test("no http(s) address reaches an img src on the page, whatever a tab or the cache holds", () => {
+  const made: { tag: string; src?: string }[] = [];
+  const fake = (tag: string) => {
+    const node = { tag, className: "", textContent: "", append() {}, addEventListener() {}, replaceWith() {}, set src(value: string) { (node as { src_value?: string }).src_value = value; made.push({ tag, src: value }); } };
+    return node;
+  };
+  const real_document = (globalThis as { document?: unknown }).document;
+  (globalThis as { document?: unknown }).document = { createElement: fake };
+  try {
+    const tabs = [tab(1, "https://a.example/", 3, { favIconUrl: "https://a.example/i.png" }), tab(2, "https://b.example/", 2, { favIconUrl: "http://b.example/i.ico" })];
+    // A poisoned cache entry shows the guard in the tile as well as the filter that reads the cache.
+    const rows = [...recent_tab_rows(tabs, 8, false, new Map([["b.example", DOT]])), { label: "x", url: "https://x.example/", host: "x.example", icon_url: "https://x.example/i.png" }];
+    for (const row of rows) draw_tile(row);
+    assert.ok(made.every((entry) => !/^https?:/i.test(entry.src ?? "")), JSON.stringify(made));
+    assert.deepEqual(made.map((entry) => entry.src), [DOT]);
+  } finally {
+    (globalThis as { document?: unknown }).document = real_document;
+  }
 });
 
 test("bookmarks and links take the cached icon of their site and show the host without www", () => {
