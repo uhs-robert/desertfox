@@ -266,8 +266,8 @@ test("hint modifier variants whose action needs another filter are not bound", (
     for (const key of keys) node = node?.children?.[key] as TreeBranch | undefined;
     return node !== undefined;
   };
-  const hidden = [";Bb", ";Bt", ";Bi", ";Wb", ";Wt", ";Wi", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yt", ";Ya"];
-  const valid = [";Bl", ";BI", ";Bf", ";Bm", ";Wl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rb", ";hb", ";xi"];
+  const hidden = [";Bb", ";Bt", ";Bi", ";nb", ";nt", ";ni", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yt", ";Ya"];
+  const valid = [";Bl", ";BI", ";Bf", ";Bm", ";nl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rb", ";hb", ";xi"];
   for (const keys of hidden) assert.equal(is_bound(keys), false, `${keys} is bound`);
   for (const keys of valid) assert.equal(is_bound(keys), true, `${keys} is missing`);
 });

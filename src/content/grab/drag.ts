@@ -31,6 +31,11 @@ const MIN_STEP_PX = 3;
 const MAX_STEP_PX = 192;
 const DRIVE_STEPS = 8;
 const STEP_PAUSE_MS = 30;
+// A fling is a short drag at the speed of a finger, about 2 px per ms. A library reads the speed from the event times: Splide picks its target from the release velocity and moves two slides at 3 px per ms. The pause grows with the distance to hold the speed on a wide box. The distance is this share of the box, which clears the slide threshold of a carousel.
+export const FLING_STEPS = 6;
+// The wait after a fling's release. A library still animates the slide change then, and Splide and Swiper ignore a press that lands in it, so the next fling of a queue would move nothing. 350 ms fits the default speed of those libraries, and a slider with a slower transition can still drop a fast second press.
+export const FLING_SETTLE_MS = 350;
+const FLING_SHARE = 0.6;
 
 // The ids Firefox gives its real mouse. A page that calls `setPointerCapture` with this id can still get a NotFoundError, which stays the page's own failure and never stops the drag.
 const MOUSE_POINTER_ID = 0;
@@ -62,6 +67,8 @@ export function press_point(element: Element): Point {
   // A vertical slider has its minimum at the bottom, and a scrollbar or separator at the top.
   return { x: middle.x, y: box.top + inside((role === "slider" ? 1 - fraction : fraction) * box.height, box.height) };
 }
+
+const pointer_held = (element: Element, start: Point): Held => ({ route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX });
 
 const under = (doc: Document, point: Point): Element => doc.elementFromPoint(point.x, point.y) ?? doc.body;
 
@@ -99,7 +106,7 @@ function send_pointer(held: Held, phase: "down" | "move" | "up", target: Element
 // Undefined when the page cancels the start of a drag.
 export function press(element: Element): Held | undefined {
   const start = press_point(element);
-  const held: Held = { route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX };
+  const held = pointer_held(element, start);
   if (route_of(element).route === "range") {
     held.route = "range";
     held.start_value = (element as HTMLInputElement).value;
@@ -206,19 +213,45 @@ export function abort(held: Held): void {
   release(held);
 }
 
-const pause = () => new Promise<void>((done) => setTimeout(done, STEP_PAUSE_MS));
+const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
-// Moves in steps with a pause between them, as a hand does, so a library that reads a few moves before it starts sees them. A drag that `abort` ended meanwhile stops the loop and sends nothing more. A page that throws still gets its release.
-export async function drive(held: Held, to: Point): Promise<void> {
+// Moves in steps with a pause between them, as a hand does, so a library that reads a few moves before it starts sees them. A drag that `abort` ended meanwhile stops the loop and sends nothing more. A page that throws still gets its release. `settle_ms` holds the caller after the release.
+export async function drive(held: Held, to: Point, steps = DRIVE_STEPS, pause_ms = STEP_PAUSE_MS, settle_ms = 0): Promise<void> {
   const from = held.at;
   try {
-    for (let step = 1; step <= DRIVE_STEPS; step++) {
-      await pause();
+    for (let step = 1; step <= steps; step++) {
+      await pause(pause_ms);
       if (held.ended) return;
-      move_to(held, { x: from.x + ((to.x - from.x) * step) / DRIVE_STEPS, y: from.y + ((to.y - from.y) * step) / DRIVE_STEPS });
+      move_to(held, { x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps });
     }
-    await pause();
+    await pause(pause_ms);
   } finally {
     release(held);
   }
+  await pause(settle_ms);
+}
+
+// A box with CSS scroll-snap scrolls natively, so a swipe on it is a `scrollBy` of one view and sends no pointer events. The nearest box from the element up that has room along the axis takes it.
+export function snap_scroll(element: Element, direction: Direction): boolean {
+  const { x, y } = UNIT[direction];
+  for (let box: Element | null = element; box; box = box.parentElement) {
+    if (getComputedStyle(box).scrollSnapType === "none" || (x ? box.scrollWidth <= box.clientWidth : box.scrollHeight <= box.clientHeight)) continue;
+    box.scrollBy({ left: x * box.clientWidth, top: y * box.clientHeight, behavior: "smooth" });
+    return true;
+  }
+  return false;
+}
+
+// Presses the element at its middle on the pointer route and returns the drag with where to fling it. The key names the way the view moves, so the pointer goes the other way: `right` drags left and shows the next slide. The route is forced, because a slide is often a link or a picture, and the html5 route would start a native drag there instead of a swipe.
+export function start_fling(element: Element, direction: Direction): { held: Held; to: Point; pause_ms: number } {
+  const middle = center_of(element);
+  const box = element.getBoundingClientRect();
+  const { x, y } = UNIT[direction];
+  const half = (FLING_SHARE / 2) * (x ? box.width : box.height);
+  const start = { x: middle.x + x * half, y: middle.y + y * half };
+  const held = pointer_held(element, start);
+  // A real press lands on the deepest element under the pointer, and a library listens on its inner track.
+  const hit = under(element.ownerDocument, start);
+  send_pointer(held, "down", element.contains(hit) ? hit : element, start);
+  return { held, to: { x: middle.x - x * half, y: middle.y - y * half }, pause_ms: Math.max(STEP_PAUSE_MS, half / FLING_STEPS) };
 }
