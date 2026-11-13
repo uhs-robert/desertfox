@@ -89,6 +89,7 @@ function fake_tab(frames: Record<number, Frame>, { pip = true, scan_timeout_ms =
   const asked: QualityRequest[] = [];
   const injected: number[] = [];
   const scanned: number[] = [];
+  const attempted: number[] = [];
   const applied: { frame_id: number; request: Extract<MediaRequest, { type: "media_apply" }> }[] = [];
   const toasts: string[] = [];
   const preferred: (number | undefined)[] = [];
@@ -99,6 +100,7 @@ function fake_tab(frames: Record<number, Frame>, { pip = true, scan_timeout_ms =
     list_frames: async () => Object.keys(frames).map(Number),
     inject: async (_tab_id, frame_id) => {
       const frame = frames[frame_id]!;
+      attempted.push(frame_id);
       if (frame.hangs) return new Promise(() => {});
       if (frame.refuses_scripts) throw new Error("Missing host permission for the tab or frames");
       injected.push(frame_id);
@@ -124,7 +126,7 @@ function fake_tab(frames: Record<number, Frame>, { pip = true, scan_timeout_ms =
     scan_timeout_ms,
     answer_timeout_ms,
   };
-  return { deps, injected, scanned, applied, toasts, asked, entered, preferred };
+  return { deps, injected, attempted, scanned, applied, toasts, asked, entered, preferred };
 }
 
 const acted = (count: number, fields: Partial<MediaState> = {}): MediaResult => ({ acted: count, state: { ...state, ...fields } });
@@ -198,7 +200,7 @@ test("a frame that already ran the bundle answers with no injection at all", asy
   assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [1]);
 });
 
-test("the bundle goes in only when no frame answers, then every frame is asked again", async () => {
+test("every frame with no listener gets the bundle and is asked again, and the next key injects nothing", async () => {
   const tab = fake_tab({ 0: { scan: scan(0, {}) }, 1: { scan: scan(1, { playing: 1 }), apply: () => acted(1) } });
   await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
   assert.deepEqual(tab.injected.sort(), [0, 1]);
@@ -208,12 +210,12 @@ test("the bundle goes in only when no frame answers, then every frame is asked a
   assert.deepEqual(tab.injected.sort(), [0, 1]);
 });
 
-test("a hung frame on the first key holds it for one scan timeout, not the 1.5 s timer", async () => {
+test("a hung frame on the first key holds it for one scan timeout, not the 1.5 s timer, and is not injected", async () => {
   const tab = fake_tab({ 0: { hangs: true }, 1: { scan: scan(1, { playing: 1 }), apply: () => acted(1) } }, { scan_timeout_ms: 40, answer_timeout_ms: 5000 });
   const started = Date.now();
   await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
-  // One timeout for the first ask, one for the injection, one for the second ask.
   assert.ok(Date.now() - started < 400);
+  assert.ok(!tab.attempted.includes(1));
   assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [1]);
 });
 
@@ -233,12 +235,35 @@ test("a frame that answers the apply after the timeout counts as one with no res
   assert.deepEqual(tab.toasts, ["Speed 1.25x"]);
 });
 
-test("a frame that navigated between the listing and the ask has no listener and counts as no media", async () => {
-  // Frame 2 sits in the list but its new document never ran the bundle, and its injection is refused.
-  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), resident: true, apply: () => acted(1) }, 2: { refuses_scripts: true } });
+test("a frame with no listener beside an answering one is injected, asked again and acted on", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}), resident: true }, 2: { scan: scan(2, { playing: 1 }), apply: () => acted(1) } });
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.injected, [2]);
+  assert.deepEqual(tab.scanned.sort(), [0, 2]);
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [2]);
+});
+
+test("a hung frame is never injected, and a refusing frame is tried without stopping the others", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { playing: 1 }), resident: true, apply: () => acted(1) }, 1: { hangs: true }, 2: { refuses_scripts: true } }, { scan_timeout_ms: 40, answer_timeout_ms: 5000 });
+  const started = Date.now();
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.ok(Date.now() - started < 400);
+  assert.deepEqual(tab.injected, []);
+  assert.deepEqual(tab.attempted, [2]);
+  assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [0]);
+});
+
+test("frames rank by frame id whatever order the list comes in", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, { video_area: 100 }), resident: true, apply: () => acted(1) }, 5: { scan: scan(5, { video_area: 100 }), resident: true, apply: () => acted(1) } });
+  tab.deps.list_frames = async () => [5, 0];
   await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
   assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [0]);
-  assert.deepEqual(tab.injected, []);
+});
+
+test("an about:blank or srcdoc frame is listed like any other and injected when it has no listener", async () => {
+  const tab = fake_tab({ 0: { scan: scan(0, {}), resident: true }, 4: { scan: scan(4, { playing: 1 }), apply: () => acted(1) } });
+  await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
+  assert.deepEqual(tab.injected, [4]);
 });
 
 test("a frame that unloads after its scan refuses as no media, not as an error", async () => {

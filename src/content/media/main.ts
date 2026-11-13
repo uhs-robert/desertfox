@@ -1,4 +1,4 @@
-// The `media` bundle. The background injects it into the frames of a tab when none answers, and asks each frame for its scan. It then asks the chosen frames to apply.
+// The `media` bundle. The background asks each frame of a tab for its scan and injects this bundle by frame id into the frames that have no listener. It then asks the chosen frames to apply.
 
 import type { MediaRequest } from "../../shared/media.ts";
 import { enter_fullscreen, leave_fullscreen } from "./fullscreen.ts";
