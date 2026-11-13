@@ -352,8 +352,10 @@ function start(): void {
   });
   // Not in capture: focus does not bubble, so only the window's own focus reaches this listener, and not that of the elements inside it.
   // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
-  // No report on blur: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
+  // A child frame also reports on blur, so its claim on the focus ends. A claim it sent from a field's blur can reach the background after the report of the frame that took the focus, which would leave the badge on FRAME.
+  // The top frame needs no blur report: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
   listen("focus", report_mode, false);
+  if (window !== window.top) listen("blur", report_mode, false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen("pageshow", report_mode, false);

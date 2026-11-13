@@ -182,15 +182,15 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     await press_hint_start(";f");
     await press_keys("s");
     await wait_event(mark, on_page(cross_id, "window_focus"), "the cross-origin frame to take the focus");
+    // The badge shows that the top page heard of the focused frame, which also starts its watch on that frame.
+    await wait_event(mark, badge_is(top_id, "FRAME"), "the badge to show FRAME");
     await wait_takes_keys(cross_id);
   };
 
-  await run_case(";f into a cross-origin frame shows the cue toast in the top page and the FRAME badge", async () => {
+  await run_case(";f into a cross-origin frame shows the FRAME badge and the cue toast in the top page", async () => {
     await open_page("frames", top_id, { new_tab: true });
-    const mark = events.length;
     await focus_cross();
     await poll_until("the cue toast in the top page", async () => (await read_top_toast()) === "Keys act in this frame. gF returns to the page.");
-    await wait_event(mark, badge_is(top_id, "FRAME"), "the badge to show FRAME");
   });
 
   await run_case(": in a focused cross-origin frame opens the line in the top page, and Escape gives the keys back to the frame", async () => {
