@@ -4,7 +4,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import { field_problems } from "../shared/engine_fields.ts";
 import { parse_toml_text } from "../shared/config_build/source_files.ts";
 import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEnginesAnswer } from "../shared/messages.ts";
-import { ConfigRefusal } from "./config_reload.ts";
+import { ConfigRefusal, failure } from "./config_reload.ts";
 import type { AliasEdits, EngineEdits } from "./edit_layers.ts";
 import { dropped_warning, fresh_drops } from "./engine_layer.ts";
 import type { DroppedPiece, LayeredBuild } from "./engine_layer.ts";
@@ -21,7 +21,6 @@ export type EngineMessageDeps = {
 
 const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const top_name = (name: string): string => name.split(".")[0]!;
-const failure = (error: unknown): { ok: false; message: string; problems?: string[] } => ({ ok: false, message: error instanceof Error ? error.message : String(error), ...(error instanceof Error && "problems" in error && Array.isArray(error.problems) && { problems: error.problems as string[] }) });
 
 function rows_of(engines: EngineEdits, dropped: DroppedPiece[]): EngineRow[] {
   const letters = Object.entries(engines.letters ?? {});

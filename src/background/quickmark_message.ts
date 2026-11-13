@@ -2,6 +2,7 @@
 
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import type { ChangeQuickmarks, ChangeQuickmarksAnswer, ListQuickmarksAnswer, QuickmarkRow } from "../shared/messages.ts";
+import { failure } from "./config_reload.ts";
 import type { QuickmarkStore } from "./quickmark_store.ts";
 
 export type QuickmarkMessageDeps = {
@@ -10,7 +11,6 @@ export type QuickmarkMessageDeps = {
   configured: () => Promise<QuickmarkTable>;
 };
 
-const failure = (error: unknown): { ok: false; message: string } => ({ ok: false, message: error instanceof Error ? error.message : String(error) });
 
 export function create_quickmark_messages(deps: QuickmarkMessageDeps) {
   async function list(): Promise<ListQuickmarksAnswer> {

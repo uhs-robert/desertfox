@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import "../src/background/command_modules.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
+import { check_args } from "../src/shared/registry/check_args.ts";
+import { parse_command_line } from "../src/shared/registry/command_line.ts";
 import { bookmark_rows, link_sections, read_sections, recent_tab_rows, type PageReaders, type TabWithUse } from "../src/newtab/lists.ts";
 import { parse_setting_text, SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { effective_settings } from "../src/shared/config.ts";
@@ -57,6 +61,18 @@ test("newtab_links validates the scheme, the group and the fields", () => {
   assert.equal(SETTING_SPECS.newtab_links.settable, true, "the settings page saves it");
   // Typed text is never a list of tables, so `:set newtab_links` refuses it as `:set site_rules` does.
   for (const name of ["newtab_links", "site_rules"] as const) assert.deepEqual(parse_setting_text(name, "https://a.example/"), { error: `${name}: expected ${SETTING_SPECS[name].expectation}` });
+});
+
+test("a typed :set newtab_links is refused by the command's argument check, as :set site_rules is", () => {
+  for (const name of ["newtab_links", "site_rules"]) {
+    for (const text of [`set ${name} https://a.example/`, `set ${name} [{"label":"A","url":"https://a.example/"}]`]) {
+      const parsed = parse_command_line(registry, text);
+      assert.equal(parsed.kind, "invocation", text);
+      const checked = check_args(registry.get("settings.set")!, parsed.kind === "invocation" ? parsed.invocation.args : undefined);
+      assert.equal(checked.ok, false, text);
+      assert.match(checked.ok ? "" : checked.error, new RegExp(name));
+    }
+  }
 });
 
 test("the editor schema describes the new settings", () => {
