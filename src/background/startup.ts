@@ -203,6 +203,9 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
   });
 }
 
+// What the Firefox shortcut slots follow: the browser chords, and the engines a `search` binding can name.
+const chord_state = (layers: EditLayers): string => JSON.stringify([layers.keymap.browser ?? {}, layers.engines ?? {}]);
+
 // `change_edits` for one edit layer, in the same queue, so a key edit and a `:set` never publish over each other.
 // `decide` gets the key editor's state of this turn, so its slot check sees every change that landed before it.
 export function change_layers<K extends LayerKind>(kind: K, decide: (current: LayerOf<K>, state: KeymapState) => LayerOf<K> | undefined): Promise<void> {
@@ -222,7 +225,7 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: La
     const slot_map_before = await read_slot_map();
     // A publish keeps the slot plan of the load, so a change of the browser chords drops it, both ways: the rollback must put the old chords back too.
     // An engine edit moves them too: it can drop a `search <engine>` binding the browser holds a slot for.
-    const moves_chords = [before.keymap.browser, before.engines].map((part) => JSON.stringify(part ?? {})).join() !== [next.keymap.browser, next.engines].map((part) => JSON.stringify(part ?? {})).join();
+    const moves_chords = chord_state(before) !== chord_state(next);
     const publish_layers = async (layers: EditLayers) => {
       if (moves_chords) delete step.slots;
       return publish(step, await load_edits(), layers);
