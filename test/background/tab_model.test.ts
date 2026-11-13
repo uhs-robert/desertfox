@@ -257,7 +257,7 @@ test("a split pair moved left or right keeps every index right", async () => {
   const indexes = () => {
     f.run_timers();
     const rows = new Map<number, number>();
-    for (const message of p.messages) for (const row of message.type === "snapshot" ? message.tabs : message.type === "patch" ? message.upserts : []) rows.set(row.id, row.index);
+    for (const message of Array.from(p.messages)) for (const row of message.type === "snapshot" ? message.tabs : message.type === "patch" ? message.upserts : []) rows.set(row.id, row.index);
     return [...rows].sort((a, b) => a[1] - b[1]).map(([id]) => id);
   };
   f.fire("onMoved", 4, { windowId: 1, fromIndex: 3, toIndex: 0 });
