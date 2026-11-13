@@ -17,6 +17,7 @@ import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
 import { follow_which_key } from "./whichkey/gate.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { badge_state } from "./badge_state.ts";
+import { DEFAULT_GRAB_STEP_PX } from "../shared/default_settings.ts";
 import { set_toast_durations, show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
 import { page_mode } from "./page_mode.ts";
@@ -247,6 +248,8 @@ let matcher_installed = false;
 // Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `,i` or `<S-Escape>` survives an unrelated edit.
 let was_all_off = false;
 
+let grab_step_px: number = DEFAULT_GRAB_STEP_PX;
+
 function install_matcher(reply: PageKeymap | undefined): void {
   page_reply = reply;
   site_mode.name_ = undefined;
@@ -258,6 +261,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   which_key_delay_ms = keymap?.which_key_delay_ms;
   key_flow.set_layout_fallback_(keymap?.layout_fallback !== false);
   set_toast_durations(keymap);
+  grab_step_px = keymap?.grab_step_px ?? DEFAULT_GRAB_STEP_PX;
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
   escape_to_page = !!reply?.site_values?.escape_to_page;
@@ -317,7 +321,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);

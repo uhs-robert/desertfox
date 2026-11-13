@@ -38,6 +38,22 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "grab_step_px",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "3, 6, 12, 24, 48, 96 or 192",
+    "values": [
+      "3",
+      "6",
+      "12",
+      "24",
+      "48",
+      "96",
+      "192"
+    ]
+  },
+  {
     "name": "which_key_repeat",
     "settable": true,
     "is_toggle": true,

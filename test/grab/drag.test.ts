@@ -69,7 +69,7 @@ test("a link takes the html5 route with no draggable attribute, unless the page 
 test("the press comes first, so an element a library makes draggable in its own pointerdown takes the html5 route", () => {
   const source = element();
   source.on.pointerdown = () => void (source.draggable_ = true);
-  const held = press(as_element(source));
+  const held = press(as_element(source), 24);
   assert.equal(held?.route, "html5");
   assert.deepEqual(source.log, ["pointerdown", "mousedown", "dragstart"]);
 });
@@ -77,7 +77,7 @@ test("the press comes first, so an element a library makes draggable in its own 
 test("a page that cancels dragstart refuses the grab", () => {
   const source = element({ draggable_: true });
   source.on.dragstart = () => false;
-  assert.equal(press(as_element(source)), undefined);
+  assert.equal(press(as_element(source), 24), undefined);
   // The press went out before the page cancelled, so the release must follow it.
   assert.deepEqual(source.log, ["pointerdown", "mousedown", "dragstart", "pointerup", "mouseup"]);
 });
@@ -85,7 +85,7 @@ test("a page that cancels dragstart refuses the grab", () => {
 test("a cancelled pointerdown sends no mouse events for the rest of the press", () => {
   const source = element();
   source.on.pointerdown = () => false;
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   move_to(held, { x: 5, y: 5 });
   release(held);
   assert.deepEqual(source.log, ["pointerdown", "pointermove", "pointerup"]);
@@ -93,7 +93,7 @@ test("a cancelled pointerdown sends no mouse events for the rest of the press", 
 
 test("release and abort end a drag once, and the pointer route always sends its up events", () => {
   const source = element();
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   move_to(held, { x: 50, y: 5 });
   abort(held);
   release(held);
@@ -103,7 +103,7 @@ test("release and abort end a drag once, and the pointer route always sends its 
 
 test("a stopped drive sends nothing after the abort", async () => {
   const source = element();
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   const driving = drive(held, { x: 90, y: 5 });
   abort(held);
   await driving;
@@ -116,7 +116,7 @@ test("the html5 drop fires only where dragover was cancelled, and dragend carrie
   Object.assign(source, { elementFromPoint: () => target });
   target.on.dragover = () => false;
   target.on.drop = () => false;
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   move_to(held, { x: 50, y: 5 });
   let effect = "";
   source.on.dragend = () => void (effect = held.data!.dropEffect);
@@ -130,7 +130,7 @@ test("the html5 abort sends dragleave and dragend with no drop", () => {
   const target = element();
   Object.assign(source, { elementFromPoint: () => target });
   target.on.dragover = () => false;
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   move_to(held, { x: 50, y: 5 });
   abort(held);
   assert.deepEqual(target.log, ["dragenter", "dragover", "dragleave"]);
@@ -145,17 +145,17 @@ test("a range input fires change only when the value changed, and never on a can
     return input;
   };
   const unchanged = make();
-  release(press(as_element(unchanged))!);
+  release(press(as_element(unchanged), 24)!);
   assert.deepEqual(unchanged.log, []);
 
   const stepped = make();
-  const held = press(as_element(stepped))!;
+  const held = press(as_element(stepped), 24)!;
   nudge(held, "right");
   release(held);
   assert.deepEqual(stepped.log, ["input", "change"]);
 
   const cancelled = make();
-  const other = press(as_element(cancelled))!;
+  const other = press(as_element(cancelled), 24)!;
   nudge(other, "right");
   abort(other);
   assert.equal(cancelled.value, "0");
@@ -170,7 +170,7 @@ test("a target that cancels dragover and sets dropEffect none refuses the drop",
     (event as unknown as { dataTransfer: FakeDataTransfer }).dataTransfer.dropEffect = "none";
     return false;
   };
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   move_to(held, { x: 50, y: 5 });
   release(held);
   assert.deepEqual(target.log, ["dragenter", "dragover", "dragleave"]);
@@ -182,7 +182,7 @@ test("a drop the page does not cancel ends with dropEffect none", () => {
   const target = element();
   Object.assign(source, { elementFromPoint: () => target });
   target.on.dragover = () => false;
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   move_to(held, { x: 50, y: 5 });
   assert.equal(held.data!.dropEffect, "move");
   release(held);
@@ -196,7 +196,7 @@ test("a range with step any moves by a hundredth of its span instead of throwing
       throw new Error("step any");
     },
   });
-  const held = press(as_element(input))!;
+  const held = press(as_element(input), 24)!;
   nudge(held, "right");
   assert.equal(input.value, "52");
   nudge(held, "left");
@@ -204,7 +204,7 @@ test("a range with step any moves by a hundredth of its span instead of throwing
 });
 
 test("a new drag starts with an uninitialized effectAllowed, as a real one does", () => {
-  assert.equal(press(as_element(element({ draggable_: true })))!.data!.effectAllowed, "uninitialized");
+  assert.equal(press(as_element(element({ draggable_: true })), 24)!.data!.effectAllowed, "uninitialized");
 });
 
 test("a picture that turns dragging off inside a draggable card leaves the card as the source", () => {
@@ -218,12 +218,12 @@ test("a picture that turns dragging off inside a draggable card leaves the card 
 test("a link whose press the page cancels keeps the pointer route, as in a browser", () => {
   const link = element({ localName: "a" });
   link.on.mousedown = () => false;
-  const held = press(as_element(link))!;
+  const held = press(as_element(link), 24)!;
   assert.equal(held.route, "pointer");
   assert.deepEqual(link.log, ["pointerdown", "mousedown"]);
   const picture = element({ localName: "img" });
   picture.on.pointerdown = () => false;
-  assert.equal(press(as_element(picture))!.route, "pointer");
+  assert.equal(press(as_element(picture), 24)!.route, "pointer");
 });
 
 test("a range with step any and max 0 steps by a hundredth of its negative span", () => {
@@ -233,13 +233,13 @@ test("a range with step any and max 0 steps by a hundredth of its negative span"
       throw new Error("step any");
     },
   });
-  nudge(press(as_element(input))!, "right");
+  nudge(press(as_element(input), 24)!, "right");
   assert.equal(input.value, "-49");
 });
 
 test("abort on the pointer route releases where the pointer is and sends no move back", () => {
   const source = element();
-  const held = press(as_element(source))!;
+  const held = press(as_element(source), 24)!;
   nudge(held, "right");
   source.log.length = 0;
   abort(held);
@@ -266,7 +266,7 @@ test("the press lands on the thumb: a role slider child, else aria-valuenow alon
 });
 
 test("the step keys halve and double the move within limits, and leave a range input alone", () => {
-  const held = press(as_element(element()))!;
+  const held = press(as_element(element()), 24)!;
   assert.equal(scale_step(held, 0.5), 12);
   const from = held.at.x;
   nudge(held, "right");
@@ -276,7 +276,15 @@ test("the step keys halve and double the move within limits, and leave a range i
   for (let count = 0; count < 10; count++) scale_step(held, 2);
   assert.equal(held.step, 192);
   const input = element({ localName: "input", type: "range", value: "0" });
-  assert.equal(scale_step(press(as_element(input))!, 2), undefined);
+  assert.equal(scale_step(press(as_element(input), 24)!, 2), undefined);
+});
+
+test("a new grab starts at the step it is given and moves by it", () => {
+  const held = press(as_element(element()), 3)!;
+  assert.equal(held.step, 3);
+  const from = held.at.x;
+  nudge(held, "right");
+  assert.equal(held.at.x, from + 3);
 });
 
 test("a fling on a link or picture forces the pointer route and sends no dragstart", async () => {

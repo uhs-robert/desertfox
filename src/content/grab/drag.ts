@@ -1,5 +1,7 @@
 // Synthetic drag input for the grab bundle, in three routes picked by the source element. A draggable element gets DragEvents with a new DataTransfer, because mouse events never start a native drag. A range input gets a value plus `input` and `change`, because mouse events do not move one. Any other element gets the pointer and mouse sequence of a press, moves and a release.
 // Every route ends in `release` or `abort`, so a page never keeps a button or a drag open.
+import { MAX_GRAB_STEP_PX, MIN_GRAB_STEP_PX } from "../../shared/grab_steps.ts";
+
 
 export type Point = { x: number; y: number };
 export type Route = "html5" | "range" | "pointer";
@@ -26,9 +28,6 @@ export type Held = {
   ended?: true;
 };
 
-const STEP_PX = 24;
-const MIN_STEP_PX = 3;
-const MAX_STEP_PX = 192;
 const DRIVE_STEPS = 8;
 const STEP_PAUSE_MS = 30;
 // A fling is a short drag at the speed of a finger, about 2 px per ms. A library reads the speed from the event times: Splide picks its target from the release velocity and moves two slides at 3 px per ms. The pause grows with the distance to hold the speed on a wide box. The distance is this share of the box, which clears the slide threshold of a carousel.
@@ -68,7 +67,7 @@ export function press_point(element: Element): Point {
   return { x: middle.x, y: box.top + inside((role === "slider" ? 1 - fraction : fraction) * box.height, box.height) };
 }
 
-const pointer_held = (element: Element, start: Point): Held => ({ route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX });
+const pointer_held = (element: Element, start: Point, step: number): Held => ({ route: "pointer", source: element as HTMLElement, start, at: start, step });
 
 const under = (doc: Document, point: Point): Element => doc.elementFromPoint(point.x, point.y) ?? doc.body;
 
@@ -104,9 +103,9 @@ function send_pointer(held: Held, phase: "down" | "move" | "up", target: Element
 
 // A press comes first on every route but the range, as a browser presses before it drags, and the route is read after it. A library such as SortableJS sets `draggable` in its own pointerdown handler, so the element is not draggable until then.
 // Undefined when the page cancels the start of a drag.
-export function press(element: Element): Held | undefined {
+export function press(element: Element, step: number): Held | undefined {
   const start = press_point(element);
-  const held = pointer_held(element, start);
+  const held = pointer_held(element, start, step);
   if (route_of(element).route === "range") {
     held.route = "range";
     held.start_value = (element as HTMLInputElement).value;
@@ -162,7 +161,7 @@ export function move_to(held: Held, point: Point): void {
 // Halves or doubles the step within its limits and returns it, or undefined for a range input, which keeps its own step.
 export function scale_step(held: Held, factor: number): number | undefined {
   if (held.route === "range") return undefined;
-  held.step = Math.min(MAX_STEP_PX, Math.max(MIN_STEP_PX, held.step * factor));
+  held.step = Math.min(MAX_GRAB_STEP_PX, Math.max(MIN_GRAB_STEP_PX, held.step * factor));
   return held.step;
 }
 
@@ -249,7 +248,8 @@ export function start_fling(element: Element, direction: Direction): { held: Hel
   const { x, y } = UNIT[direction];
   const half = (FLING_SHARE / 2) * (x ? box.width : box.height);
   const start = { x: middle.x + x * half, y: middle.y + y * half };
-  const held = pointer_held(element, start);
+  // A fling moves by its own distance and never reads the step, so it holds none.
+  const held = pointer_held(element, start, 0);
   // A real press lands on the deepest element under the pointer, and a library listens on its inner track.
   const hit = under(element.ownerDocument, start);
   send_pointer(held, "down", element.contains(hit) ? hit : element, start);

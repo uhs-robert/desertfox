@@ -436,6 +436,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,
     toast_ms: settings.toast_ms ?? DEFAULT_SETTINGS.toast_ms,
     toast_error_ms: settings.toast_error_ms ?? DEFAULT_SETTINGS.toast_error_ms,
+    grab_step_px: settings.grab_step_px ?? DEFAULT_SETTINGS.grab_step_px,
     ...(which_key_skip.length > 0 ? { which_key_skip } : {}),
     ...(settings.layout_fallback === false ? { layout_fallback: false as const } : {}),
   };
