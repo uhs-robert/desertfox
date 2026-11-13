@@ -50,8 +50,6 @@ export function create_host_update(deps: HostUpdateDeps) {
   type Phase = { kind: "idle" } | { kind: "updating" } | { kind: "failed"; reason: string };
   let phase: Phase = { kind: "idle" };
   let config_standing: HostStanding = "current";
-  // What the config host said about its version: nothing yet, no field (it predates the updater), or a version.
-  let config_release: "unseen" | "missing" | "reported" = "unseen";
   let running: Promise<void> | undefined;
   const listeners: (() => void)[] = [];
 
@@ -101,20 +99,14 @@ export function create_host_update(deps: HostUpdateDeps) {
     if (reply.updated) await deps.toast(`Native host updated to ${reply.version}`, "success");
   }
 
-  // A config host with no release_version predates the updater and has no `self_update` verb, so only a manual install can help it.
-  // A version-less bridge counts as such too until the config host has reported a version, because the two are installed together.
-  async function check(bridge_without_version: boolean): Promise<void> {
-    const predates_updater = config_release === "missing" || (config_release === "unseen" && bridge_without_version);
+  async function check(): Promise<void> {
     if (await deps.is_development()) return;
     const hashes = await deps.read_hashes();
     if (!hashes || hashes.version !== deps.extension_version) return;
     const state = await deps.load_state();
-    if (predates_updater || !(await deps.auto_update_consented())) {
+    if (!(await deps.auto_update_consented())) {
       if (state.noticed === hashes.version) return;
-      await deps.toast(
-        predates_updater ? "The native host is too old to update itself. Run :native.install to install the current one." : "The native host is older than this extension. Run :native.update to update it.",
-        "info",
-      );
+      await deps.toast("The native host is older than this extension. Run :native.update to update it.", "info");
       await deps.save_state({ ...state, noticed: hashes.version });
       return;
     }
@@ -129,12 +121,9 @@ export function create_host_update(deps: HostUpdateDeps) {
   // `watch.seen` is called for every reply, so it must return at once: the check runs on its own.
   function seen_from(release_version: unknown, source: "config" | "bridge"): void {
     const standing = host_standing(release_version, deps.extension_version);
-    if (source === "config") {
-      config_standing = standing;
-      config_release = typeof release_version === "string" ? "reported" : "missing";
-    }
+    if (source === "config") config_standing = standing;
     if (standing !== "outdated" || running) return;
-    running = check(source === "bridge" && typeof release_version !== "string")
+    running = check()
       .catch((error: unknown) => deps.warn(`desertfox: the native host update check failed: ${reason_of(error)}`))
       .finally(() => {
         running = undefined;
@@ -145,7 +134,6 @@ export function create_host_update(deps: HostUpdateDeps) {
     seen: (release_version) => seen_from(release_version, "config"),
     outdated_note: () => {
       if (config_standing !== "outdated") return undefined;
-      if (config_release === "missing") return "run :native.install to install the current host";
       if (phase.kind === "updating") return "updating";
       if (phase.kind === "failed") return `update failed: ${phase.reason}`;
       return "run :native.update to update it";
@@ -179,7 +167,6 @@ export function create_host_update(deps: HostUpdateDeps) {
     if (!hashes || hashes.version !== deps.extension_version) throw new Error(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
     // The version seen earlier can be stale, for example after a manual install, so ask the host again. A failed probe leaves the update to report its own error.
     await deps.probe_host().catch(() => undefined);
-    if (config_release === "missing") throw new Error("The native host is too old to update itself");
     const state = await deps.load_state();
     let reply: SelfUpdateReply;
     try {
