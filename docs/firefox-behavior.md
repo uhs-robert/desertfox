@@ -181,6 +181,7 @@ Measured in the key test (`test/key/p23_media_keys.mjs`, Firefox 160), with the 
 - `requestPictureInPicture()` rejects with `InvalidStateError` on a `<video>` with sound and no picture.
 - `tabs.executeScript` into a `sandbox` frame without `allow-scripts` rejects with "Missing host permission for the tab or frames". An `about:blank` frame takes the script with `matchAboutBlank`.
 - Measured with `tools/measure/media_key.mjs` (headless Firefox 160, 20 frames, the video only in the extra frame): an `about:blank` frame and a `srcdoc` frame are listed by `webNavigation.getAllFrames`, take the injection and are reached by the key in about 16 ms. A `data:` frame holding the only large video is not reached: the key went to the small top video, so `media.js` does not run there (or the frame is not listed). Which of the two was not told apart.
+- `webNavigation.getAllFrames` answered in about 1 ms on a page of 20 frames, one of them blocked by a 20 s busy loop (5 rounds, headless Firefox 160). The listing does not wait on a hung frame. The media key still cuts it off at 300 ms.
 - In the nested test session the picture-in-picture window takes the keyboard focus. A desktop compositor may not.
 - `"requestPictureInPicture" in HTMLVideoElement.prototype` is the feature check. Firefox 153 shipped the API on desktop. Before it, `aP` refuses with "Picture-in-picture needs Firefox 153 or newer". Not measured on a Firefox below 153.
 

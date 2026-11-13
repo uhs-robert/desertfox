@@ -10,12 +10,13 @@ const root = `${work}/media_key/run`;
 const CASES = [
   { name: "1 frame", frames: 1 },
   { name: "20 frames", frames: 20 },
-  { name: "20 frames, one refuses scripts", frames: 20, extra: "refuse" },
-  { name: "20 frames, one never answers", frames: 20, extra: "hang" },
+  { name: "20 frames, one refuses scripts", frames: 18, extra: "refuse" },
+  { name: "20 frames, one never answers", frames: 19, extra: "hang" },
   // The video sits in the extra frame only (the top video is tiny), so the key acts only if the frame was reached.
-  { name: "20 frames, video in an about:blank frame", frames: 20, extra: "blank" },
-  { name: "20 frames, video in a srcdoc frame", frames: 20, extra: "srcdoc" },
-  { name: "20 frames, video in a data: frame", frames: 20, extra: "data" },
+  { name: "20 frames, video in an about:blank frame", frames: 19, extra: "blank" },
+  { name: "20 frames, video in a srcdoc frame", frames: 19, extra: "srcdoc" },
+  // Negative case: media.js cannot run in a data: frame, so the key goes to the small top video and the action time stays null.
+  { name: "20 frames, negative: video only in a data: frame", frames: 19, extra: "data" },
 ];
 const ROUNDS = 6;
 rmSync(root, { recursive: true, force: true });
@@ -69,6 +70,7 @@ try {
       const url = `${base}/?frames=${frames}&extra=${extra ?? ""}&r=${round}`;
       const tab_id = await background(`(async () => { const tab = await browser.tabs.create({ url: ${JSON.stringify(url)} }); for (let i = 0; i < 200; i++) { const now = await browser.tabs.get(tab.id); if (now.title === "loaded") break; await new Promise((r) => setTimeout(r, 100)); } return tab.id; })()`);
       await sleep(1500);
+      const list_ms = await background(`(async () => { const t = performance.now(); await browser.webNavigation.getAllFrames({ tabId: ${tab_id} }); return Math.round(performance.now() - t); })()`);
       const sent = await background(`(async () => {
         const code = "(async () => { const t = Date.now(); const reply = await browser.runtime.sendMessage({ type: 'run', mode: 'normal', invocations: [{ id: 'media.act', args: { action: 'volume', value: 'up', times: 1 } }] }); return { t, done: Date.now(), ok: reply?.ok, message: reply?.refusal?.message }; })()";
         const [answer] = await browser.tabs.executeScript(${tab_id}, { code, frameId: 0 });
@@ -77,14 +79,14 @@ try {
       })()`);
       const changed = /^vol (\d+)$/.exec(sent.title);
       times.push(changed ? Number(changed[1]) - sent.t : null);
-      replies.push({ reply_ms: sent.done - sent.t, ok: sent.ok, message: sent.message });
+      replies.push({ list_ms, reply_ms: sent.done - sent.t, ok: sent.ok, message: sent.message });
       await background(`browser.tabs.remove(${tab_id})`);
     }
     // The first round of a case runs cold, so it is left out of the median.
     times.shift(); replies.shift();
     const seen = times.filter((t) => t !== null);
     results.push({ name, action_ms: times, median_action_ms: seen.length ? median(seen) : null, replies });
-    console.log(JSON.stringify({ name, median_action_ms: seen.length ? median(seen) : null, action_ms: times, median_reply_ms: median(replies.map((r) => r.reply_ms)), ok: replies.map((r) => r.ok), message: replies[0].message }));
+    console.log(JSON.stringify({ name, median_action_ms: seen.length ? median(seen) : null, action_ms: times, median_reply_ms: median(replies.map((r) => r.reply_ms)), list_ms: replies.map((r) => r.list_ms), ok: replies.map((r) => r.ok), message: replies[0].message }));
   }
 } catch (error) { console.log("ERR", String(error.stack ?? error)); process.exitCode = 1; }
 finally { try { rdp.close(); } catch {} firefox.kill("SIGTERM"); server.close(); }
