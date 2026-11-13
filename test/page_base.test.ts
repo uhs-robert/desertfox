@@ -32,7 +32,7 @@ test("the help page keeps a 16px root and sets its font through the token a them
   const html = read("src/help/home.html");
   assert.match(html, /html \{[^}]*font-size: 16px/);
   const rule = /\n  \.desertfox-help \{([^}]*)\}/.exec(html)![1]!;
-  assert.match(rule, /--desertfox-font: 15px\/1\.5 system-ui, sans-serif;/);
+  assert.match(rule, /--desertfox-font: 0\.9375rem\/1\.5 system-ui, sans-serif;/);
   assert.match(rule, /font: var\(--desertfox-font\);/);
   assert.ok(!/(^|[\s;])font-size:/.test(rule), "a font-size longhand would beat the theme's --desertfox-font");
 });

@@ -600,6 +600,7 @@ test("the section mark: one scroll listener, a re-mark after each render, fresh 
     const current_of = (root: FakeNode) => root.find_all((node) => node.attributes["aria-current"] === "location").map((node) => node.children[0]);
     assert.deepEqual(current_of(first), ["Tab"].map((name) => (group_nodes(first).find((group) => group.page === "Commands")!.list.find_all((node) => node.tag === "a").find((node) => String(node.children[0]).toLowerCase().includes(name.toLowerCase()))!.children[0])));
     assert.equal(listeners.filter((name) => name === "scroll").length, 1);
+    assert.equal(listeners.filter((name) => name === "resize").length, 1);
     assert.equal(observed.length, 1);
     assert.equal(observed[0]!.page, first.find_all((node) => node.tag === "main")[0]);
     // A second render builds new links, replaces the observer and adds no second listener, and the frame after it marks the new links.
@@ -610,6 +611,7 @@ test("the section mark: one scroll listener, a re-mark after each render, fresh 
     assert.equal(observed.length, 2);
     assert.equal(observed[0]!.disconnected, true);
     assert.equal(listeners.filter((name) => name === "scroll").length, 1);
+    assert.equal(listeners.filter((name) => name === "resize").length, 1, "a second render adds no resize listener");
     assert.equal(current_of(second).length, 0, "no mark before the frame runs");
     run_frames();
     assert.equal(current_of(second).length, 1);

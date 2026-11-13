@@ -9,13 +9,13 @@
 <style>
   /* The help layout is measured in 16px rems (sidebar 12rem, column 60rem), so the page keeps that root up to 1600px wide.
      Above 1600px the root grows in a straight line to 18px at 3440px, and the column cap below grows with it, so a wide screen shows bigger text and a wider column.
-     The text size comes from --desertfox-font on .desertfox-help, which a theme can replace. */
+     The text size comes from --desertfox-font on .desertfox-help, in rem (15px at a 16px root) so it grows with the root, and a theme can replace it. */
   html { background: var(--desertfox-bg-core); font-size: 16px; }
   @media (min-width: 1600px) { html { font-size: clamp(16px, calc(16px + (100vw - 1600px) * 2 / 1840), 18px); } }
   body { margin: 0; }
   /* Set here, below the base, so the theme sheet that follows can still replace it. */
   .desertfox-help {
-    --desertfox-font: 15px/1.5 system-ui, sans-serif;
+    --desertfox-font: 0.9375rem/1.5 system-ui, sans-serif;
     display: flex;
     min-height: 100vh;
     background: var(--desertfox-bg-core);
