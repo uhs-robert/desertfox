@@ -3,7 +3,7 @@
 // Set DESERTFOX_SHOT_DIR to save a shot of the editor.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export const areas = ["help", "config"];
+export const areas = ["help", "config", "keys"];
 
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 
@@ -17,9 +17,13 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   const shown_keys = () => in_page(`return [...view.document.querySelectorAll('[data-keys="capture"] kbd')].map((kbd) => kbd.textContent);`);
   const capture_focused = () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('[data-keys="capture"]');`);
 
-  // Key edits are stored state, so every case ends with none left, whatever the case did.
+  // Key edits are stored state, and a failed case can leave some. The reset goes through the background's own message, so the compiled keymap follows the stored layer.
+  const reset_edits = () => in_page(`return view.browser.storage.local.get("desertfox_keymap_edits").then(async (got) => { for (const [mode, table] of Object.entries(got.desertfox_keymap_edits ?? {})) for (const keys of Object.keys(table)) await view.browser.runtime.sendMessage({ type: "change_keymap", mode, keys, action: "reset" }); return true; });`);
   on_teardown(async () => {
-    await in_background(`(async () => { await browser.storage.local.remove("desertfox_keymap_edits"); })()`);
+    if (Object.keys(await layer()).length > 0) {
+      await open_settings();
+      await reset_edits();
+    }
     await in_background(`(async () => { await browser.storage.local.remove("desertfox_disabled"); })()`);
     await close_settings_tabs();
   });
@@ -41,7 +45,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   await run_case("keys section: real presses fill the capture box and the content script does not react, Backspace and Escape and Clear edit it", async () => {
     await open_settings();
     await focus_capture("normal");
-    const before = await in_page(`return { y: view.scrollY, badge: view.document.activeElement.getAttribute("data-keys") };`);
+    const before_y = await in_page(`return view.scrollY;`);
     if (process.env.DESERTFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/keys-editor.png`); }
     // j and gg scroll the page, i enters insert mode and Escape would leave it: none of them may reach the content script.
     await press_keys("j", "g", "g", "i");
@@ -49,7 +53,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     expect(JSON.stringify(await shown_keys()) === JSON.stringify(["j", "g", "g", "i"]), `captured ${JSON.stringify(await shown_keys())}`);
     await sleep(300);
     const after = await in_page(`return { y: view.scrollY, focused: view.document.activeElement.getAttribute("data-keys") };`);
-    expect(after.y === before.y && after.focused === "capture", `the page reacted to a captured key: ${JSON.stringify({ before, after })}`);
+    expect(after.y === before_y && after.focused === "capture", `the page reacted to a captured key: ${JSON.stringify({ before_y, after })}`);
 
     await press_keys("-k", "BackSpace");
     await poll_until("Backspace to drop the last key", async () => (await shown_keys()).length === 3);
@@ -65,8 +69,11 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("x to be captured", async () => (await shown_keys()).length === 1);
     await in_page(`view.document.querySelector('[data-keys="clear"]').click();`);
     await poll_until("Clear to empty the sequence", async () => (await shown_keys()).length === 0);
-    // After blur the box takes nothing: the page runs its own keys again.
-    await in_page(`view.document.activeElement.blur(); view.scrollTo(0, 0);`);
+    // The control: once the box is blurred the page runs its own keys again, so the stillness above was the capture.
+    await in_page(`view.document.querySelector('[data-keys="filter"]').focus(); view.document.activeElement.blur(); view.document.body.focus(); view.scrollTo(0, 0);`);
+    await poll_until("the page body to hold the focus", () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.body;`));
+    await press_keys("G");
+    await poll_until("G to scroll the page once the box is blurred", async () => (await in_page(`return view.scrollY;`)) > 0);
     await close_settings_tabs();
   });
 
@@ -103,6 +110,23 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("Reset to be offered on the unbound row", () => in_page(`const reset = view.document.querySelector('[data-keys="reset"]'); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
     await in_page(`view.document.querySelector('[data-keys="reset"]').click();`);
     await poll_until("Reset to bring K back", async () => (await layer()).normal?.K === undefined);
+    await close_settings_tabs();
+  });
+
+  await run_case("keys section: a save on other keys moves the binding, Tab leaves the box, Enter saves", async () => {
+    await open_settings();
+    await in_page(`${row_of("normal", "K")}.click();`);
+    await poll_until("the capture box to take the focus on its own when the editor opens", capture_focused);
+    // The row's own keys are shown, and the first press replaces them.
+    expect(JSON.stringify(await shown_keys()) === JSON.stringify(["K"]), `shown ${JSON.stringify(await shown_keys())}`);
+    await press_keys("Q");
+    await poll_until("the new key to replace the old", async () => JSON.stringify(await shown_keys()) === JSON.stringify(["Q"]));
+    await press_keys("-k", "Tab");
+    await poll_until("Tab to leave the box and not be captured", async () => !(await capture_focused()) && (await shown_keys()).length === 1);
+    await in_page(`view.document.querySelector('[data-keys="capture"]').focus();`);
+    await poll_until("the box to take the focus again", capture_focused);
+    await press_keys("-k", "Return");
+    await poll_until("Enter to store the move", async () => (await layer()).normal?.Q === "tab.prev" && (await layer()).normal?.K === "");
     await close_settings_tabs();
   });
 

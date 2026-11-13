@@ -152,3 +152,25 @@ test("a failed publish puts the stored map back with the layers", async () => {
   await set_browser(startup, { "<A-x>": "tab.close", "<A-y>": "tab.next", "<A-v>": "tab.close" });
   assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_4", "<A-y>": "slot_5", "<A-v>": "slot_6" });
 });
+
+test("a failed reload puts the stored map back before the rollback publish", async () => {
+  const host = { files: { "settings.toml": "" } as Files };
+  const { local, fake } = install_fake_browser(host);
+  // Slots the keymap order would not give: the rollback plan alone cannot rebuild them.
+  const stored = { "<A-k>": "slot_1", "<A-j>": "slot_2", "<A-,>": "slot_3" };
+  local[SLOT_MAP_STORAGE_KEY] = structuredClone(stored);
+  const startup = (await import(`../../src/background/startup.ts?slots_${"reload"}`)) as Startup;
+  await startup.get_config();
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], stored);
+  // The new keymap unbinds both default chords, so the failed publish stores a map without them.
+  host.files = { "settings.toml": "", "keymap.toml": '[browser]\n"<A-j>" = \"\"\n"<A-k>" = \"\"\n' };
+  const working = fake.tabs.query;
+  let calls = 0;
+  fake.tabs.query = async () => {
+    if (calls++ === 0) throw new Error("tabs down");
+    return working();
+  };
+  await assert.rejects(startup.reload_config(), /tabs down/);
+  fake.tabs.query = working;
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], stored);
+});

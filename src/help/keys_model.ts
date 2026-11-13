@@ -12,7 +12,7 @@ export const CHECK_DELAY_MS = 250;
 export const READ_ONLY_ROW_NOTE = "This binding runs several steps. Edit it in keymap.toml or a keymap.d file, then run config.reload. Here you can unbind it or reset it.";
 
 // Firefox keeps these for itself, so a page never sees them and the capture box cannot take them.
-export const RESERVED_CHORDS_NOTE = "Firefox keeps some chords for itself, such as Ctrl+T, Ctrl+W, Ctrl+N and F5, so they cannot be captured here. Escape cancels a capture and Backspace drops the last key, so bind those in the config files.";
+export const RESERVED_CHORDS_NOTE = "Firefox keeps some chords for itself, such as Ctrl+T, Ctrl+W, Ctrl+N and F5, so they cannot be captured here. Escape cancels a capture, Backspace drops the last key, Tab moves the focus and Enter saves, so bind those four in the config files.";
 
 export const is_read_only = (row: BindingRow): boolean => row.text.includes(STEP_JOINER);
 export const row_id = (mode: KeymapMode, keys: string): string => `${mode}\u0000${keys}`;
@@ -31,6 +31,8 @@ export type Editor = {
   // The row this edits. Absent for a new binding, and for a row another tab removed.
   original?: BindingRow | undefined;
   tokens: string[];
+  // True while the keys shown are the row's own: the first key press replaces them instead of adding to them.
+  fresh: boolean;
   text: string;
   check: CheckView;
   busy: boolean;
@@ -44,6 +46,8 @@ export type KeysState = {
   open?: Editor | undefined;
   // The text of the datalist: command names, aliases and snippet names.
   names: string[];
+  // Counts the times an editor was opened, so the page moves focus into it on a new open and not on a redraw.
+  opened: number;
   error?: string | undefined;
 };
 
@@ -71,6 +75,9 @@ export function is_dirty(editor: Editor): boolean {
   return original === undefined ? editor.tokens.length > 0 || editor.text !== "" : keys_of(editor.tokens) !== original.keys || editor.text !== original.text;
 }
 
+// A save on other keys than the row's own moves the binding: the old key is freed in the same change.
+const moved_from = (editor: Editor): { move_from?: string } => (editor.original && keys_of(editor.tokens) !== editor.original.keys ? { move_from: editor.original.keys } : {});
+
 export function matches_filter(row: BindingRow, filter: string): boolean {
   const needle = filter.trim().toLowerCase();
   return needle === "" || [row.keys, row.text, row.mode, row.origin].some((field) => field.toLowerCase().includes(needle));
@@ -88,7 +95,7 @@ export function actions_of(editor: Editor): { save: boolean; remove: boolean; re
 }
 
 export function create_keys_session(deps: KeysDeps) {
-  const state: KeysState = { rows: [], loaded: false, filter: "", names: [] };
+  const state: KeysState = { rows: [], loaded: false, filter: "", names: [], opened: 0 };
   const drafts = new Map<string, Editor>();
   const schedule = deps.schedule ?? ((run, ms) => {
     const timer = setTimeout(run, ms);
@@ -122,8 +129,13 @@ export function create_keys_session(deps: KeysDeps) {
     return true;
   }
 
+  // A snippet saved or removed since the last read changes the names, so every read takes them again.
+  async function read_names(): Promise<void> {
+    if (deps.names) state.names = await deps.names().catch(() => state.names);
+  }
+
   async function load(): Promise<void> {
-    if (!state.names.length && deps.names) state.names = await deps.names().catch(() => []);
+    await read_names();
     await read_rows();
     deps.on_change("rows");
   }
@@ -138,6 +150,7 @@ export function create_keys_session(deps: KeysDeps) {
     try {
       do {
         refresh_again = false;
+        await read_names();
         await read_rows();
         deps.on_change("rows");
       } while (refresh_again);
@@ -158,6 +171,7 @@ export function create_keys_session(deps: KeysDeps) {
     if (state.open && is_dirty(state.open)) drafts.set(state.open.id, state.open);
     if (editor) drafts.delete(editor.id);
     state.open = editor;
+    if (editor) state.opened += 1;
     deps.on_change("rows");
     if (editor) start_check(editor);
   }
@@ -166,12 +180,12 @@ export function create_keys_session(deps: KeysDeps) {
     const id = row_id(row.mode, row.keys);
     const kept = drafts.get(id);
     if (kept) kept.original = row;
-    show(kept ?? { id, mode: row.mode, original: row, tokens: tokens_of(row.keys), text: row.text, check: { state: "waiting" }, busy: false });
+    show(kept ?? { id, mode: row.mode, original: row, tokens: tokens_of(row.keys), fresh: true, text: row.text, check: { state: "waiting" }, busy: false });
   }
 
   function open_new(mode: KeymapMode): void {
     const id = `${mode}${NEW_SUFFIX}`;
-    show(drafts.get(id) ?? { id, mode, tokens: [], text: "", check: { state: "waiting" }, busy: false });
+    show(drafts.get(id) ?? { id, mode, tokens: [], fresh: false, text: "", check: { state: "waiting" }, busy: false });
   }
 
   // Closing keeps the draft of an edited row, so coming back finds it.
@@ -204,7 +218,7 @@ export function create_keys_session(deps: KeysDeps) {
 
   async function run_check(editor: Editor, serial: number): Promise<void> {
     cancel_check = undefined;
-    const answer = await ask<CheckBindingAnswer>({ type: "check_binding", mode: editor.mode, keys: keys_of(editor.tokens), text: editor.text });
+    const answer = await ask<CheckBindingAnswer>({ type: "check_binding", mode: editor.mode, keys: keys_of(editor.tokens), text: editor.text, ...moved_from(editor) });
     if (serial !== check_serial || state.open !== editor) return;
     if (!answer.ok) editor.check = { state: "failed", message: answer.message };
     else {
@@ -223,14 +237,32 @@ export function create_keys_session(deps: KeysDeps) {
     start_check(editor);
   };
 
-  const capture = (token: string) => edit((editor) => void editor.tokens.push(token));
-  const capture_backspace = () => edit((editor) => void editor.tokens.pop());
-  const clear_keys = () => edit((editor) => void (editor.tokens = []));
+  // A row with several steps keeps its keys: its capture box shows them and changes nothing.
+  const keys_edit = (change: (editor: Editor) => void): void => edit((editor) => {
+    if (editor.original && is_read_only(editor.original)) return;
+    change(editor);
+  });
+  const capture = (token: string) => keys_edit((editor) => {
+    if (editor.fresh) editor.tokens = [];
+    editor.fresh = false;
+    editor.tokens.push(token);
+  });
+  const capture_backspace = () => keys_edit((editor) => {
+    editor.fresh = false;
+    editor.tokens.pop();
+  });
+  const clear_keys = () => keys_edit((editor) => {
+    editor.fresh = false;
+    editor.tokens = [];
+  });
   const set_text = (text: string) => edit((editor) => void (editor.text = text));
 
   // Escape: the sequence goes back to the row's own keys, or to empty for a new binding.
   function cancel_capture(): void {
-    edit((editor) => void (editor.tokens = editor.original ? tokens_of(editor.original.keys) : []));
+    keys_edit((editor) => {
+      editor.tokens = editor.original ? tokens_of(editor.original.keys) : [];
+      editor.fresh = editor.original !== undefined;
+    });
   }
 
   // One request at a time. The editor follows the answer: the row it now edits, or a plain editor on the same keys when the row is gone.
@@ -261,6 +293,7 @@ export function create_keys_session(deps: KeysDeps) {
     // The editor now stands on the row the answer names, so Remove and Reset act on the key just saved.
     editor.original = row;
     editor.tokens = tokens_of(row.keys);
+    editor.fresh = true;
     editor.text = row.text;
     editor.id = row_id(row.mode, row.keys);
   };
@@ -268,7 +301,7 @@ export function create_keys_session(deps: KeysDeps) {
   async function save(): Promise<void> {
     const editor = state.open;
     if (!editor || !actions_of(editor).save) return;
-    await change(editor, { mode: editor.mode, keys: keys_of(editor.tokens), action: "set", text: editor.text }, (answer) => settle(editor, answer.row));
+    await change(editor, { mode: editor.mode, keys: keys_of(editor.tokens), action: "set", text: editor.text, ...moved_from(editor) }, (answer) => settle(editor, answer.row));
   }
 
   async function remove(): Promise<void> {

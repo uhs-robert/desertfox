@@ -54,9 +54,9 @@ test("capture builds a sequence, Backspace drops a token, Clear empties it, canc
   assert.deepEqual(session.state.open?.tokens, ["J"]);
   session.capture("<C-d>");
   session.capture("x");
-  assert.deepEqual(session.state.open?.tokens, ["J", "<C-d>", "x"]);
+  assert.deepEqual(session.state.open?.tokens, ["<C-d>", "x"]);
   session.capture_backspace();
-  assert.deepEqual(session.state.open?.tokens, ["J", "<C-d>"]);
+  assert.deepEqual(session.state.open?.tokens, ["<C-d>"]);
   session.cancel_capture();
   assert.deepEqual(session.state.open?.tokens, ["J"]);
   session.clear_keys();
@@ -206,7 +206,7 @@ test("the capture takes keys only while its box has focus, and leaves no listene
   holder.document = { activeElement: null };
   const capture = create_key_capture();
   const got: string[] = [];
-  const release = capture.bind(box as never, { token: (token) => got.push(token), backspace: () => got.push("<BS>"), cancel: () => got.push("<cancel>") });
+  const release = capture.bind(box as never, { token: (token) => got.push(token), backspace: () => got.push("<BS>"), cancel: () => got.push("<cancel>"), save: () => got.push("<save>") });
 
   const outside = press({ key: "j" });
   capture.on_keydown(outside as never);
@@ -214,11 +214,17 @@ test("the capture takes keys only while its box has focus, and leaves no listene
 
   holder.document.activeElement = box;
   box.fire("focus");
-  for (const event of [press({ key: "j" }), press({ key: "d", ctrlKey: true }), press({ key: "Shift", shiftKey: true }), press({ key: "Backspace" }), press({ key: "Escape" }), press({ key: "Escape", shiftKey: true })]) {
+  for (const event of [press({ key: "j" }), press({ key: "d", ctrlKey: true }), press({ key: "Shift", shiftKey: true }), press({ key: "Backspace" }), press({ key: "Escape" }), press({ key: "Escape", shiftKey: true }), press({ key: "Enter" })]) {
     capture.on_keydown(event as never);
     assert.deepEqual([event.prevented, event.stopped], [true, true], event.key);
   }
-  assert.deepEqual(got, ["j", "<C-d>", "<BS>", "<cancel>", "<S-Escape>"]);
+  assert.deepEqual(got, ["j", "<C-d>", "<BS>", "<cancel>", "<S-Escape>", "<save>"]);
+  // Tab and Shift+Tab move the focus as usual: not taken, not captured.
+  for (const event of [press({ key: "Tab" }), press({ key: "Tab", shiftKey: true })]) {
+    capture.on_keydown(event as never);
+    assert.deepEqual([event.prevented, event.stopped], [false, false], event.key);
+  }
+  assert.equal(got.length, 6);
 
   box.fire("blur");
   const after_blur = press({ key: "j" });
@@ -230,7 +236,6 @@ test("the capture takes keys only while its box has focus, and leaves no listene
   const detached = press({ key: "j" });
   capture.on_keydown(detached as never);
   assert.equal(detached.stopped, false);
-  assert.equal(capture.is_active(), false);
 
   assert.ok(box.count() > 0);
   release();
@@ -244,8 +249,8 @@ test("a second bind takes over, and the first box's blur does not drop it", () =
   holder.document = { activeElement: first };
   const capture = create_key_capture();
   const got: string[] = [];
-  capture.bind(first as never, { token: () => got.push("first"), backspace: () => undefined, cancel: () => undefined });
-  capture.bind(second as never, { token: () => got.push("second"), backspace: () => undefined, cancel: () => undefined });
+  capture.bind(first as never, { token: () => got.push("first"), backspace: () => undefined, cancel: () => undefined, save: () => undefined });
+  capture.bind(second as never, { token: () => got.push("second"), backspace: () => undefined, cancel: () => undefined, save: () => undefined });
   first.fire("focus");
   holder.document.activeElement = second;
   second.fire("focus");
@@ -254,3 +259,55 @@ test("a second bind takes over, and the first box's blur does not drop it", () =
   assert.deepEqual(got, ["second"]);
 });
 
+
+test("on an existing row the first press replaces the keys, Backspace edits them, and Escape restores them", async () => {
+  const { session } = make([row({ keys: "gg", text: "scroll.top" })]);
+  await session.load();
+  session.open_row(row({ keys: "gg", text: "scroll.top" }));
+  assert.deepEqual(session.state.open?.tokens, ["g", "g"]);
+  session.capture("x");
+  session.capture("y");
+  assert.deepEqual(session.state.open?.tokens, ["x", "y"]);
+  session.cancel_capture();
+  assert.deepEqual(session.state.open?.tokens, ["g", "g"]);
+  session.capture_backspace();
+  session.capture("z");
+  assert.deepEqual(session.state.open?.tokens, ["g", "z"]);
+});
+
+test("a save on other keys moves the binding: one change names the old keys, and the editor follows the new row", async () => {
+  const moved = row({ keys: "X", text: "tab.next", origin: "edit" });
+  const { session, sent, fire } = make([J], (message) => (message.type === "change_keymap" ? { ok: true, row: moved, message: "Moved J to X in normal mode" } : { ok: true, saves: true, problems: [], warnings: [], shadows: [], keys: "X" }));
+  await session.load();
+  session.open_row(J);
+  session.capture("X");
+  assert.equal(actions_of(session.state.open!).save, true);
+  await fire();
+  assert.deepEqual(sent.find((message) => message.type === "check_binding"), { type: "check_binding", mode: "normal", keys: "X", text: "tab.next", move_from: "J" });
+  await session.save();
+  assert.deepEqual(sent.at(-1), { type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J" });
+  assert.equal(session.state.open?.original?.keys, "X");
+  assert.equal(session.state.open?.id, row_id("normal", "X"));
+});
+
+test("a read-only row keeps its keys when keys are captured", async () => {
+  const multi = row({ keys: "gx", text: "tab.next ; tab.prev" });
+  const { session } = make([multi]);
+  await session.load();
+  session.open_row(multi);
+  session.capture("q");
+  session.capture_backspace();
+  session.clear_keys();
+  assert.deepEqual(session.state.open?.tokens, ["g", "x"]);
+});
+
+test("a refresh reads the command names again, and a new open counts once", async () => {
+  let names = ["tab.next"];
+  const session = create_keys_session({ send: async () => ({ ok: true, bindings: [J] }), names: async () => names, on_change: () => undefined });
+  await session.load();
+  names = ["tab.next", "user.new"];
+  await session.refresh();
+  assert.deepEqual(session.state.names, ["tab.next", "user.new"]);
+  session.open_row(J);
+  assert.equal(session.state.opened, 1);
+});
