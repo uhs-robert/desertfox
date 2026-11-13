@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { BUILT_IN_QUERY, resolve_new_tab_page } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 function problems_with_settings(settings_toml: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
+  const dir = make_tmp_dir("desertfox-config-");
   cpSync(join(FIXTURES, "full"), dir, { recursive: true });
   mkdirSync(dirname(join(dir, "settings.toml")), { recursive: true });
   writeFileSync(join(dir, "settings.toml"), settings_toml);

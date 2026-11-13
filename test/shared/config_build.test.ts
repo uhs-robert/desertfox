@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { build_config as build_config_from_dir, read_commands_file } from "../../tools/build-config/build_config.ts";
 import { build_config, commands_of_registry } from "../../src/shared/config_build/build_config.ts";
 import { ConfigErrors } from "../../src/shared/config_build/errors.ts";
 import { create_registry } from "../../src/shared/registry/index.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const FIXTURE_DIR = join(import.meta.dirname, "..", "fixtures", "build-config", "full");
 const commands = read_commands_file(join(FIXTURE_DIR, "..", "commands.json"));
@@ -73,7 +73,7 @@ test("a known name of the wrong type is a problem", () => {
 });
 
 test("the directory reader reports a known name of the wrong type", () => {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-types-"));
+  const dir = make_tmp_dir("desertfox-types-");
   mkdirSync(join(dir, "settings.toml"));
   writeFileSync(join(dir, "snippets"), "");
   assert.throws(

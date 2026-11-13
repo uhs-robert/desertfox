@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { readdirSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const CLI = join(import.meta.dirname, "..", "tools", "build-config", "cli.ts");
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 
 // HOME is a tmp dir so a stray write would show there, not in the real home.
 function run_cli(args: string[]) {
-  const home = mkdtempSync(join(tmpdir(), "desertfox-home-"));
-  const config_dir = mkdtempSync(join(tmpdir(), "desertfox-cfg-"));
+  const home = make_tmp_dir("desertfox-home-");
+  const config_dir = make_tmp_dir("desertfox-cfg-");
   const result = spawnSync(
     process.execPath,
     [CLI, config_dir, "--commands", join(FIXTURES, "commands.json"), ...args],
@@ -37,7 +38,7 @@ test("--live and --out are no longer flags", () => {
 });
 
 test("--schemas writes the data schemas and nothing else", () => {
-  const schemas_dir = mkdtempSync(join(tmpdir(), "desertfox-schemas-"));
+  const schemas_dir = make_tmp_dir("desertfox-schemas-");
   const { result, home } = run_cli(["--schemas", schemas_dir]);
   assert.equal(result.status, 0, result.stderr);
   assert.ok(readdirSync(schemas_dir).every((name) => name.endsWith(".schema.json")));

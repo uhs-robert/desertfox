@@ -1,8 +1,7 @@
 // The `s/` group: engines tied to sites by `hosts`, letters from `[site_keys]`, and what a page sees of them.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import "../src/background/command_modules.ts";
@@ -17,6 +16,7 @@ import { build_commands_file } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const commands = build_commands_file(registry).commands;
 
@@ -51,7 +51,7 @@ r = ["github.repos"]
 `;
 
 function config_dir(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-site-"));
+  const dir = make_tmp_dir("desertfox-site-");
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
   return dir;
 }
