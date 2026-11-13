@@ -57,7 +57,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     await open_page("page", "cards_b", { new_tab: true });
     await load_config_dir(cards_config);
     const dot = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23c0392b'/></svg>";
-    await in_background(`(async () => { for (const [title, host] of [["Firefox source docs", "firefox-source-docs.mozilla.org"], ["A long bookmark title that cannot fit on one line of a card", "example.net"], ["Arch wiki", "wiki.archlinux.org"], ["Hacker News", "news.ycombinator.com"], ["Rust reference", "doc.rust-lang.org"]]) await browser.bookmarks.create({ title, url: "https://" + host + "/" }); await browser.storage.local.set({ favicon_cache: [{ host: "doc.rust-lang.org", icon: ${JSON.stringify(dot)}, source: "data:", at: Date.now() }] }); })()`);
+    await in_background(`(async () => { for (const [title, host] of [["Firefox source docs", "firefox-source-docs.mozilla.org"], ["A long bookmark title that cannot fit on one line of a card", "example.net"], ["Arch wiki", "wiki.archlinux.org"], ["Hacker News", "news.ycombinator.com"], ["Rust reference", "doc.rust-lang.org"]]) await browser.bookmarks.create({ title, url: "https://" + host + "/" }); await browser.storage.local.set({ favicon_cache: [{ host: "doc.rust-lang.org", icon: ${JSON.stringify(dot)}, source: "seed" }] }); })()`);
 
     await run_case("recent tabs, bookmarks and links are cards with one anchor each, and f labels one per card", async () => {
       expect(await open_new_tab(".tiles .tile"), "no card rendered");
@@ -66,12 +66,30 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect(shape.nested_anchors === 0 && shape.sites, `a card holds a nested anchor or has no site: ${JSON.stringify(shape)}`);
       expect(shape.images >= 1 && shape.letters >= 1, `expected an icon and letter tiles: ${JSON.stringify(shape)}`);
       if (shot_dir) await take_shot(`${shot_dir}/newtab-cards.png`);
+      // The content script starts after the cards render, so wait for it to read the tree before the key.
+      await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
       await press_keys("f");
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
       await poll_until("the hint labels to show", async () => (await labels()) > 0);
       // One label per card, plus the three built-in links.
       expect((await labels()) === shape.cards + 3, `expected ${shape.cards + 3} labels, found ${await labels()}`);
       await press_keys("-k", "Escape");
+    });
+
+    // The real save path: a page with a favicon is visited, the background redraws the icon Firefox hands it, and the new tab page shows the 32x32 copy. A clear of all history first empties the cache and the saver's memory, so an earlier visit to this host in the session cannot hide the save.
+    await run_case("a visited page's favicon is saved as a 32x32 PNG and its card shows it", async () => {
+      await close_new_tabs();
+      await in_background(`browser.history.deleteAll()`);
+      await poll_until("the cache to be empty", async () => (await in_background(`browser.storage.local.get("favicon_cache").then((found) => !found.favicon_cache || found.favicon_cache.length === 0)`)) === true);
+      await open_page("iconed", "cards_icon", { new_tab: true });
+      const entry_script = `browser.storage.local.get("favicon_cache").then(async (found) => { const entry = (found.favicon_cache ?? []).find((item) => item.host === "127.0.0.1"); if (!entry) return null; const image = new Image(); image.src = entry.icon; await image.decode(); return { icon: entry.icon, width: image.naturalWidth, height: image.naturalHeight }; })`;
+      await poll_until("the background to save the icon", async () => (await in_background(entry_script).catch(() => null)) !== null, { timeout_ms: 15000 });
+      const saved = await in_background(entry_script);
+      expect(saved.icon.startsWith("data:image/png;base64,") && saved.width === 32 && saved.height === 32, `the saved icon was not a 32x32 PNG: ${saved.icon.slice(0, 40)} ${saved.width}x${saved.height}`);
+      expect(await open_new_tab(".tiles .tile"), "no card rendered");
+      const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile img.tile-icon")].map((image) => image.getAttribute("src"))`);
+      expect(shown.includes(saved.icon), "no card showed the saved icon");
+      expect(shown.every((src) => src.startsWith("data:image/")), `an img src was not a data: image: ${JSON.stringify(shown)}`);
     });
   } finally {
     await close_new_tabs().catch(() => undefined);

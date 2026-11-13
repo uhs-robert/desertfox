@@ -14,7 +14,7 @@ import { stored_keymap } from "./keymap_source.ts";
 import { history_cache } from "./history_cache.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
 import { make_favicon_cache } from "../newtab/icon_cache.ts";
-import { fetch_icon_png, make_favicon_saver } from "./favicon_saver.ts";
+import { make_favicon_saver, redraw_icon_png } from "./favicon_saver.ts";
 import { shared_previous_tabs } from "./previous_tab.ts";
 import { shared_last_used_tabs } from "./last_used_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
@@ -552,7 +552,7 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
 
-const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.local), fetch_icon_png);
+const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.local), redraw_icon_png);
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // The icon often arrives after the load completes, so a later icon change saves too. A private tab saves nothing.
   if (change.status === "complete" || change.favIconUrl !== undefined) void favicon_saver.on_tab({ url: tab.url, icon: tab.favIconUrl, incognito: tab.incognito }).catch(warn_and_go("favicon_saver.on_tab"));
