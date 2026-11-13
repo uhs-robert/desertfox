@@ -4,7 +4,7 @@ import { shadow_root_of } from "../shadow.ts";
 import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 import { is_scroll_box } from "../scroll_box.ts";
 import { element_address, is_image_element, takes_typing } from "./actions.ts";
-import { keep_visible, scroll_clips_of } from "./visible.ts";
+import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
 export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "media" | "images" | "frames" | "custom";
@@ -163,10 +163,10 @@ type Box = { left: number; top: number; right: number; bottom: number; width: nu
 export const is_rect_off_screen = (rect: Box, view_width: number, view_height: number): boolean =>
   rect.width > 0 && rect.height > 0 && (rect.bottom < 0 || rect.right < 0 || rect.top > view_height || rect.left > view_width);
 
-// Reads the rect of its own window, so an element in a frame is judged by the frame's viewport.
+// Judged against the layout viewport of the element's own document, which a pinch zoom leaves alone, and a frame's element by the frame's.
 export const is_element_off_screen = (element: Element): boolean => {
-  const view = element.ownerDocument.defaultView ?? window;
-  return is_rect_off_screen(element.getBoundingClientRect(), view.innerWidth, view.innerHeight);
+  const { width, height } = viewport_size(element.ownerDocument, window_of(element));
+  return is_rect_off_screen(element.getBoundingClientRect(), width, height);
 };
 
 const dom_styles: ClickStyles = {
