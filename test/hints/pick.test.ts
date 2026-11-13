@@ -190,5 +190,9 @@ test("physical letters: text mode keeps the typed text, and a slash stays a slas
   assert.equal(picker.on_token_("/", null).kind, "handled");
   const outcome = picker.on_token_("ф", "a");
   assert.equal(outcome.kind === "handled" ? outcome.text : undefined, "");
+  const cyrillic = create_picker(labels, () => ["фото", "новости", "погода", "форум"]);
+  cyrillic.on_token_("/");
+  const typed = cyrillic.on_token_("ф", "a");
+  assert.deepEqual(typed.kind === "handled" ? [typed.text, typed.still_possible_] : undefined, ["ф", [0, 3]]);
   assert.deepEqual(text_picker().on_token_("/", "q"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3], text: "", active: 0 });
 });

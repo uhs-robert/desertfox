@@ -1615,6 +1615,20 @@ test("a Cyrillic key typed before the labels show picks its label by the physica
   assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s" }]);
 });
 
+test("two keys typed before the labels show keep their own physical letters: the first fits no label and drops, the second picks", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: true, left: [] } });
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  page.type("ч", "x");
+  page.type("ы", "s");
+  answer_start(across_answer(["a", "s"], ["a"])());
+  await settle();
+  assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s" }]);
+});
+
 test("across frames the keys typed ahead go with the pick of another frame, and what its owner left replays here", async () => {
   const page = await page_with(["one"]);
   answer_picks_with(page, { s: { ok: true, left: ["y"] } });
