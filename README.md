@@ -100,6 +100,14 @@ Sources, read in November 2026: each project's documentation, source code and sh
 > The last row shows size, not page speed. The sizes are as shipped.
 > DesertFox and Vimium C are minified, and Vimium and Tridactyl are not. DesertFox defers loading hint and caret code to first use.
 
+### Hint speed, coverage and dragging
+
+- **Speed.** DesertFox can be slower than Vimium C to show the first hint, but by less than the blink of an eye. The median time from the `f` key to the first label was 59, 77 and 57 ms for DesertFox on a page of 20,000 elements, on an article and on a page of 100 iframes. Vimium C took 36, 20 and 65 ms. DesertFox spends the extra time looking inside off-screen sections, because CSS can place visible content there, such as an open dropdown or a modal.
+- **Coverage on very large pages.** On a test page of 16,000 elements about 29 screens tall, DesertFox, Vimium and Tridactyl labeled all 11 visible targets. Vimium C 2.12.3 labeled 4. It skips the contents of off-screen sections on pages that large. Smaller pages gave every tool full coverage.
+- **Dragging.** Of Vimium, Vimium C, Tridactyl, qutebrowser, Surfingkeys, Vieb and cVim, only DesertFox has built-in keyboard drag of elements: `;g` picks a source and a target, and `;G` moves an element with `hjkl`. The drag sends synthetic events, so pages that ignore untrusted events ignore it.
+
+Rerun the speed and coverage measurements with `just measure-rivals`. The code is in `tools/measure/rivals/`, and `PAGES=coverage` runs the coverage page only. It needs Firefox and network access, and the numbers move with machine load.
+
 <details>
 <summary><b>🧭 Where another tool fits better</b></summary>
 
