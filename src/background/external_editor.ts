@@ -2,7 +2,8 @@
 // The jobs live in `storage.session` and the collect loops are derived from them, so a restarted background resumes the loops with `resume`.
 // A job whose page is gone (the tab closed, reloaded or navigated) is orphaned, not dropped: its loop keeps collecting, so the user's saved text still lands in the unnamed register.
 
-import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
+import { current_keymap } from "../shared/prefix_tree.ts";
+import { stored_keymap } from "./keymap_source.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { EditorAnswer, EditorDone, EditorOpen } from "../shared/messages.ts";
 import { site_columns_for, site_value } from "./page_keymap.ts";
@@ -154,8 +155,7 @@ export type ExternalEditor = ReturnType<typeof create_external_editor>;
 // The extension for a page: the setting's value for the sender's site (a site row beats the global value), else the global one. The empty text is the default and means no extension.
 export function make_editor_ext_for(local: Pick<typeof browser.storage.local, "get">, global_ext: () => Promise<string | undefined>) {
   return async (addresses: readonly (string | undefined)[]): Promise<string | undefined> => {
-    const stored = await local.get(COMPILED_KEYMAP_STORAGE_KEY);
-    const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+    const keymap = current_keymap(await stored_keymap(local));
     return site_value(site_columns_for(keymap, addresses), "editor_ext", (await global_ext()) ?? "") || undefined;
   };
 }

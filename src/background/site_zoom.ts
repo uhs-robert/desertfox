@@ -2,7 +2,8 @@
 // Firefox remembers zoom per host and `tabs.setZoom` writes that memory, so one set carries the level to every later tab of the host.
 // docs/firefox-behavior.md has the measured details.
 
-import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap, type CompiledKeymap } from "../shared/prefix_tree.ts";
+import { current_keymap } from "../shared/prefix_tree.ts";
+import { stored_keymap } from "./keymap_source.ts";
 import { site_columns_for, site_value } from "./page_keymap.ts";
 import { SITE_ZOOM_PRIVATE_STORAGE_KEY, SITE_ZOOM_STORAGE_KEY } from "./storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
@@ -66,8 +67,7 @@ type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 export function make_level_for(local: KeymapStorage, global_level: () => Promise<number | undefined>, is_disabled: () => Promise<boolean>) {
   return async (address: string): Promise<number | undefined> => {
     if (await is_disabled()) return undefined;
-    const stored = await local.get(COMPILED_KEYMAP_STORAGE_KEY);
-    const keymap = current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined);
+    const keymap = current_keymap(await stored_keymap(local));
     return site_value(site_columns_for(keymap, [address]), "zoom", await global_level());
   };
 }

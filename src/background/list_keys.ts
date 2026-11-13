@@ -9,7 +9,8 @@ import { PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { mark_text, shorten_address } from "../shared/mark_text.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import { UNNAMED_REGISTER } from "../shared/register_names.ts";
-import { ANY_KEY, LIVE_KEY, COMPILED_KEYMAP_STORAGE_KEY, token_label } from "../shared/prefix_tree.ts";
+import { ANY_KEY, LIVE_KEY, token_label } from "../shared/prefix_tree.ts";
+import { stored_keymap } from "./keymap_source.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
@@ -106,8 +107,7 @@ export async function list_keys(
   request: Pick<ListKeys, "mode" | "prefix">,
   { availability, addresses = [], registers, marks, quickmarks, macros }: ListKeysOptions = {},
 ): Promise<WhichKeyPanel> {
-  const stored = await storage.get(COMPILED_KEYMAP_STORAGE_KEY);
-  const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
+  const keymap = await stored_keymap(storage);
   // The register prefix is no key of the tree: it waits for a register name, so the panel lists the registers that hold something. A user binding of `"` keeps its own tree.
   if (registers && request.prefix.length === 1 && request.prefix[0] === UNNAMED_REGISTER && REGISTER_PREFIX_MODES.includes(request.mode) && !keymap?.modes[request.mode as keyof CompiledKeymap["modes"]]?.children[UNNAMED_REGISTER]) {
     const items = await registers().catch((): RegisterItem[] => []);

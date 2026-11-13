@@ -19,7 +19,7 @@ Phase 0 measured these on Firefox 159 with real key presses. They shape every ch
 
 ## Decisions
 
-- Manifest V2 with a persistent background page. No state lives only in memory, so a later move to MV3 changes the manifest and little else.
+- Manifest V2 with a persistent background page. No state lives only in memory, so a later move to MV3 changes the manifest and little else. A copy of stored state may sit in memory when it refills from storage and drops on `storage.onChanged` (the compiled keymap, `keymap_source.ts`).
 - TypeScript, bundled with esbuild. No framework. No runtime dependency in the content script.
 - No Rust and no WASM. The slow parts are DOM work and messages between processes, not computation. WASM also adds load cost to every page.
 - No ex-command language. The command line parses text into the same typed invocation that a key produces. Snippets are the only user code. They come from the user's own config folder, or from an import the user accepts snippet by snippet.

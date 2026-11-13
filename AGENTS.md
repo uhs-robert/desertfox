@@ -30,7 +30,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Put no test hooks in `src/`. Tests drive the extension through its public surface. The one exception is the `data-desertfox-tree-read-ms` attribute on the document element, which the key test reads as the signal that the content script is ready.
-- Keep no state only in memory. Store it, so a later move to Manifest V3 stays small.
+- Keep no state only in memory. Store it, so a later move to Manifest V3 stays small. A copy of stored state may sit in memory when it refills from storage and drops on `storage.onChanged` (see `src/background/keymap_source.ts`).
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, the conditional `default`, `value_when` (which values of an enum a sibling's value allows) and `pattern_arms` (which text pattern a string takes per sibling value) are the only conditions; the last three reuse the syntax of `when`. Split a command that needs more.
 - Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. Throw runtime failures as `RuntimeRefusal`. A test fails when a handler refuses args the schema accepts.
