@@ -139,7 +139,7 @@ export function with_site_selectors(root: ParentNode, filter: HintFilter, found:
 }
 
 // Page reads behind the weak test, so tests run on fake elements.
-export type ClickStyles = { cursor_of_: (element: Element) => string; parent_of: (element: Element) => Element | null };
+export type ClickStyles = { cursor_of_: (element: Element) => string; parent_of: (element: Element) => Element | null; is_off_screen_: (element: Element) => boolean };
 
 const NEVER_WEAK = new Set(["html", "body", "head", "script", "style", "option"]);
 
@@ -154,11 +154,19 @@ export function has_click_sign(element: Element, styles: ClickStyles): boolean {
   return parent === null || styles.cursor_of_(parent) !== "pointer";
 }
 
-export const make_weak_test = (styles: ClickStyles): WeakTest => (element) => element.matches(MENU_ITEM) || has_click_sign(element, styles);
+// The off-screen test comes first because a rect is far cheaper than the two style reads, and `keep_visible` drops an off-screen weak candidate anyway before `drop_redundant_weak` runs, so no ancestor check loses a candidate.
+export const make_weak_test = (styles: ClickStyles): WeakTest => (element) => element.matches(MENU_ITEM) || (!styles.is_off_screen_(element) && has_click_sign(element, styles));
 
 const dom_styles: ClickStyles = {
   cursor_of_: (element) => (element.ownerDocument.defaultView ?? window).getComputedStyle(element).cursor,
   parent_of: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
+  // An empty rect (`display: none`, `display: contents`) is not placed, so it stays a candidate for `keep_visible` to judge.
+  is_off_screen_: (element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return false;
+    const view = element.ownerDocument.defaultView ?? window;
+    return rect.bottom < 0 || rect.right < 0 || rect.top > view.innerHeight || rect.left > view.innerWidth;
+  },
 };
 
 // Only the filters that mean "anything clickable" look for weak candidates. `links`, `buttons`, `inputs` and `custom` are exact.
