@@ -36,7 +36,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   light_intensity: "Which of the five light sets of an Oasis theme the light variant uses, 1 (lightest) to 5",
   search_prefixes: "Prefixes of the keys made from search_keys: here searches in this tab, tab in a new tab",
   container_prefixes: "Prefixes of the keys made from container_keys: reopen reopens this tab in the container, tab opens a prompt in a new container tab",
-  home_page: `URL that page.home opens, or "${BUILT_IN_PAGE}" for the built-in new tab page`,
+  home_page: `URL that page.home opens, or "${BUILT_IN_PAGE}" for the built-in new tab page. An about: page other than about:blank is refused`,
   default_engine: "Search engine that open.clipboard uses for text that is not a URL. Must name a defined engine",
   new_tab_page: `What a new tab shows: an http or https URL that the new tab redirects to, or "${BUILT_IN_PAGE}" for the built-in page. Unset means the built-in page`,
   completion_all_windows: "Whether the tab completion lists the tabs of every window, not only the line's window",
