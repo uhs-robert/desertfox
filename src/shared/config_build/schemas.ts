@@ -3,7 +3,7 @@
 
 import type { CommandMeta } from "../command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
-import { SETTING_DOCS } from "../settings_docs.ts";
+import { SETTING_DOCS, SETTING_HELP } from "../settings_docs.ts";
 import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
 import { MAX_BIND_STEPS } from "../table_constants.ts";
 import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
@@ -136,9 +136,10 @@ function value_schema(row: SettingRow): Schema {
   }
 }
 
+// The long text leans on the summary for its subject, so an editor tooltip without the summary starts mid-thought.
 function setting_schema(name: SettingName): Schema {
   const row: SettingRow = SETTINGS_TABLE[name];
-  return { ...value_schema(row), ...("default" in row && { default: row.default }), description: SETTING_DOCS[name] };
+  return { ...value_schema(row), ...("default" in row && { default: row.default }), description: `${SETTING_HELP[name].summary} ${SETTING_DOCS[name]}` };
 }
 
 export function settings_schema(): Schema {
