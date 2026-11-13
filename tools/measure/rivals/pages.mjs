@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 
 const pages_dir = `${process.env.RIVALS_DIR}/pages`;
 
-// A target is any element with data-target. The frame script labels each as visible or not and maps hint labels to targets by position.
-// The page is 20,000 px tall (about 29 viewports) with 16,000 filler elements, and scrolls to y=2000 on load, so the sticky header is stuck and every "off-screen" wrapper (at y>=3600 or y=100) lies outside the viewport.
+// A target is any element with data-target. The frame script reads each target's rect and visibility, and match_labels.mjs maps hint labels to targets by position.
+// The page is 20,000 px tall (about 29 viewports) with 16,000 filler elements, and scrolls to y=2000 on load, so the sticky header is stuck and every off-screen wrapper (at y=100 or y>=3500) lies outside the viewport.
 // Each wrapper has zero size, so the target inside it is placed only by CSS: the case a "skip children of off-screen boxes" shortcut gets wrong.
+// Targets sit 60 px apart where they share a lane, which match_labels.mjs relies on.
 // The last child of each off-screen wrapper. Vimium C jumps to a pruned box's last child and tests that child, so a wrapper whose only child is the visible content is never pruned.
 const tail = `<div style="height:10px"></div>`;
 const box = (style, inner) => `<div style="position:absolute;${style}">${inner}</div>`;
@@ -14,12 +15,12 @@ const button = (target, style = "") => `<button data-target="${target}" style="d
 function coverage_body() {
   const parts = [
     `<div style="position:absolute;top:0;left:0;width:100%;height:20000px"><header style="position:sticky;top:0;height:40px;background:#ddd;z-index:5"><a href="/p?sticky_link" data-target="sticky_link" style="margin-left:400px">sticky_link</a></header></div>`,
-    // Plain, in flow of the viewport.
+    // Plain cases at fixed offsets in view.
     box("top:2080px;left:20px", link("plain_link")),
     box("top:2140px;left:20px", button("plain_button")),
     box("top:2200px;left:20px", `<input data-target="plain_input" value="plain_input" style="width:160px;height:30px">`),
-    // Open dropdown: a zero-size wrapper in view, the menu hangs out of it.
-    box("top:2100px;left:300px;width:0;height:0", box("top:0;left:0", `${link("dropdown_item_1")}<div style="height:30px"></div>${link("dropdown_item_2")}`)),
+    // Open dropdown: the wrapper is below the viewport and the open menu is pulled up into it.
+    box("top:3500px;left:300px;width:0;height:0", box("top:-1400px;left:0", `${link("dropdown_item_1")}<div style="height:30px"></div>${link("dropdown_item_2")}`) + tail),
     // Tooltip: the wrapper is below the viewport and the tooltip is pulled up into it.
     box("top:3600px;left:600px;width:0;height:0", box("top:-1450px;left:0", link("tooltip_below")) + tail),
     // Tooltip: the wrapper is above the viewport and the tooltip is pushed down into it.
@@ -28,11 +29,10 @@ function coverage_body() {
     box("top:3700px;left:0;width:0;height:0", `<div style="position:fixed;top:260px;left:300px;width:200px;background:#eee">${link("modal_link")}<div style="height:30px"></div>${button("modal_button")}</div>${tail}`),
     box("top:3800px;left:0;width:0;height:0", `<div style="position:fixed;bottom:0;left:600px;width:200px;background:#fe8">${link("banner_link")}</div>${tail}`),
     // Filler that makes the page tall and element-heavy. Vimium C prunes off-screen boxes only past 15,000 elements on a page much taller than the viewport, and only if more than 12 elements survive in view, hence the on-screen filler.
-    box("top:2400px;left:20px", Array.from({ length: 20 }, (_, i) => `<span style="display:block;height:3px"></span>`).join("")),
+    box("top:2400px;left:20px", Array.from({ length: 20 }, () => `<span style="display:block;height:3px"></span>`).join("")),
     box("top:6000px;left:0;width:100%", Array.from({ length: 16000 }, () => `<span style="display:block;height:3px"></span>`).join("")),
-    // Controls that are not visible, so a label on them is noise: far below, and display:none.
+    // A control that is not visible, so a label on it is noise. A display:none control has no rect to match a label to, so there is none.
     box("top:3900px;left:20px", link("control_offscreen")),
-    box("top:2260px;left:20px", link("control_display_none", "display:none")),
   ];
   return `<!doctype html><title>coverage</title><body style="margin:0;height:20000px">${parts.join("")}<script>scrollTo(0, 2000)</script></body>`;
 }
