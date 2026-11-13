@@ -6,7 +6,7 @@ import { show_toast_on_tab } from "../background/browser_deps.ts";
 import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
 import { in_folder, pick_filter_folder, pick_folder, rows_in_folder } from "../shared/folder_pick.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { open_in, open_many, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
+import { is_openable, open_in, open_many, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type BookmarkDeps = {
@@ -34,9 +34,6 @@ export const pick_bookmark = (bookmarks: readonly BookmarkItem[], text: string):
 
 // The most tabs one `bookmark.open_folder` opens. A bigger folder opens its first tabs and the toast says so.
 export const OPEN_FOLDER_CAP = 25;
-
-// Addresses that cannot open as a page from an extension: a smart-bookmark query, script, and the browser's own pages. Opening one would stop the rest of the folder.
-const UNOPENABLE_URL = /^(place|javascript|chrome|resource|file|data|view-source):|^about:(?!(blank|home|newtab)([?#]|$))/i;
 
 export { pick_folder };
 
@@ -94,7 +91,8 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
     open_folder: async (ctx: CommandContext, args: { folder: string; where: Exclude<Where, "here"> }) => {
       const folder = pick_folder(await deps.folders(), args.folder);
       const total = folder.bookmarks.length;
-      const openable = folder.bookmarks.flatMap((node) => (node.url && !UNOPENABLE_URL.test(node.url) ? [node.url] : []));
+      // A smart-bookmark query (`place:`), a bookmarklet or a browser page is skipped and counted, rather than stopping the rest of the folder.
+      const openable = folder.bookmarks.flatMap((node) => (node.url && is_openable(node.url) ? [node.url] : []));
       if (openable.length === 0) throw new RuntimeRefusal(`No bookmarks to open in ${folder.path}`);
       const urls = openable.slice(0, OPEN_FOLDER_CAP);
       // The browser may still refuse an address the filter let through. open_many counts those and calls back before it moves the focus, so one toast carries every count.

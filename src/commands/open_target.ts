@@ -6,7 +6,8 @@ import { get_config } from "../background/startup.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
 import type { PageInfo } from "../shared/engines/slots.ts";
-import { url_target } from "./url_build.ts";
+import { openable_url, require_openable, url_target } from "./url_build.ts";
+import type { OwnPages } from "./url_build.ts";
 import { pick_by } from "../shared/folder_pick.ts";
 import type { Pickable } from "../shared/folder_pick.ts";
 
@@ -76,15 +77,18 @@ export async function current_page(ctx: CommandContext): Promise<PageInfo | unde
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
-// For text a person typed or configured. URLs that code built need no such pass.
-export async function typed_url_target(text: string): Promise<string> {
-  const { search_engines, settings } = await get_config();
-  return url_target(text, settings.default_engine ?? DEFAULT_SETTINGS.default_engine, search_engines);
-}
+// The extension's own pages may open from the user's config and stored data, and from a request no page sent. Text a page sent, such as a hinted link, the selection or the clipboard, may not open them.
+export const own_pages: NonNullable<OwnPages> = () => browser.runtime.getURL("");
+export const own_pages_for = (ctx: CommandContext): OwnPages => (ctx.from_page ? undefined : own_pages);
 
-// Firefox refuses privileged pages such as about:config from extensions. The refusal is shown as a notice, so the text is never searched instead.
-const ABOUT_URL = /^about:/i;
-const PRIVILEGED_URL_REFUSAL = /illegal url|privileged/i;
+// The addresses `open_in` and `open_many` take come from typed text that `url_target` already checked against the request's sender, or from code, config and stored data. So the extension's own pages pass here.
+export const is_openable = (url: string): boolean => openable_url(url, own_pages);
+
+// For text a person typed or configured. URLs that code built need no such pass.
+export async function typed_url_target(text: string, may_open_own_pages: OwnPages): Promise<string> {
+  const { search_engines, settings } = await get_config();
+  return url_target(text, settings.default_engine ?? DEFAULT_SETTINGS.default_engine, search_engines, may_open_own_pages);
+}
 
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {
   await open_in_with_id(ctx, url, where, container);
@@ -92,12 +96,8 @@ export async function open_in(ctx: CommandContext, url: string, where: Where, co
 
 // The id of the tab it made, for a caller that must place or activate it later. A window and `here` give none.
 async function open_in_with_id(ctx: CommandContext, url: string, where: Where, container?: string): Promise<number | undefined> {
-  try {
-    return await open_in_unchecked(ctx, url, where, container);
-  } catch (error) {
-    if (!ABOUT_URL.test(url) || !PRIVILEGED_URL_REFUSAL.test(String(error))) throw error;
-    throw new RuntimeRefusal(`Firefox does not let extensions open ${url}`);
-  }
+  require_openable(url, own_pages);
+  return open_in_unchecked(ctx, url, where, container);
 }
 
 // Firefox opens a window with no container and not private unless told otherwise, so a window opened from a container or private tab must carry that tab's state. An unreadable sender tab gives the old plain window.
@@ -139,6 +139,7 @@ export async function open_many(ctx: CommandContext, urls: readonly string[], wh
     const context = await new_window_context(ctx, undefined);
     for (const url of urls) {
       try {
+        require_openable(url, own_pages);
         if (window_id === undefined) window_id = (await browser.windows.create({ url, ...context })).id;
         else await browser.tabs.create({ url, active: false, windowId: window_id });
       } catch {

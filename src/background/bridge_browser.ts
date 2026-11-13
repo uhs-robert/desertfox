@@ -9,7 +9,7 @@ import { registry } from "../shared/registry/builtin.ts";
 import { create_bridge_run } from "./bridge_run.ts";
 import { NoSuchTab } from "./bridge_run.ts";
 import type { BridgeRunTarget } from "./bridge_run.ts";
-import { typed_url_target } from "../commands/open_target.ts";
+import { own_pages, typed_url_target } from "../commands/open_target.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_tab_switch } from "./tab_switch.ts";
 import type { TabSwitch } from "./tab_switch.ts";
@@ -57,7 +57,7 @@ export function browser_bridge_run(router_deps: RouterDeps, is_snippet: (command
     registry,
     is_snippet,
     get_enum_sources: router_deps.get_enum_sources,
-    resolve_url: typed_url_target,
+    resolve_url: (text) => typed_url_target(text, own_pages),
     target: async (tab_id) => {
       if (tab_id === undefined) return focused_normal_target();
       const tab = await tab_switch.normal_tab(tab_id);

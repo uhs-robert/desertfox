@@ -94,6 +94,8 @@ export type CommandContext = {
   window_id: number | undefined;
   frame_id: number;
   mode: Mode;
+  // A page's content script sent the request, so text in its args (a hinted link, the selection, the clipboard) may come from the page.
+  from_page?: true;
 };
 
 // What a handler throws for a failure that depends on the state of the browser or the config, such as a tab that is gone or a search engine the config lacks. A bad argument value is never one of these: the param schema rules it out before the handler runs.

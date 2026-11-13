@@ -159,7 +159,7 @@ const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefine
 wire_repeat({
   load: async (ctx) => repeat_memory.load(await is_private_tab(ctx.tab_id)),
   run_batch: (invocations, ctx) =>
-    router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }) }),
+    router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }), ...(ctx.from_page && { from_page: true }) }),
 });
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
@@ -377,6 +377,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
       ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
       ...(sender.frameId === undefined ? {} : { frame_id: sender.frameId }),
+      ...(!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL("")) && { from_page: true }),
     });
   });
 });

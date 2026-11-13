@@ -20,6 +20,19 @@ test("a background command runs with checked args and the count rule", async () 
   assert.deepEqual(seen, [[7, { focus: "right" }], [7, { focus: "right" }]]);
 });
 
+test("a request from a page marks the context of every step and every repeat, and other requests do not", async () => {
+  const seen: unknown[] = [];
+  const { deps } = make_fake({
+    "tab.close": { label: "Close", intent: "x", runs_in: "background", count: "repeat", run: (ctx) => void seen.push(ctx.from_page) },
+  });
+  const router = create_router(deps);
+  await router.run({ invocations: [{ id: "tab.close", count: 2 }, { id: "tab.close" }], mode: "normal", from_page: true });
+  assert.deepEqual(seen, [true, true, true]);
+  seen.length = 0;
+  await router.run({ invocations: [{ id: "tab.close" }], mode: "normal" });
+  assert.deepEqual(seen, [undefined]);
+});
+
 test("context sources are filled", async () => {
   const seen: unknown[] = [];
   const { deps } = make_fake({
