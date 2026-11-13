@@ -26,7 +26,6 @@ export type RuleDeps = {
 function take_to_level(driver: Driver, value: string): boolean {
   const levels = driver.levels();
   if (levels.length === 0) return false;
-  if (value === "auto") return driver.auto();
   const chosen = choose_level(levels, value, undefined, 1)!;
   if (chosen.active) return true;
   chosen.pick();
@@ -72,8 +71,7 @@ export function create_rule(deps: RuleDeps) {
       } catch {
         // A page object that throws counts as a player that is not ready.
       }
-      // `auto` has no level to watch, so one hand-back ends it.
-      held = at_level ? (level === "auto" ? hold_ticks : held + (video_is_new || !navigated ? 1 : 0)) : 0;
+      held = at_level ? held + (video_is_new || !navigated ? 1 : 0) : 0;
       if (held >= hold_ticks) break;
       await deps.sleep(RULE_INTERVAL_MS);
     }
@@ -82,7 +80,8 @@ export function create_rule(deps: RuleDeps) {
     level = value;
     if (navigated) manual = false;
     else if (manual) return;
-    if (value === "off") {
+    // `auto` leaves the player to the site, like `off`. A poll of an earlier value ends here.
+    if (value === "off" || value === "auto") {
       generation++;
       polling = false;
       return;

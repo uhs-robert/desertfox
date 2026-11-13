@@ -299,7 +299,7 @@ test("the defaults stay the same", () => {
     mode_indicator: "always",
     palette: "oasis_moonlight",
     light_intensity: 3,
-    media_quality: "max",
+    media_quality: "auto",
     editor_ext: "",
     search_prefixes: { here: "s", tab: "S" },
     container_prefixes: { reopen: "c", tab: "C" },

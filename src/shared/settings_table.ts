@@ -90,8 +90,8 @@ export const SETTINGS_TABLE = {
   strip_tracking: { kind: "boolean", default: true, per_site: true },
   // No default: a tab keeps the zoom Firefox remembers for the site until a site row or `:set` gives one. Firefox's own zoom range.
   zoom: { kind: "number", min: 0.3, max: 5, per_site: true },
-  // The quality rule for site players (see `src/background/media_quality.ts`): `off` leaves the site alone, `auto` hands the choice to the site, `max` and `min` take an end, a height takes the highest level at or below it.
-  media_quality: { kind: "enum", values: ["off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160, 4320], default: "max", per_site: true },
+  // The quality rule for site players (see `src/background/media_quality.ts`): `off` leaves the site alone, `auto` (the default) leaves the player to the site, like `off` but a site row can still override it, `max` and `min` take an end, a height takes the highest level at or below it.
+  media_quality: { kind: "enum", values: ["off", "auto", "max", "min", 144, 240, 360, 480, 720, 1080, 1440, 2160, 4320], default: "auto", per_site: true },
   // The file extension of the scratch file `text.edit_external` opens, so the editor picks a filetype. The empty default means the file has no extension.
   editor_ext: { kind: "custom", schema: { type: "string", pattern: "^[A-Za-z0-9]{0,10}$" }, default: "", per_site: true },
   layout_fallback: { kind: "boolean", default: true },
