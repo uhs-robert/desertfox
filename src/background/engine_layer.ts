@@ -37,8 +37,15 @@ function pieces_of(edits: EngineEdits): { name: string; edits: EngineEdits }[] {
 
 const joined = (a: EngineEdits, b: EngineEdits): EngineEdits => ({ engines: { ...a.engines, ...b.engines }, letters: { ...a.letters, ...b.letters } });
 
+// A table the TOML writer cannot write (an array holding `null`, say) refuses like a conflict, so the piece-by-piece build can leave it out.
 function build_with(files: ConfigFiles, dir_label: string, commands: CommandMeta[], edits: EngineEdits) {
-  return build_files_config({ ...files, ...layer_files(files, {}, edits) }, dir_label, commands, "layer");
+  let layer: ConfigFiles;
+  try {
+    layer = layer_files(files, {}, edits);
+  } catch (error) {
+    throw new ConfigRefusal(`${KEPT_CURRENT.layer} An engine holds a value that cannot be saved: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return build_files_config({ ...files, ...layer }, dir_label, commands, "layer");
 }
 
 // A piece that conflicts is left out with its problems, so a later edit of the files never leaves the browser with no engines. The files alone were built before, so they pass.

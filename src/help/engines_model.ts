@@ -56,6 +56,7 @@ export function create_engines_session(deps: EnginesDeps) {
 
   // One request at a time. The form clears after a save and stays after a refusal, so the user can fix the field.
   async function change(request: ChangeEngines, cleared: boolean): Promise<void> {
+    const sent = JSON.stringify([state.form, state.editing]);
     state.busy = true;
     delete state.message;
     deps.on_change();
@@ -63,7 +64,8 @@ export function create_engines_session(deps: EnginesDeps) {
     state.busy = false;
     if (answer.ok) {
       state.message = { ok: true, text: answer.message };
-      if (cleared) {
+      // A draft or an Edit picked while the request ran stays.
+      if (cleared && JSON.stringify([state.form, state.editing]) === sent) {
         state.form = { ...EMPTY_FORM };
         delete state.editing;
       }
