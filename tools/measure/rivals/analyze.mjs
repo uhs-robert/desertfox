@@ -6,6 +6,8 @@ import { PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
 const out_dir = `${process.env.RIVALS_DIR}/out`;
 const pass_numbers = (process.env.PASSES ?? "1,2").split(",").map(Number);
 const MEGABYTE = 1048576;
+// A missing sample stays null: dividing null would give a measured zero.
+const to_mb = (bytes) => (typeof bytes === "number" ? bytes / MEGABYTE : null);
 
 const runs_of = {};
 const info_of = {};
@@ -53,14 +55,14 @@ table("Hint key to first label, first press on the page", (run) => run.press1?.f
 table("Hint key to first label painted (next animation frame), first press", (run) => run.press1?.paint_ms, "ms");
 table("Hint key to first label, second press (warm)", (run) => run.press2?.first_ms, "ms");
 table("Labels seen in the top document", (run) => run.press1?.count, "count");
-table("Page content process RSS after load", (run) => run.mem_load?.content_rss / MEGABYTE, "MB");
-table("Page content process RSS after hints", (run) => run.mem_hints?.content_rss / MEGABYTE, "MB");
-table("Extension process RSS after load", (run) => run.mem_load?.ext_rss / MEGABYTE, "MB");
-table("Extension process RSS after hints", (run) => run.mem_hints?.ext_rss / MEGABYTE, "MB");
-table("Extension heap in the page content process after load (explicit, moz-extension)", (run) => run.mem_load?.content_ext_heap / MEGABYTE, "MB");
-table("Extension heap in the page content process after hints", (run) => run.mem_hints?.content_ext_heap / MEGABYTE, "MB");
-table("Extension-process heap attributed to moz-extension after load", (run) => run.mem_load?.ext_proc_heap / MEGABYTE, "MB");
-table("Extension-process heap attributed to moz-extension after hints", (run) => run.mem_hints?.ext_proc_heap / MEGABYTE, "MB");
+table("Page content process RSS after load", (run) => to_mb(run.mem_load?.content_rss), "MB");
+table("Page content process RSS after hints", (run) => to_mb(run.mem_hints?.content_rss), "MB");
+table("Extension process RSS after load", (run) => to_mb(run.mem_load?.ext_rss), "MB");
+table("Extension process RSS after hints", (run) => to_mb(run.mem_hints?.ext_rss), "MB");
+table("Extension heap in the page content process after load (explicit, moz-extension)", (run) => to_mb(run.mem_load?.content_ext_heap), "MB");
+table("Extension heap in the page content process after hints", (run) => to_mb(run.mem_hints?.content_ext_heap), "MB");
+table("Extension-process heap attributed to moz-extension after load", (run) => to_mb(run.mem_load?.ext_proc_heap), "MB");
+table("Extension-process heap attributed to moz-extension after hints", (run) => to_mb(run.mem_hints?.ext_proc_heap), "MB");
 
 if (ran_pages.includes("frames") && ran_pages.includes("frames0")) {
   const frame_count = 100;
@@ -90,7 +92,7 @@ if (tools.includes("none")) {
 }
 
 const hint_pages = ran_pages.filter((page) => page !== "frames0");
-markdown += `\n### Cold first press (warm-up run, run -1, fresh browser; ms)\n\n| tool | ${hint_pages.join(" | ")} |\n|---|${hint_pages.map(() => "---").join("|")}|\n`;
+markdown += `\n### First press after load on each page, from the warm-up run (run -1) in the same browser process; only the first page of a tool is a fresh browser (ms)\n\n| tool | ${hint_pages.join(" | ")} |\n|---|${hint_pages.map(() => "---").join("|")}|\n`;
 for (const tool of tools.filter((name) => name !== "none")) {
   const cells = hint_pages.map((page) => (runs_of[tool].find((run) => run.page === page && run.run === -1)?.press1?.first_ms ?? null));
   markdown += `| ${tool} | ${cells.map((value) => show(value, 0)).join(" | ")} |\n`;
