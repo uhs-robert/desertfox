@@ -24,6 +24,14 @@ test("quick start: the keys come from the keymap", () => {
   for (const key of ["j", "k", "gg", "G", "f", ":", "/", "?", "n", "N", "v", ";v", ";V", "g?", "y", "o", "<Escape>"]) assert.ok(codes.includes(key), key);
 });
 
+test("quick start: the host keys follow a rebind and fall back to the command line", () => {
+  const rebound = codes_of(quick_start_blocks(compile({ ...DEFAULT_KEYMAP, insert: { "<A-e>": { id: "text.edit_external" } } } as never), all_commands));
+  assert.ok(rebound.includes("<A-e>"));
+  assert.ok(!rebound.includes("<C-o>"));
+  const unbound = codes_of(quick_start_blocks(compile({ ...DEFAULT_KEYMAP, insert: {} } as never), all_commands));
+  assert.ok(!unbound.includes("<C-o>"));
+});
+
 test("quick start: the copy example names a key that copies a link address", () => {
   assert.ok(codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands)).includes(";yl"));
 });
@@ -66,7 +74,7 @@ test("quick start: a hint on inputs only is not picked for clicking", () => {
 
 test("quick start: the default keymap gives the keys it always gave", () => {
   const codes = codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands));
-  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", "g", "which_key_delay_ms", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", "<C-o>", ",f", "config.reload", "~/.config/desertfox/", ":native.install"]);
+  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", "g", "which_key_delay_ms", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", "<C-o>", ",fs", "config.reload", "~/.config/desertfox/", ":native.install"]);
 });
 
 test("quick start: a binding that spells out a default still matches", () => {

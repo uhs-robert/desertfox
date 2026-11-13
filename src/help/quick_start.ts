@@ -90,6 +90,9 @@ const BINDINGS = {
   // `<C-[>` also escapes, but `<Escape>` is the key a reader knows.
   escape: { mode: "normal", id: "mode.escape", args: {}, test: () => true, prefer: "<Escape>" },
   help: { mode: "normal", id: "help.open", args: {} },
+  // Host features: the keys follow the keymap like the rest, so a rebind never leaves this section wrong.
+  edit_external: { mode: "insert", id: "text.edit_external", args: {} },
+  firefox_settings: { mode: "normal", id: "browser.open_firefox_page", args: { page: "settings" } },
 } satisfies Record<string, Binding>;
 
 type BindingName = keyof typeof BINDINGS;
@@ -169,6 +172,6 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows any config warnings."),
     heading("The native host is optional"),
     say("DesertFox works without the native host (a small Linux helper program). In the browser you can change settings, quickmarks and site rules. You can edit the config files in the files editor on the settings page. You can import and export a zip. You can rebind keys in the Keys section of the settings page."),
-    say("The host adds three things. Press [<C-o>] in insert mode to edit a text field in your own editor. The [,f] keys open Firefox pages. The [config.reload] command reads config files from [~/.config/desertfox/]. To install the host, run [:native.install]."),
+    say("The host adds three things. Press {edit_external} in insert mode to edit a text field in your own editor. {firefox_settings} opens the Firefox settings page, and the keys beside it open other Firefox pages. The [config.reload] command reads config files from [~/.config/desertfox/]. To install the host, run [:native.install]."),
   ];
 }
