@@ -7,11 +7,12 @@ import { refused_as } from "../src/shared/swallow.ts";
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   // 19.5 KB (admission clause A, it runs before the first key): the layout fallback reads a letter of another script by its physical key.
-  "content.js": 19.5 * 1024,
+  // 20 KB (clause A, it decides what happens to a key): the top frame's watch on a focused frame that hides, and a child frame's mode report on blur, which keep the keys and the FRAME badge with the frame that holds the focus (#619).
+  "content.js": 20 * 1024,
   // 48.5 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB.
   "hints.js": 48.5 * 1024,
   "caret.js": 32 * 1024,
-  // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the arrival guard). The bundle loads on a pause in a prefix, not on every page.
+  // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
   "whichkey.js": 8.5 * 1024,
   // 6.5 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The bundle loads on the first `:`, not on every page.
   "cmdline.js": 6.5 * 1024,
