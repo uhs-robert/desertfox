@@ -27,7 +27,7 @@ const HAND_BACK_TIMEOUT_MS = 1000;
 const NO_ROOM_PX = 120;
 const NO_ROOM = "No room for the line";
 // A frame asked for a line it no longer holds, or a top frame asked for a frame that is gone.
-const NOT_HERE: Outcome = { ok: false, message: "The frame is not there" };
+const NOT_HERE: Outcome = { ok: false, message: "The frame is gone" };
 // After the line's answer, a subframe that has not heard the end of the line from the top frame ends it on its own.
 const END_GRACE_MS = 2000;
 
@@ -91,6 +91,8 @@ if (!page.desertfox_cmdline_ready) {
   const origin = new URL(browser.runtime.getURL("cmdline.html")).origin;
   let open: Open | undefined;
   let remote: Remote | undefined;
+  // The id of the last line this frame sent up. Its focus comes back even when the mode left the line first, as the end of a fullscreen does.
+  let sent_line_id: string | undefined;
 
   // Keys typed fast after Enter or Escape still reach the frame until Firefox moves the focus. So the focus moves to the
   // page first and the page's keys wait, the frame hands back its late keys, they replay, and only then the frame goes.
@@ -330,6 +332,7 @@ if (!page.desertfox_cmdline_ready) {
     const current: Remote = { id_: crypto.randomUUID(), sent_: [], ending_: false, late_: [], search_open_: args.search !== undefined };
     const from_mode = host.get_mode();
     remote = current;
+    sent_line_id = current.id_;
     host.set_mode_("cmdline");
     const outcome = await relay_outcome("top", "cmdline.open", { text: args.text, search: args.search, mode: from_mode, remote_id: current.id_, scroll: read_scroll() });
     if (remote === current && (outcome === undefined || (!outcome.ok && outcome.message === NO_ROOM))) {
@@ -362,8 +365,8 @@ if (!page.desertfox_cmdline_ready) {
   const asked_of_this_line = (args: Record<string, unknown>) => remote?.id_ === args.remote_id;
   // The top frame hands the focus back. A frame that is hidden now, or that no longer holds this line, refuses, and the top frame keeps the focus.
   host.register_handler_("cmdline.focus", (args): Outcome => {
-    if (!remote || !asked_of_this_line(args) || is_too_small_to_show({ width: innerWidth, height: innerHeight })) return NOT_HERE;
-    remote.ending_ = true;
+    if (args.remote_id !== sent_line_id || is_too_small_to_show({ width: innerWidth, height: innerHeight })) return NOT_HERE;
+    if (remote) remote.ending_ = true;
     window.focus();
     return { ok: true };
   });
