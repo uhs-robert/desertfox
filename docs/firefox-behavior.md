@@ -466,4 +466,4 @@ Counted from the unit tests (`test/quality_load.test.ts`) against a fake backgro
 | Driver probes | 100 | 0 |
 | Timers that wait | one poll for 10 s | one 2 s look-again timer for 10 s |
 
-The off check reads the keymap once per trigger, about 3 reads per hard load for the whole tab, not per frame. With the rule `off` or `auto` everywhere (the global value `off` or the default `auto`, no site row sets one) the count is 0 injections. A frame with a video costs one keymap read per load. Each report that comes from a frame with a video carries the rule in its answer. The 200-frame page that cost about 2,200 `read_media_quality` messages in 10 s now costs none.
+The off check reads the keymap once per trigger, about 3 reads per hard load for the whole tab, not per frame. With the rule `off` or `auto` everywhere (the global value `off` or the default `auto`, no site row asks for a quality) the count is 0 injections. A frame with a video costs one keymap read per load. Each report that comes from a frame with a video carries the rule in its answer. The 200-frame page that cost about 2,200 `read_media_quality` messages in 10 s now costs none.

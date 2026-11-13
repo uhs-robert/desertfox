@@ -177,7 +177,7 @@ test("the strip rule is the global list on by default, none where a site row tur
   assert.equal("frame_site_globals" in compile_keymap(KEYMAP, {}, resolve).compiled, false);
 });
 
-test("the rule is off everywhere only when the global value is off and no site row sets one", async () => {
+test("the rule is idle only when the global value is off or auto and no site row asks for a quality", async () => {
   const is_idle = (settings: Record<string, unknown>) => media_quality_is_idle(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled));
   assert.equal(await is_idle({}), true, "the default auto leaves every player alone");
   assert.equal(await is_idle({ media_quality: "auto" }), true);
