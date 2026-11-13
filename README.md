@@ -73,6 +73,8 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | --- | --- | --- | --- | --- | --- |
 | Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
+| Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
 | Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
 | Command line with completion | ✅ | 🟡 | 🟡 | ✅ | ✅ |
@@ -83,17 +85,20 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Per-site keys and settings | ✅ | keys only | 🟡 | ✅ | ✅ |
 | Containers | ✅ | ❌ | 🟡 | ✅ | ❌ |
 | Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
-| Helper program outside the browser | optional, fixed requests | none | none | optional, runs shell commands | n/a |
+| Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Script loaded on every page | 18.5 KB | 254 KB | 94 KB | 1.1 MB | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
+
+Hints typically appear in under a tenth of a second, within the blink of an eye.
 
 Sources, read in November 2026: each project's documentation, source code and shipped add-on.
 
 - Vimium: [README](https://github.com/philc/vimium/blob/master/README.md).
 - Vimium C: [README](https://github.com/gdh1995/vimium-c/blob/master/README.md) and the 2.12.3 add-on.
 - Tridactyl: [command source](https://github.com/tridactyl/tridactyl/blob/master/src/excmds.ts) (`bindurl`, `seturl`, `exclaim`).
+- Speed, coverage and drag checks: [performance comparison](tools/measure/rivals/README.md).
 - qutebrowser: [command reference](https://github.com/qutebrowser/qutebrowser/blob/main/doc/help/commands.asciidoc).
 
 > [!NOTE]

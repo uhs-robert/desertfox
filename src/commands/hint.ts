@@ -5,6 +5,10 @@ import { YANK_REGISTER_PARAM } from "./register_param.ts";
 // Filters whose elements have an address to open or copy. The mixed filters stay because some of their elements have one.
 const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "custom"];
 
+// Filters whose elements a click, a double-click or a grab can act on. A link is left out: its click navigates away, and a link is no grab source.
+const NON_LINK_FILTERS = ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"];
+const GRABBABLE = [...NON_LINK_FILTERS, "draggable"];
+
 define("hint.run", {
   name: "hint",
   label: "Hint",
@@ -27,9 +31,12 @@ define("hint.run", {
         play_pause: { filter: ["media"] },
         mute: { filter: ["media"] },
         fullscreen: { filter: ["media"] },
+        // A link is no grab source, so the grabs leave `links` out. `every` is the way to a plain element.
+        grab: { filter: GRABBABLE },
+        grab_move: { filter: GRABBABLE },
         // The pin and the media keys are not shown to follow focus into a frame of another site, unlike the caret.
         enter_media: { filter: ["media"], frames: ["same_origin"] },
-        double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
+        double_click: { filter: NON_LINK_FILTERS },
         // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.
         inspect: { frames: ["same_origin"] },
       },
@@ -90,10 +97,10 @@ define("hint.run", {
     {
       name: "filter",
       type: "enum",
-      values: ["all", "every", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "media", "images", "frames", "custom"],
+      values: ["all", "every", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "draggable", "media", "images", "frames", "custom"],
       default: "clickable",
       short: { all: "a", every: "e", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", custom: "u" },
-      value_labels: { all: "for all elements", every: "for every visible element", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", media: "for video and audio", images: "for images", frames: "for frames", custom: "for a selector" },
+      value_labels: { all: "for all elements", every: "for every visible element", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", draggable: "for draggable elements", media: "for video and audio", images: "for images", frames: "for frames", custom: "for a selector" },
       description: {
         all: "Label every element.",
         every: "Label visible elements, not empty or one-child wrappers.",
@@ -102,6 +109,7 @@ define("hint.run", {
         links: "Label only the links.",
         prose: "Label the elements that hold text of their own.",
         scrollable: "Label the boxes that scroll, to focus one.",
+        draggable: "Label what a drag moves: handles, sliders, grab cursors.",
         media: "Label the video and audio, even under site controls.",
         images: "Label the pictures of at least 24 px, even as backgrounds.",
         frames: "Label the frames of at least 24 px, to focus one.",

@@ -114,6 +114,18 @@ test("the default modifiers give the owner's keys and no stacked or refused ones
   for (const keys of [["B", "b"], ["B", "t"], ["B", "p"], ["h", "s"], ["r", "v"], ["r", "V"], ["B", ";"], ["r", "B"], ["p"], ["R"]]) assert.equal(node_at(compiled, ";", ...keys), undefined, keys.join(""));
 });
 
+test("the grab modifiers give ;gg and ;Gg for the draggable group, ;ga and ;gb for the rest, and no link variant", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  for (const [prefix, action] of [["g", "grab"], ["G", "grab_move"]] as const) {
+    assert.deepEqual([args_at(compiled, ";", prefix, "g")?.action, args_at(compiled, ";", prefix, "g")?.filter], [action, "draggable"]);
+    assert.deepEqual([args_at(compiled, ";", prefix, "a")?.action, args_at(compiled, ";", prefix, "a")?.filter], [action, "every"]);
+    assert.equal(args_at(compiled, ";", prefix, "b")?.filter, "buttons");
+    assert.equal(node_at(compiled, ";", prefix, "l"), undefined);
+    assert.equal(node_at(compiled, ";", prefix)?.kind, "branch");
+  }
+});
+
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);

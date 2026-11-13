@@ -1,4 +1,4 @@
-// The grab keys. ;g picks an element and a target and drives a drag between them, ;G holds the element and h j k l, Enter and Escape move, drop and cancel it.
+// The grab keys. ;gg picks (;ga for a source outside the draggable group) an element and a target and drives a drag between them, ;G holds the element and h j k l, Enter and Escape move, drop and cancel it.
 // The pages are in drag_pages.mjs. Each keeps its result in the DOM, which the content script world reads.
 
 export const areas = ["hints", "keys", "bundles"];
@@ -35,7 +35,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case(";g drops a draggable element on a target with DragEvents", async () => {
     await open_page("drag", "h5", { new_tab: true });
-    await press_keys(";g");
+    await press_keys(";gg");
     await pick("#src");
     await pick("#dst");
     await poll_until("the drop", async () => (await read('document.getElementById("dst").textContent')) === "dropped:payload");
@@ -43,7 +43,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case(";g reorders a SortableJS list that runs on pointer events", async () => {
     await open_page("drag", "sortable_fallback", { new_tab: true });
-    await press_keys(";g");
+    await press_keys(";ga");
     await pick("#i1");
     await pick("#i3");
     await poll_until("the list order", async () => (await order_of("list")) === "i2,i3,i1", { timeout_ms: 5000 });
@@ -53,7 +53,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case(";g moves a pointer slider thumb to a target", async () => {
     await open_page("drag", "range", { new_tab: true });
-    await press_keys(";g");
+    await press_keys(";ga");
     await pick("#thumb");
     await pick("#cv");
     await poll_until("the thumb to move", async () => (await thumb_left()) > 100, { timeout_ms: 5000 });
@@ -62,7 +62,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case(";g still moves a card when the page's setPointerCapture call fails", async () => {
     await open_page("drag", "ptr", { new_tab: true });
     const mark = events.length;
-    await press_keys(";g");
+    await press_keys(";gg");
     await pick("#c1");
     await pick("#b");
     await poll_until("the card in column b", async () => (await order_of("b")) === "c1", { timeout_ms: 5000 });
@@ -73,7 +73,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     const page_id = "range_enter";
     await open_page("drag", "range_enter", { new_tab: true });
     let mark = events.length;
-    await press_keys(";G");
+    await press_keys(";Gg");
     await pick("#r");
     await wait_badge(mark, page_id, "GRAB");
     await press_keys("l", "l", "l");
@@ -91,7 +91,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case(";G then Escape puts a held thumb back and leaves no pointer held", async () => {
     const page_id = "range_cancel";
     await open_page("drag", "range_cancel", { new_tab: true });
-    await press_keys(";G");
+    await press_keys(";Ga");
     await pick("#thumb");
     await press_keys("l", "l", "l");
     await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
@@ -108,7 +108,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case(";G on a range input, Escape restores the value", async () => {
     const page_id = "range_escape";
     await open_page("drag", "range_escape", { new_tab: true });
-    await press_keys(";G");
+    await press_keys(";Gg");
     await pick("#r");
     await press_keys("l", "l");
     await poll_until("the value at 2", async () => (await read('document.getElementById("r").value')) === "2");
@@ -120,7 +120,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case(";g reorders a SortableJS list in its default, native drag mode", async () => {
     await open_page("drag", "sortable_native", { new_tab: true });
-    await press_keys(";g");
+    await press_keys(";ga");
     await pick("#i1");
     await pick("#i3");
     await poll_until("the list order", async () => (await order_of("list")) === "i2,i3,i1", { timeout_ms: 5000 });
@@ -130,7 +130,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     const page_id = "h5_move";
     await open_page("drag", page_id, { new_tab: true });
     let mark = events.length;
-    await press_keys(";G");
+    await press_keys(";Gg");
     await pick("#src");
     await wait_badge(mark, page_id, "GRAB");
     await press_keys("j", "j", "j", "j");
@@ -140,7 +140,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await sleep(200);
     expect((await read('document.getElementById("dst").textContent')) === "dst", "Escape dropped the element");
     mark = events.length;
-    await press_keys(";G");
+    await press_keys(";Gg");
     await pick("#src");
     await wait_badge(mark, page_id, "GRAB");
     await press_keys("j", "j", "j", "j");
@@ -154,7 +154,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     const page_id = "ptr_move";
     await open_page("drag", page_id, { new_tab: true });
     let mark = events.length;
-    await press_keys(";G");
+    await press_keys(";Gg");
     await pick("#c1");
     await wait_badge(mark, page_id, "GRAB");
     await press_keys("l", "l", "l", "l", "l", "l");
@@ -166,7 +166,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case("a page that goes hidden during ;G releases the held pointer through the mode exit", async () => {
     await open_page("drag", "range_hidden", { new_tab: true });
-    await press_keys(";G");
+    await press_keys(";Ga");
     await pick("#thumb");
     await press_keys("l", "l", "l");
     await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
@@ -182,9 +182,88 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case(";g drops a link on an html5 drop zone, though a link has no draggable attribute", async () => {
     await open_page("drag", "link_drop", { new_tab: true });
-    await press_keys(";g");
+    await press_keys(";ga");
     await pick("#src");
     await pick("#dst");
     await poll_until("the drop", async () => (await read('document.getElementById("dst").textContent')) === "dropped");
   });
+
+  await run_case(";gg labels the draggable group, one per sign, and not links, plain buttons or a child of a grab cursor", async () => {
+    await open_page("drag", "group", { new_tab: true });
+    await press_keys(";gg");
+    await labels_up("labels of the draggable group");
+    expect((await hint_label_count()) === 12, `the draggable group has twelve labels, one per sign, got ${await hint_label_count()}`);
+    await press_keys("-k", "Escape");
+    await labels_gone("labels gone after Escape");
+  });
+
+  await run_case(";ga keeps every element reachable, the link, the button and the plain div too", async () => {
+    await open_page("drag", "group_every", { new_tab: true });
+    await press_keys(";ga");
+    await labels_up("labels of every element");
+    expect((await hint_label_count()) >= 5, "every filter labels the link, the button and the div too");
+    await press_keys("-k", "Escape");
+    await labels_gone("labels gone after the second Escape");
+  });
+
+  await run_case(";gg reorders a native SortableJS list whose items are marked draggable", async () => {
+    await open_page("drag", "sortable_marked", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#i1");
+    await pick("#i3");
+    await poll_until("the list order", async () => (await order_of("list")) === "i2,i3,i1", { timeout_ms: 5000 });
+  });
+
+  await run_case(";gg drags a role=slider div shaped like a video volume panel", async () => {
+    await open_page("drag", "slider", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#vol");
+    await pick("#dst");
+    await poll_until("the slider value", async () => parseFloat(await read('document.getElementById("vol").getAttribute("aria-valuenow")')) > 20, { timeout_ms: 5000 });
+  });
+
+  await run_case(";Gg labels the two touch-action cards, holds one and Escape puts it back", async () => {
+    const page_id = "ptr_hold";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
+    await press_keys(";Gg");
+    await labels_up("labels of the draggable group");
+    expect((await hint_label_count()) === 2, `the two cards are the whole group, got ${await hint_label_count()} labels`);
+    await pick("#c1");
+    await wait_badge(mark, page_id, "GRAB");
+    expect(!!find_event(mark, (event) => event.type === "drag" && (event.ev === "capture_ok" || event.ev === "capture_error")), "the card got no pointerdown, so nothing was held");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    // The page's pointerup appends the dragged card to the column under the pointer, so the card lands last in column a and never in b.
+    expect((await order_of("a")) === "c2,c1" && (await order_of("b")) === "", `Escape put the card back in column a, a is ${await order_of("a")} b is ${await order_of("b")}`);
+  });
+
+  await run_case(";gg twice on one page lands both drops", async () => {
+    await open_page("drag", "ptr_twice", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#c1");
+    await pick("#b");
+    await poll_until("c1 in column b", async () => (await order_of("b")) === "c1", { timeout_ms: 5000 });
+    await press_keys(";gg");
+    await pick("#c2");
+    await pick("#b");
+    await poll_until("c2 in column b after c1", async () => (await order_of("b")) === "c1,c2", { timeout_ms: 5000 });
+  });
+
+  // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.
+  for (const [second, label] of [[";ga", "a grab"], [";a", "a plain hint"]]) {
+    await run_case(`;gg then Escape, and ${second} on the same page still shows labels (${label})`, async () => {
+      await open_page("drag", "group", { new_tab: true });
+      await press_keys(";gg");
+      await labels_up("labels of the draggable group");
+      await press_keys("-k", "Escape");
+      await labels_gone("labels gone after Escape");
+      await sleep(300);
+      await press_keys(second);
+      await labels_up(`labels of ${second} after the cancelled grab`);
+      await press_keys("-k", "Escape");
+      await labels_gone(`labels gone after ${second}`);
+    });
+  }
 }
