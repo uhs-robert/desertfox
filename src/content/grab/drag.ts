@@ -81,7 +81,9 @@ export function press(element: Element): Held | undefined {
   const { route, source } = route_of(element);
   if (route !== "html5") return held;
   Object.assign(held, { route, source, data: new DataTransfer() });
-  return fire(source, drag_event(held, "dragstart", start)) ? held : undefined;
+  if (fire(source, drag_event(held, "dragstart", start))) return held;
+  // The page refused after the press, so the button must not stay down.
+  send_pointer(held, "up", element, start);
 }
 
 function write_range(held: Held, value: string): void {
