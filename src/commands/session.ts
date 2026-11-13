@@ -192,7 +192,7 @@ export const browser_session_deps: SessionDeps = {
     if (created.id === undefined) throw new RuntimeRefusal("Firefox did not open a window");
     return { window_id: created.id, blank_tab_id: created.tabs?.[0]?.id };
   },
-  window_exists: (window_id) => browser.windows.get(window_id).then(() => true, () => false),
+  window_exists: (window_id) => ignore_refusal(browser.windows.get(window_id)).then((window) => window !== undefined),
   create_tab: async (open) => {
     const created = await browser.tabs.create({
       windowId: open.window_id,

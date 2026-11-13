@@ -38,7 +38,7 @@ import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
 import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
 import { arm_leave_watch } from "../page/leave_watch.ts";
-import { best_effort, refused_as } from "../../shared/swallow.ts";
+import { best_effort, ignore_refusal, refused_as } from "../../shared/swallow.ts";
 
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element; desertfox_content_loaded?: true | (() => void) };
@@ -390,9 +390,9 @@ function register(host: BundleHostApi): void {
     if (own !== undefined) return { run: () => perform_pick(current, labeled.found[own]!.element as HTMLElement) };
     const keys = !leaves || current.waiting_tokens_.length === 0 ? undefined : [...current.waiting_tokens_];
     const answer: Promise<HintFramesPickAnswer | undefined> = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_!, label: labeled.labels[index]!, ...(keys && { keys }) } satisfies HintFramesPick);
-    if (current.action === "hover") hovers_across.push({ session_id: labeled.session_id_!, answered: answer.then(() => undefined, () => undefined) });
+    if (current.action === "hover") hovers_across.push({ session_id: labeled.session_id_!, answered: best_effort(answer) });
     // A mode that started in the owner takes no typeahead. A mode that failed to start leaves the keys for a replay here.
-    const left = answer.then((reply) => (reply?.ok === true && starts_caret(current.action) ? [] : reply?.left ?? keys ?? []), () => keys ?? []);
+    const left = ignore_refusal(answer).then((reply) => (reply?.ok === true && starts_caret(current.action) ? [] : reply?.left ?? keys ?? []));
     return { run: () => answer.then((reply) => (reply && "text" in reply ? (current.action === "prompt" ? open_line_(reply.text) : copy_of_pick(current)(reply.text, reply.what)) : reply)), left };
   }
 

@@ -449,7 +449,7 @@ if (browser.omnibox) {
 const site_zoom = create_site_zoom({
   session: browser.storage.session,
   level_for: make_level_for(browser.storage.local, async () => effective_settings((await get_config()).settings).zoom, read_disabled),
-  address_of: (tab_id) => browser.tabs.get(tab_id).then((tab) => tab.url, () => undefined),
+  address_of: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)).then((tab) => tab?.url),
   set_zoom: (tab_id, level) => browser.tabs.setZoom(tab_id, level),
 });
 
@@ -459,7 +459,7 @@ const external_editor = create_external_editor({
   send_done: (tab_id, frame_id, message) => browser.tabs.sendMessage(tab_id, message, { frameId: frame_id }),
   save_text: (text, is_private) => browser_register_store.yank("", text, is_private),
   toast: (tab_id, frame_id, message) => show_toast_on_tab({ tab_id, frame_id }, "text.edit_external", message, "error"),
-  tab_exists: (tab_id) => browser.tabs.get(tab_id).then(() => true, () => false),
+  tab_exists: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)).then((tab) => tab !== undefined),
   private_window_open: has_private_window,
   now: () => Date.now(),
   pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

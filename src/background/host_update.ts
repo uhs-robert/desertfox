@@ -4,6 +4,7 @@
 
 import { host_standing } from "../shared/host_version.ts";
 import type { HostStanding } from "../shared/host_version.ts";
+import { best_effort } from "../shared/swallow.ts";
 import type { HostWatch, SelfUpdateReply, SelfUpdateRequest } from "./native_client.ts";
 
 // One automatic attempt per version per day, so a host that cannot update is not asked again on every reload.
@@ -149,10 +150,7 @@ export function create_host_update(deps: HostUpdateDeps) {
       if (running || phase.kind === "updating") return Promise.reject(new Error("An update is already running."));
       // Set before the first await, so an automatic check that starts meanwhile sees it and sends no second self_update.
       const work = manual_update();
-      running = work.then(
-        () => undefined,
-        () => undefined,
-      ).finally(() => {
+      running = best_effort(work).finally(() => {
         running = undefined;
       });
       return work;
