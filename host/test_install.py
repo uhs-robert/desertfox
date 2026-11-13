@@ -679,7 +679,7 @@ class ReleaseStepTest(InstallCase):
         """A work dir whose npm build is a stub that copies the stamped hashes into dist/, so release_beta runs without esbuild."""
         work = self.release_work_dir(version)
         os.makedirs(os.path.join(work, "node_modules"))
-        scripts = {"typecheck": "true", "build": 'mkdir -p dist && cp "$RELEASE_ASSETS_DIR/host_sha256.json" dist/'}
+        scripts = {"build": 'mkdir -p dist && cp "$RELEASE_ASSETS_DIR/host_sha256.json" dist/'}
         with open(os.path.join(work, "package.json"), "w") as file:
             file.write(json.dumps({"version": STABLE_PACKAGE_VERSION, "scripts": scripts}))
         gecko = {"update_url": "https://example.invalid/updates.json"} if update_url else {}
