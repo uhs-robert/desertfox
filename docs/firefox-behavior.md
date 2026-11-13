@@ -222,6 +222,8 @@ Measured in the key test (`test/key/p15_frame_mode.mjs`, Firefox 160) and on a p
 - When the focus moves from a field in a child frame to a field of the top document, the frame's field fires `focusout` first, with the frame's body as its `activeElement`. `frameElement.blur()` inside that event cancels the move: the top document's `activeElement` ends as its body.
 - A window that loses the focus (a hidden tab) fires `blur` and `focusout` on its focused field, which stays the `activeElement`.
 - `element instanceof HTMLElement` is false in a content script for an element of a same-origin child frame's document.
+- A focused child frame of another origin that gets `display: none` or `visibility: hidden` loses the focus: Firefox moves it to the top document, which gets a window `focus` event. A frame that gets `opacity: 0`, or a height of 0 with no border, keeps the focus and the keys. Measured in `test/key/p6_frames.mjs` (Firefox 160).
+- A child frame of another origin can call `window.focus()` on itself from a message handler while an extension iframe in the top document holds the focus. The focus moves into the child and its keys work. Measured in `test/key/p6_frames.mjs`, where the command line of the top document hands the focus back.
 
 ## The Google Sheets cell editor (sheets-cell-editor)
 
