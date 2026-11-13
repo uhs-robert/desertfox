@@ -13,10 +13,11 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 | `tab.mjs` | `node tools/measure/tab.mjs` | The timeline of a switch to a loaded and a discarded tab, and `tabs.reload` and `tabs.warmup` on the neighbor | `$MEASURE_DIR/tab/result.json` |
 | `p99_first_press.mjs` | see below | First and second press of `f` and `g`, and the early j on a slow-body page | `$MEASURE_DIR/fp/out.jsonl` |
 | `p99_profile.mjs` | see below | `start()` and per-key time with real keys | `$MEASURE_DIR/fp/prof.jsonl` |
+| `p96_hints_large.mjs` | see below, `KEY_TEST_PIECES=p96_hints_large` | Time from the `f` press to the first hint label on a page with 10,000 links and 10,000 plain divs, against a small-page control | `$MEASURE_DIR/hints_large/out.jsonl` |
 
 ## Key-test pieces
 
-`p99_first_press.mjs` and `p99_profile.mjs` are pieces for the headed key test, which needs a nested Hyprland session (see `test/key/README.md`). The harness only finds pieces named `p<number>_*.mjs` in `test/key/`. Copy the piece there for the run and delete the copy afterwards, so no throwaway piece is committed:
+`p99_first_press.mjs`, `p99_profile.mjs` and `p96_hints_large.mjs` are pieces for the headed key test, which needs a nested Hyprland session (see `test/key/README.md`). The harness only finds pieces named `p<number>_*.mjs` in `test/key/`. Copy the piece there for the run and delete the copy afterwards, so no throwaway piece is committed:
 
 ```bash
 cp tools/measure/p99_first_press.mjs test/key/

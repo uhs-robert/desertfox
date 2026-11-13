@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { make_browser_handlers } from "../src/commands/browser.ts";
 import { url_target, home_page_url } from "../src/commands/url_build.ts";
-import { focus_page_content, start_content_once, start_on_first_focus } from "../src/content/handlers/focus.ts";
+import { focus_page_content, start_content_once } from "../src/content/handlers/focus.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
@@ -179,11 +179,11 @@ test("url_target refuses empty text", () => {
   assert.throws(() => url_target("  ", "search", engines, undefined), /No URL/);
 });
 
-test("start_on_first_focus waits for the focus of a frame, and starts once", () => {
+test("start_content_once waits for the focus of a frame, and starts once", () => {
   const listeners: { run: () => void; once: boolean }[] = [];
   const win = { addEventListener: (type: string, run: () => void, options: { once: boolean }) => type === "focus" && listeners.push({ run, once: options.once }) };
   let started = 0;
-  start_on_first_focus(() => started++, win as never, false);
+  start_content_once(() => started++, win as never, false);
   assert.equal(started, 0);
   assert.equal(listeners.length, 1);
   assert.equal(listeners[0]!.once, true);
@@ -203,10 +203,10 @@ test("start_content_once starts one script per window, across a second injection
   assert.equal(started, 1);
 });
 
-test("start_on_first_focus starts at once in a frame that already holds the focus, with no listener", () => {
+test("start_content_once starts at once in a frame that already holds the focus, with no listener", () => {
   const listeners: unknown[] = [];
   let started = 0;
-  start_on_first_focus(() => started++, { addEventListener: () => listeners.push(1) } as never, true);
+  start_content_once(() => started++, { addEventListener: () => listeners.push(1) } as never, true);
   assert.equal(started, 1);
   assert.deepEqual(listeners, []);
 });

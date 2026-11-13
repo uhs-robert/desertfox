@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -74,10 +74,11 @@ test("the clickable selector adds roving-tabindex items", () => {
 });
 
 // A fake page element for the click sign: a tag, a cursor, a parent and attributes.
-type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean };
+type Dom = { name: string; local: string; cursor?: string; parent?: Dom; attrs?: Record<string, string>; in_menu?: boolean; plain?: boolean; focus_only?: boolean; off_screen?: boolean };
 const dom_styles = {
   cursor_of_: (e: Element) => (e as unknown as Dom).cursor ?? "auto",
   parent_of: (e: Element) => ((e as unknown as Dom).parent ?? null) as unknown as Element | null,
+  is_off_screen_: (e: Element) => (e as unknown as Dom).off_screen === true,
 };
 const el = (d: Dom) =>
   Object.assign(d, {
@@ -174,6 +175,30 @@ test("a visible wrapper keeps its hint when the clickable child inside it is hid
     is_reachable_at_: () => true,
   };
   assert.deepEqual(names_of(keep_visible_deduplicated([weak(wrapper), strong(child)], probe)), ["wrapper"]);
+});
+
+test("an off-screen element is not weak and costs no style read", () => {
+  const reads: string[] = [];
+  const counting = { ...dom_styles, cursor_of_: (e: Element) => (reads.push((e as unknown as Dom).name), dom_styles.cursor_of_(e)) };
+  const weak_test = make_weak_test(counting);
+  assert.equal(weak_test(el({ name: "below", local: "div", cursor: "pointer", off_screen: true })), false);
+  assert.deepEqual(reads, []);
+  assert.equal(weak_test(el({ name: "shown", local: "div", cursor: "pointer" })), true);
+  assert.deepEqual(reads, ["shown"]);
+});
+
+test("the off-screen rule: empty boxes stay, each edge rejects, a box just inside stays", () => {
+  const box = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, width, height });
+  const off = (rect: ReturnType<typeof box>) => is_rect_off_screen(rect, 100, 50);
+  assert.equal(off(box(500, 500, 0, 0)), false, "empty on both axes");
+  assert.equal(off(box(500, 500, 0, 10)), false, "zero width");
+  assert.equal(off(box(500, 500, 10, 0)), false, "zero height");
+  assert.equal(off(box(-20, 10, 10, 10)), true, "left of the window");
+  assert.equal(off(box(10, -20, 10, 10)), true, "above the window");
+  assert.equal(off(box(101, 10, 10, 10)), true, "right of the window");
+  assert.equal(off(box(10, 51, 10, 10)), true, "below the window");
+  assert.equal(off(box(-9, 10, 10, 10)), false, "one pixel inside on the left");
+  assert.equal(off(box(100, 50, 10, 10)), false, "touching the right and bottom edge");
 });
 
 test("the roving group rule is part of the weak menu selector, so plain-list menus are found", () => {
