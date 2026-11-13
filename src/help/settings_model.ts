@@ -2,19 +2,20 @@
 
 import type { ChangeSetting, ChangeSettingAnswer, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
-import { SETTING_HELP } from "../shared/settings_docs.ts";
+import { SETTING_DOCS, SETTING_HELP } from "../shared/settings_docs.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 // Shown on a row `:set` refuses.
-export const READ_ONLY_NOTE = "You cannot change this setting here. Edit it in a settings file, then press ,r.";
+// `reload_key` is the live key of config.reload. A settings file is a text file in the DesertFox folder, which the Advanced block explains.
+export const read_only_note = (reload_key: string): string => `You cannot change this setting here. Edit it in a settings file, a text file in your DesertFox folder, then press ${reload_key}. See Advanced at the bottom of this page.`;
 
 // A group takes the settings whose name starts with one of its prefixes. A setting that matches none lands in the last group. `intro` is the one sentence under the group's heading.
 export const GROUPS: { title: string; intro: string; prefixes: string[] }[] = [
-  { title: "Appearance", intro: "Colors, the mode badge and the key panel.", prefixes: ["palette", "light_", "mode_indicator", "which_key_"] },
+  { title: "Appearance", intro: "Colors, the mode badge and the which-key panel.", prefixes: ["palette", "light_", "mode_indicator", "which_key_"] },
   { title: "New tab", intro: "What the new tab page shows.", prefixes: ["newtab_", "new_tab_page", "home_page"] },
   { title: "Search", intro: "Which search engine runs by default and how a search opens.", prefixes: ["default_engine", "search_", "container_"] },
   { title: "Command line and completion", intro: "How the command line looks and what it suggests as you type.", prefixes: ["cmdline_", "completion_", "open_completion", "history_completion_"] },
-  { title: "General", intro: "Everything else, such as hints, zoom, site rules and the native host.", prefixes: [] },
+  { title: "General", intro: "Everything else, such as hints, zoom and site rules, and the desktop link, which needs the native host (an optional small Linux program).", prefixes: [] },
 ];
 
 export function group_of(name: string): string {
@@ -81,7 +82,7 @@ export function problem_with(name: string, value: unknown): string | undefined {
 export const LAYER_LABEL: Record<SettingTag | "default", string> = {
   "settings.toml": "changed",
   saved: "changed",
-  temp: "changed",
+  temp: "changed until restart",
   default: "default",
 };
 
@@ -101,6 +102,8 @@ export type Field = {
   control: Control;
   group: string;
   label: string;
+  // The long description, for the closed "More" fold.
+  doc: string;
   summary: string;
   // A value the reader typed that the background has not acknowledged. While it is set, a refresh leaves the field alone.
   draft?: { value: unknown };
@@ -129,6 +132,7 @@ export function create_settings_session(deps: SessionDeps) {
     row,
     control: control_of(row, deps.engines),
     group: group_of(row.name),
+    doc: SETTING_DOCS[row.name as keyof typeof SETTING_DOCS] ?? "",
     label: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.label ?? row.name,
     summary: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.summary ?? "",
   });

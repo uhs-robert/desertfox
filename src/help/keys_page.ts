@@ -78,7 +78,7 @@ function check_lines(check: CheckView, saves_hint: boolean, freed: string | unde
       for (const warning of check.warnings) lines.push(el("div", "desertfox-settings-error", warning));
       for (const shadow of check.shadows) lines.push(el("div", "desertfox-help-muted", `This replaces the key ${shadow.keys}, which now runs ${shadow.text || "nothing"}.`));
       if (freed !== undefined) lines.push(el("div", "desertfox-help-muted", `The key ${freed} will have no command.`));
-      if (check.problems.length === 0 && saves_hint && !check.saves) lines.push(el("div", "desertfox-help-muted", "This change would not take effect."));
+      if (check.problems.length === 0 && saves_hint && !check.saves) lines.push(el("div", "desertfox-help-muted", "DesertFox cannot save this key. The lines above say why."));
       return lines;
     }
   }
@@ -93,7 +93,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   const filter = el("input", "desertfox-settings-input") as HTMLInputElement;
   filter.type = "search";
   filter.placeholder = "Filter by key, command or mode";
-  filter.setAttribute("aria-label", "Filter bindings");
+  filter.setAttribute("aria-label", "Filter keys");
   filter.addEventListener("input", () => session.set_filter(filter.value));
   const status = el("p", "desertfox-settings-error");
   status.setAttribute("role", "status");
@@ -167,6 +167,8 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   }
 
   const origin_label = (row: BindingRow): string => (row.origin === "default" ? "default" : row.origin === "removed" ? "removed" : "changed");
+  // Reset is on the open editor, so the tag tells where the key comes from and why Reset may be missing.
+  const origin_title = (row: BindingRow): string => (row.origin === "default" ? "The built-in default" : row.origin === "removed" ? "You removed this key on this page" : "Changed on this page or in a settings file");
 
   function row_node(row: BindingRow): HTMLElement {
     const open = button("Edit", () => session.open_row(row));
@@ -174,6 +176,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
     open.className = "desertfox-settings-reset";
     const text = row.text === "" ? el("span", "desertfox-help-muted", "(unbound)") : el("code", undefined, row.text);
     const tag = el("span", "desertfox-help-badge", origin_label(row));
+    tag.title = origin_title(row);
     const cells = [el("td", undefined, el("kbd", undefined, row.keys)), el("td", undefined, text, " ", tag, ...(row.skipped ? [el("div", "desertfox-settings-error", row.skipped)] : [])), el("td", undefined, open)];
     const node = el("tr", "desertfox-keys-row", ...cells);
     node.addEventListener("click", (event) => {
@@ -191,10 +194,10 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
       body.push(row_node(row));
       if (open?.original && open.mode === mode && open.original.keys === row.keys) body.push(editor_row);
     }
-    const add = button("Add a binding", () => session.open_new(mode));
-    add.setAttribute("aria-label", `Add a binding in ${mode} mode`);
+    const add = button("Add a key", () => session.open_new(mode));
+    add.setAttribute("aria-label", `Add a key in ${mode} mode`);
     const heading = el("h3", undefined, mode, " ", el("span", "desertfox-help-muted", `(${rows.length})`));
-    const section = el("div", "desertfox-keys-mode", heading, add, body.length === 0 ? el("p", "desertfox-help-muted", "No bindings match.") : el("table", "desertfox-keys-table", ...body));
+    const section = el("div", "desertfox-keys-mode", heading, add, body.length === 0 ? el("p", "desertfox-help-muted", "No keys match.") : el("table", "desertfox-keys-table", ...body));
     return section;
   }
 
@@ -226,7 +229,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
     },
   });
   container.replaceChildren(
-    el("p", undefined, "Each row is a key and the command it runs. Keys are grouped by mode. A mode is a state, such as normal (keys run commands) or insert (keys type text). Click a row to change it, press the new keys in the box, type the command as you would in the command line and press Save. Remove takes the command off a key, and Reset goes back to the default."),
+    el("p", undefined, "Each row is a key and the command it runs. Keys are grouped by mode. A mode is a state, such as normal (keys run commands) or insert (keys type text). Click a row to change it, press the new keys in the box, type the command as you would in the command line and press Save. Remove takes the command off a key, and Reset undoes your change."),
     el("div", "desertfox-keys-tools", filter),
     status,
     tables,

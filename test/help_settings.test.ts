@@ -5,7 +5,7 @@ import { load_effective_config } from "../src/background/config_load.ts";
 import { create_settings_messages } from "../src/background/settings_message.ts";
 import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
-import { mount_settings } from "../src/help/settings_page.ts";
+import { mount_settings, update_row } from "../src/help/settings_page.ts";
 import { control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
 import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages.ts";
@@ -226,4 +226,18 @@ test("two quick edits of one field end on the second value", async () => {
   await Promise.all([first, second]);
   assert.equal(session.field("history_completion_max")!.row.value, 9);
   assert.equal(session.field("history_completion_max")!.draft, undefined);
+});
+
+test("update_row sets data-changed, the tag text and the tag title for each top layer", async () => {
+  const { session } = await make();
+  const field = session.field("newtab_date")!;
+  const expected = { "settings.toml": [true, "changed"], saved: [true, "changed"], temp: [true, "changed until restart"], default: [false, "default"] } as const;
+  for (const [layer, [changed, text]] of Object.entries(expected)) {
+    const attributes: Record<string, string> = {};
+    const row = { node: { setAttribute: (name: string, value: string) => { attributes[name] = value; } }, tag: { textContent: "", title: "" }, message: { textContent: "", classList: { toggle: () => undefined } }, reset: { disabled: false } };
+    update_row(row as never, { ...field, row: { ...field.row, top_layer: layer as never } });
+    assert.equal(attributes["data-changed"], String(changed), layer);
+    assert.equal(row.tag.textContent, text, layer);
+    assert.notEqual(row.tag.title, "", layer);
+  }
 });

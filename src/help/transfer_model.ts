@@ -101,7 +101,7 @@ export function create_transfer_session(deps: TransferDeps) {
       else set({ busy: false, message: { ok: false, text: preview.message } });
     } catch (error) {
       if (mine !== selection) return;
-      set({ busy: false, message: { ok: false, text: error instanceof ZipError ? `Config not imported, the current one stays. The import is refused: ${error.message}.` : `Config not imported, the current one stays. ${message_of(error)}` } });
+      set({ busy: false, message: { ok: false, text: error instanceof ZipError ? `Settings not imported, the current ones stay. The import is refused: ${error.message}.` : `Settings not imported, the current ones stay. ${message_of(error)}` } });
     }
   }
 
@@ -121,7 +121,7 @@ export function create_transfer_session(deps: TransferDeps) {
     try {
       answer = (await deps.send({ type: "commit_config_import", source: review.source, accepted: accepted_code(review) })) as ConfigImportAnswer;
     } catch (error) {
-      answer = { ok: false, message: `Config not imported, the current one stays. ${message_of(error)}` };
+      answer = { ok: false, message: `Settings not imported, the current ones stay. ${message_of(error)}` };
     }
     set({ busy: false, review: undefined, message: { ok: answer.ok, text: answer.message } });
     await load_snippets();

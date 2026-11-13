@@ -11,7 +11,7 @@ import { refused_as } from "../shared/swallow.ts";
 const STEP_JOINER = " ; ";
 export const CHECK_DELAY_MS = 250;
 
-export const READ_ONLY_ROW_NOTE = "This key runs several commands, so you cannot change it here. You can remove it or reset it. To change it, edit a settings file.";
+export const READ_ONLY_ROW_NOTE = "This key runs several commands, so you cannot change it here. You can remove it or reset it. To change it, edit a settings file, a text file in your DesertFox folder. See Advanced at the bottom of this page.";
 
 // Firefox keeps these for itself, so a page never sees them and the capture box cannot take them.
 export const RESERVED_CHORDS_NOTE = "Firefox keeps some keys for itself, such as Ctrl+T, Ctrl+W, Ctrl+N and F5, so you cannot use them here. Escape cancels, Backspace drops the last key, Tab moves the focus and Enter saves, so you cannot bind those four here either. Bind them in a settings file.";
@@ -127,7 +127,7 @@ export function create_keys_session(deps: KeysDeps) {
   async function read_rows(): Promise<boolean> {
     const answer = await ask<ListBindingsAnswer>({ type: "list_bindings" });
     if (!answer.ok) {
-      state.error = `The bindings could not be loaded: ${answer.message}`;
+      state.error = `The keys could not be loaded: ${answer.message}`;
       return false;
     }
     delete state.error;

@@ -93,6 +93,8 @@ const BINDINGS = {
   settings_page: { mode: "normal", id: "help.open", args: { name: "settings" } },
   // Host features: the keys follow the keymap like the rest, so a rebind never leaves this section wrong.
   edit_external: { mode: "insert", id: "text.edit_external", args: {} },
+  reload: { mode: "normal", id: "config.reload", args: {} },
+  find_anything: { mode: "normal", id: "open.anything", args: {} },
   firefox_settings: { mode: "normal", id: "browser.open_firefox_page", args: { page: "settings" } },
 } satisfies Record<string, Binding>;
 
@@ -112,6 +114,12 @@ export function quick_start_fallbacks(commands: CommandMeta[]): { id: string; te
     const text = command_line_of(commands, binding);
     return text === undefined ? [] : [{ id: binding.id, text }];
   });
+}
+
+// The key text a settings page sentence names, from the same keymap as the Quick Start text.
+export function key_text(compiled: CompiledKeymap | undefined, commands: CommandMeta[], name: "reload" | "find_anything"): string {
+  const inline = sentence(compiled, commands, `{${name}}`)[0]!;
+  return "text" in inline ? inline.text : "";
 }
 
 // Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name.

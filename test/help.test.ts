@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { build_help_model, STYLE_VARIABLES } from "../src/help/model.ts";
+import { build_help_model, group_title, STYLE_VARIABLES } from "../src/help/model.ts";
 import { command_help_url, parse_route } from "../src/help/route.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
@@ -247,4 +247,10 @@ test("the advanced flag in the hash rides on every route form", () => {
   assert.deepEqual(parse_route("#section=commands/debug?advanced"), { page: "commands", section: "debug", advanced: true });
   assert.deepEqual(parse_route("#command=debug.restart?advanced"), { page: "commands", command: "debug.restart", advanced: true });
   assert.deepEqual(parse_route("#/commands"), { page: "commands" });
+});
+
+test("every command group in the built command list has a plain title", () => {
+  const { commands } = JSON.parse(readFileSync(new URL("../dist/commands.json", import.meta.url), "utf8")) as { commands: { id: string }[] };
+  const raw = [...new Set(commands.map((command) => command.id.split(".")[0]!))].filter((group) => group_title(group) === group);
+  assert.deepEqual(raw, []);
 });

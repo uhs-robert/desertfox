@@ -51,6 +51,7 @@ class FakeNode {
     return node === this || (node?.parent ? this.contains(node.parent) : false);
   }
   focus() { fake_document.activeElement = this; }
+  scrollIntoView() {}
   getClientRects() { return this.shown ? [{}] : []; }
   find_all(test: (node: FakeNode) => boolean): FakeNode[] {
     const below = this.children.flatMap((child) => (typeof child === "string" ? [] : child.find_all(test)));
@@ -64,6 +65,7 @@ const fake_document = {
   createElement: (tag: string) => new FakeNode(tag),
   createElementNS: (_ns: string, tag: string) => new FakeNode(tag),
   querySelector: (selector: string) => fake_document.body.querySelector(selector),
+  getElementById: (id: string) => fake_document.body.find_all((node) => node.id === id)[0] ?? null,
 };
 
 const by_class = (name: string) => (node: FakeNode): boolean => node.classList.contains(name);
@@ -88,7 +90,7 @@ function render(route: Route, keep_state = false, guide: Block[] = [], root = ne
   fake_document.body = root;
   fake_document.activeElement = null;
   if (!keep_state) reset_group_state();
-  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings, config_source: "Config files", rebuild_steps: ["step one"], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
+  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings, config_source: "Config files", rebuild_steps: ["step one"], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," } } as never, route, guide);
   return root;
 }
 
@@ -435,7 +437,7 @@ function render_site_rules(address: string | undefined, rows = SITE_RULES_VIEW.r
   const root = new FakeNode("body");
   fake_document.body = root;
   reset_group_state();
-  const model = { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, site_rules_for: () => ({ address, rows }) };
+  const model = { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," }, site_rules_for: () => ({ address, rows }) };
   render_help(root as never, model as never, { page: "site-rules", ...(address === undefined ? {} : { address }) }, []);
   return root;
 }
@@ -455,4 +457,28 @@ test("the Site Rules page draws each row with its origin, columns as name and va
 test("the Site Rules page says so when no row fits, and tells where to run it without an address", () => {
   assert.match(text_of(render_site_rules("https://a.test/", [])), /No rule applies to this address/);
   assert.match(text_of(render_site_rules(undefined)), /Open a web page, then run +:help site_rules/);
+});
+
+test("a section link to a settings group shows every setting, so the heading is not hidden by the filter", () => {
+  const root = render({ page: "settings" });
+  const box = root.querySelector(".desertfox-settings")!;
+  const check = root.querySelector(".desertfox-only-changed-toggle")! as unknown as { checked: boolean; listeners: Record<string, FakeListener> };
+  check.checked = true;
+  check.listeners["change"]!();
+  assert.ok(box.classList.contains("desertfox-only-changed"));
+  const link = group_nodes(root).find((group) => group.page === "Settings")!.list.find_all((node) => node.tag === "a").find((node) => node.children[0] === "General")!;
+  (globalThis as { location?: unknown }).location = { hash: "#elsewhere" };
+  link.listeners["click"]!();
+  assert.equal(box.classList.contains("desertfox-only-changed"), false);
+  assert.equal(check.checked, false);
+});
+
+test("a section link to the page's own hash opens the collapsed Advanced block before it scrolls", () => {
+  const root = render({ page: "settings" });
+  const advanced = root.find_all((node) => node.tag === "details")[0] as unknown as { open: boolean };
+  advanced.open = false;
+  const link = group_nodes(root).find((group) => group.page === "Settings")!.list.find_all((node) => node.tag === "a").find((node) => String(node.children[0]).startsWith("Advanced: edit"))!;
+  (globalThis as { location?: unknown }).location = { hash: link.attributes["href"] };
+  link.listeners["click"]!();
+  assert.equal(advanced.open, true);
 });

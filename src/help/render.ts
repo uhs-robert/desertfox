@@ -254,9 +254,16 @@ const NO_CHANGED_CLASS = "desertfox-settings-none-changed";
 const ONLY_CHANGED_CLASS = "desertfox-only-changed";
 
 // The filter is a class on the settings box. The stylesheet (home.html) hides the rows whose `data-changed` is false and the groups left with none, so a refresh of the rows needs no code here.
+function clear_only_changed(): void {
+  document.querySelector(".desertfox-settings")?.classList.toggle(ONLY_CHANGED_CLASS, false);
+  const box = document.querySelector<HTMLInputElement>(".desertfox-only-changed-toggle");
+  if (box) box.checked = false;
+}
+
 function only_changed_toggle(): HTMLElement {
   const box = el("input", undefined) as HTMLInputElement;
   box.type = "checkbox";
+  box.className = "desertfox-only-changed-toggle";
   box.addEventListener("change", () => document.querySelector(".desertfox-settings")?.classList.toggle(ONLY_CHANGED_CLASS, box.checked));
   return el("p", undefined, el("label", undefined, box, " Show only changed settings"));
 }
@@ -310,7 +317,7 @@ function settings_page(model: HelpModel): HTMLElement[] {
     ),
     // `main.ts` fills `.desertfox-keys`, `.desertfox-engines`, `.desertfox-aliases` and `.desertfox-quickmarks`.
     ...settings_form_section(KEYS_SECTION, "desertfox-keys", "Change what a key does. Pick a key below, press the new keys and type the command it runs. The change works at once."),
-    ...settings_form_section(ENGINES_SECTION, "desertfox-engines", "Add a site you can search from the keyboard. Give it a name and an address with ", el("code", undefined, "{query}"), " where the search words go. A key letter lets you search it with ", el("code", undefined, "s"), " and that letter, or in a new tab with ", el("code", undefined, "S"), " and that letter. ", el("code", undefined, "{query}"), " stands for the words you type. A search word is optional. Type it before your words in the finder (key ,,) to search that engine, for example w rust."),
+    ...settings_form_section(ENGINES_SECTION, "desertfox-engines", "Add a site you can search from the keyboard. Give it a name and an address with ", el("code", undefined, "{query}"), " where the search words go. A key letter lets you search it with ", el("code", undefined, "s"), " and that letter, or in a new tab with ", el("code", undefined, "S"), " and that letter. A search word is optional. Type it before your words in the Find anything box (press ", el("code", undefined, model.keys.find_anything), ") to search that engine, for example w rust."),
     ...settings_form_section(ALIASES_SECTION, "desertfox-aliases", "Give a command a short name. Type the short name in the command line to run the command. For example, the alias ", el("code", undefined, "up"), " can run ", el("code", undefined, "tab.prev"), ". Find command names on the ", page_link("Commands", "commands"), " page."),
     ...settings_form_section(QUICKMARKS_SECTION, "desertfox-quickmarks", "A quickmark is a site saved under one letter or digit. Open it from the keyboard with the quickmark key and then the letter. Add one here, or save the page you are on."),
     advanced_settings(model),
@@ -447,6 +454,8 @@ function section_list(page: PageId, sections: Section[], expanded: boolean, keep
     link.setAttribute("href", hash);
     // The same hash fires no hashchange, so a click would not scroll back from where the reader moved.
     link.addEventListener("click", () => {
+      // A group the filter hides has no heading to scroll to, so a link to a group shows every setting.
+      if (page === "settings" && document.getElementById(section_anchor(page, slug))?.closest(".desertfox-settings-section")) clear_only_changed();
       if (decodeURIComponent(location.hash) !== decodeURIComponent(hash)) return;
       const heading = document.getElementById(section_anchor(page, slug));
       const collapsed = heading?.closest("details");

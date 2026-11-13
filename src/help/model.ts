@@ -21,7 +21,7 @@ import { subject_param } from "../shared/registry/params.ts";
 import type { Block } from "./blocks.ts";
 import { site_rules_view } from "../background/site_rules_view.ts";
 import type { SiteRulesView } from "../background/site_rules_view.ts";
-import { quick_start_blocks, tip_block } from "./quick_start.ts";
+import { key_text, quick_start_blocks, tip_block } from "./quick_start.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
 export type KeyRow = { mode: KeymapMode; keys: string; args: string };
@@ -77,6 +77,8 @@ export type HelpModel = {
   engines: EngineRow[];
   quick_start: Block[];
   tip: Block;
+  // The keys the Settings page names, read from the keymap like the Quick Start text.
+  keys: { reload: string; find_anything: string };
   // The Site Rules page's rows for one address, read from the keymap the model was built from.
   site_rules_for: (address: string) => SiteRulesView;
 };
@@ -217,6 +219,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),
     tip: tip_block(compiled, commands),
+    keys: { reload: key_text(compiled, commands, "reload"), find_anything: key_text(compiled, commands, "find_anything") },
     site_rules_for: (address) => site_rules_view(compiled, address),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };

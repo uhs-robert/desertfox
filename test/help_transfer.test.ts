@@ -92,7 +92,7 @@ test("a failed read or preview shows the message and sends no commit", async () 
   assert.equal(session.state.review, undefined);
   assert.match(session.state.message!.text, /zip is refused/);
   await session.choose(() => read_folder_files([unread_file("big.toml", DEFAULT_ZIP_LIMITS.max_entry_bytes + 1)]));
-  assert.match(session.state.message!.text, /^Config not imported, the current one stays\. The import is refused: .*too large/);
+  assert.match(session.state.message!.text, /^Settings not imported, the current ones stay\. The import is refused: .*too large/);
   assert.deepEqual(sent.map((message) => message.type), ["preview_config_import"]);
 });
 

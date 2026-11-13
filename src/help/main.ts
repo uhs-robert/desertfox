@@ -109,7 +109,7 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   stop_quickmarks = undefined;
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
-  if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
+  if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never, model.keys.reload);
   const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
   if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
   const engines_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-engines") : null;
