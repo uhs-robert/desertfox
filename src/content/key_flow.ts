@@ -170,18 +170,18 @@ export function create_key_flow(deps: KeyFlowDeps) {
     }
     let result = active.feed(mode, token);
     // A find key waits for its target, unless a find is live: then the same press repeats it.
-    if (result.kind === "pending" && result.node.children[LIVE_KEY] && deps.sink_of_(mode)?.live_?.()) result = active.feed(mode, LIVE_KEY);
-    sequence_in_progress = result.kind === "pending";
-    if (result.kind === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
-    awaiting_argument = result.kind === "pending" && (register === '"' || !!result.node.children[ANY_KEY]);
+    if (result.kind_ === "pending" && result.node.children[LIVE_KEY] && deps.sink_of_(mode)?.live_?.()) result = active.feed(mode, LIVE_KEY);
+    sequence_in_progress = result.kind_ === "pending";
+    if (result.kind_ === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
+    awaiting_argument = result.kind_ === "pending" && (register === '"' || !!result.node.children[ANY_KEY]);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);
-    deps.on_prefix_(result.kind === "pending" && listing.length > 0 ? { mode, typed_: listing } : undefined);
-    if (result.kind === "match") {
+    deps.on_prefix_(result.kind_ === "pending" && listing.length > 0 ? { mode, typed_: listing } : undefined);
+    if (result.kind_ === "match") {
       deps.run_leaf_(result.leaf, result.count, repeat);
       return "cancel";
     }
-    if (result.kind === "pending") return "cancel";
+    if (result.kind_ === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.
     if (mode === "insert" && token === "<Escape>") deps.leave_insert_();
     return !active.passes_(mode, token) && cancels_unbound_key(mode, token, deps.in_editable_field_()) ? "cancel" : "pass";

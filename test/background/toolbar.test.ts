@@ -37,7 +37,7 @@ test("the empty keymap matches no key and hides the badge", () => {
   assert.equal(OFF_KEYMAP.off, true);
   assert.equal(OFF_KEYMAP.mode_indicator, "off");
   assert.equal(OFF_KEYMAP.site_rules, undefined);
-  for (const mode of ["normal", "insert", "hint", "cmdline"]) assert.equal(create_matcher(OFF_KEYMAP).feed(mode, "j").kind, "no_match");
+  for (const mode of ["normal", "insert", "hint", "cmdline"]) assert.equal(create_matcher(OFF_KEYMAP).feed(mode, "j").kind_, "no_match");
 });
 
 test("turning off stores the flag, republishes, greys the icon and sends every tab to normal mode", async () => {

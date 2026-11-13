@@ -276,19 +276,19 @@ const walk = (matcher: ReturnType<typeof create_matcher>, mode: string, keys: st
 
 const matcher_for = (keymap: KeymapConfig) => create_matcher(compile(keymap).compiled);
 const leaf_id = (result: ReturnType<ReturnType<typeof create_matcher>["feed"]>) =>
-  result.kind === "match" ? result.leaf.steps[0]!.invocation.id : result.kind;
+  result.kind_ === "match" ? result.leaf.steps[0]!.invocation.id : result.kind_;
 
 test("matcher: single key, sequence, pending and mismatch reset", () => {
   const matcher = matcher_for({ normal: { J: { id: "tab.next" }, gg: { id: "scroll.top" }, "g0": { id: "tab.first" } } });
   assert.equal(leaf_id(matcher.feed("normal", "J")), "tab.next");
-  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(matcher.feed("normal", "g").kind_, "pending");
   assert.equal(leaf_id(matcher.feed("normal", "g")), "scroll.top");
-  assert.equal(matcher.feed("normal", "g").kind, "pending");
-  assert.equal(matcher.feed("normal", "z").kind, "no_match");
+  assert.equal(matcher.feed("normal", "g").kind_, "pending");
+  assert.equal(matcher.feed("normal", "z").kind_, "no_match");
   assert.equal(leaf_id(matcher.feed("normal", "J")), "tab.next");
-  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(matcher.feed("normal", "g").kind_, "pending");
   assert.equal(leaf_id(matcher.feed("normal", "0")), "tab.first");
-  assert.equal(matcher.feed("normal", "q").kind, "no_match");
+  assert.equal(matcher.feed("normal", "q").kind_, "no_match");
 });
 
 test("matcher: binds_after_ reads ahead through keys not yet fed and leaves the walk as it was", () => {
@@ -302,7 +302,7 @@ test("matcher: binds_after_ reads ahead through keys not yet fed and leaves the 
   assert.equal(matcher.binds_after_("normal", [], "3"), true);
   assert.equal(matcher.binds_after_("normal", ["3"], "0"), true);
   assert.equal(matcher.binds_after_("ignore", [], "J"), false);
-  assert.equal(matcher.feed("normal", "z").kind, "pending");
+  assert.equal(matcher.feed("normal", "z").kind_, "pending");
   assert.equal(matcher.binds_after_("normal", [], "t"), true);
   // After a completed binding the mode the keys replay in is unknown.
   assert.equal(matcher.binds_after_("normal", ["J"], "t"), true);
@@ -314,15 +314,15 @@ test("matcher: binds_after_ reads ahead through keys not yet fed and leaves the 
 test("matcher: counts", () => {
   const matcher = matcher_for({ normal: { J: { id: "tab.next" }, "0": { id: "scroll.left" }, "g0": { id: "tab.first" } } });
   const first = matcher.feed("normal", "3");
-  assert.deepEqual([first.kind, first.kind === "pending" && first.count], ["pending", 3]);
+  assert.deepEqual([first.kind_, first.kind_ === "pending" && first.count], ["pending", 3]);
   matcher.feed("normal", "1");
   const thirty_one = matcher.feed("normal", "J");
-  assert.equal(thirty_one.kind === "match" && thirty_one.count, 31);
+  assert.equal(thirty_one.kind_ === "match" && thirty_one.count, 31);
   assert.equal(leaf_id(matcher.feed("normal", "0")), "scroll.left");
   const ten = walk(matcher, "normal", ["1", "0", "J"]).at(-1)!;
-  assert.equal(ten.kind === "match" && ten.count, 10);
+  assert.equal(ten.kind_ === "match" && ten.count, 10);
   const after_g = walk(matcher, "normal", ["2", "g", "0"]).at(-1)!;
-  assert.equal(after_g.kind === "match" && after_g.count, 2);
+  assert.equal(after_g.kind_ === "match" && after_g.count, 2);
   assert.equal(leaf_id(after_g), "tab.first");
 });
 
@@ -330,24 +330,24 @@ test("matcher: a bound digit wins at the start, a mismatch drops the count, othe
   const matcher = matcher_for({ normal: { "1": { id: "bound.one" }, J: { id: "tab.next" } }, ignore: { "<S-Escape>": { id: "mode.set" }, "5": { id: "five" } } });
   assert.equal(leaf_id(matcher.feed("normal", "1")), "bound.one");
   matcher.feed("normal", "4");
-  assert.equal(matcher.feed("normal", "z").kind, "no_match");
+  assert.equal(matcher.feed("normal", "z").kind_, "no_match");
   const plain = matcher.feed("normal", "J");
-  assert.equal(plain.kind === "match" && plain.count, undefined);
+  assert.equal(plain.kind_ === "match" && plain.count, undefined);
   assert.equal(leaf_id(matcher.feed("ignore", "5")), "five");
-  assert.equal(matcher.feed("hint", "a").kind, "no_match");
+  assert.equal(matcher.feed("hint", "a").kind_, "no_match");
 });
 
 test("matcher: caret and visual modes take counts, hint and cmdline modes do not", () => {
   const matcher = matcher_for({ caret: { w: { id: "caret.word" }, "0": { id: "caret.line_start" } }, visual: { w: { id: "visual.word" } }, hint: { w: { id: "hint.w" }, "3": { id: "hint.three" } } });
   const counted = matcher.feed("caret", "3");
-  assert.equal(counted.kind, "pending");
+  assert.equal(counted.kind_, "pending");
   const word = matcher.feed("caret", "w");
-  assert.equal(word.kind === "match" && word.count, 3);
+  assert.equal(word.kind_ === "match" && word.count, 3);
   assert.equal(leaf_id(matcher.feed("caret", "0")), "caret.line_start");
   matcher.feed("visual", "1");
   matcher.feed("visual", "2");
   const visual_word = matcher.feed("visual", "w");
-  assert.equal(visual_word.kind === "match" && visual_word.count, 12);
+  assert.equal(visual_word.kind_ === "match" && visual_word.count, 12);
   assert.equal(leaf_id(matcher.feed("hint", "3")), "hint.three");
 });
 
@@ -355,7 +355,7 @@ test("matcher: a mode change resets the walk", () => {
   const matcher = matcher_for({ normal: { gg: { id: "a.b" } }, ignore: { g: { id: "c.d" } } });
   matcher.feed("normal", "g");
   assert.equal(leaf_id(matcher.feed("ignore", "g")), "c.d");
-  assert.equal(matcher.feed("normal", "g").kind, "pending");
+  assert.equal(matcher.feed("normal", "g").kind_, "pending");
 });
 
 test("firefox shortcut strings", () => {
