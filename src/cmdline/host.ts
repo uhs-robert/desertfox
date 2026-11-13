@@ -201,7 +201,7 @@ if (!page.desertfox_cmdline_ready) {
         void host.run_command_("heading.list", "hints", { report }).then((outcome) => outcome.ok || report([]));
       } else if (message.kind === "find_text") {
         const report = (status: string) => tell({ kind: "find_status", text: status });
-        void host.run_command_("find.live", "caret", { text: message.text, report });
+        void host.run_command_("find.live", "caret", { text: message.text, report }).then((outcome) => outcome.ok || report(outcome.message));
       } else if (message.kind === "find_commit") {
         current.committed = true;
         let ended!: (outcome: Outcome) => void;
