@@ -41,17 +41,30 @@ test("a fresh load takes a player at another level to the rule's level, then wat
   assert.equal(clock.now, RULE_HOLD_MS);
 });
 
-test("min, a height between levels and auto each reach their level", async () => {
+test("min and a height between levels each reach their level", async () => {
   for (const [value, wanted] of [["min", 360], ["900", 720], ["1080p", 1080], ["100", 360]] as const) {
     const { rule, player } = setup(value);
     await rule.start(true);
     assert.deepEqual(player.state.picks, wanted === 720 ? [] : [wanted], value);
     assert.equal(player.state.playing, wanted, value);
   }
+});
+
+test("auto leaves the player alone and does not reset a quality the user chose", async () => {
   const { rule, player, clock } = setup("auto");
   await rule.start(true);
-  assert.equal(player.state.autos, 1);
-  assert.equal(clock.now, 0, "auto ends at one hand-back");
+  assert.equal(player.state.autos, 0);
+  assert.deepEqual(player.state.picks, []);
+  assert.equal(clock.now, 0);
+});
+
+test("a row auto under a global max leaves a player the user set to 360 at 360, on load and on navigation", async () => {
+  const { rule, player } = setup("auto", fake_player(360));
+  await rule.start(false);
+  await rule.start(true);
+  assert.deepEqual(player.state.picks, []);
+  assert.equal(player.state.autos, 0);
+  assert.equal(player.state.playing, 360);
 });
 
 test("off leaves the player alone and never asks for the driver", async () => {

@@ -6,6 +6,7 @@ import { build_config_status } from "./config_load.ts";
 import { build_setting_list } from "../shared/setting_list.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer } from "../shared/messages.ts";
+import { is_extension_page } from "./extension_page.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
@@ -15,12 +16,6 @@ export type SettingsMessageDeps = {
   // The file layer and the stored edits, read fresh.
   read_layers: () => Promise<{ source: ConfigSource; config_settings: MergedConfig["settings"]; edits: SettingEdits }>;
 };
-
-// Only a top-level extension page may ask. `cmdline.html` is web-accessible, so a site can embed it in a frame, and a content script runs under the site's address.
-export function is_extension_page(sender: { id?: string | undefined; url?: string | undefined; frameId?: number | undefined; tab?: { url?: string | undefined } | undefined }, extension_id: string, origin: string): boolean {
-  const under_origin = (url: string | undefined) => url !== undefined && url.startsWith(origin);
-  return sender.id === extension_id && under_origin(sender.url) && (sender.frameId ?? 0) === 0 && (sender.tab === undefined || under_origin(sender.tab.url));
-}
 
 // The text `:set` or `:unset` gives for a name it does not take, from the same validator.
 function refusal_of(command_id: "settings.set" | "settings.unset", name: unknown): string | undefined {

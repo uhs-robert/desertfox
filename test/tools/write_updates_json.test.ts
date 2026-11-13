@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { build_updates } from "../../tools/write_updates_json.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const script = new URL("../../tools/write_updates_json.ts", import.meta.url).pathname;
 const REPO = "uhs-robert/desertfox";
@@ -45,8 +45,8 @@ test("a manifest without a gecko minimum version is refused", () => {
   assert.throws(() => build_updates({ ...input, manifest: { version: "0.1.23.2" } }), /strict_min_version/);
 });
 
-test("the command writes the file and exits 1 on a mismatch", () => {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-updates-"));
+test("the command writes the file and exits 1 on a mismatch", (t) => {
+  const dir = make_tmp_dir("desertfox-updates-", t);
   const xpi = join(dir, "desertfox-0.1.23.2.xpi");
   const manifest_path = join(dir, "manifest.json");
   const out = join(dir, "updates.json");

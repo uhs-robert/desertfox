@@ -1,8 +1,7 @@
 // The optional `keyword` field of a search engine: its format, uniqueness and what a child inherits.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import "../src/background/command_modules.ts";
@@ -10,11 +9,12 @@ import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { build_commands_file } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const commands = build_commands_file(registry).commands;
 
 function build(engines: string) {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-keyword-"));
+  const dir = make_tmp_dir("desertfox-keyword-");
   writeFileSync(join(dir, "search_engines.toml"), engines);
   return build_config(dir, commands).search_engines;
 }

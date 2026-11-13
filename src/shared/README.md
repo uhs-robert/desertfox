@@ -16,6 +16,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `quickmark_names.ts`: the quickmark key rule (one letter or digit), the address cap and the `QuickmarkTable` type.
 - `media.ts`: the messages between the background and the `media` bundle, the media actions and the step rules of speed, volume and seek.
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
+- `page_bundle_tag.ts`: the extension pages' side of a bundle load. `listen_for_bundle_requests` adds a bundle's `<script src>` tag when the background asks, joins repeat asks and answers after the script has run.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
 - `keys/`: key notation, the prefix tree compiler and the matcher. See its README.

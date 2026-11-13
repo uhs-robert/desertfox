@@ -3,6 +3,7 @@ import { load_effective_config } from "../background/config_load.ts";
 import { render_new_tab } from "./render.ts";
 import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 import { follow_settings } from "../shared/storage_watch.ts";
+import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
 // Draws the page from the settings in force. Only the first draw may redirect: a tab that already shows the built-in page stays on it when `new_tab_page` changes.
 async function draw(first: boolean): Promise<void> {
@@ -19,6 +20,7 @@ async function draw(first: boolean): Promise<void> {
   await render_new_tab(document.body, effective_settings(config.settings));
 }
 
+listen_for_bundle_requests();
 follow_theme(":root");
 follow_user_css();
 follow_settings(draw);

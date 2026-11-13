@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { compile_config } from "../src/background/compile.ts";
@@ -10,11 +9,12 @@ import { build_config, read_commands_file } from "../tools/build-config/build_co
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
 import { make_fake } from "./background/fakes.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const commands = read_commands_file(join(import.meta.dirname, "fixtures", "build-config", "commands.json"));
 
 function settings_problems(text: string): string[] {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-settings-"));
+  const dir = make_tmp_dir("desertfox-settings-");
   writeFileSync(join(dir, "settings.toml"), text);
   try {
     build_config(dir, commands);

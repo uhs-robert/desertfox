@@ -33,15 +33,34 @@ build: install_deps
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
+    # Each run owns one scratch dir, so a concurrent run in another session is never touched. It becomes TMPDIR for every test process. A run killed by SIGKILL skips the trap below, so the sweep removes such dirs once they are older than the longest normal run (the scope limit of 900 s, plus margin).
+    scratch_parent="${TMPDIR:-/tmp}"
+    find "$scratch_parent" -maxdepth 1 -type d -name 'desertfox-test-run.*' -mmin +30 -exec rm -rf {} + 2>/dev/null || true
+    run_dir=$(mktemp -d "$scratch_parent/desertfox-test-run.XXXXXX")
+    trap 'rm -rf "$run_dir"' EXIT
+    export TMPDIR="$run_dir"
+    # Node keeps its module compile cache in TMPDIR by default, which the guard would read as a leak. A stable dir outside the run dir keeps the cache.
+    export NODE_COMPILE_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/desertfox/node-compile-cache"
     # A test that runs away dies with its scope, so nothing outlives the run. The host tests share the scope and its time limit.
     all_tests='just host-test && npm run --silent test'
     # Inside agents.slice, keep the scope there too: a bare scope lands in app.slice and escapes the slice CPU cap.
     slice_args=(); if grep -q /agents.slice/ /proc/self/cgroup 2>/dev/null; then slice_args=(--slice=agents.slice); fi
+    # Not exec: exec would skip the trap and leave the run dir behind.
+    status=0
     if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope "${slice_args[@]}" --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 true >/dev/null 2>&1; then
-        exec systemd-run --user --scope "${slice_args[@]}" --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 bash -c "$all_tests"
+        systemd-run --user --scope "${slice_args[@]}" --quiet -p MemoryMax=8G -p MemorySwapMax=0 -p RuntimeMaxSec=900 bash -c "$all_tests" || status=$?
+    else
+        echo "test: no systemd user session, so this run has no memory cap or time limit." >&2
+        bash -c "$all_tests" || status=$?
     fi
-    echo "test: no systemd user session, so this run has no memory cap or time limit." >&2
-    exec bash -c "$all_tests"
+    # Every test removes its own scratch files, so anything left here is a leak. Fail before the trap deletes the evidence.
+    leftovers=$(find "$run_dir" -mindepth 1 -maxdepth 1 -printf '%f\n')
+    if [ -n "$leftovers" ]; then
+        echo "test: the run left files in its scratch dir (TMPDIR). Each test must remove what it makes there. JS tests make scratch dirs with make_tmp_dir from test/support/tmp_dir.ts. Left over:" >&2
+        echo "$leftovers" | sed 's/^/  /' >&2
+        [ "$status" -ne 0 ] || status=1
+    fi
+    exit "$status"
 
 [private]
 install_deps:

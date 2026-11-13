@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stamp_beta_manifest } from "../../tools/stamp_beta_manifest.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const script = new URL("../../tools/stamp_beta_manifest.ts", import.meta.url).pathname;
 const UPDATE_URL = "https://github.com/uhs-robert/desertfox/releases/download/beta-channel/updates.json";
@@ -27,8 +27,8 @@ test("refuses a stable version, a bad version and a non-https update_url", () =>
   assert.throws(() => stamp_beta_manifest({ version: "0.1.22" }, "0.1.23.1", UPDATE_URL), /gecko/);
 });
 
-test("the command rewrites only the manifest it is given and exits 1 on a bad version", () => {
-  const dir = mkdtempSync(join(tmpdir(), "stamp-beta-"));
+test("the command rewrites only the manifest it is given and exits 1 on a bad version", (t) => {
+  const dir = make_tmp_dir("stamp-beta-", t);
   const file = join(dir, "manifest.json");
   writeFileSync(file, JSON.stringify(manifest));
   const ok = spawnSync("node", [script, "--version", "0.1.23.4", "--update-url", UPDATE_URL, "--manifest", file], { encoding: "utf8" });

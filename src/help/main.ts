@@ -27,6 +27,7 @@ import { create_host_start_session } from "./host_start_model.ts";
 import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "./route.ts";
 import { refused_as } from "../shared/swallow.ts";
+import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
@@ -201,6 +202,7 @@ window.addEventListener("keydown", key_capture.on_keydown, true);
 window.addEventListener("keydown", close_drawer_on_escape, true);
 window.addEventListener("blur", close_drawer_on_window_blur);
 window.addEventListener("hashchange", () => current && show_route(current.model_, current.guide, current.engines, "moved"));
+listen_for_bundle_requests();
 follow_theme(":root, .desertfox-help");
 const open_user_css_hold = create_user_css_gate(follow_user_css());
 follow_settings(draw);

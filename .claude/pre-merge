@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# merge-prs runs this in a fresh worktree with no node_modules. Install this
+# head's own lockfile so the lint sees the dependencies the PR declares.
+set -euo pipefail
+npm ci --ignore-scripts --no-audit --no-fund >&2
+npm run lint

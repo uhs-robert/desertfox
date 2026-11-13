@@ -92,6 +92,8 @@ Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask
 
 `docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts` and `docs/keymap_planned.toml` (keys that are `later` or `dropped`). Edit those two, then run `just docs-gen`. `just test` fails when the doc is stale.
 
+`just test` gives each run its own `TMPDIR` under `/tmp/desertfox-test-run.*`, removes it at the end, and fails naming anything a test left in it. JS tests make scratch dirs with `make_tmp_dir` from `test/support/tmp_dir.ts`.
+
 Run `just test` before every commit. Run `just key-test` after a change to keys, modes, the content script or config reload. `just test-all` runs both at once. It needs labwc, Hyprland, dbus-daemon and python3. `test/key/session.mjs` starts the nested session. It runs on demand only. Read [`test/key/README.md`](test/key/README.md) before you run it.
 
 While building, run `just key-test-changed [base]` or set `KEY_TEST_PIECES`, not the full suite. Run one full `just key-test` before you report. Run the serial reverse run (`KEY_TEST_ORDER=reverse`) only when the shared test machinery changes: the harness, run, session, server or keyboard files in `test/key/`.

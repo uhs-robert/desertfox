@@ -5,10 +5,10 @@ import { create_media_quality, rule_for_report } from "../src/background/media_q
 import { create_probe } from "../src/content/quality/probe.ts";
 import { create_rule } from "../src/content/quality/rule.ts";
 
-type Page = { videos: readonly boolean[]; off?: boolean };
+type Page = { videos: readonly boolean[]; idle?: boolean };
 
 // One tab. Frame 0 is the top. Running the probe in a frame does what `src/content/quality/probe_main.ts` does, and loading the bundle does what `main.ts` does: the first run of a frame is a navigation, a later one at the same address is not.
-async function load_page({ videos, off = false }: Page) {
+async function load_page({ videos, idle = false }: Page) {
   const counts = { probe_runs: 0, bundle_loads: 0, reports: 0, keymap_reads: 0, timers_left: 0 };
   const web = "https://news.test/";
   const loaded: boolean[] = videos.map(() => false);
@@ -16,7 +16,7 @@ async function load_page({ videos, off = false }: Page) {
   // The background is built below, and a frame's probe reports to it.
   const frames: { probe: ReturnType<typeof create_probe>; rule: ReturnType<typeof create_rule>; bundle_runs: number }[] = [];
   const quality = create_media_quality({
-    is_off: async () => off,
+    is_idle: async () => idle,
     inject_all: async () => void frames.forEach((frame) => (counts.probe_runs++, frame.probe.run())),
     inject_about_blank: async () => void frames.forEach((frame) => (counts.probe_runs++, frame.probe.run())),
     frame_address: async () => web,
@@ -69,7 +69,7 @@ test("only the frames with a video load the bundle, once each, and each reports 
   assert.equal(counts.keymap_reads, 2);
 });
 
-test("a page whose rule is off everywhere runs nothing", async () => {
-  const { counts } = await load_page({ videos: [true, false], off: true });
+test("a page whose rule is idle everywhere runs nothing", async () => {
+  const { counts } = await load_page({ videos: [true, false], idle: true });
   assert.deepEqual(counts, { probe_runs: 0, bundle_loads: 0, reports: 0, keymap_reads: 0, timers_left: 0 });
 });

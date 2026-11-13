@@ -3,6 +3,14 @@ if (!this.__rivals_loaded) { this.__rivals_loaded = 1; (function(){
 // It sends the key and watches for labels in one process, so one clock covers both ends.
 // Hint label classes, one per tool: DesertFox, Vimium, Vimium C (inside a closed shadow root), Tridactyl.
 const hint_selectors = [".desertfox-hint", ".vimiumHintMarker", ".LH", ".TridactylHint"];
+// Visits every hint label under node, and calls on_root for each shadow root on the way (Xray access reads closed roots too).
+const walk_hints = (node, on_label, on_root = () => {}) => {
+  if (node.nodeType !== 1) return;
+  if (hint_selectors.some((selector) => node.matches(selector))) on_label(node);
+  const root = node.openOrClosedShadowRoot;
+  if (root) { on_root(root); for (const child of root.children) walk_hints(child, on_label, on_root); }
+  for (const child of node.children) walk_hints(child, on_label, on_root);
+};
 const now = () => content.performance.timeOrigin + content.performance.now();
 const reply = (data) => sendAsyncMessage("rivals:reply", data);
 const tip = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
@@ -27,16 +35,11 @@ addMessageListener("rivals:press", ({ data }) => { try {
   const watched = new WeakSet();
   let count = 0, first = null, paint = null, done = false;
   const observers = [];
-  const scan = (node) => {
-    if (node.nodeType !== 1) return;
-    if (hint_selectors.some((selector) => node.matches(selector)) && !seen.has(node)) {
-      seen.add(node); count++;
-      if (first === null) { first = now(); content.requestAnimationFrame(() => { paint = now(); }); }
-    }
-    const root = node.openOrClosedShadowRoot;
-    if (root) { watch(root); for (const c of root.children) scan(c); }
-    for (const c of node.children) scan(c);
-  };
+  const scan = (node) => walk_hints(node, (label) => {
+    if (seen.has(label)) return;
+    seen.add(label); count++;
+    if (first === null) { first = now(); content.requestAnimationFrame(() => { paint = now(); }); }
+  }, watch);
   const watch = (root) => {
     if (watched.has(root)) return;
     watched.add(root);
@@ -63,6 +66,28 @@ addMessageListener("rivals:press", ({ data }) => { try {
     content.setTimeout(tick, 25);
   };
   content.setTimeout(tick, 25);
+  } catch (e) { reply({ error: String(e).slice(0, 300) }); }
+});
+
+// Coverage: reads where the targets are and whether they are visible before the key is sent, because a hint overlay can cover a target. After settle_ms it sends the rects of the visible labels. run.mjs does the matching.
+addMessageListener("rivals:coverage", ({ data }) => { try {
+  const plain_rect = (r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
+  const targets = [...content.document.querySelectorAll("[data-target]")].map((el) => {
+    const rect = el.getBoundingClientRect();
+    const center_x = rect.left + rect.width / 2, center_y = rect.top + rect.height / 2;
+    const in_view = rect.width > 0 && rect.height > 0 && center_x >= 0 && center_y >= 0 && center_x < content.innerWidth && center_y < content.innerHeight;
+    const top_element = in_view ? content.document.elementFromPoint(center_x, center_y) : null;
+    return { name: el.dataset.target, rect: plain_rect(rect), visible: !!top_element && (top_element === el || el.contains(top_element)) };
+  });
+  press_char(data.char);
+  content.setTimeout(() => {
+    const labels = [];
+    for (const el of content.document.documentElement.children) walk_hints(el, (label) => {
+      const rect = label.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && label.checkVisibility({ opacityProperty: true, visibilityProperty: true })) labels.push(plain_rect(rect));
+    });
+    reply({ labels, viewport: [content.innerWidth, content.innerHeight], scroll_y: content.scrollY, targets });
+  }, data.settle_ms);
   } catch (e) { reply({ error: String(e).slice(0, 300) }); }
 });
 

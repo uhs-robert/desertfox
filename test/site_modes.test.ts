@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
@@ -21,6 +20,7 @@ import { build_commands_file } from "../src/shared/registry/index.ts";
 import { SETTINGS_TABLE } from "../src/shared/settings_table.ts";
 import { SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
 const id = (name: string) => ({ id: name });
@@ -150,7 +150,7 @@ test("the modes column accepts a mode table and refuses a bad one", () => {
 
 const commands = build_commands_file(registry).commands;
 function build_text(rows: string) {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-modes-"));
+  const dir = make_tmp_dir("desertfox-modes-");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "settings.toml"), rows);
   return build_config(dir, commands);

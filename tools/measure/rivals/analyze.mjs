@@ -97,6 +97,31 @@ for (const tool of tools.filter((name) => name !== "none")) {
   const cells = hint_pages.map((page) => (runs_of[tool].find((run) => run.page === page && run.run === -1)?.press1?.first_ms ?? null));
   markdown += `| ${tool} | ${cells.map((value) => show(value, 0)).join(" | ")} |\n`;
 }
+// Coverage page: per target, in how many timed runs a tool put a label on it. A target counts as visible only if it was visible in every run of every tool.
+// An errored coverage run would shrink the n of a cell without notice, so it stops the analysis.
+const coverage_runs_of = (tool) => (runs_of[tool] ?? []).filter((run) => run.page === "coverage" && run.run >= 0);
+for (const tool of tools) {
+  for (const run of coverage_runs_of(tool)) if (run.error || (tool !== "none" && !run.coverage?.targets)) throw new Error(`coverage run ${run.run} of ${tool} has no result: ${run.error ?? "no targets"}`);
+}
+const coverage_tools = tools.filter((tool) => tool !== "none" && coverage_runs_of(tool).length > 0);
+if (coverage_tools.length > 0) {
+  const all_runs = coverage_tools.flatMap((tool) => coverage_runs_of(tool));
+  const first = all_runs[0].coverage;
+  const is_visible = (name) => all_runs.every((run) => run.coverage.targets.find((target) => target.name === name)?.visible);
+  const is_labelled = (run, name) => run.coverage.labelled.includes(name);
+  markdown += `\n### Coverage: runs in which a target got a hint label (viewport ${first.viewport.join("x")}, scrolled to ${first.scroll_y}; ${all_runs.length} runs over ${coverage_tools.length} tools)\n\n| target | visible | ${coverage_tools.join(" | ")} |\n|---|---|${coverage_tools.map(() => "---").join("|")}|\n`;
+  for (const { name } of first.targets) {
+    const cells = coverage_tools.map((tool) => {
+      const runs = coverage_runs_of(tool);
+      return `${runs.filter((run) => is_labelled(run, name)).length}/${runs.length}`;
+    });
+    markdown += `| ${name} | ${is_visible(name) ? "yes" : "no"} | ${cells.join(" | ")} |\n`;
+  }
+  const visible_names = first.targets.map((target) => target.name).filter(is_visible);
+  const labelled_visible = (tool) => median_of(coverage_runs_of(tool).map((run) => visible_names.filter((name) => is_labelled(run, name)).length));
+  markdown += `| visible targets labelled (median) | ${visible_names.length} | ${coverage_tools.map(labelled_visible).join(" | ")} |\n`;
+  markdown += `| labels in total (median) | - | ${coverage_tools.map((tool) => median_of(coverage_runs_of(tool).map((run) => run.coverage.labels.length))).join(" | ")} |\n`;
+}
 markdown += `\n### Versions\n\n${tools.map((tool) => `- ${tool}: firefox ${info_of[tool].firefox}, meta ${JSON.stringify(info_of[tool].meta)}`).join("\n")}\n`;
 writeFileSync(`${out_dir}/tables.md`, markdown);
 console.log(markdown);

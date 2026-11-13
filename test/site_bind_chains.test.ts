@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { compile_config } from "../src/background/compile.ts";
@@ -12,12 +11,13 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { build_commands_file } from "../src/shared/registry/index.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
 import { MAX_BIND_STEPS } from "../src/shared/table_constants.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const commands = build_commands_file(registry).commands;
 
 // A config dir holding one site row with the given `bind` table text.
 function build_with_bind(bind: string) {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-bind-"));
+  const dir = make_tmp_dir("desertfox-bind-");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "settings.toml"), `[[site_rules]]\nsite = "https://a.test/*"\nbind = { ${bind} }\n`);
   return build_config(dir, commands);

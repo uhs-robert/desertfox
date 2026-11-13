@@ -1,4 +1,4 @@
-// The help page and the settings page, both extension pages that load the key scripts by tag.
+// The help page and the settings page, both extension pages. They load content.js by tag and every other bundle on first use, through a script tag the page adds on the background's request.
 import { SHIFT_ESCAPE } from "./harness.mjs";
 import { evaluate_in_background } from "./rdp.mjs";
 
@@ -30,14 +30,15 @@ export async function run_cases({ run_case, setup, expect, press_keys, poll_unti
     await wait_badge(["NORMAL"], "NORMAL after the second <S-Escape>");
   });
 
-  // caret.js loads on the help page by script tag, so the caret keys work there. Escape must still leave the page in normal mode.
+  // caret.js loads on first use through a script tag the page adds, so the caret keys work there. Escape must still leave the page in normal mode.
   await run_case("V on the help page enters caret mode and Escape returns to normal", async () => {
     const loads_before = await settled_injection_count("caret.js");
     await press_keys("gV");
     await wait_badge(["CARET", "VISUAL"], "CARET or VISUAL after V");
     await settled_injection_count("caret.js");
     const loads = (await injections_of("caret.js")).slice(loads_before);
-    record("help_page_caret_load", loads.length === 0 ? "not requested" : loads.at(-1).ok ? "executeScript ok" : "executeScript refused");
+    expect(loads.length > 0 && loads.every((load) => load.route === "page_tag" && load.ok), `caret.js did not load through the page tag: ${JSON.stringify(loads)}`);
+    record("help_page_caret_load", "page tag ok");
     for (let step = 0; step < 2; step++) {
       await press_keys("-k", "Escape");
       if (await wait_badge(["NORMAL"], "NORMAL after Escape").then(() => true, () => false)) break;
@@ -59,5 +60,24 @@ export async function run_cases({ run_case, setup, expect, press_keys, poll_unti
       return { hash: "", rows: 0 };
     })()`);
     expect(settings?.hash === "#/settings" && settings?.rows > 20, `settings page after openOptionsPage: ${JSON.stringify(settings)}`);
+  });
+
+  // The page asks for page.js when a jump records where it left, so the selection and jump asks reach the page-tag route.
+  await run_case("a jump on the help page loads page.js through the page tag", async () => {
+    await press_keys("G");
+    await poll_until("page.js to be ready on the help page", async () => await evaluate(`${extension_view("home.html")}.desertfox_page_ready === true`).catch(() => false));
+    const loads = await injections_of("page.js");
+    expect(loads.some((load) => load.route === "page_tag" && load.ok), `page.js did not load through the page tag: ${JSON.stringify(loads)}`);
+  });
+
+  // Each bundle loads on first use. The background asks the page to add the tag, because executeScript is refused on a moz-extension page.
+  await run_case("typing in a Settings field and Ctrl+O load the text and editor bundles", async () => {
+    const field_focused = await evaluate(`(() => { const view = ${extension_view("home.html")}; const field = view.document.querySelector("input.desertfox-settings-input[type=text], input.desertfox-settings-input:not([type])"); field?.focus(); if (field) field.value = ""; return view.document.activeElement === field && !!field; })()`);
+    expect(field_focused, "a Settings text field takes the focus");
+    await press_keys("x", "y");
+    await poll_until("the Settings field to hold xy and the text bundle to be ready", async () => await evaluate(`(() => { const view = ${extension_view("home.html")}; return view.document.activeElement?.value === "xy" && view.desertfox_text_ready === true; })()`).catch(() => false));
+    // Ctrl+O only has to reach the editor bundle. The test opens no external editor.
+    await press_keys("-M", "ctrl", "o", "-m", "ctrl");
+    await poll_until("the editor bundle to be ready", async () => await evaluate(`${extension_view("home.html")}.desertfox_editor_ready === true`).catch(() => false));
   });
 }

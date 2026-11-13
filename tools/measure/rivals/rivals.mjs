@@ -1,16 +1,17 @@
 // Runs the rival-extension benchmark: DesertFox from dist/ against the pinned store builds in tools.mjs, and a no-extension baseline.
-// Settings by environment: MEASURE_DIR (default /tmp/desertfox-measure), PAGES (default all four), RUNS (timed runs per page and tool, default 8), PASSES (1 or 2, default 2; pass 2 runs the tools in reverse order, so a slow minute on the machine does not land on one tool only).
+// Settings by environment: MEASURE_DIR (default /tmp/desertfox-measure), PAGES (default the four timing pages; `coverage` is not timed and runs only when asked for), RUNS (timed runs per page and tool, default 8), PASSES (1 or 2, default 2; pass 2 runs the tools in reverse order, so a slow minute on the machine does not land on one tool only).
 // Everything it downloads or writes goes to $MEASURE_DIR/rivals. A downloaded file is touched only by `unzip -p manifest.json`, to check its version and id.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { PINNED_BUILDS, TOOL_NAMES } from "./tools.mjs";
+import { CHECK_FAILED_STATUS, PINNED_BUILDS, PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const repo_dir = new URL("../../..", import.meta.url).pathname.replace(/\/$/, "");
 const work_dir = `${process.env.MEASURE_DIR ?? "/tmp/desertfox-measure"}/rivals`;
 const timed_runs = process.env.RUNS ?? "8";
 const pass_count = Number(process.env.PASSES ?? "2");
+const page_names = (process.env.PAGES ?? PAGE_NAMES.join(",")).split(",");
 const WIKI_URL = "https://en.wikipedia.org/wiki/World_War_II";
 const USER_AGENT = "desertfox-measure/1.0 (local benchmark)";
 const FETCH_TIMEOUT_MS = 60000;
@@ -49,7 +50,7 @@ for (const [name, pin] of Object.entries(PINNED_BUILDS)) {
 
 // The article is a snapshot taken on the first run and reused after it, with its style sheets inlined and no scripts or images, so the page loads the same offline every time. Delete $MEASURE_DIR/rivals/pages to take a new one.
 const wiki_file = `${work_dir}/pages/wiki.html`;
-if (!existsSync(wiki_file)) {
+if (page_names.includes("wiki") && !existsSync(wiki_file)) {
   const get_text = async (url) => (await fetch_checked(url, { "user-agent": USER_AGENT })).text();
   let html = await get_text(WIKI_URL);
   let css = "";
@@ -66,7 +67,9 @@ for (let pass = 1; pass <= pass_count; pass++) {
     console.log(`pass ${pass}: ${tool}`);
     // A busy machine can make the debugger connection time out at startup, so each tool gets one retry.
     const attempt = () => spawnSync("node", [`${here}run.mjs`, tool, timed_runs], { env: { ...env, PASS: String(pass) }, stdio: ["ignore", "inherit", "inherit"] });
-    const result = attempt().status === 0 ? { status: 0 } : attempt();
+    const first = attempt();
+    if (first.status === CHECK_FAILED_STATUS) throw new Error(`run.mjs ${tool} failed a coverage check: not retried`);
+    const result = first.status === 0 ? first : attempt();
     if (result.status !== 0) throw new Error(`run.mjs ${tool} failed twice (status ${result.status})`);
   }
 }

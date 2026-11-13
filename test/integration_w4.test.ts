@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { make_browser_handlers } from "../src/commands/browser.ts";
@@ -9,12 +8,13 @@ import { focus_page_content, start_content_once } from "../src/content/handlers/
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
+import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "build-config");
 const commands = read_commands_file(join(FIXTURES, "commands.json"));
 
 function config_dir_with(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), "desertfox-config-"));
+  const dir = make_tmp_dir("desertfox-config-");
   cpSync(join(FIXTURES, "full"), dir, { recursive: true });
   for (const [name, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });

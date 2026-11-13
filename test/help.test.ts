@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build_help_model, group_title, STYLE_VARIABLES } from "../src/help/model.ts";
 import { read_only_note } from "../src/help/settings_model.ts";
@@ -7,6 +7,7 @@ import { command_help_url, parse_route } from "../src/help/route.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
 import { token_name } from "../src/shared/theme/tokens.ts";
+import { BUNDLE_NAMES } from "../src/shared/bundles.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
 import { build_commands_file, create_registry } from "../src/shared/registry/index.ts";
 
@@ -105,7 +106,6 @@ test("home.html loads the content script after help.js", () => {
   const help = html.indexOf('<script src="help.js"></script>');
   const content = html.indexOf('<script src="content.js"></script>');
   assert.ok(help >= 0 && content > help);
-  assert.ok(html.indexOf('<script src="ui.js"></script>') > content, "the badge and toast bundle loads by tag, because executeScript is refused here");
 });
 
 test("the Engines section lists the tree parents first, with needs, fallback and origins", () => {
@@ -221,10 +221,11 @@ test("a conditional default reads as the value and its condition", () => {
   assert.equal(model.groups[0]!.commands[0]!.params[0]!.default, '"" when where is tab, background or window');
 });
 
-test("the help home and new tab pages load page.js by tag, because executeScript is refused there", () => {
+test("the help home and new tab pages load content.js by tag and no feature bundle, so bundles load on first use", () => {
   for (const file of ["../src/help/home.html", "../src/newtab/newtab.html"]) {
-    const html = readFileSync(new URL(file, import.meta.url), "utf8");
-    assert.ok(html.indexOf('<script src="page.js"></script>') > html.indexOf('<script src="content.js"></script>'), file);
+    const scripts = [...readFileSync(new URL(file, import.meta.url), "utf8").matchAll(/<script src="([^"]+)"/g)].map((match) => match[1]);
+    assert.ok(scripts.includes("content.js"), file);
+    for (const name of BUNDLE_NAMES) assert.ok(!scripts.includes(`${name}.js`), `${file} loads ${name}.js at start`);
   }
 });
 
@@ -271,4 +272,15 @@ test("the Settings page keys follow a rebound config.reload and Find anything, a
   assert.match(read_only_note(rebound.keys.reload), /press <C-r>\./);
   const unbound = build_help_model(commands, compile({}), []);
   assert.notEqual(unbound.keys.reload, ",r");
+});
+
+test("every extension page that tags content.js also registers the bundle request listener", () => {
+  const src = new URL("../src/", import.meta.url);
+  for (const folder of readdirSync(src, { withFileTypes: true }).filter((entry) => entry.isDirectory())) {
+    for (const html_file of readdirSync(new URL(`${folder.name}/`, src)).filter((name) => name.endsWith(".html"))) {
+      if (!readFileSync(new URL(`${folder.name}/${html_file}`, src), "utf8").includes('<script src="content.js">')) continue;
+      const page_script = readFileSync(new URL(`${folder.name}/main.ts`, src), "utf8");
+      assert.match(page_script, /listen_for_bundle_requests\(\)/, `${folder.name}/${html_file} tags content.js, so ${folder.name}/main.ts must call listen_for_bundle_requests`);
+    }
+  }
 });

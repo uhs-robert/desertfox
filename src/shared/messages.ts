@@ -49,6 +49,10 @@ export type LoadBundle = {
   name: BundleName;
 };
 
+// To an extension page: add the script tag for a bundle file. The answer is an AddBundleScriptAnswer, sent once the script has run or failed.
+export type AddBundleScript = { type: "add_bundle_script"; file: string };
+export type AddBundleScriptAnswer = { ok: true } | { ok: false; message: string };
+
 // Asks for the keys that can follow `prefix` in `mode`. The answer is a WhichKeyPanel.
 export type ListKeys = {
   type: "list_keys";
@@ -659,7 +663,7 @@ export type HintFramesLabels = {
 // To the frame that opened an edit, when the editor ends. `text` is present only when the file changed. A frame with another `token` (a new page) ignores it.
 export type EditorDone = { type: "editor_done"; token: string; text?: string };
 
-export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | GetJumpOffset | FocusPage | Ping;
+export type BackgroundToContent = EditorDone | HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | RunInContent | ReplayHold | ShowRefusal | SetMode | MediaStep | FocusedFrameMode | TreeUpdated | GetSelection | GetJumpOffset | FocusPage | Ping | AddBundleScript;
 
 // Background to tab-model clients, over the port `desertfox_tab_model`
 

@@ -2,7 +2,7 @@
 
 The `quality` bundle (`quality.js`, 5 KB limit). Like `media.js`, the content script never loads it: the background injects it into every frame for each `media quality` and `media skip` command (`src/background/quality_levels.ts`) and, for the `media_quality` rule (`src/background/media_quality.ts`), into the frames whose probe found a video.
 
-The probe (`quality_probe.js`, 2.5 KB limit) is what the rule injects into every frame at each navigation:
+The probe (`quality_probe.js`, 2.5 KB limit) is what the rule injects into every frame at each navigation, unless the global value is `off` or `auto` and no site row asks for a quality:
 
 - `probe_main.ts`: the entry. It leaves one probe on the window and sends `quality_probe` once per address, and sends it again when the background refuses it (the rule is off). It also leaves what it found in `desertfox_quality_video` for the bundle.
 - `probe.ts`: the probe in one frame, with its deps injected for tests. It looks at once, looks again every 2 s for 10 s, and wakes on a media event. A run at a new address in a document that already reported reports again, so the loaded bundle starts the rule for the new page, and a report asked for while another is out runs when that one settles. A report counts only when the background answers that it injected the bundle.

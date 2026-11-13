@@ -6,8 +6,9 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
+import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
+import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
 const tool = process.argv[2];
 const timed_runs = Number(process.argv[3] ?? 7);
@@ -24,6 +25,8 @@ rmSync(profile_dir, { recursive: true, force: true });
 mkdirSync(profile_dir, { recursive: true });
 // Timer precision is off so that sub-millisecond marks are not rounded to 1 ms or more.
 writeFileSync(`${profile_dir}/user.js`, `${readFileSync(`${repo_dir}/test/key/user.js`, "utf8")}\nuser_pref("privacy.reduceTimerPrecision", false);\n`);
+
+class CheckFailed extends Error {}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -176,7 +179,19 @@ try {
       await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
       const run_record = { page, run, dcl: page_state.dcl, load: page_state.load };
       run_record.mem_load = await memory();
-      if (page !== "frames0") {
+      if (page === "coverage") {
+        // Not timed: the press is made once the extension has settled, and the labels are read after settle_ms.
+        if (addon) {
+          const reply = await ask_page("coverage", { char: "f", settle_ms: 3000 }, 20000);
+          if (reply.error) throw new Error(`coverage press failed: ${reply.error}`);
+          if (reply.labels.length === 0) throw new CheckFailed("coverage press drew no labels: the key did not reach the tool");
+          const match = match_labels(reply.labels, reply.targets);
+          run_record.coverage = { ...reply, ...match };
+          // A duplicate or stray label means the labelled-target count cannot be trusted, so the run fails instead of reporting it.
+          if (match.duplicates > 0 || match.stray > 0) throw new CheckFailed(`coverage labels do not match the targets one to one: ${match.duplicates} duplicate, ${match.stray} stray`);
+        }
+        await ask_page("escape");
+      } else if (page !== "frames0") {
         if (!addon) {
           await sleep(1000);
           run_record.mem_hints = await memory();
@@ -202,7 +217,7 @@ try {
 } catch (error) {
   result.error = String(error.stack ?? error);
   console.log("ERR", result.error);
-  process.exitCode = 1;
+  process.exitCode = error instanceof CheckFailed ? CHECK_FAILED_STATUS : 1;
 } finally {
   try { rdp.close(); } catch { /* the connection may already be gone */ }
   await stop_firefox();

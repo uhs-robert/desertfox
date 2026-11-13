@@ -5,12 +5,12 @@ import type { QualityReport } from "../../src/shared/quality.ts";
 
 const web = "https://video.test/watch";
 
-function make({ off = false as boolean | (() => boolean), inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined, frame_address = web as string | null, inject_frame = async (_tab_id: number, _frame_id: number): Promise<unknown> => [1] } = {}) {
+function make({ idle = false as boolean | (() => boolean), inject = async (_tab_id: number): Promise<unknown> => [1], wait = async (_ms: number): Promise<void> => undefined, frame_address = web as string | null, inject_frame = async (_tab_id: number, _frame_id: number): Promise<unknown> => [1] } = {}) {
   const into_frame: [number, number][] = [];
   const injected: number[] = [];
   const about_blank: number[] = [];
   const quality = create_media_quality({
-    is_off: async () => (typeof off === "function" ? off() : off),
+    is_idle: async () => (typeof idle === "function" ? idle() : idle),
     inject_all: (tab_id) => (injected.push(tab_id), inject(tab_id)),
     inject_about_blank: async (tab_id) => void about_blank.push(tab_id),
     inject_frame: (tab_id, frame_id) => (into_frame.push([tab_id, frame_id]), inject_frame(tab_id, frame_id)),
@@ -39,16 +39,16 @@ test("a navigation and a finished load each inject the bundle once, and send no 
   assert.deepEqual(injected, [3, 3]);
 });
 
-test("pages that are not http or https, and an extension that is off or has the rule off everywhere, inject nothing", async () => {
+test("pages that are not http or https, and an extension that is off or has the rule idle everywhere, inject nothing", async () => {
   const { quality, injected, about_blank } = make();
   await quality.tab_updated(1, { url: "about:blank" }, "about:blank");
   await quality.tab_updated(1, { url: "moz-extension://x/help.html" }, "moz-extension://x/help.html");
   await quality.tab_updated(1, { url: web }, undefined);
-  const off = make({ off: true });
-  await off.quality.tab_updated(1, { url: web }, web);
-  await off.quality.tab_updated(1, { status: "complete" }, web);
+  const idle = make({ idle: true });
+  await idle.quality.tab_updated(1, { url: web }, web);
+  await idle.quality.tab_updated(1, { status: "complete" }, web);
   await flush();
-  assert.deepEqual([injected, about_blank, off.injected, off.about_blank], [[], [], [], []]);
+  assert.deepEqual([injected, about_blank, idle.injected, idle.about_blank], [[], [], [], []]);
 });
 
 test("a frame that refuses the script does not stop the about:blank pass", async () => {
@@ -59,7 +59,7 @@ test("a frame that refuses the script does not stop the about:blank pass", async
 });
 
 test("a tab that closed while the bundle was injected throws nothing", async () => {
-  const closing = create_media_quality({ is_off: async () => false, inject_all: async () => Promise.reject(new Error("no such tab")), inject_about_blank: async () => Promise.reject(new Error("no such tab")), inject_frame: async () => undefined, frame_address: async () => undefined, wait: async () => undefined, settle_ms: 0 });
+  const closing = create_media_quality({ is_idle: async () => false, inject_all: async () => Promise.reject(new Error("no such tab")), inject_about_blank: async () => Promise.reject(new Error("no such tab")), inject_frame: async () => undefined, frame_address: async () => undefined, wait: async () => undefined, settle_ms: 0 });
   await closing.tab_updated(2, { url: web }, web);
   await flush();
 });
@@ -141,25 +141,25 @@ test("the reply to a report carries the resolved rule for a frame with a video, 
   assert.equal(reads, 1, "a frame with no video reads nothing");
 });
 
-test("a settings change that turns the rule from off to on injects the open web tabs, once", async () => {
-  let off = true;
-  const { quality, injected, about_blank } = make({ off: () => off });
+test("a settings change that turns the rule from idle to active injects the open web tabs, once", async () => {
+  let idle = true;
+  const { quality, injected, about_blank } = make({ idle: () => idle });
   const tabs = async () => [{ id: 1, url: web }, { id: 2, url: "about:blank" }, { id: 3, url: "https://other.test/" }, { id: undefined, url: web }];
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [], "the first read only records the state");
   await quality.settings_changed(tabs);
-  assert.deepEqual(injected, [], "still off");
-  off = false;
+  assert.deepEqual(injected, [], "still idle");
+  idle = false;
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [1, 3]);
   assert.deepEqual(about_blank, [1, 3], "the about:blank pass runs for each tab too");
   await quality.settings_changed(tabs);
   assert.deepEqual(injected, [1, 3], "on to on injects nothing");
-  off = true;
+  idle = true;
   await quality.settings_changed(tabs);
-  off = false;
+  idle = false;
   await quality.settings_changed(tabs);
-  assert.deepEqual(injected, [1, 3, 1, 3], "extension off then on again");
+  assert.deepEqual(injected, [1, 3, 1, 3], "idle then active again");
 });
 
 test("a frame whose probe found a video gets the bundle, and no other frame does", async () => {
@@ -182,13 +182,13 @@ test("a probe report from an about:blank frame loads the bundle with no address 
   assert.deepEqual(into_frame, [[4, 7]]);
 });
 
-test("a probe report with the extension or the rule off, or with no sender, loads nothing, and a frame that refuses the bundle throws nothing", async () => {
-  const off = make({ off: true });
-  await off.quality.probe_reported(4, 7, web);
+test("a probe report with the extension off or the rule idle, or with no sender, loads nothing, and a frame that refuses the bundle throws nothing", async () => {
+  const idle = make({ idle: true });
+  await idle.quality.probe_reported(4, 7, web);
   const nameless = make();
   await nameless.quality.probe_reported(undefined, 7, web);
   await nameless.quality.probe_reported(4, undefined, web);
-  assert.deepEqual([off.into_frame, nameless.into_frame], [[], []]);
+  assert.deepEqual([idle.into_frame, nameless.into_frame], [[], []]);
   const refusing = make({ inject_frame: async () => Promise.reject(new Error("no such frame")) });
   await refusing.quality.probe_reported(4, 7, web);
   assert.equal(refusing.into_frame.length, 1);
