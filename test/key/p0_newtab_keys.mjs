@@ -1,4 +1,4 @@
-// The new tab page loads every key script by tag, since executeScript cannot reach an extension page.
+// The new tab page loads content.js by tag and every other bundle on first use, through a script tag the page adds on the background's request, since executeScript cannot reach an extension page.
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["newtab"];
@@ -27,5 +27,15 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     for (const bundle of ["hints.js", "cmdline.js"]) {
       expect((await injections_of(bundle)).every((entry) => entry.tab_id !== tab_id), `${bundle} went through executeScript`);
     }
+  });
+
+  await run_case("typing in an input on the new tab page loads the text bundle without a failure message", async () => {
+    // The page the first case opened is still the focused tab.
+    await poll_until("the new tab page to hold the focus", async () => await evaluate(`${extension_view("newtab.html")}?.document.hasFocus() ?? false`).catch(() => false), { timeout_ms: 10000 });
+    await evaluate(`(() => { const view = ${extension_view("newtab.html")}; view.desertfox_test_roots = []; const attach = view.Element.prototype.attachShadow; view.Element.prototype.attachShadow = function (init) { const root = attach.call(this, { ...init, mode: "open" }); view.desertfox_test_roots.push(root); return root; }; const input = view.document.createElement("input"); input.id = "desertfox-test-input"; view.document.body.prepend(input); input.focus(); })()`);
+    await press_keys("x", "y");
+    await poll_until("the input to hold xy and the text bundle to be ready", async () => await evaluate(`(() => { const view = ${extension_view("newtab.html")}; return view.document.getElementById("desertfox-test-input").value === "xy" && view.desertfox_text_ready === true; })()`).catch(() => false));
+    const messages = await evaluate(`${extension_view("newtab.html")}.desertfox_test_roots.map((root) => root.textContent).join(" | ")`);
+    expect(!/could not load/.test(messages), `a load failure showed on the new tab page: ${messages}`);
   });
 }

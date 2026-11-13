@@ -2,7 +2,6 @@ import { build } from "esbuild";
 import { write_commands_json } from "./write_commands_json.mjs";
 import { grey_svg } from "./grey_svg.mjs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { with_bundle_tags } from "./page_bundle_tags.ts";
 import { refused_as } from "../src/shared/swallow.ts";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
@@ -86,9 +85,7 @@ for (const [name, entry] of Object.entries(minified_entries)) {
 }
 
 for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html", "devtools/devtools.html"]) {
-  const target = `dist/${file.split("/").pop()}`;
-  if (file === "help/home.html" || file === "newtab/newtab.html") await writeFile(target, with_bundle_tags(await readFile(`src/${file}`, "utf8"), file));
-  else await copyFile(`src/${file}`, target);
+  await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
 }
 
 // The font is copied as is with its licence: the licence reserves the name "DSEG", so a converted or edited font could not keep it.

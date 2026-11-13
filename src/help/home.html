@@ -199,6 +199,6 @@
 <body><script src="help.js"></script>
 <!-- moz-extension:// pages do not match <all_urls>, so keys on this page need the content script by tag. -->
 <script src="content.js"></script>
-<!-- The build writes a script tag for every bundle here (tools/page_bundle_tags.ts), because none of them can load on request on this page. -->
-<!-- bundle-tags --></body>
+<!-- Every other bundle loads on first use, as on a website: the background asks help.js to add its tag (src/shared/page_bundle_tag.ts), because executeScript is refused here. -->
+</body>
 </html>

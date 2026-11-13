@@ -6,16 +6,21 @@ import type { BundleName } from "../shared/bundles.ts";
 import type { RunResponse } from "../shared/messages.ts";
 
 // The document id tells a new page in a frame from the one it replaced, so a request from the new page never joins a load of the old one.
-export type BundleTarget = { tab_id: number; frame_id: number; document_id: string };
+// `in_extension_page` is set for a help, Settings or new tab page, which Firefox will not take an injection into.
+export type BundleTarget = { tab_id: number; frame_id: number; document_id: string; in_extension_page: boolean };
 
 export type BundleLoaderDeps = {
   inject: (target: BundleTarget, file: string) => Promise<void>;
+  // Asks an extension page to add the script tag itself. Resolves once the script has run.
+  add_script_tag: (target: BundleTarget, file: string) => Promise<void>;
+  // The `moz-extension://` address of this add-on. A sender under it is an extension page.
+  extension_origin: () => string;
   // Firefox can leave an injection into a navigating frame unanswered. Past this the load fails, so the page stops holding keys.
   timeout_ms: number;
 };
 
 // The sender of a runtime message. Firefox sets `documentId`, and the bundled types do not list it.
-export type LoadSender = { tab?: { id?: number | undefined } | undefined; frameId?: number | undefined; documentId?: string | undefined };
+export type LoadSender = { url?: string | undefined; tab?: { id?: number | undefined } | undefined; frameId?: number | undefined; documentId?: string | undefined };
 
 const failure = (message: string): RunResponse => ({ ok: false, refusal: { id: "desertfox", message } });
 
@@ -27,8 +32,7 @@ export function create_bundle_loader(deps: BundleLoaderDeps) {
     const deadline = new Promise<RunResponse>((resolve) => {
       timer = setTimeout(() => resolve(failure(`DesertFox could not load ${name}: no answer in ${deps.timeout_ms} ms`)), deps.timeout_ms);
     });
-    const injected = deps
-      .inject(target, `${name}.js`)
+    const injected = (target.in_extension_page ? deps.add_script_tag : deps.inject)(target, `${name}.js`)
       .then((): RunResponse => ({ ok: true }))
       .catch((error: unknown) => failure(`DesertFox could not load ${name}: ${error instanceof Error ? error.message : String(error)}`));
     try {
@@ -54,7 +58,7 @@ export function create_bundle_loader(deps: BundleLoaderDeps) {
     // The entry for a `load_bundle` message. The name is checked here because the sender is a page script.
     answer: (sender: LoadSender, name: unknown): Promise<RunResponse> => {
       if (sender.tab?.id === undefined || !is_bundle_name(name)) return Promise.resolve(failure("DesertFox: unknown bundle request"));
-      return load({ tab_id: sender.tab.id, frame_id: sender.frameId ?? 0, document_id: sender.documentId ?? "" }, name);
+      return load({ tab_id: sender.tab.id, frame_id: sender.frameId ?? 0, document_id: sender.documentId ?? "", in_extension_page: sender.url?.startsWith(deps.extension_origin()) ?? false }, name);
     },
   };
 }

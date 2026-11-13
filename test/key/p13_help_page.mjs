@@ -1,4 +1,4 @@
-// The help page and the settings page, both extension pages that load the key scripts by tag.
+// The help page and the settings page, both extension pages. They load content.js by tag and every other bundle on first use, through a script tag the page adds on the background's request.
 import { SHIFT_ESCAPE } from "./harness.mjs";
 import { evaluate_in_background } from "./rdp.mjs";
 
@@ -61,17 +61,18 @@ export async function run_cases({ run_case, setup, expect, press_keys, poll_unti
     expect(settings?.hash === "#/settings" && settings?.rows > 20, `settings page after openOptionsPage: ${JSON.stringify(settings)}`);
   });
 
-  // text.js and editor.js load by tag here. A request for either would reach executeScript, which refuses the page, and the host would show "could not load".
-  await run_case("typing in a Settings field and Ctrl+O load no bundle on request", async () => {
-    const field_focused = await evaluate(`(() => { const view = ${extension_view("home.html")}; const field = view.document.querySelector("input.desertfox-settings-input[type=text], input.desertfox-settings-input:not([type])"); field?.focus(); return view.document.activeElement === field && !!field; })()`);
+  // Each bundle loads on first use. The background asks the page to add the tag, because executeScript is refused on a moz-extension page.
+  await run_case("typing in a Settings field and Ctrl+O load the text and editor bundles without a failure message", async () => {
+    // The toast sits in a closed shadow root. Opening roots from here on lets the test read a message that appears.
+    await evaluate(`(() => { const view = ${extension_view("home.html")}; if (view.desertfox_test_roots) return; view.desertfox_test_roots = []; const attach = view.Element.prototype.attachShadow; view.Element.prototype.attachShadow = function (init) { const root = attach.call(this, { ...init, mode: "open" }); view.desertfox_test_roots.push(root); return root; }; })()`);
+    const field_focused = await evaluate(`(() => { const view = ${extension_view("home.html")}; const field = view.document.querySelector("input.desertfox-settings-input[type=text], input.desertfox-settings-input:not([type])"); field?.focus(); if (field) field.value = ""; return view.document.activeElement === field && !!field; })()`);
     expect(field_focused, "a Settings text field takes the focus");
-    const text_before = await settled_injection_count("text.js");
-    const editor_before = await settled_injection_count("editor.js");
     await press_keys("x", "y");
+    await poll_until("the Settings field to hold xy and the text bundle to be ready", async () => await evaluate(`(() => { const view = ${extension_view("home.html")}; return view.document.activeElement?.value === "xy" && view.desertfox_text_ready === true; })()`).catch(() => false));
     // Ctrl+O only has to reach the editor bundle. The test opens no external editor.
     await press_keys("-M", "ctrl", "o", "-m", "ctrl");
-    const text_requests = (await injections_of("text.js")).slice(text_before);
-    const editor_requests = (await injections_of("editor.js")).slice(editor_before);
-    expect(text_requests.length === 0 && editor_requests.length === 0, `the Settings page asked the background for text.js (${text_requests.length}) or editor.js (${editor_requests.length})`);
+    await poll_until("the editor bundle to be ready", async () => await evaluate(`${extension_view("home.html")}.desertfox_editor_ready === true`).catch(() => false));
+    const messages = await evaluate(`${extension_view("home.html")}.desertfox_test_roots.map((root) => root.textContent).join(" | ")`);
+    expect(!/could not load/.test(messages), `a load failure showed on the Settings page: ${messages}`);
   });
 }

@@ -3,22 +3,20 @@ import { test } from "node:test";
 import { create_bundle_loader } from "../../src/background/bundle_loader.ts";
 import type { BundleTarget } from "../../src/background/bundle_loader.ts";
 
-type Pending = { target: BundleTarget; file: string; settle: (error?: Error) => void };
+type Pending = { target: BundleTarget; file: string; route: "inject" | "page_tag"; settle: (error?: Error) => void };
 
 // Each inject call waits until the test settles it, so the test controls the order of events.
 function make_loader(timeout_ms = 1000) {
   const pending: Pending[] = [];
-  const loader = create_bundle_loader({
-    timeout_ms,
-    inject: (target, file) =>
-      new Promise<void>((resolve, reject) => {
-        pending.push({ target, file, settle: (error) => (error ? reject(error) : resolve()) });
-      }),
-  });
+  const route = (kind: Pending["route"]) => (target: BundleTarget, file: string) =>
+    new Promise<void>((resolve, reject) => {
+      pending.push({ target, file, route: kind, settle: (error) => (error ? reject(error) : resolve()) });
+    });
+  const loader = create_bundle_loader({ timeout_ms, inject: route("inject"), add_script_tag: route("page_tag"), extension_origin: () => "moz-extension://abc/" });
   return { loader, pending };
 }
 
-const target = (overrides: Partial<BundleTarget> = {}): BundleTarget => ({ tab_id: 1, frame_id: 0, document_id: "doc_a", ...overrides });
+const target = (overrides: Partial<BundleTarget> = {}): BundleTarget => ({ tab_id: 1, frame_id: 0, document_id: "doc_a", in_extension_page: false, ...overrides });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 test("requests that arrive while a load runs join it, so the bundle is injected once", async () => {
@@ -96,7 +94,7 @@ test("an injection that never answers fails at the deadline and the next request
 test("answer takes the tab, frame and document from the sender and checks the name", async () => {
   const { loader, pending } = make_loader();
   const asked = loader.answer({ tab: { id: 7 }, frameId: 4, documentId: "doc_z" }, "whichkey");
-  assert.deepEqual(pending[0]!.target, { tab_id: 7, frame_id: 4, document_id: "doc_z" });
+  assert.deepEqual(pending[0]!.target, { tab_id: 7, frame_id: 4, document_id: "doc_z", in_extension_page: false });
   pending[0]!.settle();
   assert.deepEqual(await asked, { ok: true });
 
@@ -106,4 +104,40 @@ test("answer takes the tab, frame and document from the sender and checks the na
   assert.equal(no_tab.ok, false);
   await tick();
   assert.equal(pending.length, 1);
+});
+
+test("a request from an extension page asks the page for a script tag, and a website's goes to executeScript", async () => {
+  const { loader, pending } = make_loader();
+  const from_page = loader.answer({ url: "moz-extension://abc/home.html", tab: { id: 1 }, frameId: 0, documentId: "d" }, "text");
+  const from_site = loader.answer({ url: "https://example.com/", tab: { id: 2 }, frameId: 0, documentId: "e" }, "text");
+  const lookalike = loader.answer({ url: "https://example.com/moz-extension://abc/", tab: { id: 3 }, frameId: 0, documentId: "f" }, "text");
+  assert.deepEqual(pending.map((entry) => entry.route), ["page_tag", "inject", "inject"]);
+  for (const entry of pending) entry.settle();
+  assert.ok((await Promise.all([from_page, from_site, lookalike])).every((answer) => answer.ok));
+});
+
+test("two requests for one bundle from an extension page ask for one tag and both resolve after it ran", async () => {
+  const { loader, pending } = make_loader();
+  const sender = { url: "moz-extension://abc/home.html", tab: { id: 1 }, frameId: 0, documentId: "d" };
+  let resolved = 0;
+  const first = loader.answer(sender, "editor").then((answer) => (resolved++, answer));
+  const second = loader.answer(sender, "editor").then((answer) => (resolved++, answer));
+  await tick();
+  assert.equal(pending.length, 1);
+  assert.equal(resolved, 0);
+  pending[0]!.settle();
+  assert.deepEqual(await Promise.all([first, second]), [{ ok: true }, { ok: true }]);
+});
+
+test("a tag that fails to load answers the could-not-load refusal, and a later request tries again", async () => {
+  const { loader, pending } = make_loader();
+  const sender = { url: "moz-extension://abc/home.html", tab: { id: 1 }, frameId: 0, documentId: "d" };
+  const failed = loader.answer(sender, "text");
+  pending[0]!.settle(new Error("text.js did not load"));
+  const answer = await failed;
+  assert.match(answer.ok ? "" : answer.refusal.message, /DesertFox could not load text: text.js did not load/);
+  const retry = loader.answer(sender, "text");
+  assert.equal(pending.length, 2);
+  pending[1]!.settle();
+  assert.deepEqual(await retry, { ok: true });
 });
