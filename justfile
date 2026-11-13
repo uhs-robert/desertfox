@@ -39,8 +39,8 @@ test: install_deps
     run_dir=$(mktemp -d "$scratch_parent/desertfox-test-run.XXXXXX")
     trap 'rm -rf "$run_dir"' EXIT
     export TMPDIR="$run_dir"
-    # Node keeps its module compile cache in TMPDIR, which would read as a leak.
-    export NODE_DISABLE_COMPILE_CACHE=1
+    # Node keeps its module compile cache in TMPDIR by default, which the guard would read as a leak. A stable dir outside the run dir keeps the cache.
+    export NODE_COMPILE_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/desertfox/node-compile-cache"
     # A test that runs away dies with its scope, so nothing outlives the run. The host tests share the scope and its time limit.
     all_tests='just host-test && npm run --silent test'
     # Inside agents.slice, keep the scope there too: a bare scope lands in app.slice and escapes the slice CPU cap.
@@ -56,7 +56,7 @@ test: install_deps
     # Every test removes its own scratch files, so anything left here is a leak. Fail before the trap deletes the evidence.
     leftovers=$(find "$run_dir" -mindepth 1 -maxdepth 1 -printf '%f\n')
     if [ -n "$leftovers" ]; then
-        echo "test: the run left files in its scratch dir. Make scratch dirs with make_tmp_dir from test/support/tmp_dir.ts:" >&2
+        echo "test: the run left files in its scratch dir (TMPDIR). Each test must remove what it makes there. JS tests make scratch dirs with make_tmp_dir from test/support/tmp_dir.ts. Left over:" >&2
         echo "$leftovers" | sed 's/^/  /' >&2
         [ "$status" -ne 0 ] || status=1
     fi

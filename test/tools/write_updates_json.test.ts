@@ -45,8 +45,8 @@ test("a manifest without a gecko minimum version is refused", () => {
   assert.throws(() => build_updates({ ...input, manifest: { version: "0.1.23.2" } }), /strict_min_version/);
 });
 
-test("the command writes the file and exits 1 on a mismatch", () => {
-  const dir = make_tmp_dir("desertfox-updates-");
+test("the command writes the file and exits 1 on a mismatch", (t) => {
+  const dir = make_tmp_dir("desertfox-updates-", t);
   const xpi = join(dir, "desertfox-0.1.23.2.xpi");
   const manifest_path = join(dir, "manifest.json");
   const out = join(dir, "updates.json");

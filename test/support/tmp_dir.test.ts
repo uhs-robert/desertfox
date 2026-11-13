@@ -27,6 +27,23 @@ test("the directory is removed when the test body throws", (t) => {
   assert.equal(existsSync(dir), false);
 });
 
+// The process-exit hook would also remove the dir, so the child checks in a later test, while the process is still running.
+test("the directory is removed when the test that made it ends, before the process exits", (t) => {
+  const source = `
+import { existsSync } from "node:fs";
+import { test } from "node:test";
+import { make_tmp_dir } from ${JSON.stringify(helper_url)};
+let dir = "";
+test("makes the dir", (t) => { dir = make_tmp_dir("tmp-dir-test-", t); });
+test("checks it", () => { process.stdout.write("EXISTS=" + existsSync(dir)); });
+`;
+  const run = spawnSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", source], {
+    encoding: "utf8",
+    env: { ...process.env, TMPDIR: make_tmp_dir("tmp-dir-parent-", t) },
+  });
+  assert.match(run.stdout, /EXISTS=false/, run.stdout + run.stderr);
+});
+
 test("without a test context the directory is removed when the process exits", (t) => {
   const source = `
 import { make_tmp_dir } from ${JSON.stringify(helper_url)};

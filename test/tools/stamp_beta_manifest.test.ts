@@ -27,8 +27,8 @@ test("refuses a stable version, a bad version and a non-https update_url", () =>
   assert.throws(() => stamp_beta_manifest({ version: "0.1.22" }, "0.1.23.1", UPDATE_URL), /gecko/);
 });
 
-test("the command rewrites only the manifest it is given and exits 1 on a bad version", () => {
-  const dir = make_tmp_dir("stamp-beta-");
+test("the command rewrites only the manifest it is given and exits 1 on a bad version", (t) => {
+  const dir = make_tmp_dir("stamp-beta-", t);
   const file = join(dir, "manifest.json");
   writeFileSync(file, JSON.stringify(manifest));
   const ok = spawnSync("node", [script, "--version", "0.1.23.4", "--update-url", UPDATE_URL, "--manifest", file], { encoding: "utf8" });
