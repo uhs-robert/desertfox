@@ -21,8 +21,8 @@ const MAX_BYTES = {
   "page.js": 5.5 * 1024,
   "text.js": 4 * 1024,
   "editor.js": 6.5 * 1024, // 6.5 KB: the clipboard fallback for CodeMirror, Ace and Monaco, with its copy checks and paste read-back. The bundle loads on first use.
-  // 6 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, the captions and frame keys read the text tracks and step the time, and the volume keys go through the YouTube player (#632). The bundle loads on first use, not on every page.
-  "media.js": 6 * 1024,
+  // 6.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, the captions and frame keys read the text tracks and step the time, and the volume and play keys go through the YouTube player (#632, #656). The bundle loads on first use, not on every page.
+  "media.js": 6.5 * 1024,
   // 5 KB: the YouTube driver gained the captions toggle and its state read, and the rule answers a frame without a video by waiting for a media event and looking again for 10 s, inside open shadow roots too. The bundle loads on first use.
   "quality.js": 5 * 1024,
   // 2.5 KB: the probe queues a report asked for while another is out. It is the only script the media_quality rule injects into every frame, so it stays small. The names of the plain HTML elements, which the custom-element search for a video in shadow roots leaves out, are most of it.

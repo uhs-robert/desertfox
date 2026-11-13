@@ -20,6 +20,11 @@ function youtube_page() {
   const movie_player = {
     getVolume: () => player_state.volume,
     setVolume: (volume: number) => { player_state.volume = volume; element.held = volume / 100; },
+    // 5 is cued: the element has no source, so only the player's own call starts it.
+    state: 5,
+    getPlayerState() { return this.state; },
+    playVideo() { this.state = 3; },
+    pauseVideo() { this.state = 2; },
   };
   const page = { document: { getElementById: (id: string) => (id === "movie_player" ? movie_player : null) } };
   return { element, page, movie_player };
@@ -78,4 +83,20 @@ test("volume steps reach exactly 0 and 100 through the player and through a plai
       assert.equal(read(), end / 100, `${value} from ${from}`);
     }
   }
+});
+
+test("play on a cued player starts it through the player and reports playing", async () => {
+  const { element, page, movie_player } = youtube_page();
+  let element_plays = 0;
+  element.play = async () => { element_plays++; };
+  const view = view_of(element, () => youtube_volume(page));
+  const started = await apply_in_frame(view, apply({ action: "play_pause", value: undefined }));
+  assert.equal(movie_player.state, 3);
+  assert.equal(element_plays, 0);
+  assert.equal(started.state?.paused, false);
+  const stopped = await apply_in_frame(view, apply({ action: "play_pause", value: undefined }));
+  assert.equal(movie_player.state, 2);
+  assert.equal(stopped.state?.paused, true);
+  const later = await apply_in_frame(view, apply({}));
+  assert.equal(later.state?.paused, true);
 });

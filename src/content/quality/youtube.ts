@@ -18,6 +18,9 @@ type MoviePlayer = {
   getOption?: (module: string, option: string) => unknown;
   getVolume?: () => unknown;
   setVolume?: (volume: number) => void;
+  getPlayerState?: () => unknown;
+  playVideo?: () => void;
+  pauseVideo?: () => void;
 };
 
 export type YouTubePage = { document: { getElementById: (id: string) => unknown } };
@@ -25,10 +28,13 @@ export type YouTubePage = { document: { getElementById: (id: string) => unknown 
 // The player's own names, by height.
 const HEIGHTS: Readonly<Record<string, number>> = { tiny: 144, small: 240, medium: 360, large: 480, hd720: 720, hd1080: 1080, hd1440: 1440, hd2160: 2160, hd2880: 2880, highres: 4320 };
 
-// Percent, 0 to 100.
-export type PlayerVolume = { get: () => number | undefined; set: (volume: number) => void };
+// The player's own state codes that mean it plays or is about to: playing and buffering.
+const RUNNING_STATES = [1, 3];
 
-// The player's own volume, 0 to 100. A write to the video element is put back by the player, so the volume goes through the player. Undefined when the page has no player with both calls.
+// `get` and `set` are the volume in percent, 0 to 100. `running` reads the player state and `toggle` plays or pauses by it.
+export type PlayerVolume = { get: () => number | undefined; set: (volume: number) => void; running: () => boolean; toggle: () => boolean };
+
+// The player's own controls. A write to the video element's volume is put back by the player, so the volume goes through the player. Play goes through it too, because a cued embed (state 5) has no source on its element and ignores play() there. Undefined when the page has no player with both volume calls.
 export function youtube_volume(page: YouTubePage): PlayerVolume | undefined {
   const player = page.document.getElementById("movie_player") as MoviePlayer | null;
   if (typeof player?.getVolume !== "function" || typeof player.setVolume !== "function") return undefined;
@@ -38,6 +44,14 @@ export function youtube_volume(page: YouTubePage): PlayerVolume | undefined {
       return typeof volume === "number" && Number.isFinite(volume) ? volume : undefined;
     },
     set: (volume) => player.setVolume?.(volume),
+    running: () => RUNNING_STATES.includes(player.getPlayerState?.() as number),
+    // Returns whether the player plays afterwards, which its state does not yet say.
+    toggle() {
+      const was_running = this.running();
+      if (was_running) player.pauseVideo?.();
+      else player.playVideo?.();
+      return !was_running;
+    },
   };
 }
 

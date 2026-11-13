@@ -145,7 +145,18 @@ function captions_of(players: Player[]): MediaState["captions"] {
   return tracks.length === 0 ? "none" : tracks.some(({ mode }) => mode === "showing") ? "on" : "off";
 }
 
+// What a site-player toggle just set, for the report: the player's state lags the call.
+const toggled = new WeakMap<Player, boolean>();
+
 const site_volume_of = (player: Player, view: FrameView): PlayerVolume | undefined => (view.site_controls(player) ? view.site_volume() : undefined);
+
+// The report of the request that just toggled counts once, so a later request reads the player again.
+function paused_of(player: Player, view: FrameView): boolean {
+  const site = site_volume_of(player, view);
+  const playing = toggled.get(player) ?? site?.running();
+  toggled.delete(player);
+  return playing === undefined ? player.paused : !playing;
+}
 
 function state_of(player: Player, view: FrameView, captions: MediaState["captions"]): MediaState {
   return {
@@ -155,7 +166,7 @@ function state_of(player: Player, view: FrameView, captions: MediaState["caption
     muted: player.muted,
     position: player.currentTime,
     duration: Number.isFinite(player.duration) ? player.duration : null,
-    paused: player.paused,
+    paused: paused_of(player, view),
     // The document retargets the open element to the shadow host of a video inside a shadow root, so a comparison with the player fails there.
     pip: !!view.pip_element(),
     loop: player.loop,
@@ -177,7 +188,11 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   }
   else if (action === "seek") player.currentTime = next_level(player.currentTime, value, times, { ...SEEK_RULE, max: Number.isFinite(player.duration) ? player.duration : SEEK_RULE.max });
   // An element that plays pauses, one that does not plays. The audible and playing targets hold only elements that play.
-  else if (action === "play_pause") return is_playing(player) ? player.pause() : within_grace(player.play());
+  else if (action === "play_pause") {
+    const site = site_volume_of(player, view);
+    if (site) return void toggled.set(player, site.toggle());
+    return is_playing(player) ? player.pause() : within_grace(player.play());
+  }
   else if (action === "captions") toggle_captions(player);
   else if (action === "frame") {
     player.pause();
