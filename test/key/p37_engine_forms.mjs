@@ -2,7 +2,7 @@
 // the starter set adds the sample engines, and the export carries the layer. Stored layers survive across cases, so the teardown clears the layer in storage and publishes twice.
 import { evaluate_in_background } from "./rdp.mjs";
 
-export const areas = ["help", "config", "engines"];
+export const areas = ["help", "config", "engines", "keys"];
 
 export async function run_cases({ run_case, open_page, press_keys, poll_until, rdp, extension_id, expect, on_teardown, wait_event, events }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#/settings"))`;

@@ -37,6 +37,7 @@ export function mount_engines(container: HTMLElement, deps: Omit<EnginesDeps, "o
   });
   const hints = el("div", "desertfox-settings-error");
   hints.setAttribute("role", "status");
+  hints.id = "desertfox-engines-hints";
   const message = el("div", undefined);
   message.setAttribute("role", "status");
   const save = button("Save engine", () => void session.save());
@@ -54,7 +55,12 @@ export function mount_engines(container: HTMLElement, deps: Omit<EnginesDeps, "o
     }
     // The name is fixed while a row is edited: a save replaces that engine.
     inputs.get("name")!.readOnly = state.editing !== undefined;
-    hints.replaceChildren(...form_problems(state.form).map((problem) => el("div", undefined, problem)));
+    const problems = form_problems(state.form);
+    hints.replaceChildren(...problems.map((problem) => el("div", undefined, problem)));
+    for (const input of inputs.values()) {
+      input.setAttribute("aria-invalid", String(problems.length > 0));
+      input.setAttribute("aria-describedby", "desertfox-engines-hints");
+    }
     save.disabled = !can_save(state);
     starter.disabled = state.busy;
     message.textContent = state.message?.text ?? "";
@@ -64,7 +70,10 @@ export function mount_engines(container: HTMLElement, deps: Omit<EnginesDeps, "o
       return;
     }
     const rows = state.rows.map((row) => {
-      const edit = button("Edit", () => session.edit(row));
+      const edit = button("Edit", () => {
+        session.edit(row);
+        inputs.get("url")!.focus();
+      });
       edit.setAttribute("aria-label", `Edit the engine ${row.name}`);
       const remove = button("Remove", () => void session.remove(row.name));
       remove.setAttribute("aria-label", `Remove the engine ${row.name}`);

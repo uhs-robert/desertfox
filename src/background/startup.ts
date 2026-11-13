@@ -221,7 +221,8 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: La
     }
     const slot_map_before = await read_slot_map();
     // A publish keeps the slot plan of the load, so a change of the browser chords drops it, both ways: the rollback must put the old chords back too.
-    const moves_chords = JSON.stringify(before.keymap.browser ?? {}) !== JSON.stringify(next.keymap.browser ?? {});
+    // An engine edit moves them too: it can drop a `search <engine>` binding the browser holds a slot for.
+    const moves_chords = [before.keymap.browser, before.engines].map((part) => JSON.stringify(part ?? {})).join() !== [next.keymap.browser, next.engines].map((part) => JSON.stringify(part ?? {})).join();
     const publish_layers = async (layers: EditLayers) => {
       if (moves_chords) delete step.slots;
       return publish(step, await load_edits(), layers);
