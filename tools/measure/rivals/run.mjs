@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
+import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
 import { DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -178,7 +179,14 @@ try {
       run_record.mem_load = await memory();
       if (page === "coverage") {
         // Not timed: the press is made once the extension has settled, and the labels are read after settle_ms.
-        if (addon) run_record.coverage = await ask_page("coverage", { char: "f", settle_ms: 3000 }, 20000);
+        if (addon) {
+          const reply = await ask_page("coverage", { char: "f", settle_ms: 3000 }, 20000);
+          if (reply.error) throw new Error(`coverage press failed: ${reply.error}`);
+          const match = match_labels(reply.labels, reply.targets);
+          run_record.coverage = { ...reply, ...match };
+          // A duplicate or stray label means the labelled-target count cannot be trusted, so the run fails instead of reporting it.
+          if (match.duplicates > 0 || match.stray > 0) throw new Error(`coverage labels do not match the targets one to one: ${match.duplicates} duplicate, ${match.stray} stray`);
+        }
         await ask_page("escape");
       } else if (page !== "frames0") {
         if (!addon) {
