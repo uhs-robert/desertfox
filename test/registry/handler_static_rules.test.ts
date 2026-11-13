@@ -203,7 +203,7 @@ test("no background handler refuses args the schema accepts", async () => {
 // plain throw that a handler gives belongs to RuntimeRefusal.
 const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
   "src/background/browser_deps.ts": { count: 1, why: "the page's refusal to add a bundle tag, turned into the could-not-load refusal by the bundle loader, not a command handler" },
-  "src/background/favicon_saver.ts": { count: 6, why: "a fetch that is not an icon, turned into a skipped save by the saver, not a command handler" },
+  "src/background/favicon_saver.ts": { count: 1, why: "a redrawn icon that is too large, turned into a skipped save by the saver, not a command handler" },
   "src/background/keymap_message.ts": { count: 1, why: "a message reply for the keys page, turned into { ok: false } by `failure`, not a command handler" },
   "src/background/snippets.ts": { count: 1, why: "inside the snippet code that runs in the page, where RuntimeRefusal does not exist" },
   "src/shared/page_bundle_tag.ts": { count: 1, why: "a bundle tag that failed to load, turned into the could-not-load refusal by the bundle loader, not a command handler" },

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { FAVICON_CACHE_KEY, FAVICON_CACHE_MAX_ENTRIES, FAVICON_ENTRY_MAX_CHARS, icons_by_host, make_favicon_cache, with_icon, type FaviconEntry } from "../src/newtab/icon_cache.ts";
 
 const ICON = "data:image/png;base64,AAAA";
-const entry = (host: string, icon = ICON, source = `https://${host}/f.png`, at = 1): FaviconEntry => ({ host, icon, source, at });
+const entry = (host: string, icon = ICON, source = `key-${host}`): FaviconEntry => ({ host, icon, source });
 
 function fake_storage(fail_set = false) {
   const data: Record<string, unknown> = {};
@@ -37,7 +37,7 @@ test("a changed icon replaces the entry and moves it to the newest end", () => {
 
 test("the same icon from the same source returns the same list, so nothing is written", () => {
   const before = with_icon([], entry("a.example"));
-  assert.equal(with_icon(before, entry("a.example", ICON, "https://a.example/f.png", 999)), before);
+  assert.equal(with_icon(before, entry("a.example", ICON, "key-a.example")), before);
 });
 
 test("only a data: image within the per-entry cap is stored", () => {
@@ -66,7 +66,7 @@ test("a save of an unchanged entry does not write the list again", async () => {
   const storage = fake_storage();
   const cache = make_favicon_cache(storage);
   await cache.save(entry("a.example"), 0);
-  await cache.save(entry("a.example", ICON, "https://a.example/f.png", 50), 0);
+  await cache.save(entry("a.example", ICON, "key-a.example"), 0);
   assert.equal(storage.writes.length, 1);
 });
 

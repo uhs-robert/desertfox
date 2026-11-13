@@ -1,14 +1,14 @@
 import { keep_chain } from "../shared/swallow.ts";
 
-// Site icons for the cards, kept in `storage.local` so the page loads no remote icon. Each is a 32x32 PNG data: URL made by the background (`background/favicon_saver.ts`).
+// Site icons for the cards, kept in `storage.local` so the page loads no remote icon. Each is a 32x32 PNG data: URL that the background redraws from the tab icon (`background/favicon_saver.ts`).
 export const FAVICON_CACHE_KEY = "favicon_cache";
 export const FAVICON_SIZE = 32;
 // A 32x32 PNG is at most about 4.2 KB of bytes even as noise, which is under 5.7k characters of base64 with the prefix, so 6144 leaves room. At 200 hosts the whole cache is under 1.3 MB of the 5 MB `storage.local` quota.
 export const FAVICON_ENTRY_MAX_CHARS = 6144;
 export const FAVICON_CACHE_MAX_ENTRIES = 200;
 
-// `source` is the address the icon came from, or "data:" for a tab icon that was already a data: URL. `at` is when it was saved, in ms. The list is in save order, oldest first, so the front is what the cap drops.
-export type FaviconEntry = { host: string; icon: string; source: string; at: number };
+// `source` is a short key of the tab icon the PNG was redrawn from, so an unchanged icon is not redrawn. The list is in save order, oldest first, so the front is what the cap drops.
+export type FaviconEntry = { host: string; icon: string; source: string };
 
 export function site_host(url: string): string {
   try {
