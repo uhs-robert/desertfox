@@ -475,7 +475,7 @@ function add_movie_player() { document.body.append(make_movie_player([["hd1080",
 if (kind.includes("shadow")) {
   // The video comes inside an open shadow root at 4 s, where no media event reaches the document. The site player comes at 12.5 s, after the look-again time of a frame with no video has run out, so only a poll that the shadow-root hit started at about 4 s still finds it.
   setTimeout(() => {
-    const host = document.createElement("div");
+    const host = document.createElement("x-player");
     const video = document.createElement("video");
     video.src = "/tone.wav";
     video.loop = true;
@@ -496,6 +496,8 @@ if (kind.includes("shadow")) {
 if (kind.includes("blank")) {
   const blank = document.createElement("iframe");
   document.body.append(blank);
+  // The probe looks for a video element, as every real hls.js page has one.
+  blank.contentDocument.body.append(blank.contentDocument.createElement("video"));
   blank.contentDocument.body.append(make_movie_player([["hd1080", "1080p60"], ["hd720", "720p"], ["large", "480p"]], "hd720"));
 }
 // An in-site navigation: the address changes first, and the next video starts at the site's own level 800 ms later.

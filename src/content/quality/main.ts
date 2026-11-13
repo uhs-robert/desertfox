@@ -1,6 +1,6 @@
 // The `quality` bundle. The background injects it into every frame of the tab for each quality request and for each navigation, which starts the `media_quality` rule. Each frame reports whether it has a site player and a video, the background picks one frame and sends the request to it alone, and answers a frame with a video with the rule for its address. Each run reports again and adds no second listener.
 
-import type { QualityReport, QualityRequest } from "../../shared/quality.ts";
+import type { QualityReport, QualityRequest, QualityVideoState } from "../../shared/quality.ts";
 import { apply_quality } from "./apply.ts";
 import type { Driver } from "./driver.ts";
 import { hls_driver } from "./hls.ts";
@@ -9,7 +9,7 @@ import { create_rule } from "./rule.ts";
 import { youtube_driver } from "./youtube.ts";
 import type { YouTubePage } from "./youtube.ts";
 
-type QualityWindow = { desertfox_quality_ready?: true; desertfox_quality_address?: string; desertfox_quality_rule?: ReturnType<typeof create_rule>; wrappedJSObject: YouTubePage & HlsPage };
+type QualityWindow = QualityVideoState & { desertfox_quality_ready?: true; desertfox_quality_address?: string; desertfox_quality_rule?: ReturnType<typeof create_rule>; wrappedJSObject: YouTubePage & HlsPage };
 const quality_window = window as unknown as QualityWindow;
 
 // What the background needs to pick one player: whether this frame has one, whether it lists levels yet, and whether it holds a video at all.
@@ -22,14 +22,10 @@ function report(): QualityReport {
   }
 }
 
-// An open shadow root hides its video from a document query, and media events do not cross it.
-function has_video_in(root: ParentNode): boolean {
-  return root.querySelector("video") !== null || Array.from(root.querySelectorAll("*")).some((element) => element.shadowRoot !== null && has_video_in(element.shadowRoot));
-}
-
+// The probe (`probe_main.ts`) loads this bundle where it found a video, and leaves its finding in `desertfox_quality_video`, so the search inside shadow roots runs there and not here.
 const has_media = (): boolean => {
   try {
-    return Boolean(probe()) || has_video_in(document);
+    return Boolean(probe()) || quality_window.desertfox_quality_video === true || document.querySelector("video") !== null;
   } catch {
     return false;
   }

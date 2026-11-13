@@ -458,7 +458,7 @@ Counted from the unit tests (`test/quality_load.test.ts`) against a fake backgro
 
 | Message or work, per frame | Before | After |
 | --- | --- | --- |
-| `quality.js` injections | 3 | 3 |
+| `quality.js` injections | 3 | 0 (the 3 probe injections remain, and a frame with a video loads the bundle once) |
 | `quality_report` messages | 3 | 3 |
 | `quality_rule` messages | 3 | 0 (the message is gone) |
 | `read_media_quality` messages | 11 | 0 (the message is gone) |
