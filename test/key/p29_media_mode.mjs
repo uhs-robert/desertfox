@@ -359,7 +359,8 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await j_is_media(`${id}_inner`, 0.9);
     const escape_mark = events.length;
     await press_keys("-k", "Escape");
-    await normal(escape_mark, id);
+    // The frame keeps the focus in normal mode, so the badge reads FRAME.
+    await wait_event(escape_mark, indicator(id, "FRAME"), `the badge of ${id} to read FRAME`);
     await j_scrolls(`${id}_inner`);
     await focus_top(id);
     await j_scrolls(id);

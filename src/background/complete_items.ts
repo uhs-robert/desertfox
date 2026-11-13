@@ -332,6 +332,8 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   search_engines: () => Promise<Record<string, SearchEngine>>;
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
+  // The address of the subframe the line acts in, or undefined when the line acts in the top frame. A subframe's local marks sit under its own address.
+  line_frame_url: (tab_id: number) => Promise<string | undefined>;
   // The marks of the page at `url` then the global ones, and the quickmarks, as list rows: the key and the text the which-key rows show.
   marks: (url: string | undefined, is_private: boolean) => Promise<RegisterItem[]>;
   quickmarks: (is_private: boolean) => Promise<RegisterItem[]>;
@@ -411,7 +413,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // A private line lists no sessions, as the commands refuse there.
     if (kind === "sessions") return asker.incognito ? [] : deps.sessions();
     if (kind === "registers") return deps.registers(asker.incognito);
-    if (kind === "marks") return deps.marks((await deps.page_of(asker.tab_id))?.url, asker.incognito);
+    if (kind === "marks") return deps.marks((await deps.line_frame_url(asker.tab_id)) ?? (await deps.page_of(asker.tab_id))?.url, asker.incognito);
     if (kind === "quality_levels") return deps.quality_levels(asker.tab_id);
     if (kind === "quickmarks") return deps.quickmarks(asker.incognito);
     if (kind === "saved_quickmarks") return deps.saved_quickmarks(asker.incognito);

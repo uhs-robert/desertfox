@@ -94,8 +94,9 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await wait_takes_keys("p22_frames_same");
     await frame_passes_j("p22_frames_same");
     mark = events.length;
+    // The frame keeps the focus, so the badge reads FRAME in normal mode.
     await press_keys("-k", "Escape");
-    await wait_badge(mark, "p22_frames", "NORMAL");
+    await wait_badge(mark, "p22_frames", "FRAME");
     await frame_scrolls_on_j("p22_frames_same");
   });
 
@@ -107,8 +108,9 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await focus_frame(mark, "p22_top_same", "same");
     await frame_passes_j("p22_top_same");
     mark = events.length;
+    // The frame keeps the focus, so the badge reads FRAME in normal mode.
     await press_keys("-k", "Escape");
-    await wait_badge(mark, "p22_top", "NORMAL");
+    await wait_badge(mark, "p22_top", "FRAME");
     await frame_scrolls_on_j("p22_top_same");
   });
 

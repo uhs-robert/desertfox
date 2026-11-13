@@ -83,12 +83,13 @@ export async function run_cases({ in_background, config_copy, load_config_dir, s
       await open_page(kind, top_id, { new_tab: true, keys_page_id: frame_id });
       await expect_badge("INSERT");
       const text_before = await frame_text();
+      // The frame keeps the focus in normal mode, so the badge reads FRAME.
       await press_keys("-k", "Escape");
-      await expect_badge("NORMAL");
+      await expect_badge("FRAME");
       const mark = events.length;
       await press_keys("j");
       await wait_event(mark, scroll_of(frame_id), `j to scroll the frame with ${what}`);
-      await expect_badge("NORMAL");
+      await expect_badge("FRAME");
       expect((await frame_text()) === text_before, `j was typed into the frame with ${what}`);
     });
   }

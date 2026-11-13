@@ -29,6 +29,8 @@ export const area_rules = [
   { globs: ["src/commands/{page,reload_clear}.ts", "src/shared/permission_grant.ts"], areas: ["keys", "cmdline", "hints"] },
   // The hand-off of a hidden input frame, which p15_frame_mode tests, and the `gi` search that returns into it.
   { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
+  // The top frame draws the line, which-key and toasts for a focused subframe, which p6_frames tests.
+  { globs: ["src/{content,shared}/relay.ts", "src/background/frame_cue.ts"], areas: ["hints", "cmdline", "whichkey", "ui"] },
   { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
   { globs: ["src/content/hints/**", "src/content/grab/**", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.

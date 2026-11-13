@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 
+type Relayed = { type: "relay"; to: "top" | number; id: string; args: Record<string, unknown> };
 type Sink = { on_token_: (token: string) => "handled" | "pass"; exit: () => void };
 type Posted = { message: { desertfox_cmdline: Record<string, unknown> }; origin: string; transfer: MessagePort[] };
 
@@ -48,13 +49,16 @@ async function until(condition: () => boolean): Promise<void> {
 // For a message that must not arrive: long enough for one that would.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined, active_element = null as unknown } = {}) {
+async function load_host(t: TestContext, tag: string, { ticket_fails = false, run_answer = undefined as (() => Promise<unknown>) | undefined, search = undefined as ((finish: (outcome: unknown) => void) => void) | undefined, scrolling_element = undefined as unknown, command = undefined as ((id: string, args: Record<string, unknown>) => Promise<unknown>) | undefined, active_element = null as unknown, subframe = false, relay = undefined as ((message: Relayed) => unknown) | undefined, open_args = {} as Record<string, unknown>, frame_size = { width: 300, height: 200 }, window_height = 600 } = {}) {
   const modes: string[] = [];
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
   const sinks = new Map<string, Sink>();
   const elements: ReturnType<typeof fake_element>[] = [];
   const window_listeners: Record<string, (event: unknown) => void> = {};
   const sent: unknown[] = [];
+  // What the host asked the background to run in another frame, in order.
+  const relays: Relayed[] = [];
+  const window_focus: string[] = [];
   const calls: { id: string; args: Record<string, unknown> }[] = [];
   const observers: (() => void)[] = [];
   // What the host hands back to the page's key flow, in order, one entry per line that ended.
@@ -71,6 +75,10 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
       runtime: {
         getURL: (path: string) => `https://extension.test/${path}`,
         sendMessage: async (message: { type: string }) => {
+          if (message.type === "relay") {
+            relays.push(message as Relayed);
+            return relay?.(message as Relayed);
+          }
           if (message.type !== "issue_cmdline_ticket") {
             sent.push(message);
             // An inner `run` that the test finishes by hand.
@@ -82,8 +90,11 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
       },
     },
     document: { activeElement: active_element, scrollingElement: scrolling_element, documentElement: { append: (child: { isConnected: boolean }) => void (child.isConnected = true) }, createElement: () => { const element = fake_element(); elements.push(element); return element; } },
+    innerWidth: frame_size.width,
+    innerHeight: frame_size.height,
     window: {
-      innerHeight: 600,
+      innerHeight: window_height,
+      focus: () => void window_focus.push("window"),
       desertfox_host: {
         set_mode_: (mode: string) => void modes.push(mode),
         escape_: () => void modes.push("normal"),
@@ -100,15 +111,18 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
       addEventListener: (type: string, listener: (event: unknown) => void) => void (window_listeners[type] = listener),
     },
   });
+  // The top frame unless a test says otherwise.
+  const fake_window = (globalThis as unknown as { window: { top?: unknown } }).window;
+  fake_window.top = subframe ? {} : fake_window;
   // A query string makes Node evaluate the module again, as a fresh injection does.
   const host_url = new URL("../../src/cmdline/host.ts", import.meta.url).href;
   await import(`${host_url}?${tag}`);
 
-  const answer = handlers.get("cmdline.open")!({ text: "open ", search: search ? "forward" : undefined }) as Promise<{ ok: boolean; cancelled?: true; message?: string }> | { ok: false; message: string };
+  const answer = handlers.get("cmdline.open")!({ text: "open ", search: search ? "forward" : undefined, ...open_args }) as Promise<{ ok: boolean; cancelled?: true; message?: string }> | { ok: false; message: string };
   const opened_again = () => handlers.get("cmdline.open")!({ text: "again" }) as { ok: false; message: string };
   const [holder, frame] = elements as [ReturnType<typeof fake_element>, ReturnType<typeof fake_element>];
   // An open port keeps Node running, so a failed test would hang.
-  t.after(() => frame.posted.forEach((posted) => posted.transfer.forEach((port) => port.close())));
+  t.after(() => elements.forEach((element) => element.posted.forEach((posted) => posted.transfer.forEach((port) => port.close()))));
   const on_window = (message: unknown, source: unknown) => window_listeners.message!({ data: { desertfox_cmdline: message }, source });
   // The page answers `start` once the background took its ticket.
   const ready = async () => {
@@ -120,7 +134,7 @@ async function load_host(t: TestContext, tag: string, { ticket_fails = false, ru
     await until(() => frame.focused);
   };
   const page_mutated = () => observers.forEach((callback) => callback());
-  return { handed_back, modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened_, page_mutated, answer, opened_again };
+  return { relays, window_focus, handed_back, modes, sent, calls, elements, window_listeners, handlers, holder, frame, sink: sinks.get("cmdline")!, on_window, ready, page_opened_, page_mutated, answer, opened_again };
 }
 
 test("opening mounts the line, hands over the kept keys with a port, and a close over the port leaves it", async (t) => {
@@ -170,7 +184,7 @@ test("a submit over the port runs, and later keys travel over the port, not the 
   page_port.postMessage({ desertfox_cmdline: { kind: "submit", invocation: { id: "scroll.down" } } });
   await until(() => sent.length === 1);
   assert.deepEqual(modes, ["cmdline", "normal"]);
-  assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.down" }], mode: "normal" }]);
+  assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.down" }], mode: "normal", from_line: true }]);
 });
 
 test("a second ready after the start closes the line", async (t) => {
@@ -587,4 +601,125 @@ test("a page with no scrolling element starts the line with a null scroll", asyn
   const { frame, ready } = await load_host(t, "scroll_none", { scrolling_element: null });
   await ready();
   assert.equal(frame.posted[0]!.message.desertfox_cmdline.scroll, null);
+});
+
+// A focused subframe keeps the keys while the top frame draws the line. These tests drive both ends: the subframe's (`subframe: true`) and the top frame's, which `open_args` marks as a line for frame 5.
+const FOR_FRAME_5 = { from_frame: 5, remote_id: "line-1", mode: "insert", scroll: { top: 40, max: 900 } };
+const relayed_ids = (relays: Relayed[]) => relays.map((relayed) => relayed.id);
+const NO_LINE = { ok: false, message: "The frame is gone" };
+
+test("a subframe sends the line to the top frame with its own mode and scroll place, and its keys follow", async (t) => {
+  const { relays, modes, sink, elements } = await load_host(t, "remote_open", { subframe: true, scrolling_element: { scrollTop: 30, scrollHeight: 1000, clientHeight: 400 }, relay: () => new Promise(() => {}) });
+  assert.equal(elements.length, 0, "nothing drawn in the subframe");
+  assert.deepEqual(modes, ["cmdline"]);
+  const [open] = relays;
+  assert.equal(open!.to, "top");
+  assert.deepEqual({ ...open!.args, remote_id: "id" }, { text: "open ", mode: "normal", remote_id: "id", scroll: { top: 30, max: 600 } });
+  assert.equal(sink.on_token_("a"), "handled");
+  assert.deepEqual(relays.at(-1), { type: "relay", to: "top", id: "cmdline.token", args: { token: "a" } });
+});
+
+test("a top frame with no room, or none at all, leaves the line to the subframe, with the keys the top frame did not take", async (t) => {
+  for (const top_answer of [{ ok: false, message: "No room" }, undefined]) {
+    let answer_open!: (outcome: unknown) => void;
+    const { sink, frame_of, ready_here } = await (async () => {
+      const page = await load_host(t, `remote_no_room_${String(top_answer?.ok)}`, { subframe: true, relay: (relayed) => (relayed.id === "cmdline.open" ? new Promise((resolve) => (answer_open = resolve)) : NO_LINE) });
+      return { ...page, frame_of: () => page.elements[1], ready_here: async () => (page.on_window({ kind: "ready" }, page.elements[1]!.contentWindow), await until(() => page.elements[1]!.posted.length > 0)) };
+    })();
+    sink.on_token_("x");
+    await settle();
+    answer_open(top_answer);
+    await until(() => frame_of() !== undefined);
+    await ready_here();
+    assert.deepEqual(frame_of()!.posted[0]!.message.desertfox_cmdline.tokens, ["x"]);
+  }
+});
+
+test("the top frame hands the focus back to the subframe, which then ends the line with the late keys and its own", async (t) => {
+  let answer_open!: (outcome: unknown) => void;
+  const { relays, handlers, sink, modes, handed_back, window_focus } = await load_host(t, "remote_focus_back", { subframe: true, relay: (relayed) => (relayed.id === "cmdline.open" ? new Promise((resolve) => (answer_open = resolve)) : relayed.id === "cmdline.token" ? NO_LINE : { ok: true }) });
+  const remote_id = relays[0]!.args.remote_id;
+  // A key the top frame refused: its line had already closed.
+  sink.on_token_("j");
+  await settle();
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: "an older line" }), NO_LINE);
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id }), { ok: true });
+  assert.deepEqual(window_focus, ["window"]);
+  // Keys after the focus came back wait here for the end.
+  sink.on_token_("k");
+  answer_open({ ok: true, cancelled: true });
+  handlers.get("cmdline.end")!({ remote_id, tokens: ["l"] });
+  await until(() => handed_back.length === 1);
+  assert.deepEqual(handed_back, [["l", "j", "k"]]);
+  assert.deepEqual(modes, ["cmdline", "normal"]);
+  assert.equal(relays.filter((relayed) => relayed.id === "cmdline.token").length, 1, "k stayed here");
+});
+
+test("a subframe that is too small to show refuses the focus, so the top frame keeps it", async (t) => {
+  const { relays, handlers, window_focus } = await load_host(t, "remote_hidden", { subframe: true, frame_size: { width: 625, height: 1 }, relay: () => new Promise(() => {}) });
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: relays[0]!.args.remote_id }), NO_LINE);
+  assert.deepEqual(window_focus, []);
+});
+
+test("a subframe whose top frame never says the line ended leaves it after a grace time", async (t) => {
+  const { modes } = await load_host(t, "remote_grace", { subframe: true, relay: (relayed) => (relayed.id === "cmdline.open" ? { ok: true } : undefined), command: async () => ({ ok: true }) });
+  await until(() => modes.length === 2);
+  assert.deepEqual(modes, ["cmdline", "normal"]);
+});
+
+test("a page search in a subframe draws its line in that frame, which searches itself", async (t) => {
+  const { relays, elements, modes } = await load_host(t, "remote_search_here", { subframe: true, search: () => {}, relay: () => new Promise(() => {}) });
+  assert.deepEqual(relays, [], "nothing goes to the top frame");
+  assert.equal(elements.length, 2, "the line is drawn here");
+  assert.deepEqual(modes, ["cmdline"]);
+});
+
+test("the top frame draws a subframe's line with that frame's scroll place, and takes keys from that frame only", async (t) => {
+  const { handlers, frame, ready, sink } = await load_host(t, "top_for_frame", { open_args: FOR_FRAME_5, scrolling_element: { scrollTop: 0, scrollHeight: 100, clientHeight: 100 } });
+  await ready();
+  assert.deepEqual([frame.posted[0]!.message.desertfox_cmdline.scroll, frame.posted[0]!.message.desertfox_cmdline.mode], [FOR_FRAME_5.scroll, "insert"]);
+  const received = collect_messages(frame);
+  assert.equal(handlers.get("cmdline.token")!({ from_frame: 5, token: "q" }), undefined);
+  assert.deepEqual(handlers.get("cmdline.token")!({ from_frame: 6, token: "z" }), NO_LINE);
+  assert.equal(sink.on_token_("w"), "handled", "the top frame's own keys still type");
+  await until(() => received.length === 2);
+  assert.deepEqual(received, [{ kind: "token", token: "q" }, { kind: "token", token: "w" }]);
+});
+
+test("a top frame too short for the line refuses it, so the subframe draws its own", async (t) => {
+  const { elements, answer, modes } = await load_host(t, "top_no_room", { open_args: FOR_FRAME_5, window_height: 100 });
+  assert.deepEqual(await answer, { ok: false, message: "No room" });
+  assert.deepEqual([elements, modes], [[], []]);
+});
+
+test("a key relayed after the top frame's line closed is refused, so the subframe keeps it", async (t) => {
+  const { handlers, sink } = await load_host(t, "top_closed", { open_args: FOR_FRAME_5, relay: () => ({ ok: true }) });
+  sink.on_token_("<Escape>");
+  assert.deepEqual(handlers.get("cmdline.token")!({ from_frame: 5, token: "j" }), NO_LINE);
+});
+
+test("a subframe that refuses the focus still hears the end, and the late keys stay in the top frame", async (t) => {
+  for (const takes_focus of [false, true]) {
+    const { relays, frame, ready, page_opened_, handed_back } = await load_host(t, `top_focus_${takes_focus}`, { open_args: FOR_FRAME_5, relay: (relayed) => (relayed.id === "cmdline.focus" ? (takes_focus ? { ok: true } : NO_LINE) : { ok: true }) });
+    await ready();
+    await page_opened_();
+    const page_port = frame.posted[0]!.transfer[0]!;
+    page_port.onmessage = (event) => event.data.desertfox_cmdline.kind === "drain" && page_port.postMessage({ desertfox_cmdline: { kind: "drained", tokens: ["x"] } });
+    page_port.postMessage({ desertfox_cmdline: { kind: "close" } });
+    await until(() => handed_back.length === 1);
+    await until(() => relays.some((relayed) => relayed.id === "cmdline.end"));
+    assert.deepEqual(relays.find((relayed) => relayed.id === "cmdline.end")?.args, { remote_id: "line-1", tokens: takes_focus ? ["x"] : [] });
+    assert.deepEqual(handed_back, [takes_focus ? [] : ["x"]]);
+    assert.equal(frame.focused, takes_focus, "the line's frame keeps no focus either way, the page's blur or the subframe takes it");
+  }
+});
+
+test("a subframe whose mode left the line first, as the end of a fullscreen does, still takes the focus back for that line", async (t) => {
+  const { relays, handlers, sink, window_focus } = await load_host(t, "remote_exit_focus", { subframe: true, relay: () => new Promise(() => {}) });
+  const remote_id = relays[0]!.args.remote_id;
+  sink.exit();
+  assert.deepEqual(relays.at(-1)?.args, { token: "<Escape>" });
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id: "an older line" }), NO_LINE);
+  assert.deepEqual(handlers.get("cmdline.focus")!({ remote_id }), { ok: true });
+  assert.deepEqual(window_focus, ["window"]);
 });
