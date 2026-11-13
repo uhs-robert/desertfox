@@ -30,7 +30,7 @@ export function create_bridge_events(deps: BridgeEventsDeps) {
   // Events go out one after another, so a slow lookup cannot let an update land after the tab's removal.
   let turns: Promise<void> = Promise.resolve();
   const in_turn = (work: () => Promise<void>) => {
-    turns = turns.then(work).catch(() => undefined);
+    turns = turns.then(work).catch((error: unknown) => console.warn("desertfox: a bridge event failed", error));
     return turns;
   };
 

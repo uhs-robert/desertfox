@@ -55,3 +55,25 @@ test("a read right after an activation waits for the write", async () => {
   void tabs.activated(1, 10);
   assert.equal(await tabs.previous_of(1), 10);
 });
+
+test("a failing write warns and the next write still runs", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const data = new Map<string, unknown>();
+  let fail_next = true;
+  const tabs = create_previous_tabs({
+    get: async (key: string) => (data.has(key) ? { [key]: data.get(key) } : {}),
+    set: async (items: Record<string, unknown>) => {
+      if (fail_next) {
+        fail_next = false;
+        throw new Error("quota");
+      }
+      Object.entries(items).forEach(([key, value]) => data.set(key, value));
+    },
+    remove: async (key: string) => void data.delete(key),
+  } as never);
+  await tabs.activated(1, 10);
+  assert.equal(warn.mock.callCount(), 1);
+  assert.equal(await tabs.previous_of(1), undefined);
+  await tabs.activated(1, 11);
+  assert.equal(await tabs.previous_of(1), 11);
+});

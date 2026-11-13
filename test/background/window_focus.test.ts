@@ -53,3 +53,26 @@ test("the list survives a restart because it is read back from storage", async (
 test("a stored value of the wrong shape reads as empty", async () => {
   assert.deepEqual(await read_recent_window_ids(make({ desertfox_window_focus: "x" }).storage), []);
 });
+
+test("a failing write warns and the next update still runs", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const data: Record<string, unknown> = {};
+  let fail_next = true;
+  const storage = {
+    get: async (key: string) => ({ [key]: data[key] }),
+    set: async (items: Record<string, unknown>) => {
+      if (fail_next) {
+        fail_next = false;
+        throw new Error("quota");
+      }
+      Object.assign(data, items);
+    },
+  } as unknown as Parameters<typeof read_recent_window_ids>[0];
+  let focus = (_id: number) => {};
+  const tracker = track_window_focus(storage, { onFocusChanged: { addListener: (listener) => void (focus = listener) }, onRemoved: { addListener: () => {} } });
+  focus(4);
+  focus(5);
+  await tracker.settled();
+  assert.equal(warn.mock.callCount(), 1);
+  assert.deepEqual(await read_recent_window_ids(storage), [5]);
+});

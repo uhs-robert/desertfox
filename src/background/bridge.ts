@@ -79,7 +79,7 @@ export function create_bridge(deps: BridgeDeps) {
   let queue: Promise<void> = Promise.resolve();
 
   const enqueue = (work: () => Promise<void>) => {
-    queue = queue.then(work).catch(() => undefined);
+    queue = queue.then(work).catch((error: unknown) => console.warn("desertfox: a bridge update failed", error));
     return queue;
   };
 

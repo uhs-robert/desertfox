@@ -2,6 +2,7 @@
 // because a tab opened in the background gets that time at creation and would look like the tab the user came from.
 
 import { PREVIOUS_TAB_STORAGE_PREFIX } from "./storage_keys.ts";
+import { create_write_queue } from "./store_turns.ts";
 
 type PreviousTabStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -12,15 +13,17 @@ export function create_previous_tabs(storage: PreviousTabStorage) {
     return typeof stored === "number" ? stored : undefined;
   };
   // Writes run one after another, so a close cannot read the value an activation is about to replace.
-  let queue: Promise<void> = Promise.resolve();
+  const run_in_turn = create_write_queue();
+  let settled: Promise<void> = Promise.resolve();
+  // A failed write warns and leaves the old value, and the next write still runs.
   const enqueue = (write: () => Promise<void>) => {
-    queue = queue.then(write).catch(() => {});
-    return queue;
+    settled = run_in_turn(write).catch((error: unknown) => console.warn("desertfox: could not save the previous tab", error));
+    return settled;
   };
   return {
     // Waits for queued writes, so a read right after an activation sees it. `removed` reads inside the queue and must not wait on it.
     previous_of: async (window_id: number): Promise<number | undefined> => {
-      await queue;
+      await settled;
       return stored_previous_of(window_id);
     },
     // A window's first activation has no previous tab.
