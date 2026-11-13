@@ -127,11 +127,11 @@ const tabswitch_runs_of = (tool) => (runs_of[tool] ?? []).filter((run) => run.pa
 const tabswitch_tools = tools.filter((tool) => tabswitch_runs_of(tool).length > 0);
 if (tabswitch_tools.length > 0) {
   const meta = info_of[tabswitch_tools[0]].meta.tabswitch;
-  markdown += `\n### Tab switch to an unloaded tab (ms; median [min-max]; extensions at default settings; retry gap ${meta.retry_ms} ms; cache: ${meta.cache})\n\n| tool | next-tab key | hop A: key in loaded tab to next tab | hop B: unloaded tab active to next tab active | presses sent before landing | extra hops |\n|---|---|---|---|---|---|\n`;
+  markdown += `\n### Tab switch to an unloaded tab (ms; median [min-max]; extensions at default settings; presses asked for every ${meta.retry_ms} ms, measured gap in the last column; cache: ${meta.cache}). Early keys: ${meta.early_keys}\n\n| tool | next-tab key | hop A: key in loaded tab to next tab | hop B: unloaded tab active to next tab active | presses sent before landing | extra hops | measured press gap (ms) |\n|---|---|---|---|---|---|---|\n`;
   for (const tool of tabswitch_tools) {
     const runs = tabswitch_runs_of(tool);
     const pick = (field) => runs.map((run) => run.tabswitch[field]);
-    markdown += `| ${tool} | ${info_of[tool].meta.tabswitch.next_key} | ${summary_of(pick("first_hop_ms"))} | ${summary_of(pick("arrive_to_land_ms"))} | ${summary_of(pick("presses_sent"))} | ${pick("extra_hops").reduce((sum, count) => sum + count, 0)} |\n`;
+    markdown += `| ${tool} | ${info_of[tool].meta.tabswitch.next_key} | ${summary_of(pick("first_hop_ms"))} | ${summary_of(pick("arrive_to_land_ms"))} | ${summary_of(pick("presses_sent"))} | ${pick("extra_hops").reduce((sum, count) => sum + count, 0)} | ${summary_of(pick("press_gap_ms"))} |\n`;
   }
 }
 markdown += `\n### Versions\n\n${tools.map((tool) => `- ${tool}: firefox ${info_of[tool].firefox}, meta ${JSON.stringify(info_of[tool].meta)}`).join("\n")}\n`;

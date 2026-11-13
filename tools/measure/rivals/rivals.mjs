@@ -68,7 +68,7 @@ for (let pass = 1; pass <= pass_count; pass++) {
     // A busy machine can make the debugger connection time out at startup, so each tool gets one retry.
     const attempt = () => spawnSync("node", [`${here}run.mjs`, tool, timed_runs], { env: { ...env, PASS: String(pass) }, stdio: ["ignore", "inherit", "inherit"] });
     const first = attempt();
-    if (first.status === CHECK_FAILED_STATUS) throw new Error(`run.mjs ${tool} failed a coverage check: not retried`);
+    if (first.status === CHECK_FAILED_STATUS) throw new Error(`run.mjs ${tool} failed a result check: not retried`);
     const result = first.status === 0 ? first : attempt();
     if (result.status !== 0) throw new Error(`run.mjs ${tool} failed twice (status ${result.status})`);
   }

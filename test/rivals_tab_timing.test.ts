@@ -36,3 +36,13 @@ test("every tool has a next-tab key and the retry gap is positive", () => {
   assert.deepEqual(Object.keys(NEXT_TAB_KEY).sort(), ["desertfox", "tridactyl", "vimium", "vimiumc"]);
   assert.ok(RETRY_MS > 0);
 });
+
+test("a first switch to the wrong tab fails even when the right tabs follow", () => {
+  const result = analyze_tab_switch({ key_a_ms: 0, selects: [{ index: 2, ms: 10 }, { index: 1, ms: 20 }, { index: 2, ms: 60 }], presses_b_ms: [21, 31, 41, 51] });
+  assert.match(result.error, /did not switch/);
+});
+
+test("the median gap between presses is reported from the press times", () => {
+  const result = analyze_tab_switch({ key_a_ms: 0, selects: [{ index: 1, ms: 10 }, { index: 2, ms: 80 }], presses_b_ms: [11, 28, 45, 62] });
+  assert.equal(result.press_gap_ms, 17);
+});

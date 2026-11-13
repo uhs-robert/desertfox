@@ -133,21 +133,21 @@ async function remove_policy_addon() {
   throw new Error("the policy-installed DesertFox is still present: the run would be biased");
 }
 
-// Navigates the selected tab to the page and waits until it has loaded. Returns the page state, or null when it did not load.
+// Navigates the selected tab to the page and waits until it has loaded. Returns the last page state and whether it loaded, so a failed load keeps its diagnosis.
 async function open_page(page) {
   await navigate("about:blank");
   await sleep(700);
   await navigate(`${base_url}/${page}`);
+  let page_state = null;
   for (let attempt = 0; attempt < 150; attempt++) {
     await sleep(100);
-    let page_state = null;
     try {
       await load_frame_script();
       page_state = await ask_page("state");
     } catch { continue; }
-    if (page_state?.ready === "complete" && page_state.load > 0 && page_state.url.startsWith(base_url)) return page_state;
+    if (page_state?.ready === "complete" && page_state.load > 0 && page_state.url.startsWith(base_url)) return { page_state, loaded: true };
   }
-  return null;
+  return { page_state, loaded: false };
 }
 
 // One tab-switch run. Tab 0 is loaded and active, tabs 1 and 2 are loaded once and then discarded, so Firefox has to load them on arrival.
@@ -156,7 +156,8 @@ async function open_page(page) {
 // - The first press is queued with setTimeout(0) from the TabSelect handler, so it never runs inside the event dispatch.
 // - A press sent while the old page or no page owns focus is lost. The record counts presses sent before the landing.
 // - A press in flight at the landing can still work and switch again (extra_hops), because the loop stops only when the landing event runs.
-// - Tab 2 loads while hop B runs, so server and parse time are inside the interval for every tool alike (the server answers in a few ms and sends no-store).
+// - Tab 1 loads while hop B runs, so server and parse time are inside the interval for every tool alike (the server answers in a few ms and sends no-store). Tab 2 starts to load only after the interval.
+// - The press gap is longer than RETRY_MS because the parent process is busy restoring tab 1, so presses_b_ms is kept in the run record and analyze.mjs reports the measured gap.
 async function tab_switch_run(next_key) {
   const marks = await chrome_long(`{
     const win = Services.wm.getMostRecentWindow("navigator:browser");
@@ -212,7 +213,7 @@ async function tab_switch_run(next_key) {
   if (!marks.pending_at_start.every(Boolean)) throw new CheckFailed(`tabs 1 and 2 were not unloaded at the start (pending: ${marks.pending_at_start})`);
   const timing = analyze_tab_switch(marks);
   if (timing.error) throw new CheckFailed(`tab switch cannot be measured: ${timing.error}`);
-  return { ...timing, selects: marks.selects };
+  return { ...timing, selects: marks.selects, presses_b_ms: marks.presses_b_ms };
 }
 
 const result = { tool, base_url, firefox: "", meta: {}, runs: [] };
@@ -245,20 +246,19 @@ try {
     if (page === "tabswitch") {
       if (!addon) continue;
       // Default settings for every tool, nothing turned off. The warm-up run (-1) covers the first load after install, and the timed runs are warm.
-      result.meta.tabswitch = { next_key: NEXT_TAB_KEY[tool], retry_ms: RETRY_MS, cache: "server sends cache-control: no-store, so each tab load fetches the page again; the browser start-up cache and the extension's script cache are warm after run -1", settings: "extension defaults" };
+      result.meta.tabswitch = { next_key: NEXT_TAB_KEY[tool], retry_ms: RETRY_MS, cache: "server sends cache-control: no-store, so each tab load fetches the page again; the browser start-up cache and the extension's script cache are warm after run -1", settings: "extension defaults", early_keys: "DesertFox holds keys that arrive before its keymap is read and replays them; Vimium, Vimium C and Tridactyl drop them, so for DesertFox the presses before landing are held, for the others lost" };
       for (let run = -1; run < timed_runs; run++) {
-        if ((await open_page("tab")) === null) throw new Error("the start tab did not load");
+        if (!(await open_page("tab")).loaded) throw new Error("the start tab did not load");
         await sleep(1500);
         const tabswitch = await tab_switch_run(NEXT_TAB_KEY[tool]);
         result.runs.push({ page, run, tabswitch });
-        log_row({ page, run, first_hop_ms: tabswitch.first_hop_ms, arrive_to_land_ms: tabswitch.arrive_to_land_ms, lost: tabswitch.lost_before_landing, extra_hops: tabswitch.extra_hops });
+        log_row({ page, run, first_hop_ms: tabswitch.first_hop_ms, arrive_to_land_ms: tabswitch.arrive_to_land_ms, lost: tabswitch.lost_before_landing, press_gap_ms: tabswitch.press_gap_ms, extra_hops: tabswitch.extra_hops });
       }
       continue;
     }
     // Run -1 is a warm-up. It stays in the data as the first press on this page in this browser process (only the first page of a tool starts in a fresh browser), and the analysis leaves it out of the medians.
     for (let run = -1; run < timed_runs; run++) {
-      const page_state = await open_page(page);
-      const loaded = page_state !== null;
+      const { page_state, loaded } = await open_page(page);
       if (!loaded) { result.runs.push({ page, run, error: "not loaded", page_state }); continue; }
       await sleep(1500);
       await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
