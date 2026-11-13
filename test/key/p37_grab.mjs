@@ -193,7 +193,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys(";gg");
     await labels_up("labels of the draggable group");
     expect((await hint_label_count()) === 12, `the draggable group has twelve labels, one per sign, got ${await hint_label_count()}`);
-    await press_keys("Escape");
+    await press_keys("-k", "Escape");
     await labels_gone("labels gone after Escape");
   });
 
@@ -202,7 +202,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys(";ga");
     await labels_up("labels of every element");
     expect((await hint_label_count()) >= 5, "every filter labels the link, the button and the div too");
-    await press_keys("Escape");
+    await press_keys("-k", "Escape");
     await labels_gone("labels gone after the second Escape");
   });
 
@@ -250,4 +250,20 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await pick("#b");
     await poll_until("c2 in column b after c1", async () => (await order_of("b")) === "c1,c2", { timeout_ms: 5000 });
   });
+
+  // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.
+  for (const [second, label] of [[";ga", "a grab"], [";a", "a plain hint"]]) {
+    await run_case(`;gg then Escape, and ${second} on the same page still shows labels (${label})`, async () => {
+      await open_page("drag", "group", { new_tab: true });
+      await press_keys(";gg");
+      await labels_up("labels of the draggable group");
+      await press_keys("-k", "Escape");
+      await labels_gone("labels gone after Escape");
+      await sleep(300);
+      await press_keys(second);
+      await labels_up(`labels of ${second} after the cancelled grab`);
+      await press_keys("-k", "Escape");
+      await labels_gone(`labels gone after ${second}`);
+    });
+  }
 }
