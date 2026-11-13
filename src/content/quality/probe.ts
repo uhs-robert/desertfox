@@ -64,7 +64,7 @@ export function create_probe(deps: ProbeDeps) {
     const address = deps.address();
     if (seen_at === address) return;
     if (deps.has_video()) return void tell(true);
-    if (loaded && told_at !== address) void tell(false);
+    if ((loaded || busy) && told_at !== address) void tell(false);
     look_until = deps.now() + PROBE_SPAN_MS;
     void look_again();
   }
