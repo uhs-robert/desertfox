@@ -28,7 +28,7 @@
     --desertfox-border: #9aa5b1;
   }
 }
-/* One size for both pages: the unit every rem on them is measured in. */
+/* The new tab page's rem unit. The help page sets its own 16px root after this sheet, because its layout is measured in 16px rems. */
 html { font-size: 15px; }
 
 .desertfox-keycaps { display: inline-flex; flex-wrap: wrap; gap: var(--desertfox-space-1); vertical-align: middle; }

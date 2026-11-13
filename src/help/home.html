@@ -7,7 +7,8 @@
 <!-- First, so the theme sheet and style.css that main.ts appends win over it. -->
 <link rel="stylesheet" href="page_base.css">
 <style>
-  html { background: var(--desertfox-bg-core); }
+  /* The help layout is measured in 16px rems (sidebar 12rem, column 60rem), so the page keeps that root. The text stays 15px. */
+  html { background: var(--desertfox-bg-core); font-size: 16px; }
   body { margin: 0; }
   .desertfox-help {
     display: flex;
@@ -15,6 +16,7 @@
     background: var(--desertfox-bg-core);
     color: var(--desertfox-fg-core);
     font: var(--desertfox-font);
+    font-size: 15px;
   }
   .desertfox-help-page { box-sizing: border-box; flex: 1; min-width: 0; max-width: 60rem; padding: 1rem 2rem 4rem; }
   .desertfox-help-sidebar {
