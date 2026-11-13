@@ -252,6 +252,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "layout_fallback",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "mode_indicator",
     "settable": true,
     "is_toggle": false,

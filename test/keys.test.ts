@@ -4,6 +4,7 @@ import {
   compile_keymap,
   create_matcher,
   event_to_token,
+  physical_token,
   is_chord,
   parse_sequence,
   to_firefox_shortcut,
@@ -76,6 +77,25 @@ test("event to token", () => {
 test("chords on another script fall back to the physical letter", () => {
   assert.equal(event_to_token(press("в", { ctrlKey: true, code: "KeyD" })), "<C-d>");
   assert.equal(event_to_token(press("в", { code: "KeyD" })), "в");
+});
+
+test("layout fallback: a Cyrillic letter on a Latin key", () => {
+  const { compiled } = compile({ normal: { j: { id: "scroll.down" }, J: { id: "scroll.top" }, "<C-d>": { id: "scroll.half" } } });
+  const matcher = create_matcher(compiled);
+  const cyrillic = (key: string, code: string, shiftKey = false) => press(key, { code, shiftKey });
+  // The typed letter binds nothing, so the physical key stands in.
+  assert.equal(physical_token(cyrillic("о", "KeyJ")), "j");
+  assert.equal(physical_token(cyrillic("О", "KeyJ", true)), "J");
+  assert.equal(matcher.binds_after_("normal", [], event_to_token(cyrillic("о", "KeyJ"))!), false);
+  assert.equal(matcher.binds_after_("normal", [], physical_token(cyrillic("о", "KeyJ"))!), true);
+  // A typed character that binds something stays: nothing asks for the physical key.
+  assert.equal(matcher.binds_after_("normal", [], event_to_token(cyrillic("j", "KeyJ"))!), true);
+  assert.equal(physical_token(cyrillic("j", "KeyJ")), null);
+  // Greek and Hebrew letters, and keys that are not letters, have the same rule.
+  assert.equal(physical_token(cyrillic("ξ", "KeyJ")), "j");
+  assert.equal(physical_token(cyrillic("ח", "KeyJ")), "j");
+  assert.equal(physical_token(cyrillic("Enter", "Enter")), null);
+  assert.equal(physical_token(cyrillic("1", "Digit1")), null);
 });
 
 test("event token equals the parsed notation token", () => {

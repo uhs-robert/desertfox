@@ -3,7 +3,7 @@
 
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
-import { create_matcher, event_to_token } from "../shared/keys/index.ts";
+import { create_matcher, event_to_token, physical_token } from "../shared/keys/index.ts";
 import { all_off_step } from "./site_rule.ts";
 import { create_keymap_asks } from "./ask_keymap.ts";
 import { message_of } from "./bundle_host.ts";
@@ -57,6 +57,7 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
+let layout_fallback = true;
 let which_key_skip: readonly string[] | undefined;
 // The timer lives in the `whichkey` bundle, so the first panel may appear late by the load.
 const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => follow_which_key(bundles, prefix, at_once, which_key_delay_ms, which_key_skip);
@@ -139,8 +140,9 @@ function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   cancelled_keys.saw_keydown_(event.code);
   if (!event.isTrusted || event.isComposing) return;
-  const token = event_to_token(event);
+  let token = event_to_token(event);
   if (token === null) return;
+  if (layout_fallback) token = key_flow.layout_token_(token, physical_token(event));
   // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
   follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
@@ -250,6 +252,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
+  layout_fallback = keymap?.layout_fallback !== false;
   set_toast_durations(keymap);
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
