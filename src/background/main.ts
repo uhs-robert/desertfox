@@ -263,7 +263,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (page_request?.type === "export_config" || page_request?.type === "list_snippets" || page_request?.type === "remove_snippet") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or change snippets" });
-    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state(), registry), remove: remove_snippet });
+    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state()), remove: remove_snippet });
   }
   if (page_request?.type === "config_files") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may edit the config files" });

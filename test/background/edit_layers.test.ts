@@ -143,22 +143,22 @@ test("a key edit stays on top when a start applies the folder, and when the page
   await set_keymap(first, { normal: { J: "tab.close" } });
 
   // The browser copy holds no browser change, so the start applies the folder at once.
-  host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\n' };
+  host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\nK = "tab.goto"\n' };
   const silent = await fresh_startup("host_start_silent");
   await silent.reload_config_at_start();
-  assert.equal(bound(local, "normal", "K"), "tab.prev");
+  assert.equal(bound(local, "normal", "K"), "tab.goto");
   assert.equal(bound(local, "normal", "J"), "tab.close");
 
   // An editor save makes the start ask, and the answer applies the folder.
   const base = (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["keymap.toml"]!;
   await silent.save_config_file("keymap.toml", '[normal]\nJ = "tab.next"\n', base);
-  host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\nK = "tab.goto"\n' };
+  host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\nK = "tab.next"\n' };
   const asked = await fresh_startup("host_start_asked");
   await asked.reload_config_at_start();
   const pending = local[HOST_START_PENDING_STORAGE_KEY] as HostStartPending;
   assert.ok(pending, "a question is pending");
   const answered = await answer_host_start_choice({ type: "host_start_choice", choice: "use_folder", host_digest: pending.host_digest, browser_digest: pending.browser_digest }, asked.choose_host_start);
   assert.equal(answered.ok, true, answered.message);
-  assert.equal(bound(local, "normal", "K"), "tab.goto");
+  assert.equal(bound(local, "normal", "K"), "tab.next");
   assert.equal(bound(local, "normal", "J"), "tab.close");
 });
