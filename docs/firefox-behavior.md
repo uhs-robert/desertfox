@@ -241,6 +241,7 @@ Read from the Firefox 160 sources (`omni.ja`), plus the key test for the grant a
 - A declined request resolves `false` and does not throw. A policy block throws "Permissions are blocked by enterprise policy". An already granted permission resolves `true` with no prompt.
 - A grant persists across restarts. The running background sees it at once (`permissions.contains` is true with no reload). The key test grants and removes with `ExtensionPermissions.add` and `remove`, passing the extension as the third argument so the background learns of the change.
 - `browsingData` shows "Clear recent browsing history, cookies, and related data" at install. Moving it to `optional_permissions` removes that line.
+- `webNavigation` (required, for the media keys' frame list) adds a line to the install prompt and makes Firefox ask again on the update that adds it. The line is not measured in a run. The media key needs it because `tabs.executeScript` with `allFrames` waits on a hung frame and skips `data:` and sandboxed frames, while `webNavigation.getAllFrames` lists every frame and lets the background ask each by `frameId` with its own deadline.
 - `cookies` shows no install prompt line, but it stays required. Without it Firefox 160 throws "No permission for cookieStoreId" in `tabs.create`, `windows.create` and `downloads.download` when they carry a container.
 
 ## Per-site zoom memory and `tabs.setZoom` (per-site-settings)

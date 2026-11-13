@@ -2,13 +2,10 @@ import { define } from "../shared/registry/builtin.ts";
 import type { MediaStep, Ping } from "../shared/messages.ts";
 import { MEDIA_ACTIONS } from "../shared/media.ts";
 import { MEDIA_VALUE_PATTERNS } from "../shared/media_values.ts";
-import { create_media_reports, run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";
+import { run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";
 import { ask_quality_in_tab } from "../background/quality_levels.ts";
 import { create_tab_media } from "../background/tab_media.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-
-// The background's message listener hands each frame's pushed scan to this.
-export const media_reports = create_media_reports();
 
 // The background's message listener hands each frame's mode report to this.
 export const tab_media = create_tab_media({
@@ -20,15 +17,17 @@ export const tab_media = create_tab_media({
 });
 
 const browser_media_deps: MediaDeps = {
-  reports: media_reports,
   tab_media,
-  // Document start runs the script at once, so a frame that is still loading reports instead of holding the key until it is idle.
-  inject_all: async (tab_id) => (await browser.tabs.executeScript(tab_id, { file: "media.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" })).length,
+  // `getAllFrames` lists the `data:` and sandboxed frames that `executeScript` with `allFrames` skips, and a frame that hangs shows up in it like any other.
+  list_frames: async (tab_id) => ((await browser.webNavigation.getAllFrames({ tabId: tab_id })) ?? []).map((frame) => frame.frameId),
+  // Document start runs the script at once, so a frame that is still loading answers instead of holding the key until it is idle.
+  inject: (tab_id, frame_id) => browser.tabs.executeScript(tab_id, { file: "media.js", frameId: frame_id, matchAboutBlank: true, runAt: "document_start" }),
   ask: (tab_id, frame_id, request) => browser.tabs.sendMessage(tab_id, request, { frameId: frame_id }),
   quality: ask_quality_in_tab,
   // Firefox 153 brought the standard API to desktop. The background page has the same engine as the pages, so it can ask for all of them. Node tools import this module too, where no HTMLVideoElement exists.
   can_picture_in_picture: () => "requestPictureInPicture" in (globalThis.HTMLVideoElement?.prototype ?? {}),
   toast: (ctx, message) => show_toast_on_tab(ctx, "media.act", message, "info"),
+  scan_timeout_ms: 300,
   answer_timeout_ms: 1500,
 };
 

@@ -1,7 +1,6 @@
-// The `media` bundle. The background injects it into every frame of the tab for each `media` command. Each frame pushes its scan to the background, which then asks the chosen frames to apply.
+// The `media` bundle. The background injects it into the frames of a tab when none answers, and asks each frame for its scan. It then asks the chosen frames to apply.
 
 import type { MediaRequest } from "../../shared/media.ts";
-import type { MediaReport } from "../../shared/messages.ts";
 import { enter_fullscreen, leave_fullscreen } from "./fullscreen.ts";
 import { apply_in_frame, media_in, scan_frame, visible_area } from "./frame_media.ts";
 import type { FrameView, Player } from "./frame_media.ts";
@@ -17,15 +16,14 @@ const view: FrameView = {
   toggle_fullscreen: (player) => (document.fullscreenElement ? leave_fullscreen() : enter_fullscreen(player as unknown as Element)),
 };
 
-// Each command injects the file again, so a second run must not add a second listener, but it reports again.
+// A second injection (two keys pressed before the first listener was up) must not add a second listener.
 if (!media_window.desertfox_media_ready) {
   media_window.desertfox_media_ready = true;
   // The content script's own listener answers nothing to this type, so this one's answer is the reply.
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const request = raw as MediaRequest;
+    if (request.type === "media_scan") return Promise.resolve(scan_frame(view));
     if (request.type === "media_apply") return apply_in_frame(view, request);
     return undefined;
   });
 }
-
-void browser.runtime.sendMessage({ type: "media_report", scan: scan_frame(view) } satisfies MediaReport).catch(() => undefined);
