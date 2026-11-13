@@ -184,6 +184,7 @@ The keymap is data, not code. It maps a mode and a key sequence to an invocation
 - `I` is `gi`: it focuses the first field. A hidden input frame is a child frame of the page's own origin that the user cannot see: under 4 px on one side. Where the frame sits does not count, so an editor in a full-size frame that is scrolled out of view is not one. A page such as Google Docs types into one. While such a frame is in normal mode it blurs its own frame element, so the document that holds it gets the keys and every command, sink and panel works there.
 - It hands off on each change into normal mode and when it gains the focus in normal mode, and no rule names a site. Escape hands off in the key's own turn. Every other hand-off waits one tick, so a focus move that leaves the frame for a field of the page is not cancelled. A mouse press that focuses the frame's field returns to insert mode, and so does `gi`, which picks a field in one of the page's hidden input frames ahead of the page's own visible fields.
 - A frame that gains the focus again within 500 ms of a hand-off, with no insert mode between, keeps it, so a page that fights for the focus does not loop. While the page holds the focus, keys the page's editor handles in the frame (arrows and PageDown in Docs) do nothing.
+
 ### Layout fallback
 
 - On a Cyrillic, Greek or Hebrew layout, a plain letter whose typed character binds nothing acts as the Latin letter on its physical key (`event.code`). Shift gives upper case.
