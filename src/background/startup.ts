@@ -30,6 +30,8 @@ import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../shared/messages.ts";
 import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
+import { key_edits_running } from "./keymap_message.ts";
+import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, has_config_files, read_host_memory, remember_applied, settle_host_start, store_host_pending } from "./host_start.ts";
@@ -362,11 +364,16 @@ export function import_config(source: unknown, accepted: unknown): Promise<{ war
   });
 }
 
-// Drops one installed snippet from the slot's raw files and rebuilds. A key that binds it makes the build refuse, and the snippet stays.
+// Drops one installed snippet from the slot's raw files and rebuilds. A key in the files or a key edit that binds it refuses the removal, and the snippet stays.
 export function remove_snippet(path: string): Promise<{ warnings: number }> {
   return in_change_queue(async () => {
     const current = await load_files_source();
     if (!path.startsWith("snippets/") || !Object.hasOwn(current.files, path)) throw new ConfigRefusal(`${KEPT_CURRENT.remove} No snippet ${path} is installed.`);
+    const snippet_id = parse_snippet(path, current.files[path]!, [])?.id;
+    if (snippet_id !== undefined) {
+      const binding_edits = key_edits_running(snippet_id, { config: await get_config(), layers: await load_layers() }, registry);
+      if (binding_edits.length > 0) throw new ConfigRefusal(`${KEPT_CURRENT.remove} The key edit ${binding_edits.join(", ")} runs ${snippet_id}. Reset or change it first.`);
+    }
     const { [path]: _removed, ...files } = current.files;
     return apply_files(files, current.dir_label, "remove");
   });

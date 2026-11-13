@@ -55,7 +55,8 @@ export function installed_snippets(files: ConfigFiles): InstalledSnippet[] {
 export type ConfigTransferDeps = {
   read_files: () => Promise<ConfigFiles>;
   read_saved: () => Promise<SettingOverrides>;
-  read_keymap_edits: () => Promise<KeymapEdits>;
+  // Only the edits that read. `skipped` names the rest.
+  read_keymap_edits: () => Promise<{ edits: KeymapEdits; skipped: string[] }>;
   remove: (path: string) => Promise<{ warnings: number }>;
 };
 
@@ -64,7 +65,10 @@ const message_of = (error: unknown) => (error instanceof Error ? error.message :
 export async function answer_config_transfer(request: ExportConfig | ListSnippets | RemoveSnippet, deps: ConfigTransferDeps): Promise<ExportConfigAnswer | ListSnippetsAnswer | ConfigImportAnswer> {
   try {
     if (request.type === "list_snippets") return { ok: true, snippets: installed_snippets(await deps.read_files()) };
-    if (request.type === "export_config") return { ok: true, ...export_files(await deps.read_files(), await deps.read_saved(), await deps.read_keymap_edits()) };
+    if (request.type === "export_config") {
+      const { edits, skipped } = await deps.read_keymap_edits();
+      return { ok: true, ...export_files(await deps.read_files(), await deps.read_saved(), edits), ...(skipped.length > 0 && { skipped_key_edits: skipped }) };
+    }
     if (typeof request.path !== "string") return { ok: false, message: "The removal names no snippet." };
     const { warnings } = await deps.remove(request.path);
     return { ok: true, message: `Removed ${request.path}${warnings === 0 ? "" : `, with ${warnings} warning(s) on the Help page`}. A config.reload brings it back while the file stays in the config folder.` };

@@ -40,7 +40,7 @@ test("removing a snippet rebuilds without it, and a key that binds it refuses th
   const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
   await startup.get_config();
   await startup.reload_config();
-  const deps = { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => ({}), remove: startup.remove_snippet };
+  const deps = { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => ({ edits: {}, skipped: [] }), remove: startup.remove_snippet };
 
   const removed = await answer_config_transfer({ type: "remove_snippet", path: "snippets/a.js" }, deps);
   assert.equal(removed.ok, true);
@@ -108,7 +108,7 @@ test("an export with key edits imports on a fresh profile to the same compiled k
   await startup.get_config();
   await startup.reload_config();
   await startup.change_layers("keymap", () => ({ normal: { J: "tab.close", K: "", Jx: "tab.next" }, browser: { "<A-x>": "tab.next" } }));
-  const exported = await answer_config_transfer({ type: "export_config" }, { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => (await load_layers()).keymap, remove: startup.remove_snippet });
+  const exported = await answer_config_transfer({ type: "export_config" }, { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => ({ edits: (await load_layers()).keymap, skipped: [] }), remove: startup.remove_snippet });
   assert.equal(exported.ok, true);
   const compiled_before = source.local[COMPILED_KEYMAP_STORAGE_KEY];
 
@@ -117,4 +117,18 @@ test("an export with key edits imports on a fresh profile to the same compiled k
   await restored.get_config();
   await restored.import_config({ kind: "zip", bytes: write_zip((exported as { config_files: Files }).config_files) }, {});
   assert.deepEqual(fresh.local[COMPILED_KEYMAP_STORAGE_KEY], compiled_before);
+});
+
+test("a key edit that runs a snippet refuses its removal, and the export answer names an edit that no longer reads", async () => {
+  const host = { files: { "snippets/b.js": snippet_file("keyed.snippet") } as Files };
+  install_fake_browser(host);
+  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  await startup.get_config();
+  await startup.reload_config();
+  await startup.change_layers("keymap", () => ({ normal: { zz: "keyed.snippet" } }));
+  await assert.rejects(startup.remove_snippet("snippets/b.js"), /Snippet not removed, the current config stays\. The key edit normal "zz" runs keyed\.snippet/);
+  assert.ok(Object.hasOwn((await load_files_source()).files, "snippets/b.js"));
+
+  const exported = await answer_config_transfer({ type: "export_config" }, { read_files: async () => ({}), read_saved: async () => ({}), read_keymap_edits: async () => ({ edits: { normal: { J: "tab.close" } }, skipped: ['normal "x": unknown command "user.gone"'] }), remove: startup.remove_snippet });
+  assert.deepEqual(exported, { ok: true, config_files: { "keymap.d/zz-saved-edits.toml": '[normal]\nJ = "tab.close"\n' }, snippet_files: {}, skipped_key_edits: ['normal "x": unknown command "user.gone"'] });
 });

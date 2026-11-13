@@ -7,12 +7,14 @@ import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckB
 import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
+import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
+import { plan_slots } from "./slots.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import type { Registry } from "../shared/registry/index.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { config_entry_resolver } from "./compile.ts";
 import type { CompileOutput } from "./compile.ts";
-import { normalized_keys } from "./edit_layers.ts";
+import { by_spelling, normalized_keys } from "./edit_layers.ts";
 import type { EditLayers, KeymapEdits } from "./edit_layers.ts";
 
 // Read in the change queue. `compile` compiles the config in force under the given layers.
@@ -34,14 +36,15 @@ function invocation_text(invocation: BoundInvocation, registry: Registry, source
   return `${prompt ? ":" : ""}${print_command(command, args, { sources })}`;
 }
 
-// A binding of several steps has no one-line form. The steps show joined, and a save of that text is refused by the check.
-const binding_text = (binding: KeyBinding, registry: Registry, sources: EnumSources) => [binding].flat().map((step) => invocation_text(step, registry, sources)).join(" ; ");
+// A binding of several steps has no one-line form. The steps show joined by `STEP_JOINER`, and the check refuses a text that holds it.
+const STEP_JOINER = " ; ";
+const binding_text = (binding: KeyBinding, registry: Registry, sources: EnumSources) => [binding].flat().map((step) => invocation_text(step, registry, sources)).join(STEP_JOINER);
 
 export function binding_rows(default_keymap: KeymapConfig, file_keymap: KeymapConfig, edits: KeymapEdits, registry: Registry, sources: EnumSources): BindingRow[] {
   const rows: BindingRow[] = [];
   for (const mode of KEYMAP_MODES) {
     const defaults = default_keymap[mode] ?? {};
-    const files = file_keymap[mode] ?? {};
+    const files = by_spelling(file_keymap[mode] ?? {});
     const edited = edits[mode] ?? {};
     for (const keys of new Set([...Object.keys(defaults), ...Object.keys(files), ...Object.keys(edited)])) {
       const shipped = defaults[keys];
@@ -107,6 +110,7 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   if ("problem" in normalized) return { problems: [`${mode} "${request.keys}": ${normalized.problem}`], ...none };
   const problems: string[] = [];
   if (text !== "") config_entry_resolver(registry, state.config, problems)(text, `${mode} "${normalized.keys}"`);
+  if (text.includes(STEP_JOINER)) problems.push(`${mode} "${normalized.keys}": a binding of several steps is edited in the config files`);
   if (problems.length > 0) return { problems, ...none };
 
   const before = state.compile(state.layers);
@@ -118,9 +122,51 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   const shadows = [...leaves_near(before.compiled.modes[mode], tokens)]
     .filter(([keys, leaf]) => JSON.stringify(near_after.get(keys)) !== JSON.stringify(leaf))
     .map(([keys, leaf]) => ({ keys, text: binding_text(leaf.steps.map((step) => step.invocation), registry, sources) }));
+  const warnings = after.warnings.filter((warning) => !warnings_before.has(warning));
   // An unbind always lands. A binding lands when the compile kept it: a skip leaves its reason in the new warnings.
-  const saves = text === "" || near_after.has(normalized.keys);
-  return { saves, problems: [], warnings: after.warnings.filter((warning) => !warnings_before.has(warning)), shadows };
+  let saves = text === "" || near_after.has(normalized.keys);
+  if (mode === "browser" && text !== "") {
+    // The slots are planned at publish, so a chord past the last free slot would compile and still do nothing.
+    const slot_warnings_before = new Set(plan_slots(before.compiled.modes.browser).warnings);
+    const after_plan = plan_slots(after.compiled.modes.browser);
+    warnings.push(...after_plan.warnings.filter((warning) => !slot_warnings_before.has(warning)));
+    const shortcut = to_firefox_shortcut(normalized.keys).shortcut;
+    saves &&= after_plan.assignments.some((assignment) => assignment.shortcut === shortcut);
+  }
+  return { saves, problems: [], warnings, shadows };
+}
+
+// The edits as the export writes them: only the ones that read against the config in force, since an import refuses a whole config over one unknown command.
+export function exportable_key_edits(state: Pick<KeymapState, "config" | "layers">, registry: Registry): { edits: KeymapEdits; skipped: string[] } {
+  const skipped: string[] = [];
+  const resolve = config_entry_resolver(registry, state.config, skipped);
+  const edits: KeymapEdits = {};
+  for (const [mode, table] of Object.entries(state.layers.keymap) as [KeymapMode, Record<string, string>][]) {
+    const kept = Object.entries(table).filter(([keys, text]) => text === "" || resolve(text, `${mode} "${keys}"`) !== undefined);
+    if (kept.length > 0) edits[mode] = Object.fromEntries(kept);
+  }
+  return { edits, skipped };
+}
+
+// The key edits whose text runs `command_id`, as `mode "keys"`. A snippet they bind must not be removed under them.
+export function key_edits_running(command_id: string, state: Pick<KeymapState, "config" | "layers">, registry: Registry): string[] {
+  const resolve = config_entry_resolver(registry, state.config, []);
+  return (Object.entries(state.layers.keymap) as [KeymapMode, Record<string, string>][]).flatMap(([mode, table]) =>
+    Object.entries(table)
+      .filter(([, text]) => text !== "" && [resolve(text, "") ?? []].flat().some((step) => step.id === command_id))
+      .map(([keys]) => `${mode} "${keys}"`),
+  );
+}
+
+// An edit the compile dropped shows why, instead of showing in force. A text that does not read leaves the binding under it, a skip leaves no leaf.
+function with_skipped_edits(rows: BindingRow[], compiled: CompileOutput): BindingRow[] {
+  return rows.map((row) => {
+    if (row.origin !== "edit") return row;
+    const reason = compiled.warnings.find((warning) => warning.startsWith(`keymap edits: ${row.mode} skipped "${row.keys}":`) || warning.startsWith(`${row.mode}: skipped "${row.keys}":`));
+    const has_leaf = leaves_near(compiled.compiled.modes[row.mode], parse_sequence(row.keys).tokens ?? []).has(row.keys);
+    if (reason === undefined && has_leaf) return row;
+    return { ...row, skipped: reason ?? "the compile skips it" };
+  });
 }
 
 const failure = (error: unknown): { ok: false; message: string } => ({ ok: false, message: error instanceof Error ? error.message : String(error) });
@@ -131,7 +177,7 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
   async function list(): Promise<ListBindingsAnswer> {
     try {
       const state = await deps.read_keymap_state();
-      return { ok: true, bindings: rows_of(state.config, state.layers.keymap) };
+      return { ok: true, bindings: with_skipped_edits(rows_of(state.config, state.layers.keymap), state.compile(state.layers)) };
     } catch (error) {
       return failure(error);
     }
@@ -164,14 +210,19 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
         }
       }
       let row: BindingRow | undefined;
+      let changed = false;
       await deps.change_layers("keymap", (current, config) => {
         // A key only an edit binds is unbound by dropping the edit. Unbinding a file or default binding takes an empty text.
-        const underlying = Object.hasOwn(config.keymap[mode] ?? {}, keys) ? config.keymap[mode]![keys] : deps.default_keymap[mode]?.[keys];
+        const file_bindings = by_spelling(config.keymap[mode] ?? {});
+        const underlying = Object.hasOwn(file_bindings, keys) ? file_bindings[keys] : deps.default_keymap[mode]?.[keys];
         const text = action === "set" ? request.text : action === "remove" && underlying ? "" : undefined;
         const next = with_key_edit(current, mode, keys, text);
         row = rows_of(config, next).find((candidate) => candidate.mode === mode && candidate.keys === keys);
-        return JSON.stringify(next) === JSON.stringify(current) ? undefined : next;
+        changed = JSON.stringify(next) !== JSON.stringify(current);
+        return changed ? next : undefined;
       });
+      // A key only a generator binds (`search_keys` and the like), or bound nowhere, has nothing here to change.
+      if (!changed) return { ok: false, message: `Nothing to change: ${{ set: "it already runs that text", remove: "no file or default binding to remove", reset: "no edit to reset" }[action]} on ${mode} "${keys}".` };
       const done = { set: `Bound ${keys} in ${mode} mode`, remove: `Unbound ${keys} in ${mode} mode`, reset: `Reset ${keys} in ${mode} mode` }[action];
       return { ok: true, ...(row && { row }), message: done };
     } catch (error) {
