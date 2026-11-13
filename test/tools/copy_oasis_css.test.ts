@@ -1,24 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, type TestContext } from "node:test";
 import { LIGHT_INTENSITIES } from "../../src/shared/theme/roles.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const script = fileURLToPath(new URL("../../tools/copy_oasis_css.ts", import.meta.url));
 const THEME_COUNT = 16;
 
-function temp_dir(t: TestContext, prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 // A checkout holding `theme_count` themes, each with one dark file and one file per light intensity. File names carry the folder because the tool flattens them into one directory.
 function make_checkout(t: TestContext, theme_count: number): string {
-  const root = temp_dir(t, "desertfox-oasis-src-");
+  const root = make_tmp_dir("desertfox-oasis-src-", t);
   const themes = join(root, "extras", "css", "themes");
   for (const folder of ["dark", ...LIGHT_INTENSITIES.map((intensity) => join("light", String(intensity)))]) {
     mkdirSync(join(themes, folder), { recursive: true });
@@ -32,7 +26,7 @@ function run(checkout: string, out: string) {
 }
 
 test("a checkout with a short file count copies nothing and exits 1", (t) => {
-  const out = temp_dir(t, "desertfox-oasis-out-");
+  const out = make_tmp_dir("desertfox-oasis-out-", t);
   const result = run(make_checkout(t, THEME_COUNT - 1), out);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /expected/);
@@ -40,7 +34,7 @@ test("a checkout with a short file count copies nothing and exits 1", (t) => {
 });
 
 test("a CSS file upstream dropped is removed from the output and other files are kept", (t) => {
-  const out = temp_dir(t, "desertfox-oasis-out-");
+  const out = make_tmp_dir("desertfox-oasis-out-", t);
   writeFileSync(join(out, "oasis_gone.css"), "stale");
   writeFileSync(join(out, "notes.txt"), "keep");
   assert.equal(run(make_checkout(t, THEME_COUNT), out).status, 0);
@@ -51,7 +45,7 @@ test("a CSS file upstream dropped is removed from the output and other files are
 
 test("each copied file matches its source byte for byte", (t) => {
   const checkout = make_checkout(t, THEME_COUNT);
-  const out = temp_dir(t, "desertfox-oasis-out-");
+  const out = make_tmp_dir("desertfox-oasis-out-", t);
   assert.equal(run(checkout, out).status, 0);
   const source = readFileSync(join(checkout, "extras", "css", "themes", "dark", "oasis_t3_dark.css"));
   assert.deepEqual(readFileSync(join(out, "oasis_t3_dark.css")), source);

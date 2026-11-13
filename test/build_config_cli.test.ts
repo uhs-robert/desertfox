@@ -37,8 +37,8 @@ test("--live and --out are no longer flags", () => {
   }
 });
 
-test("--schemas writes the data schemas and nothing else", () => {
-  const schemas_dir = make_tmp_dir("desertfox-schemas-");
+test("--schemas writes the data schemas and nothing else", (t) => {
+  const schemas_dir = make_tmp_dir("desertfox-schemas-", t);
   const { result, home } = run_cli(["--schemas", schemas_dir]);
   assert.equal(result.status, 0, result.stderr);
   assert.ok(readdirSync(schemas_dir).every((name) => name.endsWith(".schema.json")));

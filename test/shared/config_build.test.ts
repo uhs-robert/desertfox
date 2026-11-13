@@ -72,8 +72,8 @@ test("a known name of the wrong type is a problem", () => {
   assert.deepEqual(problems_of({ snippets: "" }), ["snippets: expected a directory, found a file"]);
 });
 
-test("the directory reader reports a known name of the wrong type", () => {
-  const dir = make_tmp_dir("desertfox-types-");
+test("the directory reader reports a known name of the wrong type", (t) => {
+  const dir = make_tmp_dir("desertfox-types-", t);
   mkdirSync(join(dir, "settings.toml"));
   writeFileSync(join(dir, "snippets"), "");
   assert.throws(

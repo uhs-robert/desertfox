@@ -349,8 +349,8 @@ test("a snippet modes header rejects an unknown mode name", () => {
   assert.match(problems_of(dir).join("\n"), /pick\.js: header "modes": unknown mode "vsual"/);
 });
 
-test("one schema per data file offers command names", () => {
-  const dir = make_tmp_dir("desertfox-schemas-");
+test("one schema per data file offers command names", (t) => {
+  const dir = make_tmp_dir("desertfox-schemas-", t);
   write_schemas(dir, build_schemas(commands));
   assert.deepEqual(readdirSync(dir).sort(), [
     "command_aliases.schema.json", "keymap.schema.json", "quickmarks.schema.json", "search_engines.schema.json", "settings.schema.json",
@@ -534,7 +534,7 @@ test("an engine name that starts with a dash draws a warning", () => {
   assert.match(warnings[0]!, /engine "-odd" starts with "-".*--engine=-odd/);
 });
 
-test("contract: build_commands_file output feeds build-config", () => {
+test("contract: build_commands_file output feeds build-config", (t) => {
   const registry = create_registry();
   registry.define("tab.close", {
     label: "Close Tab",
@@ -543,7 +543,7 @@ test("contract: build_commands_file output feeds build-config", () => {
     runs_in: "background",
     run: () => {},
   });
-  const dir = make_tmp_dir("desertfox-contract-");
+  const dir = make_tmp_dir("desertfox-contract-", t);
   const commands_path = join(dir, "commands.json");
   writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
   const config_dir = config_dir_with({ "keymap.toml": '[normal]\nD = "tab.close --left"' });
@@ -699,7 +699,7 @@ test("a site row bind that waits for a key press is refused", () => {
   assert.equal(problems.some((problem) => problem.includes('bind "k"')), false, problems.join("\n"));
 });
 
-test("a binding may leave out the count param in a mode with counts, and a Firefox shortcut may not", () => {
+test("a binding may leave out the count param in a mode with counts, and a Firefox shortcut may not", (t) => {
   const registry = create_registry();
   registry.define("demo.jump", {
     label: "Jump",
@@ -709,7 +709,7 @@ test("a binding may leave out the count param in a mode with counts, and a Firef
     runs_in: "background",
     run: () => {},
   });
-  const dir = make_tmp_dir("desertfox-count-");
+  const dir = make_tmp_dir("desertfox-count-", t);
   const commands_path = join(dir, "commands.json");
   writeFileSync(commands_path, JSON.stringify(build_commands_file(registry)));
   const config_dir = config_dir_with({ "keymap.toml": '[normal]\n"%" = "demo.jump"\n[browser]\n"<A-j>" = "demo.jump"' });
