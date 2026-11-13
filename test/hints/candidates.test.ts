@@ -439,7 +439,8 @@ test("the scrollable filter leaves out a text field that overflows, because focu
 test("the draggable filter keeps explicit drag signs and grab cursors where they start, and no plain link, image or button", (context) => {
   const global_scope = globalThis as unknown as { getComputedStyle?: unknown };
   const cursors = new Map<unknown, string>();
-  global_scope.getComputedStyle = (element: unknown) => ({ cursor: cursors.get(element) ?? "auto" });
+  const touch_none = new Set<unknown>();
+  global_scope.getComputedStyle = (element: unknown) => ({ cursor: cursors.get(element) ?? "auto", touchAction: touch_none.has(element) ? "none" : "auto" });
   context.after(() => delete global_scope.getComputedStyle);
   const draggable_selector = query_for("draggable", undefined).selector;
   assert.equal(draggable_selector, "*");
@@ -461,6 +462,12 @@ test("the draggable filter keeps explicit drag signs and grab cursors where they
   cursors.set(pointer, "pointer");
   assert.equal(is_draggable(pointer), false);
   assert.equal(is_draggable(fake("body", true)), false);
+  const sized = fake("div", false);
+  cursors.set(sized, "nw-resize");
+  assert.equal(is_draggable(sized), true);
+  const pointer_card = fake("div", false);
+  touch_none.add(pointer_card);
+  assert.equal(is_draggable(pointer_card), true);
 });
 
 test("hint_add matches are added for the draggable filter too", () => {

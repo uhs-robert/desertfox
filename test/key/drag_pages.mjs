@@ -8,13 +8,34 @@ export const DRAG_PAGES = {
 dst.addEventListener("dragover", (e) => e.preventDefault());
 dst.addEventListener("drop", (e) => { e.preventDefault(); dst.textContent = "dropped"; });
 </script>`,
-  // Only #grabbable and #cursor_box belong to the draggable group. A link, a plain button and a plain div do not.
+  // Every block with a data-in attribute belongs to the draggable group, one per sign. The link, the button, the div and the child of the grab cursor box do not.
   group: `
-<a id="plain_link" href="/drag?id=link_elsewhere" style="display:block;width:80px;height:30px">link</a>
-<button id="plain_button" style="display:block;width:80px;height:30px">button</button>
-<div id="plain_div" style="width:80px;height:30px;background:#ccc">div</div>
-<div id="grabbable" draggable="true" style="width:80px;height:30px;background:#9cf">drag</div>
-<div id="cursor_box" style="width:80px;height:30px;background:#fc9;cursor:grab">cursor</div>`,
+<style>.blk{width:80px;height:20px;margin:2px;background:#ddd}</style>
+<a id="plain_link" class="blk" href="/drag?id=link_elsewhere" style="display:block">link</a>
+<button id="plain_button" class="blk" style="display:block">button</button>
+<div id="plain_div" class="blk">div</div>
+<div data-in id="grabbable" class="blk" draggable="true">draggable</div>
+<div data-in id="cursor_box" class="blk" style="cursor:grab"><span id="inherits">child</span></div>
+<div data-in class="blk" style="cursor:nw-resize">resize</div>
+<div data-in class="blk" style="touch-action:none">touch</div>
+<input data-in type="range" class="blk">
+<div data-in class="blk" role="slider" aria-valuenow="3">slider</div>
+<div data-in class="blk" role="scrollbar">scrollbar</div>
+<div data-in class="blk" role="separator" aria-valuenow="5">separator</div>
+<div data-in class="blk" aria-grabbed="false">grabbed</div>
+<div data-in class="blk" aria-roledescription="sortable item">sortable</div>
+<div data-in class="blk sortable-handle">handle</div>
+<div data-in class="blk" data-rbd-drag-handle-draggable-id="x">rbd</div>`,
+  // The shape of a video player's volume panel: a slider role on a div that a pointer drag moves.
+  slider: `
+<div id="vol" role="slider" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" tabindex="0" style="width:100px;height:20px;background:#ddd"></div>
+<div id="dst" style="width:100px;height:20px;margin-left:200px;background:#fc9">dst</div>
+<script>
+let down = false;
+vol.addEventListener("pointerdown", () => { down = true; });
+document.addEventListener("pointermove", (e) => { if (down) vol.setAttribute("aria-valuenow", String(Math.round(e.clientX - vol.getBoundingClientRect().left))); });
+document.addEventListener("pointerup", () => { down = false; });
+</script>`,
   h5: `
 <div id="src" draggable="true" style="width:80px;height:40px;background:#9cf">src</div>
 <div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>
@@ -55,6 +76,7 @@ document.addEventListener("pointerup", (e) => {
 <script src="/sortable.js"></script>
 <script>
 const fallback = location.search.includes("fallback");
+if (location.search.includes("marked")) for (const item of list.children) item.draggable = true;
 window.sortable_instance = new Sortable(document.getElementById("list"), { forceFallback: fallback, animation: 0, fallbackTolerance: 0, onEnd: (e) => send("drag", { ev: "sortable_end", old_index: e.oldIndex, new_index: e.newIndex }) });
 </script>`,
   range: `

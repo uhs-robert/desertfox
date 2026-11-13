@@ -5,7 +5,9 @@ import { YANK_REGISTER_PARAM } from "./register_param.ts";
 // Filters whose elements have an address to open or copy. The mixed filters stay because some of their elements have one.
 const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "custom"];
 
-const GRABBABLE = ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "draggable", "media", "images", "frames", "custom"];
+// Filters whose elements a click, a double-click or a grab can act on. A link is left out: its click navigates away, and a link is no grab source.
+const NON_LINK_FILTERS = ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"];
+const GRABBABLE = [...NON_LINK_FILTERS, "draggable"];
 
 define("hint.run", {
   name: "hint",
@@ -34,7 +36,7 @@ define("hint.run", {
         grab_move: { filter: GRABBABLE },
         // The pin and the media keys are not shown to follow focus into a frame of another site, unlike the caret.
         enter_media: { filter: ["media"], frames: ["same_origin"] },
-        double_click: { filter: ["all", "every", "clickable", "buttons", "inputs", "prose", "scrollable", "media", "images", "frames", "custom"] },
+        double_click: { filter: NON_LINK_FILTERS },
         // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.
         inspect: { frames: ["same_origin"] },
       },
