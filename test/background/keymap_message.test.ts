@@ -79,13 +79,21 @@ test("the binding list tags each row with the layer that decides it", () => {
   assert.match(row("T")!.text, /^:/);
 });
 
-// The background's messages over storage in memory: `change_layers` runs `decide` on the stored edits.
+// The background's messages over storage in memory. One queue runs the reads and the changes one at a time, as `in_change_queue` does, so two tabs can both read before either change lands.
 function messages_over(config: MergedConfig, stored: { edits: KeymapEdits }) {
-  const read_keymap_state = async (): Promise<KeymapState> => ({ config, layers: { keymap: stored.edits }, compile: (layers: EditLayers) => compile_config(input_of(config, layers.keymap)) });
-  const change_layers = async (_kind: "keymap", decide: (current: KeymapEdits, config: MergedConfig) => KeymapEdits | undefined) => {
-    const next = decide(stored.edits, config);
-    if (next !== undefined) stored.edits = next;
+  let queue: Promise<unknown> = Promise.resolve();
+  const in_queue = <T>(work: () => T): Promise<T> => {
+    const turn = queue.then(work);
+    queue = turn.catch(() => undefined);
+    return turn;
   };
+  const state_now = (): KeymapState => ({ config, layers: { keymap: stored.edits }, compile: (layers: EditLayers) => compile_config(input_of(config, layers.keymap)) });
+  const read_keymap_state = () => in_queue(state_now);
+  const change_layers = (_kind: "keymap", decide: (current: KeymapEdits, state: KeymapState) => KeymapEdits | undefined) =>
+    in_queue(() => {
+      const next = decide(stored.edits, state_now());
+      if (next !== undefined) stored.edits = next;
+    });
   return create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });
 }
 
@@ -252,4 +260,32 @@ test("a browser chord moves when every slot is taken, because the old chord is f
   assert.equal(moved.ok, true, JSON.stringify(moved));
   assert.equal(stored.edits.browser?.["<A-a>"], undefined);
   assert.equal(stored.edits.browser?.["<A-z>"], "tab.next");
+});
+
+// The defaults take 3 of the 10 slots, so six chords here leave one slot free.
+const browser_chords = (keys: string): KeymapEdits => ({ browser: Object.fromEntries([...keys].map((key) => [`<A-${key}>`, "tab.next"])) });
+
+test("two tabs saving the last free slot at once: one binds, the other is refused and nothing drops", async () => {
+  const stored = { edits: browser_chords("abcdef") };
+  const messages = messages_over(config_with({}), stored);
+  const answers = await Promise.all([
+    messages.change({ type: "change_keymap", mode: "browser", keys: "<A-y>", action: "set", text: "tab.next" }),
+    messages.change({ type: "change_keymap", mode: "browser", keys: "<A-z>", action: "set", text: "tab.prev" }),
+  ]);
+  assert.deepEqual(answers.map((answer) => answer.ok), [true, false], JSON.stringify(answers));
+  const refused = answers[1]!;
+  assert.match(refused.message, /^browser "<A-z>" not saved: .*only 10 Firefox shortcut slots/);
+  assert.equal(!refused.ok && refused.problems?.some((problem) => /only 10 Firefox shortcut slots/.test(problem)), true, JSON.stringify(refused));
+  assert.deepEqual(stored.edits, { browser: { ...browser_chords("abcdef").browser, "<A-y>": "tab.next" } });
+});
+
+test("a move at full slots still lands when another tab takes the last free slot first", async () => {
+  const stored = { edits: browser_chords("abcdef") };
+  const messages = messages_over(config_with({}), stored);
+  const [added, moved] = await Promise.all([
+    messages.change({ type: "change_keymap", mode: "browser", keys: "<A-y>", action: "set", text: "tab.next" }),
+    messages.change({ type: "change_keymap", mode: "browser", keys: "<A-z>", action: "set", text: "tab.next", move_from: "<A-a>", move_from_text: "tab.next" }),
+  ]);
+  assert.equal(added.ok && moved.ok, true, JSON.stringify([added, moved]));
+  assert.deepEqual(Object.keys(stored.edits.browser ?? {}).sort(), ["<A-b>", "<A-c>", "<A-d>", "<A-e>", "<A-f>", "<A-y>", "<A-z>"]);
 });

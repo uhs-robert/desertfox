@@ -30,6 +30,8 @@ export type Editor = {
   mode: KeymapMode;
   // The row this edits. Absent for a new binding, and for a row another tab removed.
   original?: BindingRow | undefined;
+  // The row's text when the editor opened it. A refresh moves `original` on, so a move sends this to tell the background what the user saw.
+  opened_text?: string | undefined;
   tokens: string[];
   // True while the keys shown are the row's own: the first key press replaces them instead of adding to them.
   fresh: boolean;
@@ -80,7 +82,7 @@ export const freed_keys = (editor: Editor): string | undefined => (editor.origin
 // The old text goes along, so the background refuses the move when another tab changed the old key since the row was shown.
 const moved_from = (editor: Editor): { move_from?: string; move_from_text?: string } => {
   const keys = freed_keys(editor);
-  return keys === undefined ? {} : { move_from: keys, move_from_text: editor.original!.text };
+  return keys === undefined ? {} : { move_from: keys, move_from_text: editor.opened_text ?? editor.original!.text };
 };
 
 // A row matches when the filter is part of its keys, its command text, its mode or its origin.
@@ -185,8 +187,12 @@ export function create_keys_session(deps: KeysDeps) {
     const id = row_id(row.mode, row.keys);
     // The open row is not in `drafts` yet, so a click on it again must find it here or its edits are lost.
     const kept = state.open?.id === id ? state.open : drafts.get(id);
-    if (kept) kept.original = row;
-    show(kept ?? { id, mode: row.mode, original: row, tokens: tokens_of(row.keys), fresh: true, text: row.text, check: { state: "waiting" }, busy: false });
+    if (kept) {
+      kept.original = row;
+      // Opening the row again shows its text now, so a move checks against that text, as the refusal message asks.
+      kept.opened_text = row.text;
+    }
+    show(kept ?? { id, mode: row.mode, original: row, opened_text: row.text, tokens: tokens_of(row.keys), fresh: true, text: row.text, check: { state: "waiting" }, busy: false });
   }
 
   function open_new(mode: KeymapMode): void {
@@ -294,10 +300,12 @@ export function create_keys_session(deps: KeysDeps) {
     if (row === undefined) {
       // The binding is gone: a new one on the same keys can follow.
       editor.original = undefined;
+      delete editor.opened_text;
       return;
     }
     // The editor now stands on the row the answer names, so Remove and Reset act on the key just saved.
     editor.original = row;
+    editor.opened_text = row.text;
     editor.tokens = tokens_of(row.keys);
     editor.fresh = true;
     editor.text = row.text;
