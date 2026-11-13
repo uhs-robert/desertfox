@@ -21,7 +21,7 @@ import { subject_param } from "../shared/registry/params.ts";
 import type { Block } from "./blocks.ts";
 import { site_rules_view } from "../background/site_rules_view.ts";
 import type { SiteRulesView } from "../background/site_rules_view.ts";
-import { quick_start_blocks, tip_block } from "./quick_start.ts";
+import { key_text, quick_start_blocks, tip_block } from "./quick_start.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
 
 export type KeyRow = { mode: KeymapMode; keys: string; args: string };
@@ -77,6 +77,8 @@ export type HelpModel = {
   engines: EngineRow[];
   quick_start: Block[];
   tip: Block;
+  // The keys the Settings page names, read from the keymap like the Quick Start text.
+  keys: { reload: string; find_anything: string };
   // The Site Rules page's rows for one address, read from the keymap the model was built from.
   site_rules_for: (address: string) => SiteRulesView;
 };
@@ -217,10 +219,54 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     engines: engine_rows(engines, compiled, status?.settings.default_engine ?? DEFAULT_SETTINGS.default_engine),
     quick_start: quick_start_blocks(compiled, commands),
     tip: tip_block(compiled, commands),
+    keys: { reload: key_text(compiled, commands, "reload"), find_anything: key_text(compiled, commands, "find_anything") },
     site_rules_for: (address) => site_rules_view(compiled, address),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };
 }
+
+// The plain heading for a command group, which the commands share by the first part of their id. A group with no entry shows its id part.
+const GROUP_TITLES: Record<string, string> = {
+  bookmark: "Bookmarks",
+  browser: "Browser",
+  caret: "Caret mode",
+  cmdline: "Command line",
+  command: "Repeat a command",
+  config: "Reload settings",
+  copy: "Copy",
+  debug: "Debugging",
+  engine: "Search engines",
+  find: "Find on the page",
+  frame: "Frames",
+  grab: "Grab an element",
+  heading: "Headings",
+  help: "Help",
+  hint: "Hints",
+  history: "History",
+  list: "Tab list",
+  macro: "Macros",
+  mark: "Marks",
+  media: "Video and audio",
+  mode: "Modes",
+  native: "Native host",
+  open: "Open pages",
+  page: "Page",
+  permissions: "Permissions",
+  quickmark: "Quickmarks",
+  register: "Registers",
+  scroll: "Scroll",
+  session: "Sessions",
+  settings: "Settings",
+  tab: "Tabs",
+  tabgroup: "Tab groups",
+  text: "Text fields",
+  url: "Web addresses",
+  visual: "Visual mode",
+  window: "Windows",
+  zoom: "Zoom",
+};
+
+export const group_title = (name: string): string => GROUP_TITLES[name] ?? name;
 
 // The model the Commands page draws: without `advanced` commands unless the route asks for them. The one card a route names stays,
 // so a `#command=<id>` link to an advanced command still lands on it. A group the filter empties drops out, so no heading stands alone.
@@ -237,9 +283,9 @@ export const advanced_count = (model: HelpModel): number => model.groups.reduce(
 
 // The public styling surface from design.md "Styles" and "Themes".
 const ROLE_MEANINGS: Record<Role, string> = {
-  bg_core: "Background of a surface",
-  bg_mantle: "A surface layered on bg_core, for panels and rows",
-  bg_crust: "A second layer on bg_core, lighter than the mantle in a dark theme",
+  bg_core: "Background of every DesertFox part",
+  bg_mantle: "A background on top of bg_core, for panels and rows",
+  bg_crust: "Another background on top of bg_core, lighter than the mantle in a dark theme",
   selection: "Background of the selected row, and of the selection in visual mode",
   fg_core: "Text color",
   fg_comment: "Secondary text, such as descriptions",
@@ -290,5 +336,5 @@ export const STYLE_CLASSES: { name: string; meaning: string }[] = [
   { name: "desertfox-help-tip", meaning: "The tip callout at the top of the Home and Commands pages" },
   { name: "desertfox-help-tip-label", meaning: "The bold \"Tip\" word that starts the callout" },
   { name: "desertfox-help-inline-code", meaning: "A code snippet inside a sentence on the help page" },
-  { name: "desertfox-help-shadowed", meaning: "A column or key on the Site Rules page that an earlier row already decides" },
+  { name: "desertfox-help-shadowed", meaning: "An option or key on the Site Rules page that an earlier rule already decides" },
 ];

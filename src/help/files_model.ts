@@ -44,7 +44,7 @@ export function create_files_session(deps: FilesDeps) {
       const follows = editing !== undefined && stored !== undefined && stored !== editing.base && editing.text === editing.base;
       set({ files: answer.files, ...(follows && { open: { ...editing, text: stored ?? editing.text, base: stored }, consent: undefined, accepted: false }) });
     }
-    else set({ message: { ok: false, text: `The config files could not be loaded: ${"message" in answer ? answer.message : ""}` } });
+    else set({ message: { ok: false, text: `The settings files could not be loaded: ${"message" in answer ? answer.message : ""}` } });
   }
 
   function open(path: string): void {

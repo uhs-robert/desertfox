@@ -1,7 +1,7 @@
 // Draws the settings page from a session and wires its controls. The session (`settings_model.ts`) holds the state, so this file only turns fields into nodes and events into session calls.
 
 import { el } from "./render.ts";
-import { create_settings_session, GROUPS, LAYER_LABEL, READ_ONLY_NOTE, text_of_value, value_of_text } from "./settings_model.ts";
+import { create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
 
@@ -189,30 +189,46 @@ function widget_of(field: Field, hooks: Hooks): Widget | undefined {
   }
 }
 
-type Row = { node: HTMLElement; tag: HTMLElement; message: HTMLElement; reset: HTMLButtonElement; widget?: Widget };
+// The long description is kept for power users in a closed fold: it holds the input format, such as CSS selectors or the range of a number.
+const more_of = (doc: string): HTMLElement => el("details", "desertfox-settings-more", el("summary", undefined, "More"), el("p", "desertfox-help-muted", doc));
 
-function build_row(field: Field, session: SettingsSession): Row {
+export type Row = { node: HTMLElement; tag: HTMLElement; message: HTMLElement; reset: HTMLButtonElement; widget?: Widget };
+
+function build_row(field: Field, session: SettingsSession, reload_key: string): Row {
   const name = field.row.name;
   const tag = el("span", "desertfox-help-badge");
   const message = el("div", "desertfox-settings-message");
   message.setAttribute("role", "status");
   const reset = el("button", "desertfox-settings-reset", "Reset") as HTMLButtonElement;
   reset.type = "button";
-  reset.title = "Drop the saved and temp edit, so the config file value applies";
-  reset.addEventListener("click", () => void session.reset(name));
+  reset.title = "Undo your change. The setting goes back to its default, or to the value in your settings file.";
+  reset.addEventListener("click", () => void session.reset(name).then(() => keep_focus_after_reset(node)));
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
-  const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.doc);
-  const head = el("div", "desertfox-settings-head", el("code", undefined, name), tag);
+  const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.summary);
+  const head = el("div", "desertfox-settings-head", el("strong", undefined, field.label), tag);
   const body = widget
     ? el("div", "desertfox-settings-body", widget.node, reset)
-    : el("div", "desertfox-settings-body", el("code", "desertfox-settings-value", JSON.stringify(field.row.value) ?? "unset"), el("span", "desertfox-help-muted", READ_ONLY_NOTE));
-  const node = el("div", "desertfox-settings-row", head, doc, body, message);
+    : el("div", "desertfox-settings-body", el("code", "desertfox-settings-value", JSON.stringify(field.row.value) ?? "unset"), el("span", "desertfox-help-muted", read_only_note(reload_key)));
+  const code_name = el("small", "desertfox-help-muted", el("code", undefined, name));
+  const node = el("div", "desertfox-settings-row", head, code_name, doc, more_of(field.doc), body, message);
   node.setAttribute("data-setting", name);
   return { node, tag, message, reset, ...(widget ? { widget } : {}) };
 }
 
-function update_row(row: Row, field: Field): void {
+// With the changed-only filter on, a reset row turns "default" and CSS hides it, so its button would drop the focus to the page. The focus goes to the next changed row, else to the filter box.
+function keep_focus_after_reset(node: HTMLElement): void {
+  if (node.getAttribute("data-changed") !== "false" || !node.closest(".desertfox-only-changed")) return;
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('.desertfox-settings-row[data-changed="true"]'));
+  const next = rows.find((row) => node.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) ?? rows.at(-1);
+  const target = next?.querySelector<HTMLElement>("input, select, textarea, button:not(:disabled)") ?? document.querySelector<HTMLElement>(".desertfox-only-changed-toggle");
+  target?.focus();
+}
+
+export function update_row(row: Row, field: Field): void {
   row.tag.textContent = LAYER_LABEL[field.row.top_layer];
+  row.tag.title = LAYER_TITLE[field.row.top_layer];
+  // The changed-only filter reads this attribute in CSS (home.html), so a row that becomes changed stays shown.
+  row.node.setAttribute("data-changed", String(is_changed(field.row)));
   const edited = field.row.top_layer === "saved" || field.row.top_layer === "temp";
   row.reset.disabled = !edited && field.draft === undefined;
   row.message.textContent = field.error ?? field.note ?? "";
@@ -227,7 +243,7 @@ function update_row(row: Row, field: Field): void {
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
 // Loads the settings into `container` and keeps them current: a change in another tab refreshes the rows the reader is not editing. The returned function stops the listening. The router calls it before it rebuilds the body.
-export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents): () => void {
+export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents, reload_key: string): () => void {
   const rows = new Map<string, Row>();
   // The headings and the group boxes come from the render, so a section link reaches a heading before the settings load.
   const build = (session: SettingsSession) => {
@@ -236,7 +252,7 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
       const box = container.querySelector(`[data-group="${group.title}"]`);
       box?.replaceChildren(
         ...fields.filter((field) => field.group === group.title).map((field) => {
-          const row = build_row(field, session);
+          const row = build_row(field, session, reload_key);
           rows.set(field.row.name, row);
           row.widget?.write(field.row.value);
           update_row(row, field);

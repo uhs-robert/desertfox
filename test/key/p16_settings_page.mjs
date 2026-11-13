@@ -21,25 +21,48 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
 
     await in_page(row("which_key_border", `const select = row.querySelector("select"); select.selectedIndex = 1; select.dispatchEvent(new view.Event("change"));`));
     await poll_until("the select change to be saved", async () => (await saved()).which_key_border === "round");
-    await poll_until("the tag to turn saved", async () => (await tag_of("which_key_border")) === "saved");
+    await poll_until("the tag to turn changed", async () => (await tag_of("which_key_border")) === "changed");
     expect((await saved()).which_key_border === "round", `saved layer was ${JSON.stringify(await saved())}`);
-    expect((await tag_of("which_key_border")) === "saved", "the tag did not turn saved");
+    expect((await tag_of("which_key_border")) === "changed", "the tag did not turn changed");
 
     await in_page(row("which_key_border", `row.querySelector(".desertfox-settings-reset").click();`));
     await poll_until("the reset to clear the saved edit", async () => (await saved()).which_key_border === undefined);
-    await poll_until("the tag to leave saved", async () => (await tag_of("which_key_border")) !== "saved");
+    await poll_until("the tag to leave changed", async () => (await tag_of("which_key_border")) !== "changed");
     expect((await saved()).which_key_border === undefined, "reset left the saved edit");
-    expect((await tag_of("which_key_border")) !== "saved", "the tag stayed saved after reset");
+    expect((await tag_of("which_key_border")) !== "changed", "the tag stayed changed after reset");
 
     // A second extension page sends the same message the page does, as a `:set` in another tab would. It ends with a write of the config status, which is what the page listens for.
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/quick-start") }).then(() => true)`);
     await poll_until("the quick start page to load", () => in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other?.document.readyState === "complete"; })()`).catch(() => false));
     await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "set", value: false }).then((answer) => answer.ok); })()`);
     const read_shown = () => in_page(row("newtab_date", `return { checked: row.querySelector("input").checked, tag: row.querySelector(".desertfox-help-badge").textContent };`));
-    await poll_until("the settings page to refresh the row", async () => (await read_shown()).tag === "saved").catch(() => undefined);
+    await poll_until("the settings page to refresh the row", async () => (await read_shown()).tag === "changed").catch(() => undefined);
     const shown = await read_shown();
-    expect(shown.checked === false && shown.tag === "saved", `another write showed ${JSON.stringify(shown)}`);
+    expect(shown.checked === false && shown.tag === "changed", `another write showed ${JSON.stringify(shown)}`);
     await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "reset" }).then((answer) => answer.ok); })()`);
+    await close_tabs();
+  });
+
+  await run_case("settings page: the changed-only filter hides unchanged rows and empty groups and keeps the forms", async () => {
+    await close_tabs();
+    await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
+    await poll_until("the settings page to list the settings", () => in_page(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
+    const shown = (selector) => in_page(`const node = view.document.querySelector(${JSON.stringify(selector)}); return !!node && view.getComputedStyle(node).display !== "none";`);
+    const none_line = ".desertfox-settings-none-changed";
+    await in_page(`view.document.querySelector(".desertfox-only-changed-toggle").click();`);
+    // Whatever the file or an earlier case changed, the CSS must follow the rows' own data-changed.
+    const state = await in_page(`const hidden = (node) => view.getComputedStyle(node).display === "none";
+      const rows = [...view.document.querySelectorAll(".desertfox-settings-row")];
+      const sections = [...view.document.querySelectorAll(".desertfox-settings-section")];
+      return { rows: rows.every((node) => hidden(node) === (node.getAttribute("data-changed") === "false")), sections: sections.every((node) => hidden(node) === !node.querySelector('[data-changed="true"]')), none_line: !hidden(view.document.querySelector(${JSON.stringify(none_line)})), any_changed: rows.some((node) => node.getAttribute("data-changed") === "true") };`);
+    expect(state.rows, "a row's visibility did not follow data-changed");
+    expect(state.sections, "a group's visibility did not follow its changed rows");
+    expect(state.none_line === !state.any_changed, "the none-changed line did not match the rows");
+    expect(await shown(".desertfox-keys"), "the Keys form was hidden by the filter");
+    await in_page(row("which_key_border", `const select = row.querySelector("select"); select.selectedIndex = 1; select.dispatchEvent(new view.Event("change"));`));
+    await poll_until("the changed row to show", async () => await shown('[data-setting="which_key_border"]'));
+    await in_page(row("which_key_border", `row.querySelector(".desertfox-settings-reset").click();`));
+    await poll_until("the reset row to hide", async () => !(await shown('[data-setting="which_key_border"]')));
     await close_tabs();
   });
 
@@ -50,7 +73,8 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     const heading = view.document.getElementById("settings-${slug}");
     if (!heading) return "no heading";
     const top = Math.round(heading.getBoundingClientRect().top);
-    return top >= 0 && top < view.innerHeight / 2 && view.document.activeElement === heading ? "reached" : "heading at " + top + " of " + view.innerHeight;
+    // Closed Advanced leaves Quickmarks last on the page, with no room below to reach the top half.
+    return top >= 0 && top < (${JSON.stringify(slug === "quickmarks")} ? view.innerHeight : view.innerHeight / 2) && view.document.activeElement === heading ? "reached" : "heading at " + top + " of " + view.innerHeight;
   `);
   const section_slugs = () => in_any(`return [...view.document.querySelectorAll(".desertfox-help-sections:not([hidden]) a")].map((link) => decodeURIComponent(link.getAttribute("href").split("/")[1]));`);
   // The heading must be reached once the page is full, so a poll on the state replaces a fixed wait.
@@ -72,7 +96,7 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
     await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
     const slugs = await section_slugs();
-    expect(slugs.length > 3 && slugs[0] === "keys", `the sidebar listed ${JSON.stringify(slugs)}`);
+    expect(slugs.length > 3 && slugs[0] === "appearance", `the sidebar listed ${JSON.stringify(slugs)}`);
     const failures = [];
     for (const slug of slugs) {
       await in_any(`view.scrollTo(0, 0); view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/${slug}']").click();`);

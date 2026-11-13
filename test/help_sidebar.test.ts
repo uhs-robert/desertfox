@@ -51,6 +51,7 @@ class FakeNode {
     return node === this || (node?.parent ? this.contains(node.parent) : false);
   }
   focus() { fake_document.activeElement = this; }
+  scrollIntoView() {}
   getClientRects() { return this.shown ? [{}] : []; }
   find_all(test: (node: FakeNode) => boolean): FakeNode[] {
     const below = this.children.flatMap((child) => (typeof child === "string" ? [] : child.find_all(test)));
@@ -64,6 +65,7 @@ const fake_document = {
   createElement: (tag: string) => new FakeNode(tag),
   createElementNS: (_ns: string, tag: string) => new FakeNode(tag),
   querySelector: (selector: string) => fake_document.body.querySelector(selector),
+  getElementById: (id: string) => fake_document.body.find_all((node) => node.id === id)[0] ?? null,
 };
 
 const by_class = (name: string) => (node: FakeNode): boolean => node.classList.contains(name);
@@ -83,12 +85,12 @@ const GUIDE: Block[] = [
   { kind: "heading", level: 3, text: "Trees" },
 ];
 
-function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body")): FakeNode {
+function render(route: Route, keep_state = false, guide: Block[] = [], root = new FakeNode("body"), warnings: string[] = [], keys = { reload: ",r", find_anything: ",," }): FakeNode {
   (globalThis as { document?: unknown }).document = fake_document;
   fake_document.body = root;
   fake_document.activeElement = null;
   if (!keep_state) reset_group_state();
-  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "Config files", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] } } as never, route, guide);
+  render_help(root as never, { quick_start: QUICK_START, groups: GROUPS, warnings, config_source: "Config files", rebuild_steps: ["step one"], engines: [], tip: { kind: "tip", inlines: [] }, keys } as never, route, guide);
   return root;
 }
 
@@ -103,7 +105,20 @@ const links = (list: FakeNode) => (list.children as FakeNode[]).map((link) => li
 
 test("the settings group lists the setting groups as sections", () => {
   const by_page = Object.fromEntries(group_nodes(render({ page: "home" })).map((group) => [group.page, links(group.list)]));
-  assert.deepEqual(by_page["Settings"]?.slice(0, 6), ["#section=settings/keys", "#section=settings/search-engines", "#section=settings/aliases", "#section=settings/quickmarks", "#section=settings/appearance", "#section=settings/new-tab"]);
+  assert.deepEqual(by_page["Settings"], [
+    "#section=settings/appearance",
+    "#section=settings/new-tab",
+    "#section=settings/search",
+    "#section=settings/command-line-and-completion",
+    "#section=settings/general",
+    "#section=settings/keys",
+    "#section=settings/search-engines",
+    "#section=settings/aliases",
+    "#section=settings/quickmarks",
+    "#section=settings/advanced-settings-files",
+    "#section=settings/advanced-back-up-and-restore",
+    "#section=settings/advanced-edit-files",
+  ]);
 });
 
 test("every page with sections has a group, and Home has none", () => {
@@ -157,7 +172,7 @@ test("each section link round-trips through the router to a heading on its page"
   for (const group of groups) {
     for (const hash of links(group.list) as string[]) {
       const route = parse_route(hash);
-      const target = render(route).find_all((node) => node.tag === "h2" && node.id === `${route.page}-${route.section}`);
+      const target = render(route).find_all((node) => (node.tag === "h2" || node.tag === "h3") && node.id === `${route.page}-${route.section}`);
       assert.equal(target.length, 1, hash);
     }
   }
@@ -247,13 +262,13 @@ test("the home page opens with the keycap mark", () => {
   assert.equal(keycap?.attributes.src, "icons/desertfox-keycap.svg");
 });
 
-test("the home header holds the keycap above the title, ahead of the tip", () => {
+test("the home header holds the keycap above the title, ahead of the lead sentence", () => {
   const page = render(parse_route("")).querySelector(".desertfox-help-page");
   const header = page?.children[0] as FakeNode;
   assert.equal(header.className, "desertfox-help-home-header");
   assert.equal((header.children[0] as FakeNode).className, "desertfox-help-keycap");
   assert.equal((header.children[1] as FakeNode).tag, "h1");
-  assert.equal((page?.children[1] as FakeNode).className, "desertfox-help-tip");
+  assert.equal((page?.children[1] as FakeNode).tag, "p");
 });
 
 function drawer(route: Route = { page: "commands" }) {
@@ -352,27 +367,53 @@ test("the window losing focus to the browser UI closes the drawer without taking
   assert.equal(fake_document.activeElement, null);
 });
 
-test("Home shows the tip and the warnings, with no settings table and no config steps", () => {
+test("Home says what DesertFox is and links the next steps, with no settings table and no config steps", () => {
   const page = render({ page: "home" }).querySelector(".desertfox-help-page")!;
-  assert.deepEqual(page.find_all((node) => node.tag === "h2").map((node) => node.children[0]), ["Warnings"]);
+  assert.deepEqual(page.find_all((node) => node.tag === "h2").map((node) => node.children[0]), ["Start here"]);
+  assert.deepEqual(page.find_all((node) => node.tag === "a").map((node) => node.attributes["href"]), ["#/quick-start", "#/settings", "#/commands"]);
+  assert.match(text_of(page), /lets you use Firefox from the keyboard/);
   assert.equal(page.find_all((node) => node.tag === "ol" || node.tag === "table").length, 0);
 });
 
-test("Settings shows the config source and the apply steps above the groups", () => {
+test("Home shows the problems heading only when a warning exists, and the popup link finds it", () => {
+  const root = render({ page: "home" }, false, [], undefined, ["A key is bound twice."]);
+  const heading = root.find_all((node) => node.tag === "h2" && node.children[0] === "Problems in your setup");
+  assert.equal(heading.length, 1);
+  assert.equal(heading[0]!.id, "home-warnings");
+});
+
+test("Settings puts the groups and forms first and the files, backup and host in a collapsed Advanced block", () => {
   const page = render({ page: "settings" }).querySelector(".desertfox-help-page")!;
   const texts = page.find_all((node) => node.tag === "p").map((node) => node.children[0]);
-  assert.ok(texts.includes("Config source: Config files."));
-  const headings = page.find_all((node) => node.tag === "h2").map((node) => node.children[0]);
-  assert.equal(headings[0], "Apply a config file edit");
-  assert.ok(page.find_all((node) => node.tag === "ol").length === 1);
-  assert.equal(page.find_all(by_class("desertfox-settings-install")).length, 1);
+  assert.ok(texts.includes("Config files."));
+  const headings = page.find_all((node) => node.tag === "h2" || node.tag === "h3").map((node) => node.children[0]);
+  assert.deepEqual(headings, ["Appearance", "New tab", "Search", "Command line and completion", "General", "Keys", "Search engines", "Aliases", "Quickmarks", "Advanced: settings files", "Advanced: back up and restore", "Advanced: edit files"]);
+  const [advanced] = page.find_all((node) => node.tag === "details");
+  assert.ok(advanced && advanced.find_all((node) => node.tag === "ol").length === 1);
+  assert.equal(advanced.find_all(by_class("desertfox-settings-install")).length, 1);
+  assert.equal(advanced.find_all(by_class("desertfox-transfer")).length + advanced.find_all(by_class("desertfox-files")).length, 2);
+  for (const box of ["desertfox-keys", "desertfox-engines", "desertfox-aliases", "desertfox-quickmarks"]) assert.equal(advanced.find_all(by_class(box)).length, 0, box);
+});
+
+test("the changed-only toggle sets its class on the settings box, and a group box starts with the none-changed line", () => {
+  const root = render({ page: "settings" });
+  const box = root.querySelector(".desertfox-settings")!;
+  assert.match(text_of(box), /You have not changed any setting yet/);
+  const check = root.find_all((node) => node.tag === "input")[0]!;
+  const change = check.listeners["change"]!;
+  (check as unknown as { checked: boolean }).checked = true;
+  change();
+  assert.ok(box.classList.contains("desertfox-only-changed"));
+  (check as unknown as { checked: boolean }).checked = false;
+  change();
+  assert.equal(box.classList.contains("desertfox-only-changed"), false);
 });
 
 test("a model change updates the Settings config source line in place", () => {
   const root = render({ page: "settings" });
   const line = root.querySelector(".desertfox-config-source")!;
-  update_config_source({ config_source: "Config files, read by config.reload" } as never);
-  assert.equal(line.textContent, "Config source: Config files, read by config.reload.");
+  update_config_source({ config_source: "Your settings come from files" } as never);
+  assert.equal(line.textContent, "Your settings come from files.");
 });
 
 test("the Site Rules route carries its address through the hash, whatever the address holds", () => {
@@ -396,7 +437,7 @@ function render_site_rules(address: string | undefined, rows = SITE_RULES_VIEW.r
   const root = new FakeNode("body");
   fake_document.body = root;
   reset_group_state();
-  const model = { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, site_rules_for: () => ({ address, rows }) };
+  const model = { quick_start: QUICK_START, groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," }, site_rules_for: () => ({ address, rows }) };
   render_help(root as never, model as never, { page: "site-rules", ...(address === undefined ? {} : { address }) }, []);
   return root;
 }
@@ -406,14 +447,45 @@ const text_of = (node: FakeNode | string): string => (typeof node === "string" ?
 test("the Site Rules page draws each row with its origin, columns as name and value, and the keys it changes", () => {
   const sections = render_site_rules("https://a.test/").find_all(by_class("desertfox-help-command"));
   assert.equal(sections.length, 2);
-  assert.match(text_of(sections[0]!), /Your row.*hint_add.*\.a, \.b.*Scroll down/);
-  assert.match(text_of(sections[1]!), /Shipped row sheets.*hint_add.*\.c.*visual.*Stop/);
+  assert.match(text_of(sections[0]!), /Your rule.*hint_add.*\.a, \.b.*Scroll down/);
+  assert.match(text_of(sections[1]!), /Built-in rule sheets.*hint_add.*\.c.*visual.*Stop/);
   assert.equal(sections[0]!.find_all(by_class("desertfox-help-shadowed")).length, 0);
   assert.equal(sections[1]!.find_all(by_class("desertfox-help-shadowed")).length, 2);
-  assert.match(text_of(sections[1]!), /an earlier row decides it/);
+  assert.match(text_of(sections[1]!), /an earlier rule decides this/);
 });
 
 test("the Site Rules page says so when no row fits, and tells where to run it without an address", () => {
-  assert.match(text_of(render_site_rules("https://a.test/", [])), /No site row fits this address/);
-  assert.match(text_of(render_site_rules(undefined)), /Run +:help site_rules +on a web page/);
+  assert.match(text_of(render_site_rules("https://a.test/", [])), /No rule applies to this address/);
+  assert.match(text_of(render_site_rules(undefined)), /Open a web page, then run +:help site_rules/);
+});
+
+test("a section link to a settings group shows every setting, so the heading is not hidden by the filter", () => {
+  const root = render({ page: "settings" });
+  const box = root.querySelector(".desertfox-settings")!;
+  const check = root.querySelector(".desertfox-only-changed-toggle")! as unknown as { checked: boolean; listeners: Record<string, FakeListener> };
+  check.checked = true;
+  check.listeners["change"]!();
+  assert.ok(box.classList.contains("desertfox-only-changed"));
+  const link = group_nodes(root).find((group) => group.page === "Settings")!.list.find_all((node) => node.tag === "a").find((node) => node.children[0] === "General")!;
+  (globalThis as { location?: unknown }).location = { hash: "#elsewhere" };
+  link.listeners["click"]!();
+  assert.equal(box.classList.contains("desertfox-only-changed"), false);
+  assert.equal(check.checked, false);
+});
+
+test("a section link to the page's own hash opens the collapsed Advanced block before it scrolls", () => {
+  const root = render({ page: "settings" });
+  const advanced = root.find_all((node) => node.tag === "details")[0] as unknown as { open: boolean };
+  advanced.open = false;
+  const link = group_nodes(root).find((group) => group.page === "Settings")!.list.find_all((node) => node.tag === "a").find((node) => String(node.children[0]).startsWith("Advanced: edit"))!;
+  (globalThis as { location?: unknown }).location = { hash: link.attributes["href"] };
+  link.listeners["click"]!();
+  assert.equal(advanced.open, true);
+});
+
+test("the Search engines intro names the Find anything key from the model, not a fixed key", () => {
+  const root = render({ page: "settings" }, false, [], new FakeNode("body"), [], { reload: "<C-r>", find_anything: "gx" });
+  const intro = root.find_all((node) => node.tag === "code" && node.children[0] === "gx");
+  assert.equal(intro.length, 1);
+  assert.equal(root.find_all((node) => node.tag === "code" && node.children[0] === ",,").length, 0);
 });

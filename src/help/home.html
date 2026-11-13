@@ -119,6 +119,17 @@
   .desertfox-settings-row { display: flex; flex-direction: column; gap: .25rem; padding: .6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
   .desertfox-settings-head { display: flex; align-items: center; gap: .5rem; }
   .desertfox-settings-doc { margin: 0; }
+  .desertfox-settings-more > summary { cursor: pointer; font-size: .85em; }
+  .desertfox-settings-more > p { margin: .25rem 0 0; }
+  /* The changed-only filter: render.ts sets the class on the settings box and settings_page.ts sets data-changed on each row. */
+  .desertfox-settings-none-changed { display: none; }
+  .desertfox-only-changed .desertfox-settings-row[data-changed="false"] { display: none; }
+  .desertfox-only-changed .desertfox-settings-section:not(:has(.desertfox-settings-row[data-changed="true"])) { display: none; }
+  .desertfox-only-changed:not(:has(.desertfox-settings-row[data-changed="true"])) .desertfox-settings-none-changed { display: block; }
+  .desertfox-settings-advanced { margin-top: 1.5rem; }
+  /* The last section sits near the page end, so the room below lets a section link scroll it to the top. A closed block adds no room. */
+  .desertfox-settings-advanced[open] { padding-bottom: 50vh; }
+  .desertfox-settings-advanced > summary { cursor: pointer; font-weight: bold; font-size: 1.2em; }
   .desertfox-settings-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
   .desertfox-settings-input { max-width: 100%; box-sizing: border-box; padding: .25rem .4rem; border: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 40%, transparent); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: inherit; }
   .desertfox-settings-input[aria-invalid="true"] { border-color: var(--desertfox-primary); }
@@ -175,19 +186,19 @@
     .desertfox-help-site-rules tr { margin: .5rem 0; }
     .desertfox-help-site-rules td:empty { display: none; }
     .desertfox-help-site-rules td::before { opacity: .6; margin-right: .5rem; }
-    .desertfox-help-columns td:nth-child(1)::before { content: "column"; }
+    .desertfox-help-columns td:nth-child(1)::before { content: "option"; }
     .desertfox-help-columns td:nth-child(2)::before { content: "value"; }
     .desertfox-help-changes td:nth-child(1)::before { content: "key"; }
     .desertfox-help-changes td:nth-child(2)::before { content: "mode"; }
     .desertfox-help-changes td:nth-child(3)::before { content: "does"; }
-    .desertfox-help-changes td:nth-child(4)::before { content: "instead of"; }
+    .desertfox-help-changes td:nth-child(4)::before { content: "was"; }
     .desertfox-help-params td { overflow-wrap: anywhere; }
     /* Visually hidden, not display:none, so screen readers keep the column headers. */
     .desertfox-help-params tr:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .desertfox-help-params tr { margin: .5rem 0; }
     .desertfox-help-params td:empty { display: none; }
     .desertfox-help-params td::before { opacity: .6; margin-right: .5rem; }
-    .desertfox-help-params td:nth-child(1)::before { content: "param"; }
+    .desertfox-help-params td:nth-child(1)::before { content: "option"; }
     .desertfox-help-params td:nth-child(2)::before { content: "type"; }
     .desertfox-help-params td:nth-child(3)::before { content: "default"; }
     .desertfox-help-params td:nth-child(4)::before { content: "values"; }

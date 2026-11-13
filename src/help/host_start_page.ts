@@ -8,9 +8,9 @@ import type { HostFileChange } from "../shared/messages.ts";
 import type { HostStartSession } from "./host_start_model.ts";
 
 const CHANGE_TEXT: Record<HostFileChange["kind"], string> = {
-  replaced: "replaced by the folder's version",
+  replaced: "replaced by the version in the folder",
   added: "added from the folder",
-  removed: "dropped, it is only in the browser",
+  removed: "dropped, because only Firefox has it",
 };
 
 // `send` serves the export, which is the transfer section's own: it zips the stored files, which are the browser copy while the question is open.
@@ -28,16 +28,16 @@ export function mount_host_start(container: HTMLElement, session: HostStartSessi
       return;
     }
     container.replaceChildren(
-      el("h2", undefined, "The config folder differs from the browser copy"),
-      el("p", undefined, "The native host reads ", el("code", undefined, pending.config_dir), ". Its files differ from the config files stored in the browser, which stay in force until you choose. Using the folder changes these files:"),
+      el("h2", undefined, "Your settings files and the settings stored in Firefox differ"),
+      el("p", undefined, "DesertFox found settings files in ", el("code", undefined, pending.config_dir), ", read by the native host, a small helper program DesertFox installs on Linux. They differ from the settings DesertFox already has. Nothing changes until you choose. If you use the folder, these files change:"),
       el("ul", undefined, ...pending.changes.map(({ path, kind }) => el("li", undefined, el("code", undefined, path), `: ${CHANGE_TEXT[kind]}`))),
-      el("p", undefined, "Your saved edits stay on top either way. To keep the browser files in the folder, export them, unpack the zip into the folder, then use the folder. The zip carries your saved edits in its settings file too, so the folder then holds them as well."),
+      el("p", undefined, "Your changes on the Settings page are kept either way. To keep what Firefox has, press Export settings, unpack the zip into the folder, then press Use the files in the folder."),
       el(
         "div",
         "desertfox-settings-body",
-        button("Export config", () => void exporter.export_zip("config").then((file) => file && download(file))),
-        button("Use the folder", () => void session.choose("use_folder"), busy),
-        button("Keep the browser copy", () => void session.choose("keep_browser"), busy),
+        button("Export settings", () => void exporter.export_zip("config").then((file) => file && download(file))),
+        button("Use the files in the folder", () => void session.choose("use_folder"), busy),
+        button("Keep what Firefox has", () => void session.choose("keep_browser"), busy),
       ),
       export_message,
       outcome,

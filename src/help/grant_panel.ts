@@ -6,7 +6,7 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import { host_channel, install_hashes_of, main_install_command, release_install_command, type InstallHashes } from "../shared/native_host.ts";
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
-import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
+import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
 import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages.ts";
 
 export type PermissionDeps = {
@@ -15,14 +15,14 @@ export type PermissionDeps = {
 };
 
 export const AUTO_UPDATE_SETTING = "host_auto_update";
-export const AUTO_UPDATE_BUTTON = "Install and keep the host updated";
+export const AUTO_UPDATE_BUTTON = "Install and keep the native host updated";
 
 // The consent button saves `host_auto_update` and installs nothing: Firefox cannot run the command, so the user runs it.
 // The page text is the disclosure of what the setting allows.
 export async function consent_to_auto_update(send: (message: ChangeSetting) => Promise<unknown>): Promise<string> {
   try {
     const answer = (await send({ type: "change_setting", name: AUTO_UPDATE_SETTING, action: "set", value: true })) as ChangeSettingAnswer | undefined;
-    if (answer?.ok === true) return "Saved. After you run the command, the host updates itself to match the extension, and a toast says so.";
+    if (answer?.ok === true) return "Saved. After you run the command, the native host updates itself to match the extension, and a message tells you so.";
     return `DesertFox could not save the setting: ${answer?.message ?? "no answer"}`;
   } catch (error) {
     return `DesertFox could not save the setting: ${error instanceof Error ? error.message : String(error)}`;
@@ -35,15 +35,15 @@ export type PermissionOutcome = { granted: boolean; message: string };
 type GrantCopy = { title: string; ask: string; button: string; granted: string; declined: string };
 const COPY: Record<GrantablePermission, GrantCopy> = {
   nativeMessaging: {
-    title: "Install the native host",
-    ask: "Step 1: allow DesertFox to talk to its native host.",
-    button: "Allow native messaging",
-    granted: "Permission granted. Run the command below in a terminal, then DesertFox can reach the host.",
-    declined: "Firefox did not grant the permission. Press the button again and choose Allow. DesertFox cannot reach the host without it.",
+    title: "Set up the native host",
+    ask: "Step 1: let DesertFox start the native host.",
+    button: "Allow it",
+    granted: "Permission granted. Run the command below in a terminal, then DesertFox can reach the native host.",
+    declined: "Firefox did not grant the permission. Press the button again and choose Allow. DesertFox cannot reach the native host without it.",
   },
   browsingData: {
     title: "Allow clearing site data",
-    ask: "The clear-and-reload keys (rc, rC) need the browsingData permission. Firefox asks once, and the keys work at once after you allow it.",
+    ask: "The keys rc and rC clear a site's saved data and reload it. Firefox asks you once to allow this, and the keys work at once after you allow it.",
     button: "Allow clearing site data",
     granted: "Permission granted. The clear-and-reload keys work now.",
     declined: "Firefox did not grant the permission. Press the button again and choose Allow. The clear-and-reload keys stay off without it.",
@@ -96,17 +96,27 @@ async function read_install_hashes(version: string): Promise<InstallHashes | und
 export function install_step(channel: string, hashes: InstallHashes | undefined): { text: string; command: string; checked: boolean } {
   if (channel !== "main" && hashes !== undefined) {
     return {
-      text: `Step 2: run this in a terminal. It fetches the install script and the host of version ${channel} and checks each against the SHA-256 this signed build carries.`,
+      text: `Step 2: run this command in a terminal. It downloads the native host for version ${channel} and checks that it is the right one.`,
       command: release_install_command(channel, hashes),
       checked: true,
     };
   }
   const reason = channel === "main" ? "This is a development install, so" : "This build carries no host hashes, so";
   return {
-    text: `Step 2: run this in a terminal. Warning: ${reason} the command fetches the host from the main branch with no checksum. Use it for development only.`,
+    text: `Step 2: run this command in a terminal. Warning: ${reason} the command downloads the native host from the main branch with no checksum. Use it for development only.`,
     command: main_install_command(),
     checked: false,
   };
+}
+
+// The check detail kept out of the steps: the reader needs it only to judge the command, not to run it.
+function download_check_note(): HTMLElement {
+  const note = element("details", undefined, "margin:.5rem 0 0");
+  note.append(
+    element("summary", "How DesertFox checks the download"),
+    element("p", "This signed build carries the SHA-256 hash of the install script and of the native host. The command fetches both from GitHub over HTTPS and refuses any file with a different hash. Each update runs the same check."),
+  );
+  return note;
 }
 
 // The host install command for this build's channel, with a Copy button.
@@ -123,6 +133,7 @@ async function append_install_steps(panel: HTMLElement): Promise<void> {
     });
   });
   panel.append(element("p", text), code, copy);
+  if (checked) panel.append(download_check_note());
   // Without the signed hashes the host cannot update itself either, so the consent has nothing to allow.
   if (!checked) return;
   const consent_status = element("p", undefined, "margin:.5rem 0 0");
@@ -134,7 +145,7 @@ async function append_install_steps(panel: HTMLElement): Promise<void> {
     });
   });
   panel.append(
-    element("p", "After this first install the host updates itself. When the extension updates, a host that is older fetches the matching release from GitHub over HTTPS and checks its SHA-256 against hashes inside the signed extension. Each update shows a toast. This button allows that. Without it, run :native.update when the extension says the host is older.", "margin:.75rem 0 0"),
+    element("p", "DesertFox can keep the native host up to date. A message tells you each time it updates. Press the button to allow this. Without it, run :native.update when DesertFox says the host is older.", "margin:.75rem 0 0"),
     consent,
     consent_status,
   );
@@ -156,7 +167,9 @@ async function build_panel(permission: GrantablePermission, on_close: () => void
   });
   const close = element("button", "Close", `${BUTTON_STYLE};float:right`);
   close.addEventListener("click", on_close);
-  panel.append(close, element("h2", words.title, "margin:0 0 .5rem;font-size:1.1rem"), status, allow);
+  panel.append(close, element("h2", words.title, "margin:0 0 .5rem;font-size:1.1rem"));
+  if (permission === "nativeMessaging") panel.append(element("p", "The native host is a small program for Linux. It is optional. It lets DesertFox open a text field in your own editor, open Firefox pages with keys, and read settings files from a folder."));
+  panel.append(status, allow, element("p", USER_CSS_PAUSED_NOTE, "margin:.75rem 0 0;opacity:.7;font-size:.9em"));
   if (permission === "nativeMessaging") await append_install_steps(panel);
   return panel;
 }

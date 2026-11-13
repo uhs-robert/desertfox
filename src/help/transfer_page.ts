@@ -2,8 +2,8 @@
 // The consent screen shows each snippet's full code, `matches` and `requires`. A snippet is stored only when its box is ticked and Import is pressed.
 
 import { el } from "./render.ts";
-import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
-import { create_transfer_session, can_commit, read_folder_files, read_zip_file, SNIPPET_WARNING } from "./transfer_model.ts";
+import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
+import { create_transfer_session, can_commit, read_folder_files, read_zip_file, SNIPPET_GLOSS, SNIPPET_WARNING } from "./transfer_model.ts";
 import type { ExportFile, PickedFile, Review, TransferSession } from "./transfer_model.ts";
 import type { InstalledSnippet, SnippetPreview } from "../shared/messages.ts";
 import type { TransferDeps } from "./transfer_model.ts";
@@ -63,17 +63,18 @@ export function snippet_card(snippet: SnippetPreview, review: Pick<Review, "acce
 function review_view(review: Review, session: TransferSession): HTMLElement {
   const { preview } = review;
   const config_line = preview.config_files.length > 0
-    ? `The config files (${preview.config_files.join(", ")}) replace the ones in force. Your saved edits stay on top.`
-    : "The import holds no config files, so the config stays.";
+    ? `These files replace your current ones: ${preview.config_files.join(", ")}. Settings you changed on the Settings page are kept.`
+    : "The import holds no settings files, so your settings files stay.";
   return el(
     "div",
     "desertfox-transfer-review",
     el("h3", undefined, "Review the import"),
     el("p", undefined, config_line),
+    el("p", "desertfox-help-muted", USER_CSS_PAUSED_NOTE),
     ...preview.problems.map((problem) => el("div", "desertfox-settings-error", problem)),
     ...preview.warnings.map((warning) => el("div", "desertfox-help-muted", warning)),
     ...(preview.snippets.length > 0
-      ? [el("p", "desertfox-transfer-warning", SNIPPET_WARNING), el("p", undefined, "No snippet is stored until you accept it here. Snippets you leave unticked are dropped."), ...preview.snippets.map((snippet) => snippet_card(snippet, review, session))]
+      ? [el("p", undefined, SNIPPET_GLOSS), el("p", "desertfox-transfer-warning", SNIPPET_WARNING), el("p", undefined, "DesertFox adds no snippet until you accept it here. Snippets you leave unticked are dropped."), ...preview.snippets.map((snippet) => snippet_card(snippet, review, session))]
       : []),
     el("div", "desertfox-settings-body", button("Import", () => void session.commit(), !can_commit(review) || session.state.busy), button("Cancel", () => session.cancel())),
   );
@@ -95,7 +96,8 @@ function installed_row(snippet: InstalledSnippet, session: TransferSession): HTM
 export function mount_transfer(container: HTMLElement, send: TransferDeps["send"], user_css_hold: UserCssHold = NO_USER_CSS_HOLD): TransferSession {
   const message = el("div", "desertfox-settings-message");
   message.setAttribute("role", "status");
-  const tools = el("div", "desertfox-settings-body");
+  const setup_tools = el("div", "desertfox-settings-body");
+  const session_tools = el("div", "desertfox-settings-body");
   const review_box = el("div", undefined);
   const installed_box = el("div", undefined);
   const draw = () => {
@@ -112,15 +114,17 @@ export function mount_transfer(container: HTMLElement, send: TransferDeps["send"
   const session: TransferSession = create_transfer_session({ send, on_change: draw });
   const export_button = (label: string, which: "config" | "snippets") =>
     button(label, () => void session.export_zip(which).then((file) => file && download(file)));
-  tools.append(
-    export_button("Export config", "config"),
+  setup_tools.append(
+    export_button("Export settings", "config"),
     export_button("Export snippets", "snippets"),
-    button("Export sessions", () => void session.export_sessions().then((file) => file && download(file))),
     picker("Import a zip", "import-zip", (files) => void session.choose(() => read_zip_file(files[0]!)), { accept: ".zip,application/zip" }),
-    picker("Import sessions", "import-sessions", (files) => void session.import_sessions(files[0]!), { accept: ".json,application/json" }),
     picker("Import a folder", "import-folder", (files) => void session.choose(() => read_folder_files(files)), { folder: true }),
   );
-  container.replaceChildren(tools, message, review_box, installed_box);
+  session_tools.append(
+    button("Export sessions", () => void session.export_sessions().then((file) => file && download(file))),
+    picker("Import sessions", "import-sessions", (files) => void session.import_sessions(files[0]!), { accept: ".json,application/json" }),
+  );
+  container.replaceChildren(el("p", "desertfox-help-muted", "Settings, keys and search engines"), setup_tools, el("p", "desertfox-help-muted", "Open windows and tabs (sessions)"), session_tools, message, review_box, installed_box);
   draw();
   void session.load_snippets();
   return session;

@@ -112,7 +112,7 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   stop_quickmarks = undefined;
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
-  if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
+  if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never, model.keys.reload);
   const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
   if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
   const engines_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-engines") : null;
@@ -137,6 +137,9 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));
   if (section_heading) {
+    // The Advanced block is collapsed, so a link to a section inside it opens it first.
+    const collapsed = section_heading.closest("details");
+    if (collapsed) collapsed.open = true;
     section_heading.scrollIntoView();
     section_heading.focus({ preventScroll: true });
     hold_section_in_view(section_heading);

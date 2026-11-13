@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { build_help_model, STYLE_VARIABLES } from "../src/help/model.ts";
+import { build_help_model, group_title, STYLE_VARIABLES } from "../src/help/model.ts";
+import { read_only_note } from "../src/help/settings_model.ts";
 import { command_help_url, parse_route } from "../src/help/route.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
@@ -24,7 +25,7 @@ function sample() {
     ],
     run: () => {},
   });
-  registry.define("help.open", { name: "help", label: "Help", intent: "Open help.", runs_in: "background", run: () => {} });
+  registry.define("help.open", { name: "help", label: "Help", intent: "Open help.", runs_in: "background", params: [{ name: "name", type: "string", rest: true, main: true, optional: true }], run: () => {} });
   const { compiled } = compile_keymap(
     { normal: { o: { id: "open.url", args: { where: "tab", url: "https://a.example" } }, j: { id: "scroll.lines", args: { count: 10 } }, gg: [{ id: "scroll.lines" }, { id: "help.open" }] }, browser: { "<A-j>": { id: "scroll.lines" } } },
     {},
@@ -167,9 +168,9 @@ test("the model carries the config source and apply steps for the settings page"
   const { commands, compiled } = sample();
   const status = { source: "files" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
-  assert.equal(model.config_source, "Config files, read by config.reload through the native host");
+  assert.equal(model.config_source, "Your settings come from the settings files in the folder");
   assert.match(model.rebuild_steps[1]!, /config\.reload/);
-  assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
+  assert.equal(build_help_model(commands, compiled, []).config_source, "DesertFox has not recorded where your settings come from yet");
 });
 
 test("effective settings keep the default prefix a config leaves out", () => {
@@ -195,12 +196,12 @@ test("the help page scrolls to and highlights the command card the way it does a
   assert.match(main, /row\.classList\.add\("desertfox-help-current"\)/);
 });
 
-test("the tip names :help and takes the command line key from the keymap", () => {
+test("the tip names the help command and takes the command line key from the keymap", () => {
   const { commands, compiled } = sample();
   const text = (compiled_arg: typeof compiled | undefined) => JSON.stringify(build_help_model(commands, compiled_arg, []).tip);
   assert.match(text(compiled), /"kind":"tip"/);
-  assert.match(text(compiled), /:help <name>/);
-  assert.match(text(undefined), /:help <name>/);
+  assert.match(text(compiled), /help settings/);
+  assert.match(text(undefined), /help settings/);
 });
 
 test("a conditional default reads as the value and its condition", () => {
@@ -248,6 +249,29 @@ test("the advanced flag in the hash rides on every route form", () => {
   assert.deepEqual(parse_route("#section=commands/debug?advanced"), { page: "commands", section: "debug", advanced: true });
   assert.deepEqual(parse_route("#command=debug.restart?advanced"), { page: "commands", command: "debug.restart", advanced: true });
   assert.deepEqual(parse_route("#/commands"), { page: "commands" });
+});
+
+test("every command group in the built command list has a plain title", () => {
+  const { commands } = JSON.parse(readFileSync(new URL("../dist/commands.json", import.meta.url), "utf8")) as { commands: { id: string }[] };
+  const raw = [...new Set(commands.map((command) => command.id.split(".")[0]!))].filter((group) => group_title(group) === group);
+  assert.deepEqual(raw, []);
+});
+
+test("the Settings page keys follow a rebound config.reload and Find anything, and an unbound one reads plainly", () => {
+  const registry = create_registry();
+  registry.define("config.reload", { name: "reload", label: "Reload", intent: "Reload.", runs_in: "background", run: () => {} });
+  registry.define("open.anything", { name: "anything", label: "Find anything", intent: "Find.", runs_in: "background", run: () => {} });
+  const compile = (normal: Record<string, unknown>) =>
+    compile_keymap({ normal } as never, {}, (id) => {
+      const command = registry.get(id);
+      return command && { runs_in: command.runs_in, label: command.label, count: "ignore" };
+    }).compiled;
+  const commands = build_commands_file(registry).commands;
+  const rebound = build_help_model(commands, compile({ "<C-r>": { id: "config.reload" }, gx: { id: "open.anything" } }), []);
+  assert.deepEqual(rebound.keys, { reload: "<C-r>", find_anything: "gx" });
+  assert.match(read_only_note(rebound.keys.reload), /press <C-r>\./);
+  const unbound = build_help_model(commands, compile({}), []);
+  assert.notEqual(unbound.keys.reload, ",r");
 });
 
 test("every extension page that tags content.js also registers the bundle request listener", () => {

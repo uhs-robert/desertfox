@@ -11,6 +11,9 @@ export const SESSIONS_FILE_NAME = "desertfox-sessions.json";
 // 400 sessions of 50 tabs are about 5 MB, so 16 MB leaves room and still stops a file that would fill memory.
 export const MAX_SESSIONS_FILE_BYTES = 16 * 1024 * 1024;
 
+// Said before the warning, because the reader meets the word only on this consent view.
+export const SNIPPET_GLOSS = "A snippet is a small script that changes how a site works.";
+
 export const SNIPPET_WARNING = "A snippet is code that runs in the pages it matches and can use every DesertFox permission: it can read and change any page it matches, open and close tabs, and read your bookmarks and history. Accept only snippets you have read and trust.";
 
 // What the page needs of a `File`. A test passes plain objects.
@@ -98,7 +101,7 @@ export function create_transfer_session(deps: TransferDeps) {
       else set({ busy: false, message: { ok: false, text: preview.message } });
     } catch (error) {
       if (mine !== selection) return;
-      set({ busy: false, message: { ok: false, text: error instanceof ZipError ? `Config not imported, the current one stays. The import is refused: ${error.message}.` : `Config not imported, the current one stays. ${message_of(error)}` } });
+      set({ busy: false, message: { ok: false, text: error instanceof ZipError ? `Settings not imported, the current ones stay. The import is refused: ${error.message}.` : `Settings not imported, the current ones stay. ${message_of(error)}` } });
     }
   }
 
@@ -118,7 +121,7 @@ export function create_transfer_session(deps: TransferDeps) {
     try {
       answer = (await deps.send({ type: "commit_config_import", source: review.source, accepted: accepted_code(review) })) as ConfigImportAnswer;
     } catch (error) {
-      answer = { ok: false, message: `Config not imported, the current one stays. ${message_of(error)}` };
+      answer = { ok: false, message: `Settings not imported, the current ones stay. ${message_of(error)}` };
     }
     set({ busy: false, review: undefined, message: { ok: answer.ok, text: answer.message } });
     await load_snippets();
@@ -146,7 +149,7 @@ export function create_transfer_session(deps: TransferDeps) {
       return undefined;
     }
     if (Object.keys(files).length === 0) {
-      say(false, which === "config" ? "Nothing exported: there are no config files and no saved edits." : "Nothing exported: no snippet is installed.");
+      say(false, which === "config" ? "Nothing exported: you have no settings files and have saved no changes." : "Nothing exported: no snippet is installed.");
       return undefined;
     }
     try {

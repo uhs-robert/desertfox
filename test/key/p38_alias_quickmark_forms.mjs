@@ -39,13 +39,13 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
 
   await run_case("aliases form: an unknown command shows the problem and stores nothing, a known one saves and runs from the command line", async () => {
     await open_settings();
-    await type_field("desertfox-aliases", "alias name", "p38dup");
-    await type_field("desertfox-aliases", "alias command id", "tab.nope");
+    await type_field("desertfox-aliases", "alias short name", "p38dup");
+    await type_field("desertfox-aliases", "alias command to run", "tab.nope");
     await poll_until("Save to turn on", () => in_page(`return !${button_in("desertfox-aliases", "Save alias")}.disabled;`));
     await in_page(`${button_in("desertfox-aliases", "Save alias")}.click();`);
     await poll_until("the form to show the refusal", () => in_page(`const text = view.document.querySelector(".desertfox-aliases").textContent; return text.includes("Edit not saved") && text.includes("unknown command id") && text.includes("Aliases section");`));
     expect(Object.keys(await stored("desertfox_alias_edits")).length === 0, "a refused alias was stored");
-    await type_field("desertfox-aliases", "alias command id", "tab.duplicate");
+    await type_field("desertfox-aliases", "alias command to run", "tab.duplicate");
     await poll_until("Save to turn on", () => in_page(`return !${button_in("desertfox-aliases", "Save alias")}.disabled;`));
     await in_page(`${button_in("desertfox-aliases", "Save alias")}.click();`);
     await poll_until("the alias to be stored", async () => (await stored("desertfox_alias_edits")).p38dup === "tab.duplicate");
@@ -62,11 +62,11 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     const page_url = await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => tab.url)`);
     const server = new URL(page_url).origin;
     await open_settings();
-    await type_field("desertfox-quickmarks", "quickmark key", "ab");
+    await type_field("desertfox-quickmarks", "quickmark letter or digit", "ab");
     await type_field("desertfox-quickmarks", "quickmark address", `${server}/page?id=p38_mark`);
     await poll_until("the form to name the key problem", () => in_page(`return view.document.querySelector(".desertfox-quickmarks").textContent.includes("one letter or digit");`));
     expect(await in_page(`return ${button_in("desertfox-quickmarks", "Save quickmark")}.disabled;`), "Save was on with a bad key");
-    await type_field("desertfox-quickmarks", "quickmark key", "z");
+    await type_field("desertfox-quickmarks", "quickmark letter or digit", "z");
     await poll_until("Save to turn on", () => in_page(`return !${button_in("desertfox-quickmarks", "Save quickmark")}.disabled;`));
     await in_page(`${button_in("desertfox-quickmarks", "Save quickmark")}.click();`);
     await poll_until("the quickmark to be stored", async () => (await stored("desertfox_quickmarks")).z?.includes("p38_mark"));
