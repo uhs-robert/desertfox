@@ -192,7 +192,7 @@ The user config is a directory of files, one file per kind of setting. `config.r
 
 ### Source files
 
-The tool reads `~/.config/desertfox/` by default. Every data file is TOML. A leftover `.jsonc` file is an error that names the `.toml` file to write.
+The tool reads `~/.config/desertfox/` by default. Every data file is TOML. A leftover `.jsonc` file is an unknown file.
 
 | File | Holds |
 | --- | --- |
@@ -614,7 +614,7 @@ Firefox updates the extension. DesertFox then updates its own native hosts and t
 - Lock. The updater and `host/install.sh` take a non-blocking `flock` on `update.lock` in the data folder (`~/.local/share/desertfox/`), which both already write to, so both compute one path whatever the environment. They hold it from the first staged `.new` file to the last rename. The second caller fails with `update running`, so two writers never stage the same file.
 - Reconnect. After an ok reply the extension closes the bridge port and connects again. The running bridge still holds the old code in memory, and it exits when its stdin closes. The new bridge waits up to 3 s for the old one to release `bridge.lock`. If it loses that race, it exits and the usual backoff connects again. The bridge never replaces its own file.
 - Retry and toasts. The extension tries a version once per 24 hours (the time of the last attempt lives in `storage.local`, written before the call). A failure shows one toast per version, "Host update failed: <reason>. Run the command from :native.install", and is logged each time. A checksum mismatch blocks that version until a new extension build, which carries other hashes. Each success shows one toast. While the host is older, an error from it reads `host_outdated` and says whether it is updating or the update failed.
-- Bootstrap. A host from before the updater has no `release_version` and no `self_update` verb, so it needs one more manual `:native.install`. The extension keeps showing the manual line for it until then. `INSTALL_HINT` stays for `host_missing` and `no_permission`, because a missing host cannot update itself.
+- Bootstrap. A host from before the updater has no `release_version` and no `self_update` verb. The extension treats it as any outdated host: the update fails with the host's "unknown cmd" refusal, and the failure toast names the manual `:native.install`. `INSTALL_HINT` stays for `host_missing` and `no_permission`, because a missing host cannot update itself.
 
 ### Bridge host (in progress)
 

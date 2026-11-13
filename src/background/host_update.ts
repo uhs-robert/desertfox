@@ -30,8 +30,6 @@ export type HostUpdateDeps = {
   read_hashes: () => Promise<HostHashes | undefined>;
   auto_update_consented: () => Promise<boolean>;
   update: (request: SelfUpdateRequest) => Promise<SelfUpdateReply>;
-  // One request to the config host, whose reply reports its version through `watch.seen`.
-  probe_host: () => Promise<void>;
   load_state: () => Promise<HostUpdateState>;
   save_state: (state: HostUpdateState) => Promise<void>;
   now_ms: () => number;
@@ -165,8 +163,6 @@ export function create_host_update(deps: HostUpdateDeps) {
     if (await deps.is_development()) throw new Error("This is a development install of DesertFox, which never updates its host. Run :native.install instead.");
     const hashes = await deps.read_hashes();
     if (!hashes || hashes.version !== deps.extension_version) throw new Error(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
-    // The version seen earlier can be stale, for example after a manual install, so ask the host again. A failed probe leaves the update to report its own error.
-    await deps.probe_host().catch(() => undefined);
     const state = await deps.load_state();
     let reply: SelfUpdateReply;
     try {
