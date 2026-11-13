@@ -1,6 +1,6 @@
 # Hand checks on login sites
 
-The rig (`PAGES=sites`) cannot log in, so these sites are checked by hand. Fill in one table per site. Each cell takes `pass`, `fail` or `n/a`, plus a short reason for a fail.
+The rig (`PAGES=sites`) cannot log in, so these sites are checked by hand. Fill in one table per site. A step 1 cell takes what you saw. A step 2 cell takes `pass` or `fail`, and a step 3 cell `pass` or `blocked`, plus a short reason when it is not a pass.
 
 ## Setup
 
@@ -12,17 +12,15 @@ The rig (`PAGES=sites`) cannot log in, so these sites are checked by hand. Fill 
 | --- | --- | --- | --- | --- |
 | Scroll | `j` | `j` | `j` | `j` |
 | Hints | `f` | `f` | `f` | `f` |
-| Leave hints | `Escape` | `Escape` | `Escape` | `Escape` |
+| Leave hints, leave a field | `Escape` | `Escape` | `Escape` | `Escape` |
 
 ## The checks
 
-Run them in this order on each site, with the focus on the page and not in a text field.
+Run three steps on each site, the same way the rig does (`sites.mjs`).
 
-1. Scroll: `j` scrolls the main view, the message list or the document.
-2. Hints: `f` puts labels on the visible links and buttons.
-3. Activate: typing one label clicks or focuses its target.
-4. Escape: `Escape` removes every label.
-5. Site check: the extra row under each site.
+1. Mode on load (information, not scored). Load the page and touch nothing. Note where the focus is, also inside a frame, and the extension's mode. DesertFox shows its mode in the badge. For the others, infer the mode: press `j` and see whether it scrolls (normal mode) or types into the field or does nothing (insert mode, or the key went past the extension). Starting in insert mode where the site focused a field is right. Reload before step 2.
+2. Leave (scored). Press the extension's leave key, `Escape` for all four. Pass when the focus really leaves the field, also a field inside a frame. Fail when the field keeps the focus, or when the extension acts as if in normal mode while its keys still go into the field.
+3. Normal-mode actions (scored, pass or blocked). Scroll with `j`. Show hints with `f` on the visible links and buttons. Type one label and check that it clicks or focuses its target. Show hints again and press `Escape`: every label goes. Then the extra row under each site.
 
 ## Run details
 
@@ -44,10 +42,12 @@ URL: `https://drive.google.com/drive/my-drive`
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
-| Scroll | | | | |
-| Hints | | | | |
-| Activate | | | | |
-| Escape | | | | |
+| 1. Mode on load (focus, mode) | | | | |
+| 2. Leave with `Escape` | | | | |
+| 3. Scroll | | | | |
+| 3. Hints | | | | |
+| 3. Activate | | | | |
+| 3. `Escape` out of hints | | | | |
 | A hint on a file row opens the file | | | | |
 
 ## Gmail
@@ -56,10 +56,12 @@ URL: `https://mail.google.com/mail/u/0/#inbox`
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
-| Scroll | | | | |
-| Hints | | | | |
-| Activate | | | | |
-| Escape | | | | |
+| 1. Mode on load (focus, mode) | | | | |
+| 2. Leave with `Escape` | | | | |
+| 3. Scroll | | | | |
+| 3. Hints | | | | |
+| 3. Activate | | | | |
+| 3. `Escape` out of hints | | | | |
 | A hint on a message row opens the message | | | | |
 
 ## Figma
@@ -68,10 +70,12 @@ URL: a design file you own, `https://www.figma.com/design/...`
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
-| Scroll | | | | |
-| Hints | | | | |
-| Activate | | | | |
-| Escape | | | | |
+| 1. Mode on load (focus, mode) | | | | |
+| 2. Leave with `Escape` | | | | |
+| 3. Scroll | | | | |
+| 3. Hints | | | | |
+| 3. Activate | | | | |
+| 3. `Escape` out of hints | | | | |
 | Figma's own single-letter keys still work on the canvas | | | | |
 
 ## Slack or Discord
@@ -80,10 +84,12 @@ Site checked (Slack or Discord):
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
-| Scroll | | | | |
-| Hints | | | | |
-| Activate | | | | |
-| Escape | | | | |
+| 1. Mode on load (focus, mode) | | | | |
+| 2. Leave with `Escape` | | | | |
+| 3. Scroll | | | | |
+| 3. Hints | | | | |
+| 3. Activate | | | | |
+| 3. `Escape` out of hints | | | | |
 | Typing in the message box sends no key to the extension | | | | |
 
 ## Outlook or Microsoft 365
@@ -92,10 +98,12 @@ Site checked (Outlook or Microsoft 365):
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
-| Scroll | | | | |
-| Hints | | | | |
-| Activate | | | | |
-| Escape | | | | |
+| 1. Mode on load (focus, mode) | | | | |
+| 2. Leave with `Escape` | | | | |
+| 3. Scroll | | | | |
+| 3. Hints | | | | |
+| 3. Activate | | | | |
+| 3. `Escape` out of hints | | | | |
 | A hint on a message row opens the message | | | | |
 
 ## ChatGPT or Claude web
@@ -104,8 +112,10 @@ Site checked (ChatGPT or Claude web):
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
-| Scroll | | | | |
-| Hints | | | | |
-| Activate | | | | |
-| Escape | | | | |
+| 1. Mode on load (focus, mode) | | | | |
+| 2. Leave with `Escape` | | | | |
+| 3. Scroll | | | | |
+| 3. Hints | | | | |
+| 3. Activate | | | | |
+| 3. `Escape` out of hints | | | | |
 | Typing in the prompt box sends no key to the extension | | | | |

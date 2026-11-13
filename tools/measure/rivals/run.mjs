@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { GENERIC_CHECKS, judge_activation, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, page_wall, pick_activation, SITES, TOOL_KEYS } from "./sites.mjs";
+import { as_action, describe_mode_on_load, judge_activation, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, NORMAL_ACTIONS, page_wall, pick_activation, SITES, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -222,25 +222,54 @@ async function tab_switch_run(next_key) {
   return { ...timing, selects: marks.selects, presses_b_ms: marks.presses_b_ms };
 }
 
-// One site for the live-site check: the per-site checks first, on the fresh page, then the generic ones. Typing a label comes last because it can leave the page.
+// One site for the live-site check, in the three steps of sites.mjs. Typing a label comes last because it can leave the page.
 // A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
 // open_page polls every 100 ms, so a live page gets about 30 s to load.
 const LIVE_LOAD_ATTEMPTS = 300;
 const RENDER_MS = 5000;
-async function check_site(site) {
-  const keys = TOOL_KEYS[tool];
-  const url = site.url ?? `${base_url}/${site.path}`;
-  const check_names = [...site.extra, ...GENERIC_CHECKS];
+
+// Loads the url, lets an app render after the load event, and returns what the page shows. A page that never completes still gets its checks.
+async function load_live(url) {
   const { page_state, loaded } = await open_page(url, LIVE_LOAD_ATTEMPTS);
-  if (!page_state) return { url, checks: Object.fromEntries(check_names.map((name) => [name, { status: "error", reason: "the page never answered" }])) };
-  // Apps render after the load event, and a page that never completes still gets its checks.
+  if (!page_state) return null;
   await sleep(RENDER_MS);
   await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
   // A page that swapped its content process has lost the frame script, so a first miss loads it again.
   const info = await ask_page("page_info", {}, 5000).catch(async () => { await load_frame_script(); return ask_page("page_info", {}, 5000); });
-  const record = { url, loaded, landed_url: info.url, title: info.title, checks: {} };
-  const wall = page_wall(info);
+  return { loaded, info };
+}
+
+async function check_site(site) {
+  const keys = TOOL_KEYS[tool];
+  const url = site.url ?? `${base_url}/${site.path}`;
+  const check_names = ["mode_on_load", "leave", ...site.extra, ...NORMAL_ACTIONS];
+  const error_record = (reason) => ({ url, checks: Object.fromEntries(check_names.map((name) => [name, { status: "error", reason }])) });
+  const page = await load_live(url);
+  if (!page) return error_record("the page never answered");
+  const record = { url, loaded: page.loaded, landed_url: page.info.url, title: page.info.title, checks: {} };
+  const wall = page_wall(page.info);
   if (wall) { for (const name of check_names) record.checks[name] = wall; return record; }
+  const run_check = async (name, check) => {
+    try { record.checks[name] = await check(); }
+    catch (error) { record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) }; }
+  };
+
+  // Step 1. The probe key changes the page (it scrolls or types), so steps 2 and 3 start from a fresh load.
+  await run_check("mode_on_load", async () => {
+    const focus = await ask_page("focus_path", {}, 5000);
+    const desertfox_mode = tool === "desertfox" ? await ask_page("desertfox_mode", {}, 5000) : null;
+    const probe = desertfox_mode ? null : await ask_page("probe_key", { keys: keys.scroll_down }, 5000);
+    return { ...describe_mode_on_load({ focus, probe, desertfox_mode }), focus, probe };
+  });
+  if (!(await load_live(url))) { for (const name of check_names.slice(1)) record.checks[name] = { status: "error", reason: "the page did not load again" }; return record; }
+
+  // Step 2.
+  await run_check("leave", async () => {
+    const left = await ask_page("leave_key", {}, 5000);
+    return { ...judge_leave(left), ...left };
+  });
+
+  // Step 3.
   const no_key = { status: "fail", reason: "no default key" };
   const press_and_compare = async (key, read, judge, wait_ms) => {
     if (!key) return no_key;
@@ -253,7 +282,9 @@ async function check_site(site) {
   const wait_for_embed = async () => {
     for (let waited = 0; waited < 20000; waited += 500) { if (await ask_page("embed_state", {}, 5000)) return; await sleep(500); }
   };
-  const extra_checks = {
+  const show_hints = () => ask_page("hints", { keys: keys.hint, settle_ms: 1500 }, 15000);
+  let shown = null;
+  const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
     volume: () => press_and_compare(keys.volume_down, "video_state", judge_volume, 1000),
     cell_move: () => press_and_compare(keys.scroll_down, "name_box", judge_cell_move, 1000),
@@ -265,13 +296,9 @@ async function check_site(site) {
     },
     embed_play_pause: async () => { await wait_for_embed(); return press_and_compare(keys.play_pause, "embed_state", judge_play_pause, 2500); },
     embed_volume: () => press_and_compare(keys.volume_down, "embed_state", judge_volume, 1500),
-  };
-  const show_hints = () => ask_page("hints", { keys: keys.hint, settle_ms: 1500 }, 15000);
-  let shown = null;
-  const generic_checks = {
     scroll: async () => judge_scroll(await ask_page("scroll_check", { keys: keys.scroll_down, wait_ms: 1000 }, 10000)),
     hints: async () => { shown = await show_hints(); return judge_hints(shown.labels, shown.targets); },
-    escape: async () => {
+    hints_escape: async () => {
       if (!shown?.labels.length) return { status: "fail", reason: "no labels to leave" };
       await ask_page("escape");
       await sleep(800);
@@ -281,13 +308,16 @@ async function check_site(site) {
       const again = await show_hints();
       const pick = pick_activation(again.labels, again.targets);
       if (!pick) return { status: "fail", reason: "no label on a visible target to type" };
-      return { ...judge_activation(await ask_page("activate", { ...pick, wait_ms: 3000 }, 15000)), typed: pick.keys };
+      const url_before = await chrome(`${selected_browser}.currentURI.spec`);
+      // A navigation into another content process cuts the frame script off before it answers, so a missing answer with a new address is a navigation.
+      const reply = await ask_page("activate", { ...pick, wait_ms: 3000 }, 15000).catch(async (error) => {
+        if ((await chrome(`${selected_browser}.currentURI.spec`)) !== url_before) return { event: "navigated" };
+        throw error;
+      });
+      return { ...judge_activation(reply), typed: pick.keys };
     },
   };
-  for (const name of check_names) {
-    try { record.checks[name] = await (extra_checks[name] ?? generic_checks[name])(); }
-    catch (error) { record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) }; }
-  }
+  for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
   return record;
 }
 
@@ -326,7 +356,7 @@ try {
       const only_sites = process.env.SITES?.split(",");
       for (const site of SITES.filter((entry) => !only_sites || only_sites.includes(entry.name))) {
         // One site that hangs the debugger must not cost the other sites their results.
-        const record = await check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries([...site.extra, ...GENERIC_CHECKS].map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
+        const record = await check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries(["mode_on_load", "leave", ...site.extra, ...NORMAL_ACTIONS].map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
         result.runs.push({ page, run: 0, site: site.name, ...record });
         log_row({ site: site.name, ...Object.fromEntries(Object.entries(record.checks).map(([name, check]) => [name, `${check.status}: ${check.reason}`])) });
       }

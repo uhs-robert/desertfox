@@ -146,7 +146,7 @@ if (site_tools.length > 0) {
   const date = info_of[site_tools[0]].date.slice(0, 10);
   const versions = Object.fromEntries(site_tools.map((tool) => [tool, { firefox: info_of[tool].firefox, version: info_of[tool].meta.version, commit: info_of[tool].meta.commit, keys: info_of[tool].meta.sites.keys, started: info_of[tool].date }]));
   writeFileSync(`${out_dir}/sites-${date}.json`, JSON.stringify({ date, versions, runs: site_runs_of }, null, 1));
-  markdown += `\n### Live sites, ${date} (Firefox ${info_of[site_tools[0]].firefox}; ${site_tools.map((tool) => `${tool} ${info_of[tool].meta.version}`).join(", ")})\n\nStatus per check: pass, fail, blocked (a consent or bot wall), login (the site wants a login), error (the rig could not run the check).\n\n${sites_table(site_runs_of, site_tools)}`;
+  markdown += `\n### Live sites, ${date} (Firefox ${info_of[site_tools[0]].firefox}; ${site_tools.map((tool) => `${tool} ${info_of[tool].meta.version}`).join(", ")})\n\nSteps per site: \`mode_on_load\` is information (where the focus starts, and the tool's mode, read for DesertFox and inferred for the others). \`leave\` is the tool's Escape out of the field the site focused, pass or fail. The rows after it are normal-mode actions, pass or blocked. A site behind a wall shows wall (a consent or bot wall) or login on every row, and error means the rig could not run the check.\n\n${sites_table(site_runs_of, site_tools)}`;
 }
 markdown += `\n### Versions\n\n${tools.map((tool) => `- ${tool}: firefox ${info_of[tool].firefox}, meta ${JSON.stringify(info_of[tool].meta)}`).join("\n")}\n`;
 writeFileSync(`${out_dir}/tables.md`, markdown);

@@ -157,8 +157,13 @@ answer("keys", async ({ keys }) => { await press_keys(keys); return 1; });
 
 // Watches what typing the label does: a click or a focus on the page, or a navigation away. A tool can focus or click another element first, so any event on the labelled target counts, and the first event is the fallback.
 // The page's timers stop once it unloads, so a navigation answers at once.
-answer("activate", ({ keys, target, wait_ms }) => new Promise((resolve) => {
+// A user's click at the label's spot lands on the element on top there, under the label. The label sits on the tool's own target, which can be an element the rig's target list missed or an overlay over it (YouTube lays one over its buttons). So that element, its inside, and its ancestors short of the body count as the target too.
+const has_hint = (el) => { let found = false; walk_hints(el, () => { found = true; }); return found; };
+const element_under_label = (at) => (at ? content.document.elementsFromPoint(at.x, at.y).find((el) => !has_hint(el)) ?? null : null);
+const is_under_label = (el, under) => !!under && (el === under || under.contains(el) || (el.contains(under) && el !== content.document.body && el !== content.document.documentElement));
+answer("activate", ({ keys, target, at, wait_ms }) => new Promise((resolve) => {
   const expected = last_targets[Number(target)];
+  const under = element_under_label(at);
   let first = null;
   const finish = (seen) => {
     content.removeEventListener("click", on_event, true);
@@ -168,8 +173,8 @@ answer("activate", ({ keys, target, wait_ms }) => new Promise((resolve) => {
   };
   const on_event = (event) => {
     const el = event.target;
-    const seen = { event: event.type === "focusin" ? "focus" : "click", tag: describe(el), on_target: !!expected && (el === expected || expected.contains(el) || el.contains(expected)) };
-    if (seen.on_target) finish(seen);
+    const seen = { event: event.type === "focusin" ? "focus" : "click", tag: describe(el), on_target: !!expected && (el === expected || expected.contains(el) || el.contains(expected)), under_label: is_under_label(el, under) };
+    if (seen.on_target || seen.under_label) finish(seen);
     first ??= seen;
   };
   const on_leave = () => finish({ event: "navigated" });
@@ -178,6 +183,51 @@ answer("activate", ({ keys, target, wait_ms }) => new Promise((resolve) => {
   content.addEventListener("pagehide", on_leave, true);
   void press_keys(keys).then(() => content.setTimeout(() => finish(null), wait_ms));
 }));
+
+// Follows the focus from the top document into each focused frame of the same origin. A frame of another origin cannot be read from here, so the path stops at it.
+const innermost_focus = () => {
+  let doc = content.document;
+  const path = [];
+  for (;;) {
+    const active = doc.activeElement;
+    path.push(describe(active));
+    if (!active || !["iframe", "frame"].includes(active.localName)) return { doc, active, path, cross_origin: false };
+    const inner = active.contentDocument;
+    if (!inner) return { doc, active, path: [...path, "(frame of another origin)"], cross_origin: true };
+    doc = inner;
+  }
+};
+const focus_path = () => {
+  const { active, path, cross_origin } = innermost_focus();
+  const takes_typing = cross_origin || (!!active && (active.isContentEditable || ["input", "textarea", "select"].includes(active.localName)));
+  return { path: path.join(" > "), takes_typing, cross_origin };
+};
+
+answer("focus_path", async () => focus_path());
+
+// DesertFox's mode badge carries the mode label for its key test, in the top document.
+answer("desertfox_mode", async () => content.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null);
+
+// Infers a tool's mode from what it does with its scroll key. The tools listen in the capture phase on the window and stop a key they take, so a capture listener added after theirs, on the focused document's window, sees the key only if the tool let it through. Capture also runs before the page's own handlers on the field can stop the key.
+answer("probe_key", async ({ keys }) => {
+  const { doc, cross_origin } = innermost_focus();
+  if (cross_origin) return null;
+  const seen = { reached: false, prevented: false };
+  const on_key = (event) => { seen.reached = true; seen.prevented = event.defaultPrevented; };
+  doc.defaultView.addEventListener("keydown", on_key, true);
+  await press_keys(keys);
+  await sleep(300);
+  doc.defaultView.removeEventListener("keydown", on_key, true);
+  return seen;
+});
+
+// The tool's own leave key, Escape for every tool here, and the focus path before and after it.
+answer("leave_key", async () => {
+  const before = focus_path();
+  send("Escape", "Escape", 27);
+  await sleep(600);
+  return { before, after: focus_path() };
+});
 
 answer("video_state", async () => { const video = largest_video(); return video ? { paused: video.paused, volume: video.muted ? 0 : video.volume } : null; });
 
