@@ -3,6 +3,7 @@
 import type { QualityProbe, QualityVideoState } from "../../shared/quality.ts";
 import type { PlayerHandlePage } from "./find_video.ts";
 import { has_player_handle, has_video_in } from "./find_video.ts";
+import { refused_as } from "../../shared/swallow.ts";
 import { create_probe } from "./probe.ts";
 
 type ProbeWindow = QualityVideoState & { wrappedJSObject: PlayerHandlePage; desertfox_quality_probe?: ReturnType<typeof create_probe> };
@@ -19,7 +20,7 @@ probe_window.desertfox_quality_probe ??= create_probe({
   address: () => location.href,
   report: (video) => {
     probe_window.desertfox_quality_video = video;
-    return (browser.runtime.sendMessage({ type: "quality_probe", address: location.href } satisfies QualityProbe) as Promise<boolean>).catch(() => false);
+    return refused_as(browser.runtime.sendMessage({ type: "quality_probe", address: location.href } satisfies QualityProbe) as Promise<boolean>, false);
   },
   // Media events do not bubble, but a capture listener on the document sees them.
   watch: (on_media) => {
