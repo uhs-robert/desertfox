@@ -90,9 +90,15 @@ function match_term(term: string, text: string): Hit | null {
   return { score, positions };
 }
 
+// A query read once, so a list of rows does not split and lowercase it again for every row.
+type Parsed_query = { terms: string[]; typed: string };
+
+const parse_query = (query: string): Parsed_query => ({ terms: query.toLowerCase().split(/\s+/).filter((term) => term !== ""), typed: query.trim().toLowerCase() });
+
 // Every space-separated term must hit the name, the description or a keyword. Only the name hits get positions.
-export function score_candidate(query: string, candidate: Candidate): Hit | null {
-  const terms = query.toLowerCase().split(/\s+/).filter((term) => term !== "");
+export const score_candidate = (query: string, candidate: Candidate): Hit | null => score_parsed(parse_query(query), candidate);
+
+function score_parsed({ terms, typed }: Parsed_query, candidate: Candidate): Hit | null {
   // A final period ends the sentence and is not a letter to match, or `tab.` would find every "...the tab."
   const description = candidate.description?.replace(/\.$/, "");
   const keywords = (candidate.keywords ?? []).join(" ");
@@ -111,7 +117,6 @@ export function score_candidate(query: string, candidate: Candidate): Hit | null
   }
   // Scaled by the size of the score, so a gappy hit with a negative score still rises. Before the exact bonus, so use never outranks an exact name.
   if (candidate.boost) score += Math.abs(score) * Math.min(candidate.boost, MAX_BOOST);
-  const typed = query.trim().toLowerCase();
   if ([candidate.name, ...(candidate.also_named ?? [])].some((name) => name.toLowerCase() === typed)) score += EXACT_NAME_BONUS;
   return { score, positions };
 }
@@ -119,9 +124,10 @@ export function score_candidate(query: string, candidate: Candidate): Hit | null
 // Best first. A tie goes to the lower `group_of` when the caller ranks several groups as one list, then to the shorter name, then to the order of the source. An empty query keeps the source order.
 export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0): Ranked<Item>[] {
   if (query.trim() === "") return items.map((item) => ({ ...item, positions: [] }));
+  const parsed = parse_query(query);
   const hits: { item: Item; hit: Hit; order: number }[] = [];
   items.forEach((item, order) => {
-    const hit = score_candidate(query, item);
+    const hit = score_parsed(parsed, item);
     if (hit) hits.push({ item, hit, order });
   });
   hits.sort((left, right) => right.hit.score - left.hit.score || group_of(left.item) - group_of(right.item) || left.item.name.length - right.item.name.length || left.order - right.order);
@@ -132,9 +138,10 @@ export type BestMatch<Item> = { found: "none" } | { found: "one"; item: Item } |
 
 // For a handler that runs one item from typed text. Equal top scores give a `tie` so the caller can refuse instead of guessing.
 export function best_match<Item>(query: string, items: readonly Item[], candidate_of: (item: Item) => Candidate): BestMatch<Item> {
+  const parsed = parse_query(query);
   const hits: { item: Item; score: number }[] = [];
   for (const item of items) {
-    const hit = score_candidate(query, candidate_of(item));
+    const hit = score_parsed(parsed, candidate_of(item));
     if (hit) hits.push({ item, score: hit.score });
   }
   hits.sort((left, right) => right.score - left.score);
