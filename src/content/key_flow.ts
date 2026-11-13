@@ -20,7 +20,7 @@ export const DEFAULT_CHORDS = /^<(?:C-[abdfiouvx[]|A-[,?jkmp]|AC-(?:Escape|`))>$
 export type OnReplayPass = () => void;
 
 // A key waiting for replay. Keys handed back by the command line have no way to reach the page again.
-type HeldKey = { token_: string; on_replay_pass_?: OnReplayPass | undefined; repeat?: boolean | undefined };
+type HeldKey = { token_: string; on_replay_pass_?: OnReplayPass | undefined; repeat?: boolean | undefined; physical_?: string | null | undefined };
 
 // The keys typed so far in a half-typed sequence. Which-key reads it.
 export type PendingPrefix = { mode: Mode; typed_: string[] };
@@ -116,6 +116,11 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   const held_tokens = () => held_keys.map((held) => held.token_);
 
+  // The typed token, or `physical` when the setting is on and the keymap binds the typed one nowhere here. A sink gets the typed letter, so hint mode's text filter keeps it.
+  let layout_fallback = true;
+  const layout_token = (token: string, physical: string | null | undefined): string =>
+    physical && layout_fallback && matcher && !deps.sink_of_(deps.get_mode_()) && !matcher.binds_after_(deps.get_mode_(), held_tokens(), token) ? physical : token;
+
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, or an insert mode Escape, which leaves the mode on replay, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
     deps.loading_sink_bundles_().some((bundle) => bundle_may_take(active, held_tokens(), bundle, token)) ||
@@ -125,14 +130,14 @@ export function create_key_flow(deps: KeyFlowDeps) {
     held_keys.some((held) => held.token_ === "<Backspace>" || held.token_ === "<Escape>") ||
     active.binds_after_(mode, held_tokens(), token);
 
-  const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean): KeyDecision => {
+  const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean, physical?: string | null): KeyDecision => {
     const mode = deps.get_mode_();
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
     if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
     if (!matcher && is_chord(token) && !DEFAULT_CHORDS.test(token)) return "pass";
     if (!matcher || browser_chord_in(mode, token) || waits_for_replay(matcher, mode, token)) {
-      held_keys.push({ token_: token, on_replay_pass_, repeat });
+      held_keys.push({ token_: token, on_replay_pass_, repeat, physical_: physical });
       return "cancel";
     }
     const last_held = held_keys.at(-1)?.token_;
@@ -196,24 +201,24 @@ export function create_key_flow(deps: KeyFlowDeps) {
   // A replayed key can start another load, and the keys behind it wait for that load too.
   const replay = () => {
     while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
-      const { token_: token, on_replay_pass_, repeat } = held_keys.shift()!;
+      const { token_: token, on_replay_pass_, repeat, physical_ } = held_keys.shift()!;
       if (token === SEQUENCE_BREAK) reset_sequence_();
-      else if (decide(matcher, token, repeat === true) === "pass") on_replay_pass_?.();
+      else if (decide(matcher, layout_token(token, physical_), repeat === true) === "pass") on_replay_pass_?.();
     }
   };
 
   return {
-    handle_token_: (token: string, repeat = false, on_replay_pass_?: OnReplayPass): KeyDecision => {
+    handle_token_: (token: string, repeat = false, on_replay_pass_?: OnReplayPass, physical?: string | null): KeyDecision => {
       if (deps.take_pass_next_()) {
         reset_sequence_();
         return "pass";
       }
-      if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_, repeat);
-      return decide(matcher, token, repeat);
+      if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_, repeat, physical);
+      return decide(matcher, layout_token(token, physical), repeat);
     },
     reset_sequence_,
-    // The typed token, or `physical` when the keymap binds the typed one nowhere here.
-    layout_token_: (token: string, physical: string | null): string => (physical !== null && matcher && !matcher.binds_after_(deps.get_mode_(), held_tokens(), token) ? physical : token),
+    layout_token_: layout_token,
+    set_layout_fallback_: (on: boolean) => void (layout_fallback = on),
     // The first call also replays the held keys. Later calls swap the keymap.
     set_matcher_: (next: Matcher, next_browser_chords?: TreeBranch) => {
       matcher = next;

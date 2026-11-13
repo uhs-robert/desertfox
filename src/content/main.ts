@@ -57,7 +57,6 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 
 // Zero turns which-key off.
 let which_key_delay_ms: number | undefined;
-let layout_fallback = true;
 let which_key_skip: readonly string[] | undefined;
 // The timer lives in the `whichkey` bundle, so the first panel may appear late by the load.
 const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => follow_which_key(bundles, prefix, at_once, which_key_delay_ms, which_key_skip);
@@ -140,19 +139,23 @@ function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   cancelled_keys.saw_keydown_(event.code);
   if (!event.isTrusted || event.isComposing) return;
-  let token = event_to_token(event);
+  const token = event_to_token(event);
   if (token === null) return;
-  if (layout_fallback) token = key_flow.layout_token_(token, physical_token(event));
   // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
   follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
   const target = press_target(event);
   const press: HeldPress = { keyup_seen_: false };
   // A replayed key the keymap passes ends the site mode after the page has the key, because ending it replays the keys behind.
-  const decision = key_flow.handle_token_(token, event.repeat, () => {
-    target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init));
-    site_mode.set_();
-  });
+  const decision = key_flow.handle_token_(
+    token,
+    event.repeat,
+    () => {
+      target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init));
+      site_mode.set_();
+    },
+    physical_token(event),
+  );
   cancelled_keys.record_keydown_(event.code, decision, press);
   if (decision === "cancel") cancel(event);
   else site_mode.set_();
@@ -252,7 +255,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
   which_key_delay_ms = keymap?.which_key_delay_ms;
-  layout_fallback = keymap?.layout_fallback !== false;
+  key_flow.set_layout_fallback_(keymap?.layout_fallback !== false);
   set_toast_durations(keymap);
   which_key_skip = keymap?.which_key_skip;
   recording = reply?.recording;
