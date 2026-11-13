@@ -1,6 +1,6 @@
 // Key cases of the frames hint filter (#134). A subframe starts its content script on its first focus, and gF returns the keys to the top page.
 // The fixture page /frames holds a same-origin frame (a), a cross-origin frame (s) and a 10 px frame that gets no label.
-// The command line, which-key, the page search input and the toasts draw in the top page for a focused frame, and the keys and commands still act in the frame (#619).
+// The command line, which-key and the toasts draw in the top page for a focused frame, and the keys and commands still act in the frame (#619).
 
 export const areas = ["hints", "cmdline", "whichkey", "ui", "find", "scroll"];
 
@@ -224,12 +224,12 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     await poll_until("the panel to go after Escape", async () => !(await in_active_tab(surface_in(WHICH_KEY_Z))));
   });
 
-  await run_case("/ in a focused cross-origin frame searches the frame, not the top page", async () => {
+  await run_case("/ in a focused cross-origin frame draws its line in the frame and searches the frame", async () => {
     await in_cross_frame(`(document.body.insertAdjacentHTML("afterbegin", "<p>zebrafish</p>"), true)`);
     await wait_takes_keys(cross_id);
     await press_keys("/");
     await wait_cmdline((line) => line.open && line.focused, "the search line to open");
-    expect(await in_active_tab(LINE_IN_TOP), "the search line is not in the top page");
+    expect(await in_cross_frame(surface_in("2147483647")), "the search line is not in the frame");
     await type_in_line("zebrafish", { until: (line) => line.note.startsWith("1 of 1"), what: "the frame's match count under the line" });
     await press_keys("-k", "Return");
     await wait_cmdline((line) => !line.open, "the search line to close after Enter");
