@@ -28,8 +28,8 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 - **It stays light on every page.** The script on each page is small, and the heavy parts load on first use. [Details](docs/design.md#content-script-size).
 - **It is always ready.** A page gets its keys within milliseconds of starting to load. [Details](docs/design.md#constraints-from-firefox).
 - **It grows with you.** The first day needs a few keys. Macros, per-site rules and your own commands wait until you want them. See [Features](#-features).
-- **It is safe by design.** DesertFox never evaluates text as code, and its optional helper program takes a fixed set of requests. [Details](host/README.md#what-the-host-can-and-cannot-do).
-- **It is tested with real key presses.** A test suite presses real keys in a real Firefox. [Details](AGENTS.md#commands).
+- **It is safe by design.** DesertFox never evaluates text as code, and its optional helper program takes a fixed set of requests. [Details](docs/design.md#decisions).
+- **It is tested with real key presses.** A test suite presses real keys in a real Firefox.
 
 ## 📦 Install
 
