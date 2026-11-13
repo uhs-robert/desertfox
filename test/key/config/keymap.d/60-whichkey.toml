@@ -2,10 +2,6 @@
 ",w" = "help.whichkey"
 "Qabc" = "help.whichkey"
 "Zabcde" = "help.whichkey"
-[caret]
-"_w" = "help.whichkey"
-[visual]
-"_w" = "help.whichkey"
 
 # A chain of long group names, for the which-key title widening and cutting at the start.
 [group_names]

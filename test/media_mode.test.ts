@@ -75,7 +75,7 @@ test("the media section holds the media keys and, of normal mode, only f, : and 
   for (const key of ["F", "h", "l", "0", "^", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";", "?"]) assert.ok(media.children[key], key);
   const normal = compiled().modes.normal!;
   const shared = Object.keys(media.children).filter((key) => normal.children[key] && JSON.stringify(normal.children[key]) === JSON.stringify(media.children[key]));
-  assert.deepEqual(shared.sort(), [":", ";", "<C-[>", "<Escape>", "f"].sort());
+  assert.deepEqual(shared.sort(), [":", ";", "<A-?>", "<C-[>", "<Escape>", "f"].sort());
   for (const key of ["g", "d", "x", "/", "o", "t", "<C-v>", "G", "n"]) assert.equal(media.children[key], undefined, key);
 });
 
