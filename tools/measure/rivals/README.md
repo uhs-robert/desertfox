@@ -32,7 +32,7 @@ Only DesertFox has built-in keyboard drag of elements (`;g`, `;G`). Checked from
 
 ## Tab switch
 
-Time to move to the next tab, in ms, on a quiet machine. Headless Firefox 160.0, 13 November 2026, load under 1 (0.08 before the run, 0.84 after, which includes the run). 24 runs per tool (12 runs x 2 passes, the warm-up run dropped). The tool order in pass 2 is the reverse of pass 1, to cancel drift. Cells are median, then IQR (Q1 to Q3).
+Time to move to the next tab, in ms, on a quiet machine. Headless Firefox 160.0, 13 November 2026, load under 1 (0.08 before the run, 0.84 after, which includes the run). 24 runs per tool (12 runs x 2 passes, the warm-up run dropped). The tool order in pass 2 is the reverse of pass 1, to limit drift. Cells are median, then IQR (Q1 to Q3).
 
 | Hop | DesertFox | Vimium C | Vimium | Tridactyl |
 | --- | --- | --- | --- | --- |
