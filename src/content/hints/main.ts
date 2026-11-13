@@ -6,8 +6,8 @@ import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFrames
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_caret, takes_typing } from "./actions.ts";
-import type { CaretMode, HintAction, Place } from "./actions.ts";
+import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";
+import type { ModeAction, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
@@ -41,7 +41,7 @@ import { arm_leave_watch } from "../page/leave_watch.ts";
 import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
 
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
-type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element; desertfox_content_loaded?: true | (() => void) };
+type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_pick_target?: Element; desertfox_content_loaded?: true | (() => void) };
 const page = window as unknown as HintsWindow;
 
 const done: Outcome = { ok: true };
@@ -228,9 +228,9 @@ function open_link_(url: string, place: Place): Promise<unknown> {
   return browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url, where: place } }], mode: "normal", from_hints: true });
 }
 
-// The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry. A failed load fails the pick.
-function start_caret_(target: Element, mode: CaretMode): Promise<Outcome> {
-  page.desertfox_caret_target = target;
+// A pick that starts a mode of another bundle: the caret bundle (caret, visual) or the grab bundle. The bundle reads the element in `desertfox_pick_target` when its `<bundle>.mode` handler runs, and loads on that first entry. A failed load fails the pick.
+function start_mode_(target: Element, mode: ModeAction): Promise<Outcome> {
+  page.desertfox_pick_target = target;
   const bundle = mode[0] === "g" ? "grab" : "caret";
   return page.desertfox_host.run_command_(`${bundle}.mode`, bundle, { mode });
 }
@@ -293,7 +293,7 @@ let starting = 0;
 // To the background, which passes it on. Nothing waits for the answer.
 const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_collect" | "hint_frames_labels" }>) => void best_effort(browser.runtime.sendMessage(message));
 
-const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_caret_, inspect_ };
+const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_mode_, inspect_ };
 
 function register(host: BundleHostApi): void {
   let session: Session | undefined;
@@ -321,7 +321,8 @@ function register(host: BundleHostApi): void {
     const first = !current.picked;
     current.picked = true;
     current.finish(new Promise<Outcome>((resolve) => (answer = resolve)));
-    void browser.runtime.sendMessage({ type: "record_step", invocations: [{ id: "hint.run", args: current.args }], outcome: done, pick: true });
+    // The grab bundle runs the target hint inside the first pick, and the first pick is the step to repeat.
+    if (!current.args.nested_) void browser.runtime.sendMessage({ type: "record_step", invocations: [{ id: "hint.run", args: current.args }], outcome: done, pick: true });
     const ended = (result: unknown) => {
       let outcome = (result as Outcome | undefined) ?? done;
       // A refused open comes back as a RunResponse with no message. The background already showed it, so it only stops the sequence.
@@ -392,7 +393,7 @@ function register(host: BundleHostApi): void {
     const answer: Promise<HintFramesPickAnswer | undefined> = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_!, label: labeled.labels[index]!, ...(keys && { keys }) } satisfies HintFramesPick);
     if (current.action === "hover") hovers_across.push({ session_id: labeled.session_id_!, answered: best_effort(answer) });
     // A mode that started in the owner takes no typeahead. A mode that failed to start leaves the keys for a replay here.
-    const left = ignore_refusal(answer).then((reply) => (reply?.ok === true && starts_caret(current.action) ? [] : reply?.left ?? keys ?? []));
+    const left = ignore_refusal(answer).then((reply) => (reply?.ok === true && starts_mode(current.action) ? [] : reply?.left ?? keys ?? []));
     return { run: () => answer.then((reply) => (reply && "text" in reply ? (current.action === "prompt" ? open_line_(reply.text) : copy_of_pick(current)(reply.text, reply.what)) : reply)), left };
   }
 
@@ -558,7 +559,7 @@ function register(host: BundleHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_caret(action) && action !== "prompt", across_frames_: args.frames === "all_frames", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true, started_ms);
@@ -629,7 +630,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     let handed: { text: string; what: string | undefined } | undefined;
     const hand_over: HandOver = (text, what) => void (handed = { text, what });
     // The keyboard focus is in another frame. Gecko keeps an element's focus() out of a frame of another site that does not hold it, and the window's focus() brings it in.
-    if (pick_args.action === "focus" || starts_caret(pick_args.action) || takes_typing(element)) window.focus();
+    if (pick_args.action === "focus" || starts_mode(pick_args.action) || takes_typing(element)) window.focus();
     // Only a pick that focuses a field takes the keys typed ahead. The keyboard frame replays the rest.
     if (pick_args.action === "hover") hovered_by = current.session_id;
     const types_ahead = keys && (pick_args.action === "here" || pick_args.action === "focus") && takes_typing(element);
