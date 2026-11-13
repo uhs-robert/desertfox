@@ -35,6 +35,7 @@ test("the silent catch rule hits a handler that ignores its error", () => {
     assert.equal(hits("p.catch(() => { return undefined; });"), 1);
     assert.equal(hits("p.catch(() => { return []; });"), 1);
     assert.equal(hits("p.catch((e) => { return false; });"), 1);
+    assert.equal(hits("p.catch((e) => [] as string[]);"), 1);
     assert.equal(hits("p.then(ok, () => undefined);"), 1);
     assert.equal(hits("p.then(undefined, () => false);"), 1);
     assert.equal(hits("p.then(() => true, (_e) => false);"), 1);
@@ -54,6 +55,7 @@ test("the silent catch rule spares helpers, logging handlers and handlers that a
     assert.equal(hits("p.then(ok, warn_and_go('x'));"), 0);
     assert.equal(hits("p.then(ok, (error) => log(error));"), 0);
     assert.equal(hits("p.then((tab) => tab.url);"), 0);
+    assert.equal(hits("p.then(ok, (error) => ({ ok: false, message: message_of(error) }) as Answer);"), 0);
     assert.equal(hits("p.catch(() => console.warn('x'));"), 0);
     assert.equal(hits("p.catch(() => { console.warn('x'); });"), 0);
     assert.equal(hits("p.catch(() => { throw new Error('x'); });"), 0);

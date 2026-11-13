@@ -8,7 +8,9 @@ const ACTING = "/^(CallExpression|AwaitExpression|ChainExpression|AssignmentExpr
 
 function constant_at(path) {
     return [
-        `[${path}.type=/^(Literal|TSAsExpression)$/]`,
+        `[${path}.type='Literal']`,
+        `[${path}.type='TSAsExpression'][${path}.expression.type='Literal']`,
+        `[${path}.type='TSAsExpression'][${path}.expression.type='ArrayExpression'][${path}.expression.elements.length=0]`,
         `[${path}.type='Identifier'][${path}.name='undefined']`,
         `[${path}.type='ArrayExpression'][${path}.elements.length=0]`,
         `[${path}.type='ObjectExpression'][${path}.properties.length=0]`,
