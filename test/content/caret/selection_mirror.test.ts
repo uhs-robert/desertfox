@@ -148,7 +148,7 @@ test("paint draws one range per tree, and its own paint is no outside move", () 
     [1, 3],
     [3, 5],
   ]);
-  assert.equal(mirror.foreign_cursor_(model, { anchor: 1, caret: 4 }, true), undefined);
+  assert.equal(mirror.foreign_move_(model), undefined);
   assert.equal(mirror.moved_since_(mirror.mark(model)), false);
 });
 
@@ -166,7 +166,7 @@ test("measure puts back the ranges Selection.modify collapsed, so the paint and 
     [1, 3],
     [3, 5],
   ]);
-  assert.equal(mirror.foreign_cursor_(model, { anchor: 1, caret: 4 }, true), undefined, "the mirror took its own measure for a click");
+  assert.equal(mirror.foreign_move_(model), undefined, "the mirror took its own measure for a click");
   assert.equal(mirror.moved_since_(mark), false, "a search position would be lost to a measure");
 });
 
@@ -182,19 +182,18 @@ test("measure puts the ranges back when the measure throws", () => {
   assert.deepEqual(ends(top.selection), [[0, 2]]);
 });
 
-test("a click after the paint moves the caret there, and visual mode keeps its anchor", () => {
+test("a click after the paint answers the index it landed on, in visual mode too", () => {
   const { top, model, mirror, second_node } = setup();
   mirror.paint(model, { from: 1, to: 3 }, "visual");
   top.selection.collapse(second_node, 1);
-  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 1, caret: 2 }, true), { anchor: 1, caret: 4 });
-  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 1, caret: 2 }, false), { anchor: 4, caret: 4 });
+  assert.equal(mirror.foreign_move_(model), 4);
 });
 
 test("a drag after the paint is taken whole, and a backward one puts the caret at its start", () => {
   const { top, model, mirror, second_node } = setup();
   mirror.paint(model, { from: 0, to: 1 }, "visual");
   top.selection.setBaseAndExtent(second_node, 3, second_node, 1);
-  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 0, caret: 0 }, false), { anchor: 5, caret: 4 });
+  assert.deepEqual(mirror.foreign_move_(model), { anchor: 5, caret: 4 });
 });
 
 // The same span painted the other way round has the same range ends, so only the anchor and focus tell it.
@@ -260,7 +259,7 @@ test("caret mode draws its cell as a highlight in the document of the character 
   assert.deepEqual(cell_of(top), [], "the old cell stayed in the top document");
   assert.deepEqual(cell_of(frame), [[4, 5]]);
   assert.deepEqual(ends(frame.selection), []);
-  assert.equal(mirror.foreign_cursor_(model, { anchor: 4, caret: 4 }, false), undefined);
+  assert.equal(mirror.foreign_move_(model), undefined);
   mirror.clear();
   assert.deepEqual(cell_of(frame), []);
 });
@@ -289,9 +288,9 @@ test("in caret mode any selection is an outside move, and the next paint clears 
   const { top, model, mirror, second_node } = setup();
   mirror.paint(model, { from: 0, to: 1 }, "caret");
   top.selection.collapse(second_node, 1);
-  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 0, caret: 0 }, false), { anchor: 4, caret: 4 });
+  assert.equal(mirror.foreign_move_(model), 4);
   top.selection.setBaseAndExtent(second_node, 0, second_node, 2);
-  assert.deepEqual(mirror.foreign_cursor_(model, { anchor: 0, caret: 0 }, false), { anchor: 3, caret: 4 });
+  assert.deepEqual(mirror.foreign_move_(model), { anchor: 3, caret: 4 });
   mirror.paint(model, { from: 4, to: 5 }, "caret");
   assert.deepEqual(ends(top.selection), []);
   assert.deepEqual(cell_of(top), [[4, 5]]);

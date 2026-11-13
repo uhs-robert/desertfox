@@ -1,7 +1,7 @@
 // A grid of selection sources against the caret and visual modes. Each cell asserts the selection's two ends, read from `getSelection()` on the page, and the caret mode cell, a highlight, after the mode took the source and again after one `l`.
 // The sources are script stand-ins. The harness has no pointer, so click and drag send no pointer events. A drag is `setBaseAndExtent` and a click is a collapsed selection, which is all the caret code reads. The page script uses the drag's call on another span, but keeps its own row.
 // "Before" means the source exists when the mode starts. "During" means the mode is already active when the source arrives.
-// The expected values are what the code did when the grid was written. A cell is not a promise that the behavior is right. Caret mode leaves no selection of its own, so its cells show the cell and no selection after `l`.
+// The expected values are what the code did when the grid was written. A cell is not a promise that the behavior is right, except a click during a visual mode: it ends the mode, as in vim, at the next key. Here that key is the barrier after the source, so the read already shows caret mode at the click. Caret mode leaves no selection of its own, so its cells show the cell and no selection after `l`.
 
 export const areas = ["caret", "find"];
 
@@ -31,9 +31,9 @@ const EXPECTED = {
   "click caret before": "\"\" anchor none:0 focus none:0 cell \"o\" star:6-7 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
   "click caret during": "\"\" anchor star:6 focus star:6 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
   "click visual before": "\"o\" anchor star:6 focus star:7 | after l \"of\" anchor star:6 focus star:8",
-  "click visual during": "\"\" anchor star:6 focus star:6 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
+  "click visual during": "\"\" anchor none:0 focus none:0 cell \"o\" star:6-7 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
   "click line_visual before": "\"start of pag...(13 characters)\" anchor star:0 focus star:13 | after l \"start of pag...(13 characters)\" anchor star:0 focus star:13",
-  "click line_visual during": "\"\" anchor star:6 focus star:6 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
+  "click line_visual during": "\"\" anchor none:0 focus none:0 cell \"o\" star:6-7 | after l \"\" anchor none:0 focus none:0 cell \"f\" star:7-8",
   "browser_find caret before": "\"\" anchor none:0 focus none:0 cell \"e\" the :9-10 | after l \"\" anchor none:0 focus none:0 cell \" \" the :10-11",
   "browser_find caret during": "\"needle\" anchor the :4 focus the :10 cell \"c\" care:0-1 | after l \"\" anchor none:0 focus none:0 cell \" \" the :10-11",
   "browser_find visual before": "\"needle\" anchor the :4 focus the :10 | after l \"needle \" anchor the :4 focus the :11",

@@ -471,7 +471,7 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     });
   }
 
-  // The harness has no pointer, so the click is a collapsed selection, which is all the caret code reads. The next key sees it: visual mode ends and the key runs in caret mode, where v starts visual mode at the click.
+  // The harness has no pointer, so the click is a collapsed selection, which is all the caret code reads. The next key sees it: visual mode ends before the keymap reads that key, so the key runs in caret mode from the click.
   await run_case("a click in visual mode ends it, and the next key runs in caret mode from the click", async () => {
     const page_id = "click_visual";
     await open_page("caret", page_id, { new_tab: true });
@@ -482,11 +482,11 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     // The "l" of "second line here".
     await in_active_tab(`(() => { getSelection().collapse(document.querySelectorAll("p")[1].firstChild, 7); return true; })()`);
     await wait_event(mark_click, is_selection_of(page_id), "the click report");
+    // v has no binding in visual mode. In caret mode it starts visual mode at the caret, so a visual selection of the clicked "l" shows the key ran in caret mode. The badge goes through CARET within one task, so the page sees only VISUAL.
     const mark = events.length;
     await press_keys("v");
-    const caret_badge = await wait_event(mark, badge_is(page_id, "CARET"), "the CARET badge after the click");
-    await wait_event(events.indexOf(caret_badge), badge_is(page_id, "VISUAL"), "v to start visual mode again");
-    await wait_for_last_selection(page_id, mark, (last) => last.text === "l", 'the visual selection on the "l" of line');
+    await wait_for_last_selection(page_id, mark, (last) => last.text === "l", 'v to select the "l" of line');
+    expect((await in_active_tab("String(getSelection())")) === "l", "the click did not start a visual selection at the clicked letter");
     await escape_to_normal(page_id);
   });
 
