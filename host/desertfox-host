@@ -2,7 +2,7 @@
 """Native-messaging host for the DesertFox Firefox extension.
 
 Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
-in the same framing to stdout and exits. It has five verbs and no others:
+in the same framing to stdout and exits. It has six verbs and no others:
 
   {"cmd": "read_config"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}

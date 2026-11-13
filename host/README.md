@@ -38,12 +38,20 @@ The native-messaging hosts (the config host and the bridge host) and the script 
 
 The root README lists them in plain words. The details:
 
-- Config files: the host reads the TOML files in `~/.config/desertfox/`. The settings page and `:set` work without it.
+- Config files: the host reads the TOML files in `~/.config/desertfox/`, or in `$XDG_CONFIG_HOME/desertfox/` when that variable holds an absolute path (a relative value is ignored). The settings page and `:set` work without it. Keys, search engines and themes also come in there as a zip or a folder.
 - Editor: `<C-o>` in insert mode needs `editor.toml`, see External editor above.
 - `,f` keys: see Firefox pages above. Without the host, DesertFox copies the address.
 - `:native.update`: see `self_update` above. It replaces the host, the bridge, the `desertfox` command and the two manifests, and checks each script against the hashes in the signed extension (`dist/host_sha256.json`).
-- Bridge: set `bridge = true` (in `settings.toml` or with `:set bridge true`) and grant the `nativeMessaging` permission on the page that `:native.install` opens. Tab commands also need `bridge_share_tabs`. Private tabs and their ids are never shared. A focused private window still shows `private: true` and its mode.
+- Bridge (a second helper, off by default, that lets scripts run DesertFox commands, read the current mode and follow your desktop theme): set `bridge = true` (in `settings.toml` or with `:set bridge true`) and grant the `nativeMessaging` permission on the page that `:native.install` opens. Tab commands also need `bridge_share_tabs`. Private tabs and their ids are never shared. A focused private window still shows `private: true` and its mode.
 - Desktop theme: set `palette = "desktop"`, then run `desertfox theme <name>`. This needs the bridge, and only built-in theme names work.
+
+## What the host can and cannot do
+
+- It has a fixed list of actions: read the config files, write one file for your saved edits, update itself, edit text, open a Firefox page and, with the bridge, pass commands to DesertFox. It has no shell and no way to run a command that someone sends it.
+- A web page cannot give it an address. The `,f` keys pick a page from a fixed table, not a URL (see Firefox pages above).
+- Text from a web page goes only into a temporary file for your editor. The editor program comes from your own `editor.toml`.
+- The updater starts at this project's GitHub releases and follows up to five HTTPS redirects, without limiting which hosts they lead to. It refuses a redirect that is not HTTPS, and refuses a file that does not match the hashes in the signed extension.
+- With the bridge on, DesertFox itself decides which commands a script can run (see Bridge host below).
 
 ## Bridge host
 
