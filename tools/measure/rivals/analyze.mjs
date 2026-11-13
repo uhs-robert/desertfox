@@ -1,6 +1,7 @@
 // Turns the per-run JSON files in $RIVALS_DIR/out into $RIVALS_DIR/out/tables.md: medians with min and max per tool and page, plus per-frame and against-baseline rows.
 // Only the pages that ran appear, and a derived row is left out when a median it needs is missing.
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { sites_table } from "./sites.mjs";
 import { PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
 
 const out_dir = `${process.env.RIVALS_DIR}/out`;
@@ -45,24 +46,28 @@ const difference = (a, b) => (a === null || b === null ? null : a - b);
 const show = (value, digits) => (value === null ? "-" : value.toFixed(digits));
 
 let markdown = "";
+// A run of only the live-site check or only the tab switch has no timing page, and the timing tables would be empty.
+const timing_ran = ran_pages.length > 0;
 function table(title, pick, unit) {
   markdown += `\n### ${title} (${unit}; median [min-max])\n\n| tool | ${ran_pages.join(" | ")} |\n|---|${ran_pages.map(() => "---").join("|")}|\n`;
   for (const tool of tools) markdown += `| ${tool} | ${ran_pages.map((page) => summary_of(values_of(tool, page, pick))).join(" | ")} |\n`;
 }
-table("DOMContentLoaded end", (run) => run.dcl, "ms");
-table("Load event end", (run) => run.load, "ms");
-table("Hint key to first label, first press on the page", (run) => run.press1?.first_ms, "ms");
-table("Hint key to first label painted (next animation frame), first press", (run) => run.press1?.paint_ms, "ms");
-table("Hint key to first label, second press (warm)", (run) => run.press2?.first_ms, "ms");
-table("Labels seen in the top document", (run) => run.press1?.count, "count");
-table("Page content process RSS after load", (run) => to_mb(run.mem_load?.content_rss), "MB");
-table("Page content process RSS after hints", (run) => to_mb(run.mem_hints?.content_rss), "MB");
-table("Extension process RSS after load", (run) => to_mb(run.mem_load?.ext_rss), "MB");
-table("Extension process RSS after hints", (run) => to_mb(run.mem_hints?.ext_rss), "MB");
-table("Extension heap in the page content process after load (explicit, moz-extension)", (run) => to_mb(run.mem_load?.content_ext_heap), "MB");
-table("Extension heap in the page content process after hints", (run) => to_mb(run.mem_hints?.content_ext_heap), "MB");
-table("Extension-process heap attributed to moz-extension after load", (run) => to_mb(run.mem_load?.ext_proc_heap), "MB");
-table("Extension-process heap attributed to moz-extension after hints", (run) => to_mb(run.mem_hints?.ext_proc_heap), "MB");
+if (timing_ran) {
+  table("DOMContentLoaded end", (run) => run.dcl, "ms");
+  table("Load event end", (run) => run.load, "ms");
+  table("Hint key to first label, first press on the page", (run) => run.press1?.first_ms, "ms");
+  table("Hint key to first label painted (next animation frame), first press", (run) => run.press1?.paint_ms, "ms");
+  table("Hint key to first label, second press (warm)", (run) => run.press2?.first_ms, "ms");
+  table("Labels seen in the top document", (run) => run.press1?.count, "count");
+  table("Page content process RSS after load", (run) => to_mb(run.mem_load?.content_rss), "MB");
+  table("Page content process RSS after hints", (run) => to_mb(run.mem_hints?.content_rss), "MB");
+  table("Extension process RSS after load", (run) => to_mb(run.mem_load?.ext_rss), "MB");
+  table("Extension process RSS after hints", (run) => to_mb(run.mem_hints?.ext_rss), "MB");
+  table("Extension heap in the page content process after load (explicit, moz-extension)", (run) => to_mb(run.mem_load?.content_ext_heap), "MB");
+  table("Extension heap in the page content process after hints", (run) => to_mb(run.mem_hints?.content_ext_heap), "MB");
+  table("Extension-process heap attributed to moz-extension after load", (run) => to_mb(run.mem_load?.ext_proc_heap), "MB");
+  table("Extension-process heap attributed to moz-extension after hints", (run) => to_mb(run.mem_hints?.ext_proc_heap), "MB");
+}
 
 if (ran_pages.includes("frames") && ran_pages.includes("frames0")) {
   const frame_count = 100;
@@ -80,7 +85,7 @@ if (ran_pages.includes("frames") && ran_pages.includes("frames0")) {
   }
 }
 
-if (tools.includes("none")) {
+if (timing_ran && tools.includes("none")) {
   markdown += "\n### Median delta against the no-extension baseline\n\n| tool | page | dcl ms | load ms | content RSS MB after load |\n|---|---|---|---|---|\n";
   for (const tool of tools.filter((name) => name !== "none")) {
     for (const page of ran_pages) {
@@ -92,8 +97,8 @@ if (tools.includes("none")) {
 }
 
 const hint_pages = ran_pages.filter((page) => page !== "frames0");
-markdown += `\n### First press after load on each page, from the warm-up run (run -1) in the same browser process; only the first page of a tool is a fresh browser (ms)\n\n| tool | ${hint_pages.join(" | ")} |\n|---|${hint_pages.map(() => "---").join("|")}|\n`;
-for (const tool of tools.filter((name) => name !== "none")) {
+if (timing_ran) markdown += `\n### First press after load on each page, from the warm-up run (run -1) in the same browser process; only the first page of a tool is a fresh browser (ms)\n\n| tool | ${hint_pages.join(" | ")} |\n|---|${hint_pages.map(() => "---").join("|")}|\n`;
+for (const tool of timing_ran ? tools.filter((name) => name !== "none") : []) {
   const cells = hint_pages.map((page) => (runs_of[tool].find((run) => run.page === page && run.run === -1)?.press1?.first_ms ?? null));
   markdown += `| ${tool} | ${cells.map((value) => show(value, 0)).join(" | ")} |\n`;
 }
@@ -133,6 +138,15 @@ if (tabswitch_tools.length > 0) {
     const pick = (field) => runs.map((run) => run.tabswitch[field]);
     markdown += `| ${tool} | ${info_of[tool].meta.tabswitch.next_key} | ${summary_of(pick("first_hop_ms"))} | ${summary_of(pick("arrive_to_land_ms"))} | ${summary_of(pick("presses_sent"))} | ${pick("extra_hops").reduce((sum, count) => sum + count, 0)} | ${summary_of(pick("press_gap_ms"))} |\n`;
   }
+}
+// Live-site check: one dated JSON for the whole run, and the table.
+const site_runs_of = Object.fromEntries(tools.map((tool) => [tool, runs_of[tool].filter((run) => run.page === "sites")]));
+const site_tools = tools.filter((tool) => site_runs_of[tool].length > 0);
+if (site_tools.length > 0) {
+  const date = info_of[site_tools[0]].date.slice(0, 10);
+  const versions = Object.fromEntries(site_tools.map((tool) => [tool, { firefox: info_of[tool].firefox, version: info_of[tool].meta.version, commit: info_of[tool].meta.commit, keys: info_of[tool].meta.sites.keys, started: info_of[tool].date }]));
+  writeFileSync(`${out_dir}/sites-${date}.json`, JSON.stringify({ date, versions, runs: site_runs_of }, null, 1));
+  markdown += `\n### Live sites, ${date} (Firefox ${info_of[site_tools[0]].firefox}; ${site_tools.map((tool) => `${tool} ${info_of[tool].meta.version}`).join(", ")})\n\nStatus per check: pass, fail, blocked (a consent or bot wall), login (the site wants a login), error (the rig could not run the check).\n\n${sites_table(site_runs_of, site_tools)}`;
 }
 markdown += `\n### Versions\n\n${tools.map((tool) => `- ${tool}: firefox ${info_of[tool].firefox}, meta ${JSON.stringify(info_of[tool].meta)}`).join("\n")}\n`;
 writeFileSync(`${out_dir}/tables.md`, markdown);

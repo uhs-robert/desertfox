@@ -91,4 +91,107 @@ addMessageListener("rivals:coverage", ({ data }) => { try {
   } catch (e) { reply({ error: String(e).slice(0, 300) }); }
 });
 
+
+// The live-site checks (PAGES=sites). State between messages lives here: the targets of the last hint check, so the activation check knows the element its label sits on.
+let last_targets = [];
+const sleep = (ms) => new Promise((resolve) => content.setTimeout(resolve, ms));
+const plain_rect = (r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
+const in_viewport = (rect) => rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < content.innerHeight && rect.left < content.innerWidth;
+const describe = (el) => (el ? el.localName + (el.id ? "#" + el.id : "") : "none");
+// Uppercase keys go out with Shift held, as a typed capital would.
+const press_keys = async (keys, gap_ms = 80) => {
+  for (const c of keys) {
+    const upper = c !== c.toLowerCase();
+    tip.beginInputTransactionForTests(content);
+    const shift = new content.KeyboardEvent("", { key: "Shift", code: "ShiftLeft", keyCode: 16 });
+    if (upper) tip.keydown(shift);
+    const event = new content.KeyboardEvent("", { key: c, code: "Key" + c.toUpperCase(), keyCode: c.toUpperCase().charCodeAt(0), shiftKey: upper });
+    tip.keydown(event);
+    tip.keyup(event);
+    if (upper) tip.keyup(shift);
+    await sleep(gap_ms);
+  }
+};
+const visible_labels = () => {
+  const labels = [];
+  for (const el of content.document.documentElement.children) walk_hints(el, (label) => {
+    const rect = label.getBoundingClientRect();
+    if (in_viewport(rect) && label.checkVisibility({ opacityProperty: true, visibilityProperty: true })) labels.push({ text: label.textContent, rect: plain_rect(rect) });
+  });
+  return labels;
+};
+const TARGET_SELECTOR = "a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=checkbox], [onclick], [tabindex]:not([tabindex='-1'])";
+const visible_targets = () => [...content.document.querySelectorAll(TARGET_SELECTOR)].filter((el) => {
+  const rect = el.getBoundingClientRect();
+  if (!in_viewport(rect)) return false;
+  const top_element = content.document.elementFromPoint(Math.min(rect.left + rect.width / 2, content.innerWidth - 1), Math.min(rect.top + rect.height / 2, content.innerHeight - 1));
+  return !!top_element && (top_element === el || el.contains(top_element));
+});
+const largest_video = () => [...content.document.querySelectorAll("video")].sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0] ?? null;
+const answer = (name, job) => addMessageListener("rivals:" + name, ({ data }) => { job(data).then(reply, (e) => reply({ error: String(e).slice(0, 300) })); });
+
+answer("page_info", async () => ({ url: String(content.location), title: content.document.title, text: (content.document.body?.innerText ?? "").slice(0, 3000), content_type: content.document.contentType }));
+
+answer("scroll_check", async ({ keys, wait_ms }) => {
+  const scrolled = [...content.document.querySelectorAll("*")].filter((el) => el.scrollHeight > el.clientHeight).map((el) => [el, el.scrollTop]);
+  const window_y = content.scrollY;
+  const active = describe(content.document.activeElement);
+  await press_keys(keys);
+  await sleep(wait_ms);
+  let element_dy = 0, element = "none";
+  for (const [el, top] of scrolled) if (Math.abs(el.scrollTop - top) > Math.abs(element_dy)) { element_dy = el.scrollTop - top; element = describe(el); }
+  return { window_dy: content.scrollY - window_y, element_dy, element, active };
+});
+
+answer("hints", async ({ keys, settle_ms }) => {
+  const targets = visible_targets();
+  last_targets = targets;
+  await press_keys(keys);
+  await sleep(settle_ms);
+  return { labels: visible_labels(), targets: targets.map((el, i) => ({ name: String(i), rect: plain_rect(el.getBoundingClientRect()) })) };
+});
+
+answer("label_count", async () => visible_labels().length);
+
+answer("keys", async ({ keys }) => { await press_keys(keys); return 1; });
+
+// Watches what typing the label does: a click or a focus on the page, or a navigation away. A tool can focus or click another element first, so any event on the labelled target counts, and the first event is the fallback.
+// The page's timers stop once it unloads, so a navigation answers at once.
+answer("activate", ({ keys, target, wait_ms }) => new Promise((resolve) => {
+  const expected = last_targets[Number(target)];
+  let first = null;
+  const finish = (seen) => {
+    content.removeEventListener("click", on_event, true);
+    content.removeEventListener("focusin", on_event, true);
+    content.removeEventListener("pagehide", on_leave, true);
+    resolve(seen ?? first ?? { event: null });
+  };
+  const on_event = (event) => {
+    const el = event.target;
+    const seen = { event: event.type === "focusin" ? "focus" : "click", tag: describe(el), on_target: !!expected && (el === expected || expected.contains(el) || el.contains(expected)) };
+    if (seen.on_target) finish(seen);
+    first ??= seen;
+  };
+  const on_leave = () => finish({ event: "navigated" });
+  content.addEventListener("click", on_event, true);
+  content.addEventListener("focusin", on_event, true);
+  content.addEventListener("pagehide", on_leave, true);
+  void press_keys(keys).then(() => content.setTimeout(() => finish(null), wait_ms));
+}));
+
+answer("video_state", async () => { const video = largest_video(); return video ? { paused: video.paused, volume: video.muted ? 0 : video.volume } : null; });
+
+// The Sheets name box shows the selected cell.
+answer("name_box", async () => content.document.querySelector("#t-name-box")?.value ?? null);
+
+// X marks the post its j moved to by focusing the article.
+answer("post_focus", async () => { const post = content.document.activeElement?.closest?.("article"); return post ? [...content.document.querySelectorAll("article")].indexOf(post) : null; });
+
+// pages.mjs writes the embedded player's state onto the body, because the player frame is in another process.
+answer("embed_state", async () => {
+  const body = content.document.body;
+  const state = body.getAttribute("data-yt-state");
+  return state === null ? null : { paused: state !== "1" && state !== "3", volume: Number(body.getAttribute("data-yt-volume")) / 100, state: Number(state) };
+});
+
 })(); }

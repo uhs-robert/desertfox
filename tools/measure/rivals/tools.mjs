@@ -14,7 +14,7 @@ export const PINNED_BUILDS = {
 // Every tool name in run order. `none` is the baseline with no extension.
 export const TOOL_NAMES = ["desertfox", ...Object.keys(PINNED_BUILDS), "none"];
 
-// The timing pages, run by default. `coverage` is not timed: it records which visible targets get a label, and runs only when PAGES=coverage.
+// The timing pages, run by default. `coverage` is not timed: it records which visible targets get a label, and runs only when PAGES=coverage. `sites` (sites.mjs) and `tabswitch` also run only when asked for.
 export const PAGE_NAMES = ["large", "wiki", "frames", "frames0"];
 
 export const xpi_path = (work_dir, tool) => `${work_dir}/xpi/${PINNED_BUILDS[tool].dir}/${PINNED_BUILDS[tool].dir}.xpi`;

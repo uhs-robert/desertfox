@@ -59,6 +59,9 @@ Read from source in November 2026 (Vimium 49a3942, Vimium C 3188526, Tridactyl a
 ```
 just measure-rivals                      # speed on all pages
 PAGES=coverage just measure-rivals       # coverage alone
+PAGES=sites PASSES=1 just measure-rivals # checks on live public sites
 ```
+
+Login sites are checked by hand with [`hand_checks.md`](hand_checks.md).
 
 It needs Firefox, unzip and network access. Results go to `$MEASURE_DIR/rivals`, and load swings the numbers. See [`../README.md`](../README.md) for the settings.

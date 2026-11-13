@@ -5,7 +5,7 @@ const to_label = (label) => ({ x: label.left + label.width / 2, y: label.top + l
 // Targets are 60 px apart, so a limit under 30 px keeps a label from reaching the neighbour of its own target.
 export const MAX_DISTANCE = 25;
 
-const distance_to = (point, rect) => Math.hypot(Math.max(rect.left - point.x, 0, point.x - rect.right), Math.max(rect.top - point.y, 0, point.y - rect.bottom));
+export const distance_to = (point, rect) => Math.hypot(Math.max(rect.left - point.x, 0, point.x - rect.right), Math.max(rect.top - point.y, 0, point.y - rect.bottom));
 
 // Returns the names of the labelled targets, the labels beyond the first on one target (duplicates) and the labels near no target (stray).
 // A non-zero duplicates or stray count means the label count and the labelled-target count disagree, so the credit cannot be trusted.
