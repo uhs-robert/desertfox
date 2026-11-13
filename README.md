@@ -85,7 +85,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Per-site keys and settings | ✅ | keys only | 🟡 | ✅ | ✅ |
 | Containers | ✅ | ❌ | 🟡 | ✅ | ❌ |
 | Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
-| Helper program outside the browser | optional, fixed requests | none | none | optional, runs shell commands | n/a |
+| Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Script loaded on every page | 18.5 KB | 254 KB | 94 KB | 1.1 MB | n/a |
 
