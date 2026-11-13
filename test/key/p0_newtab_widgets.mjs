@@ -11,7 +11,7 @@ const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) =>
 
 export const areas = ["newtab", "config"];
 
-export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, open_page, rdp, extension_id }) {
+export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, open_page, rdp, extension_id }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
 
@@ -47,8 +47,35 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       const parts = await parts_of_page();
       expect(!parts.clock, "the clock showed with newtab_clock = false");
     });
+    // Cards: links, recent tabs and bookmarks. The cache is seeded for one site, so the shot shows an icon tile beside letter tiles.
+    const cards_config = mkdtempSync(join(tmpdir(), "desertfox-cards-"));
+    cpSync(test_config_dir, cards_config, { recursive: true });
+    const links = ["Docs", "Mail", "News"].map((name) => `[[newtab_links]]\nlabel = "${name}"\nurl = "https://${name.toLowerCase()}.example.org/"\ngroup = "Pinned"\n`).join("\n");
+    writeFileSync(join(cards_config, "settings.toml"), `newtab_recent_tabs = true\nnewtab_bookmarks = true\nnewtab_bookmarks_max = 4\n\n${links}`);
+    await close_new_tabs();
+    await open_page("page", "cards_a", { new_tab: true });
+    await open_page("page", "cards_b", { new_tab: true });
+    await load_config_dir(cards_config);
+    const dot = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23c0392b'/></svg>";
+    await in_background(`(async () => { for (const [title, host] of [["Firefox source docs", "firefox-source-docs.mozilla.org"], ["A long bookmark title that cannot fit on one line of a card", "example.net"], ["Arch wiki", "wiki.archlinux.org"], ["Hacker News", "news.ycombinator.com"], ["Rust reference", "doc.rust-lang.org"]]) await browser.bookmarks.create({ title, url: "https://" + host + "/" }); await browser.storage.local.set({ favicon_cache: [{ host: "doc.rust-lang.org", icon: ${JSON.stringify(dot)} }] }); })()`);
+
+    await run_case("recent tabs, bookmarks and links are cards with one anchor each, and f labels one per card", async () => {
+      expect(await open_new_tab(".tiles .tile"), "no card rendered");
+      await poll_until("the cards to render", async () => (await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`)) >= 8);
+      const shape = await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const cards = [...page.querySelectorAll(".tiles .tile")]; return { cards: cards.length, nested_anchors: cards.filter((card) => card.querySelector("a")).length, letters: page.querySelectorAll(".tile-letter").length, images: page.querySelectorAll("img.tile-icon").length, sites: cards.every((card) => card.querySelector(".tile-site")?.textContent) }; })()`);
+      expect(shape.nested_anchors === 0 && shape.sites, `a card holds a nested anchor or has no site: ${JSON.stringify(shape)}`);
+      expect(shape.images >= 1 && shape.letters >= 1, `expected an icon and letter tiles: ${JSON.stringify(shape)}`);
+      if (shot_dir) await take_shot(`${shot_dir}/newtab-cards.png`);
+      await press_keys("f");
+      const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
+      await poll_until("the hint labels to show", async () => (await labels()) > 0);
+      // One label per card, plus the three built-in links.
+      expect((await labels()) === shape.cards + 3, `expected ${shape.cards + 3} labels, found ${await labels()}`);
+      await press_keys("-k", "Escape");
+    });
   } finally {
     await close_new_tabs().catch(() => undefined);
+    await in_background(`(async () => { await browser.storage.local.remove("favicon_cache"); for (const host of ["firefox-source-docs.mozilla.org", "example.net", "wiki.archlinux.org", "news.ycombinator.com", "doc.rust-lang.org"]) for (const mark of await browser.bookmarks.search({ url: "https://" + host + "/" })) await browser.bookmarks.remove(mark.id); })()`).catch(() => undefined);
     await open_page("page", "widgets_restore", { new_tab: true });
     await load_config_dir(config_dir);
   }

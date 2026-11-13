@@ -13,6 +13,7 @@ import { relay_plan } from "../shared/relay.ts";
 import { stored_keymap } from "./keymap_source.ts";
 import { history_cache } from "./history_cache.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
+import { make_favicon_cache } from "../newtab/icon_cache.ts";
 import { shared_previous_tabs } from "./previous_tab.ts";
 import { shared_last_used_tabs } from "./last_used_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
@@ -550,7 +551,10 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
 
+const favicon_cache = make_favicon_cache(browser.storage.local);
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
+  // The icon often arrives after the load completes, so a later icon change stores too. A private tab stores nothing.
+  if (change.status === "complete" || change.favIconUrl !== undefined) void favicon_cache.store({ url: tab.url, icon: tab.favIconUrl, incognito: tab.incognito }).catch(warn_and_go("favicon_cache.store"));
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
   if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(warn_and_go("tab_media.navigated"));
   // A new tab's first load reports only `status`, with the address already on the tab.
@@ -572,7 +576,7 @@ wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_s
 browser.history.onVisited.addListener(history_cache.visited);
 browser.history.onTitleChanged.addListener(history_cache.title_changed);
 browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
-browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_removed(removal, { marks: browser_mark_store, cmdline }).catch(warn_and_go("clear_on_history_removed")));
+browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_removed(removal, { marks: browser_mark_store, cmdline, favicons: favicon_cache }).catch(warn_and_go("clear_on_history_removed")));
 void history_cache.start();
 
 browser.tabs.onActivated.addListener(({ tabId, windowId, previousTabId }) => {

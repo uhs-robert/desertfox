@@ -331,7 +331,7 @@ test("the new tab page reads an absent setting as before", async () => {
   assert.deepEqual(enabled_widgets(effective_settings({})), { clock: true, clock_style: "analog", date: true });
   assert.deepEqual(enabled_widgets(effective_settings({ newtab_clock: true, newtab_date: false })), { clock: true, clock_style: "analog", date: false });
   const tabs = Array.from({ length: 12 }, (_, index) => ({ id: index, url: `https://t${index}.example/`, title: `T${index}`, lastAccessed: index, windowId: 1, incognito: false }));
-  const readers = { query_tabs: async () => tabs, bookmark_tree: async () => [], page_is_private: async () => false } as never;
+  const readers = { query_tabs: async () => tabs, bookmark_tree: async () => [], page_is_private: async () => false, cached_icons: async () => new Map() } as never;
   assert.deepEqual(await read_sections(effective_settings({}), readers), []);
   const sections = await read_sections(effective_settings({ newtab_recent_tabs: true }), readers);
   assert.equal(sections[0]?.rows.length, 8);

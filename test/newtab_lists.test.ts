@@ -13,7 +13,7 @@ const tab = (id: number, url: string, last: number, extra: Partial<TabWithUse> =
 const TABS = [tab(1, "https://a.example/", 10), tab(2, "https://b.example/", 30), tab(3, "https://c.example/", 20), tab(4, "https://p.example/", 99, { incognito: true }), tab(5, "about:newtab", 50)];
 const TREE = [{ type: "folder", children: [{ type: "bookmark", title: "Old", url: "https://old.example/", dateAdded: 1 }, { type: "bookmark", title: "New", url: "https://new.example/", dateAdded: 9 }, { type: "bookmark", title: "Js", url: "javascript:1", dateAdded: 20 }, { type: "bookmark", title: "Mid", url: "https://mid.example/", dateAdded: 5 }] }];
 
-const readers = (over: Partial<PageReaders> = {}): PageReaders => ({ query_tabs: async () => TABS, bookmark_tree: async () => TREE, page_is_private: async () => false, ...over });
+const readers = (over: Partial<PageReaders> = {}): PageReaders => ({ query_tabs: async () => TABS, bookmark_tree: async () => TREE, page_is_private: async () => false, cached_icons: async () => new Map(), ...over });
 
 test("recent tabs: last used first, private and non-web tabs left out", () => {
   assert.deepEqual(recent_tab_rows(TABS, 8, false).map((row) => row.url), ["https://b.example/", "https://c.example/", "https://a.example/"]);
@@ -80,4 +80,36 @@ test("the editor schema describes the new settings", () => {
   for (const name of ["newtab_bookmarks", "newtab_recent_tabs", "newtab_bookmarks_max", "newtab_recent_tabs_max", "newtab_links"]) assert.ok(name in properties, name);
   assert.equal(properties.newtab_bookmarks?.default, false);
   assert.equal(properties.newtab_recent_tabs_max?.default, 8);
+});
+
+const DOT = "data:image/png;base64,AAAA";
+
+test("card icon order: the tab's own icon, then the cache for its site, then none for the letter tile", () => {
+  const tabs = [tab(1, "https://a.example/x", 30, { favIconUrl: "https://a.example/i.png" }), tab(2, "https://b.example/", 20), tab(3, "https://c.example/", 10)];
+  const rows = recent_tab_rows(tabs, 8, false, new Map([["a.example", DOT], ["b.example", DOT]]));
+  assert.deepEqual(rows.map((row) => [row.host, row.icon_url]), [["a.example", "https://a.example/i.png"], ["b.example", DOT], ["c.example", undefined]]);
+  assert.ok(!("icon_url" in rows[2]!), "no icon key at all for a letter tile");
+});
+
+test("a favIconUrl that is not http(s) or a small data: URL is dropped", () => {
+  const tabs = [tab(1, "https://a.example/", 3, { favIconUrl: "chrome://branding/icon.png" }), tab(2, "https://b.example/", 2, { favIconUrl: `data:image/png;base64,${"A".repeat(3000)}` })];
+  assert.deepEqual(recent_tab_rows(tabs, 8, false).map((row) => row.icon_url), [undefined, undefined]);
+});
+
+test("bookmarks and links take the cached icon of their site and show the host without www", () => {
+  const cached = new Map([["new.example", DOT]]);
+  const [first] = bookmark_rows(TREE, 1, cached);
+  assert.deepEqual([first!.host, first!.icon_url], ["new.example", DOT]);
+  const [section] = link_sections([{ label: "W", url: "https://www.new.example/p" }], cached);
+  assert.deepEqual([section!.rows[0]!.host, section!.rows[0]!.icon_url], ["new.example", DOT]);
+});
+
+test("private tabs stay out of the rows even when the cache knows the site", () => {
+  const rows = recent_tab_rows(TABS, 8, false, new Map([["p.example", DOT]]));
+  assert.ok(!rows.some((row) => row.host === "p.example"));
+});
+
+test("a cache that fails to read leaves the cards with letter tiles", async () => {
+  const sections = await read_sections(effective_settings({ newtab_bookmarks: true }), readers({ cached_icons: () => Promise.reject(new Error("no")) }));
+  assert.equal(sections[0]!.rows[0]!.icon_url, undefined);
 });

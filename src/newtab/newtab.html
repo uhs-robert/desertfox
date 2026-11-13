@@ -40,9 +40,17 @@
   /* With no clock the lists are the first child and sit at the bottom. */
   .desertfox-newtab .lists:first-child { margin-top: auto; }
   .desertfox-newtab .lists h4 { margin: 0 0 0.25rem; color: var(--desertfox-primary); font-weight: 500; }
-  .desertfox-newtab .lists ul { margin: 0; padding: 0; list-style: none; }
-  .desertfox-newtab .lists a { display: block; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.125rem 0; color: var(--desertfox-fg-core); text-decoration: none; }
-  .desertfox-newtab .lists a:hover, .desertfox-newtab .lists a:focus-visible { color: var(--desertfox-primary); outline: none; }
+  /* Two 14rem columns, one when the window is narrow. A grid fills row by row, so the DOM order is the visual order. */
+  .desertfox-newtab .lists section { max-width: 100%; }
+  .desertfox-newtab .tiles { display: grid; grid-template-columns: repeat(2, 14rem); gap: 0.5rem; }
+  @media (max-width: 32rem) { .desertfox-newtab .tiles { grid-template-columns: minmax(0, 14rem); } }
+  .desertfox-newtab .tile { flex-direction: row; align-items: center; gap: 0.75rem; box-sizing: border-box; height: 3.5rem; padding: 0 0.75rem; text-decoration: none; min-width: 0; }
+  .desertfox-newtab .tile:focus-visible { outline: 2px solid var(--desertfox-primary); outline-offset: 2px; }
+  .desertfox-newtab .tile-icon { flex: none; width: 1.75rem; height: 1.75rem; border-radius: 6px; object-fit: contain; }
+  .desertfox-newtab .tile-letter { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--desertfox-fg-core); background: color-mix(in srgb, var(--desertfox-primary) 35%, var(--desertfox-bg-mantle)); }
+  .desertfox-newtab .tile-text { display: flex; flex-direction: column; min-width: 0; }
+  .desertfox-newtab .tile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .desertfox-newtab .tile-site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
   /* After the script-drawn page in the body column, so it has its own background. */
   .builtin-links { flex: none; padding: 0.75rem 0 1.5rem; background: var(--desertfox-bg-core); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
   .builtin-links a { color: var(--desertfox-primary); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }
