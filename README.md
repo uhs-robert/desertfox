@@ -91,7 +91,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 ✅ yes · ❌ no · 🟡 partial
 
-Hints typically appear in under a tenth of a second on every page we measured, within a blink of Vimium C. On very large pages, DesertFox still labels open menus, tooltips and pop-ups that Vimium C skips.
+Hints typically appear in under a tenth of a second, within the blink of an eye. On very large pages, DesertFox still labels open menus, tooltips and pop-ups that Vimium C skips.
 
 Sources, read in November 2026: each project's documentation, source code and shipped add-on.
 
