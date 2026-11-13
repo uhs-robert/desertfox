@@ -14,7 +14,7 @@ Which-key shows a group as `+Name`, for example `g` as `+Go`. A `group_names` se
 
 A key shows the command label plus a phrase for each arg its binding sets, for example `gO` as "Open URL in new tab". Keys that set numbers carry a `label` in the default keymap, such as `h` as "Scroll left". The Label column shows that `label` or the command label. The rule is in [design.md](design.md#which-key).
 
-The hint keys `;r ;B ;W ;d ;o ;h ;x ;2` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;Bl` opens a link in a background tab, `;oa` selects any visible element in the DevTools Inspector, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;xa` deletes any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V` and the `;y` yank keys) get none, and modifiers do not stack.
+The hint keys `;r ;B ;W ;d ;o ;h ;x ;2 ;g ;G` are modifiers, so no row lists their variants. A `[modifiers]` section in `keymap.toml` holds them. Each adds its args to a variant of every key in the `;` group: `;Bl` opens a link in a background tab, `;oa` selects any visible element in the DevTools Inspector, `;ha` hovers any element, `;2a` double-clicks any element but a link, `;xa` deletes any element, `;rl` opens links in background tabs and keeps picking. A variant exists only when the `hint` param schema accepts the combination. Keys that set their own `action` (`;s`, `;v`, `;V` and the `;y` yank keys) get none, and modifiers do not stack.
 
 A register prefix `"<reg>` and a count go before any command in normal, caret, visual and visual line mode, so `"ay` yanks into register `a` and `"app` opens it. The prefix is no row below, because it is no key of the tree. In insert mode `<C-r><reg>` pastes a register.
 
@@ -253,8 +253,8 @@ bound: 458 (normal 234, media 54, grab 9, hint 8, cmdline 19, caret 36, visual 4
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
-| `;g` | bound | `hint --grab --every` | Grab an element and drop it on a target |  |
-| `;G` | bound | `hint --grab-move --every` | Grab an element and move it with the keys |  |
+| `;gg` | bound | `hint --grab --draggable` | Grab an element and drop it on a target |  |
+| `;Gg` | bound | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
@@ -331,8 +331,8 @@ Which-key group names:
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
-| `;g` | bound | `hint --grab --every` | Grab an element and drop it on a target |  |
-| `;G` | bound | `hint --grab-move --every` | Grab an element and move it with the keys |  |
+| `;gg` | bound | `hint --grab --draggable` | Grab an element and drop it on a target |  |
+| `;Gg` | bound | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |

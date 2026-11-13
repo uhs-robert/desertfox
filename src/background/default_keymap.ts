@@ -68,6 +68,8 @@ const BASE_SECTIONS: KeymapConfig = {
     ";h": { action: "hover", label: "Hover" },
     ";x": { action: "delete", label: "Delete" },
     ";2": { action: "double_click", label: "Double-click" },
+    ";g": { action: "grab", label: "Grab and drop" },
+    ";G": { action: "grab_move", label: "Grab and move" },
     ";:": { action: "prompt", label: "Edit in command line" },
   },
   // What which-key calls each group. `s S c C` name the groups that the search and container keys of a user config fill.
@@ -346,8 +348,9 @@ const BASE_SECTIONS: KeymapConfig = {
     ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },
-    ";g": { id: "hint.run", args: { action: "grab", filter: "every" }, label: "Grab an element and drop it on a target" },
-    ";G": { id: "hint.run", args: { action: "grab_move", filter: "every" }, label: "Grab an element and move it with the keys" },
+    // `;g` and `;G` are modifiers, so these two keys are the draggable group under them: the filter letter `g` follows the modifier `g`.
+    ";gg": { id: "hint.run", args: { action: "grab", filter: "draggable" }, label: "Grab an element and drop it on a target", variant_label: "Draggable" },
+    ";Gg": { id: "hint.run", args: { action: "grab_move", filter: "draggable" }, label: "Grab an element and move it with the keys", variant_label: "Draggable" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },

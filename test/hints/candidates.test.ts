@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -434,6 +434,39 @@ test("the scrollable filter leaves out a text field that overflows, because focu
   assert.equal(is_hit?.(overflowing("div")), true);
   assert.equal(is_hit?.(overflowing("textarea")), false);
   assert.equal(is_hit?.(overflowing("div", { isContentEditable: true })), false);
+});
+
+test("the draggable filter keeps explicit drag signs and grab cursors where they start, and no plain link, image or button", (context) => {
+  const global_scope = globalThis as unknown as { getComputedStyle?: unknown };
+  const cursors = new Map<unknown, string>();
+  global_scope.getComputedStyle = (element: unknown) => ({ cursor: cursors.get(element) ?? "auto" });
+  context.after(() => delete global_scope.getComputedStyle);
+  const draggable_selector = query_for("draggable", undefined).selector;
+  assert.equal(draggable_selector, "*");
+  const fake = (local: string, signs: boolean, parent: Element | null = null) => {
+    const element = { localName: local, parentElement: parent, ownerDocument: { defaultView: globalThis }, matches: () => signs } as unknown as Element;
+    return element;
+  };
+  assert.equal(is_draggable(fake("div", true)), true);
+  assert.equal(is_draggable(fake("a", false)), false);
+  assert.equal(is_draggable(fake("img", false)), false);
+  assert.equal(is_draggable(fake("button", false)), false);
+  const card = fake("div", false);
+  cursors.set(card, "grab");
+  assert.equal(is_draggable(card), true);
+  const inside = fake("span", false, card);
+  cursors.set(inside, "grab");
+  assert.equal(is_draggable(inside), false);
+  const pointer = fake("div", false);
+  cursors.set(pointer, "pointer");
+  assert.equal(is_draggable(pointer), false);
+  assert.equal(is_draggable(fake("body", true)), false);
+});
+
+test("hint_add matches are added for the draggable filter too", () => {
+  const page = placed_root([{ name: "handle", local: "a", href: true }]);
+  assert.deepEqual(names(with_site_selectors(page, "draggable", [], { add: ["links"], remove: [] })), ["handle"]);
+  assert.deepEqual(names(with_site_selectors(page, "links", [], { add: ["links"], remove: [] })), []);
 });
 
 test("text keeps the links whose text holds it", () => {
