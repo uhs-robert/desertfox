@@ -50,20 +50,37 @@ browser.storage.onChanged.addListener((changes, area) => {
 const SECTION_HOLD_MS = 5000;
 
 // The Keys, files and settings boxes fill in after the render and push the headings below them down, so a heading scrolled to at render time ends up far off screen. Scroll to it again as the page grows, until the reader scrolls or types or the load is over.
+// A bound key such as j never reaches a keydown listener here, because earlier capture listeners stop it. So a scroll to a place the hold did not set also ends it, which covers a scrollbar drag too.
+// The scroll event of the hold's own scrollIntoView can arrive after the page grew again. A scroll event with a changed page height is therefore not judged: it only moves the expected position.
 function hold_section_in_view(heading: HTMLElement): void {
   const page = document.querySelector(".desertfox-help-page");
   if (!page) return;
-  const observer = new ResizeObserver(() => heading.scrollIntoView());
+  const root = document.documentElement;
+  let held_y = window.scrollY;
+  let held_height = root.scrollHeight;
+  const observer = new ResizeObserver(() => {
+    heading.scrollIntoView();
+    held_y = window.scrollY;
+    held_height = root.scrollHeight;
+  });
   observer.observe(page);
   const reader_events = ["wheel", "touchstart", "pointerdown", "keydown"];
+  const on_scroll = () => {
+    if (root.scrollHeight !== held_height) {
+      held_y = window.scrollY;
+      held_height = root.scrollHeight;
+    } else if (window.scrollY !== held_y) stop();
+  };
   const stop = () => {
     clearTimeout(timer);
     observer.disconnect();
     for (const name of reader_events) window.removeEventListener(name, stop, true);
+    window.removeEventListener("scroll", on_scroll);
     stop_section_hold = undefined;
   };
   const timer = setTimeout(stop, SECTION_HOLD_MS);
   for (const name of reader_events) window.addEventListener(name, stop, { capture: true, passive: true });
+  window.addEventListener("scroll", on_scroll, { passive: true });
   stop_section_hold = stop;
 }
 
