@@ -72,7 +72,7 @@ export const area_rules = [
   { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts", "src/background/site_zoom.ts"], areas: ["scroll"] },
   {
     globs: [
-      "src/background/{config_*,css_limits,autoconfig_mirror,host_start,snippets,storage_keys,first_install,load_log,settings_message,reload}.ts",
+      "src/background/{config_*,css_limits,autoconfig_mirror,host_start,snippets,storage_keys,first_install,load_log,settings_message,edit_layers,keymap_message,reload}.ts",
       "src/commands/config.ts",
       "src/shared/{config_build/**,theme/**,themes,theme_names,default_settings,config,match_pattern,site_key,zip}.ts",
       "src/shared/registry/{check_args,check_shape,params,parse_binding,commands_file,print_command,summary,usage,command_line,single_quote}.ts",
@@ -80,7 +80,7 @@ export const area_rules = [
     areas: ["config"],
   },
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
-  { globs: ["src/background/{default_keymap,default_site_rows,keymap_merge,compile,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
+  { globs: ["src/background/{default_keymap,default_site_rows,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },

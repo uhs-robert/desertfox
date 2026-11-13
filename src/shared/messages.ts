@@ -361,7 +361,8 @@ export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: 
 export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };
 
 // One key binding as the key editor lists it. `text` is the command as keymap.toml writes it, empty for a removed binding. `origin` names the layer that decides it: the shipped default, the config files, a browser edit, or an unbind by either. `default_text` is the shipped binding a file or edit replaced.
-export type BindingRow = { mode: KeymapMode; keys: string; text: string; origin: "default" | "file" | "edit" | "removed"; default_text?: string };
+// `skipped` is set on an edit the compile dropped: the warning that says why. The binding under it runs instead.
+export type BindingRow = { mode: KeymapMode; keys: string; text: string; origin: "default" | "file" | "edit" | "removed"; default_text?: string; skipped?: string };
 
 // From an extension page: every binding of every mode, except the ones generators make (`search_keys` and the like). The answer is a ListBindingsAnswer.
 export type ListBindings = { type: "list_bindings" };
@@ -419,7 +420,8 @@ export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; me
 
 // From an extension page: the files an export writes, raw. The page builds the two zips. `config_files` holds the config files and the saved browser edits as TOML, `snippet_files` the installed snippets, both keyed by their path in the zip.
 export type ExportConfig = { type: "export_config" };
-export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string> } | { ok: false; message: string };
+// `skipped_key_edits` names the key edits left out because their text no longer reads, so an import does not refuse the whole config over them.
+export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string>; skipped_key_edits?: string[] } | { ok: false; message: string };
 
 // From an extension page: the installed snippets for the list on the settings page. The header fields are absent when the header does not parse.
 export type ListSnippets = { type: "list_snippets" };

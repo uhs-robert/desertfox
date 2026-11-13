@@ -25,7 +25,7 @@ export function key_problem(mode: KeymapMode, keys: string): string | undefined 
   return mode === "browser" ? to_firefox_shortcut(keys).error : parse_sequence(keys).error;
 }
 
-// The sequence as the compiled tree spells it, so `<a-j>` and `<A-j>` are one edit and replace the default `<A-j>`.
+// The sequence as the compiled tree spells it, so `<A-J>` and `<A-j>` are one edit and replace the default `<A-j>`.
 export function normalized_keys(mode: KeymapMode, keys: string): { keys: string; tokens: string[] } | { problem: string } {
   const problem = key_problem(mode, keys);
   if (problem !== undefined) return { problem };
@@ -42,6 +42,14 @@ function checked_keymap_edits(stored: unknown): KeymapEdits {
     if (kept.length > 0) edits[mode as KeymapMode] = Object.fromEntries(kept) as Record<string, string>;
   }
   return edits;
+}
+
+// A key that does not parse keeps its spelling. The compile warns about it.
+export const spelling_of = (keys: string): string => parse_sequence(keys).tokens?.join("") ?? keys;
+
+// A mode table keyed by `spelling_of`, so a file's `<C-D>` and an edit's `<C-d>` meet. Of two spellings of one key the later wins, as in the compile.
+export function by_spelling<V>(table: Record<string, V>): Record<string, V> {
+  return Object.fromEntries(Object.entries(table).map(([keys, value]) => [spelling_of(keys), value]));
 }
 
 export const EDIT_LAYERS: { [K in LayerKind]: LayerSpec<K> } = {

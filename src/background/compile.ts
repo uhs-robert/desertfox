@@ -6,6 +6,7 @@ import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
 import type { Keymap, KeymapConfig, KeymapMode, ModeBindings } from "../shared/keymap.ts";
+import { spelling_of } from "./edit_layers.ts";
 import type { KeymapEdits } from "./edit_layers.ts";
 import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
@@ -77,6 +78,7 @@ function with_keymap_edits(input: CompileInput, warnings: string[]): KeymapConfi
     return input.config.keymap;
   }
   const resolve_entry = config_entry_resolver(input.registry, input.config, warnings);
+  const file_keymap: KeymapConfig = { ...input.config.keymap };
   const resolved: Keymap = {};
   for (const [mode, table] of edits) {
     const bindings: ModeBindings = {};
@@ -85,9 +87,12 @@ function with_keymap_edits(input: CompileInput, warnings: string[]): KeymapConfi
       const binding = text === "" ? null : resolve_entry(text, `keymap edits: ${mode} skipped "${sequence}"`);
       if (binding !== undefined) bindings[sequence] = binding;
     }
+    // The edits are stored under one spelling, and the merge goes by the written key. So a file key spelled another way (`<C-D>` for `<C-d>`) goes, or the compile would keep it over the edit.
+    const file_bindings = Object.entries(file_keymap[mode as KeymapMode] ?? {}).filter(([sequence]) => !Object.hasOwn(bindings, spelling_of(sequence)));
+    file_keymap[mode as KeymapMode] = Object.fromEntries(file_bindings);
     resolved[mode as KeymapMode] = bindings;
   }
-  return merge_keymaps(input.config.keymap, resolved);
+  return merge_keymaps(file_keymap, resolved);
 }
 
 export function compile_config(input: CompileInput): CompileOutput {

@@ -6,7 +6,7 @@ import type { CompileInput } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import type { EditLayers, KeymapEdits } from "../../src/background/edit_layers.ts";
-import { binding_rows, create_keymap_messages } from "../../src/background/keymap_message.ts";
+import { binding_rows, create_keymap_messages, exportable_key_edits } from "../../src/background/keymap_message.ts";
 import type { KeymapState } from "../../src/background/keymap_message.ts";
 import type { MergedConfig } from "../../src/shared/config.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
@@ -128,4 +128,66 @@ test("set, remove and reset change the layer, and a set the check refuses change
   const listed = await messages.list();
   assert.equal(listed.ok && listed.bindings.find((row) => row.keys === "zq")?.origin, "removed");
   assert.equal((await messages.change({ type: "change_keymap", mode: "nope" as "normal", keys: "J", action: "reset" })).ok, false);
+});
+
+test("an edit meets a file key spelled another way: set, unbind and remove all reach it", async () => {
+  // The default keymap binds `<C-d>`. The file spells its override `<C-D>`, and `<C-S-j>` with no default under it.
+  const config = config_with({ normal: { "<C-D>": { id: "tab.prev" }, "<C-S-j>": { id: "tab.next" } } });
+  const set = compile_config(input_of(config, { normal: { "<C-d>": "tab.close" } }));
+  assert.equal(leaf_id(set.compiled, "<C-d>"), "tab.close");
+  assert.deepEqual(set.warnings, []);
+  assert.equal(leaf_id(compile_config(input_of(config, { normal: { "<C-d>": "" } })).compiled, "<C-d>"), undefined);
+
+  const stored: { edits: KeymapEdits } = { edits: {} };
+  const messages = messages_over(config, stored);
+  const removed = await messages.change({ type: "change_keymap", mode: "normal", keys: "<C-S-j>", action: "remove" });
+  assert.equal(removed.ok, true, JSON.stringify(removed));
+  assert.deepEqual(stored.edits, { normal: { "<CS-j>": "" } });
+  assert.equal(leaf_id(compile_config(input_of(config, stored.edits)).compiled, "<CS-j>"), undefined);
+
+  await messages.change({ type: "change_keymap", mode: "normal", keys: "<C-d>", action: "set", text: "tab.close" });
+  const listed = await messages.list();
+  const rows = listed.ok ? listed.bindings.filter((row) => row.mode === "normal" && /^<C-?d>$|^<C-D>$/.test(row.keys)) : [];
+  assert.deepEqual(rows.map((row) => [row.keys, row.origin, row.text]), [["<C-d>", "edit", "tab.close"]]);
+});
+
+test("a listed edit the compile dropped carries the warning instead of showing in force", async () => {
+  // The alias the edit used left the config, as on a reload.
+  const messages = messages_over(config_with({}), { edits: { normal: { J: "nt" } } });
+  const listed = await messages.list();
+  const row = listed.ok ? listed.bindings.find((candidate) => candidate.mode === "normal" && candidate.keys === "J") : undefined;
+  assert.equal(row?.origin, "edit");
+  assert.match(row?.skipped ?? "", /^keymap edits: normal skipped "J": /);
+});
+
+test("a joined multi-step text is refused, and a change that changes nothing says so", async () => {
+  const stored: { edits: KeymapEdits } = { edits: {} };
+  const messages = messages_over(config_with({}), stored);
+  const joined = await messages.change({ type: "change_keymap", mode: "normal", keys: "J", action: "set", text: "open -t https://x.test ; tab.next" });
+  assert.equal(joined.ok, false);
+  assert.deepEqual(stored.edits, {});
+  for (const request of [
+    { keys: "J", action: "reset" },
+    { keys: "zq", action: "remove" },
+  ] as const) {
+    const answer = await messages.change({ type: "change_keymap", mode: "normal", ...request });
+    assert.deepEqual([answer.ok, answer.message.startsWith("Nothing to change")], [false, true], JSON.stringify(answer));
+  }
+  await messages.change({ type: "change_keymap", mode: "normal", keys: "J", action: "set", text: "tab.close" });
+  const again = await messages.change({ type: "change_keymap", mode: "normal", keys: "J", action: "set", text: "tab.close" });
+  assert.equal(again.ok, false);
+});
+
+test("a browser chord past the last free Firefox slot is refused by the check", async () => {
+  // The defaults take 3 of the 10 slots.
+  const browser_edits = (count: number) => ({ browser: Object.fromEntries(Array.from({ length: count }, (_, index) => [`<A-${index + 1}>`, "tab.next"])) });
+  const last_free = await messages_over(config_with({}), { edits: browser_edits(6) }).check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
+  assert.equal(last_free.ok && last_free.saves, true, JSON.stringify(last_free));
+  const past = await messages_over(config_with({}), { edits: browser_edits(7) }).check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
+  assert.equal(past.ok && !past.saves && past.warnings.some((warning) => /only 10 Firefox shortcut slots/.test(warning)), true, JSON.stringify(past));
+});
+
+test("the export keeps only the edits that read", () => {
+  const state = { config: config_with({}), layers: { keymap: { normal: { J: "tab.close", K: "", x: "user.gone" } } } };
+  assert.deepEqual(exportable_key_edits(state, registry), { edits: { normal: { J: "tab.close", K: "" } }, skipped: [`normal "x": unknown command "user.gone"`] });
 });
