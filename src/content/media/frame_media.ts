@@ -1,6 +1,6 @@
 // What the `media` bundle does in one frame: find the media elements, describe them for the background's choice, and change the chosen ones.
 
-import type { PlayerVolume } from "../quality/driver.ts";
+import type { PlayerVolume } from "../quality/youtube.ts";
 import { shadow_root_of } from "../shadow.ts";
 import { FRAME_RULE, SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
 import type { LevelRule, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../../shared/media.ts";
@@ -29,6 +29,8 @@ export type FrameView = {
   players: () => { player: Player; area: number; pinned_?: boolean }[];
   // The site player's own volume control, when the page has one: it puts back a volume written to the element.
   site_volume: () => PlayerVolume | undefined;
+  // Whether the site player controls this element. A second media element in the frame has only its own volume.
+  site_controls: (player: Player) => boolean;
   pip_element: () => unknown;
   exit_pip: () => Promise<void>;
   fullscreen_element: () => unknown;
@@ -143,11 +145,13 @@ function captions_of(players: Player[]): MediaState["captions"] {
   return tracks.length === 0 ? "none" : tracks.some(({ mode }) => mode === "showing") ? "on" : "off";
 }
 
+const site_volume_of = (player: Player, view: FrameView): PlayerVolume | undefined => (view.site_controls(player) ? view.site_volume() : undefined);
+
 function state_of(player: Player, view: FrameView, captions: MediaState["captions"]): MediaState {
   return {
     captions,
     rate: player.playbackRate,
-    volume: (view.site_volume()?.get() ?? player.volume * 100) / 100,
+    volume: (site_volume_of(player, view)?.get() ?? player.volume * 100) / 100,
     muted: player.muted,
     position: player.currentTime,
     duration: Number.isFinite(player.duration) ? player.duration : null,
@@ -165,7 +169,7 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   if (value === undefined && (action === "speed" || action === "volume" || action === "seek")) return;
   if (action === "speed") player.playbackRate = next_level(player.playbackRate, value, times, SPEED_RULE);
   else if (action === "volume") {
-    const site = view.site_volume();
+    const site = site_volume_of(player, view);
     const now = site?.get() ?? player.volume * 100;
     const next = Math.round(next_level(now, value, times, VOLUME_RULE));
     if (site) site.set(next);

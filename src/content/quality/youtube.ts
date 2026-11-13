@@ -1,6 +1,6 @@
 // The YouTube driver: the `#movie_player` element carries an unofficial quality API on the page's own object. The public iframe API dropped these calls in 2019, the player on youtube.com still answers them.
 
-import type { Driver, PlayerLevel, PlayerVolume } from "./driver.ts";
+import type { Driver, PlayerLevel } from "./driver.ts";
 import { copy_of } from "./driver.ts";
 
 type Quality = { quality?: unknown; qualityLabel?: unknown; isPlayable?: unknown };
@@ -24,6 +24,9 @@ export type YouTubePage = { document: { getElementById: (id: string) => unknown 
 
 // The player's own names, by height.
 const HEIGHTS: Readonly<Record<string, number>> = { tiny: 144, small: 240, medium: 360, large: 480, hd720: 720, hd1080: 1080, hd1440: 1440, hd2160: 2160, hd2880: 2880, highres: 4320 };
+
+// Percent, 0 to 100.
+export type PlayerVolume = { get: () => number | undefined; set: (volume: number) => void };
 
 // The player's own volume, 0 to 100. A write to the video element is put back by the player, so the volume goes through the player. Undefined when the page has no player with both calls.
 export function youtube_volume(page: YouTubePage): PlayerVolume | undefined {
