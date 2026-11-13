@@ -73,8 +73,8 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | --- | --- | --- | --- | --- | --- |
 | Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
-| Drag elements from the keyboard (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | not tested |
+| Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
 | Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
 | Command line with completion | ✅ | 🟡 | 🟡 | ✅ | ✅ |
@@ -91,14 +91,14 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 ✅ yes · ❌ no · 🟡 partial
 
-Hints appear in under a tenth of a second on every page we measured, within a blink of Vimium C. On very large pages, DesertFox still labels open menus, tooltips and pop-ups that Vimium C skips.
+Hints typically appear in under a tenth of a second on every page we measured, within a blink of Vimium C. On very large pages, DesertFox still labels open menus, tooltips and pop-ups that Vimium C skips.
 
 Sources, read in November 2026: each project's documentation, source code and shipped add-on.
 
 - Vimium: [README](https://github.com/philc/vimium/blob/master/README.md).
 - Vimium C: [README](https://github.com/gdh1995/vimium-c/blob/master/README.md) and the 2.12.3 add-on.
 - Tridactyl: [command source](https://github.com/tridactyl/tridactyl/blob/master/src/excmds.ts) (`bindurl`, `seturl`, `exclaim`).
-- Hint speed and coverage: measured on test pages with [`tools/measure/rivals/`](tools/measure/rivals/). Rerun with `just measure-rivals`, or `PAGES=coverage just measure-rivals` for coverage alone. Coverage row: a test page of 16,000 elements about 29 screens tall, Vimium C 2.12.3.
+- Hint speed and coverage: measured on test pages with [`tools/measure/rivals/`](tools/measure/rivals/). Rerun with `just measure-rivals`, or `PAGES=coverage just measure-rivals` for coverage alone. Coverage row: a test page of 16,000 elements about 29 screens tall, Vimium C 2.12.3. qutebrowser was checked from source (a2a9c9d), not run: its hint code tests each element on its own, with no ancestor or page-size rule.
 - Dragging: no built-in keyboard drag of elements in Vimium, Vimium C, Tridactyl, qutebrowser, Surfingkeys, Vieb or cVim. DesertFox's drag sends synthetic events, so pages that ignore untrusted events ignore it.
 - qutebrowser: [command reference](https://github.com/qutebrowser/qutebrowser/blob/main/doc/help/commands.asciidoc).
 
