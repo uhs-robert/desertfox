@@ -57,6 +57,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
       samples.push(await in_active_tab(`window.__gap_ms`));
     }
     const median = [...samples].sort((a, b) => a - b)[Math.floor(samples.length / 2)];
+    expect(median < 100, `median stall ${median} ms`);
     if (process.env.MEASURE_DIR) {
       mkdirSync(`${process.env.MEASURE_DIR}/scroll_box`, { recursive: true });
       appendFileSync(`${process.env.MEASURE_DIR}/scroll_box/out.jsonl`, JSON.stringify({ median_ms: median, samples }) + "\n");

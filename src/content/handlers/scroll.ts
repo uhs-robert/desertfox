@@ -49,6 +49,10 @@ const forget_kept_boxes = () => {
   delete kept_box.y;
 };
 
+// A pane that starts to scroll later (a slow load, a view opened by key) beats the kept box only if the keep ends. A pause between bursts ends it, and the repeats of a held key come faster than this.
+const KEEP_IDLE_MS = 1000;
+let last_scroll_key_at = 0;
+
 // A box that is gone or no longer scrolls on the axis fails the re-check, and the scan runs again.
 function kept_candidates(axis: ScrollAxis): ScrollCandidate<Element>[] {
   const element = kept_box[axis]?.deref();
@@ -58,6 +62,9 @@ function kept_candidates(axis: ScrollAxis): ScrollCandidate<Element>[] {
 }
 
 export function scroll_target(axis: ScrollAxis): Element {
+  const now = Date.now();
+  if (now - last_scroll_key_at > KEEP_IDLE_MS) forget_kept_boxes();
+  last_scroll_key_at = now;
   let scanned = false;
   const target = pick_scroll_target(
     site_candidate(),
