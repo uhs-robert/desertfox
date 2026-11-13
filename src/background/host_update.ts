@@ -2,6 +2,7 @@
 // own version, by the config host's `self_update` verb. The extension sends its version and the hashes its signed build carries,
 // never a URL. Consent is asked once (`host_auto_update`), then each update is automatic with a toast.
 
+import { RuntimeRefusal } from "../shared/command.ts";
 import { host_standing } from "../shared/host_version.ts";
 import type { HostStanding } from "../shared/host_version.ts";
 import { best_effort } from "../shared/swallow.ts";
@@ -147,7 +148,7 @@ export function create_host_update(deps: HostUpdateDeps) {
     on_updated: (listener: () => void) => void listeners.push(listener),
     // `:native.update`. Skips consent, the daily limit and a checksum block, because the user asked. Throws with the reason on failure.
     update_now: (): Promise<ManualOutcome> => {
-      if (running || phase.kind === "updating") return Promise.reject(new Error("An update is already running."));
+      if (running || phase.kind === "updating") return Promise.reject(new RuntimeRefusal("An update is already running."));
       // Set before the first await, so an automatic check that starts meanwhile sees it and sends no second self_update.
       const work = manual_update();
       running = best_effort(work).finally(() => {
@@ -158,9 +159,9 @@ export function create_host_update(deps: HostUpdateDeps) {
   };
 
   async function manual_update(): Promise<ManualOutcome> {
-    if (await deps.is_development()) throw new Error("This is a development install of DesertFox, which never updates its host. Run :native.install instead.");
+    if (await deps.is_development()) throw new RuntimeRefusal("This is a development install of DesertFox, which never updates its host. Run :native.install instead.");
     const hashes = await deps.read_hashes();
-    if (!hashes || hashes.version !== deps.extension_version) throw new Error(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
+    if (!hashes || hashes.version !== deps.extension_version) throw new RuntimeRefusal(`This build carries no host hashes, so it cannot update the host. ${MANUAL_HINT}`);
     const state = await deps.load_state();
     let reply: SelfUpdateReply;
     try {

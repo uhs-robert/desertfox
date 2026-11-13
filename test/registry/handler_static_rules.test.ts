@@ -2,6 +2,7 @@
 // For each background command, the test builds args the one validator accepts, runs the real handler against a stub
 // `browser`, and fails on any throw that is not a RuntimeRefusal.
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import type { CommandContext, ParamDef } from "../../src/shared/command.ts";
@@ -193,4 +194,26 @@ test("no background handler refuses args the schema accepts", async () => {
   const stale_refusals = Object.entries(EXPECTED_REFUSALS).flatMap(([id, patterns]) => patterns.map((_, index) => `${id}#${index}`)).filter((key) => !used.has(key));
   assert.deepEqual(stale_refusals, []);
   assert.deepEqual(Object.keys(CANNOT_RUN_ON_STUB).filter((id) => !stuck.has(id)), []);
+});
+
+// Content handlers need a page to run on, so the stub run above cannot reach them. This scan covers them and the rest of
+// src/ instead: a plain `new Error` is allowed only where it is not a refusal a handler gives. Each entry says why. A
+// plain throw that a handler gives belongs to RuntimeRefusal.
+const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
+  "src/background/keymap_message.ts": { count: 1, why: "a message reply for the keys page, turned into { ok: false } by `failure`, not a command handler" },
+  "src/background/snippets.ts": { count: 1, why: "inside the snippet code that runs in the page, where RuntimeRefusal does not exist" },
+  "src/content/run_content.ts": { count: 1, why: "a bundle command without a bundle: a registry bug, not a state of the page" },
+};
+
+function source_files(folder: string): string[] {
+  return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? source_files(`${folder}/${entry.name}`) : entry.name.endsWith(".ts") ? [`${folder}/${entry.name}`] : []));
+}
+
+test("a plain Error in src/ is only a programming error or a message reply, never a handler refusal", () => {
+  const found: Record<string, number> = {};
+  for (const file of source_files("src")) {
+    const count = readFileSync(file, "utf8").split("\n").filter((line) => /\bnew Error\(/.test(line)).length;
+    if (count > 0) found[file] = count;
+  }
+  assert.deepEqual(found, Object.fromEntries(Object.entries(PLAIN_ERRORS).map(([file, { count }]) => [file, count])));
 });

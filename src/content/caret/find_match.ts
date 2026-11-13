@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../../shared/command.ts";
 import type { FindScanAnswer } from "../../shared/messages.ts";
 
 // The pure half of page search: a query to a search, the match list over the model's text, and which match is next.
@@ -120,7 +121,7 @@ export async function collect_matches(text: string, search: Search, slicing: Sli
     });
     if (!answer || slicing.is_stale_()) return undefined;
     if (answer.ok) return { from: Array.from(answer.from), to: Array.from(answer.to) };
-    if (answer.reason === "failed") throw new Error(answer.message);
+    if (answer.reason === "failed") throw new RuntimeRefusal(answer.message);
     return answer.reason === "timeout" ? "timeout" : undefined;
   }
   const found: Matches = { from: [], to: [] };

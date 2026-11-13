@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../../shared/command.ts";
 import { takes_typing } from "../editable.ts";
 import { is_hidden_frame } from "../hidden_frame.ts";
 
@@ -24,6 +25,6 @@ const hidden_frame_field = (): HTMLElement | undefined =>
 export function focus_first_input(): void {
   const inputs = visible_fields_in(document);
   const target = hidden_frame_field() ?? inputs.find(is_in_viewport) ?? inputs[0];
-  if (!target) throw new Error("No text field on this page");
+  if (!target) throw new RuntimeRefusal("No text field on this page");
   target.focus();
 }

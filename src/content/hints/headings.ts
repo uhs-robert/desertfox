@@ -1,6 +1,7 @@
 // The headings of the page for the `heading` command: which elements count, the list the command line shows, and the jump.
 // The list is a snapshot, taken when the line first reads it and dropped when the line is done with it.
 
+import { RuntimeRefusal } from "../../shared/command.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
 import { best_match } from "../../shared/score.ts";
 import { collect, scroll_clips_in_page } from "./candidates.ts";
@@ -77,7 +78,7 @@ export function pick_heading(rows: readonly HeadingItem[], typed: string): numbe
     if (place >= 1 && place <= rows.length) return place - 1;
   }
   const match = best_match(text, rows.map((row, index) => ({ row, index })), ({ row }) => ({ name: row.text, description: `h${row.level}` }));
-  if (match.found === "none") throw new Error(`No heading matches ${text}`);
+  if (match.found === "none") throw new RuntimeRefusal(`No heading matches ${text}`);
   return (match.found === "one" ? match.item : match.first).index;
 }
 
@@ -131,7 +132,7 @@ export type Snapshot = { found: Found[]; rows: HeadingItem[] };
 // The heading may have left the page since the list was read, with its frame or alone.
 export function jump_in({ found, rows }: Snapshot, typed: string): void {
   const chosen = found[pick_heading(rows, typed)]!;
-  if (!chosen.element.isConnected || !chosen.frames.every((frame) => frame.isConnected)) throw new Error("That heading is gone");
+  if (!chosen.element.isConnected || !chosen.frames.every((frame) => frame.isConnected)) throw new RuntimeRefusal("That heading is gone");
   scroll_to_top(chosen.element, chosen.frames);
 }
 

@@ -6,7 +6,7 @@ import { last_blurred_element } from "./handlers/page.ts";
 import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
-import { is_caret_mode } from "../shared/command.ts";
+import { is_caret_mode, RuntimeRefusal } from "../shared/command.ts";
 import type { Mode } from "../shared/command.ts";
 import type { Outcome } from "../shared/messages.ts";
 import { refused_as } from "../shared/swallow.ts";
@@ -127,7 +127,7 @@ export function create_bundle_host() {
               resolve(
                 settle(() => {
                   const registered = handlers.get(command_id);
-                  if (!registered) throw new Error(loaded ? missing : `DesertFox could not load ${name}`);
+                  if (!registered) throw new RuntimeRefusal(loaded ? missing : `DesertFox could not load ${name}`);
                   return registered(args);
                 }),
               ),
