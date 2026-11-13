@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 445 (normal 232, media 52, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 458 (normal 234, media 54, grab 9, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -253,6 +253,8 @@ bound: 445 (normal 232, media 52, hint 8, cmdline 19, caret 36, visual 44, visua
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
+| `;g` | bound | `hint --grab --every` | Grab an element and drop it on a target |  |
+| `;G` | bound | `hint --grab-move --every` | Grab an element and move it with the keys |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
@@ -329,6 +331,8 @@ Which-key group names:
 | `;f` | bound | `hint --frames` | Focus frame |  |
 | `;m` | bound | `hint --media` | Play or pause media |  |
 | `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
+| `;g` | bound | `hint --grab --every` | Grab an element and drop it on a target |  |
+| `;G` | bound | `hint --grab-move --every` | Grab an element and move it with the keys |  |
 | `:` | bound | `cmdline.open` | Command line |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
@@ -356,6 +360,20 @@ Which-key group names:
 | `q` | bound | `cmdline.open --text='media quality '` | Pick the quality |  |
 | `r` | bound | `media loop` | Toggle loop |  |
 | `i` | bound | `media info` | Show the time, speed, quality and volume |  |
+
+### grab
+
+| Key | Status | Command | Label | Note |
+| --- | --- | --- | --- | --- |
+| `h` | bound | `grab.move left` | Move left |  |
+| `j` | bound | `grab.move down` | Move down |  |
+| `k` | bound | `grab.move up` | Move up |  |
+| `l` | bound | `grab.move right` | Move right |  |
+| `<Enter>` | bound | `grab.drop` | Drop |  |
+| `<Escape>` | bound | `grab.cancel` | Cancel the grab |  |
+| `<C-[>` | bound | `grab.cancel` | Cancel the grab |  |
+| `?` | bound | `help.whichkey` | Show the keys |  |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 
 ### hint
 

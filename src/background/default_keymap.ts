@@ -346,6 +346,8 @@ const BASE_SECTIONS: KeymapConfig = {
     ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },
+    ";g": { id: "hint.run", args: { action: "grab", filter: "every" }, label: "Grab an element and drop it on a target" },
+    ";G": { id: "hint.run", args: { action: "grab_move", filter: "every" }, label: "Grab an element and move it with the keys" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
@@ -464,4 +466,17 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS };
+// The keys of grab mode. Enter drops where the element is, Escape puts it back first.
+const GRAB_KEYS: ModeBindings = {
+  h: { id: "grab.move", args: { direction: "left" }, label: "Move left" },
+  j: { id: "grab.move", args: { direction: "down" }, label: "Move down" },
+  k: { id: "grab.move", args: { direction: "up" }, label: "Move up" },
+  l: { id: "grab.move", args: { direction: "right" }, label: "Move right" },
+  "<Enter>": { id: "grab.drop", label: "Drop" },
+  "<Escape>": { id: "grab.cancel", label: "Cancel the grab" },
+  "<C-[>": { id: "grab.cancel" },
+  "?": { id: "help.whichkey", label: "Show the keys" },
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
+};
+
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS };

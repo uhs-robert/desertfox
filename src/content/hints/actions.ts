@@ -6,15 +6,16 @@ import type { MediaPin } from "../../shared/messages.ts";
 import { parent_across_shadow, player_box } from "../player_box.ts";
 import { best_effort } from "../../shared/swallow.ts";
 
-export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "prompt";
+export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "prompt" | "grab" | "grab_move";
 
 export type Place = "here" | "tab" | "background" | "window";
 
 export const OPEN_PLACES: readonly HintAction[] = ["tab", "background", "window"];
 
-export type CaretMode = "caret" | "visual";
+// The grabs start a mode of the grab bundle the way the caret actions start the caret.
+export type CaretMode = "caret" | "visual" | "grab" | "grab_move";
 
-export const starts_caret = (action: HintAction): action is CaretMode => action === "caret" || action === "visual";
+export const starts_caret = (action: HintAction): action is CaretMode => /^(?:caret|visual|grab)/.test(action);
 
 export type ActionDeps = {
   // A promise settles when the action is finished, so the sequence that started the hints goes on after it.

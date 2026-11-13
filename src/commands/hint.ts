@@ -8,12 +8,12 @@ const HAS_ADDRESS = ["all", "clickable", "links", "images", "frames", "media", "
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Prompt opens the command line with a command and the address of the element, to edit before Enter runs it. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Rapid with copy or copy text collects the picks into one deduplicated list on the clipboard. Prompt ignores rapid. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Prompt opens the command line with a command and the address of the element, to edit before Enter runs it. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Rapid with copy or copy text collects the picks into one deduplicated list on the clipboard. Grab drags one element to another: it picks the element, then the target, and drops it there. Grab move picks the element and moves it with h j k l, Enter drops it and Escape cancels. A page that ignores synthetic events ignores the drag. Prompt and the grabs ignore rapid. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "prompt"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "prompt", "grab", "grab_move"],
       default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
         prompt: { filter: HAS_ADDRESS },
@@ -33,7 +33,7 @@ define("hint.run", {
         // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.
         inspect: { frames: ["same_origin"] },
       },
-      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F", enter_media: "A", prompt: "L" },
+      short: { ...WHERE_SHORT, caret: "c", visual: "v", copy: "y", copy_text: "Y", copy_image: "C", copy_selector: "S", copy_html: "H", inspect: "o", download: "D", delete: "d", focus: "f", double_click: "k", play_pause: "P", mute: "M", fullscreen: "F", enter_media: "A", prompt: "L", grab: "g", grab_move: "G" },
       value_labels: {
         here: "to click",
         tab: "in new tab",
@@ -57,6 +57,8 @@ define("hint.run", {
         fullscreen: "to toggle fullscreen",
         enter_media: "to start media mode",
         prompt: "to edit in the command line",
+        grab: "to grab and drop",
+        grab_move: "to grab and move",
       },
       description: {
         here: "Click the element.",
@@ -81,6 +83,8 @@ define("hint.run", {
         fullscreen: "Show the player in fullscreen, or leave fullscreen.",
         enter_media: "Start media mode on the video, and pin it.",
         prompt: "Put the address of the element in the command line.",
+        grab: "Grab the element and drop it on a target you pick.",
+        grab_move: "Grab the element and move it with the keys.",
       },
     },
     {
