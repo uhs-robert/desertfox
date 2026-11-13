@@ -106,6 +106,9 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     expect(after_wheel === 0, `a wheel scroll was pulled back to ${after_wheel}`);
 
     await open_fresh("new-tab");
+    // A key pressed in the first ~110 ms of a page start reaches no listener at all, so the press waits it out.
+    await poll_until("the page to be 500 ms old", async () => (await in_any(`return view.performance.now();`)) > 500, { timeout_ms: 3000 });
+    await settle_on("new-tab");
     const before_key = await scroll_y();
     await press_keys("j");
     await poll_until("the j key to move the page", async () => (await scroll_y()) !== before_key, { timeout_ms: 3000 });
