@@ -462,9 +462,11 @@ test("the draggable filter keeps explicit drag signs and grab cursors where they
   cursors.set(pointer, "pointer");
   assert.equal(is_draggable(pointer), false);
   assert.equal(is_draggable(fake("body", true)), false);
-  const sized = fake("div", false);
-  cursors.set(sized, "nw-resize");
-  assert.equal(is_draggable(sized), true);
+  for (const direction of ["n", "s", "e", "w", "ne", "nw", "se", "sw", "ew", "ns", "col", "row", "nwse", "nesw"]) {
+    const resizer = fake("div", false);
+    cursors.set(resizer, `${direction}-resize`);
+    assert.equal(is_draggable(resizer), true, direction);
+  }
   const pointer_card = fake("div", false);
   touch_none.add(pointer_card);
   assert.equal(is_draggable(pointer_card), true);

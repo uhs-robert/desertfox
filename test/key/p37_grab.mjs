@@ -222,12 +222,32 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await poll_until("the slider value", async () => parseFloat(await read('document.getElementById("vol").getAttribute("aria-valuenow")')) > 20, { timeout_ms: 5000 });
   });
 
-  await run_case(";Gg holds a pointer-driven card that sets touch-action none", async () => {
-    await open_page("drag", "ptr", { new_tab: true });
+  await run_case(";Gg labels the two touch-action cards, holds one and Escape puts it back", async () => {
+    const page_id = "ptr_hold";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
     await press_keys(";Gg");
     await labels_up("labels of the draggable group");
-    expect((await label_of("#c1")) !== undefined, "the card has a label");
-    await press_keys("Escape");
-    await labels_gone("labels gone after Escape");
+    expect((await hint_label_count()) === 2, `the two cards are the whole group, got ${await hint_label_count()} labels`);
+    await pick("#c1");
+    await wait_badge(mark, page_id, "GRAB");
+    expect(!!find_event(mark, (event) => event.type === "drag" && (event.ev === "capture_ok" || event.ev === "capture_error")), "the card got no pointerdown, so nothing was held");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    // The page's pointerup appends the dragged card to the column under the pointer, so the card lands last in column a and never in b.
+    expect((await order_of("a")) === "c2,c1" && (await order_of("b")) === "", `Escape put the card back in column a, a is ${await order_of("a")} b is ${await order_of("b")}`);
+  });
+
+  await run_case(";gg twice on one page lands both drops", async () => {
+    await open_page("drag", "ptr_twice", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#c1");
+    await pick("#b");
+    await poll_until("c1 in column b", async () => (await order_of("b")) === "c1", { timeout_ms: 5000 });
+    await press_keys(";gg");
+    await pick("#c2");
+    await pick("#b");
+    await poll_until("c2 in column b after c1", async () => (await order_of("b")) === "c1,c2", { timeout_ms: 5000 });
   });
 }
