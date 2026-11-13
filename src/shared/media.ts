@@ -18,6 +18,7 @@ export const PLAYING_MIN_SHARE = 0.25;
 export type MediaTarget = "audible" | "playing" | "largest" | "pinned";
 
 export type MediaRequest =
+  | { type: "media_scan" }
   | { type: "media_apply"; target: MediaTarget; action: MediaAction; value: string | undefined; times: number };
 
 // One frame's media. The areas are in CSS pixels inside the frame's own viewport, videos only.

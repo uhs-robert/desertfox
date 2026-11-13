@@ -48,7 +48,7 @@ import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { create_media_quality, rule_for_report } from "./media_quality.ts";
 import { ask_quality_in_tab, inject_quality_about_blank, inject_quality_for_rule, quality_reports, quality_rows } from "./quality_levels.ts";
-import { media_reports, tab_media } from "../commands/media.ts";
+import { tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
 import { create_tab_insert } from "./tab_insert.ts";
@@ -302,7 +302,6 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
   if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
-  if (request?.type === "media_report") return void media_reports.receive(sender.tab?.id, sender.frameId, request.scan);
   if (request?.type === "replay_end") return macro_replay.ended();
   if (request?.type === "replay_stop") return void macro_replay.stop();
   if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);

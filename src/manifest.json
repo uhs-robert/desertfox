@@ -50,6 +50,7 @@
     "cookies",
     "sessions",
     "tabGroups",
+    "webNavigation",
     "<all_urls>"
   ],
   "optional_permissions": [

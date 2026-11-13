@@ -459,12 +459,6 @@ export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false;
 
 export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
-// From the `media` bundle in each frame the background injected it into, with that frame's media. The frame comes from the message sender.
-export type MediaReport = {
-  type: "media_report";
-  scan: MediaScan;
-};
-
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };
 
@@ -532,7 +526,7 @@ export type HintFramesUnhover = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | MediaReport | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | RunRequest | ModeChanged | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
