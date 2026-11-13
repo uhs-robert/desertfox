@@ -80,3 +80,20 @@ test("a new source starts empty, as a restarted background does", async () => {
   assert.equal(await after.read(), false);
   assert.equal(after.reads(), 1);
 });
+
+test("a rejected storage read throws, and the next key reads storage again", async () => {
+  let fail = true;
+  let reads = 0;
+  const storage = {
+    get: async (key: string) => {
+      reads++;
+      if (fail) throw new Error("storage unavailable");
+      return { [key]: true };
+    },
+  };
+  const read = create_disabled_source(storage as never, { addListener() {} } as never);
+  await assert.rejects(read(), /storage unavailable/);
+  fail = false;
+  assert.equal(await read(), true);
+  assert.equal(reads, 2);
+});

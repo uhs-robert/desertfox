@@ -131,6 +131,7 @@ export function create_router(deps: RouterDeps): Router {
     // Keys stop in the page, so this catches what does not come from a key: a slot chord, a snippet call, a line that was open.
     if (await deps.is_disabled()) return { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } };
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
+    const first_started_ms = performance.now();
     const first_now = await read_now(request, true);
     const is_private = first_now.active?.incognito === true;
     const prompted = new Set<BoundInvocation>();
@@ -147,7 +148,7 @@ export function create_router(deps: RouterDeps): Router {
       if (over) return fail_at(index, over);
     }
     for (const [index, invocation] of request.invocations.entries()) {
-      const outcome = await run_one(invocation, request, prompted, index === 0 ? first_now : undefined).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
+      const outcome = await run_one(invocation, request, prompted, index === 0 ? { now: first_now, started_ms: first_started_ms } : undefined).catch((error: unknown) => refuse(error instanceof Error ? error.message : String(error)));
       // The user left a waiting step: the rest of the sequence does not run, and nothing is repeated.
       if (outcome.ok && outcome.cancelled) {
         await record_step(request.invocations, { ...outcome, failed_step: index }, { is_private });
@@ -161,10 +162,10 @@ export function create_router(deps: RouterDeps): Router {
     return { ok: true };
   }
 
-  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, first_now: Now | undefined): Promise<Outcome> {
-    // Before the tab read, permission checks and validation, so a slow preflight shows in the time.
-    const started_ms = performance.now();
-    const { active, context } = first_now ?? (await read_now(request, false));
+  async function run_one(invocation: BoundInvocation, request: RouteRequest, prompted: Set<BoundInvocation>, first: { now: Now; started_ms: number } | undefined): Promise<Outcome> {
+    // Before the tab read, permission checks and validation, so a slow preflight shows in the time. Step 0 reuses the read `run` made, so its clock started there.
+    const started_ms = first?.started_ms ?? performance.now();
+    const { active, context } = first?.now ?? (await read_now(request, false));
     const command = deps.get_command(invocation.id);
     if (!command) return refuse(`unknown command "${invocation.id}"`);
 
