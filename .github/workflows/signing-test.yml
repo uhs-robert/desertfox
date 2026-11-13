@@ -15,9 +15,9 @@ permissions:
   contents: read
 
 jobs:
-  sign:
+  # Stamps and builds with no secret, and hands dist/ to the sign job as an artifact.
+  build:
     runs-on: ubuntu-latest
-    environment: beta-signing
     timeout-minutes: 20
     env:
       TEST_VERSION: ${{ inputs.test_version }}
@@ -29,7 +29,6 @@ jobs:
         with:
           node-version: 24
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-      # Installs the locked dependencies, web-ext included, before the key is in any step. The install_deps recipe then finds node_modules and does nothing.
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Stamp the test version in the runner's working copy
         run: |
@@ -39,8 +38,44 @@ jobs:
           fi
           jq --arg version "$TEST_VERSION" '.version = $version' src/manifest.json > manifest.tmp
           mv manifest.tmp src/manifest.json
-      - name: Build with no key
-        run: just build
+      - run: just build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ github.run_id }}
+          path: dist
+          if-no-files-found: error
+
+  # The only job with the AMO key. It runs no build and no install script: it installs the locked dependencies with scripts off, takes dist/ from the build job and signs it.
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: beta-signing
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-${{ github.run_id }}
+          path: ${{ runner.temp }}/build
+      # Build code wrote this artifact, so only a plain dist/ may come into the checkout.
+      - name: Unpack the build artifact
+        env:
+          BUILD_DIR: ${{ runner.temp }}/build
+        run: |
+          set -euo pipefail
+          if [ -n "$(find "$BUILD_DIR" -type l)" ]; then
+            echo "The build artifact holds a symlink." >&2
+            exit 1
+          fi
+          mkdir dist
+          cp -r "$BUILD_DIR"/. dist/
       - name: Sign
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}

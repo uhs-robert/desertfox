@@ -416,16 +416,16 @@ release_install:
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    # The key lives in shell variables that are never exported, so the build and install steps cannot read it. Only the sign command gets it. A key already in the environment moves into those variables before any child command runs. Build code on this machine stays trusted: it can still reach node_modules and an unlocked rbw.
+    amo_key="${WEB_EXT_API_KEY:-}"
+    amo_secret="${WEB_EXT_API_SECRET:-}"
+    unset WEB_EXT_API_KEY WEB_EXT_API_SECRET
     just release_guard
     # Before the bump, so a missing dependency never leaves a bump behind.
     just install_deps
     # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
     command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
     gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
-    # The key lives in shell variables that are never exported, so the build and install steps below cannot read it. Only the sign command gets it. A key already in the environment moves into those variables first.
-    amo_key="${WEB_EXT_API_KEY:-}"
-    amo_secret="${WEB_EXT_API_SECRET:-}"
-    unset WEB_EXT_API_KEY WEB_EXT_API_SECRET
     if [ -z "$amo_key" ] || [ -z "$amo_secret" ]; then
         for tool in rbw jq; do
             command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
