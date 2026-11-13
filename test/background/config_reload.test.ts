@@ -267,6 +267,52 @@ test("a change to the saved edits writes autoconfig.toml, and a temp change does
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "xy" });
 });
 
+const writes_of = (sent: { cmd: string; toml?: string }[]) => sent.filter((message) => message.cmd === "write_autoconfig").map((message) => message.toml);
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+const set_keys = (startup: Startup, keys: Record<string, Record<string, string>>) => startup.change_layers("keymap", () => keys);
+
+test("a key edit alone writes autoconfig.toml with an unbind as an empty string and a browser table", async () => {
+  const { sent } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("mirror_keys");
+  await startup.get_config();
+  await set_keys(startup, { normal: { J: "tab.close", K: "" }, browser: { "<A-x>": "tab.next" } });
+  await settle();
+  assert.deepEqual(writes_of(sent), ['[normal]\nJ = "tab.close"\nK = ""\n\n[browser]\n"<A-x>" = "tab.next"\n']);
+});
+
+test("interleaved settings and key edits each write both layers, in commit order", async () => {
+  const { sent } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("mirror_interleaved");
+  await startup.get_config();
+  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } }));
+  await set_keys(startup, { normal: { J: "tab.close" } });
+  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "zz" } }));
+  await settle();
+  assert.deepEqual(writes_of(sent), [
+    'hint_letters = "xy"\n',
+    'hint_letters = "xy"\n\n[normal]\nJ = "tab.close"\n',
+    'hint_letters = "zz"\n\n[normal]\nJ = "tab.close"\n',
+  ]);
+});
+
+test("a rolled back key edit writes nothing, and removing every edit writes the header-only file", async () => {
+  const { sent, fake } = install_fake_browser({ files: {} });
+  const startup = await fresh_startup("mirror_rollback");
+  await startup.get_config();
+  const working = fake.tabs.query;
+  fake.tabs.query = async () => {
+    throw new Error("tabs down");
+  };
+  await assert.rejects(set_keys(startup, { normal: { J: "tab.close" } }), /tabs down/);
+  fake.tabs.query = working;
+  await settle();
+  assert.deepEqual(writes_of(sent), []);
+  await set_keys(startup, { normal: { J: "tab.close" } });
+  await set_keys(startup, {});
+  await settle();
+  assert.deepEqual(writes_of(sent).at(-1), "");
+});
+
 test("a host failure on the autoconfig write keeps the edit and warns once", async () => {
   const host = { files: {}, reply: async () => Promise.reject(new Error("No such native application desertfox_host")) };
   const { local } = install_fake_browser(host);
@@ -300,20 +346,20 @@ test("the mirror writes in order, keeps quiet without the permission, and warns 
     },
     warn: (message) => void warned.push(message),
   });
-  await Promise.all([mirror.mirror({ hint_letters: "slow" }), mirror.mirror({ hint_letters: "fast" })]);
+  await Promise.all([mirror.mirror({ hint_letters: "slow" }, {}), mirror.mirror({ hint_letters: "fast" }, {})]);
   assert.deepEqual(written, ['hint_letters = "slow"\n', 'hint_letters = "fast"\n']);
 
   fail_with = new NativeHostError("no_permission", "no permission");
-  await mirror.mirror({});
+  await mirror.mirror({}, {});
   assert.deepEqual(warned, []);
   fail_with = new NativeHostError("host_missing", "not installed");
-  await mirror.mirror({});
-  await mirror.mirror({});
+  await mirror.mirror({}, {});
+  await mirror.mirror({}, {});
   fail_with = new Error("odd");
-  await mirror.mirror({});
+  await mirror.mirror({}, {});
   assert.equal(warned.length, 2);
   fail_with = undefined;
-  await mirror.mirror({ hint_letters: "back" });
+  await mirror.mirror({ hint_letters: "back" }, {});
   assert.equal(written.at(-1), 'hint_letters = "back"\n');
 });
 
@@ -394,8 +440,8 @@ test("the build warnings of a reload survive a restart", async () => {
 test("a saved value TOML cannot hold only warns, and the edit stays", async () => {
   const warned: string[] = [];
   const mirror = create_autoconfig_mirror({ write_autoconfig: async () => undefined, warn: (message) => void warned.push(message) });
-  assert.doesNotThrow(() => mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }));
-  await mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] });
+  assert.doesNotThrow(() => mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }, {}));
+  await mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }, {});
   assert.equal(warned.length, 1);
 });
 

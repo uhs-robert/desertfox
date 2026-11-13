@@ -172,7 +172,7 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
     const next = decide(before, config);
     if (next === undefined) return;
     await commit_change(before, next, { store: store_edits, publish: async (edits) => publish(await (load_step as Promise<LoadStep>), edits) });
-    if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) void autoconfig.mirror(next.saved);
+    if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) void autoconfig.mirror(next.saved, (await load_layers()).keymap);
   });
 }
 
@@ -198,6 +198,7 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: Ed
       if (layers === before) await store_slot_map(slot_map_before);
     };
     await commit_change(before, next, { store, publish: publish_layers });
+    void autoconfig.mirror((await load_edits()).saved, next.keymap);
   });
 }
 

@@ -1,8 +1,9 @@
-// Mirrors the saved browser edits into `autoconfig.toml` through the native host. The file is write-only: nothing reads it back.
+// Mirrors the saved settings and the stored key edits into `autoconfig.toml` through the native host. The file is write-only: nothing reads it back.
 // A failed write never blocks or undoes an edit, because browser storage holds the edits and this file only copies them.
 
 import { stringify } from "smol-toml";
 import type { SettingOverrides } from "../shared/config.ts";
+import type { KeymapEdits } from "./edit_layers.ts";
 import type { NativeFailure } from "./native_client.ts";
 
 export type AutoconfigMirrorDeps = {
@@ -27,11 +28,13 @@ export function create_autoconfig_mirror(deps: AutoconfigMirrorDeps) {
 
   return {
     // Returns at once. The promise it gives back is for tests: it settles when this write has run, and never rejects.
-    mirror(saved: SettingOverrides): Promise<void> {
+    // Both layers on every call, so the file always holds both and the write order is the commit order.
+    mirror(saved: SettingOverrides, key_edits: KeymapEdits): Promise<void> {
       // Serialized now, so a later edit cannot change what this write holds. A value TOML cannot hold (a sparse list) only warns.
       let toml: string;
       try {
-        toml = stringify(saved);
+        // Settings first: TOML wants the flat values before the first `[mode]` table. Both parts are empty for no edits, which leaves the header-only file.
+        toml = [saved, key_edits].filter((layer) => Object.keys(layer).length > 0).map((layer) => stringify(layer)).join("\n");
       } catch (error) {
         warn_once(error);
         return Promise.resolve();
