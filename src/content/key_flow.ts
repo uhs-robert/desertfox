@@ -116,7 +116,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   const held_tokens = () => held_keys.map((held) => held.token_);
 
-  // The typed token, or `physical` when the setting is on and the keymap binds the typed one nowhere here. A sink gets the typed letter, so hint mode's text filter keeps it.
+  // The typed token, or `physical` when the setting is on and the keymap binds the typed one nowhere here. A sink gets the typed letter, and the physical one beside it for hint labels.
   let layout_fallback = true;
   // `ahead` is the keys the check reads through: the held queue for a key still waiting, none for a key being replayed (the walk is then at that key).
   const layout_token = (token: string, physical: string | null | undefined, ahead: readonly string[] = held_tokens()): string =>
@@ -187,14 +187,14 @@ export function create_key_flow(deps: KeyFlowDeps) {
     return !active.passes_(mode, token) && cancels_unbound_key(mode, token, deps.in_editable_field_()) ? "cancel" : "pass";
   };
 
-  const decide = (active: Matcher, token: string, repeat: boolean): KeyDecision => {
+  const decide = (active: Matcher, token: string, repeat: boolean, physical?: string | null): KeyDecision => {
     // Escape drops a waiting argument and nothing else, so the mode stays. The sink must not take it: the next Escape does what Escape does.
     if (awaiting_argument && (token === "<Escape>" || token === "<C-[>") && deps.get_mode_() !== "insert") {
       reset_sequence_();
       return "cancel";
     }
     // A sink takes the token before the keymap, and "pass" lets the keymap see it.
-    if (deps.sink_of_(deps.get_mode_())?.on_token_(token) === "handled") {
+    if (deps.sink_of_(deps.get_mode_())?.on_token_(token, layout_fallback ? physical : null) === "handled") {
       reset_sequence_();
       return "cancel";
     }
@@ -206,7 +206,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     while (matcher && held_keys.length > 0 && !deps.is_loading_()) {
       const { token_: token, on_replay_pass_, repeat, physical_ } = held_keys.shift()!;
       if (token === SEQUENCE_BREAK) reset_sequence_();
-      else if (decide(matcher, layout_token(token, physical_, []), repeat === true) === "pass") on_replay_pass_?.();
+      else if (decide(matcher, layout_token(token, physical_, []), repeat === true, physical_) === "pass") on_replay_pass_?.();
     }
   };
 
@@ -217,7 +217,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
         return "pass";
       }
       if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_, repeat, physical);
-      return decide(matcher, layout_token(token, physical), repeat);
+      return decide(matcher, layout_token(token, physical), repeat, physical);
     },
     reset_sequence_,
     layout_token_: layout_token,

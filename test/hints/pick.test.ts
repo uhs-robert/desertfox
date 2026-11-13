@@ -167,3 +167,28 @@ test("a new picker is in label mode, as a rapid rebuild needs", () => {
   const second = text_picker();
   assert.deepEqual(second.on_token_("a"), { kind: "handled", typed: "a", still_possible_: [0], picked: 0 });
 });
+
+test("physical letters: a Cyrillic key picks the label of its physical key, in either case", () => {
+  assert.deepEqual(create_picker(labels).on_token_("ф", "a"), { kind: "handled", typed: "a", still_possible_: [0], picked: 0 });
+  assert.equal(create_picker(labels).on_token_("Ф", "A").kind, "handled");
+  const picker = create_picker(labels);
+  picker.on_token_("ы", "s");
+  assert.deepEqual(picker.on_token_("в", "d"), { kind: "handled", typed: "sd", still_possible_: [3], picked: 3 });
+});
+
+test("physical letters: a key that fits no label by either letter is dropped", () => {
+  assert.deepEqual(create_picker(labels).on_token_("ч", "x"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3] });
+});
+
+test("physical letters: custom Cyrillic labels win over the physical letter", () => {
+  const picker = create_picker(["ф", "ы"]);
+  assert.deepEqual(picker.on_token_("ы", "s"), { kind: "handled", typed: "ы", still_possible_: [1], picked: 1 });
+});
+
+test("physical letters: text mode keeps the typed text, and a slash stays a slash", () => {
+  const picker = text_picker();
+  assert.equal(picker.on_token_("/", null).kind, "handled");
+  const outcome = picker.on_token_("ф", "a");
+  assert.equal(outcome.kind === "handled" ? outcome.text : undefined, "");
+  assert.deepEqual(text_picker().on_token_("/", "q"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3], text: "", active: 0 });
+});
