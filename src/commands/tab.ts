@@ -184,6 +184,13 @@ export function make_tab_handlers(deps: TabDeps) {
         await deps.remove(side_tab_ids(tabs, current.index, args.side === "all_before" ? "before" : "after"));
         return;
       }
+      // The other pane takes the focus, as Firefox does for a pair whose tab closes.
+      const partner = current.split_id === -1 ? undefined : tabs.find((tab) => tab.split_id === current.split_id && tab.id !== current.id);
+      if (partner) {
+        if (current.active) await deps.activate(partner.id);
+        await deps.remove([current.id]);
+        return;
+      }
       const neighbor_index = focus_index_after_close(current.index, tabs.length, args.side === "focus_previous" ? "previous" : "next");
       // Focus moves first so Firefox does not pick the tab it would choose after the close. A tab that is no longer active (the key came from it before a tab switch) leaves focus where it is.
       if (neighbor_index !== undefined && current.active) await activate_at(tabs, neighbor_index);

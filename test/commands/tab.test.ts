@@ -112,7 +112,7 @@ test("tab.move with a place number takes that place, negative counts from the en
   assert.deepEqual(log, ["move 100 2", "move 100 3", "move 103 2", "move 100 3", "move 103 0"]);
 });
 
-// Four tabs, the two middle ones split: Firefox moves the pair as one unit, so these moves never touch one tab of it.
+// Six tabs by default, the second and third split: Firefox moves the pair as one unit, so these moves never touch one tab of it.
 const split_strip = (count = 6, start = 1) => make_tabs(count, Array.from({ length: count }, (_, index) => (index === start || index === start + 1 ? { split_id: 7 } : {})));
 
 test("tab.move of a split tab moves the pair by its first tab, whichever tab the key came from", async () => {
@@ -126,6 +126,19 @@ test("tab.move one step right of a split tab moves the tab after the pair over i
   const { handlers, log } = make_fake(split_strip());
   await handlers.move(ctx_at(101), move_args({ offset: 1 }));
   assert.deepEqual(log, ["move 103 1"]);
+});
+
+test("tab.move one step left of the tab after a pair aims at the pair's second place, which Firefox reads as in front of the pair", async () => {
+  const { handlers, log } = make_fake(split_strip());
+  await handlers.move(ctx_at(103), move_args({ offset: -1 }));
+  assert.deepEqual(log, ["move 103 2"]);
+});
+
+test("closing the active second pane gives the focus to the other pane even when a tab follows the pair", async () => {
+  const { handlers, log } = make_fake(split_strip());
+  await handlers.close(ctx_at(102), { side: "none" });
+  await handlers.close(ctx_at(101), { side: "focus_previous" });
+  assert.deepEqual(log, ["activate 101", "remove 102", "activate 102", "remove 101"]);
 });
 
 test("tab.move of a split tab stops with the whole pair inside the strip and does nothing at its own place", async () => {

@@ -249,6 +249,25 @@ test("move shifts the tabs it passes", async () => {
   assert.deepEqual(back.upserts.map((r) => [r.id, r.index]).sort(), [[1, 0], [2, 1], [3, 2]]);
 });
 
+// Firefox sends onMoved for each tab of a moved pair, one after the other (docs/firefox-behavior.md, "Split view"), so the shifts add up.
+test("a split pair moved left or right keeps every index right", async () => {
+  const f = make([tab(1, 1, 0), tab(2, 1, 1), tab(3, 1, 2), tab(4, 1, 3), tab(5, 1, 4)]);
+  await f.model.start();
+  const p = await f.connect_port();
+  const indexes = () => {
+    f.run_timers();
+    const rows = new Map<number, number>();
+    for (const message of p.messages) for (const row of message.type === "snapshot" ? message.tabs : message.type === "patch" ? message.upserts : []) rows.set(row.id, row.index);
+    return [...rows].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+  };
+  f.fire("onMoved", 4, { windowId: 1, fromIndex: 3, toIndex: 0 });
+  f.fire("onMoved", 5, { windowId: 1, fromIndex: 4, toIndex: 1 });
+  assert.deepEqual(indexes(), [4, 5, 1, 2, 3]);
+  f.fire("onMoved", 5, { windowId: 1, fromIndex: 1, toIndex: 4 });
+  f.fire("onMoved", 4, { windowId: 1, fromIndex: 0, toIndex: 3 });
+  assert.deepEqual(indexes(), [1, 2, 3, 4, 5]);
+});
+
 test("detach and attach across windows in one batch is one upsert, no removal", async () => {
   const f = make([tab(1, 1, 0), tab(2, 1, 1), tab(3, 2, 0)]);
   await f.model.start();

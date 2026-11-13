@@ -417,7 +417,8 @@ Measured in Firefox 160 in the key test, with probe pieces that opened a split t
 - `tabs.move` on one tab of a pair moves both and keeps their order, and the pair starts at the given index (clamped so both fit). It never ends the split, also when the place is not adjacent. This differs from the blog post that announced Firefox 150.
 - `tabs.move` onto the partner's own place swaps the two tabs and keeps the split. There is no swap call in `browser.tabs`, so a swap is a move of one tab onto the other's place. Only the moved tab gets an `onMoved` event.
 - So the pair cannot move one place right through its own tab: the first tab to the next place swaps. A move of the first tab to an earlier place, or two or more places right, moves the pair whole. A move of the tab after the pair to the pair's first place puts that tab in front of the pair and moves the pair one place right (key test `p35_split_view`).
-- A tab outside the pair moved onto a place inside the pair lands after the pair, and the pair stays whole.
+- A tab outside the pair moved onto a place inside the pair lands on the far side of the pair from where it started: a tab before the pair lands after it, and a tab after the pair lands in front of it (key test `p35_split_view`). The pair stays whole.
+- A whole-pair move sends `onMoved` for both tabs, one after the other, in an order that keeps the tab model's shifts right. A swap sends it for the moved tab only. After `tabs.remove` ends a split, the surviving tab gets `onUpdated` with `splitViewId` -1.
 - Firefox places a new split's two tabs at the end of the strip. Not measured: private windows, a split inside a collapsed group, and Firefox 153 to 159.
 - Session restore (`sessions.restore`, the tab sessions in `session_store.ts`) is not measured. The stored fields (address, title, pinned, active) carry no split id, and the extension cannot create a split, so a restore loses it.
 
