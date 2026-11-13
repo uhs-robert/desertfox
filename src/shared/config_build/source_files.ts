@@ -61,11 +61,6 @@ export function parse_toml_text(label: string, text: string, problems: string[])
   }
 }
 
-// The tool no longer reads JSONC. Name the file to write instead of calling it unknown.
-function jsonc_problem(path: string): string {
-  return `${path}: JSONC is no longer read, use ${path.replace(/\.jsonc$/, ".toml")}`;
-}
-
 function parse_data_layers(files: ConfigFiles, dir_label: string, kind: DataKind, problems: string[]): DataLayer[] {
   const paths: string[] = [];
   const main_path = `${kind}.toml`;
@@ -76,7 +71,6 @@ function parse_data_layers(files: ConfigFiles, dir_label: string, kind: DataKind
     const path = `${d_dir}/${name}`;
     const label = labeled_path(dir_label, path);
     if (name.endsWith(".toml") && is_file_entry(files, d_dir, name)) paths.push(path);
-    else if (name.endsWith(".jsonc")) problems.push(jsonc_problem(label));
     else problems.push(`${label}: unknown file, only .toml files belong in ${kind}.d`);
   }
 
@@ -114,8 +108,7 @@ export function parse_source_files(files: ConfigFiles, dir_label: string, proble
     if (KNOWN_FILES.has(name) && !is_file) problems.push(`${label}: expected a file, found a directory`);
     if (KNOWN_DIRS.has(name) && is_file) problems.push(`${label}: expected a directory, found a file`);
     if (KNOWN_TOP_LEVEL.has(name)) continue;
-    if (DATA_KINDS.some((kind) => name === `${kind}.jsonc`)) problems.push(jsonc_problem(label));
-    else problems.push(`${label}: unknown file or directory (known: ${[...KNOWN_TOP_LEVEL].join(", ")})`);
+    problems.push(`${label}: unknown file or directory (known: ${[...KNOWN_TOP_LEVEL].join(", ")})`);
   }
 
   const layers = Object.fromEntries(

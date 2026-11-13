@@ -53,10 +53,6 @@ test("a directory entry inside a known folder is unknown", () => {
   assert.match(problems_of({ "snippets/sub/": "" })[0]!, /^snippets\/sub: unknown file, only \.js files belong in snippets$/);
 });
 
-test("the old JSONC name gets a pointer to the TOML name", () => {
-  assert.deepEqual(problems_of({ "keymap.jsonc": "" }), ["keymap.jsonc: JSONC is no longer read, use keymap.toml"]);
-});
-
 test("palette = \"desktop\" is accepted without a theme file", () => {
   assert.equal(build_config({ "settings.toml": 'palette = "desktop"' }, commands, []).settings.palette, "desktop");
 });

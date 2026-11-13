@@ -129,7 +129,7 @@ test("the site state tells enabled, disabled, covered by a rule and no site", ()
   const off = [{ site: pattern, off: true }];
   assert.deepEqual(site_state(www_url, { file: [], saved: undefined, effective: [] }), { kind: "enabled", pattern });
   assert.deepEqual(site_state(www_url, { file: [], saved: off, effective: off }), { kind: "disabled", pattern, rule: "all off" });
-  // The bare row of an older popup loads as off, and a click still removes it.
+  // A bare off row loads as off, and a click still removes it.
   assert.deepEqual(site_state(www_url, { file: [], saved: rule_list(pattern), effective: rule_list(pattern) }), { kind: "disabled", pattern, rule: "all off" });
   assert.equal(site_state(www_url, { file: rule_list("*://www.example.com/*"), saved: undefined, effective: rule_list("*://www.example.com/*") }).kind, "config");
   // The saved list copied a file rule that matches: only the file can undo it.
@@ -173,7 +173,7 @@ test("disabling a site appends an off row to the list in force, enabling removes
   assert.deepEqual(enabled?.saved.site_rules, file);
   assert.equal(plan_site_edit(disabled!, [], pattern, "disable"), undefined);
   assert.equal(plan_site_edit(NO_EDITS, [], pattern, "enable"), undefined);
-  // Enabling also removes the bare row an older popup wrote, and keeps a row for the pattern that sets keys.
+  // Enabling also removes the bare off row, and keeps a row for the pattern that sets keys.
   // A user row that is off and also binds keys is no popup row, so enabling the site keeps it.
   const with_bind = { site: pattern, off: true, bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } } } };
   assert.equal(plan_site_edit({ saved: { site_rules: [with_bind] }, temp: {} }, [], pattern, "enable"), undefined);

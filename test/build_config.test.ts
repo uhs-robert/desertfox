@@ -209,13 +209,6 @@ test("a syntax error names file, line and column", () => {
   assert.match(problems_of(dir).join("\n"), /settings\.toml:2:\d+:/);
 });
 
-test("a JSONC file is an error that names the TOML file to use", () => {
-  const dir = config_dir_with({ "keymap.jsonc": "{}", "keymap.d/10-a.jsonc": "{}" });
-  const text = problems_of(dir).join("\n");
-  assert.match(text, /keymap\.jsonc: JSONC is no longer read, use .*keymap\.toml/);
-  assert.match(text, /10-a\.jsonc: JSONC is no longer read, use .*10-a\.toml/);
-});
-
 test("bad bindings name the file and the key", () => {
   const dir = config_dir_with({
     "keymap.toml": [

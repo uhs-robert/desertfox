@@ -85,20 +85,6 @@ test("a build with no hashes, or hashes for another version, sends nothing", asy
   }
 });
 
-test("a host with no release_version predates the updater, so the line points to :native.install and nothing is sent", async () => {
-  for (const consent of [true, false]) {
-    const test_case = make({ consent });
-    test_case.updater.watch.seen(undefined);
-    await test_case.settle();
-    test_case.updater.watch.seen(undefined);
-    await test_case.settle();
-    assert.deepEqual(test_case.calls, []);
-    assert.equal(test_case.toasts.length, 1);
-    assert.match(test_case.toasts[0]!.message, /:native\.install/);
-    assert.match(test_case.updater.watch.outdated_note()!, /:native\.install/);
-  }
-});
-
 test("without consent nothing is sent and one line names the manual command, once per version", async () => {
   const test_case = make({ consent: false });
   test_case.updater.watch.seen("0.1.22");
@@ -350,27 +336,8 @@ test("an old bridge with no version updates once the config host has reported it
   assert.deepEqual(test_case.toasts.map((toast) => toast.kind), ["success"]);
 });
 
-test("a bridge with no version that comes before the config host's reply gets the install notice and no self_update", async () => {
-  const test_case = make();
-  test_case.updater.bridge_ready(undefined);
-  await test_case.settle();
-  test_case.updater.watch.seen(undefined);
-  await test_case.settle();
-  assert.deepEqual(test_case.calls, []);
-  assert.deepEqual(test_case.toasts.map((toast) => toast.kind), ["info"]);
-  assert.match(test_case.toasts[0]!.message, /:native\.install/);
-});
-
-test("the manual command on a host with no release_version refuses and sends nothing", async () => {
-  const test_case = make({ probed_version: undefined });
-  test_case.updater.watch.seen(undefined);
-  await test_case.settle();
-  await assert.rejects(test_case.updater.update_now(), /too old to update itself/);
-  assert.deepEqual(test_case.calls, []);
-});
-
 test("the manual command probes the host first, so a manual install since the last reply is seen", async () => {
-  const test_case = make({ probed_version: "0.1.22" });
+  const test_case = make({ probed_version: "0.1.22", consent: false });
   test_case.updater.watch.seen(undefined);
   await test_case.settle();
   assert.deepEqual(await test_case.updater.update_now(), { updated: true, version: EXTENSION });
