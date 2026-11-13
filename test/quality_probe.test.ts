@@ -223,3 +223,23 @@ test("a return to an address that had a video reports again after a no-video pag
   await page.settle();
   assert.deepEqual(page.reports, [true, false, true]);
 });
+
+test("a no-video page reached while the first report is out reports false when that report settles, and a return to the first address reports again", async () => {
+  const page = make({ video: true });
+  page.state.hold = true;
+  page.probe.run();
+  page.state.address = "https://site.test/b";
+  page.state.video = false;
+  page.probe.run();
+  page.held.shift()!();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, false]);
+  page.held.shift()!();
+  await page.settle();
+  page.state.hold = false;
+  page.state.address = "https://site.test/a";
+  page.state.video = true;
+  page.probe.run();
+  await page.settle();
+  assert.deepEqual(page.reports, [true, false, true]);
+});
