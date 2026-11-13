@@ -12,3 +12,5 @@ The new tab page. The manifest sets `chrome_url_overrides.newtab` to `newtab.htm
 Firefox gives the address bar focus on Ctrl+T. Press Esc or click the page before the keys work.
 
 After Firefox's one-time "Your new tab has changed" notice, its hidden Keep Changes button keeps access key K for that browser session. So Alt+K (previous tab) does nothing on about: pages until a restart. Accepting the notice once avoids it.
+
+`newtab.html` links `page_base.css` (`src/shared`) first, the same base as the help page, so both pages share one palette, type scale and key cap and card styles. Its rules read `var(--desertfox-*)` with no fallback and declare no color, so the theme sheet and `style.css` win. The page sets the extension icon as its tab favicon.

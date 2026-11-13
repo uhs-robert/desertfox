@@ -5,6 +5,8 @@ import type { Block, Inline } from "./blocks.ts";
 import type { RuleColumn, KeyChange, SiteRuleRowView } from "../background/site_rules_view.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { advanced_count, group_title, STYLE_CLASSES, STYLE_VARIABLES, visible_commands_model } from "./model.ts";
+import { chevron_icon, heart_icon, menu_icon } from "../shared/icons.ts";
+import { key_caps } from "../shared/key_caps.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
 import { ADVANCED_SUFFIX, PAGES } from "./route.ts";
@@ -26,7 +28,7 @@ function key_list(rows: KeyRow[]): HTMLElement {
     return cell;
   }
   for (const row of rows) {
-    const line = el("div", undefined, el("span", "desertfox-help-mode", row.mode), el("kbd", undefined, row.keys));
+    const line = el("div", undefined, el("span", "desertfox-help-mode", row.mode), key_caps(row.keys));
     if (row.args) line.append(" ", el("span", "desertfox-help-muted", row.args));
     cell.append(line);
   }
@@ -368,20 +370,8 @@ function support_link(title: string, url: string): HTMLElement {
   return link;
 }
 
-function heart_icon(): SVGElement {
-  const svg_ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svg_ns, "svg");
-  svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("class", "desertfox-help-support-heart");
-  const path = document.createElementNS(svg_ns, "path");
-  path.setAttribute("d", "M8 14 C2 9.8 1 7.4 1 5.5 C1 3.5 2.5 2 4.3 2 C5.8 2 7.1 2.8 8 4.1 C8.9 2.8 10.2 2 11.7 2 C13.5 2 15 3.5 15 5.5 C15 7.4 14 9.8 8 14 Z");
-  svg.append(path);
-  return svg;
-}
-
 function support_card(): HTMLElement {
-  const heading = el("div", "desertfox-help-support-heading", heart_icon(), "Enjoying DesertFox?");
+  const heading = el("div", "desertfox-help-support-heading", heart_icon("desertfox-help-support-heart"), "Enjoying DesertFox?");
   return el(
     "div",
     "desertfox-help-support",
@@ -477,18 +467,6 @@ export function reset_group_state(): void {
   last_page = undefined;
 }
 
-// Built with DOM calls, not markup. CSS turns it by the button's aria-expanded.
-function chevron_icon(): Element {
-  const svg_ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svg_ns, "svg");
-  svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(svg_ns, "path");
-  path.setAttribute("d", "M6 3l5 5-5 5");
-  svg.append(path);
-  return svg;
-}
-
 // A real button, so keys and hints reach it.
 function section_toggle(page: PageId, title: string, list: HTMLElement): HTMLElement {
   const button = el("button", "desertfox-help-sections-toggle", chevron_icon());
@@ -534,17 +512,6 @@ function sidebar(current: PageId, model: HelpModel, guide: Block[], advanced: bo
     return el("div", "desertfox-help-nav-group", el("div", "desertfox-help-nav-row", link, toggle), list);
   });
   return el("nav", "desertfox-help-sidebar", brand(), ...entries, support_card());
-}
-
-function menu_icon(): Element {
-  const svg_ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svg_ns, "svg");
-  svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(svg_ns, "path");
-  path.setAttribute("d", "M2 4h12M2 8h12M2 12h12");
-  svg.append(path);
-  return svg;
 }
 
 const DRAWER_OPEN_CLASS = "desertfox-help-drawer-open";
