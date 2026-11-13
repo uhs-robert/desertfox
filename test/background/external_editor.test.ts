@@ -33,7 +33,7 @@ function make(collect: (job: string) => Promise<EditorCollectReply>, options: Op
     now: options.now ?? (() => 0),
     pause: options.pause ?? (async () => {}),
   });
-  const open = (tab_id: number, frame_id: number, token = "t1", ext?: string, insert = false) => editor.open(tab_id, frame_id, { ...request(token), insert }, ext, false);
+  const open = (tab_id: number, frame_id: number, token = "t1", ext?: string, insert = false) => editor.open(tab_id, frame_id, { ...request(token), insert }, ext, false, editor.navigation_stamp(tab_id));
   return { editor, open, log, store };
 }
 
@@ -99,6 +99,74 @@ test("a tab that navigated keeps collecting, and the late result goes to the reg
   assert.match(log.toasts[0] ?? "", /unnamed register/);
 });
 
+const GONE = { ok: false, message: "The page was gone before the editor started" };
+
+test("a press whose page navigated before its turn starts no editor, and the new page's press opens one", async () => {
+  const { editor, open, log, store } = make(forever);
+  const stale = editor.navigation_stamp(1);
+  await editor.orphan(1);
+  assert.deepEqual(await editor.open(1, 0, request("old"), undefined, false, stale), GONE);
+  assert.deepEqual(log.starts, []);
+  assert.deepEqual(Object.values(store)[0] ?? {}, {});
+  assert.equal((await open(1, 0, "new")).ok, true, "no live job blocks the new page");
+});
+
+test("a stale open refuses whether it queued before or after the orphan", async () => {
+  const { editor, log } = make(forever);
+  const ahead = editor.open(1, 0, request("ahead"), undefined, false, editor.navigation_stamp(1));
+  void editor.orphan(1);
+  assert.deepEqual(await ahead, GONE, "the count moves at once, so the turn already queued sees it");
+  const behind_stamp = editor.navigation_stamp(1);
+  const orphaned = editor.orphan(1);
+  assert.deepEqual(await editor.open(1, 0, request("behind"), undefined, false, behind_stamp), GONE);
+  await orphaned;
+  assert.deepEqual(log.starts, []);
+});
+
+test("a navigation while the host starts the editor orphans the new job", async () => {
+  let started!: (job: string) => void;
+  const { editor, open, store } = make(forever, { start: () => new Promise((resolve) => (started = resolve)) });
+  const answer = open(1, 0);
+  await settle();
+  const orphaned = editor.orphan(1);
+  started("job1");
+  assert.deepEqual(await answer, { ok: true });
+  await orphaned;
+  assert.equal((Object.values(store)[0] as Record<string, { orphaned?: true }>).job1?.orphaned, true);
+});
+
+test("a tab closed during setup starts no editor and leaves other tabs alone", async () => {
+  const { editor, open, log } = make(forever);
+  const stale = editor.navigation_stamp(2);
+  const other = editor.navigation_stamp(3);
+  await editor.orphan(2);
+  assert.deepEqual(await editor.open(2, 0, request(), undefined, false, stale), GONE);
+  assert.equal((await editor.open(3, 0, request(), undefined, false, other)).ok, true);
+  assert.equal(log.starts.length, 1);
+  assert.equal((await open(1, 0)).ok, true);
+});
+
+test("the count holds across several navigations and interleaved presses", async () => {
+  const { editor, open, log } = make(forever);
+  const first = editor.navigation_stamp(1);
+  await editor.orphan(1);
+  const second = editor.navigation_stamp(1);
+  await editor.orphan(1);
+  const [a, b] = await Promise.all([editor.open(1, 0, request("a"), undefined, false, first), editor.open(1, 0, request("b"), undefined, false, second)]);
+  assert.deepEqual([a, b], [GONE, GONE]);
+  assert.deepEqual(log.starts, []);
+  const [c, d] = await Promise.all([open(1, 0, "c"), open(1, 0, "d")]);
+  assert.deepEqual([c.ok, d], [true, { ok: false, message: "An editor is already open for this tab" }], "the current page's presses behave as before");
+});
+
+test("a restarted background has no count and still opens an editor for a tab with only orphaned jobs", async () => {
+  const store: Record<string, unknown> = { desertfox_editor_jobs: { old: { job: "old", tab_id: 1, token: "x", frame_id: 0, is_private: false, orphaned: true } } };
+  const { editor, open } = make(forever, { store });
+  await editor.resume();
+  assert.equal(editor.navigation_stamp(1), 0);
+  assert.equal((await open(1, 0)).ok, true);
+});
+
 test("an orphaned job whose editor ended without a save saves nothing", async () => {
   let finish!: (reply: EditorCollectReply) => void;
   const { editor, open, log } = make(() => new Promise((resolve) => (finish = resolve)));
@@ -128,7 +196,7 @@ test("a register that refuses the text is said in the toast with the text length
 
 test("a private tab's text goes to the private register", async () => {
   const { editor, log } = make(async () => ({ done: true, changed: true, text: "x" }), { delivered: false });
-  await editor.open(1, 0, request(), undefined, true);
+  await editor.open(1, 0, request(), undefined, true, editor.navigation_stamp(1));
   await settle();
   assert.deepEqual(log.saved, [{ text: "x", is_private: true }]);
 });
@@ -188,7 +256,7 @@ test("the extension comes from the site row, else the global value, and the empt
 
 test("a private result with no private window open any more is dropped with a toast", async () => {
   const { editor, log } = make(async () => ({ done: true, changed: true, text: "secret" }), { delivered: false, private_window: false });
-  await editor.open(1, 0, request(), undefined, true);
+  await editor.open(1, 0, request(), undefined, true, editor.navigation_stamp(1));
   await settle();
   assert.deepEqual(log.saved, []);
   assert.match(log.toasts[0] ?? "", /private window was gone.*dropped/);
