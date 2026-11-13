@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { actions_of, CHECK_DELAY_MS, create_keys_session, matches_filter, row_id } from "../src/help/keys_model.ts";
 import { create_key_capture } from "../src/help/keys_page.ts";
+import { STALE_MOVE_REFUSAL } from "../src/shared/messages.ts";
 import type { BindingRow } from "../src/shared/messages.ts";
 
 const row = (over: Partial<BindingRow> & { keys: string; text: string }): BindingRow => ({ mode: "normal", origin: "default", ...over });
@@ -357,7 +358,7 @@ test("a move after a refresh sends the text the row had when it opened, also fro
 });
 
 test("after the refusal of a stale move, opening the row again moves from the text it shows now", async () => {
-  const stale = "J changed since you opened it. Open the row again.";
+  const stale = `J ${STALE_MOVE_REFUSAL}`;
   const moved = row({ keys: "X", text: "tab.next", origin: "edit" });
   const { session, sent, set_rows } = make([J, K], (message) =>
     message.type !== "change_keymap" ? { ok: true, saves: true, problems: [], warnings: [], shadows: [] } : message.move_from_text === "tab.close" ? { ok: true, row: moved, message: "Moved J to X in normal mode" } : { ok: false, message: stale },

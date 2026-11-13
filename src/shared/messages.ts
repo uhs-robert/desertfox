@@ -380,6 +380,8 @@ export type CheckBindingAnswer = { ok: true; saves: boolean; problems: string[];
 // From an extension page: one key edit. A set with `move_from` is a move. `move_from_text` is the text the row showed on the old key: the change refuses the move when the old key holds other text by then. `set` binds `text`, `remove` unbinds the key, `reset` drops the edit so the file or default binding shows again.
 // The answer carries the row after the change, absent when the key is then unbound. A refused set carries the check's problems and warnings.
 export type ChangeKeymap = { type: "change_keymap"; mode: KeymapMode; keys: string; action: "set" | "remove" | "reset"; text?: string; move_from?: string; move_from_text?: string };
+// The refusal of a move whose old key changed, after the old keys. The settings page spots it to let the row open again and move.
+export const STALE_MOVE_REFUSAL = "changed since you opened it. Open the row again.";
 export type ChangeKeymapAnswer = { ok: true; row?: BindingRow; message: string } | { ok: false; message: string; problems?: string[] };
 
 // What the toolbar popup asks. Only a top-level extension page may send them.

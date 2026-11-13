@@ -3,6 +3,7 @@
 import type { MergedConfig } from "../shared/config.ts";
 import type { KeyBinding, BoundInvocation } from "../shared/invocation.ts";
 import type { KeymapConfig, KeymapMode } from "../shared/keymap.ts";
+import { STALE_MOVE_REFUSAL } from "../shared/messages.ts";
 import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckBindingAnswer, ListBindingsAnswer } from "../shared/messages.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
@@ -258,7 +259,7 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
         const text = action === "set" ? request.text : action === "remove" && underlying ? "" : undefined;
         if (old_keys !== undefined && typeof request.move_from_text === "string") {
           const shown = rows_of(config, current).find((candidate) => candidate.mode === mode && candidate.keys === old_keys)?.text ?? "";
-          if (shown !== request.move_from_text) throw new Error(`${old_keys} changed since you opened it. Open the row again.`);
+          if (shown !== request.move_from_text) throw new Error(`${old_keys} ${STALE_MOVE_REFUSAL}`);
         }
         if (action === "set" && text !== undefined) {
           refused = set_refusal(state, deps, { mode, keys, text, old_keys });
