@@ -57,11 +57,11 @@ export async function media_quality_reply(storage: KeymapStorage, frame_address:
   return String(value);
 }
 
-// True when no page can have a rule to apply: the global value is `off` or `auto` (both leave the player alone) and no site row sets one. A page with no stored keymap keeps the global default, so the default `auto` makes it idle too.
+// True when no page can have a rule to apply: the global value is `off` or `auto` (both leave the player alone) and no site row asks for a quality. A row of `off` or `auto` asks for nothing. A page with no stored keymap keeps the global default, so the default `auto` makes it idle too.
 export async function media_quality_is_idle(storage: KeymapStorage): Promise<boolean> {
   const keymap = current_keymap(await stored_keymap(storage));
   const global = keymap?.frame_site_globals?.media_quality ?? DEFAULT_SETTINGS.media_quality;
-  return (global === "off" || global === "auto") && !(keymap?.site_rules ?? []).some(({ values }) => values !== undefined && Object.hasOwn(values, "media_quality"));
+  return (global === "off" || global === "auto") && !(keymap?.site_rules ?? []).some(({ values }) => values !== undefined && Object.hasOwn(values, "media_quality") && values.media_quality !== "off" && values.media_quality !== "auto");
 }
 
 // The bind among `all` whose keys are a proper prefix of this bind's keys. It is a complete binding, so it hides this bind.

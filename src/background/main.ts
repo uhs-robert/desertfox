@@ -500,7 +500,7 @@ const editor_ext_for = make_editor_ext_for(browser.storage.local, async () => ef
 void external_editor.resume().catch(warn_and_go("external_editor.resume"));
 
 const media_quality = create_media_quality({
-  is_off: async () => (await read_disabled()) || media_quality_is_idle(browser.storage.local),
+  is_idle: async () => (await read_disabled()) || media_quality_is_idle(browser.storage.local),
   inject_all: inject_probe_for_rule,
   inject_about_blank: inject_probe_about_blank,
   inject_frame: inject_quality_into_frame,

@@ -4,8 +4,8 @@ import type { QualityReport } from "../shared/quality.ts";
 import { best_effort } from "../shared/swallow.ts";
 
 export type MediaQualityDeps = {
-  // True when the extension is off, or the rule is `off` everywhere (the global value is `off` and no site row sets one), so no frame has anything to apply.
-  is_off: () => Promise<boolean>;
+  // True when the extension is off, or the rule is idle everywhere (the global value is `off` or `auto` and no site row asks for a quality), so no frame has anything to apply.
+  is_idle: () => Promise<boolean>;
   // Runs the probe in every frame. Rejects when any frame refuses, while the others still run it.
   inject_all: (tab_id: number) => Promise<unknown>;
   // The second pass, with `matchAboutBlank`, that reaches a player in an about:blank frame. It runs `settle_ms` after the first, once the frames have left their initial about:blank documents. With the flag at load, a frame under an all-off site rule left ignore mode (#466).
@@ -37,17 +37,17 @@ export function create_media_quality(deps: MediaQualityDeps) {
   let turns = 0;
   async function about_blank_pass(tab_id: number, turn: number): Promise<void> {
     await deps.wait(deps.settle_ms);
-    if (newest.get(tab_id) !== turn || (await deps.is_off()) || newest.get(tab_id) !== turn) return;
+    if (newest.get(tab_id) !== turn || (await deps.is_idle()) || newest.get(tab_id) !== turn) return;
     await best_effort(deps.inject_about_blank(tab_id));
   }
-  // Whether the rule was off at the last settings change, so a change from off to on is seen.
-  let was_off: boolean | undefined;
+  // Whether the rule was idle at the last settings change, so a change from off to on is seen.
+  let was_idle: boolean | undefined;
   return {
     // A page that loaded while the rule was off has no bundle, so a settings change that turns the rule on injects it into the open web tabs, about:blank frames included, with no navigation needed.
     async settings_changed(open_tabs: () => Promise<readonly { id?: number | undefined; url?: string | undefined }[]>): Promise<void> {
-      const off = await deps.is_off();
-      const turned_on = was_off === true && !off;
-      was_off = off;
+      const idle = await deps.is_idle();
+      const turned_on = was_idle === true && !idle;
+      was_idle = idle;
       if (!turned_on) return;
       for (const { id, url } of await open_tabs()) {
         if (id === undefined || !is_web(url)) continue;
@@ -60,7 +60,7 @@ export function create_media_quality(deps: MediaQualityDeps) {
     async probe_reported(tab_id: number | undefined, frame_id: number | undefined, address: string): Promise<boolean> {
       if (tab_id === undefined || frame_id === undefined) return false;
       try {
-        if (await deps.is_off()) return false;
+        if (await deps.is_idle()) return false;
         if (is_web(address) && (await deps.frame_address(tab_id, frame_id)) !== address) return false;
         await deps.inject_frame(tab_id, frame_id);
         return true;
@@ -76,7 +76,7 @@ export function create_media_quality(deps: MediaQualityDeps) {
       const turn = ++turns;
       newest.set(tab_id, turn);
       try {
-        if ((await deps.is_off()) || newest.get(tab_id) !== turn) return;
+        if ((await deps.is_idle()) || newest.get(tab_id) !== turn) return;
         await best_effort(deps.inject_all(tab_id));
         if (newest.get(tab_id) !== turn) return;
         void best_effort(about_blank_pass(tab_id, turn));

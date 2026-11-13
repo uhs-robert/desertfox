@@ -58,6 +58,15 @@ test("auto leaves the player alone and does not reset a quality the user chose",
   assert.equal(clock.now, 0);
 });
 
+test("a row auto under a global max leaves a player the user set to 360 at 360, on load and on navigation", async () => {
+  const { rule, player } = setup("auto", fake_player(360));
+  await rule.start(false);
+  await rule.start(true);
+  assert.deepEqual(player.state.picks, []);
+  assert.equal(player.state.autos, 0);
+  assert.equal(player.state.playing, 360);
+});
+
 test("off leaves the player alone and never asks for the driver", async () => {
   const player = fake_player();
   let probes = 0;
