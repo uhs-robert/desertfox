@@ -875,6 +875,21 @@ test("the finder list holds quickmarks, bookmarks, history, closed tabs and the 
   assert.deepEqual(private_items.tab_used, { 2: 700 });
 });
 
+test("an error in the history_max mapper reaches the fetch fallback and is logged, not swallowed with the read", async () => {
+  const broken = { sources: [], get history_max(): number { throw new Error("mapper bug"); } } as OpenSettings;
+  const { service } = make({ open: broken, quickmark_urls: { a: "https://a.test/" } });
+  const warnings: unknown[][] = [];
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(args);
+  try {
+    const items = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+    assert.deepEqual(items.quickmarks, []);
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = warn;
+  }
+});
+
 test("the browser reader answers the 1000-row search until the cache has filled, then the cache", async () => {
   const searches: { maxResults: number }[] = [];
   const rows = [{ url: "https://a.test/", title: "A", lastVisitTime: 2 }];
