@@ -2,7 +2,7 @@
 // The fixture page /frames holds a same-origin frame (a), a cross-origin frame (s) and a 10 px frame that gets no label.
 // The command line, which-key, the page search input and the toasts draw in the top page for a focused frame, and the keys and commands still act in the frame (#619).
 
-export const areas = ["hints", "cmdline", "whichkey", "ui"];
+export const areas = ["hints", "cmdline", "whichkey", "ui", "find", "scroll"];
 
 export async function run_cases({ in_background, sleep, badge_is, open_cmdline, type_in_line, run_line, wait_cmdline, close_cmdline, run_case, press_keys, poll_until, barrier, expect_absent, hint_label_count, open_page, wait_event, find_event, events, expect, wait_takes_keys, scroll_of, last_scroll_y, in_active_tab }) {
   const page_id = "p6_frames";
@@ -262,6 +262,15 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
       await in_active_tab(`document.getElementById("cross").${show}`);
     });
   }
+
+  await run_case("a focused frame that turns transparent behind the top page's line gives the keys back to the top page once the line closes", async () => {
+    await focus_cross();
+    await open_cmdline();
+    await in_active_tab(`document.getElementById("cross").style.opacity = "0"`);
+    await close_cmdline();
+    await wait_takes_keys(top_id);
+    await in_active_tab(`document.getElementById("cross").style.opacity = ""`);
+  });
 
   await run_case("a frame focused while hidden keeps the keys once it shows, as a panel that animates open", async () => {
     let mark = events.length;

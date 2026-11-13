@@ -7,6 +7,7 @@ import { mode_label } from "./mode_label.ts";
 import type { BadgeState } from "./mode_label.ts";
 import { relay } from "../relay.ts";
 import { show_toast } from "../toast.ts";
+import { create_frame_hide_watch } from "./frame_hide_watch.ts";
 
 type UiWindow = { desertfox_host: BundleHostApi; desertfox_ui_ready?: true };
 const page = window as unknown as UiWindow;
@@ -20,6 +21,12 @@ if (!page.desertfox_ui_ready) {
     if (window === window.top) return draw();
     void relay("top", "ui.toast", { message: args.message, duration_ms: args.duration_ms, kind: args.kind }).then((shown) => shown || draw());
   });
+  // Not a command: content.js in the top frame turns it on while a child frame holds the focus. Taking the focus back is what `<A-,>` does.
+  const watch_focused_frame = create_frame_hide_watch(() => {
+    window.focus();
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  page.desertfox_host.register_handler_("ui.frame_watch", (args) => watch_focused_frame(args.on === true));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
     const { mode, pass_next, setting, recording, site_label } = args as unknown as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.

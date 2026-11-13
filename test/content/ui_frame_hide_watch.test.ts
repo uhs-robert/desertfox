@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
-import { create_frame_hide_watch } from "../../src/content/frame_hide_watch.ts";
+import { create_frame_hide_watch } from "../../src/content/ui/frame_hide_watch.ts";
 
 const real = { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval };
 
@@ -76,4 +76,27 @@ test("the watch looks at once when armed, so a frame that hides before the first
   frame.look.visible = false;
   tick();
   assert.equal(taken(), 1);
+});
+
+test("a frame that hides behind the top frame's command line gives the keys back once the line hands it the focus", (t) => {
+  const { frame, doc, watch, tick, taken } = fixture(t);
+  watch(true);
+  // The line takes the focus: the child's claim ends while the line's frame, in a closed shadow root, holds it.
+  doc.activeElement = { openOrClosedShadowRoot: { activeElement: { contentWindow: {} } } };
+  watch(false);
+  frame.look.visible = false;
+  doc.activeElement = frame;
+  watch(true);
+  assert.equal(taken(), 1);
+});
+
+test("a frame the user left for the top page starts over as not shown, so a panel that opens again hidden keeps the keys", (t) => {
+  const { frame, doc, watch, taken } = fixture(t);
+  watch(true);
+  doc.activeElement = { tagName: "BODY" };
+  watch(false);
+  frame.look.visible = false;
+  doc.activeElement = frame;
+  watch(true);
+  assert.equal(taken(), 0);
 });

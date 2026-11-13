@@ -19,7 +19,6 @@ import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } fro
 import { badge_state } from "./badge_state.ts";
 import { set_toast_durations, show_mode_label, show_toast } from "./ui_proxy.ts";
 import { holds_own_focus, wire_mode_reports } from "./mode_report.ts";
-import { create_frame_hide_watch } from "./frame_hide_watch.ts";
 import { page_mode } from "./page_mode.ts";
 import { fullscreen_step, takes_media_step } from "./mode_state.ts";
 import { site_mode } from "./site_mode.ts";
@@ -384,8 +383,6 @@ function start(): void {
   page_mode.listen_display_(refresh_mode_indicator);
 
   const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
-  // Only the top frame hears `frame_mode`, so only it watches.
-  const watch_focused_frame = create_frame_hide_watch(focus_page_content);
 
   browser.runtime.onMessage.addListener((raw: unknown) => {
     const message = raw as BackgroundToContent;
@@ -410,7 +407,8 @@ function start(): void {
       sync_mode_to_focus();
     } else if (message.type === "frame_mode") {
       focused_frame_mode = message.mode;
-      watch_focused_frame(message.mode !== undefined);
+      // Only the top frame hears `frame_mode`. Its watch on the focused child frame lives in the ui bundle, loaded when a child first takes the focus.
+      if (message.mode || bundles.has_handler_("ui.frame_watch")) void bundles.run_command_("ui.frame_watch", "ui", { on: !!message.mode }, "", false);
       refresh_mode_indicator();
     }
     else if (message.type === "tree_updated") void ask_keymap();
