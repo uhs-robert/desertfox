@@ -6,12 +6,16 @@ const NO_WINDOW = -1;
 
 type FakeTab = { window_id: number; incognito: boolean; active: boolean };
 
-// A browser with tabs 11 and 12 in window 1, 21 and 22 in window 2, and 31 in private window 3. The first tab of each window is active.
-function make_browser({ set_delay_ms = 0 } = {}) {
+// A browser with tabs 11 and 12 in window 1, 21 and 22 in window 2, and 31 and 32 in private window 3. The first tab of each window is active, and window 1 has the focus.
+// `hold_writes` keeps every write waiting until `release`.
+function make_browser({ set_delay_ms = 0, focused_tab_delay_ms = 0 } = {}) {
   const data = new Map<string, unknown>();
+  let writes_held: Promise<void> | undefined;
+  let release_writes = () => {};
   const storage = {
     get: async (key: string) => (data.has(key) ? { [key]: structuredClone(data.get(key)) } : {}),
     set: async (items: Record<string, unknown>) => {
+      await writes_held;
       if (set_delay_ms) await new Promise((resolve) => setTimeout(resolve, set_delay_ms));
       Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value)));
     },
@@ -22,15 +26,24 @@ function make_browser({ set_delay_ms = 0 } = {}) {
     [21, { window_id: 2, incognito: false, active: true }],
     [22, { window_id: 2, incognito: false, active: false }],
     [31, { window_id: 3, incognito: true, active: true }],
+    [32, { window_id: 3, incognito: true, active: false }],
   ]);
+  const focus = { window_id: 1 };
   const start = () =>
     create_last_used_tabs({
       storage: storage as never,
       active_tab_of: async (window_id) => {
+        // Firefox has no window -1. A tab here makes a missing `NO_WINDOW` guard show in the record.
+        if (window_id === -1) return { tab_id: 99, incognito: false };
         const found = [...tabs].find(([, tab]) => tab.window_id === window_id && tab.active);
         return found && { tab_id: found[0], incognito: found[1].incognito };
       },
       is_private: async (tab_id) => tabs.get(tab_id)?.incognito,
+      focused_tab: async () => {
+        const found = [...tabs].find(([, tab]) => tab.window_id === focus.window_id && tab.active);
+        if (focused_tab_delay_ms) await new Promise((resolve) => setTimeout(resolve, focused_tab_delay_ms));
+        return found && { window_id: focus.window_id, tab_id: found[0], incognito: found[1].incognito };
+      },
     });
   const record = start();
   // What Firefox does on `tabs.update(id, { active: true })`: the tab becomes active and `onActivated` fires.
@@ -40,7 +53,8 @@ function make_browser({ set_delay_ms = 0 } = {}) {
     tab.active = true;
     return record.activated(tab_id, tab.window_id);
   };
-  return { record, start, tabs, activate };
+  const hold_writes = () => void (writes_held = new Promise<void>((resolve) => (release_writes = resolve)));
+  return { record, start, tabs, activate, focus, hold_writes, release: () => release_writes() };
 }
 
 test("switching tabs in one window records the tab before", async () => {
@@ -189,10 +203,50 @@ test("a failing write warns and the next write still runs", async (t) => {
     } as never,
     active_tab_of: async (window_id) => ({ tab_id: window_id * 10, incognito: false }),
     is_private: async () => false,
+    focused_tab: async () => undefined,
   });
   await record.focused(1);
   assert.equal(warn.mock.callCount(), 1);
   await record.focused(1);
   await record.focused(2);
   assert.equal(await record.previous_of(false), 10);
+});
+
+test("the focus event takes the tab in view when it fires, not one activated while an earlier write waits", async () => {
+  const { record, activate, hold_writes, release } = make_browser();
+  await record.focused(1);
+  hold_writes();
+  void record.removed(99);
+  void record.focused(2);
+  void activate(22);
+  release();
+  assert.equal(await record.previous_of(false), 21);
+});
+
+test("closing a private tab clears it from the private record", async () => {
+  const { record, activate, tabs } = make_browser();
+  await record.focused(3);
+  await activate(32);
+  assert.equal(await record.previous_of(true), 31);
+  tabs.delete(31);
+  await record.removed(31);
+  assert.equal(await record.previous_of(true), undefined);
+});
+
+test("a fresh session seeds the tab in view, so the first switch has a previous tab", async () => {
+  const { record, activate } = make_browser({ focused_tab_delay_ms: 10 });
+  void record.seed();
+  void activate(12);
+  assert.equal(await record.previous_of(false), 11);
+});
+
+test("the seed keeps a record that survived a background restart", async () => {
+  const { record, start, focus } = make_browser();
+  await record.focused(1);
+  await record.focused(2);
+  focus.window_id = 3;
+  const restarted = start();
+  await restarted.seed();
+  assert.equal(await restarted.previous_of(false), 11);
+  assert.equal(await restarted.previous_of(true), undefined);
 });

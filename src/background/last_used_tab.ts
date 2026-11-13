@@ -4,6 +4,7 @@
 import { ignore_refusal } from "../shared/swallow.ts";
 import { LAST_USED_TAB_STORAGE_KEY } from "./storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
+import { NO_WINDOW } from "./window_focus.ts";
 
 type UsedTabs = { current: number | undefined; previous: number | undefined };
 type LastUsedRecord = { focused_window_id: number | undefined; normal: UsedTabs; private: UsedTabs };
@@ -14,10 +15,9 @@ export type LastUsedTabDeps = {
   active_tab_of: (window_id: number) => Promise<{ tab_id: number; incognito: boolean } | undefined>;
   // Undefined when the tab is gone.
   is_private: (tab_id: number) => Promise<boolean | undefined>;
+  // The active tab of the last focused window, undefined when there is none.
+  focused_tab: () => Promise<{ window_id: number; tab_id: number; incognito: boolean } | undefined>;
 };
-
-// `windows.onFocusChanged` reports this id when focus leaves every Firefox window.
-const NO_WINDOW = -1;
 
 const number_or_none = (value: unknown) => (typeof value === "number" ? value : undefined);
 const used_tabs_from = (stored: unknown): UsedTabs => {
@@ -68,13 +68,24 @@ export function create_last_used_tabs(deps: LastUsedTabDeps) {
         return incognito === undefined ? record : with_switch_to(record, window_id, tab_id, incognito);
       }),
     // Focus leaving Firefox keeps the record, so coming back to the same tab is no switch.
-    focused: (window_id: number): Promise<void> =>
-      window_id === NO_WINDOW
-        ? settled
-        : update(async (record) => {
-            const active = await deps.active_tab_of(window_id);
-            return active ? with_switch_to(record, window_id, active.tab_id, active.incognito) : record;
-          }),
+    focused: (window_id: number): Promise<void> => {
+      if (window_id === NO_WINDOW) return settled;
+      // Read now, not in turn: an activation queued behind this event must not show up as the tab the focus landed on.
+      const active_at_focus = deps.active_tab_of(window_id);
+      return update(async (record) => {
+        const active = await active_at_focus;
+        return active ? with_switch_to(record, window_id, active.tab_id, active.incognito) : record;
+      });
+    },
+    // A fresh browser session has no record, so the first switch would have no previous tab. A record kept through a background restart stays.
+    seed: (): Promise<void> => {
+      const in_view = deps.focused_tab();
+      return update(async (record) => {
+        const is_empty = record.focused_window_id === undefined && record.normal.current === undefined && record.private.current === undefined;
+        const tab = is_empty ? await in_view : undefined;
+        return tab ? with_switch_to(record, tab.window_id, tab.tab_id, tab.incognito) : record;
+      });
+    },
     removed: (tab_id: number): Promise<void> => update(async (record) => ({ ...record, normal: without_tab(record.normal, tab_id), private: without_tab(record.private, tab_id) })),
     // The next focus event names the new window. Until then, an activation in any window counts.
     window_removed: (window_id: number): Promise<void> =>
@@ -92,5 +103,9 @@ export function shared_last_used_tabs() {
       return active?.id === undefined ? undefined : { tab_id: active.id, incognito: active.incognito };
     },
     is_private: async (tab_id) => (await ignore_refusal(browser.tabs.get(tab_id)))?.incognito,
+    focused_tab: async () => {
+      const [active] = (await ignore_refusal(browser.tabs.query({ lastFocusedWindow: true, active: true }))) ?? [];
+      return active?.id === undefined || active.windowId === undefined ? undefined : { window_id: active.windowId, tab_id: active.id, incognito: active.incognito };
+    },
   }));
 }

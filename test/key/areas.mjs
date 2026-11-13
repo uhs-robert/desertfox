@@ -66,7 +66,7 @@ export const area_rules = [
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
   { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
   {
-    globs: ["src/background/{tab_*,previous_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,tab_split,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
+    globs: ["src/background/{tab_*,previous_tab,last_used_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,tab_split,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
     areas: ["tabs"],
   },
   { globs: ["src/background/{mark_store,store_turns,global_mark_jump,page_ready,address_arrival,jump_store,jump_step,jump_leave}.ts", "src/commands/{mark,jump}.ts", "src/shared/{mark_names,jump_names}.ts", "src/background/quickmark_store.ts", "src/commands/quickmark.ts", "src/commands/mark_list.ts", "src/shared/mark_text.ts", "src/shared/quickmark_names.ts"], areas: ["scroll", "keys", "whichkey", "tabs"] },

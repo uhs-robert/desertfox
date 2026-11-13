@@ -205,6 +205,8 @@ browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdli
 
 const previous_tabs = shared_previous_tabs();
 const last_used_tabs = shared_last_used_tabs();
+// Queued before any event, so the events of this start apply on top of the seed.
+void last_used_tabs.seed();
 
 const open_help = create_open_help({
   is_opener: cmdline.is_opener,
