@@ -119,6 +119,10 @@ const resolve = (id: string) =>
 
 const compile = (keymap: KeymapConfig, settings = {}) => compile_keymap(keymap, settings, resolve);
 
+test("the compiler carries a set grab_step_px into the keymap", () => {
+  assert.equal(compile({ normal: {} }, { grab_step_px: 12 }).compiled.grab_step_px, 12);
+});
+
 test("compiler builds the tree with steps, runs_in and label", () => {
   const { compiled, warnings } = compile({
     normal: { gg: { id: "scroll.to" }, "gx$": [{ id: "tab.a" }, { id: "scroll.b" }] },
