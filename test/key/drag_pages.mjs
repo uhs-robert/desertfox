@@ -80,14 +80,16 @@ document.addEventListener("pointerup", (e) => {
   dragged = null;
 });
 </script>`,
-  // Three swipe targets, one per swipe route. The scroll-snap box scrolls natively. The two carousels take a pointer sequence, bound the way libraries bind it: the press on the inner track and the release on the box, so a press sent to the box or a release outside it is lost: they turn a slide when the drag passes 40% of the width (strict pages ignore an untrusted one) and count presses and releases, so a test sees a button left down. The link is a carousel whose slide would start a native drag if the route were html5.
+  // Four swipe targets. The scroll-snap box scrolls natively. The two carousels take a pointer sequence, bound the way libraries bind it. The press is on the inner track and the release on the box, so a press sent to the box or a release outside it is lost. They turn a slide when the drag passes 40% of the width (strict pages ignore an untrusted one) and count presses and releases, so a test sees a button left down. The link is a carousel whose slide would start a native drag if the route were html5.
   swipe: `
-<style>.box{width:300px;height:100px;margin:10px;display:block;overflow:hidden;background:#eee}.snap{overflow-x:auto;scroll-snap-type:x mandatory;white-space:nowrap}.snap div{display:inline-block;width:300px;height:100px;scroll-snap-align:start}.slide{float:left;width:300px;height:100px}</style>
+<style>html,body{touch-action:pan-y}.box{width:300px;height:100px;margin:10px;display:block;overflow:hidden;background:#eee}.snap{overflow-x:auto;scroll-snap-type:x mandatory;white-space:nowrap}.snap div{display:inline-block;width:300px;height:100px;scroll-snap-align:start}.slide{float:left;width:300px;height:100px}</style>
+<div id="pan" class="box" style="touch-action:pan-y pinch-zoom">pan</div>
 <div id="snap" class="box snap"><div style="background:#9cf">a</div><div style="background:#fc9">b</div><div style="background:#cf9">c</div></div>
 <div id="car" class="box swiper"><div id="track" style="width:900px;transition:none"><div class="slide" style="background:#9cf">a</div><div class="slide" style="background:#fc9">b</div><div class="slide" style="background:#cf9">c</div></div></div>
 <a id="link" class="box swiper" href="/drag?id=link_elsewhere"><div style="width:900px"><div class="slide" style="background:#9cf">a</div><div class="slide" style="background:#fc9">b</div><div class="slide" style="background:#cf9">c</div></div></a>
 <script>
 const strict = location.search.includes("strict");
+for (const type of ["down", "up"]) document.addEventListener("pointer" + type, () => { document.body.dataset["raw" + type] = String(+(document.body.dataset["raw" + type] || 0) + 1); }, true);
 document.addEventListener("dragstart", () => { document.body.dataset.dragstart = String(+(document.body.dataset.dragstart || 0) + 1); });
 for (const box of [car, link]) {
   let from = null;

@@ -321,13 +321,13 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   const attr_of = (id, name) => read(`document.getElementById("${id}").dataset.${name}`);
 
-  await run_case(";w labels the three swipe targets, and l flings a carousel one slide at a time until Escape", async () => {
+  await run_case(";w labels the four swipe targets, and l flings a carousel one slide at a time until Escape", async () => {
     const page_id = "swipe_car";
     await open_page("drag", page_id, { new_tab: true });
     let mark = events.length;
     await press_keys(";w");
     await labels_up("labels of the swipeable group");
-    expect((await hint_label_count()) === 3, `the snap box, the carousel and the link are the group, got ${await hint_label_count()} labels`);
+    expect((await hint_label_count()) === 4, `the snap box, the carousel, the link and the touch-action box are the group, and a page-wide touch-action adds nothing, got ${await hint_label_count()} labels`);
     const label = await label_of("#car");
     await press_keys(label);
     await labels_gone("labels gone after the pick");
@@ -385,14 +385,18 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     expect((await attr_of("car", "index")) === at, "l flung after Escape");
   });
 
-  await run_case(";w on a page that ignores untrusted events moves nothing and leaves no press", async () => {
+  await run_case(";w on a page that ignores untrusted events moves nothing and leaves no raw press", async () => {
     await open_page("drag", "swipe_strict", { new_tab: true });
     await press_keys(";w");
     await pick("#car");
     await press_keys("l");
-    await sleep(400);
-    expect((await attr_of("car", "index")) === "0" && (await attr_of("car", "downs")) === "0", "a strict page took the synthetic swipe");
+    await poll_until("the raw press", async () => (await read("document.body.dataset.rawdown")) === "1", { timeout_ms: 5000 });
+    const mark = events.length;
     await press_keys("-k", "Escape");
+    await wait_badge(mark, "swipe_strict", "NORMAL");
+    await sleep(300);
+    expect((await read("document.body.dataset.rawdown")) === (await read("document.body.dataset.rawup")), "a raw press was left down");
+    expect((await attr_of("car", "index")) === "0" && (await attr_of("car", "downs")) === "0", "a strict page took the synthetic swipe");
   });
 
   // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.

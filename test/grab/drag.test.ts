@@ -311,11 +311,11 @@ test("the press goes to the element under the point when the picked box holds it
   assert.deepEqual([outside.log, covered.log], [[], ["pointerdown", "mousedown"]]);
 });
 
-test("a fling is four moves and one release", async () => {
+test("a fling is six moves and one release", async () => {
   const slide = element();
   const { held, to } = start_fling(as_element(slide), "right");
   await drive(held, to, FLING_PACE);
-  assert.equal(slide.log.filter((type) => type === "pointermove").length, 4);
+  assert.equal(slide.log.filter((type) => type === "pointermove").length, 6);
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
 });
 

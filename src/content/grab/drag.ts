@@ -31,8 +31,8 @@ const MIN_STEP_PX = 3;
 const MAX_STEP_PX = 192;
 const DRIVE_STEPS = 8;
 const STEP_PAUSE_MS = 30;
-// A fling is a short fast drag: a library reads the speed from the event times, and 8 steps of 30 ms read as a slow drag. The distance is this share of the box, which clears the slide threshold of a carousel.
-export const FLING_PACE = { steps: 4, pause_ms: 8 };
+// A fling is a short drag at the speed of a finger, about 2 px per ms over a 600 px box. A library reads the speed from the event times: Splide picks its target from the release velocity and moves two slides at 11 px per ms. The distance is this share of the box, which clears the slide threshold of a carousel.
+export const FLING_PACE = { steps: 6, pause_ms: 30 };
 const FLING_SHARE = 0.6;
 
 // The ids Firefox gives its real mouse. A page that calls `setPointerCapture` with this id can still get a NotFoundError, which stays the page's own failure and never stops the drag.

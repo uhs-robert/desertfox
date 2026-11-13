@@ -475,7 +475,8 @@ test("the draggable filter keeps explicit drag signs and grab cursors where they
 test("the swipeable filter keeps carousel containers, scroll-snap boxes and what a drag moves, and no plain box or page root", (context) => {
   const global_scope = globalThis as unknown as { getComputedStyle?: unknown };
   const snaps = new Set<unknown>();
-  global_scope.getComputedStyle = (element: unknown) => ({ cursor: "auto", touchAction: "auto", scrollSnapType: snaps.has(element) ? "x mandatory" : "none" });
+  const touch = new Map<unknown, string>();
+  global_scope.getComputedStyle = (element: unknown) => ({ cursor: "auto", touchAction: touch.get(element) ?? "auto", scrollSnapType: snaps.has(element) ? "x mandatory" : "none" });
   context.after(() => delete global_scope.getComputedStyle);
   assert.equal(query_for("swipeable", undefined).selector, "*");
   const fake = (local: string, matching: string) => ({ localName: local, parentElement: null, ownerDocument: { defaultView: globalThis }, matches: (selector: string) => selector.includes(matching) }) as unknown as Element;
@@ -486,7 +487,15 @@ test("the swipeable filter keeps carousel containers, scroll-snap boxes and what
   snaps.add(snap);
   assert.equal(is_swipeable(snap), true);
   assert.equal(is_swipeable(fake("div", "none")), false);
+  const pan = fake("div", "none");
+  touch.set(pan, "pan-y pinch-zoom");
+  assert.equal(is_swipeable(pan), true);
+  assert.equal(is_draggable(pan), false);
+  const manipulation = fake("div", "none");
+  touch.set(manipulation, "manipulation");
+  assert.equal(is_swipeable(manipulation), false);
   const root = fake("body", ".swiper");
+  touch.set(root, "pan-y");
   snaps.add(root);
   assert.equal(is_swipeable(root), false);
 });
