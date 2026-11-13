@@ -54,7 +54,7 @@ const strict = location.search.includes("strict");
 const log = (ev, e, extra = {}) => send("drag", { ev, trusted: e.isTrusted, types: e.dataTransfer ? [...e.dataTransfer.types] : null, ...extra });
 src.addEventListener("dragstart", (e) => { log("dragstart", e); if (strict && !e.isTrusted) return; e.dataTransfer.setData("text/plain", "payload"); e.dataTransfer.effectAllowed = "move"; });
 dst.addEventListener("dragenter", (e) => e.preventDefault());
-dst.addEventListener("dragover", (e) => e.preventDefault());
+dst.addEventListener("dragover", (e) => { e.preventDefault(); dst.dataset.y = String(Math.round(e.clientY)); });
 dst.addEventListener("drop", (e) => {
   e.preventDefault();
   const data = e.dataTransfer.getData("text/plain");

@@ -54,9 +54,13 @@ export function press_point(element: Element): Point {
   if (!(max > min)) return middle;
   const fraction = Math.min(1, Math.max(0, (now - min) / (max - min)));
   const box = element.getBoundingClientRect();
-  if (element.getAttribute("aria-orientation") !== "vertical") return { x: box.left + fraction * box.width, y: middle.y };
+  const role = element.getAttribute("role");
+  const vertical = (element.getAttribute("aria-orientation") ?? (role === "scrollbar" ? "vertical" : "horizontal")) === "vertical";
+  // The far edge of a box belongs to its neighbour, so the point stops one pixel short of it.
+  const inside = (offset: number, size: number) => Math.max(0, Math.min(offset, size - 1));
+  if (!vertical) return { x: box.left + inside(fraction * box.width, box.width), y: middle.y };
   // A vertical slider has its minimum at the bottom, and a scrollbar or separator at the top.
-  return { x: middle.x, y: box.top + (element.getAttribute("role") === "slider" ? 1 - fraction : fraction) * box.height };
+  return { x: middle.x, y: box.top + inside((role === "slider" ? 1 - fraction : fraction) * box.height, box.height) };
 }
 
 const under = (doc: Document, point: Point): Element => doc.elementFromPoint(point.x, point.y) ?? doc.body;

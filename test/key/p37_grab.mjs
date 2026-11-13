@@ -94,7 +94,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys(";Ga");
     await pick("#thumb");
     await press_keys("l", "l", "l");
-    await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
+    await poll_until("the thumb to move", async () => (await thumb_left()) >= 72);
     const held_at = await thumb_left();
     const mark = events.length;
     await press_keys("-k", "Escape");
@@ -171,7 +171,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys(";Ga");
     await pick("#thumb");
     await press_keys("l", "l", "l");
-    await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
+    await poll_until("the thumb to move", async () => (await thumb_left()) >= 72);
     const held_at = await thumb_left();
     await open_page("field", "grab_other", { new_tab: true });
     const in_hidden_tab = (code) =>
@@ -305,7 +305,13 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys(";Gg");
     await pick("#src");
     await wait_badge(mark, page_id, "GRAB");
-    await press_keys("]", "j", "[", "j");
+    const drag_y = async () => parseFloat(await read('document.getElementById("dst").dataset.y'));
+    // The pointer starts at the middle of the source, and a move key travels one step, 24 px at first.
+    const start_y = parseFloat(await read('(() => { const box = document.getElementById("src").getBoundingClientRect(); return box.top + box.height / 2; })()'));
+    await press_keys("]", "j");
+    await poll_until("a double step down", async () => Math.abs((await drag_y()) - (start_y + 48)) <= 1);
+    await press_keys("[", "j");
+    await poll_until("a normal step down", async () => Math.abs((await drag_y()) - (start_y + 72)) <= 1);
     mark = events.length;
     await press_keys("-k", "Escape");
     await wait_badge(mark, page_id, "NORMAL");
