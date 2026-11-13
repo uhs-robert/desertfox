@@ -37,6 +37,7 @@ export const area_rules = [
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules,extension_page}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/shared/page_bundle_tag.ts"], areas: ["bundles", "help", "newtab"] },
+  { globs: ["src/shared/{icons,key_caps,page_base}.*"], areas: ["help", "newtab"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
