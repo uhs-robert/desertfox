@@ -207,3 +207,34 @@ test("a new page in the tab removes the marker, a finished load or a title chang
   await service.forget_opener_on_navigation(7, { status: "loading" });
   assert.equal(await service.is_opener(7, LINE_FRAME), false);
 });
+
+test("a line for a subframe's keys aims its command there, and the next line without a target clears the aim", async () => {
+  const { service } = make();
+  await service.issue_ticket(7, 5);
+  assert.equal(await service.target_of(7), 5);
+  assert.equal(await service.target_of(8), undefined, "another tab");
+  await service.issue_ticket(7);
+  assert.equal(await service.target_of(7), undefined);
+});
+
+test("a target frame that is gone, navigated or in a closed tab is forgotten, so the command runs where the line is", async () => {
+  const { service, gone_frames } = make();
+  await service.issue_ticket(7, 5);
+  gone_frames.add(5);
+  assert.equal(await service.target_of(7), undefined);
+  gone_frames.delete(5);
+  assert.equal(await service.target_of(7), undefined, "forgotten, not just hidden for one ask");
+
+  await service.issue_ticket(7, 5);
+  await service.forget_target_frame(7, 6);
+  assert.equal(await service.target_of(7), 5, "another frame's navigation");
+  await service.forget_target_frame(7, 5);
+  assert.equal(await service.target_of(7), undefined);
+
+  await service.issue_ticket(7, 5);
+  await service.forget_opener_on_navigation(7, { status: "loading" });
+  assert.equal(await service.target_of(7), undefined);
+  await service.issue_ticket(7, 5);
+  await service.forget_opener(7);
+  assert.equal(await service.target_of(7), undefined);
+});
