@@ -97,6 +97,9 @@ await writeFile("dist/icons/desertfox-off.svg", grey_svg(await readFile("src/ico
 // The keycap mark lives with the docs images; the help welcome page shows it, so it ships from there.
 await copyFile("docs/images/desertfox-keycap.svg", "dist/icons/desertfox-keycap.svg");
 
+// The sample engines the Search engines section adds in one click. The background fetches this copy.
+await copyFile("examples/engines.toml", "dist/starter_engines.toml");
+
 // A doc the renderer cannot read fails the build here, with the file and line.
 const { parse_markdown } = await import("./render_docs.ts");
 const guide_blocks = parse_markdown("docs/search_engines.md", await readFile("docs/search_engines.md", "utf8"));

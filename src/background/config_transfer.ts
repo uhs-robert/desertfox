@@ -6,12 +6,13 @@ import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { AUTOCONFIG_FILE, type ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { ConfigImportAnswer, ExportConfig, ExportConfigAnswer, InstalledSnippet, ListSnippets, ListSnippetsAnswer, RemoveSnippet } from "../shared/messages.ts";
 import { ConfigRefusal } from "./config_reload.ts";
-import type { KeymapEdits } from "./edit_layers.ts";
+import type { EngineEdits, KeymapEdits } from "./edit_layers.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
 const SAVED_EDITS_FILE = "settings.toml";
 const SETTINGS_DIR = "settings.d/";
 const KEYMAP_DIR = "keymap.d/";
+const ENGINES_DIR = "search_engines.d/";
 const SAVED_EDITS_NAME = "zz-saved-edits.toml";
 
 const is_snippet_path = (path: string) => path.startsWith(SNIPPETS_PREFIX);
@@ -32,12 +33,22 @@ function saved_edits_path(config_files: ConfigFiles): string {
   return has_settings ? last_path_in(SETTINGS_DIR, config_files) : SAVED_EDITS_FILE;
 }
 
-// The key edits already have keymap.d's form: a table per mode, with "" to unbind.
-export function export_files(files: ConfigFiles, saved: SettingOverrides, keymap_edits: KeymapEdits = {}): { config_files: ConfigFiles; snippet_files: ConfigFiles } {
+// The files the key and engine edits add to `files`. Each goes in a file that sorts after every file of its folder.
+// The key edits already have keymap.d's form: a table per mode, with "" to unbind. The key letters of the engines join them as `[search_keys]`, one file for keymap.d.
+// The engine build reads these same files, so an engine in force is the engine an import of the export gives.
+export function layer_files(files: ConfigFiles, keymap_edits: KeymapEdits, engine_edits: EngineEdits): ConfigFiles {
+  const added: ConfigFiles = {};
+  const keymap_table = { ...keymap_edits, ...(Object.keys(engine_edits.letters ?? {}).length > 0 && { search_keys: engine_edits.letters }) };
+  if (Object.keys(keymap_table).length > 0) added[last_path_in(KEYMAP_DIR, files)] = stringify(keymap_table);
+  if (Object.keys(engine_edits.engines ?? {}).length > 0) added[last_path_in(ENGINES_DIR, files)] = stringify(engine_edits.engines!);
+  return added;
+}
+
+export function export_files(files: ConfigFiles, saved: SettingOverrides, keymap_edits: KeymapEdits = {}, engine_edits: EngineEdits = {}): { config_files: ConfigFiles; snippet_files: ConfigFiles } {
   const entries = Object.entries(files).filter(([path]) => path !== AUTOCONFIG_FILE);
   const config_files: ConfigFiles = Object.fromEntries(entries.filter(([path]) => !is_snippet_path(path)));
   if (Object.keys(saved).length > 0) config_files[saved_edits_path(config_files)] = stringify(saved);
-  if (Object.keys(keymap_edits).length > 0) config_files[last_path_in(KEYMAP_DIR, config_files)] = stringify(keymap_edits);
+  Object.assign(config_files, layer_files(config_files, keymap_edits, engine_edits));
   return { config_files, snippet_files: Object.fromEntries(entries.filter(([path]) => is_snippet_path(path))) };
 }
 
@@ -57,6 +68,8 @@ export type ConfigTransferDeps = {
   read_saved: () => Promise<SettingOverrides>;
   // Only the edits that read. `skipped` names the rest.
   read_keymap_edits: () => Promise<{ edits: KeymapEdits; skipped: string[] }>;
+  // Only the engines the build keeps. `skipped` names the rest.
+  read_engine_edits?: () => Promise<{ edits: EngineEdits; skipped: string[] }>;
   remove: (path: string) => Promise<{ warnings: number }>;
 };
 
@@ -67,7 +80,13 @@ export async function answer_config_transfer(request: ExportConfig | ListSnippet
     if (request.type === "list_snippets") return { ok: true, snippets: installed_snippets(await deps.read_files()) };
     if (request.type === "export_config") {
       const { edits, skipped } = await deps.read_keymap_edits();
-      return { ok: true, ...export_files(await deps.read_files(), await deps.read_saved(), edits), ...(skipped.length > 0 && { skipped_key_edits: skipped }) };
+      const engines = (await deps.read_engine_edits?.()) ?? { edits: {}, skipped: [] };
+      return {
+        ok: true,
+        ...export_files(await deps.read_files(), await deps.read_saved(), edits, engines.edits),
+        ...(skipped.length > 0 && { skipped_key_edits: skipped }),
+        ...(engines.skipped.length > 0 && { skipped_engine_edits: engines.skipped }),
+      };
     }
     if (typeof request.path !== "string") return { ok: false, message: "The removal names no snippet." };
     const { warnings } = await deps.remove(request.path);

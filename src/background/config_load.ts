@@ -6,7 +6,7 @@ import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEnt
 import { valid_quickmark_entries } from "../shared/quickmark_names.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 
 export type ConfigSource = "files" | "defaults";
 
@@ -140,8 +140,10 @@ export const with_edits = (config: MergedConfig, edits: SettingEdits = NO_EDITS)
 
 // The config the extension runs on: the loaded one with the browser edits over its settings. Pages that read the config themselves use this.
 export async function load_effective_config(): Promise<{ config: MergedConfig; source: ConfigSource; edits: SettingEdits; config_settings: MergedConfig["settings"] }> {
-  const [loaded, edits] = await Promise.all([load_config(), load_edits()]);
-  return { config: with_edits(loaded.config, edits), source: loaded.source, edits, config_settings: loaded.config.settings };
+  const [loaded, edits, layered] = await Promise.all([load_config(), load_edits(), browser.storage.local.get(LAYERED_CONFIG_STORAGE_KEY)]);
+  // The layered build when the engines layer holds something, so a page lists the engines the browser added.
+  const built = pick_config(layered[LAYERED_CONFIG_STORAGE_KEY]);
+  return { config: with_edits(built.source === "files" ? built.config : loaded.config, edits), source: loaded.source, edits, config_settings: loaded.config.settings };
 }
 
 // `config_settings` is the config before the edits, so the status can tell which differing value came from where.

@@ -12,6 +12,7 @@ import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, en
 import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
 import { create_key_capture, mount_keys } from "./keys_page.ts";
+import { mount_engines } from "./engines_page.ts";
 import type { ListSnippetsAnswer } from "../shared/messages.ts";
 import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
@@ -25,6 +26,7 @@ import { refused_as } from "../shared/swallow.ts";
 
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
+let stop_engines: (() => void) | undefined;
 let stop_section_hold: (() => void) | undefined;
 // Its one window listener is registered below, ahead of `content.js` and the drawer's Escape handler.
 const key_capture = create_key_capture();
@@ -93,11 +95,15 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   stop_settings = undefined;
   stop_keys?.();
   stop_keys = undefined;
+  stop_engines?.();
+  stop_engines = undefined;
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
   const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
   if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
+  const engines_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-engines") : null;
+  if (engines_box) stop_engines = mount_engines(engines_box, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never);
   const host_start_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-host-start") : null;
   draw_host_start = host_start_box ? mount_host_start(host_start_box, host_start_session, (message) => browser.runtime.sendMessage(message)) : () => undefined;
   draw_host_start();
