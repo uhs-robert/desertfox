@@ -35,6 +35,7 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label
 // The keys both visual modes share.
 const VISUAL_KEYS: ModeBindings = {
   ...MOTIONS,
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
   "/": { id: "find.open", label: "Find forward" },
   "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
   "*": { id: "find.open", args: { source: "word" }, label: "Find word forward" },
@@ -289,6 +290,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ",,": { id: "open.anything", prompt: { param: "query" }, label: "Find anything" },
     ",b": { id: "page.blur" },
     ",?": { id: "help.whichkey" },
+    "<A-?>": { id: "help.whichkey", label: "Show the keys" },
     ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
     // The ,f group opens Firefox's own pages. ,ff also reaches the pages that have no key of their own.
     ",fs": { id: "browser.open_firefox_page", args: { page: "settings" }, label: "Firefox settings" },
@@ -353,6 +355,7 @@ const BASE_SECTIONS: KeymapConfig = {
     gV: { id: "mode.set", args: { mode: "caret" } },
   },
   hint: {
+    "<A-?>": { id: "help.whichkey", label: "Show the keys" },
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
     "/": { id: "hint.key", args: { key: "slash" }, label: "Type link text" },
@@ -383,6 +386,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "<A-c>": { id: "list.act", args: { action: "reopen" }, label: "Reopen the tab in a container" },
   },
   caret: {
+    "<A-?>": { id: "help.whichkey", label: "Show the keys" },
     v: { id: "mode.set", args: { mode: "visual" } },
     V: { id: "mode.set", args: { mode: "visual_line" }, label: "Start line visual mode" },
     "<Escape>": { id: "mode.escape" },
@@ -405,6 +409,7 @@ const BASE_SECTIONS: KeymapConfig = {
     V: { id: "mode.set", args: { mode: "caret" }, label: "Return to caret mode" },
   },
   insert: {
+    "<A-?>": { id: "help.whichkey", label: "Show the keys" },
     "<Escape>": { id: "mode.escape" },
     "<C-r>": { id: "register.paste", label: "Paste register" },
     "<C-o>": { id: "text.edit_external", label: "Edit the field in the external editor" },
@@ -431,6 +436,7 @@ const MEDIA_KEYS: ModeBindings = {
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
   F: media_action("fullscreen", undefined, "Toggle fullscreen"),
   h: media_action("seek", "down", "Seek back"),
   l: media_action("seek", "up", "Seek forward"),

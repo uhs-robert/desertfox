@@ -3,7 +3,7 @@
 // which is why the request lives here and not in the command.
 
 import { copy_text } from "../content/caret/copy_text.ts";
-import { host_channel, install_command } from "../shared/native_host.ts";
+import { host_channel, install_hashes_of, main_install_command, release_install_command, type InstallHashes } from "../shared/native_host.ts";
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
 import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
@@ -82,11 +82,39 @@ function element(tag: string, text?: string, style?: string): HTMLElement {
   return node;
 }
 
+// `just release_stamp` writes the file and the build copies it, so a signed build carries it and an unstamped build has none.
+async function read_install_hashes(version: string): Promise<InstallHashes | undefined> {
+  try {
+    return install_hashes_of(await (await fetch(browser.runtime.getURL("host_sha256.json"))).json(), version);
+  } catch {
+    return undefined;
+  }
+}
+
+// The step text and command for this build. A release build without the signed hashes gets the unchecked main command,
+// never a release command it cannot check.
+export function install_step(channel: string, hashes: InstallHashes | undefined): { text: string; command: string; checked: boolean } {
+  if (channel !== "main" && hashes !== undefined) {
+    return {
+      text: `Step 2: run this in a terminal. It fetches the install script and the host of version ${channel} and checks each against the SHA-256 this signed build carries.`,
+      command: release_install_command(channel, hashes),
+      checked: true,
+    };
+  }
+  const reason = channel === "main" ? "This is a development install, so" : "This build carries no host hashes, so";
+  return {
+    text: `Step 2: run this in a terminal. Warning: ${reason} the command fetches the host from the main branch with no checksum. Use it for development only.`,
+    command: main_install_command(),
+    checked: false,
+  };
+}
+
 // The host install command for this build's channel, with a Copy button.
 async function append_install_steps(panel: HTMLElement): Promise<void> {
   const install_type = (await browser.management.getSelf()).installType;
-  const channel = host_channel(install_type, browser.runtime.getManifest().version);
-  const command = install_command(channel);
+  const version = browser.runtime.getManifest().version;
+  const channel = host_channel(install_type, version);
+  const { text, command, checked } = install_step(channel, channel === "main" ? undefined : await read_install_hashes(version));
   const code = element("pre", command, "white-space:pre-wrap;word-break:break-all;margin:.5rem 0;padding:.5rem;background:rgba(127,127,127,.15)");
   const copy = element("button", "Copy command", BUTTON_STYLE);
   copy.addEventListener("click", () => {
@@ -94,12 +122,9 @@ async function append_install_steps(panel: HTMLElement): Promise<void> {
       copy.textContent = copied ? "Copied" : "Copy failed, select the text instead";
     });
   });
-  panel.append(
-    element("p", channel === "main" ? "Step 2: run this in a terminal. It fetches the host from the main branch, with no checksum." : `Step 2: run this in a terminal. It fetches the host of version ${channel} and checks its SHA-256.`),
-    code,
-    copy,
-  );
-  if (channel === "main") return;
+  panel.append(element("p", text), code, copy);
+  // Without the signed hashes the host cannot update itself either, so the consent has nothing to allow.
+  if (!checked) return;
   const consent_status = element("p", undefined, "margin:.5rem 0 0");
   consent_status.setAttribute("role", "status");
   const consent = element("button", AUTO_UPDATE_BUTTON, `${BUTTON_STYLE};margin-top:.5rem`);

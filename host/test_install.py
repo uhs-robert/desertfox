@@ -36,7 +36,7 @@ path=$(awk -F'\\t' -v u="$url" '$1 == u { print $2 }' "$STUB_ROUTES")
 cp "$path" "$out"
 """
 
-TOOLS = ["sh", "mktemp", "head", "grep", "cp", "chmod", "mv", "rm", "mkdir", "awk", "cat", "env", "dirname", "tr", "sed", "ln", "flock"]
+TOOLS = ["sh", "sha256sum", "mktemp", "head", "grep", "cp", "chmod", "mv", "rm", "mkdir", "awk", "cat", "env", "dirname", "tr", "sed", "ln", "flock"]
 
 
 def real_tool(name):
@@ -90,15 +90,23 @@ class InstallCase(unittest.TestCase):
             file.writelines(kept)
             file.write(f"{url}\t{path}\n")
 
-    def serve_release(self, host_bytes=None, checksum=None):
-        host_bytes = self.host_bytes if host_bytes is None else host_bytes
-        self.serve(f"{RELEASE_BASE}/desertfox-host", host_bytes)
-        digest = hashlib.sha256(self.host_bytes).hexdigest() if checksum is None else checksum
-        self.serve(f"{RELEASE_BASE}/desertfox-host.sha256", f"{digest}  desertfox-host\n".encode())
+    def serve_release(self, host_bytes=None):
+        self.serve(f"{RELEASE_BASE}/desertfox-host", self.host_bytes if host_bytes is None else host_bytes)
         self.serve(f"{RELEASE_BASE}/desertfox-bridge", self.bridge_bytes)
-        self.serve(f"{RELEASE_BASE}/desertfox-bridge.sha256", f"{hashlib.sha256(self.bridge_bytes).hexdigest()}  desertfox-bridge\n".encode())
         self.serve(f"{RELEASE_BASE}/desertfox", self.cli_bytes)
-        self.serve(f"{RELEASE_BASE}/desertfox.sha256", f"{hashlib.sha256(self.cli_bytes).hexdigest()}  desertfox\n".encode())
+
+    def script_hashes(self):
+        return {name: hashlib.sha256(data).hexdigest() for name, data in (("desertfox-host", self.host_bytes), ("desertfox-bridge", self.bridge_bytes), ("desertfox", self.cli_bytes))}
+
+    def release_args(self, version="0.1.5", **changed):
+        """The version and one --sha256 per script, the real hashes unless `changed` names another (keys use _ for -)."""
+        hashes = self.script_hashes()
+        hashes.update({name.replace("_", "-"): digest for name, digest in changed.items()})
+        args = [version]
+        for name, digest in hashes.items():
+            if digest is not None:
+                args += ["--sha256", f"{name}={digest}"]
+        return args
 
     def serve_main(self, bridge_bytes=None):
         self.serve(f"{MAIN_BASE}/desertfox-host", self.host_bytes)
@@ -142,9 +150,11 @@ class InstallCase(unittest.TestCase):
 class ReleaseChannelTest(InstallCase):
     def test_version_installs_from_the_release_and_writes_the_manifest(self):
         self.serve_release()
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.curl_urls(), [f"{RELEASE_BASE}/{name}" for name in ("desertfox-host", "desertfox-host.sha256", "desertfox-bridge", "desertfox-bridge.sha256", "desertfox", "desertfox.sha256")])
+        self.assertEqual(self.curl_urls(), [f"{RELEASE_BASE}/{name}" for name in ("desertfox-host", "desertfox-bridge", "desertfox")])
+        self.assertIn("against the hashes the extension gave", done.stdout)
+        self.assertNotIn("WARNING", done.stderr)
         with open(self.host_path, "rb") as file:
             self.assertEqual(file.read(), self.host_bytes)
         self.assertTrue(os.stat(self.host_path).st_mode & stat.S_IXUSR)
@@ -157,7 +167,7 @@ class ReleaseChannelTest(InstallCase):
 
     def test_the_bridge_host_is_installed_beside_the_config_host(self):
         self.serve_release()
-        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
         with open(self.bridge_path, "rb") as file:
             self.assertEqual(file.read(), self.bridge_bytes)
         self.assertTrue(os.stat(self.bridge_path).st_mode & stat.S_IXUSR)
@@ -170,14 +180,14 @@ class ReleaseChannelTest(InstallCase):
 
     def test_the_command_line_is_installed_and_linked_into_local_bin(self):
         self.serve_release()
-        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
         cli_path = os.path.join(self.home, ".local", "share", "desertfox", "desertfox")
         with open(cli_path, "rb") as file:
             self.assertEqual(file.read(), self.cli_bytes)
         self.assertTrue(os.stat(cli_path).st_mode & stat.S_IXUSR)
         link_path = os.path.join(self.home, ".local", "bin", "desertfox")
         self.assertEqual(os.readlink(link_path), cli_path)
-        self.assertEqual(self.run_install("0.1.5").returncode, 0, "a rerun replaces the link")
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0, "a rerun replaces the link")
 
     def test_a_file_already_at_the_link_path_is_left_alone(self):
         self.serve_release()
@@ -185,83 +195,99 @@ class ReleaseChannelTest(InstallCase):
         os.makedirs(os.path.dirname(link_path))
         with open(link_path, "w") as file:
             file.write("mine")
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("Left %s alone" % link_path, done.stdout)
         with open(link_path) as file:
             self.assertEqual(file.read(), "mine")
 
-    def test_a_bad_command_line_checksum_installs_nothing(self):
+    def test_a_wrong_command_line_hash_installs_nothing(self):
         self.serve_release()
-        self.serve(f"{RELEASE_BASE}/desertfox.sha256", ("0" * 64 + "  desertfox\n").encode())
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args(desertfox="0" * 64))
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("checksum mismatch for desertfox ", done.stderr)
         self.assert_nothing_installed()
 
-    def test_a_bad_bridge_checksum_installs_neither_host(self):
+    def test_a_wrong_bridge_hash_installs_neither_host(self):
         self.serve_release()
-        self.serve(f"{RELEASE_BASE}/desertfox-bridge.sha256", ("0" * 64 + "  desertfox-bridge\n").encode())
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args(desertfox_bridge="0" * 64))
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("checksum mismatch for desertfox-bridge", done.stderr)
         self.assert_nothing_installed()
 
-    def test_checksum_mismatch_refuses_and_installs_nothing(self):
-        self.serve_release(checksum="0" * 64)
-        done = self.run_install("0.1.5")
+    def test_a_wrong_host_hash_refuses_and_installs_nothing(self):
+        self.serve_release()
+        done = self.run_install(*self.release_args(desertfox_host="0" * 64))
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("checksum mismatch", done.stderr)
+        self.assertIn("checksum mismatch for desertfox-host", done.stderr)
         self.assert_nothing_installed()
 
-    def test_tampered_host_with_the_real_checksum_file_is_refused(self):
-        self.serve_release(host_bytes=self.host_bytes + b"\nimport os\n")
-        done = self.run_install("0.1.5")
+    def test_a_replaced_host_with_its_own_checksum_file_is_refused(self):
+        tampered = self.host_bytes + b"\nimport os\n"
+        self.serve_release(host_bytes=tampered)
+        self.serve(f"{RELEASE_BASE}/desertfox-host.sha256", f"{hashlib.sha256(tampered).hexdigest()}  desertfox-host\n".encode())
+        done = self.run_install(*self.release_args())
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("checksum mismatch", done.stderr)
+        self.assertIn("checksum mismatch for desertfox-host", done.stderr)
+        self.assertNotIn(f"{RELEASE_BASE}/desertfox-host.sha256", self.curl_urls())
         self.assert_nothing_installed()
 
     def test_mismatch_leaves_an_earlier_install_untouched(self):
         self.serve_release()
-        self.assertEqual(self.run_install("0.1.5").returncode, 0)
-        self.serve_release(checksum="f" * 64)
-        self.assertNotEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
+        self.assertNotEqual(self.run_install(*self.release_args(desertfox_host="f" * 64)).returncode, 0)
         with open(self.host_path, "rb") as file:
             self.assertEqual(file.read(), self.host_bytes)
 
-    def test_empty_checksum_file_refuses(self):
-        self.serve(f"{RELEASE_BASE}/desertfox-host", self.host_bytes)
-        self.serve(f"{RELEASE_BASE}/desertfox-host.sha256", b"")
-        done = self.run_install("0.1.5")
-        self.assertNotEqual(done.returncode, 0)
+    def test_a_missing_hash_refuses_before_any_fetch(self):
+        self.serve_release()
+        for name in ("desertfox_host", "desertfox_bridge", "desertfox"):
+            done = self.run_install(*self.release_args(**{name: None}))
+            self.assertNotEqual(done.returncode, 0, name)
+            self.assertIn(f"no hash given for {name.replace('_', '-')}", done.stderr)
+        self.assertEqual(self.curl_urls(), [])
+        self.assert_nothing_installed()
+
+    def test_a_malformed_hash_argument_refuses_before_any_fetch(self):
+        self.serve_release()
+        good = self.script_hashes()["desertfox-host"]
+        for value in ("desertfox-host", f"desertfox-host={good[:-1]}", f"desertfox-host={good.upper()}", f"desertfox-host={good}x", f"install.sh={good}", ""):
+            done = self.run_install(*self.release_args(desertfox_host=None), "--sha256", value)
+            self.assertNotEqual(done.returncode, 0, value)
+        done = self.run_install(*self.release_args(), "--sha256", f"desertfox-host={good}")
+        self.assertIn("more than one hash given for desertfox-host", done.stderr)
+        self.assertNotEqual(self.run_install("0.1.5", "--sha256").returncode, 0)
+        self.assertEqual(self.curl_urls(), [])
         self.assert_nothing_installed()
 
     def test_missing_release_asset_reports_the_url(self):
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertNotEqual(done.returncode, 0)
         self.assertIn(f"{RELEASE_BASE}/desertfox-host", done.stderr)
         self.assert_nothing_installed()
 
     def test_rerun_is_idempotent(self):
         self.serve_release()
-        self.assertEqual(self.run_install("0.1.5").returncode, 0)
-        self.assertEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
         self.assertEqual(len(self.home_files()), 6)
 
 
 class MainChannelTest(InstallCase):
-    def test_main_fetches_from_the_main_branch_with_no_checksum(self):
+    def test_main_fetches_from_the_main_branch_with_no_checksum_and_warns(self):
         self.serve_main()
         done = self.run_install("main")
         self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("WARNING: installing the host from the main branch with no checksum", done.stderr)
         self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/{name}" for name in ("desertfox-host", "desertfox-bridge", "desertfox")])
         self.assertTrue(os.path.isfile(self.manifest_path))
         self.assertTrue(os.path.isfile(self.bridge_manifest_path))
 
     def test_channel_flag_overrides_a_version(self):
         self.serve_main()
-        done = self.run_install("0.1.5", "--channel", "main")
+        done = self.run_install(*self.release_args(), "--channel", "main")
         self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("WARNING", done.stderr)
         self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/{name}" for name in ("desertfox-host", "desertfox-bridge", "desertfox")])
 
     def test_a_page_that_is_not_the_host_is_refused(self):
@@ -335,6 +361,69 @@ class ArgumentAndPythonTest(InstallCase):
         self.assert_nothing_installed()
 
 
+class HelpPageCommandTest(InstallCase):
+    """Runs the exact line the Help page shows for a release build, as a terminal would, against the stubbed release."""
+
+    def setUp(self):
+        super().setUp()
+        self.node = shutil.which("node")
+        if self.node is None:
+            self.skipTest("node not found")
+        with open(INSTALL, "rb") as file:
+            self.install_bytes = file.read()
+
+    def shown_command(self, install_sh=None):
+        hashes = {"install_sh": install_sh or hashlib.sha256(self.install_bytes).hexdigest(), "sha256": self.script_hashes()}
+        script = "const { release_install_command } = await import(process.argv[1]); console.log(release_install_command('0.1.5', JSON.parse(process.argv[2])));"
+        module = os.path.join(os.path.dirname(HOST_DIR), "src", "shared", "native_host.ts")
+        done = subprocess.run([self.node, "--no-warnings", "--input-type=module", "-e", script, module, json.dumps(hashes)], capture_output=True, text=True, timeout=60, check=True)
+        return done.stdout.strip()
+
+    def run_shown(self, command, shell="sh"):
+        env = {"PATH": self.bin, "HOME": self.home, "STUB_LOG": self.log, "STUB_ROUTES": self.routes, "TMPDIR": self.tmp.name}
+        return subprocess.run([real_tool(shell), "-c", command], env=env, capture_output=True, text=True, timeout=60)
+
+    def leftover_temp_files(self):
+        return [name for name in os.listdir(self.tmp.name) if name.startswith("tmp.")]
+
+    def test_the_shown_command_installs_a_release_and_removes_its_temp_file(self):
+        self.serve(f"{RELEASE_BASE}/install.sh", self.install_bytes)
+        self.serve_release()
+        for shell in ("sh", "bash", "zsh"):
+            if shell != "sh" and shutil.which(shell) is None:
+                continue
+            done = self.run_shown(self.shown_command(), shell)
+            self.assertEqual(done.returncode, 0, f"{shell}: {done.stderr}")
+            self.assertTrue(os.path.isfile(self.host_path))
+            self.assertEqual(self.leftover_temp_files(), [], shell)
+
+    def test_a_changed_install_script_never_runs(self):
+        self.serve(f"{RELEASE_BASE}/install.sh", self.install_bytes + b"\n# changed\n")
+        self.serve_release()
+        done = self.run_shown(self.shown_command())
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("FAILED", done.stdout + done.stderr)
+        self.assertEqual(self.curl_urls(), [f"{RELEASE_BASE}/install.sh"])
+        self.assert_nothing_installed()
+        self.assertEqual(self.leftover_temp_files(), [])
+
+    def test_a_missing_install_script_stops_the_line(self):
+        self.serve_release()
+        done = self.run_shown(self.shown_command())
+        self.assertNotEqual(done.returncode, 0)
+        self.assert_nothing_installed()
+        self.assertEqual(self.leftover_temp_files(), [])
+
+    def test_a_changed_host_is_refused_by_the_hashes_in_the_line(self):
+        self.serve(f"{RELEASE_BASE}/install.sh", self.install_bytes)
+        self.serve_release(host_bytes=self.host_bytes + b"\n# changed\n")
+        done = self.run_shown(self.shown_command())
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("checksum mismatch for desertfox-host", done.stderr)
+        self.assert_nothing_installed()
+        self.assertEqual(self.leftover_temp_files(), [])
+
+
 GH_STUB = """#!/bin/sh
 echo "$@" >> "$GH_LOG"
 # `run list` answers the id it would print after the jq filter: 0 before the dispatch, 42 after.
@@ -367,7 +456,7 @@ class UpdateLockTest(InstallCase):
     def test_install_during_an_update_fails_and_writes_nothing(self):
         self.serve_release()
         self.hold_lock()
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("update running", done.stderr)
         self.assert_nothing_installed()
@@ -375,15 +464,15 @@ class UpdateLockTest(InstallCase):
     def test_install_goes_through_once_the_updater_lets_go(self):
         self.serve_release()
         descriptor = self.hold_lock()
-        self.assertNotEqual(self.run_install("0.1.5").returncode, 0)
+        self.assertNotEqual(self.run_install(*self.release_args()).returncode, 0)
         os.close(descriptor)
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue(os.path.exists(self.host_path))
 
     def test_a_finished_install_leaves_the_lock_free(self):
         self.serve_release()
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertEqual(done.returncode, 0, done.stderr)
         self.hold_lock()
 
@@ -405,7 +494,7 @@ sys.exit(1)' "{self.lock_path}"; then echo held >> "{probe}"; else echo free >> 
 exec {real_chmod} "$@"
 """,
         )
-        done = self.run_install("0.1.5")
+        done = self.run_install(*self.release_args())
         self.assertEqual(done.returncode, 0, done.stderr)
         with open(probe) as file:
             seen = file.read().split()
@@ -477,7 +566,10 @@ class ReleaseStepTest(InstallCase):
         with open(os.path.join(self.assets, "host_sha256.json")) as file:
             hashes = json.load(file)
         self.assertEqual(hashes["version"], version)
-        self.assertEqual(sorted(hashes["sha256"]), ["desertfox", "desertfox-bridge", "desertfox-host"])
+        self.assertEqual(sorted(hashes), ["install_sh", "sha256", "version"])
+        self.assertEqual(sorted(hashes["sha256"]), ["desertfox", "desertfox-bridge", "desertfox-host"], "self_update takes exactly these three")
+        with open(INSTALL, "rb") as file:
+            self.assertEqual(hashes["install_sh"], hashlib.sha256(file.read()).hexdigest())
         for name, expected in hashes["sha256"].items():
             with open(os.path.join(self.assets, name), "rb") as file:
                 data = file.read()
@@ -503,6 +595,15 @@ class ReleaseStepTest(InstallCase):
         done = self.just("release_publish", self.package_version(), self.xpi)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("no longer matches its checksum", done.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_publish_refuses_an_install_script_changed_after_hashing(self):
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
+        with open(os.path.join(self.assets, "install.sh"), "ab") as file:
+            file.write(b"\n# changed\n")
+        done = self.just("release_publish", self.package_version(), self.xpi)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("install.sh does not match install_sh", done.stderr)
         self.assertFalse(os.path.exists(self.gh_log))
 
     def release_work_dir(self, version):
@@ -575,13 +676,14 @@ class ReleaseStepTest(InstallCase):
         self.assertEqual(sorted(os.listdir(self.gh_out)), sorted(["desertfox", "desertfox-bridge", "desertfox-bridge.sha256", "desertfox-host", "desertfox-host.sha256", "desertfox.sha256", f"desertfox-{version}.xpi", "install.sh"]))
         self.assertIn(f"/desertfox-{version}.xpi ", logged)
 
-    def test_uploaded_assets_install_through_the_script(self):
+    def test_uploaded_assets_install_through_the_script_with_the_hashes_the_build_embeds(self):
         self.assertEqual(self.publish().returncode, 0)
-        base = RELEASE_BASE
-        for name in ("desertfox-host", "desertfox-host.sha256", "desertfox-bridge", "desertfox-bridge.sha256", "desertfox", "desertfox.sha256"):
+        with open(os.path.join(self.assets, "host_sha256.json")) as file:
+            hashes = json.load(file)["sha256"]
+        for name in ("desertfox-host", "desertfox-bridge", "desertfox"):
             with open(os.path.join(self.gh_out, name), "rb") as file:
-                self.serve(f"{base}/{name}", file.read())
-        done = self.run_install("0.1.5")
+                self.serve(f"{RELEASE_BASE}/{name}", file.read())
+        done = self.run_install(*self.release_args(**{name.replace("-", "_"): digest for name, digest in hashes.items()}))
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_uploaded_assets_pass_the_updater_with_the_hashes_the_build_embeds(self):

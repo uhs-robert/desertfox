@@ -25,7 +25,7 @@ oasis-themes oasis_nvim_dir: install_deps
 build: install_deps
     npm run --silent build
 
-# Check docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
+# Check docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, lint for floating and misused promises, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
@@ -316,7 +316,7 @@ release_commit_push:
 # Folder of the stamped release files, kept between the recipes of one release so publish uploads the bytes the build hashed.
 export RELEASE_ASSETS_DIR := env("RELEASE_ASSETS_DIR", "release-assets")
 
-# Copy the hosts, the command line and install.sh into RELEASE_ASSETS_DIR and write the given version into both hosts as release_version. Then hash the stamped files: a .sha256 per script for the GitHub release, and host_sha256.json, which the extension build copies into dist/ so the signed build carries the hashes. Stamping comes first, so the hashes match the shipped bytes.
+# Copy the hosts, the command line and install.sh into RELEASE_ASSETS_DIR and write the given version into both hosts as release_version. Then hash the stamped files: a .sha256 per script for the GitHub release, and host_sha256.json (the three scripts under sha256, install.sh as install_sh), which the extension build copies into dist/ so the signed build carries the hashes. Stamping comes first, so the hashes match the shipped bytes.
 [private]
 release_stamp version:
     #!/usr/bin/env bash
@@ -342,8 +342,9 @@ release_stamp version:
         sha256sum "$script" > "$script.sha256"
     done
     digest() { cut -d ' ' -f 1 "$1.sha256"; }
-    jq -n --arg version "$version" --arg host "$(digest desertfox-host)" --arg bridge "$(digest desertfox-bridge)" --arg cli "$(digest desertfox)" \
-        '{version: $version, sha256: {"desertfox-host": $host, "desertfox-bridge": $bridge, "desertfox": $cli}}' > host_sha256.json
+    # install_sh sits beside sha256, not in it: self_update refuses a sha256 that names anything but the three scripts.
+    jq -n --arg version "$version" --arg host "$(digest desertfox-host)" --arg bridge "$(digest desertfox-bridge)" --arg cli "$(digest desertfox)" --arg install "$(sha256sum install.sh | cut -d ' ' -f 1)" \
+        '{version: $version, sha256: {"desertfox-host": $host, "desertfox-bridge": $bridge, "desertfox": $cli}, install_sh: $install}' > host_sha256.json
     echo "stamped the hosts as $version in $RELEASE_ASSETS_DIR"
 
 # Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
@@ -371,6 +372,11 @@ release_publish version xpi:
             exit 1
         fi
     done
+    # The install command on the Help page checks install.sh against this hash before it runs it.
+    if [ "$(jq -r .install_sh "$assets/host_sha256.json")" != "$(sha256sum "$assets/install.sh" | cut -d ' ' -f 1)" ]; then
+        echo "release_publish: $assets/install.sh does not match install_sh in host_sha256.json, which the signed build carries. Run 'just release_stamp' on the commit that was signed." >&2
+        exit 1
+    fi
     xpi_args=()
     if [ -f "$xpi" ]; then
         # The release asset name is the file name, and updates.json links to exactly this one.

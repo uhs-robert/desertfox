@@ -14,7 +14,7 @@ import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
 export type KeyDecision = "cancel" | "pass";
 
 // The chords the default keymap binds in normal mode or the browser table. Content has no keymap before the first read, and a frame outside a field starts in normal mode. A chord outside this set passes at once so Firefox keeps its shortcut (Ctrl+L). A test checks it against DEFAULT_KEYMAP. A chord the user binds beyond the defaults reaches Firefox if typed in the first moments of a page.
-export const DEFAULT_CHORDS = /^<(?:C-[abdfiouvx[]|A-[,jkmp]|AC-(?:Escape|`))>$/;
+export const DEFAULT_CHORDS = /^<(?:C-[abdfiouvx[]|A-[,?jkmp]|AC-(?:Escape|`))>$/;
 
 // Runs when a held key is replayed and the keymap does not take it, so the page can still get the key.
 export type OnReplayPass = () => void;

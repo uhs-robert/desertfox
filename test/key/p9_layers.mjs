@@ -45,7 +45,7 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, open_
     await press_keys("y");
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === "p9_layers", "the copied toast");
     mark = events.length;
-    await press_keys("_w");
+    await press_keys("-M", "alt", "-M", "shift", "/", "-m", "shift", "-m", "alt");
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "p9_layers" && event.value !== "", "the which-key panel");
     const { hosts, overlaps } = JSON.parse(await in_active_tab(hit_test));
     expect(hosts >= 2, `${hosts} surface hosts are shown, need the which-key panel and the toast`);

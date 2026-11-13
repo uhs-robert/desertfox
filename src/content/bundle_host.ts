@@ -182,7 +182,7 @@ export function create_bundle_host() {
     api: {
       register_sink_: (mode, sink) => void sinks.set(mode, sink),
       register_handler_: (command_id, handler) => void handlers.set(command_id, handler),
-      set_mode_,
+      set_mode_: (mode) => void set_mode_(mode),
       get_mode: () => current_mode,
       escape_: () => in_mode_order_(() => deps.escape_?.()),
       run_command_: (command_id, name, args) => run_command_(command_id, name, args, `${name} has no ${command_id}`),

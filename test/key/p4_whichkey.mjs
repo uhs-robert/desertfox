@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["whichkey", "help"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line }) {
+export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, hint_label_count }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
   await open_page("page", "wk", { new_tab: true });
@@ -63,6 +63,12 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "wk" && event.value === "", "the panel to close");
   };
 
+  const close_panel_of = async (page_id) => {
+    const mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === page_id && event.value === "", "the panel to close");
+  };
+
   // The page can read the panel host, so the test sees only numbers: how many groups were dropped from the title, and the panel width.
   const shape_after = async (keys) => {
     const mark = events.length;
@@ -87,7 +93,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(shown.width <= shown.viewport - 32, `panel width ${shown.width} past the cap of ${shown.viewport - 32}`);
   });
 
-  const panel_value = (mark, predicate, what) => wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "wk" && predicate(event.value), what);
+  const panel_value = (mark, predicate, what, page_id = "wk") => wait_event(mark, (event) => event.type === "whichkey" && event.page_id === page_id && predicate(event.value), what);
   const is_panel_of = (rows) => (value) => value.endsWith(`:${rows}`);
 
   async function open_gx_panel() {
@@ -156,11 +162,12 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     expect(await scroll_delta_by_press("wk", [" "]) > 0, "Space did not scroll the page");
   });
 
-  // keymap.d binds ,w to help.whichkey in normal mode and _w in caret and visual mode, because caret and visual mode already use , to repeat a character find. It sits there so the keymap that config.reload writes keeps it. Each mode lists its own keys.
-  const rows_after = async (keys, mode) => {
+  // <A-?> (Alt+Shift+/) is the default key in every mode. keymap.d adds ,w in normal mode only for the cases that press a short key. Each mode lists its own keys.
+  const CHORD = ["-M", "alt", "-M", "shift", "/", "-m", "shift", "-m", "alt"];
+  const rows_after = async (keys, mode, page_id = "wk") => {
     const mark = events.length;
     await press_keys(...keys);
-    const shown = await panel_value(mark, (value) => value !== "", `the manual panel in ${mode} mode`);
+    const shown = await panel_value(mark, (value) => value !== "", `the manual panel in ${mode} mode`, page_id);
     return Number(shown.value.split(":")[1]);
   };
 
@@ -174,17 +181,52 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     const normal_rows = await rows_after([",w"], "normal");
     await close_panel();
     await press_for_badge(["gV"], "CARET");
-    const caret_rows = await rows_after(["_w"], "caret");
+    const caret_rows = await rows_after([...CHORD], "caret");
     // Escape closes the panel and also leaves caret mode, so V starts caret mode again before v.
     await press_keys("-k", "Escape");
     await poll_until("the NORMAL badge after Escape", async () => badge_of_page() === "NORMAL");
     await press_for_badge(["gV"], "CARET");
     await press_for_badge(["v"], "VISUAL");
-    const visual_rows = await rows_after(["_w"], "visual");
+    const visual_rows = await rows_after([...CHORD], "visual");
     await press_keys("-k", "Escape", "-k", "Escape");
     await poll_until("the NORMAL badge after two Escapes", async () => badge_of_page() === "NORMAL");
     expect(caret_rows !== normal_rows, `caret mode listed ${caret_rows} rows, the same as normal mode`);
     expect(visual_rows !== normal_rows, `visual mode listed ${visual_rows} rows, the same as normal mode`);
+  });
+
+  await run_case("the chord shows the panel in insert mode with a field focused and leaves the field and the mode alone", async () => {
+    await open_page("page", "wk_insert", { new_tab: true });
+    await in_active_tab(`document.body.insertAdjacentHTML("afterbegin", '<input id="wk_input">'); 0`);
+    await press_keys("I");
+    await poll_until("the INSERT badge", async () => events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT");
+    const rows = await rows_after([...CHORD], "insert", "wk_insert");
+    expect(rows > 0, "the insert panel listed no keys");
+    expect((await in_active_tab(`document.activeElement.id + "|" + document.activeElement.value`)) === "wk_input|", "the chord moved the focus or typed into the field");
+    expect(events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT", "the chord left insert mode");
+    await close_panel_of("wk_insert");
+  });
+
+  // keymap.d binds zq in insert mode. The first z is a half-typed sequence, which must not open the panel after the delay.
+  await run_case("a half-typed insert sequence shows no panel after the pause", async () => {
+    // The Escape of the case before left insert mode.
+    await press_keys("I");
+    await poll_until("the INSERT badge", async () => events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT");
+    const mark = events.length;
+    await press_keys("z");
+    await sleep(which_key_delay_ms * 3);
+    expect(whichkey_events(mark, "wk_insert").every((event) => event.value === ""), "the pause panel opened in insert mode");
+    await press_keys("x");
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("the chord shows the panel in hint mode", async () => {
+    await open_page("hints", "wk_hint", { new_tab: true });
+    await press_keys("f");
+    await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
+    const rows = await rows_after([...CHORD], "hint", "wk_hint");
+    expect(rows > 0, "the hint panel listed no keys");
+    expect((await hint_label_count()) > 0, "the panel removed the hint labels");
+    await close_panel_of("wk_hint");
   });
 
   // Set DESERTFOX_SHOT_DIR to also save screenshots of the panel. A raised page zoom shrinks the viewport, which forces the columns.

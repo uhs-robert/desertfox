@@ -17,14 +17,17 @@
     "defaults:check": "node --no-warnings tools/build_default_settings.ts --check",
     "completion:write": "node --no-warnings tools/build_setting_completion.ts --write",
     "completion:check": "node --no-warnings tools/build_setting_completion.ts --check",
-    "test": "npm run --silent docs:check && npm run --silent themes:check && npm run --silent defaults:check && npm run --silent completion:check && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""
+    "lint": "eslint",
+    "test": "npm run --silent docs:check && npm run --silent themes:check && npm run --silent defaults:check && npm run --silent completion:check && npm run --silent lint && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
     "@types/node": "^26.6.6",
     "esbuild": "^0.25.0",
+    "eslint": "^9.39.5",
     "smol-toml": "^1.9.1",
     "typescript": "^5.9.0",
+    "typescript-eslint": "^8.72.2",
     "web-ext": "10.7.0"
   }
 }
