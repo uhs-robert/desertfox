@@ -4,7 +4,7 @@
   desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
-  desertfox theme <theme>           tell DesertFox which theme the desktop uses, or keep it for the next start while the bridge is down
+  desertfox theme <theme>             tell DesertFox which theme the desktop uses, or keep it for the next start while the bridge is down
   desertfox events                    print each event of the bridge as one JSON line until the bridge ends
 
 The tab commands need `bridge_share_tabs` on in DesertFox, and never see a private window:

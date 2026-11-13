@@ -352,7 +352,8 @@ test("the editor schema matches its output before #85, apart from the listed cha
   properties.newtab_links.default = [];
   // A setting added after the fixture.
   properties.history_list_max = (settings_schema().properties as Record<string, unknown>).history_list_max;
-  // `desktop` joined the theme examples and its description.
+  // `palette` became `theme`, and `desktop` joined its examples and description.
+  delete properties.palette;
   properties.theme = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).theme));
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
