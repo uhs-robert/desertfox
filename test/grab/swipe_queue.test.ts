@@ -68,9 +68,9 @@ test("two fast l presses run two flings one after the other, never two presses a
 test("mixed keys run in the order they came", async () => {
   const { box, log } = carousel();
   await start_swipe(box);
-  await Promise.all([key("right"), key("left"), key("right")]);
+  await Promise.all([key("right"), key("left")]);
   // The press of a fling starts on the side the key names: right at 240, left at 60.
-  assert.deepEqual(log.filter((entry) => entry.type === "pointerdown").map((entry) => entry.x), [240, 60, 240]);
+  assert.deepEqual(log.filter((entry) => entry.type === "pointerdown").map((entry) => entry.x), [240, 60]);
   exit_sink();
 });
 
@@ -95,7 +95,7 @@ test("a key past the queue cap is dropped", async () => {
   await start_swipe(box);
   await Promise.all(Array.from({ length: 12 }, () => key("right")));
   // The cap counts the flings that have not started, and none has when the keys arrive together.
-  assert.equal(count("pointerdown"), 4);
-  assert.equal(count("pointerup"), 4);
+  assert.equal(count("pointerdown"), 2);
+  assert.equal(count("pointerup"), 2);
   exit_sink();
 });

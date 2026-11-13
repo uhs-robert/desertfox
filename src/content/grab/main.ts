@@ -93,8 +93,8 @@ function register(host: BundleHostApi): void {
     return pick_target();
   });
 
-  // The flings of fast keys run one after another, so each finishes before the next presses. `end_all` swaps in a new queue, and a fling that waits in the old one sees that and never starts. A key past the cap is dropped, so a held key builds no backlog.
-  const MAX_WAITING_FLINGS = 4;
+  // The flings of fast keys run one after another, so each finishes before the next presses. `end_all` swaps in a new queue, and a fling that waits in the old one sees that and never starts. A key past the cap of two waiting flings is dropped, so a held key moves at most two more slides after key-up.
+  const MAX_WAITING_FLINGS = 2;
   // One entry per fling that has not started.
   let queue: true[] = [];
   let last_fling: Promise<Outcome> = Promise.resolve(ran);

@@ -33,7 +33,7 @@ const DRIVE_STEPS = 8;
 const STEP_PAUSE_MS = 30;
 // A fling is a short drag at the speed of a finger, about 2 px per ms. A library reads the speed from the event times: Splide picks its target from the release velocity and moves two slides at 3 px per ms. The pause grows with the distance to hold the speed on a wide box. The distance is this share of the box, which clears the slide threshold of a carousel.
 export const FLING_STEPS = 6;
-// The wait after a fling's release. A library still animates the slide change then, and Splide and Swiper ignore a press that lands in it, so the next fling of a queue would move nothing.
+// The wait after a fling's release. A library still animates the slide change then, and Splide and Swiper ignore a press that lands in it, so the next fling of a queue would move nothing. 350 ms fits the default speed of those libraries, and a slider with a slower transition can still drop a fast second press.
 export const FLING_SETTLE_MS = 350;
 const FLING_SHARE = 0.6;
 
