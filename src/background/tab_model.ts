@@ -254,8 +254,10 @@ export function create_tab_model(deps: TabModelDeps) {
     }
   };
   const number_windows = (windows: readonly WindowLike[]): WindowNumbers => new Map(numbered_windows(windows).map((window) => [window.id, window.number]));
+  // The fallback covers the refused read only; an error in number_windows still propagates.
+  const read_window_numbers = () => refused_as(deps.windows(), undefined).then((windows) => windows && number_windows(windows));
   const reread_windows = latest_only(
-    () => refused_as(deps.windows().then(number_windows), undefined),
+    read_window_numbers,
     (numbers) => {
       if (!numbers) return;
       window_numbers = numbers;
@@ -386,7 +388,7 @@ export function create_tab_model(deps: TabModelDeps) {
         // Windows and containers too, so a missed window or container event heals the labels as well.
         const [tabs, numbers, read_containers, read_groups] = await Promise.all([
           refused_as(deps.query(), undefined),
-          refused_as(deps.windows().then(number_windows), undefined),
+          read_window_numbers(),
           refused_as(deps.containers(), new Map() as Containers),
           refused_as(deps.groups(), undefined),
         ]);

@@ -381,7 +381,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
       asker.incognito ? [] : refused_as(deps.search_history(), []),
       asker.incognito ? [] : refused_as(deps.closed_tabs(), [] as ClosedTabRow[]),
       refused_as(deps.query_tabs(undefined), [] as TabLike[]),
-      refused_as(deps.open_settings().then(({ history_max }) => history_max), 0),
+      refused_as(deps.open_settings(), undefined).then((settings) => (settings ? settings.history_max : 0)),
     ]);
     const history = history_items(visits);
     const usage = usage_by_url(history);
