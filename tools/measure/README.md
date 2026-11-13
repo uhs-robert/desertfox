@@ -15,6 +15,22 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 | `p99_profile.mjs` | see below | `start()` and per-key time with real keys | `$MEASURE_DIR/fp/prof.jsonl` |
 | `p96_hints_large.mjs` | see below, `KEY_TEST_PIECES=p96_hints_large` | Time from the `f` press to the first hint label on a page with 10,000 links and 10,000 plain divs, against a small-page control | `$MEASURE_DIR/hints_large/out.jsonl` |
 
+## Rival benchmark
+
+`just measure-rivals` runs `tools/measure/rivals/`: DesertFox from `dist/` and the pinned store builds of three rival extensions, each alone in a fresh headless Firefox profile, plus a no-extension baseline. It needs `firefox`, `unzip` and network. Settings by environment: `PAGES` (default `large,wiki,frames,frames0`), `RUNS` (timed runs per page and tool, default 8), `PASSES` (1 or 2, default 2).
+
+| File | Role |
+|---|---|
+| `rivals.mjs` | Downloads each pinned xpi into its own empty directory and checks its sha256 and version, saves the article page, runs every tool, then calls `analyze.mjs`. The pins are in `PINNED` |
+| `run.mjs` | One tool in one fresh profile over the pages: load times, time from the hint key to the first label, memory of the page and extension processes |
+| `framescript.js` | Runs in the page's content process: sends a trusted key and watches for hint labels, also inside closed shadow roots |
+| `pages.mjs` | The pages: 20,000 elements, the saved article, 100 iframes, and the same page with none |
+| `analyze.mjs` | Medians and ranges into `$MEASURE_DIR/rivals/out/tables.md` |
+
+Pages: `large` is 10,000 links and 10,000 divs, `wiki` is a saved long article with many links, `frames` has 100 same-origin iframes and `frames0` is its top page alone. Per-frame cost is `frames` minus `frames0`.
+
+Results go to `$MEASURE_DIR/rivals`, never into the repo. Load times swing by tens of milliseconds when other work runs on the machine, so compare medians of several runs and passes. A system policy that force-installs DesertFox into every profile would bias the run, so `run.mjs` removes it before measuring. The probe reads hint labels inside closed shadow roots through a chrome frame script, which makes the tools comparable. Only labels in the top document are counted: a tool that draws labels inside iframes shows a low count on `frames`.
+
 ## Key-test pieces
 
 `p99_first_press.mjs`, `p99_profile.mjs` and `p96_hints_large.mjs` are pieces for the headed key test, which needs a nested Hyprland session (see `test/key/README.md`). The harness only finds pieces named `p<number>_*.mjs` in `test/key/`. Copy the piece there for the run and delete the copy afterwards, so no throwaway piece is committed:
