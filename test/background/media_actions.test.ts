@@ -215,7 +215,7 @@ test("a hung frame on the first key holds it for one scan timeout, not the 1.5 s
   const started = Date.now();
   await run_media(tab.deps, ctx, { action: "speed", value: "up", times: 1 });
   assert.ok(Date.now() - started < 400);
-  assert.ok(!tab.attempted.includes(1));
+  assert.deepEqual(tab.attempted, [1]);
   assert.deepEqual(tab.applied.map(({ frame_id }) => frame_id), [1]);
 });
 
