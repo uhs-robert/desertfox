@@ -32,7 +32,7 @@ const MAX_STEP_PX = 192;
 const DRIVE_STEPS = 8;
 const STEP_PAUSE_MS = 30;
 // A fling is a short fast drag: a library reads the speed from the event times, and 8 steps of 30 ms read as a slow drag. The distance is this share of the box, which clears the slide threshold of a carousel.
-const FLING_PACE = { steps: 4, pause_ms: 8 };
+export const FLING_PACE = { steps: 4, pause_ms: 8 };
 const FLING_SHARE = 0.6;
 
 // The ids Firefox gives its real mouse. A page that calls `setPointerCapture` with this id can still get a NotFoundError, which stays the page's own failure and never stops the drag.
@@ -65,6 +65,8 @@ export function press_point(element: Element): Point {
   // A vertical slider has its minimum at the bottom, and a scrollbar or separator at the top.
   return { x: middle.x, y: box.top + inside((role === "slider" ? 1 - fraction : fraction) * box.height, box.height) };
 }
+
+const pointer_held = (element: Element, start: Point): Held => ({ route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX });
 
 const under = (doc: Document, point: Point): Element => doc.elementFromPoint(point.x, point.y) ?? doc.body;
 
@@ -102,7 +104,7 @@ function send_pointer(held: Held, phase: "down" | "move" | "up", target: Element
 // Undefined when the page cancels the start of a drag.
 export function press(element: Element): Held | undefined {
   const start = press_point(element);
-  const held: Held = { route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX };
+  const held = pointer_held(element, start);
   if (route_of(element).route === "range") {
     held.route = "range";
     held.start_value = (element as HTMLInputElement).value;
@@ -239,13 +241,14 @@ export function snap_scroll(element: Element, direction: Direction): boolean {
 
 // Presses the element at its middle on the pointer route and returns the drag with where to fling it. The key names the way the view moves, so the pointer goes the other way: `right` drags left and shows the next slide. The route is forced, because a slide is often a link or a picture, and the html5 route would start a native drag there instead of a swipe.
 export function start_fling(element: Element, direction: Direction): { held: Held; to: Point } {
-  const start = center_of(element);
-  const held: Held = { route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX };
-  send_pointer(held, "down", element, start);
+  const middle = center_of(element);
   const box = element.getBoundingClientRect();
   const { x, y } = UNIT[direction];
-  const reach = FLING_SHARE * (x ? box.width : box.height);
-  return { held, to: { x: start.x - x * reach, y: start.y - y * reach } };
+  const half = (FLING_SHARE / 2) * (x ? box.width : box.height);
+  const start = { x: middle.x + x * half, y: middle.y + y * half };
+  const held = pointer_held(element, start);
+  // A real press lands on the deepest element under the pointer, and a library listens on its inner track.
+  const hit = under(element.ownerDocument, start);
+  send_pointer(held, "down", element.contains(hit) ? hit : element, start);
+  return { held, to: { x: middle.x - x * half, y: middle.y - y * half } };
 }
-
-export const fling = (held: Held, to: Point) => drive(held, to, FLING_PACE);

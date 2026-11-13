@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abort, drive, fling, move_to, nudge, press, press_point, release, route_of, scale_step, snap_scroll, start_fling } from "../../src/content/grab/drag.ts";
+import { abort, drive, FLING_PACE, move_to, nudge, press, press_point, release, route_of, scale_step, snap_scroll, start_fling } from "../../src/content/grab/drag.ts";
 
 // Node has no DOM events. The fakes keep the type, the init and the data transfer.
 class FakeEvent {
@@ -26,6 +26,7 @@ function element(extra: Partial<Fake> = {}): Fake {
     log: [],
     on: {},
     isConnected: true,
+    contains: () => true,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 20 }),
     // Models the selector's parts: an explicit draggable, and a link or picture that the page has not turned off.
     closest: (selector: string) => {
@@ -282,23 +283,38 @@ test("a fling on a link or picture forces the pointer route and sends no dragsta
   const slide = element({ localName: "a" });
   const { held, to } = start_fling(as_element(slide), "right");
   assert.equal(held.route, "pointer");
-  await fling(held, to);
+  await drive(held, to, FLING_PACE);
   assert.equal(slide.log.includes("dragstart"), false);
   assert.deepEqual([slide.log[0], slide.log.at(-1)], ["pointerdown", "mouseup"]);
 });
 
-test("the key names the way the view moves, so the pointer goes the other way by 60% of the box", () => {
+test("the key names the way the view moves: the stroke runs from +30% to -30% around the middle, inside the box", () => {
   const slide = element();
-  const start = start_fling(as_element(slide), "right");
-  assert.deepEqual(start.to, { x: 50 - 60, y: 10 });
-  assert.deepEqual(start_fling(as_element(slide), "left").to, { x: 50 + 60, y: 10 });
-  assert.deepEqual(start_fling(as_element(slide), "down").to, { x: 50, y: 10 - 12 });
+  const right = start_fling(as_element(slide), "right");
+  assert.deepEqual([right.held.start, right.to], [{ x: 80, y: 10 }, { x: 20, y: 10 }]);
+  const left = start_fling(as_element(slide), "left");
+  assert.deepEqual([left.held.start, left.to], [{ x: 20, y: 10 }, { x: 80, y: 10 }]);
+  const down = start_fling(as_element(slide), "down");
+  assert.deepEqual([down.held.start, down.to], [{ x: 50, y: 16 }, { x: 50, y: 4 }]);
+});
+
+test("the press goes to the element under the point when the picked box holds it, else to the box", () => {
+  const track = element();
+  const box = element({ elementFromPoint: () => track, contains: (other: unknown) => other === track });
+  box.ownerDocument = box;
+  start_fling(as_element(box), "right");
+  assert.deepEqual([track.log, box.log], [["pointerdown", "mousedown"], []]);
+  const outside = element();
+  const covered = element({ elementFromPoint: () => outside, contains: () => false });
+  covered.ownerDocument = covered;
+  start_fling(as_element(covered), "right");
+  assert.deepEqual([outside.log, covered.log], [[], ["pointerdown", "mousedown"]]);
 });
 
 test("a fling is four moves and one release", async () => {
   const slide = element();
   const { held, to } = start_fling(as_element(slide), "right");
-  await fling(held, to);
+  await drive(held, to, FLING_PACE);
   assert.equal(slide.log.filter((type) => type === "pointermove").length, 4);
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
 });
@@ -306,7 +322,7 @@ test("a fling is four moves and one release", async () => {
 test("an abort in the middle of a fling releases once and the fling sends nothing more", async () => {
   const slide = element();
   const { held, to } = start_fling(as_element(slide), "left");
-  const flinging = fling(held, to);
+  const flinging = drive(held, to, FLING_PACE);
   abort(held);
   await flinging;
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
@@ -316,10 +332,10 @@ test("an abort in the middle of a fling releases once and the fling sends nothin
 test("a second fling after an abort presses again and never leaves the first pressed", async () => {
   const slide = element();
   const first = start_fling(as_element(slide), "right");
-  const first_flight = fling(first.held, first.to);
+  const first_flight = drive(first.held, first.to, FLING_PACE);
   abort(first.held);
   const second = start_fling(as_element(slide), "right");
-  await Promise.all([first_flight, fling(second.held, second.to)]);
+  await Promise.all([first_flight, drive(second.held, second.to, FLING_PACE)]);
   const downs = slide.log.filter((type) => type === "pointerdown").length;
   assert.equal(downs, 2);
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 2);

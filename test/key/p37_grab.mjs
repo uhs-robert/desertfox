@@ -385,6 +385,16 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     expect((await attr_of("car", "index")) === at, "l flung after Escape");
   });
 
+  await run_case(";w on a page that ignores untrusted events moves nothing and leaves no press", async () => {
+    await open_page("drag", "swipe_strict", { new_tab: true });
+    await press_keys(";w");
+    await pick("#car");
+    await press_keys("l");
+    await sleep(400);
+    expect((await attr_of("car", "index")) === "0" && (await attr_of("car", "downs")) === "0", "a strict page took the synthetic swipe");
+    await press_keys("-k", "Escape");
+  });
+
   // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.
   for (const [second, label] of [[";ga", "a grab"], [";a", "a plain hint"]]) {
     await run_case(`;gg then Escape, and ${second} on the same page still shows labels (${label})`, async () => {

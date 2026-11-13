@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { Outcome } from "../../shared/messages.ts";
-import { abort, center_of, drive, fling, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
+import { abort, center_of, drive, FLING_PACE, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 
 type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
@@ -99,7 +99,7 @@ function register(host: BundleHostApi): void {
     if (snap_scroll(target, direction)) return ran;
     const { held: flung, to } = start_fling(target, direction);
     driving = flung;
-    await fling(flung, to);
+    await drive(flung, to, FLING_PACE);
     if (driving === flung) driving = undefined;
     return ran;
   }
@@ -119,15 +119,12 @@ function register(host: BundleHostApi): void {
   });
 
   host.register_handler_("grab.drop", (): Outcome => {
-    if (swiping) {
-      host.escape_();
-      return ran;
+    if (!held && !swiping) return NOTHING_HELD;
+    if (held) {
+      release(held);
+      held = undefined;
+      host.show_toast_(DROPPED_TOAST);
     }
-    if (!held) return NOTHING_HELD;
-    const dropped = held;
-    held = undefined;
-    release(dropped);
-    host.show_toast_(DROPPED_TOAST);
     host.escape_();
     return ran;
   });

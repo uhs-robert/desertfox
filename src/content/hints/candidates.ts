@@ -69,6 +69,9 @@ export const is_every_target = (element: Element): boolean => {
   return box.width > 0 && box.height > 0;
 };
 
+// What a swipe moves, besides what a drag moves: a carousel container by class. A scroll-snap box is read with the style.
+const SWIPEABLE = ".swiper, .splide, .embla, .glide, .slick-list, .flickity-viewport";
+
 // What a drag moves. A plain link, image or button is out unless it sets draggable itself. The selector holds the explicit signs, the test adds the cursor a page sets on a widget it drags.
 const DRAGGABLE = [
   '[draggable="true"]',
@@ -86,20 +89,18 @@ const DRAGGABLE = [
 const DRAG_CURSORS = new Set(["grab", "grabbing", "move", ...["ew", "ns", "col", "row", "nwse", "nesw", "n", "s", "e", "w", "ne", "nw", "se", "sw"].map((direction) => `${direction}-resize`)]);
 
 // The explicit signs skip the style read. Otherwise one read gives two signs: a drag cursor where it starts (it is inherited, so a child of a grab box does not count), and `touch-action: none`, which a pointer-driven widget sets so the browser leaves its drags alone. A widget with none of these signs and no role is reached with the `every` filter.
-export const is_draggable = (element: Element): boolean => {
+export const is_draggable = (element: Element, swipe = false): boolean => {
   if (PAGE_ROOTS.has(element.localName)) return false;
-  if (element.matches(DRAGGABLE)) return true;
+  if (element.matches(swipe ? `${DRAGGABLE}, ${SWIPEABLE}` : DRAGGABLE)) return true;
   const style_of = (target: Element) => window_of(target).getComputedStyle(target);
   const style = style_of(element);
-  if (style.touchAction === "none") return true;
+  if (style.touchAction === "none" || (swipe && style.scrollSnapType !== "none")) return true;
   if (!DRAG_CURSORS.has(style.cursor)) return false;
   const parent = element.parentElement;
   return parent === null || style_of(parent).cursor !== style.cursor;
 };
 
-// What a swipe moves: a carousel container by class, a scroll-snap box, or anything a drag moves.
-const SWIPEABLE = ".swiper, .splide, .embla, .glide, .slick-list, .flickity-viewport";
-export const is_swipeable = (element: Element): boolean => is_draggable(element) || (!PAGE_ROOTS.has(element.localName) && (element.matches(SWIPEABLE) || window_of(element).getComputedStyle(element).scrollSnapType !== "none"));
+export const is_swipeable = (element: Element): boolean => is_draggable(element, true);
 
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   all: { selector: ALL },
