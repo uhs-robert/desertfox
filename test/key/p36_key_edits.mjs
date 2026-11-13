@@ -97,7 +97,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await in_background(`browser.tabs.query({ url: "*://*/*" }).then(() => true)`);
     const settings_tab = await in_background(`browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("/home.html")).id)`);
     await in_background(`browser.tabs.update(${settings_tab}, { active: true }).then(() => true)`);
-    await poll_until("the saved row to show its origin", () => in_page(`return ${row_of("normal", "J")}?.closest("tr").textContent.includes("saved");`).catch(() => false));
+    await poll_until("the saved row to show its origin", () => in_page(`return ${row_of("normal", "J")}?.closest("tr").textContent.includes("changed");`).catch(() => false));
     await in_page(`${row_of("normal", "J")}.click();`);
     await poll_until("Reset to be offered", () => in_page(`const reset = [...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset"); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
     await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset").click();`);
