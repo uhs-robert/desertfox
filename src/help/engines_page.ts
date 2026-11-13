@@ -11,7 +11,7 @@ type StorageChangedEvents = { addListener: (listener: (changes: Record<string, u
 const FIELDS: { name: keyof EngineForm; label: string; placeholder: string }[] = [
   { name: "name", label: "Name", placeholder: "wiki" },
   { name: "url", label: "Address", placeholder: "https://en.wikipedia.org/w/index.php?search={query}" },
-  { name: "keyword", label: "Keyword (optional)", placeholder: "w" },
+  { name: "keyword", label: "Search word (optional)", placeholder: "w" },
   { name: "letter", label: "Key letter (optional)", placeholder: "w" },
 ];
 
@@ -66,7 +66,7 @@ export function mount_engines(container: HTMLElement, deps: Omit<EnginesDeps, "o
     message.textContent = state.message?.text ?? "";
     message.className = state.message?.ok === false ? "desertfox-settings-error" : "desertfox-help-muted";
     if (state.rows.length === 0) {
-      list.replaceChildren(el("p", "desertfox-help-muted", state.loaded ? "No engine was added in the browser yet." : "Loading..."));
+      list.replaceChildren(el("p", "desertfox-help-muted", state.loaded ? "You have not added an engine yet." : "Loading..."));
       return;
     }
     const rows = state.rows.map((row) => {
@@ -77,12 +77,12 @@ export function mount_engines(container: HTMLElement, deps: Omit<EnginesDeps, "o
       edit.setAttribute("aria-label", `Edit the engine ${row.name}`);
       const remove = button("Remove", () => void session.remove(row.name));
       remove.setAttribute("aria-label", `Remove the engine ${row.name}`);
-      const details = [row.label !== row.name ? row.label : "", row.keyword ? `keyword ${row.keyword}` : "", row.letter ? `key s${row.letter}` : "", row.children > 0 ? `${row.children} child engine(s)` : ""].filter((text) => text !== "");
+      const details = [row.label !== row.name ? row.label : "", row.keyword ? `search word ${row.keyword}` : "", row.letter ? `key s${row.letter}` : "", row.children > 0 ? `${row.children} ${row.children === 1 ? "variant" : "variants"}` : ""].filter((text) => text !== "");
       return el(
         "tr",
         undefined,
         el("td", undefined, el("code", undefined, row.name)),
-        el("td", undefined, row.url === "" ? el("span", "desertfox-help-muted", "(group)") : el("code", undefined, row.url), ...(details.length > 0 ? [el("div", "desertfox-help-muted", details.join(", "))] : []), ...(row.left_out ? [el("div", "desertfox-settings-error", `Left out: ${row.left_out}`)] : [])),
+        el("td", undefined, row.url === "" ? el("span", "desertfox-help-muted", "(group)") : el("code", undefined, row.url), ...(details.length > 0 ? [el("div", "desertfox-help-muted", details.join(", "))] : []), ...(row.left_out ? [el("div", "desertfox-settings-error", `Not used: ${row.left_out}`)] : [])),
         el("td", undefined, row.url === "" ? "" : edit, " ", remove),
       );
     });
@@ -95,7 +95,7 @@ export function mount_engines(container: HTMLElement, deps: Omit<EnginesDeps, "o
     hints,
     message,
     status,
-    el("p", undefined, "The starter set adds the sample engines of examples/engines.toml, except those whose name your config files or these engines already use."),
+    el("p", undefined, "Add a set of common engines, such as GitHub and YouTube. Engines you already have keep their names."),
     el("div", "desertfox-keys-editor-line", starter),
     list,
   );

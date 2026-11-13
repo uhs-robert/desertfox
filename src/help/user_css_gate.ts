@@ -3,6 +3,9 @@
 // of the view that replaced it: `dispose` ends a hold for good and later calls on it do nothing.
 // The hold is the sheet's `media`, not `disabled`: setting the text of a style element makes a new sheet, which starts enabled.
 
+// The one line every held view shows, because the reader sees their own styling vanish and would wonder why.
+export const USER_CSS_PAUSED_NOTE = "Your own CSS is paused while this is open, so no style rule can hide any part of it.";
+
 export type UserCssHold = { set: (held: boolean) => void; dispose: () => void };
 
 export const NO_USER_CSS_HOLD: UserCssHold = { set: () => {}, dispose: () => {} };

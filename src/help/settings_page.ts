@@ -1,7 +1,7 @@
 // Draws the settings page from a session and wires its controls. The session (`settings_model.ts`) holds the state, so this file only turns fields into nodes and events into session calls.
 
 import { el } from "./render.ts";
-import { create_settings_session, GROUPS, LAYER_LABEL, READ_ONLY_NOTE, text_of_value, value_of_text } from "./settings_model.ts";
+import { create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, READ_ONLY_NOTE, text_of_value, value_of_text } from "./settings_model.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
 
@@ -198,7 +198,7 @@ function build_row(field: Field, session: SettingsSession): Row {
   message.setAttribute("role", "status");
   const reset = el("button", "desertfox-settings-reset", "Reset") as HTMLButtonElement;
   reset.type = "button";
-  reset.title = "Drop the saved and temp edit, so the config file value applies";
+  reset.title = "Undo your change. The setting goes back to its default, or to the value in your settings file.";
   reset.addEventListener("click", () => void session.reset(name));
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
   const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.doc);
@@ -213,6 +213,9 @@ function build_row(field: Field, session: SettingsSession): Row {
 
 function update_row(row: Row, field: Field): void {
   row.tag.textContent = LAYER_LABEL[field.row.top_layer];
+  row.tag.title = LAYER_TITLE[field.row.top_layer];
+  // The changed-only filter reads this attribute in CSS (home.html), so a row that becomes changed stays shown.
+  row.node.setAttribute("data-changed", String(is_changed(field.row)));
   const edited = field.row.top_layer === "saved" || field.row.top_layer === "temp";
   row.reset.disabled = !edited && field.draft === undefined;
   row.message.textContent = field.error ?? field.note ?? "";

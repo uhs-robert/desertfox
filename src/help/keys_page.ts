@@ -76,9 +76,9 @@ function check_lines(check: CheckView, saves_hint: boolean, freed: string | unde
       const lines: HTMLElement[] = [];
       for (const problem of check.problems) lines.push(el("div", "desertfox-settings-error", problem));
       for (const warning of check.warnings) lines.push(el("div", "desertfox-settings-error", warning));
-      for (const shadow of check.shadows) lines.push(el("div", "desertfox-help-muted", `Replaces or drops ${shadow.keys}, which runs ${shadow.text || "nothing"}.`));
-      if (freed !== undefined) lines.push(el("div", "desertfox-help-muted", `Frees ${freed}, which this binding moves away from.`));
-      if (check.problems.length === 0 && saves_hint) lines.push(el("div", "desertfox-help-muted", check.saves ? "This saves." : "This is not saved."));
+      for (const shadow of check.shadows) lines.push(el("div", "desertfox-help-muted", `This replaces the key ${shadow.keys}, which now runs ${shadow.text || "nothing"}.`));
+      if (freed !== undefined) lines.push(el("div", "desertfox-help-muted", `The key ${freed} will have no command.`));
+      if (check.problems.length === 0 && saves_hint && !check.saves) lines.push(el("div", "desertfox-help-muted", "This change would not take effect."));
       return lines;
     }
   }
@@ -92,7 +92,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
 
   const filter = el("input", "desertfox-settings-input") as HTMLInputElement;
   filter.type = "search";
-  filter.placeholder = "Filter by keys, command or mode";
+  filter.placeholder = "Filter by key, command or mode";
   filter.setAttribute("aria-label", "Filter bindings");
   filter.addEventListener("input", () => session.set_filter(filter.value));
   const status = el("p", "desertfox-settings-error");
@@ -106,7 +106,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   capture_box.setAttribute("aria-label", "Key sequence, press the keys");
   const command = el("input", "desertfox-settings-input desertfox-keys-command") as HTMLInputElement;
   command.type = "text";
-  command.setAttribute("aria-label", "Command");
+  command.setAttribute("aria-label", "Command to run");
   command.setAttribute("list", "desertfox-keys-names");
   command.setAttribute("autocomplete", "off");
   command.spellcheck = false;
@@ -166,7 +166,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
     capture_box.setAttribute("aria-disabled", String(read_only));
   }
 
-  const origin_label = (row: BindingRow): string => (row.origin === "file" ? "config file" : row.origin === "edit" ? "saved" : row.origin);
+  const origin_label = (row: BindingRow): string => (row.origin === "default" ? "default" : row.origin === "removed" ? "removed" : "changed");
 
   function row_node(row: BindingRow): HTMLElement {
     const open = button("Edit", () => session.open_row(row));
@@ -226,7 +226,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
     },
   });
   container.replaceChildren(
-    el("p", undefined, "Every binding, by mode. A click on a row opens its editor. Press the keys in the box, write the command as in the command line, and Save. An edit applies at once and survives a config reload. Remove unbinds a key, and Reset drops the edit."),
+    el("p", undefined, "Each row is a key and the command it runs. Keys are grouped by mode. A mode is a state, such as normal (keys run commands) or insert (keys type text). Click a row to change it, press the new keys in the box, type the command as you would in the command line and press Save. Remove takes the command off a key, and Reset goes back to the default."),
     el("div", "desertfox-keys-tools", filter),
     status,
     tables,

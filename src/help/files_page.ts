@@ -1,16 +1,16 @@
 // Draws the files editor of the settings page from a files session (`files_model.ts`): the stored files, a text box for the open one, every build problem, and for a snippet the consent screen of the import review.
 
 import { el } from "./render.ts";
-import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
+import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
 import type { FilesSession } from "./files_model.ts";
 import { button, snippet_card } from "./transfer_page.ts";
-import { SNIPPET_WARNING } from "./transfer_model.ts";
+import { SNIPPET_GLOSS, SNIPPET_WARNING } from "./transfer_model.ts";
 
 function consent_view(session: FilesSession): HTMLElement[] {
   const { consent } = session.state;
   if (!consent) return [];
   const accepted = new Set(session.state.accepted ? [consent.path] : []);
-  return [el("p", "desertfox-transfer-warning", SNIPPET_WARNING), snippet_card(consent, { accepted }, { accept: (_path, on) => session.accept(on) })];
+  return [el("p", "desertfox-help-muted", USER_CSS_PAUSED_NOTE), el("p", undefined, SNIPPET_GLOSS), el("p", "desertfox-transfer-warning", SNIPPET_WARNING), snippet_card(consent, { accepted }, { accept: (_path, on) => session.accept(on) })];
 }
 
 // The text box, heading and buttons of the open file. Built once per open file, so typing and consent changes never replace the textarea and its focus.
@@ -38,7 +38,7 @@ function list_view(session: FilesSession): HTMLElement[] {
     remove.setAttribute("aria-label", `Delete ${path}`);
     return el("div", "desertfox-transfer-installed desertfox-files-row", el("code", undefined, path), open, remove);
   });
-  return rows.length > 0 ? rows : [el("p", "desertfox-help-muted", "No config file is stored. Make one below.")];
+  return rows.length > 0 ? rows : [el("p", "desertfox-help-muted", "You have no settings files stored. Make one below.")];
 }
 
 // Draws `session` into `container`. The session is the caller's and outlives the mount, so an unsaved draft survives a rebuild of the page.
@@ -53,7 +53,7 @@ export function mount_files(container: HTMLElement, session: FilesSession, user_
   const name = el("input", undefined) as HTMLInputElement;
   name.type = "text";
   name.placeholder = "keymap.toml, search_engines.toml, snippets/my.js";
-  name.setAttribute("aria-label", "Path of a new config file");
+  name.setAttribute("aria-label", "Path of a new settings file");
   name.setAttribute("data-files", "new-path");
   const make = button("New file", () => {
     new_error.textContent = session.start_new(name.value.trim()) ?? "";

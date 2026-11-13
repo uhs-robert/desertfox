@@ -6,15 +6,15 @@ import { SETTING_DOCS } from "../shared/settings_docs.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 // Shown on a row `:set` refuses.
-export const READ_ONLY_NOTE = ":set does not take this setting. Edit it in the config file, then run config.reload.";
+export const READ_ONLY_NOTE = "You cannot change this setting here. Edit it in a settings file, then press ,r.";
 
-// A group takes the settings whose name starts with one of its prefixes. A setting that matches none lands in the last group.
-export const GROUPS: { title: string; prefixes: string[] }[] = [
-  { title: "Appearance", prefixes: ["palette", "light_", "mode_indicator", "which_key_"] },
-  { title: "New tab", prefixes: ["newtab_", "new_tab_page", "home_page"] },
-  { title: "Search", prefixes: ["default_engine", "search_", "container_"] },
-  { title: "Command line and completion", prefixes: ["cmdline_", "completion_", "open_completion", "history_completion_"] },
-  { title: "General", prefixes: [] },
+// A group takes the settings whose name starts with one of its prefixes. A setting that matches none lands in the last group. `intro` is the one sentence under the group's heading.
+export const GROUPS: { title: string; intro: string; prefixes: string[] }[] = [
+  { title: "Appearance", intro: "Colors, the mode badge and the key panel.", prefixes: ["palette", "light_", "mode_indicator", "which_key_"] },
+  { title: "New tab", intro: "What the new tab page shows.", prefixes: ["newtab_", "new_tab_page", "home_page"] },
+  { title: "Search", intro: "Which search engine runs by default and how a search opens.", prefixes: ["default_engine", "search_", "container_"] },
+  { title: "Command line and completion", intro: "How the command line looks and what it suggests as you type.", prefixes: ["cmdline_", "completion_", "open_completion", "history_completion_"] },
+  { title: "General", intro: "Everything else, such as hints, zoom, site rules and the native host.", prefixes: [] },
 ];
 
 export function group_of(name: string): string {
@@ -77,13 +77,24 @@ export function problem_with(name: string, value: unknown): string | undefined {
   return spec.check(value) ? undefined : `${name}: expected ${spec.expectation}`;
 }
 
-// The tag text for each top layer. The record type fails the build when a layer is added without a label.
+// The tag text for each top layer: a setting shows "changed" or "default". The record type fails the build when a layer is added without a label.
 export const LAYER_LABEL: Record<SettingTag | "default", string> = {
-  "settings.toml": "settings.toml",
-  saved: "saved",
-  temp: "temp",
+  "settings.toml": "changed",
+  saved: "changed",
+  temp: "changed",
   default: "default",
 };
+
+// The tooltip of the tag, which names the layer that sets the value.
+export const LAYER_TITLE: Record<SettingTag | "default", string> = {
+  "settings.toml": "Changed in a settings file",
+  saved: "Changed on this page",
+  temp: "Changed until you restart Firefox",
+  default: "The built-in default",
+};
+
+// A changed setting is one whose value comes from any layer above the built-in default.
+export const is_changed = (row: SettingListRow): boolean => row.top_layer !== "default";
 
 export type Field = {
   row: SettingListRow;

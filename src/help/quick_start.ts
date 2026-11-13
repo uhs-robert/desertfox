@@ -90,6 +90,7 @@ const BINDINGS = {
   // `<C-[>` also escapes, but `<Escape>` is the key a reader knows.
   escape: { mode: "normal", id: "mode.escape", args: {}, test: () => true, prefer: "<Escape>" },
   help: { mode: "normal", id: "help.open", args: {} },
+  settings_page: { mode: "normal", id: "help.open", args: { name: "settings" } },
   // Host features: the keys follow the keymap like the rest, so a rebind never leaves this section wrong.
   edit_external: { mode: "insert", id: "text.edit_external", args: {} },
   firefox_settings: { mode: "normal", id: "browser.open_firefox_page", args: { page: "settings" } },
@@ -139,15 +140,16 @@ function prefix_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[
 
 // The callout at the top of Home and Commands. The command line key follows the keymap like the Quick Start text.
 export function tip_block(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block {
-  return { kind: "tip", inlines: sentence(compiled, commands, "Type [:help <name>] to jump to any command or page, for example [:help quick_start]. Press {cmdline} to open the command line.") };
+  return { kind: "tip", inlines: sentence(compiled, commands, "Press {cmdline} to open the command line, a box at the bottom of the page where you type commands. Type [help] and a page name, such as [help settings], to open that page.") };
 }
 
 export function quick_start_blocks(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block[] {
   const say = (template: string): Block => ({ kind: "paragraph", inlines: sentence(compiled, commands, template) });
+  const bullets = (templates: string[]): Block => ({ kind: "list", items: templates.map((template) => sentence(compiled, commands, template)) });
   const prefix = prefix_key(compiled, commands);
   const heading = (text: string): Block => ({ kind: "heading", level: 2, text });
   return [
-    say("DesertFox puts the browser on the keyboard. The keys on this page work as they do on any page, so try each one as you read. The key names come from your own keymap."),
+    say("DesertFox puts the browser on the keyboard. The keys on this page work as they do on any page, so try each one as you read. The keys shown are the ones set up for you."),
     heading("Scroll"),
     say("Press {down} to scroll down and {up} to scroll up. {top} jumps to the top of the page and {bottom} to the bottom. {half_page} moves half a page."),
     heading("Click with hints"),
@@ -159,19 +161,26 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     heading("Which-key"),
     say(
       prefix === undefined
-        ? "Which-key lists the keys that can come next after a key that starts a longer sequence. Your keymap has no such key now. The wait is the [which_key_delay_ms] setting."
-        : `Many keys start with a prefix. Press [${prefix}] and wait. A panel lists the keys that can come next, with a name for each. The wait is the [which_key_delay_ms] setting. It applies to the first panel only: while the panel is up, each further key shows its panel at once.`,
+        ? "Which-key lists the keys that can come next after a key that starts a longer sequence. No key starts a longer sequence now. You can change the wait on the Settings page."
+        : `Many keys start with a prefix. Press [${prefix}] and wait. A panel lists the keys that can come next, with a name for each. You can change the wait on the Settings page.`,
     ),
+    heading("Modes"),
+    say("DesertFox has modes. In normal mode, keys run commands. In insert mode, keys go to the page, so you can type in a text field. A small badge on the page shows the mode. {escape} returns to normal mode."),
     heading("Search the page"),
     say("Press {find} to search forward and {find_back} to search backward. Type the text and press Enter. {next} jumps to the next match and {previous} to the one before."),
     heading("Caret mode and visual mode"),
     say("Caret mode puts a cursor in the page text, so you can move over text with the keyboard and select it. It starts after a search at the match, and otherwise at the first visible text."),
-    say("Press {caret} to start caret mode. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}, or by word with {caret_word}. Press {visual} to start visual mode, which selects the text you move over. Press {visual_line} instead to select whole lines. In visual mode, {yank} copies the selection and {swap} swaps its ends. {escape} steps back to the mode before."),
+    say("Press {caret} to start caret mode. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}, or by word with {caret_word}. Press {visual} to start visual mode, which selects the text you move over. Press {visual_line} instead to select whole lines. In visual mode, {yank} copies the selection and {swap} moves the cursor to the other end of it. {escape} steps back to the mode before."),
     say("To start at a piece of text, press {caret_at_text} for caret mode or {visual_at_text} for visual mode, then type the label of the text."),
     heading("Help"),
-    say("Press {help} on any page to open this help. The Commands page lists every key, and the Home page shows any config warnings."),
-    heading("The native host is optional"),
-    say("DesertFox works without the native host (a small Linux helper program). In the browser you can change settings, quickmarks and site rules. You can edit the config files in the files editor on the settings page. You can import and export a zip. You can rebind keys in the Keys section of the settings page."),
-    say("The host adds three things. Press {edit_external} in insert mode to edit a text field in your own editor. {firefox_settings} opens the Firefox settings page, and the keys beside it open other Firefox pages. The [config.reload] command reads config files from [~/.config/desertfox/]. To install the host, run [:native.install]."),
+    say("Press {help} on any page to open this help. The Commands page lists every key. Press {settings_page} to open Settings, where you change colors, keys and search engines."),
+    heading("Advanced: the native host"),
+    say("DesertFox works fully without it. The native host is a small helper program that DesertFox installs on Linux. It adds three things."),
+    bullets([
+      "Press {edit_external} in a text field to edit the text in your own editor.",
+      "{firefox_settings} opens the Firefox settings page, and the keys beside it open other Firefox pages.",
+      "You can keep your settings in files in [~/.config/desertfox/] and load them with [config.reload].",
+    ]),
+    say("To install it, run [:native.install]."),
   ];
 }

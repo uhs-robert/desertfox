@@ -71,7 +71,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the dup engine to be listed", () => in_page(`return view.document.querySelector('[aria-label="Remove the engine p37dup"]') !== null;`));
     await type_field("Name", "p37clash");
     await type_field("Address", "https://c.test/?q={query}");
-    await type_field("Keyword (optional)", "g");
+    await type_field("Search word (optional)", "g");
     await poll_until("Save to turn on", () => in_page(`return !${button_named("Save engine")}.disabled;`));
     await in_page(`${button_named("Save engine")}.click();`);
     await poll_until("the form to show the refusal", () => in_page(`const text = view.document.querySelector(".desertfox-engines").textContent; return text.includes("Edit not saved") && text.includes("keyword") && text.includes("Search engines section");`));

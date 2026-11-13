@@ -76,7 +76,7 @@ export function mount_pairs(container: HTMLElement, kind: PairsKind, deps: Omit<
         "tr",
         undefined,
         el("td", undefined, el("code", undefined, row.key)),
-        el("td", undefined, el("code", undefined, row.value), ...(row.left_out ? [el("div", "desertfox-settings-error", `Left out: ${row.left_out}`)] : []), ...(row.note ? [el("div", "desertfox-help-muted", row.note)] : [])),
+        el("td", undefined, el("code", undefined, row.value), ...(row.left_out ? [el("div", "desertfox-settings-error", `Not used: ${row.left_out}`)] : []), ...(row.note ? [el("div", "desertfox-help-muted", row.note)] : [])),
         el("td", undefined, edit, ...(row.removable ? [" ", remove] : [])),
       );
     });

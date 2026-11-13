@@ -44,11 +44,11 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, expec
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
     await poll_until("the banner to show", () => in_page(`return !!view && (view.document.querySelector(".desertfox-host-start")?.textContent ?? "").includes("keymap.toml");`).catch(() => false), { timeout_ms: 10000 });
     const shown = await in_page(`const box = view.document.querySelector(".desertfox-host-start"); return { dir: box.textContent.includes("/key-test/desertfox"), buttons: [...box.querySelectorAll("button")].map((button) => button.textContent) };`);
-    expect(shown.dir && JSON.stringify(shown.buttons) === JSON.stringify(["Export config", "Use the folder", "Keep the browser copy"]), `the banner lacked the folder or the buttons: ${JSON.stringify(shown)}`);
+    expect(shown.dir && JSON.stringify(shown.buttons) === JSON.stringify(["Export settings", "Use the files in the folder", "Keep what Firefox has"]), `the banner lacked the folder or the buttons: ${JSON.stringify(shown)}`);
     // Set DESERTFOX_SHOT_DIR to also save a screenshot of the banner.
     if (process.env.DESERTFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/host-start-banner.png`); }
     // The digests are made up, so the background refuses whatever the folder holds, and says why.
-    await in_page(`[...view.document.querySelectorAll(".desertfox-host-start button")].find((button) => button.textContent === "Keep the browser copy").click();`);
+    await in_page(`[...view.document.querySelectorAll(".desertfox-host-start button")].find((button) => button.textContent === "Keep what Firefox has").click();`);
     await poll_until("the answer to show", () => in_page(`return (view.document.querySelector(".desertfox-host-start [role=status]")?.textContent ?? "") !== "";`).catch(() => false));
     await in_background(`browser.storage.local.remove("desertfox_host_start_pending").then(() => true)`);
     await poll_until("the banner to drop the question", () => in_page(`return !(view.document.querySelector(".desertfox-host-start")?.textContent ?? "").includes("keymap.toml");`).catch(() => false));

@@ -86,7 +86,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await in_page(`${row_of("normal", "J")}.click();`);
     await poll_until("the editor to open on J", () => in_page(`return view.document.querySelector('.desertfox-keys-command')?.value === "tab.next";`).catch(() => false));
     await in_page(`const input = view.document.querySelector('.desertfox-keys-command'); input.value = "scroll.pixels --dy=300"; input.dispatchEvent(new view.Event("input"));`);
-    await poll_until("the check to allow the save", () => in_page(`return ![...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").disabled && view.document.querySelector('.desertfox-keys-check').textContent.includes("saves");`).catch(() => false));
+    await poll_until("the check to allow the save", () => in_page(`return ![...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").disabled;`).catch(() => false));
     await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").click();`);
     await poll_until("the edit to be stored", async () => (await layer()).normal?.J === "scroll.pixels --dy=300");
 

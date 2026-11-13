@@ -36,30 +36,30 @@ export type PairsKind = {
 
 export const ALIASES_KIND: PairsKind = {
   noun: "alias",
-  key_label: "Name",
-  value_label: "Command id",
+  key_label: "Short name",
+  value_label: "Command to run",
   key_placeholder: "up",
   value_placeholder: "tab.prev",
   list: { type: "list_aliases" },
   set: (name, target) => ({ type: "change_aliases", action: "set", name, target }),
   remove: (name) => ({ type: "change_aliases", action: "remove", name }),
   rows_of: (answer) => ("aliases" in answer ? answer.aliases.map((row) => ({ key: row.name, value: row.target, removable: true, ...(row.left_out !== undefined && { left_out: row.left_out }) })) : []),
-  problems: (name) => (/\s/.test(name) ? ["An alias name has no whitespace."] : []),
-  empty_text: "No alias was added in the browser yet.",
+  problems: (name) => (/\s/.test(name) ? ["An alias is one word, with no spaces."] : []),
+  empty_text: "You have no aliases yet.",
 };
 
 export const QUICKMARKS_KIND: PairsKind = {
   noun: "quickmark",
-  key_label: "Key",
+  key_label: "Letter or digit",
   value_label: "Address",
   key_placeholder: "m",
   value_placeholder: "https://mail.example/",
   list: { type: "list_quickmarks" },
   set: (key, url) => ({ type: "change_quickmarks", action: "set", key, url }),
   remove: (key) => ({ type: "change_quickmarks", action: "remove", key }),
-  rows_of: (answer) => ("quickmarks" in answer ? answer.quickmarks.map((row) => ({ key: row.key, value: row.url, removable: row.saved, ...(!row.saved && { note: "from quickmarks.toml, so it cannot be removed here" }) })) : []),
-  problems: (key, url) => [...(key !== "" && !QUICKMARK_KEY.test(key) ? ["A quickmark key is one letter or digit."] : []), ...(url.length > MAX_QUICKMARK_URL_CHARS ? [`An address has at most ${MAX_QUICKMARK_URL_CHARS} characters.`] : [])],
-  empty_text: "No quickmark is set yet.",
+  rows_of: (answer) => ("quickmarks" in answer ? answer.quickmarks.map((row) => ({ key: row.key, value: row.url, removable: row.saved, ...(!row.saved && { note: "This one comes from a settings file, so you cannot remove it here." }) })) : []),
+  problems: (key, url) => [...(key !== "" && !QUICKMARK_KEY.test(key) ? ["Use one letter or digit."] : []), ...(url.length > MAX_QUICKMARK_URL_CHARS ? [`An address has at most ${MAX_QUICKMARK_URL_CHARS} characters.`] : [])],
+  empty_text: "You have no quickmarks yet.",
 };
 
 export type PairsForm = { key: string; value: string };

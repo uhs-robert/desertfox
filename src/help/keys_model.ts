@@ -11,10 +11,10 @@ import { refused_as } from "../shared/swallow.ts";
 const STEP_JOINER = " ; ";
 export const CHECK_DELAY_MS = 250;
 
-export const READ_ONLY_ROW_NOTE = "This binding runs several steps. Edit it in keymap.toml or a keymap.d file, then run config.reload. Here you can unbind it or reset it.";
+export const READ_ONLY_ROW_NOTE = "This key runs several commands, so you cannot change it here. You can remove it or reset it. To change it, edit a settings file.";
 
 // Firefox keeps these for itself, so a page never sees them and the capture box cannot take them.
-export const RESERVED_CHORDS_NOTE = "Firefox keeps some chords for itself, such as Ctrl+T, Ctrl+W, Ctrl+N and F5, so they cannot be captured here. Escape cancels a capture, Backspace drops the last key, Tab moves the focus and Enter saves, so bind those four in the config files.";
+export const RESERVED_CHORDS_NOTE = "Firefox keeps some keys for itself, such as Ctrl+T, Ctrl+W, Ctrl+N and F5, so you cannot use them here. Escape cancels, Backspace drops the last key, Tab moves the focus and Enter saves, so you cannot bind those four here either. Bind them in a settings file.";
 
 export const is_read_only = (row: BindingRow): boolean => row.text.includes(STEP_JOINER);
 export const row_id = (mode: KeymapMode, keys: string): string => `${mode}\u0000${keys}`;

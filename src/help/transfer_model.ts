@@ -11,6 +11,9 @@ export const SESSIONS_FILE_NAME = "desertfox-sessions.json";
 // 400 sessions of 50 tabs are about 5 MB, so 16 MB leaves room and still stops a file that would fill memory.
 export const MAX_SESSIONS_FILE_BYTES = 16 * 1024 * 1024;
 
+// Said before the warning, because the reader meets the word only on this consent view.
+export const SNIPPET_GLOSS = "A snippet is a small script that changes how a site works.";
+
 export const SNIPPET_WARNING = "A snippet is code that runs in the pages it matches and can use every DesertFox permission: it can read and change any page it matches, open and close tabs, and read your bookmarks and history. Accept only snippets you have read and trust.";
 
 // What the page needs of a `File`. A test passes plain objects.
@@ -146,7 +149,7 @@ export function create_transfer_session(deps: TransferDeps) {
       return undefined;
     }
     if (Object.keys(files).length === 0) {
-      say(false, which === "config" ? "Nothing exported: there are no config files and no saved edits." : "Nothing exported: no snippet is installed.");
+      say(false, which === "config" ? "Nothing exported: you have no settings files and have saved no changes." : "Nothing exported: no snippet is installed.");
       return undefined;
     }
     try {

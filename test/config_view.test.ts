@@ -17,18 +17,18 @@ test("each source has its own text", () => {
 test("a stored source this version dropped, such as managed, reads as unknown and does not throw", () => {
   const stale = { source: "managed", settings: DEFAULT_SETTINGS, managed_file_hint: "x", ...NO_LAYERS } as never;
   const view = build_config_view(stale);
-  assert.match(view.source_text, /Unknown/);
+  assert.match(view.source_text, /does not know/);
   assert.equal(view.rebuild_steps.length, 2);
 });
 
 test("a missing status says the source is unknown", () => {
-  assert.match(build_config_view(undefined).source_text, /Unknown/);
+  assert.match(build_config_view(undefined).source_text, /not recorded/);
 });
 
 test("the steps to apply an edit name the host install and config.reload, whatever the source", () => {
   for (const source of ["files", "defaults"] as const) {
     const steps = build_config_view({ source, settings: DEFAULT_SETTINGS, ...NO_LAYERS }).rebuild_steps;
     assert.match(steps[0]!, /native\.install/);
-    assert.match(steps[1]!, /config\.reload.*,r/);
+    assert.match(steps[1]!, /,r.*config\.reload/);
   }
 });

@@ -23,7 +23,7 @@ function sample() {
     ],
     run: () => {},
   });
-  registry.define("help.open", { name: "help", label: "Help", intent: "Open help.", runs_in: "background", run: () => {} });
+  registry.define("help.open", { name: "help", label: "Help", intent: "Open help.", runs_in: "background", params: [{ name: "name", type: "string", rest: true, main: true, optional: true }], run: () => {} });
   const { compiled } = compile_keymap(
     { normal: { o: { id: "open.url", args: { where: "tab", url: "https://a.example" } }, j: { id: "scroll.lines", args: { count: 10 } }, gg: [{ id: "scroll.lines" }, { id: "help.open" }] }, browser: { "<A-j>": { id: "scroll.lines" } } },
     {},
@@ -167,9 +167,9 @@ test("the model carries the config source and apply steps for the settings page"
   const { commands, compiled } = sample();
   const status = { source: "files" as const, settings: { ...DEFAULT_SETTINGS, palette: "x" }, saved: [], temp: [], configured: [] };
   const model = build_help_model(commands, compiled, [], {}, {}, status);
-  assert.equal(model.config_source, "Config files, read by config.reload through the native host");
+  assert.equal(model.config_source, "Your settings come from the settings files in the folder");
   assert.match(model.rebuild_steps[1]!, /config\.reload/);
-  assert.equal(build_help_model(commands, compiled, []).config_source, "Unknown, the background has not written a status yet");
+  assert.equal(build_help_model(commands, compiled, []).config_source, "DesertFox has not recorded where your settings come from yet");
 });
 
 test("effective settings keep the default prefix a config leaves out", () => {
@@ -195,12 +195,12 @@ test("the help page scrolls to and highlights the command card the way it does a
   assert.match(main, /row\.classList\.add\("desertfox-help-current"\)/);
 });
 
-test("the tip names :help and takes the command line key from the keymap", () => {
+test("the tip names the help command and takes the command line key from the keymap", () => {
   const { commands, compiled } = sample();
   const text = (compiled_arg: typeof compiled | undefined) => JSON.stringify(build_help_model(commands, compiled_arg, []).tip);
   assert.match(text(compiled), /"kind":"tip"/);
-  assert.match(text(compiled), /:help <name>/);
-  assert.match(text(undefined), /:help <name>/);
+  assert.match(text(compiled), /help settings/);
+  assert.match(text(undefined), /help settings/);
 });
 
 test("a conditional default reads as the value and its condition", () => {

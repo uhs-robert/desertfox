@@ -4,7 +4,7 @@ import { copy_text } from "../content/caret/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import type { RuleColumn, KeyChange, SiteRuleRowView } from "../background/site_rules_view.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
-import { advanced_count, STYLE_CLASSES, STYLE_VARIABLES, visible_commands_model } from "./model.ts";
+import { advanced_count, group_title, STYLE_CLASSES, STYLE_VARIABLES, visible_commands_model } from "./model.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
 import { ADVANCED_SUFFIX, PAGES } from "./route.ts";
@@ -34,12 +34,20 @@ function key_list(rows: KeyRow[]): HTMLElement {
 }
 
 function params_table(command: CommandRow): HTMLElement | string {
-  if (command.params.length === 0) return el("span", "desertfox-help-muted", "no params");
-  const head = el("tr", undefined, ...["param", "type", "default", "values", "flags"].map((name) => el("th", undefined, name)));
+  if (command.params.length === 0) return el("span", "desertfox-help-muted", "no options");
+  const head = el("tr", undefined, ...["option", "type", "default", "values", "flags"].map((name) => el("th", undefined, name)));
   const body = command.params.map((param) =>
     el("tr", undefined, ...[param.name, param.type, param.default, param.values, param.flags].map((text) => el("td", undefined, text))),
   );
   return el("table", "desertfox-help-params", head, ...body);
+}
+
+const page_hash = (id: PageId): string => PAGES.find((page) => page.id === id)!.hash;
+
+function page_link(text: string, id: PageId): HTMLElement {
+  const link = el("a", undefined, text);
+  link.setAttribute("href", page_hash(id));
+  return link;
 }
 
 export const command_anchor = (id: string): string => `command-${id}`;
@@ -83,13 +91,13 @@ function engine_row(engine: EngineRow, show_files: boolean): HTMLElement {
 }
 
 function engine_table(engines: EngineRow[]): HTMLElement {
-  if (engines.length === 0) return el("span", "desertfox-help-muted", "No engines.");
+  if (engines.length === 0) return el("p", "desertfox-help-muted", "No engines yet. Add one on the ", page_link("Settings", "settings"), " page.");
   const first_file = engines[0]!.files[0];
   const one_file = first_file !== undefined && engines.every((engine) => engine.files.length === 1 && engine.files[0] === first_file);
-  const head = el("tr", undefined, ...["engine", "label", "keys", "url"].map((name) => el("th", undefined, name)));
+  const head = el("tr", undefined, ...["Name", "What it searches", "Keys", "Address"].map((name) => el("th", undefined, name)));
   const table = el("table", "desertfox-help-engines", head, ...engines.map((engine) => engine_row(engine, !one_file)));
   if (!one_file) return table;
-  return el("div", undefined, el("p", "desertfox-help-muted", `Set by ${first_file}`), table);
+  return el("div", undefined, el("p", "desertfox-help-muted", `Set by the file ${first_file}`), table);
 }
 
 function inline_node(inline: Inline): Child {
@@ -176,13 +184,19 @@ function home_keycap(): HTMLElement {
 }
 
 function home_page(model: HelpModel): HTMLElement[] {
-  const warnings = model.warnings.length === 0
-    ? el("p", "desertfox-help-muted", "No warnings.")
-    : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
-  const quick_start_link = el("a", undefined, "Quick Start");
-  quick_start_link.setAttribute("href", "#/quick-start");
-  const host_note = el("p", undefined, "The native host is optional. You can set up DesertFox in the browser, and the host adds an external editor for text fields, keys that open Firefox pages and config files from ", el("code", undefined, "~/.config/desertfox/"), ". ", quick_start_link, " has the details.");
-  return [block_node(model.tip), host_note, el("h2", undefined, "Warnings"), warnings];
+  const steps = el(
+    "ul",
+    undefined,
+    el("li", undefined, page_link("Quick Start", "quick-start"), ": learn the first keys in five minutes."),
+    el("li", undefined, page_link("Settings", "settings"), ": change colors, keys, search engines and more."),
+    el("li", undefined, page_link("Commands", "commands"), ": see everything DesertFox can do."),
+  );
+  // The popup's warning count links to this heading.
+  const problems_heading = el("h2", undefined, "Problems in your setup");
+  problems_heading.id = section_anchor("home", "warnings");
+  problems_heading.tabIndex = -1;
+  const problems = model.warnings.length === 0 ? [] : [problems_heading, el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)))];
+  return [el("p", undefined, "DesertFox lets you use Firefox from the keyboard. You can scroll, click links, search and switch tabs without the mouse."), el("h2", undefined, "Start here"), steps, block_node(model.tip), ...problems];
 }
 
 // The toggle lives in the hash, so a reload, a link and the back button keep it. It shows the count, which the shown model no longer holds.
@@ -193,12 +207,13 @@ function advanced_toggle(advanced: boolean, count: number): HTMLElement {
   button.addEventListener("click", () => {
     location.hash = PAGES.find((page) => page.id === "commands")!.hash + (advanced ? "" : ADVANCED_SUFFIX);
   });
-  return el("p", undefined, button);
+  return el("p", undefined, button, " ", el("span", "desertfox-help-muted", "Advanced commands are for setup and debugging."));
 }
 
 function commands_page(model: HelpModel, advanced: boolean, hidden_count: number): HTMLElement[] {
   const sections = page_sections("commands", model);
   return [
+    el("p", undefined, "Every command DesertFox has. Run a command from the command line or with a key. Search this page with the browser's find (Ctrl+F)."),
     block_node(model.tip),
     ...(hidden_count > 0 || advanced ? [advanced_toggle(advanced, hidden_count)] : []),
     ...model.groups.flatMap((group, index) => [section_heading("commands", sections[index]!), ...group.commands.map(command_card)]),
@@ -208,7 +223,7 @@ function commands_page(model: HelpModel, advanced: boolean, hidden_count: number
 function styling_page(): HTMLElement[] {
   const [variables_section, classes_section] = STYLING_SECTIONS as [Section, Section];
   return [
-    el("p", undefined, "Set these CSS variables in style.css to restyle DesertFox, on the class of the surface (for example .desertfox-whichkey { --desertfox-primary: red; }): a variable on :root or :host alone does not reach inside a surface. A surface reads the roles it needs, so a role no surface reads yet has no visible effect. The class names below are stable."),
+    el("p", undefined, "You can change how DesertFox looks with CSS. Put your rules in a file named style.css in your settings files, or in the files editor on the ", page_link("Settings", "settings"), " page. Set a variable on the class of the part you want to restyle, for example .desertfox-whichkey { --desertfox-primary: red; }. A variable on :root or :host alone does not reach inside a part. A part reads only the colors it needs, so a color no part reads yet has no visible effect. The class names below are stable."),
     section_heading("styling", variables_section),
     definition_table(STYLE_VARIABLES),
     section_heading("styling", classes_section),
@@ -218,7 +233,7 @@ function styling_page(): HTMLElement[] {
 
 // Opens the panel `:native.install` opens, by the same hash. The nonce makes a tab already on the panel show it again.
 function install_native_host_button(): HTMLElement {
-  const button = el("button", "desertfox-settings-install", "Install native host") as HTMLButtonElement;
+  const button = el("button", "desertfox-settings-install", "Set up the native host") as HTMLButtonElement;
   button.type = "button";
   button.addEventListener("click", () => {
     location.hash = grant_hash("nativeMessaging", Date.now());
@@ -227,7 +242,7 @@ function install_native_host_button(): HTMLElement {
 }
 
 const CONFIG_SOURCE_CLASS = "desertfox-config-source";
-const config_source_text = (model: HelpModel): string => `Config source: ${model.config_source}.`;
+const config_source_text = (model: HelpModel): string => `${model.config_source}.`;
 
 // The Settings page is not redrawn on a settings change, so a reload that changes the source updates this line in place and leaves the fields alone.
 export function update_config_source(model: HelpModel): void {
@@ -235,43 +250,70 @@ export function update_config_source(model: HelpModel): void {
   if (line) line.textContent = config_source_text(model);
 }
 
+const NO_CHANGED_CLASS = "desertfox-settings-none-changed";
+const ONLY_CHANGED_CLASS = "desertfox-only-changed";
+
+// The filter is a class on the settings box. The stylesheet (home.html) hides the rows whose `data-changed` is false and the groups left with none, so a refresh of the rows needs no code here.
+function only_changed_toggle(): HTMLElement {
+  const box = el("input", undefined) as HTMLInputElement;
+  box.type = "checkbox";
+  box.addEventListener("change", () => document.querySelector(".desertfox-settings")?.classList.toggle(ONLY_CHANGED_CLASS, box.checked));
+  return el("p", undefined, el("label", undefined, box, " Show only changed settings"));
+}
+
+function settings_group_section(page_section: Section, group: (typeof GROUPS)[number]): HTMLElement {
+  const box = el("div", "desertfox-settings-group");
+  box.setAttribute("data-group", group.title);
+  const intro = el("p", "desertfox-help-muted", group.intro, ...(group.title === "Appearance" ? [" For full control with CSS, see ", page_link("Styling", "styling"), "."] : []));
+  return el("div", "desertfox-settings-section", section_heading("settings", page_section), intro, box);
+}
+
+const settings_section = (title: string): Section => settings_sections[SETTINGS_SECTION_TITLES.indexOf(title)]!;
+
+// A form section: its heading, one sentence of what it gives the reader, and the box `main.ts` fills.
+function settings_form_section(title: string, box_class: string, ...intro: Child[]): HTMLElement[] {
+  return [section_heading("settings", settings_section(title)), el("p", undefined, ...intro), el("div", box_class)];
+}
+
+// Collapsed, because a new reader needs none of it. A section link into it opens it (`main.ts`).
+function advanced_settings(model: HelpModel): HTMLElement {
+  return el(
+    "details",
+    "desertfox-settings-advanced",
+    el("summary", undefined, "Advanced"),
+    section_heading("settings", settings_section(ADVANCED_FILES_SECTION), 3),
+    el("p", undefined, "You can also keep your settings in text files in the folder ", el("code", undefined, "~/.config/desertfox/"), ". This needs the native host, a small helper program DesertFox installs on Linux. It reads that folder for DesertFox."),
+    el("p", CONFIG_SOURCE_CLASS, config_source_text(model)),
+    el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, step))),
+    install_native_host_button(),
+    section_heading("settings", settings_section(ADVANCED_BACKUP_SECTION), 3),
+    el("p", undefined, "Back up your DesertFox setup to a file, or restore it from one. An import replaces your current setup and keeps the snippets you installed. A snippet is a small script that runs on the sites you choose. DesertFox asks before it adds any snippet an import carries."),
+    el("div", "desertfox-transfer"),
+    section_heading("settings", settings_section(ADVANCED_FILES_EDITOR_SECTION), 3),
+    el("p", undefined, "Edit your setup files here. A file is saved only if the setup still builds. If it does not build, nothing changes. Paste only text you trust, because DesertFox does not check it. With the native host set up, a start that finds different files in the folder asks before it replaces these."),
+    el("div", "desertfox-files"),
+  );
+}
+
 // Settings go in after the render: `main.ts` fills `.desertfox-settings` from the background.
 function settings_page(model: HelpModel): HTMLElement[] {
   return [
     // Empty unless a host start waits on the user: `main.ts` fills it.
     el("div", "desertfox-host-start"),
-    el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
-    el("p", CONFIG_SOURCE_CLASS, config_source_text(model)),
-    el("h2", undefined, "Apply a config file edit"),
-    el("p", undefined, "If you keep the config files in ", el("code", undefined, "~/.config/desertfox/"), " (this needs the native host), run:"),
-    el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
-    install_native_host_button(),
-    el("h2", undefined, "Export and import"),
-    el("p", undefined, "Export the config as a zip in the layout of ", el("code", undefined, "~/.config/desertfox/"), ", with your saved edits in it. Snippets go in a second zip. An import takes a zip or a folder, replaces the config files, keeps your installed snippets and asks before it stores any snippet it carries."),
-    el("div", "desertfox-transfer"),
-    el("h2", undefined, "Config files"),
-    el("p", undefined, "Edit the config files stored in the browser. A save rebuilds the config at once. When the build fails, the files and the config stay as they were. What you save here counts as your own config: no import check runs, so paste only text you trust. With the native host installed, a start that finds different files in the config folder asks before it replaces these."),
-    el("div", "desertfox-files"),
-    // `main.ts` fills `.desertfox-keys` from the background. Its heading is the first section, ahead of the setting groups.
-    section_heading("settings", page_sections("settings", [])[0]!),
-    el("p", undefined, "Rebind a key without the native host. A key edit is a browser layer on top of keymap.toml, the same way a saved setting sits on top of settings.toml. It applies at once, survives a config.reload and goes into the config export."),
-    el("div", "desertfox-keys"),
-    // `main.ts` fills `.desertfox-engines`. Its heading follows Keys, ahead of the setting groups.
-    section_heading("settings", page_sections("settings", [])[1]!),
-    el("p", undefined, "Add a search engine without the native host. An engine added here is a browser layer on top of search_engines.toml. It applies at once, survives a config.reload and goes into the config export. The key letter binds s and S to it."),
-    el("div", "desertfox-engines"),
-    // `main.ts` fills `.desertfox-aliases` and `.desertfox-quickmarks`.
-    section_heading("settings", page_sections("settings", [])[2]!),
-    el("p", undefined, "Add a command alias without the native host. An alias added here is a browser layer on top of command_aliases.toml. It applies at once, survives a config.reload and goes into the config export."),
-    el("div", "desertfox-aliases"),
-    section_heading("settings", page_sections("settings", [])[3]!),
-    el("p", undefined, "The quickmarks that ", el("code", undefined, "quickmark.add"), " saves and ", el("code", undefined, "quickmark.open"), " opens. A quickmark saved here is the same one the command saves, and it goes into the config export. Entries of quickmarks.toml show too, and a saved one with the same key wins over them."),
-    el("div", "desertfox-quickmarks"),
-    el("div", "desertfox-settings", ...page_sections("settings", []).slice(4).flatMap((section, index) => {
-      const group = el("div", "desertfox-settings-group");
-      group.setAttribute("data-group", GROUPS[index]!.title);
-      return [section_heading("settings", section), group];
-    })),
+    el("p", undefined, "Change how DesertFox looks and behaves. Each change is saved as soon as you make it. Press Reset to undo a change."),
+    only_changed_toggle(),
+    el(
+      "div",
+      "desertfox-settings",
+      el("p", `desertfox-help-muted ${NO_CHANGED_CLASS}`, "You have not changed any setting yet."),
+      ...GROUPS.map((group) => settings_group_section(settings_section(group.title), group)),
+    ),
+    // `main.ts` fills `.desertfox-keys`, `.desertfox-engines`, `.desertfox-aliases` and `.desertfox-quickmarks`.
+    ...settings_form_section(KEYS_SECTION, "desertfox-keys", "Change what a key does. Pick a key below, press the new keys and type the command it runs. The change works at once."),
+    ...settings_form_section(ENGINES_SECTION, "desertfox-engines", "Add a site you can search from the keyboard. Give it a name and an address with ", el("code", undefined, "{query}"), " where the search words go. A key letter lets you search it with ", el("code", undefined, "s"), " and that letter, or in a new tab with ", el("code", undefined, "S"), " and that letter. ", el("code", undefined, "{query}"), " stands for the words you type. A search word is optional. Type it before your words in the finder (key ,,) to search that engine, for example w rust."),
+    ...settings_form_section(ALIASES_SECTION, "desertfox-aliases", "Give a command a short name. Type the short name in the command line to run the command. For example, the alias ", el("code", undefined, "up"), " can run ", el("code", undefined, "tab.prev"), ". Find command names on the ", page_link("Commands", "commands"), " page."),
+    ...settings_form_section(QUICKMARKS_SECTION, "desertfox-quickmarks", "A quickmark is a site saved under one letter or digit. Open it from the keyboard with the quickmark key and then the letter. Add one here, or save the page you are on."),
+    advanced_settings(model),
   ];
 }
 
@@ -280,22 +322,22 @@ const table_of = (class_name: string, heads: string[], rows: (HTMLElement | stri
   el("table", `desertfox-help-site-rules ${class_name}`, el("tr", undefined, ...heads.map((name) => el("th", undefined, name))), ...rows.map((cells, index) => el("tr", shadowed[index] ? SHADOWED_CLASS : undefined, ...cells.map((cell) => el("td", undefined, cell)))));
 
 // Columns are name and value pairs, so a per-site setting added later shows with no code here.
-const columns_table = (columns: RuleColumn[]): HTMLElement => table_of("desertfox-help-columns", ["column", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadowed ? "an earlier row decides it" : ""]), columns.map(({ shadowed }) => shadowed));
+const columns_table = (columns: RuleColumn[]): HTMLElement => table_of("desertfox-help-columns", ["option", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadowed ? "an earlier rule decides this" : ""]), columns.map(({ shadowed }) => shadowed));
 const changes_table = (changes: KeyChange[]): HTMLElement =>
-  table_of("desertfox-help-changes", ["key", "mode", "does", "instead of", ""], changes.map(({ keys, mode, action, replaces, dead }) => [el("kbd", undefined, keys), mode ?? "", action, replaces ?? "", dead ?? ""]), changes.map(({ dead }) => dead !== undefined));
+  table_of("desertfox-help-changes", ["key", "mode", "does", "was", ""], changes.map(({ keys, mode, action, replaces, dead }) => [el("kbd", undefined, keys), mode ?? "", action, replaces ?? "", dead ?? ""]), changes.map(({ dead }) => dead !== undefined));
 
 function site_rule_row(row: SiteRuleRowView): HTMLElement {
-  const source = row.origin === "default" ? `Shipped row ${row.name}` : "Your row";
-  return el("section", "desertfox-help-command", el("h3", undefined, source, " ", el("code", "desertfox-help-muted", row.site)), row.columns.length > 0 ? columns_table(row.columns) : el("p", "desertfox-help-muted", "This row sets no column."), row.changes.length > 0 ? changes_table(row.changes) : "");
+  const source = row.origin === "default" ? `Built-in rule ${row.name}` : "Your rule";
+  return el("section", "desertfox-help-command", el("h3", undefined, source, " ", el("code", "desertfox-help-muted", row.site)), row.columns.length > 0 ? columns_table(row.columns) : el("p", "desertfox-help-muted", "This rule sets no option."), row.changes.length > 0 ? changes_table(row.changes) : "");
 }
 
 // The list is for the tab's own address. A frame of another site resolves its rows against its own address, so it can differ.
 function site_rules_page(model: HelpModel, address: string | undefined): HTMLElement[] {
-  if (address === undefined) return [el("p", undefined, "Run ", el("code", undefined, ":help site_rules"), " on a web page to list the site rows that fit it and the keys they change.")];
+  if (address === undefined) return [el("p", undefined, "Site rules change how DesertFox works on certain sites, for example by turning keys off. Open a web page, then run ", el("code", undefined, ":help site_rules"), " to see the rules that apply to it.")];
   const { rows } = model.site_rules_for(address);
   return [
-    el("p", undefined, "Rows that fit ", el("code", undefined, address), ", in table order. For each column the first row that sets it decides. A bind decides key by key. Frames of other sites match their own address, so this list is for the tab's address only."),
-    ...(rows.length === 0 ? [el("p", undefined, "No site row fits this address.")] : rows.map(site_rule_row)),
+    el("p", undefined, "These rules apply to ", el("code", undefined, address), ". If two rules set the same option, the first one wins. A key rule wins key by key. Frames from other sites follow the rules for their own address, so this list is for the tab's address only."),
+    ...(rows.length === 0 ? [el("p", undefined, "No rule applies to this address.")] : rows.map(site_rule_row)),
   ];
 }
 
@@ -363,6 +405,12 @@ const KEYS_SECTION = "Keys";
 const ENGINES_SECTION = "Search engines";
 const ALIASES_SECTION = "Aliases";
 const QUICKMARKS_SECTION = "Quickmarks";
+const ADVANCED_FILES_SECTION = "Advanced: settings files";
+const ADVANCED_BACKUP_SECTION = "Advanced: back up and restore";
+const ADVANCED_FILES_EDITOR_SECTION = "Advanced: edit files";
+// The setting groups come first, then the forms, then the collapsed Advanced block.
+const SETTINGS_SECTION_TITLES = [...GROUPS.map((group) => group.title), KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ADVANCED_FILES_SECTION, ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION];
+const settings_sections = sections_from_titles(SETTINGS_SECTION_TITLES);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
@@ -370,9 +418,10 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
   const quick_start = Array.isArray(source) ? source : source.quick_start;
   switch (page) {
     case "home": return [];
-    case "settings": return sections_from_titles([KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ...GROUPS.map((group) => group.title)]);
+    case "settings": return settings_sections;
     case "quick-start": return sections_from_titles(quick_start.flatMap((block) => (block.kind === "heading" && block.level === 2 ? [block.text] : [])));
-    case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name));
+    // The slug comes from the id part, so a link to a group keeps working. Only the shown title is plain.
+    case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name)).map((section, index) => ({ ...section, title: group_title(source.groups[index]!.name) }));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);
     case "styling": return STYLING_SECTIONS;
     case "site-rules": return [];
@@ -400,6 +449,8 @@ function section_list(page: PageId, sections: Section[], expanded: boolean, keep
     link.addEventListener("click", () => {
       if (decodeURIComponent(location.hash) !== decodeURIComponent(hash)) return;
       const heading = document.getElementById(section_anchor(page, slug));
+      const collapsed = heading?.closest("details");
+      if (collapsed) collapsed.open = true;
       heading?.scrollIntoView();
       heading?.focus({ preventScroll: true });
     });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { open_quick_start_on_install } from "../src/background/first_install.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
-import type { Block } from "../src/help/blocks.ts";
+import type { Block, Inline } from "../src/help/blocks.ts";
 import "../src/background/command_modules.ts";
 import { quick_start_blocks, quick_start_fallbacks } from "../src/help/quick_start.ts";
 import { parse_route } from "../src/help/route.ts";
@@ -16,7 +16,8 @@ const any_command = { runs_in: "content" as const, label: "x", count: "ignore" a
 const compile = (keymap: typeof DEFAULT_KEYMAP) => compile_keymap(keymap, {}, () => any_command).compiled;
 
 function codes_of(blocks: Block[]): string[] {
-  return blocks.flatMap((block) => (block.kind === "paragraph" ? block.inlines.filter((inline) => inline.kind === "code").map((inline) => inline.text) : []));
+  const code_of = (inlines: Inline[]) => inlines.filter((inline) => inline.kind === "code").map((inline) => inline.text);
+  return blocks.flatMap((block) => (block.kind === "paragraph" ? code_of(block.inlines) : block.kind === "list" ? block.items.flatMap(code_of) : []));
 }
 
 test("quick start: the keys come from the keymap", () => {
@@ -74,7 +75,7 @@ test("quick start: a hint on inputs only is not picked for clicking", () => {
 
 test("quick start: the default keymap gives the keys it always gave", () => {
   const codes = codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands));
-  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", "g", "which_key_delay_ms", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", "<C-o>", ",fs", "config.reload", "~/.config/desertfox/", ":native.install"]);
+  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", "g", "<Escape>", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", ",s", "<C-o>", ",fs", "~/.config/desertfox/", "config.reload", ":native.install"]);
 });
 
 test("quick start: a binding that spells out a default still matches", () => {
@@ -88,7 +89,7 @@ test("quick start: a command with no command line form says it has no key, and a
   const bare = compile({ ...DEFAULT_KEYMAP, site_keys: {}, normal: { j: { id: "scroll.lines", args: { count: 10 } } } });
   const shown = texts(quick_start_blocks(bare, all_commands));
   assert.ok(shown.includes("(no key bound)"));
-  assert.ok(shown.some((text) => text.includes("no such key")));
+  assert.ok(shown.some((text) => text.includes("No key starts a longer sequence")));
 });
 
 test("quick start: every command line it can show resolves in the registry", () => {

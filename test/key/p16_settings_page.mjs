@@ -21,24 +21,24 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
 
     await in_page(row("which_key_border", `const select = row.querySelector("select"); select.selectedIndex = 1; select.dispatchEvent(new view.Event("change"));`));
     await poll_until("the select change to be saved", async () => (await saved()).which_key_border === "round");
-    await poll_until("the tag to turn saved", async () => (await tag_of("which_key_border")) === "saved");
+    await poll_until("the tag to turn changed", async () => (await tag_of("which_key_border")) === "changed");
     expect((await saved()).which_key_border === "round", `saved layer was ${JSON.stringify(await saved())}`);
-    expect((await tag_of("which_key_border")) === "saved", "the tag did not turn saved");
+    expect((await tag_of("which_key_border")) === "changed", "the tag did not turn changed");
 
     await in_page(row("which_key_border", `row.querySelector(".desertfox-settings-reset").click();`));
     await poll_until("the reset to clear the saved edit", async () => (await saved()).which_key_border === undefined);
-    await poll_until("the tag to leave saved", async () => (await tag_of("which_key_border")) !== "saved");
+    await poll_until("the tag to leave changed", async () => (await tag_of("which_key_border")) !== "changed");
     expect((await saved()).which_key_border === undefined, "reset left the saved edit");
-    expect((await tag_of("which_key_border")) !== "saved", "the tag stayed saved after reset");
+    expect((await tag_of("which_key_border")) !== "changed", "the tag stayed changed after reset");
 
     // A second extension page sends the same message the page does, as a `:set` in another tab would. It ends with a write of the config status, which is what the page listens for.
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/quick-start") }).then(() => true)`);
     await poll_until("the quick start page to load", () => in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other?.document.readyState === "complete"; })()`).catch(() => false));
     await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "set", value: false }).then((answer) => answer.ok); })()`);
     const read_shown = () => in_page(row("newtab_date", `return { checked: row.querySelector("input").checked, tag: row.querySelector(".desertfox-help-badge").textContent };`));
-    await poll_until("the settings page to refresh the row", async () => (await read_shown()).tag === "saved").catch(() => undefined);
+    await poll_until("the settings page to refresh the row", async () => (await read_shown()).tag === "changed").catch(() => undefined);
     const shown = await read_shown();
-    expect(shown.checked === false && shown.tag === "saved", `another write showed ${JSON.stringify(shown)}`);
+    expect(shown.checked === false && shown.tag === "changed", `another write showed ${JSON.stringify(shown)}`);
     await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "reset" }).then((answer) => answer.ok); })()`);
     await close_tabs();
   });
@@ -72,7 +72,7 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
     await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
     const slugs = await section_slugs();
-    expect(slugs.length > 3 && slugs[0] === "keys", `the sidebar listed ${JSON.stringify(slugs)}`);
+    expect(slugs.length > 3 && slugs[0] === "appearance", `the sidebar listed ${JSON.stringify(slugs)}`);
     const failures = [];
     for (const slug of slugs) {
       await in_any(`view.scrollTo(0, 0); view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/${slug}']").click();`);
