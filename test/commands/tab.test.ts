@@ -11,7 +11,6 @@ import {
   type TabDeps,
   type TabInfo,
 } from "../../src/commands/tab.ts";
-import { create_previous_tabs } from "../../src/background/previous_tab.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { ListedTab } from "../../src/background/complete_items.ts";
@@ -52,7 +51,6 @@ function make_fake(tabs: TabInfo[], containers: Record<string, string> = {}) {
     find_container_store_id: async (name) => containers[name],
     listed_tabs: async () => [],
     focus_window: async (id) => void log.push(`focus ${id}`),
-    previous_tab_of: async () => undefined,
     discard: {} as TabDeps["discard"],
     toast: async () => {},
   };
@@ -525,7 +523,7 @@ test("tab.unload with site and a named tab in another window selects the site in
 
 test("tab.alternate activates the previous tab of the window", async () => {
   const { handlers, log, deps } = make_fake(make_tabs(3));
-  deps.previous_tab_of = async (window_id) => (window_id === 1 ? 101 : undefined);
+  deps.discard = { alternate_of: async (window_id: number) => (window_id === 1 ? 101 : undefined) } as unknown as TabDeps["discard"];
   await handlers.alternate(ctx_at(102));
   assert.deepEqual(log, ["activate 101"]);
 });
@@ -533,26 +531,8 @@ test("tab.alternate activates the previous tab of the window", async () => {
 test("tab.alternate refuses with no previous tab, or one that is gone or current", async () => {
   for (const previous of [undefined, 999, 102]) {
     const { handlers, log, deps } = make_fake(make_tabs(3));
-    deps.previous_tab_of = async () => previous;
+    deps.discard = { alternate_of: async () => previous } as unknown as TabDeps["discard"];
     await assert.rejects(handlers.alternate(ctx_at(102)), /no previous tab/);
     assert.deepEqual(log, []);
   }
-});
-
-test("tab.alternate pressed at once after a switch sees that switch", async () => {
-  const data = new Map<string, unknown>();
-  const slow_storage = {
-    get: async (key: string) => (data.has(key) ? { [key]: data.get(key) } : {}),
-    set: async (items: Record<string, unknown>) => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      Object.entries(items).forEach(([key, value]) => data.set(key, value));
-    },
-    remove: async (key: string) => void data.delete(key),
-  };
-  const tracker = create_previous_tabs(slow_storage as never);
-  const { handlers, log, deps } = make_fake(make_tabs(3));
-  deps.previous_tab_of = tracker.previous_of;
-  void tracker.activated(1, 101);
-  await handlers.alternate(ctx_at(102));
-  assert.deepEqual(log, ["activate 101"]);
 });

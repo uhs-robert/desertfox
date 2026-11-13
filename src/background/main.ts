@@ -227,7 +227,7 @@ const complete_items = create_complete_items({
   saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
   quickmark_table: async (is_private) => browser_quickmark_store.table((await get_config()).quickmarks, is_private),
   read_tab: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)),
-  discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
+  discard: browser_discard_deps,
   tab_actions: browser_tab_action_deps,
   open_settings: async () => {
     const { open_completion, history_completion_max } = effective_settings((await get_config()).settings);

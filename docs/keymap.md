@@ -67,7 +67,7 @@ bound: 463 (normal 237, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `gt` | bound | `tab.goto` | Next tab |  |
 | `gT` | bound | `tab.prev` | Previous tab |  |
 | `ga` | bound | `tab.goto_audible` | Go to audible tab |  |
-| `gl` | bound | `tab.alternate` | Previous tab in this window |  |
+| `gl` | bound | `tab.alternate` | Last used tab |  |
 | `gp` | bound | `tab.split_other` | Other pane |  |
 | `gP` | bound | `tab.split_swap` | Swap panes |  |
 | `gF` | bound | `frame.exit` | Focus top page |  |
@@ -113,7 +113,7 @@ bound: 463 (normal 237, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `t0` | bound | `tab.goto 1` | First tab |  |
 | `t^` | bound | `tab.goto 1` | First tab |  |
 | `t$` | bound | `tab.goto -1` | Last tab |  |
-| `tl` | bound | `tab.alternate` | Previous tab in this window |  |
+| `tl` | bound | `tab.alternate` | Last used tab |  |
 | `tu` | bound | `tab.unload` | Unload tab |  |
 | `tU` | bound | `tab.load` | Load tab |  |
 | `tH` | bound | `tab.unload --all-before` | Unload tabs before this one |  |

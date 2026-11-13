@@ -1,4 +1,4 @@
-import { create_previous_tabs } from "./previous_tab.ts";
+import { shared_previous_tabs } from "./previous_tab.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 
 // The one place that unloads and loads tabs. Nothing else calls `tabs.discard`. Callers choose the ids: the tab
@@ -104,14 +104,13 @@ function to_discard_tab(tab: browser.tabs.Tab): DiscardTab {
   return { id: tab.id ?? -1, window_id: tab.windowId ?? -1, index: tab.index, active: tab.active, audible: tab.audible ?? false, discarded: tab.discarded ?? false };
 }
 
-// The alternate tab is read through a second reader of the same storage. A write still queued in the first reader may not show yet.
 export const browser_discard_deps: DiscardDeps = {
   read_tab: async (tab_id) => {
     const tab = await ignore_refusal(browser.tabs.get(tab_id));
     return tab && to_discard_tab(tab);
   },
   tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map(to_discard_tab).sort((a, b) => a.index - b.index),
-  alternate_of: (window_id) => create_previous_tabs(browser.storage.session).previous_of(window_id),
+  alternate_of: (window_id) => shared_previous_tabs().previous_of(window_id),
   activate: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
   discard: async (tab_id) => void (await browser.tabs.discard(tab_id)),
   reload: (tab_id) => browser.tabs.reload(tab_id),
