@@ -3,7 +3,7 @@ import type { CommandContext } from "../shared/command.ts";
 import { get_config } from "../background/startup.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { OPEN_REGISTER_PARAM } from "./register_param.ts";
-import { CONTAINER_PARAM, current_page, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
+import { CONTAINER_PARAM, current_page, open_in, own_pages_for, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { BUILT_IN_PAGE, DEFAULT_SETTINGS, NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
@@ -14,8 +14,8 @@ const container_of = (args: Record<string, unknown>) => (typeof args.container =
 
 // A blank url opens the built-in new tab page, the same page `page.home` opens for `desertfox`.
 // The param schema decides where a blank url is allowed, so this takes whatever the check let through.
-async function open_url_target(text: string): Promise<string> {
-  if (text.trim() !== "") return typed_url_target(text);
+async function open_url_target(ctx: CommandContext, text: string): Promise<string> {
+  if (text.trim() !== "") return typed_url_target(text, own_pages_for(ctx));
   return home_page_url(BUILT_IN_PAGE, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
 }
 
@@ -26,7 +26,7 @@ define("open.url", {
   params: [{ name: "url", type: "string", rest: true, main: true, default: [{ value: "", when: { where: ["tab", "window", "background"] } }], values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
   bridge: true,
   runs_in: "background",
-  run: async (ctx, args) => open_in(ctx, await open_url_target(args.url as string), args.where as Where, container_of(args)),
+  run: async (ctx, args) => open_in(ctx, await open_url_target(ctx, args.url as string), args.where as Where, container_of(args)),
   jumps: (args) => args.where === "here",
 });
 
@@ -63,7 +63,7 @@ export type AnythingDeps = {
   activate: (tab_id: number) => Promise<void>;
   focus_window: (window_id: number) => Promise<void>;
   restore_closed: (session_id: string) => Promise<void>;
-  target: (text: string) => Promise<string>;
+  target: (ctx: CommandContext, text: string) => Promise<string>;
   search: (ctx: CommandContext, engine: string | undefined, query: string) => Promise<string>;
   open: (ctx: CommandContext, url: string, where: Where) => Promise<void>;
 };
@@ -83,9 +83,9 @@ export function make_anything_handlers(deps: AnythingDeps) {
       } else if (ref.kind === "closed") {
         if (private_line) throw new RuntimeRefusal("A private window has no closed tabs");
         await deps.restore_closed(ref.session_id);
-      } else if (ref.kind === "page") await deps.open(ctx, await deps.target(ref.url), args.where);
+      } else if (ref.kind === "page") await deps.open(ctx, await deps.target(ctx, ref.url), args.where);
       else if (ref.kind === "engine") await deps.open(ctx, await deps.search(ctx, ref.engine, ref.query), args.where);
-      else await deps.open(ctx, await deps.target(ref.query), args.where);
+      else await deps.open(ctx, await deps.target(ctx, ref.query), args.where);
     },
   };
 }
@@ -99,7 +99,7 @@ const anything_handlers = make_anything_handlers({
   activate: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
   focus_window: async (window_id) => void (await browser.windows.update(window_id, { focused: true })),
   restore_closed: async (session_id) => void (await browser.sessions.restore(session_id)),
-  target: typed_url_target,
+  target: (ctx, text) => typed_url_target(text, own_pages_for(ctx)),
   search: search_target,
   open: (ctx, url, where) => open_in(ctx, url, where),
 });
@@ -134,7 +134,7 @@ define("open.clipboard", {
   bridge: false,
   runs_in: "background",
   run: async (ctx, args) => {
-    const target = await typed_url_target(await text_to_open(ctx, args.register as string));
+    const target = await typed_url_target(await text_to_open(ctx, args.register as string), own_pages_for(ctx));
     await open_in(ctx, target, args.where as Where, container_of(args));
   },
   jumps: (args) => args.where === "here",

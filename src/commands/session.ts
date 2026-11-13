@@ -4,6 +4,7 @@ import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
+import { is_openable } from "./open_target.ts";
 import { browser_session_storage, make_session_store, NEW_NAME_PATTERN, plan_restore } from "../background/session_store.ts";
 import type { ContainerRef, SessionStore, SessionTab } from "../background/session_store.ts";
 
@@ -105,6 +106,8 @@ export function make_session_handlers(deps: SessionDeps) {
       let active_tab_id: number | undefined;
       let window_closed = false;
       for (const tab of planned) {
+        // A stored session can come from an imported file, so its addresses pass the same allow-list as any open. A refused one counts as skipped.
+        if (!is_openable(tab.url)) continue;
         // Into the current window every tab is discarded and the user's tab stays active. Appending with no index keeps two restores at once from interleaving.
         const discarded = !(into_window && tab.active);
         try {

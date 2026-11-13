@@ -11,7 +11,7 @@ import type { Invocation } from "../../src/shared/invocation.ts";
 import { url_target } from "../../src/commands/url_build.ts";
 import { make_fake } from "./fakes.ts";
 
-const resolve_url = async (text: string) => url_target(text, "arch", { arch: { url: "https://arch.example/?q={query}" } });
+const resolve_url = async (text: string) => url_target(text, "arch", { arch: { url: "https://arch.example/?q={query}" } }, () => "moz-extension://own-id/");
 
 const NORMAL: BridgeRunTarget = { tab_id: 7, window_id: 1, url: "https://example.org/", incognito: false };
 
@@ -91,15 +91,15 @@ test("an unknown command, an empty line, help and a broken quote are refusals", 
 
 test("open.url takes http and https only", async () => {
   const test_case = make();
-  const bypasses = ["file:///etc/passwd", "about:config", "MOZ-EXTENSION://abc/x", "ext+x:y", "view-source:https://example.org/", "\u00a0vscode://x", "\ufeffvscode://x", "\u2003steam://run/1", "\u00a0\ufeffabout:blank", "mailto:a@b.c", "\tvscode://x"];
+  const bypasses = ["file:///etc/passwd", "about:config", "MOZ-EXTENSION://abc/x", "ext+x:y", "view-source:https://example.org/", "\u00a0vscode://x", "\ufeffvscode://x", "\u2003steam://run/1", "\u00a0\ufeffabout:blank", "mailto:a@b.c", "\tvscode://x", "data:text/html,x", "javascript:alert(1)", "  javascript:alert(1)"];
   for (const address of bypasses) {
     const text = `open "${address}"`;
     const answer = await test_case.bridge_run.run(text);
     assert.deepEqual(answer, { ok: false, message: "open.url opens only http and https addresses through the bridge" }, text);
   }
   assert.deepEqual(test_case.ran, []);
-  // The handler turns these into a search of the text, so what opens is https and the run passes.
-  for (const address of ["vs\tcode://x", "data:text/html,x", "javascript:alert(1)", "java\tscript:alert(1)", "java\nscript:alert(1)", "\u0001javascript:alert(1)", "  javascript:alert(1)", "jav\rascript:alert(1)"]) {
+  // The handler reads these as prose, not as an address, and searches them, so what opens is https and the run passes.
+  for (const address of ["vs\tcode://x", "java\tscript:alert(1)", "java\nscript:alert(1)", "\u0001javascript:alert(1)", "jav\rascript:alert(1)"]) {
     assert.equal(new URL(await resolve_url(address)).protocol, "https:", address);
     assert.deepEqual(await test_case.bridge_run.run(`open "${address}"`), { ok: true }, address);
   }
@@ -161,7 +161,7 @@ test("the real media command refuses a source word and keeps its plain values", 
 });
 
 test("an open whose default engine is missing still passes when the url is an address", async () => {
-  const no_engine = async (text: string) => url_target(text, "missing", {});
+  const no_engine = async (text: string) => url_target(text, "missing", {}, undefined);
   const { deps, registry } = make_fake({
     "open.url": { label: "Open", intent: "x", name: "open", bridge: true, params: [{ name: "url", type: "string", main: true, rest: true }, { name: "where", type: "enum", values: ["here", "tab"], default: "here" }], runs_in: "background", run: () => undefined },
   });

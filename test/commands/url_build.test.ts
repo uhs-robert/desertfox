@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { engine_search_url, incremented_url, parent_url, root_url } from "../../src/commands/url_build.ts";
+import { engine_search_url, incremented_url, openable_url, parent_url, root_url } from "../../src/commands/url_build.ts";
 
 test("parent drops the last segment, the query and the fragment", () => {
   assert.equal(parent_url("https://a.com/x/y/z?q=1#h"), "https://a.com/x/y/");
@@ -78,4 +78,68 @@ test("increment refuses an amount or a result that needs more than 15 digits", (
   assert.throws(() => incremented_url("https://a.com/p/1", "up", 1e15), /amount/);
   assert.throws(() => incremented_url("https://a.com/p/999999999999999", "up", 1), /past 15 digits/);
   assert.equal(incremented_url("https://a.com/p/999999999999998", "up", 1), "https://a.com/p/999999999999999");
+});
+
+const OWN_PAGES = () => "moz-extension://0a1b2c3d-own/";
+
+// Each row: the address, whether a request from an extension sender opens it, whether a request from a page does.
+const OPENABLE_TABLE: [string, boolean, boolean][] = [
+  ["https://example.org/", true, true],
+  ["http://example.org/a?b#c", true, true],
+  ["HTTPS://EXAMPLE.ORG/", true, true],
+  ["  https://example.org/  ", true, true],
+  ["ftp://ftp.example.org/f", true, true],
+  ["mailto:a@b.example", true, true],
+  ["MailTo:a@b.example", true, true],
+  ["tel:+15551234", true, true],
+  ["magnet:?xt=urn:btih:abc", true, true],
+  ["about:blank", true, true],
+  ["ABOUT:BLANK", true, true],
+  ["about:blank#top", true, true],
+  ["view-source:https://example.org/", true, true],
+  ["VIEW-SOURCE:http://example.org/?q#h", true, true],
+  // A tab or newline inside the scheme is dropped by the URL parser, as Firefox drops it, so it cannot hide a scheme.
+  ["java\tscript:alert(1)", false, false],
+  ["java\nscript:alert(1)", false, false],
+  ["javascript:alert(1)", false, false],
+  ["  JavaScript:alert(1)", false, false],
+  ["data:text/html,hi", false, false],
+  ["blob:https://example.org/1234", false, false],
+  ["file:///etc/passwd", false, false],
+  ["chrome://browser/content/browser.xhtml", false, false],
+  ["resource://gre/modules/x.mjs", false, false],
+  ["place:sort=8", false, false],
+  ["about:config", false, false],
+  ["about:newtab", false, false],
+  ["about:blankx", false, false],
+  ["sms:12345", false, false],
+  ["ws://example.org/", false, false],
+  ["ext+x:y", false, false],
+  ["view-source:javascript:alert(1)", false, false],
+  ["view-source:view-source:https://example.org/", false, false],
+  ["view-source:file:///etc/passwd", false, false],
+  ["view-source:about:config", false, false],
+  ["view-source:", false, false],
+  ["moz-extension://0a1b2c3d-own/home.html#grant", true, false],
+  ["MOZ-EXTENSION://0A1B2C3D-OWN/help.html", true, false],
+  ["moz-extension://ffff-other/home.html", false, false],
+  ["moz-extension://0a1b2c3d-own.evil/home.html", false, false],
+  ["moz-extension:0a1b2c3d-own/home.html", false, false],
+  ["view-source:moz-extension://0a1b2c3d-own/home.html", false, false],
+  ["", false, false],
+  ["not a url", false, false],
+];
+
+test("openable_url holds the allow-list, and opens the extension's own pages for an extension sender only", () => {
+  for (const [url, from_extension, from_page] of OPENABLE_TABLE) {
+    assert.equal(openable_url(url, OWN_PAGES), from_extension, `extension sender: ${JSON.stringify(url)}`);
+    assert.equal(openable_url(url, undefined), from_page, `page sender: ${JSON.stringify(url)}`);
+  }
+});
+
+test("openable_url asks for the extension's base only for a moz-extension: address", () => {
+  let asked = 0;
+  const counting = () => (asked++, "moz-extension://0a1b2c3d-own/");
+  for (const [url] of OPENABLE_TABLE) if (!/moz-extension/i.test(url)) openable_url(url, counting);
+  assert.equal(asked, 0);
 });

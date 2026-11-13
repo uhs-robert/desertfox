@@ -200,6 +200,18 @@ test("addresses Firefox refuses are skipped and counted, and the first tab that 
   assert.deepEqual(fake.toasts.at(-1), { kind: "warning", message: 'Opened "s": 2 tabs, skipped 2' });
 });
 
+// The fake browser takes these, so only the allow-list keeps an imported session from running script or opening another extension's page.
+test("a stored address off the allow-list is never handed to the browser, and counts as skipped", async () => {
+  (globalThis as unknown as { browser: unknown }).browser = { runtime: { getURL: (path: string) => `moz-extension://own-id/${path}` } };
+  const fake = make_fake();
+  await saved_session(fake, "s", [{ url: "javascript:alert(1)" }, { url: "https://a.test/", active: true }, { url: "data:text/html,hi" }, { url: "moz-extension://other-id/home.html" }]);
+  fake.windows.delete(1);
+  await fake.handlers.open(ctx(2), { name: "s", into: "window" });
+  const tabs = [...fake.windows][0]?.[1];
+  assert.deepEqual(tabs?.map((tab) => tab.url), ["https://a.test/"]);
+  assert.deepEqual(fake.toasts.at(-1), { kind: "warning", message: 'Opened "s": 1 tab, skipped 3' });
+});
+
 test("when no tab can open the new window closes and the command refuses", async () => {
   const fake = make_fake();
   await saved_session(fake, "s", [{ url: "about:config" }]);

@@ -93,8 +93,40 @@ export function home_page_url(home_page: string | undefined, built_in_url: () =>
   return home_page === BUILT_IN_PAGE ? `${built_in_url()}?${BUILT_IN_QUERY}` : home_page;
 }
 
-// Schemes that run code or carry inline data in the page are never opened from text.
-const SEARCHED_SCHEMES = ["javascript:", "data:"];
+// The one allow-list of addresses DesertFox opens, from typed text, hints, bookmarks, quickmarks, history and sessions.
+// An allow-list, so a scheme Firefox adds later stays closed until it is listed here.
+const OPENABLE_SCHEMES = new Set(["http:", "https:", "ftp:", "mailto:", "tel:", "magnet:"]);
+const WEB_SCHEMES = new Set(["http:", "https:"]);
+const OWN_PAGE_SCHEME = "moz-extension:";
+
+// The base of the extension's own pages (`browser.runtime.getURL("")`), asked for only when an address is one. Undefined when the request may not open them: a page sent it, so a link the page offers cannot reach the grant panel of the help page.
+export type OwnPages = (() => string) | undefined;
+
+// Why DesertFox does not open `url`, or undefined when it does. The URL parser reads the text the way Firefox will, so case, stray tabs and padding change nothing.
+function unopenable_reason(url: string, own_pages: OwnPages): string | undefined {
+  if (!URL.canParse(url)) return "This address does not parse";
+  const parsed = new URL(url);
+  const scheme = parsed.protocol;
+  if (OPENABLE_SCHEMES.has(scheme)) return undefined;
+  if (scheme === "about:" && parsed.pathname.toLowerCase() === "blank") return undefined;
+  if (scheme === "view-source:") {
+    const inner = parsed.href.slice(scheme.length);
+    return URL.canParse(inner) && WEB_SCHEMES.has(new URL(inner).protocol) ? undefined : "DesertFox opens view-source: only for http and https addresses";
+  }
+  if (scheme === OWN_PAGE_SCHEME) {
+    if (own_pages === undefined) return "A page cannot open DesertFox's own pages";
+    return parsed.host.toLowerCase() === new URL(own_pages()).host.toLowerCase() ? undefined : "DesertFox does not open another extension's pages";
+  }
+  return `DesertFox does not open ${scheme} addresses`;
+}
+
+export const openable_url = (url: string, own_pages: OwnPages): boolean => unopenable_reason(url, own_pages) === undefined;
+
+export function require_openable(url: string, own_pages: OwnPages): void {
+  const reason = unopenable_reason(url, own_pages);
+  if (reason !== undefined) throw new RuntimeRefusal(reason);
+}
+
 // Hosts on this machine or the local network rarely have a certificate, so they get http. Public IPs get https like domains.
 const IP_OR_LOCAL_HOST = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-f:.]*:[0-9a-f:.]*\])(?::\d+)?(?:[/?#]\S*)?$/i;
 const PRIVATE_IPV4 = /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)/;
@@ -110,14 +142,14 @@ const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\S+$/i;
 const LABEL_WITH_PORT = /^(?!(?:tel|sms|mms|fax|callto|facetime|facetime-audio|skype|whatsapp|geo|magnet|urn|sip|sips|xmpp|irc|ircs|bitcoin):)[a-z0-9-]+:\d{1,5}(?:[/?#]\S*)?$/i;
 const HOST_WITH_PORT = /^[^\s:/?#]+\.[^\s:/?#]+:\d+(?:[/?#]\S*)?$/;
 
-// Any parsable scheme opens as given (mailto:, view-source:, about:), except the two above. Prose with a colon searches.
+// Any parsable scheme is taken as an address, and `url_target` then refuses one off the allow-list rather than search it. Prose with a colon searches.
 function typed_url(text: string): string | undefined {
   const ip_or_local = IP_OR_LOCAL_HOST.exec(text);
   if (ip_or_local) return `${is_private_host(ip_or_local[1]!) ? "http" : "https"}://${text}`;
   if (LABEL_WITH_PORT.test(text)) return `http://${text}`;
   // Checked before the scheme parse: "example.com:8080" would otherwise parse as the scheme "example.com:".
   if (HOST_WITH_PORT.test(text)) return `https://${text}`;
-  if (SCHEME_URL.test(text) && URL.canParse(text)) return SEARCHED_SCHEMES.includes(new URL(text).protocol) ? undefined : text;
+  if (SCHEME_URL.test(text) && URL.canParse(text)) return text;
   const looks_like_domain = text.includes(".") && !/\s/.test(text);
   return looks_like_domain && URL.canParse(`https://${text}`) ? `https://${text}` : undefined;
 }
@@ -128,11 +160,15 @@ export function url_target(
   text: string,
   default_engine: string,
   engines: Record<string, { url: string }>,
+  own_pages: OwnPages,
 ): string {
   const trimmed = text.trim();
   if (trimmed === "") throw new RuntimeRefusal("No URL");
   const url = typed_url(trimmed);
-  if (url !== undefined) return url;
+  if (url !== undefined) {
+    require_openable(url, own_pages);
+    return url;
+  }
   const engine = engines[default_engine];
   if (!engine) throw new RuntimeRefusal(`The text is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);

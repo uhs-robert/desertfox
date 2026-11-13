@@ -62,13 +62,13 @@ test("page.home opens the home_page setting or refuses", () => {
 const engines = { search: { url: "https://s.example/?q=%s" }, other: { url: "https://o.example/?q=%s" } };
 
 test("open.clipboard opens a URL as is and searches other text", () => {
-  assert.equal(url_target(" https://a.example/x \n", "search", engines), "https://a.example/x");
-  assert.equal(url_target("rust lifetimes", "search", engines), "https://s.example/?q=rust%20lifetimes");
-  assert.equal(url_target("rust", "other", engines), "https://o.example/?q=rust");
+  assert.equal(url_target(" https://a.example/x \n", "search", engines, undefined), "https://a.example/x");
+  assert.equal(url_target("rust lifetimes", "search", engines, undefined), "https://s.example/?q=rust%20lifetimes");
+  assert.equal(url_target("rust", "other", engines, undefined), "https://o.example/?q=rust");
 });
 
 test("open.clipboard refuses with the setting name when the engine is missing", () => {
-  assert.throws(() => url_target("rust", "ghost", engines), /default_engine setting/);
+  assert.throws(() => url_target("rust", "ghost", engines, undefined), /default_engine setting/);
 });
 
 test("build-config: home_page and default_engine are checked", () => {
@@ -83,23 +83,23 @@ test("the settings schema lists both settings", () => {
   assert.ok("home_page" in properties && "default_engine" in properties);
 });
 
-test("open.clipboard searches text that only parses as a URL", () => {
-  for (const text of ["javascript:alert(1)", "TODO: fix thing", "data:text/html,hi", "rust"]) {
-    assert.equal(url_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
+test("open.clipboard searches prose and refuses a script or inline address", () => {
+  for (const text of ["TODO: fix thing", "rust"]) {
+    assert.equal(url_target(text, "search", engines, undefined), `https://s.example/?q=${encodeURIComponent(text)}`, text);
   }
+  for (const text of ["javascript:alert(1)", "data:text/html,hi"]) assert.throws(() => url_target(text, "search", engines, undefined), /DesertFox does not open/, text);
 });
 
 test("open.clipboard opens web schemes, bare domains and localhost with a port", () => {
-  assert.equal(url_target("ftp://f.example/x", "search", engines), "ftp://f.example/x");
-  assert.equal(url_target("file:///tmp/a.html", "search", engines), "file:///tmp/a.html");
-  assert.equal(url_target("example.com/path", "search", engines), "https://example.com/path");
-  assert.equal(url_target("localhost:3000", "search", engines), "http://localhost:3000");
-  assert.equal(url_target("two words.com", "search", engines), "https://s.example/?q=two%20words.com");
+  assert.equal(url_target("ftp://f.example/x", "search", engines, undefined), "ftp://f.example/x");
+  assert.equal(url_target("example.com/path", "search", engines, undefined), "https://example.com/path");
+  assert.equal(url_target("localhost:3000", "search", engines, undefined), "http://localhost:3000");
+  assert.equal(url_target("two words.com", "search", engines, undefined), "https://s.example/?q=two%20words.com");
 });
 
 test("open.clipboard opens host:port, which parses as a scheme", () => {
-  assert.equal(url_target("example.com:8080", "search", engines), "https://example.com:8080");
-  assert.equal(url_target("localhost:3000/a?b=1", "search", engines), "http://localhost:3000/a?b=1");
+  assert.equal(url_target("example.com:8080", "search", engines, undefined), "https://example.com:8080");
+  assert.equal(url_target("localhost:3000/a?b=1", "search", engines, undefined), "http://localhost:3000/a?b=1");
 });
 
 test("url_target gives host-like text https, local hosts http and keeps full URLs", () => {
@@ -116,10 +116,6 @@ test("url_target gives host-like text https, local hosts http and keeps full URL
     "192.168.1.1:8080/admin": "http://192.168.1.1:8080/admin",
     "https://a.example/x": "https://a.example/x",
     "http://a.example/x": "http://a.example/x",
-    "file:///tmp/a.html": "file:///tmp/a.html",
-    "about:config": "about:config",
-    "about:preferences#privacy": "about:preferences#privacy",
-    "ABOUT:config": "ABOUT:config",
     "LOCALHOST:3000": "http://LOCALHOST:3000",
     "[::1]": "http://[::1]",
     "[fd00::1]/admin": "http://[fd00::1]/admin",
@@ -137,26 +133,50 @@ test("url_target gives host-like text https, local hosts http and keeps full URL
     "tel:5551234": "tel:5551234",
     "tel:911": "tel:911",
     "tel:12345": "tel:12345",
-    "sms:12345": "sms:12345",
     "[::12]": "https://[::12]",
     "[::1:2]": "https://[::1:2]",
-    "blob:https://a.example/uuid": "blob:https://a.example/uuid",
     "[::1]:3000/a": "http://[::1]:3000/a",
     "mailto:a@b.example": "mailto:a@b.example",
     "tel:+15551234": "tel:+15551234",
     "view-source:https://a.example/": "view-source:https://a.example/",
+    "magnet:?xt=urn:btih:abc": "magnet:?xt=urn:btih:abc",
+    "about:blank": "about:blank",
   };
-  for (const [text, expected] of Object.entries(cases)) assert.equal(url_target(text, "search", engines), expected, text);
+  for (const [text, expected] of Object.entries(cases)) assert.equal(url_target(text, "search", engines, undefined), expected, text);
 });
 
-test("url_target searches plain words and unknown schemes", () => {
-  for (const text of ["rust", "foo bar", "[abc]", "javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,hi", "about: config"]) {
-    assert.equal(url_target(text, "search", engines), `https://s.example/?q=${encodeURIComponent(text)}`, text);
+test("url_target searches plain words and prose with a colon", () => {
+  for (const text of ["rust", "foo bar", "[abc]", "about: config"]) {
+    assert.equal(url_target(text, "search", engines, undefined), `https://s.example/?q=${encodeURIComponent(text)}`, text);
   }
 });
 
+// A refusal, not a search: the text names an address, and a search would send it to the engine.
+test("url_target refuses an address off the allow-list and names its scheme", () => {
+  const cases: Record<string, RegExp> = {
+    "javascript:alert(1)": /does not open javascript: addresses/,
+    "JavaScript:alert(1)": /does not open javascript: addresses/,
+    "data:text/html,hi": /does not open data: addresses/,
+    "file:///tmp/a.html": /does not open file: addresses/,
+    "about:config": /does not open about: addresses/,
+    "ABOUT:config": /does not open about: addresses/,
+    "about:preferences#privacy": /does not open about: addresses/,
+    "sms:12345": /does not open sms: addresses/,
+    "blob:https://a.example/uuid": /does not open blob: addresses/,
+    "view-source:file:///etc/passwd": /view-source: only for http and https/,
+    "moz-extension://own-id/home.html": /A page cannot open DesertFox's own pages/,
+  };
+  for (const [text, refusal] of Object.entries(cases)) assert.throws(() => url_target(text, "search", engines, undefined), refusal, text);
+});
+
+test("url_target opens the extension's own page only when the request may", () => {
+  const own = () => "moz-extension://own-id/";
+  assert.equal(url_target("moz-extension://own-id/home.html", "search", engines, own), "moz-extension://own-id/home.html");
+  assert.throws(() => url_target("moz-extension://other-id/home.html", "search", engines, own), /another extension's pages/);
+});
+
 test("url_target refuses empty text", () => {
-  assert.throws(() => url_target("  ", "search", engines), /No URL/);
+  assert.throws(() => url_target("  ", "search", engines, undefined), /No URL/);
 });
 
 test("start_on_first_focus waits for the focus of a frame, and starts once", () => {

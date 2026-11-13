@@ -4,7 +4,7 @@ import { define } from "../shared/registry/builtin.ts";
 import { numbered_windows } from "../background/complete_items.ts";
 import type { NumberedWindow, WindowLike } from "../background/complete_items.ts";
 import { read_recent_window_ids } from "../background/window_focus.ts";
-import { typed_url_target } from "./open_target.ts";
+import { own_pages_for, typed_url_target } from "./open_target.ts";
 
 export type WindowDeps = {
   create: (open: { url: string | undefined; private_window: boolean }) => Promise<void>;
@@ -96,9 +96,9 @@ define("window.new", {
   ],
   bridge: false,
   runs_in: "background",
-  run: async (_ctx, args) => {
+  run: async (ctx, args) => {
     const { url, private: private_window } = args as { url: string; private: boolean };
-    await handlers.create({ url: url.trim() === "" ? "" : await typed_url_target(url), private: private_window });
+    await handlers.create({ url: url.trim() === "" ? "" : await typed_url_target(url, own_pages_for(ctx)), private: private_window });
   },
 });
 

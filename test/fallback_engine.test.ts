@@ -45,7 +45,7 @@ test("a user duck replaces the fallback whole", () => {
 });
 
 test("clipboard text searches DuckDuckGo with the default setting and the fallback map", () => {
-  const url = url_target("rust lifetimes", DEFAULT_SETTINGS.default_engine, with_fallback_engines({}));
+  const url = url_target("rust lifetimes", DEFAULT_SETTINGS.default_engine, with_fallback_engines({}), undefined);
   assert.equal(url, "https://duckduckgo.com/?q=rust%20lifetimes");
 });
 

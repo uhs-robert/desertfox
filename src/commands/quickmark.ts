@@ -9,7 +9,7 @@ import { QUICKMARK_KEY } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { current_tab_url, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
+import { current_tab_url, open_in, own_pages, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type QuickmarkDeps = {
@@ -57,7 +57,7 @@ export const browser_quickmark_deps: QuickmarkDeps = {
   save: async (ctx, key, url) => browser_quickmark_store.add(key, url, await is_private_context(ctx)),
   remove: async (ctx, key) => browser_quickmark_store.remove(key, await is_private_context(ctx)),
   tab_url: current_tab_url,
-  target: typed_url_target,
+  target: (text) => typed_url_target(text, own_pages),
   open: (ctx, url, where) => open_in(ctx, url, where),
   toast: (ctx, kind, message) => show_toast_on_tab(ctx, "quickmark", message, kind),
 };

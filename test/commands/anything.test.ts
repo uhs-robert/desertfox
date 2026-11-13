@@ -16,7 +16,7 @@ function make(private_line = false, tabs: Record<number, { window_id: number; in
     activate: async (id) => void calls.push(`activate ${id}`),
     focus_window: async (id) => void calls.push(`focus ${id}`),
     restore_closed: async (id) => void calls.push(`restore ${id}`),
-    target: async (text) => `target:${text}`,
+    target: async (_ctx, text) => `target:${text}`,
     search: async (_ctx, engine, query) => `search:${engine ?? "default"}:${query}`,
     open: async (_ctx, url, where) => void calls.push(`open ${url} ${where}`),
   };

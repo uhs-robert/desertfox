@@ -99,29 +99,34 @@ test("open -w with no url opens the new tab page in a new window", async () => {
   assert.deepEqual(opened, [{ via: "create", url: NEW_TAB_URL }]);
 });
 
-test("open.url opens a blob: link as it is", async () => {
+test("open.url refuses an address off the allow-list before Firefox sees it, and does not search", async () => {
   const opened: Opened[] = [];
   install_browser(opened);
-  await run("open.url", { url: "blob:https://a.example/1234", where: "here" });
-  assert.deepEqual(opened, [{ via: "update", url: "blob:https://a.example/1234" }]);
-});
-
-test("open.url shows a notice when Firefox refuses an about: page, and does not search", async () => {
-  const opened: Opened[] = [];
-  install_browser(opened);
-  (globalThis as unknown as { browser: { tabs: { update: unknown } } }).browser.tabs.update = async () => {
-    throw new Error("Illegal URL: about:config");
-  };
-  await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /Firefox does not let extensions open about:config/);
+  await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /DesertFox does not open about: addresses/);
+  await assert.rejects(run("open.url", { url: "blob:https://a.example/1234", where: "tab" }), /DesertFox does not open blob: addresses/);
   assert.deepEqual(opened, []);
 });
 
-test("open.url passes other errors on an about: page through unchanged", async () => {
-  install_browser([]);
-  (globalThis as unknown as { browser: { tabs: { update: unknown } } }).browser.tabs.update = async () => {
-    throw new Error("No tab with id 1");
-  };
-  await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /No tab with id 1/);
+const run_from = (id: string, args: Record<string, unknown>, from_page: boolean) =>
+  (registry.get(id)!.run as (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>)({ tab_id: 1, window_id: 1, frame_id: 0, mode: "normal", ...(from_page && { from_page: true }) }, args);
+
+test("open.url opens the extension's own page for an extension sender and refuses it for a page", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  const own = "moz-extension://test/home.html#grant";
+  await assert.rejects(run_from("open.url", { url: own, where: "tab" }, true), /A page cannot open DesertFox's own pages/);
+  await assert.rejects(run_from("open.url", { url: "moz-extension://other/home.html", where: "tab" }, false), /another extension's pages/);
+  assert.deepEqual(opened, []);
+  await run_from("open.url", { url: own, where: "tab" }, false);
+  assert.deepEqual(opened, [{ via: "tab_active", url: own }]);
+});
+
+test("a blank open.url from a page still opens the built-in new tab page", async () => {
+  const opened: Opened[] = [];
+  install_browser(opened);
+  await run_from("open.url", { url: "", where: "tab" }, true);
+  assert.equal(opened.length, 1);
+  assert.match(opened[0]!.url!, /^moz-extension:\/\/test\//);
 });
 
 test("a binding with an explicit url prompt compiles to a prompting step, with no default filled in", () => {

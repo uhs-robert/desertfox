@@ -1,7 +1,7 @@
 import { get_config } from "../background/startup.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
+import { open_in, own_pages, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { SEND_KEY_MAX_TIMES } from "../shared/send_key_limit.ts";
@@ -94,7 +94,7 @@ define("page.home", {
   runs_in: "background",
   run: async (ctx, args) => {
     const home_url = home_page_url((await get_config()).settings.home_page, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
-    await open_in(ctx, await typed_url_target(home_url), args.where as Where);
+    await open_in(ctx, await typed_url_target(home_url, own_pages), args.where as Where);
   },
 });
 
