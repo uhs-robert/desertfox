@@ -233,6 +233,7 @@ test("only the first draw of the new tab page follows the new_tab_page redirect"
     const node = (): Record<string, unknown> => ({ style: {}, classList: { add() {}, remove() {} }, append() {}, appendChild: (child: unknown) => child, prepend() {}, setAttribute() {}, getBoundingClientRect() {} });
     Object.assign(globalThis, {
       browser: {
+        runtime: { onMessage: { addListener() {} } },
         storage: {
           local: { get: async (key: string) => (key === "desertfox_saved_settings" ? { [key]: saved } : {}), set: async () => {} },
           session: { get: async () => ({}) },

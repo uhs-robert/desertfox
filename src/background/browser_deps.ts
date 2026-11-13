@@ -5,12 +5,13 @@ import type { MergedConfig } from "../shared/config.ts";
 import { engine_of_page } from "../shared/engines/index.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
-import type { BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
+import type { AddBundleScriptAnswer, BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
-import type { BundleLoaderDeps } from "./bundle_loader.ts";
+import type { BundleLoaderDeps, LoadSender } from "./bundle_loader.ts";
+import { is_extension_page } from "./extension_page.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
 import { create_load_log } from "./load_log.ts";
 import { browser_timing_log } from "./timing_browser.ts";
@@ -130,6 +131,8 @@ export const reinject_deps: ReinjectDeps = {
   },
 };
 
+const is_own_page = (sender: LoadSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
+
 const bundle_load_log = create_load_log(
   { get: (key) => browser.storage.local.get(key), set: (items) => browser.storage.local.set(items) },
   BUNDLE_LOADS_STORAGE_KEY,
@@ -144,9 +147,22 @@ export const bundle_loader_deps: BundleLoaderDeps = {
       await browser.tabs.executeScript(tab_id, { file, frameId: frame_id, matchAboutBlank: true, runAt: "document_start" });
       ok = true;
     } finally {
-      void bundle_load_log.record({ tab_id, frame_id, file, ok, ms: performance.now() - started_ms });
+      void bundle_load_log.record({ tab_id, frame_id, file, ok, route: "execute_script", ms: performance.now() - started_ms });
     }
   },
+  // The extension page's own script adds the tag (src/shared/page_bundle_tag.ts), because `executeScript` is refused there.
+  add_script_tag: async ({ tab_id, frame_id }, file) => {
+    const started_ms = performance.now();
+    let ok = false;
+    try {
+      const answer = (await send_to_tab(tab_id, { type: "add_bundle_script", file }, frame_id)) as AddBundleScriptAnswer | undefined;
+      if (!answer?.ok) throw new Error(answer?.message ?? "the page did not answer");
+      ok = true;
+    } finally {
+      void bundle_load_log.record({ tab_id, frame_id, file, ok, route: "page_tag", ms: performance.now() - started_ms });
+    }
+  },
+  is_extension_page: is_own_page,
   timeout_ms: 10_000,
 };
 
@@ -156,7 +172,10 @@ export const bundle_loader = create_bundle_loader(bundle_loader_deps);
 // The background knows no document id, so this load joins other selection loads only, never the content script's own load. A second run of page.js registers nothing.
 const selection_ask_deps: SelectionAskDeps = {
   ask: (tab_id, frame_id) => send_to_tab(tab_id, { type: "get_selection" }, frame_id),
-  load_page_bundle: (tab_id, frame_id) => bundle_loader.load({ tab_id, frame_id, document_id: "" }, "page"),
+  load_page_bundle: async (tab_id, frame_id) => {
+    const in_extension_page = is_own_page({ id: browser.runtime.id, url: (await browser.tabs.get(tab_id)).url, frameId: frame_id });
+    return bundle_loader.load({ tab_id, frame_id, document_id: "", in_extension_page }, "page");
+  },
 };
 
 const jump_offset_ask_deps: SelectionAskDeps = { ...selection_ask_deps, ask: (tab_id, frame_id) => send_to_tab(tab_id, { type: "get_jump_offset" }, frame_id) };
