@@ -64,7 +64,7 @@ export type KeyCapture = ReturnType<typeof create_key_capture>;
 
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
-const data = <T extends HTMLElement>(node: T, name: string): T => {
+const with_data_keys = <T extends HTMLElement>(node: T, name: string): T => {
   node.setAttribute("data-keys", name);
   return node;
 };
@@ -95,18 +95,18 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   filter.type = "search";
   filter.placeholder = "Filter by keys, command or mode";
   filter.setAttribute("aria-label", "Filter bindings");
-  data(filter, "filter");
+  with_data_keys(filter, "filter");
   filter.addEventListener("input", () => session.set_filter(filter.value));
-  const status = data(el("p", "desertfox-settings-error"), "status");
+  const status = with_data_keys(el("p", "desertfox-settings-error"), "status");
   status.setAttribute("role", "status");
   const tables = el("div", "desertfox-keys-tables");
 
   // The editor is built once and moved under the open row, so a refresh that redraws the rows never rebuilds a box the user is typing in.
-  const capture_box = data(el("div", "desertfox-settings-input desertfox-keys-capture"), "capture");
+  const capture_box = with_data_keys(el("div", "desertfox-settings-input desertfox-keys-capture"), "capture");
   capture_box.tabIndex = 0;
   capture_box.setAttribute("role", "group");
   capture_box.setAttribute("aria-label", "Key sequence, press the keys");
-  const command = data(el("input", "desertfox-settings-input desertfox-keys-command"), "command") as HTMLInputElement;
+  const command = with_data_keys(el("input", "desertfox-settings-input desertfox-keys-command"), "command") as HTMLInputElement;
   command.type = "text";
   command.setAttribute("aria-label", "Command");
   command.setAttribute("list", "desertfox-keys-names");
@@ -114,26 +114,26 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   command.spellcheck = false;
   const names = el("datalist", undefined);
   names.id = "desertfox-keys-names";
-  const check_box = data(el("div", "desertfox-keys-check"), "check");
+  const check_box = with_data_keys(el("div", "desertfox-keys-check"), "check");
   check_box.setAttribute("role", "status");
-  const message_box = data(el("div", undefined), "message");
+  const message_box = with_data_keys(el("div", undefined), "message");
   message_box.setAttribute("role", "status");
   const note_box = el("div", "desertfox-help-muted");
-  const clear = data(button("Clear", () => {
+  const clear = with_data_keys(button("Clear", () => {
     session.clear_keys();
     capture_box.focus();
   }), "clear");
-  const save = data(button("Save", () => void session.save()), "save");
-  const remove = data(button("Remove", () => void session.remove()), "remove");
-  const reset = data(button("Reset", () => void session.reset()), "reset");
-  const close = data(button("Close", () => session.close()), "close");
+  const save = with_data_keys(button("Save", () => void session.save()), "save");
+  const remove = with_data_keys(button("Remove", () => void session.remove()), "remove");
+  const reset = with_data_keys(button("Reset", () => void session.reset()), "reset");
+  const close = with_data_keys(button("Close", () => session.close()), "close");
   command.addEventListener("input", () => session.set_text(command.value));
   command.addEventListener("keydown", (event) => {
     if (event.key === "Enter") void session.save();
   });
   const editor_cell = el("td", "desertfox-keys-editor-cell", el("div", "desertfox-keys-editor-line", capture_box, clear), el("div", "desertfox-keys-editor-line", command, names), note_box, check_box, el("div", "desertfox-keys-editor-line", save, remove, reset, close), message_box);
   editor_cell.setAttribute("colspan", "3");
-  const editor_row = data(el("tr", "desertfox-keys-editor", editor_cell), "editor");
+  const editor_row = with_data_keys(el("tr", "desertfox-keys-editor", editor_cell), "editor");
   release_capture = capture.bind(capture_box, {
     token: (token) => session.capture(token),
     backspace: () => session.capture_backspace(),
@@ -194,7 +194,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
       body.push(row_node(row));
       if (open?.original && open.mode === mode && open.original.keys === row.keys) body.push(editor_row);
     }
-    const add = data(button("Add a binding", () => session.open_new(mode)), "add");
+    const add = with_data_keys(button("Add a binding", () => session.open_new(mode)), "add");
     add.setAttribute("data-mode", mode);
     const heading = el("h3", undefined, mode, " ", el("span", "desertfox-help-muted", `(${rows.length})`));
     const section = el("div", "desertfox-keys-mode", heading, add, body.length === 0 ? el("p", "desertfox-help-muted", "No bindings match.") : el("table", "desertfox-keys-table", ...body));
