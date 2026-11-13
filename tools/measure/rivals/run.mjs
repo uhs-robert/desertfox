@@ -176,7 +176,11 @@ try {
       await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
       const run_record = { page, run, dcl: page_state.dcl, load: page_state.load };
       run_record.mem_load = await memory();
-      if (page !== "frames0") {
+      if (page === "coverage") {
+        // Not timed: the press is made once the extension has settled, and the labels are read after settle_ms.
+        if (addon) run_record.coverage = await ask_page("coverage", { char: "f", settle_ms: 3000 }, 20000);
+        await ask_page("escape");
+      } else if (page !== "frames0") {
         if (!addon) {
           await sleep(1000);
           run_record.mem_hints = await memory();

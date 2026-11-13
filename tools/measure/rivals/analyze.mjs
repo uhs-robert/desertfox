@@ -97,6 +97,23 @@ for (const tool of tools.filter((name) => name !== "none")) {
   const cells = hint_pages.map((page) => (runs_of[tool].find((run) => run.page === page && run.run === -1)?.press1?.first_ms ?? null));
   markdown += `| ${tool} | ${cells.map((value) => show(value, 0)).join(" | ")} |\n`;
 }
+// Coverage page: per target, in how many timed runs a tool put a label on it. Only targets that were visible in every run count as visible.
+const coverage_runs_of = (tool) => (runs_of[tool] ?? []).filter((run) => run.page === "coverage" && run.run >= 0 && run.coverage?.targets);
+const coverage_tools = tools.filter((tool) => coverage_runs_of(tool).length > 0);
+if (coverage_tools.length > 0) {
+  const first = coverage_runs_of(coverage_tools[0])[0].coverage;
+  markdown += `\n### Coverage: runs in which a target got a hint label (viewport ${first.viewport.join("x")}, scrolled to ${first.scroll_y})\n\n| target | visible | ${coverage_tools.join(" | ")} |\n|---|---|${coverage_tools.map(() => "---").join("|")}|\n`;
+  for (const { name, visible } of first.targets) {
+    const cells = coverage_tools.map((tool) => {
+      const runs = coverage_runs_of(tool);
+      return `${runs.filter((run) => run.coverage.targets.find((t) => t.name === name)?.labelled).length}/${runs.length}`;
+    });
+    markdown += `| ${name} | ${visible ? "yes" : "no"} | ${cells.join(" | ")} |\n`;
+  }
+  const visible_names = first.targets.filter((t) => t.visible).map((t) => t.name);
+  markdown += `| visible targets labelled | ${visible_names.length} | ${coverage_tools.map((tool) => { const runs = coverage_runs_of(tool); return median_of(runs.map((run) => run.coverage.targets.filter((t) => t.visible && t.labelled).length)); }).join(" | ")} |\n`;
+  markdown += `| labels in total, unmatched to any target | - | ${coverage_tools.map((tool) => median_of(coverage_runs_of(tool).map((run) => `${run.coverage.label_count}`).map(Number)) + ", " + median_of(coverage_runs_of(tool).map((run) => run.coverage.unmatched))).join(" | ")} |\n`;
+}
 markdown += `\n### Versions\n\n${tools.map((tool) => `- ${tool}: firefox ${info_of[tool].firefox}, meta ${JSON.stringify(info_of[tool].meta)}`).join("\n")}\n`;
 writeFileSync(`${out_dir}/tables.md`, markdown);
 console.log(markdown);
