@@ -106,8 +106,12 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
     expect(after_wheel === 0, `a wheel scroll was pulled back to ${after_wheel}`);
 
     await open_fresh("new-tab");
+    const before_key = await scroll_y();
     await press_keys("j");
-    await poll_until("the j key to scroll the page", async () => (await scroll_y()) > 0, { timeout_ms: 3000 }).catch(() => undefined);
+    await poll_until("the j key to move the page", async () => (await scroll_y()) !== before_key, { timeout_ms: 3000 });
+    // The page's clock starts at its load, so under 4 s on it means the 5 s hold was still running when j scrolled.
+    const key_at_ms = await in_any(`return Math.round(view.performance.now());`);
+    expect(key_at_ms < 4000, `the j key scrolled ${key_at_ms} ms after the page loaded, so the hold may have ended already`);
     // The key scrolls smoothly, so the position is read once two reads a frame pair apart agree.
     const settled_y = () => in_any(`return new Promise((resolve) => { const first = view.scrollY; view.requestAnimationFrame(() => view.requestAnimationFrame(() => resolve(first === view.scrollY ? Math.round(first) : -1))); });`);
     await poll_until("the key scroll to stop", async () => (await settled_y()) >= 0, { timeout_ms: 3000 });
