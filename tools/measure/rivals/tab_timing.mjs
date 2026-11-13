@@ -21,7 +21,7 @@ export function analyze_tab_switch(marks) {
     first_hop_ms: hop_a.ms - marks.key_a_ms,
     arrive_to_land_ms: landing.ms - hop_a.ms,
     // Presses sent before the landing, minus the one that worked. A press still in flight when the landing happened counts as lost, so this can read one or two high.
-    // DesertFox holds a key that arrives before its keymap is read and replays it. Vimium, Vimium C and Tridactyl drop it. So for DesertFox this counts held presses, and DesertFox can land up to one press gap sooner than a tool that needs a press after its handler is ready.
+    // DesertFox holds a key that arrives before its keymap is read and replays it, so for DesertFox this counts held presses and it can land up to one press gap sooner. How the rivals treat early keys was not checked, so for them it counts presses sent before the landing.
     lost_before_landing: Math.max(0, presses.length - 1),
     presses_sent: presses.length,
     // The measured gap between presses, the median of the differences. Null with fewer than two presses.

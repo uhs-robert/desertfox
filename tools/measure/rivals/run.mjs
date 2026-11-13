@@ -246,7 +246,7 @@ try {
     if (page === "tabswitch") {
       if (!addon) continue;
       // Default settings for every tool, nothing turned off. The warm-up run (-1) covers the first load after install, and the timed runs are warm.
-      result.meta.tabswitch = { next_key: NEXT_TAB_KEY[tool], retry_ms: RETRY_MS, cache: "server sends cache-control: no-store, so each tab load fetches the page again; the browser start-up cache and the extension's script cache are warm after run -1", settings: "extension defaults", early_keys: "DesertFox holds keys that arrive before its keymap is read and replays them; Vimium, Vimium C and Tridactyl drop them, so for DesertFox the presses before landing are held, for the others lost" };
+      result.meta.tabswitch = { next_key: NEXT_TAB_KEY[tool], retry_ms: RETRY_MS, cache: "server sends cache-control: no-store, so each tab load fetches the page again; the browser start-up cache and the extension's script cache are warm after run -1", settings: "extension defaults", early_keys: "DesertFox holds keys that arrive before its keymap is read and replays them. How Vimium, Vimium C and Tridactyl treat early keys was not checked, so a press count for them is presses sent before landing, not proven lost presses" };
       for (let run = -1; run < timed_runs; run++) {
         if (!(await open_page("tab")).loaded) throw new Error("the start tab did not load");
         await sleep(1500);
