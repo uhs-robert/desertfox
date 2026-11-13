@@ -8,8 +8,8 @@ import { refused_as } from "../src/shared/swallow.ts";
 const MAX_BYTES = {
   // 19.5 KB (admission clause A, it runs before the first key): the layout fallback reads a letter of another script by its physical key.
   "content.js": 19.5 * 1024,
-  // 48 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB.
-  "hints.js": 48 * 1024,
+  // 48.5 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB.
+  "hints.js": 48.5 * 1024,
   "caret.js": 32 * 1024,
   "whichkey.js": 8 * 1024,
   "cmdline.js": 4 * 1024,
