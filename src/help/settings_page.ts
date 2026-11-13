@@ -201,12 +201,13 @@ function build_row(field: Field, session: SettingsSession): Row {
   reset.title = "Undo your change. The setting goes back to its default, or to the value in your settings file.";
   reset.addEventListener("click", () => void session.reset(name));
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
-  const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.doc);
-  const head = el("div", "desertfox-settings-head", el("code", undefined, name), tag);
+  const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.summary);
+  const head = el("div", "desertfox-settings-head", el("strong", undefined, field.label), tag);
   const body = widget
     ? el("div", "desertfox-settings-body", widget.node, reset)
     : el("div", "desertfox-settings-body", el("code", "desertfox-settings-value", JSON.stringify(field.row.value) ?? "unset"), el("span", "desertfox-help-muted", READ_ONLY_NOTE));
-  const node = el("div", "desertfox-settings-row", head, doc, body, message);
+  const code_name = el("small", "desertfox-help-muted", el("code", undefined, name));
+  const node = el("div", "desertfox-settings-row", head, code_name, doc, body, message);
   node.setAttribute("data-setting", name);
   return { node, tag, message, reset, ...(widget ? { widget } : {}) };
 }

@@ -2,7 +2,7 @@
 
 import type { ChangeSetting, ChangeSettingAnswer, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
-import { SETTING_DOCS } from "../shared/settings_docs.ts";
+import { SETTING_HELP } from "../shared/settings_docs.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 // Shown on a row `:set` refuses.
@@ -100,7 +100,8 @@ export type Field = {
   row: SettingListRow;
   control: Control;
   group: string;
-  doc: string;
+  label: string;
+  summary: string;
   // A value the reader typed that the background has not acknowledged. While it is set, a refresh leaves the field alone.
   draft?: { value: unknown };
   // An error from the check or the background, shown under the field.
@@ -128,7 +129,8 @@ export function create_settings_session(deps: SessionDeps) {
     row,
     control: control_of(row, deps.engines),
     group: group_of(row.name),
-    doc: SETTING_DOCS[row.name as keyof typeof SETTING_DOCS] ?? "",
+    label: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.label ?? row.name,
+    summary: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.summary ?? "",
   });
 
   function take_row(name: string, row: SettingListRow): void {

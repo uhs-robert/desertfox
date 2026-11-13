@@ -68,3 +68,18 @@ test("no per-site setting shares a name with a site table field, and none is a t
     assert.notEqual((SETTINGS_TABLE[name] as SettingRow).kind, "site_table", name);
   }
 });
+
+test("every setting has a long description, a plain label and a one-line summary", async () => {
+  const { SETTING_DOCS, SETTING_HELP } = await import("../src/shared/settings_docs.ts");
+  for (const name of SETTING_NAMES) {
+    assert.notEqual(SETTING_DOCS[name]?.trim() ?? "", "", `${name} has no long description`);
+    assert.notEqual(SETTING_HELP[name]?.label.trim() ?? "", "", `${name} has no label`);
+    assert.notEqual(SETTING_HELP[name]?.summary.trim() ?? "", "", `${name} has no summary`);
+  }
+});
+
+test("the engine form calls the keyword a search word in its messages", async () => {
+  const { field_problems } = await import("../src/shared/engine_fields.ts");
+  const problems = field_problems({ name: "a", url: "https://x/{query}", keyword: "TOO LONG!" });
+  assert.deepEqual(problems, ["The search word is one to eight lower case letters or digits."]);
+});

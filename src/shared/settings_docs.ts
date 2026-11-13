@@ -1,6 +1,7 @@
-// The editor description of each setting, for `src/shared/config_build/schemas.ts` only. Kept out of `settings_table.ts`
-// because the command line page bundles that table and has no room for this prose. The record type makes a setting
-// without a description a compile error.
+// The prose of each setting. `SETTING_DOCS` is the long description for the settings file schema in
+// `src/shared/config_build/schemas.ts`. `SETTING_HELP` is the plain label and one-line summary the Settings page shows. Both are kept out of
+// `settings_table.ts` because the command line page bundles that table and has no room for this prose. The record types make a setting
+// without either a compile error.
 
 import { BUILT_IN_PAGE } from "./config.ts";
 import type { SettingName } from "./settings_table.ts";
@@ -57,4 +58,58 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   newtab_recent_tabs: "Whether the new tab page lists your open tabs, last used first. Private tabs never show",
   newtab_recent_tabs_max: "Recent tab rows on the new tab page",
   newtab_links: "Links on the new tab page, one [[newtab_links]] table each. Links with the same group share a list",
+};
+
+export const SETTING_HELP: Record<SettingName, { label: string; summary: string }> = {
+  which_key_delay_ms: { label: "Which-key delay", summary: "How long DesertFox waits after a first key before it lists the keys that can come next." },
+  toast_ms: { label: "Message time", summary: "How long a notice stays on the page, in milliseconds." },
+  toast_error_ms: { label: "Error message time", summary: "How long an error notice stays on the page, in milliseconds." },
+  which_key_repeat: { label: "Show the repeat step", summary: "Shows what the dot key would repeat at the bottom of the key list." },
+  which_key_border: { label: "Key list border", summary: "The corner style of the border around the key list." },
+  which_key_skip: { label: "Keys with no key list", summary: "First keys after which the key list does not open by itself." },
+  next_patterns: { label: "Next page link texts", summary: "Link texts that count as a link to the next page, best first." },
+  prev_patterns: { label: "Previous page link texts", summary: "Link texts that count as a link to the previous page, best first." },
+  strip_tracking_params: { label: "Tracking parts to drop", summary: "Parts of an address that DesertFox removes when you copy it." },
+  strip_tracking: { label: "Drop tracking when copying", summary: "Whether copying an address from a site removes those tracking parts." },
+  hint_letters: { label: "Hint letters", summary: "The letters used to label links when you press f." },
+  blur_on_load: { label: "Leave fields alone on load", summary: "Takes the focus off a field that a page focuses by itself, so your keys work at once." },
+  editable_add: { label: "Extra text fields", summary: "Page parts that DesertFox treats as text fields, so focusing one lets you type." },
+  editable_remove: { label: "Not text fields", summary: "Page parts that DesertFox does not treat as text fields, so your keys keep working there." },
+  editable_remove_unsized: { label: "Not text fields, hidden only", summary: "Applies the Not text fields list only to parts that have no width right now." },
+  escape_to_page: { label: "Let the page use Escape", summary: "Lets the page keep the Escape key while you type in a field, for editors that use it themselves." },
+  scroll_selector: { label: "Part of the page to scroll", summary: "The part of the page that the scroll keys move, for apps with their own scroll area." },
+  hint_add: { label: "Extra hint targets", summary: "Page parts that also get hint labels." },
+  hint_remove: { label: "No hint targets", summary: "Page parts that get no hint labels." },
+  hint_key_line: { label: "Show the hint key line", summary: "Shows the keys you can press at the bottom right while hints are open." },
+  default_site_rows_off: { label: "Turn off built-in site rules", summary: "Names of the site rules that come with DesertFox and that you want off." },
+  site_rules: { label: "Site rules", summary: "Settings and keys that apply only on chosen sites." },
+  zoom: { label: "Page zoom", summary: "The zoom a page starts at, where 1 is 100%." },
+  media_quality: { label: "Video quality", summary: "The quality that video players start at." },
+  editor_ext: { label: "Editor file extension", summary: "The file ending of the temporary file that opens in your own editor, so it picks the right file type." },
+  layout_fallback: { label: "Other alphabets", summary: "Lets keys work on a keyboard layout with non-Latin letters by using the physical key." },
+  mode_indicator: { label: "Mode label", summary: "When the label that shows the current mode appears." },
+  palette: { label: "Theme", summary: "The color theme DesertFox uses." },
+  light_intensity: { label: "Light theme strength", summary: "Which of the five light shades the light theme uses, from 1 (lightest) to 5." },
+  search_prefixes: { label: "Search key prefixes", summary: "The keys that start a search in this tab or in a new tab." },
+  container_prefixes: { label: "Container key prefixes", summary: "The keys that reopen a tab in a container or open a new container tab." },
+  home_page: { label: "Home page", summary: "The address that the home command opens." },
+  default_engine: { label: "Default search engine", summary: "The search engine used for text that is not an address." },
+  new_tab_page: { label: "New tab page", summary: "What a new tab shows." },
+  completion_all_windows: { label: "Tabs from all windows", summary: "Lists the tabs of every window when you complete a tab name." },
+  bridge: { label: "Desktop link", summary: "Lets DesertFox share its mode with a desktop program through the native host." },
+  host_auto_update: { label: "Update the native host", summary: "Lets DesertFox replace the native host with the matching version when the host is older." },
+  bridge_share_tabs: { label: "Share tabs with the desktop", summary: "Lets desktop programs list, switch to and close your open tabs. Private windows stay hidden." },
+  cmdline_prompt: { label: "Command line prompt", summary: "The mark shown before the text you type on the command line." },
+  open_completion: { label: "Open completion sources", summary: "Which lists the open command completes from, in order." },
+  statusbar_widgets: { label: "Command line status items", summary: "The items shown on the right of the command line." },
+  history_completion_max: { label: "History suggestions", summary: "How many history entries the open command suggests for an empty word." },
+  history_list_max: { label: "History list length", summary: "How many history entries the history command lists for an empty word." },
+  newtab_clock: { label: "New tab clock", summary: "Whether the new tab page shows a clock, and which kind." },
+  newtab_date: { label: "New tab date", summary: "Shows the date under the clock on the new tab page." },
+  newtab_clock_format: { label: "Clock hours", summary: "Shows the digital clock with 12 or 24 hours." },
+  newtab_bookmarks: { label: "New tab bookmarks", summary: "Lists your bookmarks on the new tab page." },
+  newtab_bookmarks_max: { label: "Bookmarks shown", summary: "How many bookmarks the new tab page lists." },
+  newtab_recent_tabs: { label: "New tab recent tabs", summary: "Lists your open tabs on the new tab page. Private tabs never show." },
+  newtab_recent_tabs_max: { label: "Recent tabs shown", summary: "How many recent tabs the new tab page lists." },
+  newtab_links: { label: "New tab links", summary: "Your own links on the new tab page." },
 };

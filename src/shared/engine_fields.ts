@@ -11,7 +11,7 @@ export function field_problems(fields: { name: string; url: string; keyword?: st
   if (!ENGINE_NAME.test(fields.name)) problems.push("The name is letters, digits, - and _, and starts with a letter or digit.");
   if (!/^https?:\/\//.test(fields.url)) problems.push("The address starts with http:// or https://.");
   else if (!expressions_of(fields.url).some((expression) => expression.alternatives.includes("query"))) problems.push("The address needs {query} where the search text goes.");
-  if (fields.keyword && !ENGINE_KEYWORD.test(fields.keyword)) problems.push("The keyword is one to eight lower case letters or digits.");
+  if (fields.keyword && !ENGINE_KEYWORD.test(fields.keyword)) problems.push("The search word is one to eight lower case letters or digits.");
   if (fields.letter && parse_sequence(fields.letter).tokens?.length !== 1) problems.push("The key letter is one key, such as g.");
   return problems;
 }
