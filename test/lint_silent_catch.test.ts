@@ -26,6 +26,18 @@ test("the silent catch rule hits a handler that ignores its error", () => {
     assert.equal(hits("p.catch(() => ({}));"), 1);
     assert.equal(hits("p.catch(() => null);"), 1);
     assert.equal(hits("void a.b().catch(() => undefined);"), 1);
+    assert.equal(hits("p.catch(_e => undefined);"), 1);
+    assert.equal(hits("p.catch((error) => []);"), 1);
+    assert.equal(hits("p.catch((error) => undefined);"), 1);
+    assert.equal(hits("p.catch((_) => {});"), 1);
+    assert.equal(hits("p.catch(function () {});"), 1);
+    assert.equal(hits("p.catch(() => { return; });"), 1);
+    assert.equal(hits("p.catch(() => { return undefined; });"), 1);
+    assert.equal(hits("p.catch(() => { return []; });"), 1);
+    assert.equal(hits("p.catch((e) => { return false; });"), 1);
+    assert.equal(hits("p.then(ok, () => undefined);"), 1);
+    assert.equal(hits("p.then(undefined, () => false);"), 1);
+    assert.equal(hits("p.then(() => true, (_e) => false);"), 1);
 });
 
 test("the silent catch rule spares helpers, logging handlers and handlers that act", () => {
@@ -33,10 +45,17 @@ test("the silent catch rule spares helpers, logging handlers and handlers that a
     assert.equal(hits("p.catch(ignore_refusal);"), 0);
     assert.equal(hits("ignore_refusal(p);"), 0);
     assert.equal(hits("p.catch((error: unknown) => console.warn('x', error));"), 0);
-    assert.equal(hits("p.catch((error) => undefined);"), 0);
+    assert.equal(hits("p.catch((error) => error.message);"), 0);
+    assert.equal(hits("p.catch(() => void log(x));"), 0);
+    assert.equal(hits("p.catch(() => (flag = true));"), 0);
+    assert.equal(hits("p.catch(() => fn?.());"), 0);
+    assert.equal(hits("p.catch(() => { return log(x); });"), 0);
+    assert.equal(hits("p.catch(function (error) { report(error); });"), 0);
+    assert.equal(hits("p.then(ok, warn_and_go('x'));"), 0);
+    assert.equal(hits("p.then(ok, (error) => log(error));"), 0);
+    assert.equal(hits("p.then((tab) => tab.url);"), 0);
     assert.equal(hits("p.catch(() => console.warn('x'));"), 0);
     assert.equal(hits("p.catch(() => { console.warn('x'); });"), 0);
     assert.equal(hits("p.catch(() => { throw new Error('x'); });"), 0);
     assert.equal(hits("p.catch(() => finish('gone'));"), 0);
-    assert.equal(hits("p.then(undefined, () => undefined);"), 0);
 });
