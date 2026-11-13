@@ -48,8 +48,9 @@ const fire = (target: EventTarget, event: Event): boolean => {
 };
 
 export function route_of(element: Element): { route: Route; source: HTMLElement } {
-  const draggable = element.closest<HTMLElement>('[draggable="true"]');
-  if (draggable) return { route: "html5", source: draggable };
+  // A link and a picture drag with no attribute, unless the page turns it off.
+  const draggable = element.closest<HTMLElement>('[draggable="true"],a[href],img');
+  if (draggable && draggable.getAttribute("draggable") !== "false") return { route: "html5", source: draggable };
   const is_range = element.localName === "input" && (element as HTMLInputElement).type === "range";
   return { route: is_range ? "range" : "pointer", source: element as HTMLElement };
 }
@@ -80,7 +81,8 @@ export function press(element: Element): Held | undefined {
   send_pointer(held, "down", element, start);
   const { route, source } = route_of(element);
   if (route !== "html5") return held;
-  Object.assign(held, { route, source, data: new DataTransfer() });
+  // Firefox starts a new DataTransfer at none, where a real drag starts uninitialized, which the page reads as every effect allowed.
+  Object.assign(held, { route, source, data: Object.assign(new DataTransfer(), { effectAllowed: "uninitialized" }) });
   if (fire(source, drag_event(held, "dragstart", start))) return held;
   // The page refused after the press, so the button must not stay down.
   send_pointer(held, "up", element, start);
@@ -108,10 +110,11 @@ function hover(held: Held, target: Element, point: Point): void {
     fire(target, drag_event(held, "dragenter", point, held.over ?? null));
     held.over = target;
   }
-  // A cancelled dragover is the page saying the spot takes a drop. The effect the page set stays, and an accepted drop with none set is a move, so a dragend that reads the effect sees what happened.
-  held.droppable = !fire(target, drag_event(held, "dragover", point));
+  // A browser starts each dragover at the effect it would give, a move, and the page then keeps it, changes it or sets none to refuse. A cancelled dragover that left the effect at none refuses too.
   const data = held.data!;
-  data.dropEffect = held.droppable ? (data.dropEffect === "none" ? "move" : data.dropEffect) : "none";
+  data.dropEffect = "move";
+  held.droppable = !fire(target, drag_event(held, "dragover", point)) && (data.dropEffect as string) !== "none";
+  if (!held.droppable) data.dropEffect = "none";
 }
 
 export function move_to(held: Held, point: Point): void {
@@ -127,11 +130,12 @@ export function nudge(held: Held, direction: Direction): void {
   if (held.route !== "range") return move_to(held, { x: held.at.x + OFFSET[direction].x, y: held.at.y + OFFSET[direction].y });
   const input = held.source as HTMLInputElement;
   const before = input.value;
+  const sign = direction === "up" || direction === "right" ? 1 : -1;
   try {
-    if (direction === "up" || direction === "right") input.stepUp();
-    else input.stepDown();
+    input.stepUp(sign);
   } catch {
-    // A range with step "any" has no step.
+    // A range with step "any" has no step, so it moves by 1% of its span.
+    input.value = String(+before + (sign * ((+input.max || 100) - +input.min)) / 100);
   }
   if (input.value !== before) fire(input, new Event("input", { bubbles: true }));
 }
@@ -144,7 +148,8 @@ export function release(held: Held): void {
     if ((held.source as HTMLInputElement).value !== held.start_value) fire(held.source, new Event("change", { bubbles: true }));
   } else if (held.route === "pointer") send_pointer(held, "up", under(held.source.ownerDocument, held.at), held.at);
   else {
-    if (held.over && held.droppable) fire(held.over, drag_event(held, "drop", held.at));
+    // A drop the page does not cancel is not accepted, and dragend then reports no effect.
+    if (held.over && held.droppable) fire(held.over, drag_event(held, "drop", held.at)) && (held.data!.dropEffect = "none");
     else if (held.over) fire(held.over, drag_event(held, "dragleave", held.at));
     fire(held.source, drag_event(held, "dragend", held.at));
   }

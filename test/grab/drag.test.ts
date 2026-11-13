@@ -12,10 +12,11 @@ class FakeEvent {
 }
 class FakeDataTransfer {
   dropEffect = "none";
+  effectAllowed = "none";
 }
 Object.assign(globalThis, { Event: FakeEvent, MouseEvent: FakeEvent, PointerEvent: FakeEvent, DragEvent: FakeEvent, DataTransfer: FakeDataTransfer });
 
-type Fake = { localName: string; type?: string; value?: string; draggable_: boolean; log: string[]; on: Record<string, (event: FakeEvent) => boolean | void> } & Record<string, unknown>;
+type Fake = { localName: string; draggable_attribute?: string; type?: string; value?: string; draggable_: boolean; log: string[]; on: Record<string, (event: FakeEvent) => boolean | void> } & Record<string, unknown>;
 
 // One element that is also its own document: elementFromPoint answers it, and every event lands in its log.
 function element(extra: Partial<Fake> = {}): Fake {
@@ -26,7 +27,8 @@ function element(extra: Partial<Fake> = {}): Fake {
     on: {},
     isConnected: true,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 20 }),
-    closest: () => (self.draggable_ ? self : null),
+    closest: (selector: string) => (self.draggable_ || (self.localName === "a" && selector.includes("a[href]")) ? self : null),
+    getAttribute: (name: string) => (name === "draggable" ? self.draggable_attribute ?? null : null),
     dispatchEvent(event: FakeEvent) {
       self.log.push(event.type);
       const result = self.on[event.type]?.(event);
@@ -45,6 +47,11 @@ test("the route follows the source: a draggable ancestor, a range input, anythin
   assert.equal(route_of(as_element(element({ draggable_: true }))).route, "html5");
   assert.equal(route_of(as_element(element({ localName: "input", type: "range" }))).route, "range");
   assert.equal(route_of(as_element(element())).route, "pointer");
+});
+
+test("a link takes the html5 route with no draggable attribute, unless the page turns dragging off", () => {
+  assert.equal(route_of(as_element(element({ localName: "a" }))).route, "html5");
+  assert.equal(route_of(as_element(element({ localName: "a", draggable_attribute: "false" }))).route, "pointer");
 });
 
 test("the press comes first, so an element a library makes draggable in its own pointerdown takes the html5 route", () => {
@@ -96,6 +103,7 @@ test("the html5 drop fires only where dragover was cancelled, and dragend carrie
   const target = element();
   Object.assign(source, { elementFromPoint: () => target });
   target.on.dragover = () => false;
+  target.on.drop = () => false;
   const held = press(as_element(source))!;
   move_to(held, { x: 50, y: 5 });
   let effect = "";
@@ -140,4 +148,49 @@ test("a range input fires change only when the value changed, and never on a can
   abort(other);
   assert.equal(cancelled.value, "0");
   assert.deepEqual(cancelled.log, ["input", "input"]);
+});
+
+test("a target that cancels dragover and sets dropEffect none refuses the drop", () => {
+  const source = element({ draggable_: true });
+  const target = element();
+  Object.assign(source, { elementFromPoint: () => target });
+  target.on.dragover = (event) => {
+    (event as unknown as { dataTransfer: FakeDataTransfer }).dataTransfer.dropEffect = "none";
+    return false;
+  };
+  const held = press(as_element(source))!;
+  move_to(held, { x: 50, y: 5 });
+  release(held);
+  assert.deepEqual(target.log, ["dragenter", "dragover", "dragleave"]);
+  assert.equal(held.data!.dropEffect, "none");
+});
+
+test("a drop the page does not cancel ends with dropEffect none", () => {
+  const source = element({ draggable_: true });
+  const target = element();
+  Object.assign(source, { elementFromPoint: () => target });
+  target.on.dragover = () => false;
+  const held = press(as_element(source))!;
+  move_to(held, { x: 50, y: 5 });
+  assert.equal(held.data!.dropEffect, "move");
+  release(held);
+  assert.equal(held.data!.dropEffect, "none");
+});
+
+test("a range with step any moves by a hundredth of its span instead of throwing", () => {
+  const input = element({ localName: "input", type: "range", value: "50", max: "200", min: "0" });
+  Object.assign(input, {
+    stepUp: () => {
+      throw new Error("step any");
+    },
+  });
+  const held = press(as_element(input))!;
+  nudge(held, "right");
+  assert.equal(input.value, "52");
+  nudge(held, "left");
+  assert.equal(input.value, "50");
+});
+
+test("a new drag starts with an uninitialized effectAllowed, as a real one does", () => {
+  assert.equal(press(as_element(element({ draggable_: true })))!.data!.effectAllowed, "uninitialized");
 });

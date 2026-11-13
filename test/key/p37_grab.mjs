@@ -179,4 +179,12 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await sleep(200);
     expect(parseFloat(await in_hidden_tab('document.getElementById("thumb").style.left || "0"')) < 1, "the thumb moved after the page went hidden");
   });
+
+  await run_case(";g drops a link on an html5 drop zone, though a link has no draggable attribute", async () => {
+    await open_page("drag", "link_drop", { new_tab: true });
+    await press_keys(";g");
+    await pick("#src");
+    await pick("#dst");
+    await poll_until("the drop", async () => (await read('document.getElementById("dst").textContent')) === "dropped");
+  });
 }

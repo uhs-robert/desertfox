@@ -1,5 +1,13 @@
 // Pages for the grab keys. Each page keeps its result in the DOM, so the content script world reads it.
 export const DRAG_PAGES = {
+  // A link drags with no draggable attribute.
+  link: `
+<a id="src" href="/drag?id=link_elsewhere" style="display:block;width:80px;height:40px;background:#9cf">link</a>
+<div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>
+<script>
+dst.addEventListener("dragover", (e) => e.preventDefault());
+dst.addEventListener("drop", (e) => { e.preventDefault(); dst.textContent = "dropped"; });
+</script>`,
   h5: `
 <div id="src" draggable="true" style="width:80px;height:40px;background:#9cf">src</div>
 <div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>
