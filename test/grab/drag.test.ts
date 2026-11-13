@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abort, drive, move_to, nudge, press, release, route_of } from "../../src/content/grab/drag.ts";
+import { abort, drive, move_to, nudge, press, press_point, release, route_of, scale_step } from "../../src/content/grab/drag.ts";
 
 // Node has no DOM events. The fakes keep the type, the init and the data transfer.
 class FakeEvent {
@@ -37,12 +37,14 @@ function element(extra: Partial<Fake> = {}): Fake {
       }
       return null;
     },
-    getAttribute: (name: string) => (name === "draggable" ? self.draggable_attribute ?? null : null),
+    getAttribute: (name: string) => (name === "draggable" ? self.draggable_attribute ?? null : (self.attrs as Record<string, string>)[name] ?? null),
     dispatchEvent(event: FakeEvent) {
       self.log.push(event.type);
       const result = self.on[event.type]?.(event);
       return result !== false;
     },
+    attrs: {} as Record<string, string>,
+    querySelector: () => null,
     elementFromPoint: () => self,
     body: undefined,
     ...extra,
@@ -95,7 +97,7 @@ test("release and abort end a drag once, and the pointer route always sends its 
   abort(held);
   release(held);
   abort(held);
-  assert.deepEqual(source.log, ["pointerdown", "mousedown", "pointermove", "mousemove", "pointermove", "mousemove", "pointerup", "mouseup"]);
+  assert.deepEqual(source.log, ["pointerdown", "mousedown", "pointermove", "mousemove", "pointerup", "mouseup"]);
 });
 
 test("a stopped drive sends nothing after the abort", async () => {
@@ -232,4 +234,40 @@ test("a range with step any and max 0 steps by a hundredth of its negative span"
   });
   nudge(press(as_element(input))!, "right");
   assert.equal(input.value, "-49");
+});
+
+test("abort on the pointer route releases where the pointer is and sends no move back", () => {
+  const source = element();
+  const held = press(as_element(source))!;
+  nudge(held, "right");
+  source.log.length = 0;
+  abort(held);
+  assert.deepEqual(source.log, ["pointerup", "mouseup"]);
+  assert.equal(held.at.x, held.start.x + 24);
+});
+
+test("the press lands on the thumb: a role slider child, else aria-valuenow along the box, else the middle", () => {
+  const plain = element();
+  assert.deepEqual(press_point(as_element(plain)), { x: 50, y: 10 });
+  const valued = element({ attrs: { "aria-valuenow": "25", "aria-valuemin": "0", "aria-valuemax": "100" } });
+  assert.deepEqual(press_point(as_element(valued)), { x: 25, y: 10 });
+  const vertical = element({ attrs: { role: "slider", "aria-orientation": "vertical", "aria-valuenow": "25" } });
+  assert.deepEqual(press_point(as_element(vertical)), { x: 50, y: 15 });
+  const thumb = element({ getBoundingClientRect: () => ({ left: 60, top: 0, width: 10, height: 20 }) });
+  const track = element({ querySelector: () => thumb, attrs: { "aria-valuenow": "0" } });
+  assert.deepEqual(press_point(as_element(track)), { x: 65, y: 10 });
+});
+
+test("the step keys halve and double the move within limits, and leave a range input alone", () => {
+  const held = press(as_element(element()))!;
+  assert.equal(scale_step(held, 0.5), 12);
+  const from = held.at.x;
+  nudge(held, "right");
+  assert.equal(held.at.x, from + 12);
+  for (let count = 0; count < 10; count++) scale_step(held, 0.5);
+  assert.equal(held.step, 3);
+  for (let count = 0; count < 10; count++) scale_step(held, 2);
+  assert.equal(held.step, 192);
+  const input = element({ localName: "input", type: "range", value: "0" });
+  assert.equal(scale_step(press(as_element(input))!, 2), undefined);
 });

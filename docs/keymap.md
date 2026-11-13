@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 458 (normal 234, media 54, grab 9, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 460 (normal 234, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -369,6 +369,8 @@ Which-key group names:
 | `j` | bound | `grab.move down` | Move down |  |
 | `k` | bound | `grab.move up` | Move up |  |
 | `l` | bound | `grab.move right` | Move right |  |
+| `[` | bound | `grab.step finer` | Halve the step |  |
+| `]` | bound | `grab.step coarser` | Double the step |  |
 | `<Enter>` | bound | `grab.drop` | Drop |  |
 | `<Escape>` | bound | `grab.cancel` | Cancel the grab |  |
 | `<C-[>` | bound | `grab.cancel` | Cancel the grab |  |

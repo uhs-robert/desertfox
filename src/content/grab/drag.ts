@@ -10,6 +10,8 @@ export type Held = {
   source: HTMLElement;
   start: Point;
   at: Point;
+  // Pixels one move key travels on the pointer and html5 routes. `scale_step` changes it, a range input keeps its own step.
+  step: number;
   // The html5 route: the data the page's handlers read and write, the element under the drag, and whether it accepted the last dragover.
   data?: DataTransfer;
   over?: Element;
@@ -25,17 +27,36 @@ export type Held = {
 };
 
 const STEP_PX = 24;
+const MIN_STEP_PX = 3;
+const MAX_STEP_PX = 192;
 const DRIVE_STEPS = 8;
 const STEP_PAUSE_MS = 30;
 
 // The ids Firefox gives its real mouse. A page that calls `setPointerCapture` with this id can still get a NotFoundError, which stays the page's own failure and never stops the drag.
 const MOUSE_POINTER_ID = 0;
 
-const OFFSET: Record<Direction, Point> = { left: { x: -STEP_PX, y: 0 }, down: { x: 0, y: STEP_PX }, up: { x: 0, y: -STEP_PX }, right: { x: STEP_PX, y: 0 } };
+const UNIT: Record<Direction, Point> = { left: { x: -1, y: 0 }, down: { x: 0, y: 1 }, up: { x: 0, y: -1 }, right: { x: 1, y: 0 } };
 
 export function center_of(element: Element): Point {
   const box = element.getBoundingClientRect();
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+// Where a press lands so that a slider that reads the pointer position as its value does not jump: on its thumb. A child with role slider is the thumb. Failing that, the element's own aria-valuenow gives the thumb's place along the box. Anything else presses at the middle.
+export function press_point(element: Element): Point {
+  const thumb = element.querySelector('[role="slider"]');
+  if (thumb) return center_of(thumb);
+  const middle = center_of(element);
+  const now = parseFloat(element.getAttribute("aria-valuenow") ?? "");
+  if (Number.isNaN(now)) return middle;
+  const min = parseFloat(element.getAttribute("aria-valuemin") ?? "0");
+  const max = parseFloat(element.getAttribute("aria-valuemax") ?? "100");
+  if (!(max > min)) return middle;
+  const fraction = Math.min(1, Math.max(0, (now - min) / (max - min)));
+  const box = element.getBoundingClientRect();
+  if (element.getAttribute("aria-orientation") !== "vertical") return { x: box.left + fraction * box.width, y: middle.y };
+  // A vertical slider has its minimum at the bottom, and a scrollbar or separator at the top.
+  return { x: middle.x, y: box.top + (element.getAttribute("role") === "slider" ? 1 - fraction : fraction) * box.height };
 }
 
 const under = (doc: Document, point: Point): Element => doc.elementFromPoint(point.x, point.y) ?? doc.body;
@@ -73,8 +94,8 @@ function send_pointer(held: Held, phase: "down" | "move" | "up", target: Element
 // A press comes first on every route but the range, as a browser presses before it drags, and the route is read after it. A library such as SortableJS sets `draggable` in its own pointerdown handler, so the element is not draggable until then.
 // Undefined when the page cancels the start of a drag.
 export function press(element: Element): Held | undefined {
-  const start = center_of(element);
-  const held: Held = { route: "pointer", source: element as HTMLElement, start, at: start };
+  const start = press_point(element);
+  const held: Held = { route: "pointer", source: element as HTMLElement, start, at: start, step: STEP_PX };
   if (route_of(element).route === "range") {
     held.route = "range";
     held.start_value = (element as HTMLInputElement).value;
@@ -127,9 +148,16 @@ export function move_to(held: Held, point: Point): void {
   else send_pointer(held, "move", target, point);
 }
 
+// Halves or doubles the step within its limits and returns it, or undefined for a range input, which keeps its own step.
+export function scale_step(held: Held, factor: number): number | undefined {
+  if (held.route === "range") return undefined;
+  held.step = Math.min(MAX_STEP_PX, Math.max(MIN_STEP_PX, held.step * factor));
+  return held.step;
+}
+
 // A range input steps its value, and the other routes move the pointer a few pixels.
 export function nudge(held: Held, direction: Direction): void {
-  if (held.route !== "range") return move_to(held, { x: held.at.x + OFFSET[direction].x, y: held.at.y + OFFSET[direction].y });
+  if (held.route !== "range") return move_to(held, { x: held.at.x + UNIT[direction].x * held.step, y: held.at.y + UNIT[direction].y * held.step });
   const input = held.source as HTMLInputElement;
   const before = input.value;
   const sign = direction === "up" || direction === "right" ? 1 : -1;
@@ -157,7 +185,7 @@ export function release(held: Held): void {
   }
 }
 
-// The drag goes back to where it began before it ends, so a board does not drop the item on the spot where the cancel came.
+// The range and html5 routes go back to where they began before they end, so a board does not drop the item on the spot where the cancel came. The pointer route releases where it is: its press point is a position and not a value, so a move back would set a slider that follows the pointer to that point.
 export function abort(held: Held): void {
   if (held.ended) return;
   if (held.route === "range") {
@@ -171,7 +199,6 @@ export function abort(held: Held): void {
     fire(held.source, drag_event(held, "dragend", held.at));
     return;
   }
-  move_to(held, held.start);
   release(held);
 }
 

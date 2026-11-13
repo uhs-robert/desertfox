@@ -469,12 +469,14 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of grab mode. Enter drops where the element is, Escape puts it back first.
+// The keys of grab mode. Enter drops where the element is. Escape puts a range input or a draggable element back first and releases a pointer drag where it is. [ and ] halve and double the step.
 const GRAB_KEYS: ModeBindings = {
   h: { id: "grab.move", args: { direction: "left" }, label: "Move left" },
   j: { id: "grab.move", args: { direction: "down" }, label: "Move down" },
   k: { id: "grab.move", args: { direction: "up" }, label: "Move up" },
   l: { id: "grab.move", args: { direction: "right" }, label: "Move right" },
+  "[": { id: "grab.step", args: { scale: "finer" }, label: "Halve the step" },
+  "]": { id: "grab.step", args: { scale: "coarser" }, label: "Double the step" },
   "<Enter>": { id: "grab.drop", label: "Drop" },
   "<Escape>": { id: "grab.cancel", label: "Cancel the grab" },
   "<C-[>": { id: "grab.cancel" },

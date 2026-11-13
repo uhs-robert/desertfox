@@ -88,21 +88,23 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     expect((await read('document.getElementById("r").value')) === "3", "l still stepped the range after the drop");
   });
 
-  await run_case(";G then Escape puts a held thumb back and leaves no pointer held", async () => {
+  await run_case(";G then Escape leaves a held thumb where it is and no pointer held", async () => {
     const page_id = "range_cancel";
     await open_page("drag", "range_cancel", { new_tab: true });
     await press_keys(";Ga");
     await pick("#thumb");
     await press_keys("l", "l", "l");
     await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
+    const held_at = await thumb_left();
     const mark = events.length;
     await press_keys("-k", "Escape");
     await wait_badge(mark, page_id, "NORMAL");
-    await poll_until("the thumb back at the start", async () => (await thumb_left()) < 1);
+    await sleep(200);
+    expect((await thumb_left()) === held_at, "Escape moved the thumb");
     // A pointer still held would drag the thumb on a later move.
     await read(`(() => { const point = { bubbles: true, clientX: 400, clientY: 40, buttons: 0 }; document.dispatchEvent(new PointerEvent("pointermove", point)); return 0; })()`);
     await sleep(200);
-    expect((await thumb_left()) < 1, "the thumb moved after the cancel");
+    expect((await thumb_left()) === held_at, "the thumb moved after the cancel");
   });
 
   await run_case(";G on a range input, Escape restores the value", async () => {
@@ -170,14 +172,15 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await pick("#thumb");
     await press_keys("l", "l", "l");
     await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
+    const held_at = await thumb_left();
     await open_page("field", "grab_other", { new_tab: true });
     const in_hidden_tab = (code) =>
       in_background(`(async () => { const [tab] = await browser.tabs.query({ url: "*://*/drag?id=range_hidden*" }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`);
-    await poll_until("the thumb back at the start", async () => parseFloat(await in_hidden_tab('document.getElementById("thumb").style.left || "0"')) < 1);
+    await sleep(500);
     // A pointer still held would drag the thumb on a later move.
     await in_hidden_tab('document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 400, clientY: 40 })); 0');
     await sleep(200);
-    expect(parseFloat(await in_hidden_tab('document.getElementById("thumb").style.left || "0"')) < 1, "the thumb moved after the page went hidden");
+    expect(parseFloat(await in_hidden_tab('document.getElementById("thumb").style.left || "0"')) === held_at, "the thumb moved after the page went hidden");
   });
 
   await run_case(";g drops a link on an html5 drop zone, though a link has no draggable attribute", async () => {
@@ -249,6 +252,65 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await pick("#c2");
     await pick("#b");
     await poll_until("c2 in column b after c1", async () => (await order_of("b")) === "c1,c2", { timeout_ms: 5000 });
+  });
+
+  const vol_now = async () => parseFloat(await read('document.getElementById("vol").getAttribute("aria-valuenow")'));
+  await run_case(";Gg on a position-reading slider: no jump on grab, [ steps finer, Escape leaves the value where it is", async () => {
+    const page_id = "abs_slider";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
+    await press_keys(";Gg");
+    await pick("#vol");
+    await wait_badge(mark, page_id, "GRAB");
+    await sleep(200);
+    expect((await vol_now()) === 80, `the grab moved the slider to ${await vol_now()}`);
+    await press_keys("h");
+    await poll_until("one step left", async () => (await vol_now()) === 56);
+    await press_keys("[", "h");
+    await poll_until("a half step left", async () => (await vol_now()) === 44);
+    await press_keys("]", "]", "l");
+    await poll_until("a double step right", async () => (await vol_now()) === 92);
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    await sleep(300);
+    expect((await vol_now()) === 92, `Escape moved the slider to ${await vol_now()}`);
+  });
+
+  await run_case(";G Escape on the pointer route moves nothing after the nudges", async () => {
+    await open_page("drag", "abs_slider", { new_tab: true });
+    await press_keys(";Gg");
+    await pick("#vol");
+    await press_keys("h", "h");
+    await poll_until("two steps left", async () => (await vol_now()) === 32);
+    await press_keys("-k", "Escape");
+    await sleep(300);
+    expect((await vol_now()) === 32, `Escape moved the slider to ${await vol_now()}`);
+  });
+
+  await run_case(";G on a range input ignores [ and ] and keeps its native step", async () => {
+    await open_page("drag", "range_enter", { new_tab: true });
+    await press_keys(";Gg");
+    await pick("#r");
+    await press_keys("]", "]", "l", "l");
+    await poll_until("the value at 2", async () => (await read('document.getElementById("r").value')) === "2");
+    await press_keys("-k", "Escape");
+    await poll_until("the value back at 0", async () => (await read('document.getElementById("r").value')) === "0");
+  });
+
+  await run_case(";G on an html5 source takes [ and ] and Escape drops nothing", async () => {
+    const page_id = "h5_step";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
+    await press_keys(";Gg");
+    await pick("#src");
+    await wait_badge(mark, page_id, "GRAB");
+    await press_keys("]", "j", "[", "j");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    await sleep(200);
+    expect((await read('document.getElementById("dst").textContent')) === "dst", "Escape dropped the element");
   });
 
   // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.
