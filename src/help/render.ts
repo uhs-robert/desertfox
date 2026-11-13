@@ -509,6 +509,7 @@ function follow_current_section(sidebar_node: HTMLElement, page: HTMLElement): v
   if (!scroll_listener_added && typeof window !== "undefined" && window.addEventListener) {
     scroll_listener_added = true;
     window.addEventListener("scroll", queue_current_section, { passive: true });
+    window.addEventListener("resize", queue_current_section);
   }
   page_watcher?.disconnect();
   page_watcher = undefined;
