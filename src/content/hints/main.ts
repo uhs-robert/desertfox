@@ -104,10 +104,10 @@ function windows_of(found: Found[]): Window[] {
 }
 
 // A double-click skips links. Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
-function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors): Found[] {
+function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors, only_in_view = true): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector), weak_test_for(filter), true), site_selectors);
+  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector), weak_test_for(filter), only_in_view), site_selectors, only_in_view);
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
@@ -550,10 +550,10 @@ function register(host: BundleHostApi): void {
     } catch {
       return { ok: false, message: `Invalid selector: ${custom_selector_}` };
     }
-    // With nothing to label the mode never changes, so keys held during the load run as normal keys.
+    // With nothing to label the mode never changes, so keys held during the load run as normal keys. A page with candidates only out of view still flips it, as before the view cut.
     const text = (args.text as string | undefined) || undefined;
     // Across frames the other frames can still have hints, and the build gives the notice when no frame has one.
-    if (candidates.length === 0 && args.frames !== "all_frames") return { ok: false, message: none_message(text) };
+    if (candidates.length === 0 && args.frames !== "all_frames" && find_candidates(filter, custom_selector_, action, site_selectors_, false).length === 0) return { ok: false, message: none_message(text) };
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
