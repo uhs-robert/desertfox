@@ -25,8 +25,8 @@ import { page_selection_cursor } from "./page_selection.ts";
 import { first_visible_index, visible_index_range } from "./start_point.ts";
 import { indexes_in_range, pad_range } from "./visible_range.ts";
 
-// `desertfox_caret_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
-type CaretWindow = { desertfox_host: BundleHostApi; desertfox_caret_ready?: true; desertfox_caret_target?: Element };
+// `desertfox_pick_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
+type CaretWindow = { desertfox_host: BundleHostApi; desertfox_caret_ready?: true; desertfox_pick_target?: Element };
 const page = window as unknown as CaretWindow;
 const page_text = create_page_text();
 const mirror = create_selection_mirror();
@@ -95,8 +95,8 @@ function paint(open: Session): void {
 // Where a new session starts: the text of the picked element or the next text after it, else the match a search stands on while no later selection took the place, else the page's own drag (whole in visual mode, its release end in caret mode), else the caret's place in the page's own selection if it is on screen, else the first visible text.
 // A string is the reason no session could start.
 function start_session(mode: CaretMode): { model_: TextModel; cursor: Cursor } | string {
-  const target = page.desertfox_caret_target;
-  delete page.desertfox_caret_target;
+  const target = page.desertfox_pick_target;
+  delete page.desertfox_pick_target;
   const is_other_site_frame = target !== undefined && (target.localName === "iframe" || target.localName === "frame") && !frame_document(target);
   if (is_other_site_frame) {
     return "Caret cannot reach a frame from another site";

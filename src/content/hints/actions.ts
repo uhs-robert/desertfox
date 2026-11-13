@@ -12,10 +12,10 @@ export type Place = "here" | "tab" | "background" | "window";
 
 export const OPEN_PLACES: readonly HintAction[] = ["tab", "background", "window"];
 
-// The grabs start a mode of the grab bundle the way the caret actions start the caret.
-export type CaretMode = "caret" | "visual" | "grab" | "grab_move";
+// The actions that hand the pick to a mode bundle: the caret bundle for caret and visual, the grab bundle for the grabs.
+export type ModeAction = "caret" | "visual" | "grab" | "grab_move";
 
-export const starts_caret = (action: HintAction): action is CaretMode => /^(?:caret|visual|grab)/.test(action);
+export const starts_mode = (action: HintAction): action is ModeAction => /^(?:caret|visual|grab)/.test(action);
 
 export type ActionDeps = {
   // A promise settles when the action is finished, so the sequence that started the hints goes on after it.
@@ -26,7 +26,7 @@ export type ActionDeps = {
   strip_: (address: string) => string;
   // The background fetches the address. The content script never does, because the page's rules would block a picture from another site.
   image_action: (action: "copy_image" | "download", address: string) => Promise<unknown>;
-  start_caret_: (target: Element, mode: CaretMode) => void | Promise<unknown>;
+  start_mode_: (target: Element, mode: ModeAction) => void | Promise<unknown>;
   // Sends the element to the Inspector through the devtools page. A failed outcome carries the toast text.
   inspect_: (target: Element) => Promise<unknown>;
 };
@@ -253,7 +253,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "double_click") return double_click_like_a_mouse(target, pointer_from);
   if (action === "play_pause" || action === "mute" || action === "fullscreen") return act_on_media(action, target);
   if (action === "enter_media") return pin_media(target);
-  if (starts_caret(action)) return deps.start_caret_(target as unknown as Element, action);
+  if (starts_mode(action)) return deps.start_mode_(target as unknown as Element, action);
   const address = element_address(target, with_background);
   // A copy of the address falls back to the text for an element that has none, except a picture, whose text is empty.
   if (action === "copy") return address === undefined && (is_image_element(target) || is_media(target) || is_frame_element(target)) ? NO_WEB_ADDRESS : deps.copy(address === undefined ? (target.textContent ?? "").trim() : deps.strip_(address));

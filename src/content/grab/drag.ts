@@ -16,6 +16,10 @@ export type Held = {
   droppable?: boolean;
   // The range route: the value to put back on a cancel.
   start_value?: string;
+  // The pointer route: the page cancelled pointerdown, so a browser would send no mouse events for the rest of the press.
+  no_mouse?: true;
+  // Set once the closing events went out, so a second release or abort sends nothing. A stopped drive and a later grab can then never double up.
+  ended?: true;
 };
 
 const STEP_PX = 24;
@@ -50,27 +54,34 @@ export function route_of(element: Element): { route: Route; source: HTMLElement 
   return { route: is_range ? "range" : "pointer", source: element as HTMLElement };
 }
 
+const init_at = (point: Point) => ({ bubbles: true, cancelable: true, composed: true, clientX: point.x, clientY: point.y });
+
 function drag_event(held: Held, type: string, point: Point, related: Element | null = null): DragEvent {
-  return new DragEvent(type, { bubbles: true, cancelable: true, composed: true, dataTransfer: held.data!, clientX: point.x, clientY: point.y, screenX: point.x, screenY: point.y, relatedTarget: related });
+  return new DragEvent(type, { ...init_at(point), dataTransfer: held.data!, relatedTarget: related });
 }
 
-function send_pointer(phase: "down" | "move" | "up", target: Element, point: Point): void {
-  const init = { bubbles: true, cancelable: true, composed: true, clientX: point.x, clientY: point.y, screenX: point.x, screenY: point.y, button: 0, buttons: phase === "up" ? 0 : 1 };
-  fire(target, new PointerEvent(`pointer${phase}`, { ...init, pointerId: MOUSE_POINTER_ID, pointerType: "mouse", isPrimary: true }));
-  fire(target, new MouseEvent(`mouse${phase}`, init));
+function send_pointer(held: Held, phase: "down" | "move" | "up", target: Element, point: Point): void {
+  const init = { ...init_at(point), button: phase === "move" ? -1 : 0, buttons: phase === "up" ? 0 : 1 };
+  const kept = fire(target, new PointerEvent(`pointer${phase}`, { ...init, pointerId: MOUSE_POINTER_ID, pointerType: "mouse", isPrimary: true }));
+  if (phase === "down" && !kept) held.no_mouse = true;
+  if (!held.no_mouse) fire(target, new MouseEvent(`mouse${phase}`, init));
 }
 
+// A press comes first on every route but the range, as a browser presses before it drags, and the route is read after it. A library such as SortableJS sets `draggable` in its own pointerdown handler, so the element is not draggable until then.
 // Undefined when the page cancels the start of a drag.
 export function press(element: Element): Held | undefined {
+  const start = center_of(element);
+  const held: Held = { route: "pointer", source: element as HTMLElement, start, at: start };
+  if (route_of(element).route === "range") {
+    held.route = "range";
+    held.start_value = (element as HTMLInputElement).value;
+    return held;
+  }
+  send_pointer(held, "down", element, start);
   const { route, source } = route_of(element);
-  const start = center_of(source);
-  const held: Held = { route, source, start, at: start };
-  if (route === "html5") {
-    held.data = new DataTransfer();
-    if (!fire(source, drag_event(held, "dragstart", start))) return undefined;
-  } else if (route === "range") held.start_value = (source as HTMLInputElement).value;
-  else send_pointer("down", source, start);
-  return held;
+  if (route !== "html5") return held;
+  Object.assign(held, { route, source, data: new DataTransfer() });
+  return fire(source, drag_event(held, "dragstart", start)) ? held : undefined;
 }
 
 function write_range(held: Held, value: string): void {
@@ -95,8 +106,10 @@ function hover(held: Held, target: Element, point: Point): void {
     fire(target, drag_event(held, "dragenter", point, held.over ?? null));
     held.over = target;
   }
-  // A cancelled dragover is the page saying the spot takes a drop.
+  // A cancelled dragover is the page saying the spot takes a drop. The effect the page set stays, and an accepted drop with none set is a move, so a dragend that reads the effect sees what happened.
   held.droppable = !fire(target, drag_event(held, "dragover", point));
+  const data = held.data!;
+  data.dropEffect = held.droppable ? (data.dropEffect === "none" ? "move" : data.dropEffect) : "none";
 }
 
 export function move_to(held: Held, point: Point): void {
@@ -104,7 +117,7 @@ export function move_to(held: Held, point: Point): void {
   if (held.route === "range") return range_to_point(held, point);
   const target = under(held.source.ownerDocument, point);
   if (held.route === "html5") hover(held, target, point);
-  else send_pointer("move", target, point);
+  else send_pointer(held, "move", target, point);
 }
 
 // A range input steps its value, and the other routes move the pointer a few pixels.
@@ -122,8 +135,12 @@ export function nudge(held: Held, direction: Direction): void {
 }
 
 export function release(held: Held): void {
-  if (held.route === "range") fire(held.source, new Event("change", { bubbles: true }));
-  else if (held.route === "pointer") send_pointer("up", under(held.source.ownerDocument, held.at), held.at);
+  if (held.ended) return;
+  held.ended = true;
+  // A browser fires no change for a value that did not change.
+  if (held.route === "range") {
+    if ((held.source as HTMLInputElement).value !== held.start_value) fire(held.source, new Event("change", { bubbles: true }));
+  } else if (held.route === "pointer") send_pointer(held, "up", under(held.source.ownerDocument, held.at), held.at);
   else {
     if (held.over && held.droppable) fire(held.over, drag_event(held, "drop", held.at));
     else if (held.over) fire(held.over, drag_event(held, "dragleave", held.at));
@@ -133,11 +150,14 @@ export function release(held: Held): void {
 
 // The drag goes back to where it began before it ends, so a board does not drop the item on the spot where the cancel came.
 export function abort(held: Held): void {
+  if (held.ended) return;
   if (held.route === "range") {
     write_range(held, held.start_value!);
     return release(held);
   }
   if (held.route === "html5") {
+    held.ended = true;
+    held.data!.dropEffect = "none";
     if (held.over) fire(held.over, drag_event(held, "dragleave", held.at));
     fire(held.source, drag_event(held, "dragend", held.at));
     return;
@@ -148,20 +168,17 @@ export function abort(held: Held): void {
 
 const pause = () => new Promise<void>((done) => setTimeout(done, STEP_PAUSE_MS));
 
-// Moves in steps with a pause between them, as a hand does, so a library that reads a few moves before it starts sees them. Stopped, or failed by a page, the drag still ends: stopped puts it back, the rest releases.
-export async function drive(held: Held, to: Point, stopped: () => boolean): Promise<void> {
+// Moves in steps with a pause between them, as a hand does, so a library that reads a few moves before it starts sees them. A drag that `abort` ended meanwhile stops the loop and sends nothing more. A page that throws still gets its release.
+export async function drive(held: Held, to: Point): Promise<void> {
   const from = held.at;
-  let cancelled = false;
   try {
     for (let step = 1; step <= DRIVE_STEPS; step++) {
       await pause();
-      if ((cancelled = stopped())) return;
+      if (held.ended) return;
       move_to(held, { x: from.x + ((to.x - from.x) * step) / DRIVE_STEPS, y: from.y + ((to.y - from.y) * step) / DRIVE_STEPS });
     }
     await pause();
-    cancelled = stopped();
   } finally {
-    if (cancelled) abort(held);
-    else release(held);
+    release(held);
   }
 }

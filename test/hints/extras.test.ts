@@ -309,7 +309,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     messages: () => nodes_with_class("desertfox-hint-message").map((node) => node.textContent),
     // The backdrop reset style is a child too; only a surface host has a shadow root.
     host_count: () => document_root.children.filter((child) => child.shadow).length,
-    caret_target: () => win as unknown as { desertfox_caret_target?: unknown },
+    caret_target: () => win as unknown as { desertfox_pick_target?: unknown },
   };
 }
 
@@ -797,7 +797,7 @@ test("caret and visual hand the picked element to the caret bundle and enter tha
     await settle();
     page.type(page.labels()[1]!.toLowerCase());
     await settle();
-    assert.equal(page.caret_target().desertfox_caret_target, page.links[1]);
+    assert.equal(page.caret_target().desertfox_pick_target, page.links[1]);
     assert.equal(page.mode(), action);
     assert.equal(page.labels().length, 0);
   }
@@ -807,7 +807,7 @@ test("caret with one text match starts at once at that link", async () => {
   const page = await page_with(["one", "two"]);
   page.run({ action: "caret", text: "two" });
   await settle();
-  assert.equal(page.caret_target().desertfox_caret_target, page.links[1]);
+  assert.equal(page.caret_target().desertfox_pick_target, page.links[1]);
   assert.equal(page.mode(), "caret");
 });
 
@@ -1700,7 +1700,7 @@ test("the owner frame takes the window focus and starts the mode for a caret pic
   await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "s" });
   assert.equal(page.window_focuses(), focuses + 1);
   assert.equal(page.mode(), "caret");
-  assert.equal(page.caret_target().desertfox_caret_target, page.links[1]);
+  assert.equal(page.caret_target().desertfox_pick_target, page.links[1]);
 });
 
 test("Escape after a hover of another frame releases the hover in every frame", async () => {

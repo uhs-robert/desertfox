@@ -1,19 +1,20 @@
-// The `grab` bundle: drags an element from the keys. `grab.mode` takes a hint pick, the way `caret.mode` does: the hints bundle leaves the element in `desertfox_caret_target` and passes the action as `mode`. `hint --grab` asks the hints bundle for a second pick, the target, and drives the drag to it. `hint --grab_move` holds the element and enters grab mode, whose keys (`grab.move`, `grab.drop`, `grab.cancel`) move, drop and cancel it.
+// The `grab` bundle: drags an element from the keys. `grab.mode` takes a hint pick, the way `caret.mode` does: the hints bundle leaves the element in `desertfox_pick_target` and passes the action as `mode`. `hint --grab` asks the hints bundle for a second pick, the target, and drives the drag to it. `hint --grab_move` holds the element and enters grab mode, whose keys (`grab.move`, `grab.drop`, `grab.cancel`) move, drop and cancel it.
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { Outcome } from "../../shared/messages.ts";
 import { abort, center_of, drive, nudge, press, release } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 
-type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_caret_target?: Element };
+type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
 const grab = window as unknown as GrabWindow;
 
 const refused = (message: string): Outcome => ({ ok: false, message });
 const ran: Outcome = { ok: true };
+const REFUSED = refused("The page refused the drag");
+const NOTHING_HELD = refused("Nothing is grabbed");
 
 // The page's reaction cannot be read, so the words say what ran and nothing about what it did.
 const DROPPED_TOAST = "Grab dropped";
-const CANCELLED_TOAST = "Grab cancelled";
 const KEYS_TOAST = "Grab: h j k l move, Enter drops, Escape cancels";
 
 function register(host: BundleHostApi): void {
@@ -21,15 +22,19 @@ function register(host: BundleHostApi): void {
   let held: Held | undefined;
   // The first pick of `hint --grab`, until its target is picked or the second hint is left.
   let source: Element | undefined;
-  // The drive of a `hint --grab` in flight, which a new grab or a mode exit stops.
-  let driving: { stopped: boolean } | undefined;
+  // The drag of a `hint --grab` in flight.
+  let driving: Held | undefined;
 
-  // Puts everything back: a drive stops and releases at the start, a held element goes back and is released.
+  // The one way a drag ends early: the sink's `exit` calls it for Escape, a second command, a page that goes hidden, and the keys call `escape_` to reach it. The drag goes back to its start and releases there, at once, so nothing it sends is late.
   function end_all(): void {
-    if (driving) driving.stopped = true;
-    const was_held = held;
-    held = source = undefined;
-    if (was_held) abort(was_held);
+    const stopping = [held, driving];
+    held = driving = source = undefined;
+    for (const drag of stopping) if (drag) abort(drag);
+  }
+
+  // A `;g` drive runs in normal mode, which has no sink, so Escape and a page that goes away stop it from these two listeners.
+  function stop_drive_on(event: Event): void {
+    if (event.type === "pagehide" || (event as KeyboardEvent).key === "Escape") end_all();
   }
 
   async function drop_on(target: Element): Promise<Outcome> {
@@ -37,17 +42,23 @@ function register(host: BundleHostApi): void {
     source = undefined;
     if (from.ownerDocument !== target.ownerDocument) return refused("Grab works inside one frame");
     const dragged = press(from);
-    if (!dragged) return refused("The page refused the drag");
-    const run = (driving = { stopped: false });
-    await drive(dragged, center_of(target), () => run.stopped);
-    if (driving === run) driving = undefined;
-    if (run.stopped) return { ok: true, cancelled: true };
+    if (!dragged) return REFUSED;
+    driving = dragged;
+    const stoppers = ["keydown", "pagehide"];
+    for (const type of stoppers) window.addEventListener(type, stop_drive_on, true);
+    try {
+      await drive(dragged, center_of(target));
+    } finally {
+      for (const type of stoppers) window.removeEventListener(type, stop_drive_on, true);
+    }
+    if (driving !== dragged) return { ok: true, cancelled: true };
+    driving = undefined;
     host.show_toast_(DROPPED_TOAST);
     return ran;
   }
 
   // Any element can take a drop, so the target hint is not narrowed by the filter of the first.
-  const TARGET_HINT_ARGS = { action: "grab", filter: "every", frames: "same_origin", rapid: false };
+  const TARGET_HINT_ARGS = { action: "grab", filter: "every", frames: "same_origin", rapid: false, nested_: true };
 
   async function pick_target(): Promise<Outcome> {
     // The second hint answers once the target is picked and dropped on, or when the hint ends without one.
@@ -57,14 +68,14 @@ function register(host: BundleHostApi): void {
   }
 
   host.register_handler_("grab.mode", (args): Outcome | Promise<Outcome> => {
-    const element = grab.desertfox_caret_target;
-    delete grab.desertfox_caret_target;
+    const element = grab.desertfox_pick_target;
+    delete grab.desertfox_pick_target;
     if (!element) return refused("Nothing to grab");
     if (source) return drop_on(element);
     end_all();
     if (args.mode === "grab_move") {
       held = press(element);
-      if (!held) return refused("The page refused the drag");
+      if (!held) return REFUSED;
       host.set_mode_("grab");
       host.show_toast_(KEYS_TOAST);
       return ran;
@@ -74,20 +85,13 @@ function register(host: BundleHostApi): void {
   });
 
   host.register_handler_("grab.move", (args): Outcome => {
-    if (!held) return refused("Nothing is grabbed");
-    if (!held.source.isConnected) return end_with(refused("The grabbed element left the page"));
+    if (!held) return NOTHING_HELD;
     nudge(held, args.direction as Direction);
     return ran;
   });
 
-  function end_with(outcome: Outcome): Outcome {
-    end_all();
-    host.escape_();
-    return outcome;
-  }
-
   host.register_handler_("grab.drop", (): Outcome => {
-    if (!held) return refused("Nothing is grabbed");
+    if (!held) return NOTHING_HELD;
     const dropped = held;
     held = undefined;
     release(dropped);
@@ -97,8 +101,6 @@ function register(host: BundleHostApi): void {
   });
 
   host.register_handler_("grab.cancel", (): Outcome => {
-    end_all();
-    host.show_toast_(CANCELLED_TOAST);
     host.escape_();
     return ran;
   });

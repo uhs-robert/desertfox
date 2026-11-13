@@ -6,7 +6,7 @@ export const areas = ["hints", "keys", "bundles"];
 // LAYERS.hints in src/shared/layers.ts, which the test cannot import.
 const HINTS_LAYER = 2147483647 - 4;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, hint_label_count, wait_event, events, expect, sleep }) {
+export async function run_cases({ run_case, open_page, press_keys, in_active_tab, in_background, poll_until, hint_label_count, wait_event, find_event, events, expect, sleep }) {
   // The label nearest to the top-left corner of the element.
   const label_of = (selector) =>
     in_active_tab(`(() => {
@@ -61,19 +61,21 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
 
   await run_case(";g still moves a card when the page's setPointerCapture call fails", async () => {
     await open_page("drag", "ptr", { new_tab: true });
+    const mark = events.length;
     await press_keys(";g");
     await pick("#c1");
     await pick("#b");
     await poll_until("the card in column b", async () => (await order_of("b")) === "c1", { timeout_ms: 5000 });
+    expect(!!find_event(mark, (event) => event.type === "drag" && event.ev === "capture_error"), "the page's setPointerCapture call did not fail, so the case proves nothing");
   });
 
   await run_case(";G steps a range input with l, and Enter drops it", async () => {
     const page_id = "range_enter";
     await open_page("drag", "range_enter", { new_tab: true });
+    let mark = events.length;
     await press_keys(";G");
     await pick("#r");
-    await poll_until("the grab badge", async () => true);
-    let mark = events.length;
+    await wait_badge(mark, page_id, "GRAB");
     await press_keys("l", "l", "l");
     await poll_until("the value at 3", async () => (await read('document.getElementById("r").value')) === "3");
     mark = events.length;
@@ -114,5 +116,67 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys("-k", "Escape");
     await wait_badge(mark, page_id, "NORMAL");
     await poll_until("the value back at 0", async () => (await read('document.getElementById("r").value')) === "0");
+  });
+
+  await run_case(";g reorders a SortableJS list in its default, native drag mode", async () => {
+    await open_page("drag", "sortable_native", { new_tab: true });
+    await press_keys(";g");
+    await pick("#i1");
+    await pick("#i3");
+    await poll_until("the list order", async () => (await order_of("list")) === "i2,i3,i1", { timeout_ms: 5000 });
+  });
+
+  await run_case(";G on a draggable element drops with Enter and drops nothing with Escape", async () => {
+    const page_id = "h5_move";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
+    await press_keys(";G");
+    await pick("#src");
+    await wait_badge(mark, page_id, "GRAB");
+    await press_keys("j", "j", "j", "j");
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_badge(mark, page_id, "NORMAL");
+    await sleep(200);
+    expect((await read('document.getElementById("dst").textContent')) === "dst", "Escape dropped the element");
+    mark = events.length;
+    await press_keys(";G");
+    await pick("#src");
+    await wait_badge(mark, page_id, "GRAB");
+    await press_keys("j", "j", "j", "j");
+    mark = events.length;
+    await press_keys("-k", "Return");
+    await wait_badge(mark, page_id, "NORMAL");
+    await poll_until("the drop", async () => (await read('document.getElementById("dst").textContent')) === "dropped:payload");
+  });
+
+  await run_case(";G on the pointer route moves a card into the next column with Enter", async () => {
+    const page_id = "ptr_move";
+    await open_page("drag", page_id, { new_tab: true });
+    let mark = events.length;
+    await press_keys(";G");
+    await pick("#c1");
+    await wait_badge(mark, page_id, "GRAB");
+    await press_keys("l", "l", "l", "l", "l", "l");
+    mark = events.length;
+    await press_keys("-k", "Return");
+    await wait_badge(mark, page_id, "NORMAL");
+    await poll_until("the card in column b", async () => (await order_of("b")) === "c1");
+  });
+
+  await run_case("a page that goes hidden during ;G releases the held pointer through the mode exit", async () => {
+    await open_page("drag", "range_hidden", { new_tab: true });
+    await press_keys(";G");
+    await pick("#thumb");
+    await press_keys("l", "l", "l");
+    await poll_until("the thumb to move", async () => (await thumb_left()) > 40);
+    await open_page("field", "grab_other", { new_tab: true });
+    const in_hidden_tab = (code) =>
+      in_background(`(async () => { const [tab] = await browser.tabs.query({ url: "*://*/drag?id=range_hidden*" }); return (await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }))[0]; })()`);
+    await poll_until("the thumb back at the start", async () => parseFloat(await in_hidden_tab('document.getElementById("thumb").style.left || "0"')) < 1);
+    // A pointer still held would drag the thumb on a later move.
+    await in_hidden_tab('document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 400, clientY: 40 })); 0');
+    await sleep(200);
+    expect(parseFloat(await in_hidden_tab('document.getElementById("thumb").style.left || "0"')) < 1, "the thumb moved after the page went hidden");
   });
 }
