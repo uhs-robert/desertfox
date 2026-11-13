@@ -1,6 +1,6 @@
 // What the `media` bundle does in one frame: find the media elements, describe them for the background's choice, and change the chosen ones.
 
-import type { PlayerVolume } from "../quality/youtube.ts";
+import type { SitePlayer } from "../quality/youtube.ts";
 import { shadow_root_of } from "../shadow.ts";
 import { FRAME_RULE, SEEK_RULE, SPEED_RULE, VOLUME_RULE } from "../../shared/media.ts";
 import type { LevelRule, MediaRequest, MediaResult, MediaScan, MediaState, MediaTarget } from "../../shared/media.ts";
@@ -28,7 +28,7 @@ export type FrameView = {
   // `pinned` marks the video `;M` pinned in this frame, while it is still on the page.
   players: () => { player: Player; area: number; pinned_?: boolean }[];
   // The site player's own volume control, when the page has one: it puts back a volume written to the element.
-  site_volume: () => PlayerVolume | undefined;
+  site_player: () => SitePlayer | undefined;
   // Whether the site player controls this element. A second media element in the frame has only its own volume.
   site_controls: (player: Player) => boolean;
   pip_element: () => unknown;
@@ -146,15 +146,14 @@ function captions_of(players: Player[]): MediaState["captions"] {
 }
 
 // What a site-player toggle just set, for the report: the player's state lags the call.
-const toggled = new WeakMap<Player, boolean>();
+const toggled = new Map<Player, boolean>();
 
-const site_volume_of = (player: Player, view: FrameView): PlayerVolume | undefined => (view.site_controls(player) ? view.site_volume() : undefined);
+const site_player_of = (player: Player, view: FrameView): SitePlayer | undefined => (view.site_controls(player) ? view.site_player() : undefined);
 
-// The report of the request that just toggled counts once, so a later request reads the player again.
+// Only the request that just toggled reports the toggle: `apply_in_frame` clears it, and a later request reads the player again.
 function paused_of(player: Player, view: FrameView): boolean {
-  const site = site_volume_of(player, view);
-  const playing = toggled.get(player) ?? site?.running();
-  toggled.delete(player);
+  const site = site_player_of(player, view);
+  const playing = toggled.get(player) ?? site?.play?.running();
   return playing === undefined ? player.paused : !playing;
 }
 
@@ -162,7 +161,7 @@ function state_of(player: Player, view: FrameView, captions: MediaState["caption
   return {
     captions,
     rate: player.playbackRate,
-    volume: (site_volume_of(player, view)?.get() ?? player.volume * 100) / 100,
+    volume: (site_player_of(player, view)?.get() ?? player.volume * 100) / 100,
     muted: player.muted,
     position: player.currentTime,
     duration: Number.isFinite(player.duration) ? player.duration : null,
@@ -180,7 +179,7 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   if (value === undefined && (action === "speed" || action === "volume" || action === "seek")) return;
   if (action === "speed") player.playbackRate = next_level(player.playbackRate, value, times, SPEED_RULE);
   else if (action === "volume") {
-    const site = site_volume_of(player, view);
+    const site = site_player_of(player, view);
     const now = site?.get() ?? player.volume * 100;
     const next = Math.round(next_level(now, value, times, VOLUME_RULE));
     if (site) site.set(next);
@@ -189,8 +188,13 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
   else if (action === "seek") player.currentTime = next_level(player.currentTime, value, times, { ...SEEK_RULE, max: Number.isFinite(player.duration) ? player.duration : SEEK_RULE.max });
   // An element that plays pauses, one that does not plays. The audible and playing targets hold only elements that play.
   else if (action === "play_pause") {
-    const site = site_volume_of(player, view);
-    if (site) return void toggled.set(player, site.toggle());
+    const site = site_player_of(player, view)?.play;
+    if (site) {
+      // A press while the element or the player still plays pauses, so a lag in either never turns a pause into a play.
+      const playing = !(is_playing(player) || site.running());
+      site.set(playing);
+      return void toggled.set(player, playing);
+    }
     return is_playing(player) ? player.pause() : within_grace(player.play());
   }
   else if (action === "captions") toggle_captions(player);
@@ -207,6 +211,7 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
 
 export async function apply_in_frame(view: FrameView, request: Extract<MediaRequest, { type: "media_apply" }>): Promise<MediaResult> {
   // A frame step needs a picture, so an audio element in the targets is left alone.
+  toggled.clear();
   const players = targets_of(view, request).filter((player) => request.action !== "frame" || is_video(player));
   const settled = await Promise.allSettled(players.map((player) => change(player, request, view)));
   const failure = settled.find((outcome) => outcome.status === "rejected");

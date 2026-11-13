@@ -31,27 +31,21 @@ const HEIGHTS: Readonly<Record<string, number>> = { tiny: 144, small: 240, mediu
 // The player's own state codes that mean it plays or is about to: playing and buffering.
 const RUNNING_STATES = [1, 3];
 
-// `get` and `set` are the volume in percent, 0 to 100. `running` reads the player state and `toggle` plays or pauses by it.
-export type PlayerVolume = { get: () => number | undefined; set: (volume: number) => void; running: () => boolean; toggle: () => boolean };
+// `get` and `set` are the volume in percent, 0 to 100. `play` is absent unless the player has all three play calls.
+export type SitePlayer = { get: () => number | undefined; set: (volume: number) => void; play: { running: () => boolean; set: (playing: boolean) => void } | undefined };
 
 // The player's own controls. A write to the video element's volume is put back by the player, so the volume goes through the player. Play goes through it too, because a cued embed (state 5) has no source on its element and ignores play() there. Undefined when the page has no player with both volume calls.
-export function youtube_volume(page: YouTubePage): PlayerVolume | undefined {
+export function youtube_player(page: YouTubePage): SitePlayer | undefined {
   const player = page.document.getElementById("movie_player") as MoviePlayer | null;
   if (typeof player?.getVolume !== "function" || typeof player.setVolume !== "function") return undefined;
+  const has_play = typeof player.getPlayerState === "function" && typeof player.playVideo === "function" && typeof player.pauseVideo === "function";
   return {
     get: () => {
       const volume = player.getVolume?.();
       return typeof volume === "number" && Number.isFinite(volume) ? volume : undefined;
     },
     set: (volume) => player.setVolume?.(volume),
-    running: () => RUNNING_STATES.includes(player.getPlayerState?.() as number),
-    // Returns whether the player plays afterwards, which its state does not yet say.
-    toggle() {
-      const was_running = this.running();
-      if (was_running) player.pauseVideo?.();
-      else player.playVideo?.();
-      return !was_running;
-    },
+    play: has_play ? { running: () => RUNNING_STATES.includes(player.getPlayerState?.() as number), set: (playing) => (playing ? player.playVideo?.() : player.pauseVideo?.()) } : undefined,
   };
 }
 
