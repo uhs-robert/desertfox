@@ -1,4 +1,4 @@
-import { keep_chain } from "../shared/swallow.ts";
+import { best_effort } from "../shared/swallow.ts";
 // The last bundle loads, kept in storage for the key test to read.
 
 export type LoadLogStorage = {
@@ -14,7 +14,7 @@ export function create_load_log(storage: LoadLogStorage, key: string) {
   return {
     // A storage failure is swallowed: the log is a diagnostic and must not fail the load it describes.
     record: (entry: unknown): Promise<void> => {
-      chain = keep_chain(chain
+      chain = best_effort(chain
         .then(async () => {
           const stored = await storage.get(key);
           const earlier = (stored[key] as unknown[] | undefined) ?? [];

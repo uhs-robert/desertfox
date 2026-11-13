@@ -1,4 +1,4 @@
-import { keep_chain } from "../shared/swallow.ts";
+import { best_effort } from "../shared/swallow.ts";
 // The last timings of the extension, kept in `storage.session` so a background restart keeps them. One entry is `[name, ms]`.
 
 export type TimingStorage = {
@@ -31,7 +31,7 @@ export function create_timing_log(storage: TimingStorage, key: string) {
     // A storage failure is swallowed: a timing is a diagnostic and must not fail what it measures.
     record: (name: string, ms: number): Promise<void> => {
       pending.push([name, ms]);
-      scheduled ??= chain = keep_chain(chain.then(flush));
+      scheduled ??= chain = best_effort(chain.then(flush));
       return scheduled;
     },
     read: async (): Promise<Timing[]> => {
