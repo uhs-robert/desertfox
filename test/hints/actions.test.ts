@@ -638,7 +638,7 @@ test("a frame has no text to copy", () => {
 
 test("focus, hover and delete reach a frame, and here focuses it instead of clicking", () => {
   const page = frame({ tabIndex: 0 });
-  page.run("focus");
+  with_sent_messages(() => page.run("focus"));
   page.run("here");
   assert.deepEqual(page.calls, ["focus", "focus"]);
   page.run("delete");
