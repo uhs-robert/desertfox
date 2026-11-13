@@ -28,7 +28,7 @@ class Stream:
 
     def __init__(self, socket_path, reading=True):
         self.connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.connection.settimeout(15)
+        self.connection.settimeout(liveness_s())
         self.connection.connect(socket_path)
         self.connection.sendall(b'{"verb":"subscribe"}\n')
         self.lines = []
