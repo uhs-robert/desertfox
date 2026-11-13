@@ -1,12 +1,15 @@
 // The grab keys. ;gg picks (;ga for a source outside the draggable group) an element and a target and drives a drag between them, ;G holds the element and h j k l, Enter and Escape move, drop and cancel it.
 // The pages are in drag_pages.mjs. Each keeps its result in the DOM, which the content script world reads.
 
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 export const areas = ["hints", "keys", "bundles"];
 
 // LAYERS.hints in src/shared/layers.ts, which the test cannot import.
 const HINTS_LAYER = 2147483647 - 4;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, in_background, poll_until, hint_label_count, wait_event, find_event, events, expect, sleep }) {
+export async function run_cases({ config_dir, config_copy, load_config_dir, run_case, open_page, press_keys, in_active_tab, in_background, poll_until, hint_label_count, wait_event, find_event, events, expect, sleep }) {
   // The label nearest to the top-left corner of the element.
   const label_of = (selector) =>
     in_active_tab(`(() => {
@@ -32,6 +35,16 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   const read = (code) => in_active_tab(code);
   const thumb_left = async () => parseFloat(await read('document.getElementById("thumb").style.left || "0"'));
   const order_of = (id) => read(`[...document.getElementById("${id}").children].map((child) => child.id).join()`);
+
+  // A copy of the base config with grab_step_px set, loaded as the config. Without a value the setting is its default, 3 px.
+  const load_grab_step = async (step_px) => {
+    const dir = config_copy();
+    if (step_px !== undefined) writeFileSync(join(dir, "settings.toml"), `grab_step_px = ${step_px}\n${readFileSync(join(dir, "settings.toml"), "utf8")}`);
+    await load_config_dir(dir);
+  };
+
+  // The cases up to the default-step ones count in 24 px steps, so they load that step.
+  await run_case("grab_step_px = 24 is the step the cases below count in", () => load_grab_step(24), { setup: true });
 
   await run_case(";g drops a draggable element on a target with DragEvents", async () => {
     await open_page("drag", "h5", { new_tab: true });
@@ -306,7 +319,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await pick("#src");
     await wait_badge(mark, page_id, "GRAB");
     const drag_y = async () => parseFloat(await read('document.getElementById("dst").dataset.y'));
-    // The pointer starts at the middle of the source, and a move key travels one step, 24 px at first.
+    // The pointer starts at the middle of the source, and a move key travels one step, 24 px at first with grab_step_px = 24.
     const start_y = parseFloat(await read('(() => { const box = document.getElementById("src").getBoundingClientRect(); return box.top + box.height / 2; })()'));
     await press_keys("]", "j");
     await poll_until("a double step down", async () => Math.abs((await drag_y()) - (start_y + 48)) <= 1);
@@ -407,6 +420,26 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await sleep(300);
     expect((await read("document.body.dataset.rawdown")) === (await read("document.body.dataset.rawup")), "a raw press was left down");
     expect((await attr_of("car", "index")) === "0" && (await attr_of("car", "downs")) === "0", "a strict page took the synthetic swipe");
+  const nudge_once = async (page_id) => {
+    await open_page("drag", page_id, { new_tab: true });
+    const mark = events.length;
+    await press_keys(";Gg");
+    await pick("#vol");
+    await wait_badge(mark, page_id, "GRAB");
+    await press_keys("h");
+  };
+  await run_case("a new grab with the default grab_step_px moves a slider by 3 px", async () => {
+    await load_config_dir(config_dir);
+    await nudge_once("abs_slider");
+    await poll_until("one 3 px step left", async () => (await vol_now()) === 77);
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("grab_step_px = 12 makes a new grab start at a 12 px step", async () => {
+    await load_grab_step(12);
+    await nudge_once("abs_slider");
+    await poll_until("one 12 px step left", async () => (await vol_now()) === 68);
+    await press_keys("-k", "Escape");
   });
 
   // A cancelled grab hint leaves the next hint on the page whole. Escape goes as `-k`: a bare "Escape" types the letters E s c a p e, which pick a label.
