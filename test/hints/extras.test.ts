@@ -110,7 +110,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
   const held_key_batches: string[][] = [];
   let intersecting = true;
   const handlers = new Map<string, (args: Record<string, unknown>) => unknown>();
-  let sink: { on_token_: (token: string) => string; exit: () => void } | undefined;
+  let sink: { on_token_: (token: string, physical?: string | null) => string; exit: () => void } | undefined;
   let mode = "normal";
   let sends_held: ((message: unknown) => Promise<unknown>) | undefined;
   let holds = 0;
@@ -288,7 +288,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
     run: (args: Record<string, unknown>) => handlers.get("hint.run")!({ action: "here", filter: "links", rapid: false, ...args }) as Outcome | Promise<Outcome>,
     unhover: () => handlers.get("hint.unhover")!({}),
-    type: (token: string) => (holds > 0 ? (held_input.push(token), "handled") : sink!.on_token_(token)),
+    type: (token: string, physical?: string | null) => (holds > 0 ? (held_input.push(token), "handled") : sink!.on_token_(token, physical)),
     escape: () => (holds > 0 ? void held_input.push(() => set_mode("normal")) : set_mode("normal")),
     // What the background answers to `read_hint_selectors`.
     // An object answers at once. A function gives the answer as a promise, so a test can reject it or leave it pending.
@@ -1601,6 +1601,19 @@ async function pick_with_typeahead(page: Awaited<ReturnType<typeof page_with>>, 
 }
 
 const picks_sent = (page: { sent: unknown[] }) => page.sent.filter((message) => (message as { type: string }).type === "hint_frames_pick");
+
+test("a Cyrillic key typed before the labels show picks its label by the physical letter once they do", async () => {
+  const page = await page_with(["one"]);
+  answer_picks_with(page, { s: { ok: true, left: [] } });
+  let answer_start!: (answer: unknown) => void;
+  page.answer_start(() => new Promise((resolve) => (answer_start = resolve)));
+  void page.run({ frames: "all_frames" });
+  await settle();
+  assert.equal(page.type("ы", "s"), "handled");
+  answer_start(across_answer(["a", "s"], ["a"])());
+  await settle();
+  assert.deepEqual(picks_sent(page), [{ type: "hint_frames_pick", session_id: "s1", label: "s" }]);
+});
 
 test("across frames the keys typed ahead go with the pick of another frame, and what its owner left replays here", async () => {
   const page = await page_with(["one"]);
