@@ -62,7 +62,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case(";g still moves a card when the page's setPointerCapture call fails", async () => {
     await open_page("drag", "ptr", { new_tab: true });
     const mark = events.length;
-    await press_keys(";ga");
+    await press_keys(";gg");
     await pick("#c1");
     await pick("#b");
     await poll_until("the card in column b", async () => (await order_of("b")) === "c1", { timeout_ms: 5000 });
@@ -154,7 +154,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     const page_id = "ptr_move";
     await open_page("drag", page_id, { new_tab: true });
     let mark = events.length;
-    await press_keys(";Ga");
+    await press_keys(";Gg");
     await pick("#c1");
     await wait_badge(mark, page_id, "GRAB");
     await press_keys("l", "l", "l", "l", "l", "l");
@@ -188,17 +188,46 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await poll_until("the drop", async () => (await read('document.getElementById("dst").textContent')) === "dropped");
   });
 
-  await run_case(";gg labels the draggable group and not links or plain buttons, and ;ga keeps every element reachable", async () => {
+  await run_case(";gg labels the draggable group, one per sign, and not links, plain buttons or a child of a grab cursor", async () => {
     await open_page("drag", "group", { new_tab: true });
     await press_keys(";gg");
     await labels_up("labels of the draggable group");
-    expect((await hint_label_count()) === 2, `the draggable group has two labels, got ${await hint_label_count()}`);
+    expect((await hint_label_count()) === 12, `the draggable group has twelve labels, one per sign, got ${await hint_label_count()}`);
     await press_keys("Escape");
     await labels_gone("labels gone after Escape");
+  });
+
+  await run_case(";ga keeps every element reachable, the link, the button and the plain div too", async () => {
+    await open_page("drag", "group_every", { new_tab: true });
     await press_keys(";ga");
     await labels_up("labels of every element");
     expect((await hint_label_count()) >= 5, "every filter labels the link, the button and the div too");
     await press_keys("Escape");
     await labels_gone("labels gone after the second Escape");
+  });
+
+  await run_case(";gg reorders a native SortableJS list whose items are marked draggable", async () => {
+    await open_page("drag", "sortable_marked", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#i1");
+    await pick("#i3");
+    await poll_until("the list order", async () => (await order_of("list")) === "i2,i3,i1", { timeout_ms: 5000 });
+  });
+
+  await run_case(";gg drags a role=slider div shaped like a video volume panel", async () => {
+    await open_page("drag", "slider", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#vol");
+    await pick("#dst");
+    await poll_until("the slider value", async () => parseFloat(await read('document.getElementById("vol").getAttribute("aria-valuenow")')) > 20, { timeout_ms: 5000 });
+  });
+
+  await run_case(";Gg holds a pointer-driven card that sets touch-action none", async () => {
+    await open_page("drag", "ptr", { new_tab: true });
+    await press_keys(";Gg");
+    await labels_up("labels of the draggable group");
+    expect((await label_of("#c1")) !== undefined, "the card has a label");
+    await press_keys("Escape");
+    await labels_gone("labels gone after Escape");
   });
 }

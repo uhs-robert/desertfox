@@ -83,16 +83,18 @@ const DRAGGABLE = [
   ".sortable-handle, .ui-sortable-handle, .ui-draggable, .drag-handle, .resize-handle, .gutter",
   "[data-rbd-drag-handle-draggable-id], [data-rfd-drag-handle-draggable-id], [data-dnd-draggable]",
 ].join(", ");
-const DRAG_CURSORS = new Set(["grab", "grabbing", "move", "ew-resize", "ns-resize", "col-resize", "row-resize", "nwse-resize", "nesw-resize"]);
+const DRAG_CURSORS = new Set(["grab", "grabbing", "move", ...["ew", "ns", "col", "row", "nwse", "nesw", "n", "s", "e", "w", "ne", "nw", "se", "sw"].map((direction) => `${direction}-resize`)]);
 
-// The explicit signs skip the style read. The cursor is read only for the rest, and an inherited cursor counts only where it starts, as for a pointer.
+// The explicit signs skip the style read. Otherwise one read gives two signs: a drag cursor where it starts (it is inherited, so a child of a grab box does not count), and `touch-action: none`, which a pointer-driven widget sets so the browser leaves its drags alone. A widget with none of these signs and no role is reached with the `every` filter.
 export const is_draggable = (element: Element): boolean => {
   if (PAGE_ROOTS.has(element.localName)) return false;
   if (element.matches(DRAGGABLE)) return true;
-  const cursor_of_ = (target: Element) => window_of(target).getComputedStyle(target).cursor;
-  if (!DRAG_CURSORS.has(cursor_of_(element))) return false;
+  const style_of = (target: Element) => window_of(target).getComputedStyle(target);
+  const style = style_of(element);
+  if (style.touchAction === "none") return true;
+  if (!DRAG_CURSORS.has(style.cursor)) return false;
   const parent = element.parentElement;
-  return parent === null || cursor_of_(parent) !== cursor_of_(element);
+  return parent === null || style_of(parent).cursor !== style.cursor;
 };
 
 const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
