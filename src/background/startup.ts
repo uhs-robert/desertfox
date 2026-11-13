@@ -1,5 +1,6 @@
 // Loads the config, compiles the keymap and publishes the result.
 
+import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
@@ -158,9 +159,9 @@ async function commit_change<T>(before: T, next: T, write: { store: (value: T) =
   } catch (error) {
     // Pages read the stored edits themselves, so a failed publish must not leave them ahead of the config.
     // Best effort, so a failed rollback never hides the error that caused it.
-    await write.store(before).catch(() => undefined);
+    await write.store(before).catch(warn_and_go("rollback store"));
     // Best effort: the failed publish may have written the keymap and status for `next` already.
-    await write.publish(before).catch(() => undefined);
+    await write.publish(before).catch(warn_and_go("rollback publish"));
     throw error;
   }
 }
@@ -221,7 +222,7 @@ export function republish(): Promise<void> {
     await get_config();
     await publish(await (load_step as Promise<LoadStep>), await load_edits());
   });
-  change_queue = again.catch(() => undefined);
+  change_queue = keep_chain(again);
   return again;
 }
 
@@ -262,8 +263,8 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
       // The publish below still puts the old keymap back.
     }
     // The failed publish may have stored a map planned from the new keymap.
-    await store_slot_map(slot_map_before).catch(() => undefined);
-    await publish({ loaded: current_step.loaded, load_warnings: current_step.load_warnings }, edits).catch(() => undefined);
+    await store_slot_map(slot_map_before).catch(warn_and_go("rollback slot map"));
+    await publish({ loaded: current_step.loaded, load_warnings: current_step.load_warnings }, edits).catch(warn_and_go("rollback publish"));
     commit(config_before);
     throw error;
   }
@@ -271,7 +272,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
 
 function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
   const queued = change_queue.then(work);
-  change_queue = queued.catch(() => undefined);
+  change_queue = keep_chain(queued);
   return queued;
 }
 
@@ -302,7 +303,7 @@ export async function reload_config_at_start(): Promise<void> {
   } catch (error) {
     console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`);
     // A choice needs the host, so a question left from an earlier start cannot be answered now.
-    await in_change_queue(clear_host_pending).catch(() => undefined);
+    await in_change_queue(clear_host_pending).catch(warn_and_go("clear host pending"));
     return;
   }
   await in_change_queue(async () => {
@@ -373,7 +374,7 @@ export async function preview_config_import(source: unknown): Promise<ConfigImpo
 export function import_config(source: unknown, accepted: unknown): Promise<{ warnings: number; replaces_config: boolean; snippets: number }> {
   const reading = read_import_source(source);
   // Settled here too, so a refused read is not an unhandled rejection while the queue waits.
-  reading.catch(() => undefined);
+  void keep_chain(reading);
   return in_change_queue(async () => {
     const incoming = await reading;
     const consented = checked_consent(incoming, accepted);
@@ -421,6 +422,6 @@ export function save_config_file(path: string, text: string | null, base: string
 async function tell_tabs_tree_changed(): Promise<void> {
   const tabs = await browser.tabs.query({});
   await Promise.all(
-    tabs.map((tab) => (tab.id === undefined ? undefined : browser.tabs.sendMessage(tab.id, { type: "tree_updated" }).catch(() => undefined))),
+    tabs.map((tab) => (tab.id === undefined ? undefined : best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))),
   );
 }
