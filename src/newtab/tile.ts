@@ -11,7 +11,8 @@ const letter_tile = (host: string): HTMLElement => {
 // A failed load swaps the image for the letter tile, so a dead icon address never leaves a blank box.
 const icon_box = (row: ListRow): HTMLElement => {
   const letter = letter_tile(row.host);
-  if (!row.icon_url) return letter;
+  // The last guard: only a local data: image ever becomes an img src, whatever a row holds.
+  if (!row.icon_url || !/^data:image\//i.test(row.icon_url)) return letter;
   const image = document.createElement("img");
   image.className = "tile-icon";
   image.src = row.icon_url;
