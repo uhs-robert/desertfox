@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmark_rows, link_sections, read_sections, recent_tab_rows, type PageReaders, type TabWithUse } from "../src/newtab/lists.ts";
-import { SETTING_SPECS } from "../src/shared/settings_schema.ts";
+import { parse_setting_text, SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { effective_settings } from "../src/shared/config.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
 
@@ -54,7 +54,9 @@ test("newtab_links validates the scheme, the group and the fields", () => {
   assert.equal(check([{ label: "A", url: "https://a.example/", group: "G" }, { label: "B", url: "http://b.example/" }]), true);
   assert.equal(check([]), true);
   for (const bad of [[{ label: "A", url: "javascript:alert(1)" }], [{ label: "A", url: "file:///etc/passwd" }], [{ label: "A", url: "https://a.example/", group: "" }], [{ label: "", url: "https://a.example/" }], [{ url: "https://a.example/" }], [{ label: "A", url: "https://a.example/", extra: 1 }], ["https://a.example/"], "x"]) assert.equal(check(bad), false, JSON.stringify(bad));
-  assert.equal(SETTING_SPECS.newtab_links.settable, false, ":set refuses it");
+  assert.equal(SETTING_SPECS.newtab_links.settable, true, "the settings page saves it");
+  // Typed text is never a list of tables, so `:set newtab_links` refuses it as `:set site_rules` does.
+  for (const name of ["newtab_links", "site_rules"] as const) assert.deepEqual(parse_setting_text(name, "https://a.example/"), { error: `${name}: expected ${SETTING_SPECS[name].expectation}` });
 });
 
 test("the editor schema describes the new settings", () => {

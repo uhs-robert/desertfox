@@ -69,8 +69,22 @@ test("each setting kind gets its control", async () => {
     assert.equal(kind("open_completion"), "ordered_list");
     assert.equal(kind("default_engine"), "select");
     assert.equal(kind("palette"), "select");
-    for (const name of ["search_prefixes", "container_prefixes", "newtab_links"]) assert.equal(kind(name), "read_only");
+    for (const name of ["search_prefixes", "container_prefixes"]) assert.equal(kind(name), "read_only");
+    assert.equal(kind("newtab_links"), "link_list");
   }
+});
+
+test("a list of links commits as a whole, and a link with a bad address stays a draft", async () => {
+  const { session } = await make();
+  const links = [{ label: "Mail", url: "https://mail.test/", group: "Work" }, { label: "News", url: "https://news.test/" }];
+  await session.commit("newtab_links", links);
+  assert.deepEqual(session.field("newtab_links")!.row.value, links);
+  assert.equal(session.field("newtab_links")!.row.top_layer, "saved");
+  await session.commit("newtab_links", [...links, { label: "Bad", url: "javascript:alert(1)" }]);
+  assert.match(session.field("newtab_links")!.error!, /newtab_links: expected a list of tables/);
+  assert.deepEqual(session.field("newtab_links")!.row.value, links);
+  await session.reset("newtab_links");
+  assert.deepEqual(session.field("newtab_links")!.row.value, []);
 });
 
 test("an enum keeps its typed options, and a palette in force that no list names stays selectable", async () => {

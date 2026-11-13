@@ -8,10 +8,11 @@ import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } fr
 import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
-import { engine_edits_of, has_engine_edits, load_layers, store_layers } from "./edit_layers.ts";
-import type { EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
+import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, store_layers } from "./edit_layers.ts";
+import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
 import type { EngineState } from "./engine_message.ts";
+import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
@@ -56,9 +57,9 @@ type LoadStep = {
   load_warnings: string[];
   // Found on the first publish of a load. A `:set` keeps it: it refuses the prefix settings, the only ones that move keys.
   slots?: { plan: SlotPlan; table: ReturnType<typeof slot_table>; warnings: string[]; applied: boolean };
-  // The files the load built, when the load knows them. Otherwise the engines layer reads them from storage the first time it builds.
+  // The files the load built, when the load knows them. Otherwise the engines and aliases layers read them from storage the first time they build.
   source?: FilesSource;
-  // The last build of the engines layer over the files, so a `:set` publish does not build again. Keyed by the layer.
+  // The last build of the engines and aliases layers over the files, so a `:set` publish does not build again. Keyed by the layers.
   layered?: { key: string; build: LayeredBuild };
 };
 
@@ -102,8 +103,7 @@ async function compile_input(config: MergedConfig, layers: EditLayers): Promise<
 // The edit layers are read from storage unless given, so every publish keeps them on top of the files.
 async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers): Promise<{ config: MergedConfig; warnings: string[] }> {
   const in_force = layers ?? (await load_layers());
-  const engines = engine_edits_of(in_force);
-  const layered = has_engine_edits(engines) ? await layered_build(step, engines) : undefined;
+  const layered = has_build_edits(in_force) ? await layered_build(step, engine_edits_of(in_force), alias_edits_of(in_force)) : undefined;
   const config = with_edits(layered?.loaded.config ?? step.loaded.config, edits);
   const { compiled, theme, warnings } = compile_config(await compile_input(config, in_force));
   // The build repeats the warnings of the files build, which the load warnings hold already.
@@ -146,11 +146,11 @@ async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers)
 // The commands the build checks snippet ids against: the built-in ones, so the snippets of the last load stay out.
 const built_in_commands = () => commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
 
-async function layered_build(step: LoadStep, engines: EngineEdits): Promise<LayeredBuild> {
-  const key = JSON.stringify(engines);
+async function layered_build(step: LoadStep, engines: EngineEdits, aliases: AliasEdits): Promise<LayeredBuild> {
+  const key = JSON.stringify([engines, aliases]);
   if (step.layered?.key === key) return step.layered.build;
   step.source ??= await load_files_source();
-  const build = build_layered(step.source.files, step.source.dir_label, built_in_commands(), engines);
+  const build = build_layered(step.source.files, step.source.dir_label, built_in_commands(), engines, aliases);
   step.layered = { key, build };
   return build;
 }
@@ -216,10 +216,10 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: La
     if (changed === undefined) return;
     const next: EditLayers = { ...before, [kind]: changed };
     const step = await (load_step as Promise<LoadStep>);
-    // An engines edit is refused for what it breaks, before anything is stored. An engine the files already broke stays out of the way, so it can still be removed.
-    if (kind === "engines" && has_engine_edits(engine_edits_of(next))) {
-      const known = has_engine_edits(engine_edits_of(before)) ? (await layered_build(step, engine_edits_of(before))).dropped : [];
-      const fresh = fresh_drops(await layered_build(step, engine_edits_of(next)), known);
+    // An engines or aliases edit is refused for what it breaks, before anything is stored. A piece the files already broke stays out of the way, so it can still be removed.
+    if ((kind === "engines" || kind === "aliases") && has_build_edits(next)) {
+      const known = has_build_edits(before) ? (await layered_build(step, engine_edits_of(before), alias_edits_of(before))).dropped : [];
+      const fresh = fresh_drops(await layered_build(step, engine_edits_of(next), alias_edits_of(next)), known);
       if (fresh.length > 0) throw refusal_of(fresh);
     }
     const slot_map_before = await read_slot_map();
@@ -251,15 +251,29 @@ export function read_keymap_state(): Promise<KeymapState> {
   return in_change_queue(async () => keymap_state(await get_config(), await load_layers()));
 }
 
+// What the engine and alias forms read: the layers in force, what the build kept of them and what it left out.
+async function read_layer_build(): Promise<{ config: MergedConfig; layers: EditLayers; current?: LayeredBuild; source: FilesSource }> {
+  const config = await get_config();
+  const layers = await load_layers();
+  const step = await (load_step as Promise<LoadStep>);
+  const current = has_build_edits(layers) ? await layered_build(step, engine_edits_of(layers), alias_edits_of(layers)) : undefined;
+  step.source ??= await load_files_source();
+  return { config, layers, ...(current && { current }), source: step.source };
+}
+
 export function read_engine_state(): Promise<EngineState> {
   return in_change_queue(async () => {
-    const config = await get_config();
-    const engines = engine_edits_of(await load_layers());
-    const step = await (load_step as Promise<LoadStep>);
-    const current = has_engine_edits(engines) ? await layered_build(step, engines) : undefined;
-    step.source ??= await load_files_source();
-    const { files, dir_label } = step.source;
-    return { config, engines, kept: current?.kept ?? {}, dropped: current?.dropped ?? [], trial: (other) => build_layered(files, dir_label, built_in_commands(), other) };
+    const { config, layers, current, source } = await read_layer_build();
+    const { files, dir_label } = source;
+    const aliases = alias_edits_of(layers);
+    return { config, engines: engine_edits_of(layers), aliases, kept: current?.kept ?? {}, kept_aliases: current?.kept_aliases ?? {}, dropped: current?.dropped ?? [], trial: (other) => build_layered(files, dir_label, built_in_commands(), other, aliases) };
+  });
+}
+
+export function read_alias_state(): Promise<AliasState> {
+  return in_change_queue(async () => {
+    const { config, layers, current } = await read_layer_build();
+    return { config, aliases: alias_edits_of(layers), kept: current?.kept_aliases ?? {}, dropped: current?.dropped ?? [] };
   });
 }
 

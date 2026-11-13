@@ -399,6 +399,24 @@ export type ChangeEngines =
   | { type: "change_engines"; action: "starter" };
 export type ChangeEnginesAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
+// One alias the settings page added, as the Aliases section lists it. `left_out` is the reason the build dropped it after a files edit: it then runs nowhere.
+export type AliasRow = { name: string; target: string; left_out?: string };
+export type ListAliases = { type: "list_aliases" };
+export type ListAliasesAnswer = { ok: true; aliases: AliasRow[] } | { ok: false; message: string };
+
+// From an extension page: one change of the aliases layer. `set` adds an alias or replaces the one of that name. `remove` drops one. The background builds the config with the change and refuses it, with every problem, when the build does.
+export type ChangeAliases = { type: "change_aliases"; action: "set"; name: string; target: string } | { type: "change_aliases"; action: "remove"; name: string };
+export type ChangeAliasesAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
+
+// One quickmark of a normal window. `saved` is false for an entry that only quickmarks.toml holds: the form can replace it with a saved one but not remove it.
+export type QuickmarkRow = { key: string; url: string; saved: boolean };
+export type ListQuickmarks = { type: "list_quickmarks" };
+export type ListQuickmarksAnswer = { ok: true; quickmarks: QuickmarkRow[] } | { ok: false; message: string };
+
+// From an extension page: one change of the quickmarks saved in a normal window, the store `M` writes.
+export type ChangeQuickmarks = { type: "change_quickmarks"; action: "set"; key: string; url: string } | { type: "change_quickmarks"; action: "remove"; key: string };
+export type ChangeQuickmarksAnswer = { ok: true; message: string } | { ok: false; message: string };
+
 // What the toolbar popup asks. Only a top-level extension page may send them.
 export type ToolbarRequest =
   | { type: "toolbar_set_disabled"; disabled: boolean }
@@ -440,7 +458,7 @@ export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; me
 
 // From an extension page: the files an export writes, raw. The page builds the two zips. `config_files` holds the config files and the saved browser edits as TOML, `snippet_files` the installed snippets, both keyed by their path in the zip.
 export type ExportConfig = { type: "export_config" };
-// `skipped_key_edits` names the key edits left out because their text no longer reads, so an import does not refuse the whole config over them. `skipped_engine_edits` does the same for the engines the build dropped.
+// `skipped_key_edits` names the key edits left out because their text no longer reads, so an import does not refuse the whole config over them. `skipped_engine_edits` does the same for the engines and aliases the build dropped.
 export type ExportConfigAnswer = { ok: true; config_files: Record<string, string>; snippet_files: Record<string, string>; skipped_key_edits?: string[]; skipped_engine_edits?: string[] } | { ok: false; message: string };
 
 // From an extension page: the installed snippets for the list on the settings page. The header fields are absent when the header does not parse.
@@ -476,7 +494,7 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };

@@ -32,6 +32,8 @@ export type Control =
   | { type: "text_list" }
   // The order of the checked items is the value's order, so each item has up and down buttons.
   | { type: "ordered_list"; items: string[] }
+  // A list of links, each a label, an address and an optional group, as `newtab_links` holds them.
+  | { type: "link_list" }
   | { type: "read_only" };
 
 // `engines` are the names `default_engine` can take. A value in force that no option names stays selectable, so the control never shows something the setting does not hold.
@@ -44,6 +46,7 @@ export function control_of(row: SettingListRow, engines: string[]): Control {
     case "number": return { type: "number" };
     case "enum_list": return { type: "ordered_list", items: (row.allowed ?? []) as string[] };
     case "text_list": return { type: "text_list" };
+    case "table_list": return { type: "link_list" };
     case "custom":
       return row.name === "palette" ? { type: "select", options: keep_current(row.allowed ?? []) } : { type: "text", suggestions: [] };
     case "text":

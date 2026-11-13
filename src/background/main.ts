@@ -62,7 +62,7 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_engine_state, read_keymap_state, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, read_engine_state, read_keymap_state, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -76,6 +76,8 @@ import { create_settings_messages, is_extension_page } from "./settings_message.
 import { answer_host_start_choice } from "./host_start.ts";
 import { create_keymap_messages, exportable_key_edits } from "./keymap_message.ts";
 import { create_engine_messages } from "./engine_message.ts";
+import { create_alias_messages } from "./alias_message.ts";
+import { create_quickmark_messages } from "./quickmark_message.ts";
 import { ConfigRefusal } from "./config_reload.ts";
 import { dropped_warning } from "./engine_layer.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
@@ -258,6 +260,8 @@ async function read_starter_engines(): Promise<string> {
   throw missing;
 }
 const engine_messages = create_engine_messages({ read_engine_state, change_layers, read_starter: read_starter_engines });
+const alias_messages = create_alias_messages({ read_alias_state, change_layers });
+const quickmark_messages = create_quickmark_messages({ store: browser_quickmark_store, configured: async () => (await get_config()).quickmarks });
 const keymap_messages = create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });
 
 // Listeners register in the first turn, so no event is missed while the config loads.
@@ -277,13 +281,21 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change engines" });
     return page_request.type === "list_engines" ? engine_messages.list() : engine_messages.change(page_request);
   }
+  if (page_request?.type === "list_aliases" || page_request?.type === "change_aliases") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change aliases" });
+    return page_request.type === "list_aliases" ? alias_messages.list() : alias_messages.change(page_request);
+  }
+  if (page_request?.type === "list_quickmarks" || page_request?.type === "change_quickmarks") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change quickmarks" });
+    return page_request.type === "list_quickmarks" ? quickmark_messages.list() : quickmark_messages.change(page_request);
+  }
   if (page_request?.type === "preview_config_import" || page_request?.type === "commit_config_import") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may import a config" });
     return answer_config_import(page_request, { preview: preview_config_import, commit: import_config });
   }
   if (page_request?.type === "export_config" || page_request?.type === "list_snippets" || page_request?.type === "remove_snippet") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or change snippets" });
-    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state()), read_engine_edits: async () => { const state = await read_engine_state(); return { edits: state.kept, skipped: state.dropped.map(dropped_warning) }; }, remove: remove_snippet });
+    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state()), read_engine_edits: async () => { const state = await read_engine_state(); return { edits: state.kept, aliases: state.kept_aliases, skipped: state.dropped.map(dropped_warning) }; }, read_quickmarks: () => browser_quickmark_store.saved(false), remove: remove_snippet });
   }
   if (page_request?.type === "config_files") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may edit the config files" });

@@ -109,7 +109,7 @@ test("a value that fails the setting's check stores nothing", async () => {
 
 test("the settings that :set refuses get the text :set gives, and unknown names are refused", async () => {
   const { messages, local } = await make();
-  for (const name of ["search_prefixes", "container_prefixes", "newtab_links"]) {
+  for (const name of ["search_prefixes", "container_prefixes"]) {
     const set = await messages.change({ type: "change_setting", name, action: "set", value: [] });
     const reset = await messages.change({ type: "change_setting", name, action: "reset" });
     assert.equal(set.ok, false);
@@ -156,7 +156,8 @@ test("the list gives every setting with value, top layer, kind and allowed value
   assert.equal(row("which_key_delay_ms").top_layer, "default");
   assert.deepEqual(row("newtab_clock").allowed, [true, false, "analog", "digital"]);
   assert.equal(row("newtab_clock").kind, "enum");
-  assert.equal(row("newtab_links").settable, false);
+  assert.equal(row("newtab_links").settable, true);
+  assert.equal(row("search_prefixes").settable, false);
   assert.equal(row("home_page").value, undefined);
 });
 
@@ -180,6 +181,21 @@ test("an enum list keeps the order it was sent in", async () => {
   const reversed = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: [...order].reverse() });
   assert.ok(reversed.ok);
   assert.deepEqual(reversed.setting.value, [...order].reverse());
+});
+
+test("newtab_links saves as a whole list through the settings page, and a bad list is refused", async () => {
+  const { messages, local, startup } = await make();
+  const links = [{ label: "Mail", url: "https://mail.test/", group: "Work" }, { label: "News", url: "https://news.test/" }];
+  const saved = await messages.change({ type: "change_setting", name: "newtab_links", action: "set", value: links });
+  assert.ok(saved.ok);
+  assert.deepEqual((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, links);
+  assert.deepEqual((await startup.get_config()).settings.newtab_links, links);
+  const bad = await messages.change({ type: "change_setting", name: "newtab_links", action: "set", value: [{ label: "x", url: "javascript:alert(1)" }] });
+  assert.equal(bad.ok, false);
+  assert.deepEqual((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, links);
+  const reset = await messages.change({ type: "change_setting", name: "newtab_links", action: "reset" });
+  assert.ok(reset.ok);
+  assert.equal((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, undefined);
 });
 
 test("a list during a change that then fails does not show the unpublished value", async () => {
