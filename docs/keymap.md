@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 436 (normal 229, media 51, hint 7, cmdline 19, caret 35, visual 43, visual_line 44, insert 4, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 443 (normal 230, media 52, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -200,6 +200,7 @@ bound: 436 (normal 229, media 51, hint 7, cmdline 19, caret 35, visual 43, visua
 | `,,` | bound | `anything` (prompts) | Find anything |  |
 | `,b` | bound | `page.blur` | Blur |  |
 | `,?` | bound | `help.whichkey` | Which key |  |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `,"` | bound | `registers` (prompts) | List registers |  |
 | `,fs` | bound | `firefox settings` | Firefox settings |  |
 | `,fa` | bound | `firefox addons` | Firefox add-ons |  |
@@ -330,6 +331,7 @@ Which-key group names:
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `?` | bound | `help.whichkey` | Show the keys |  |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `F` | bound | `media fullscreen` | Toggle fullscreen |  |
 | `h` | bound | `media seek down` | Seek back |  |
 | `l` | bound | `media seek up` | Seek forward |  |
@@ -357,6 +359,7 @@ Which-key group names:
 
 | Key | Status | Command | Label | Note |
 | --- | --- | --- | --- | --- |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-[>` | bound | `mode.escape` | Escape |  |
 | `/` | bound | `hint.key slash` | Type link text |  |
@@ -394,6 +397,7 @@ Which-key group names:
 | Key | Status | Command | Label | Note |
 | --- | --- | --- | --- | --- |
 | `0` | bound | `caret.move --line-start` | Move caret |  |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `v` | bound | `mode visual` | Set mode |  |
 | `V` | bound | `mode visual_line` | Start line visual mode |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
@@ -458,6 +462,7 @@ Which-key group names:
 | `T` | bound | `caret.find --back --till` | Move back after a character |  |
 | `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
 | `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
 | `*` | bound | `find --word` | Find word forward |  |
@@ -506,6 +511,7 @@ Which-key group names:
 | `T` | bound | `caret.find --back --till` | Move back after a character |  |
 | `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
 | `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `/` | bound | `find` | Find forward |  |
 | `?` | bound | `find --backward` | Find backward |  |
 | `*` | bound | `find --word` | Find word forward |  |
@@ -530,6 +536,7 @@ Which-key group names:
 
 | Key | Status | Command | Label | Note |
 | --- | --- | --- | --- | --- |
+| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
 | `<Escape>` | bound | `mode.escape` | Escape |  |
 | `<C-r>` | bound | `register.paste` | Paste register |  |
 | `<C-o>` | bound | `text.edit_external` | Edit the field in the external editor |  |
