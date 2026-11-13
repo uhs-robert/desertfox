@@ -179,7 +179,8 @@ function home_page(model: HelpModel): HTMLElement[] {
   const warnings = model.warnings.length === 0
     ? el("p", "desertfox-help-muted", "No warnings.")
     : el("ul", "desertfox-help-warnings", ...model.warnings.map((warning) => el("li", undefined, warning)));
-  return [block_node(model.tip), el("h2", undefined, "Warnings"), warnings];
+  const host_note = el("p", undefined, "The native host is optional. You can set up DesertFox in the browser, and the host adds the ", el("code", undefined, "<C-o>"), " editor, the ", el("code", undefined, ",f"), " keys and config files from ", el("code", undefined, "~/.config/desertfox/"), ". Quick Start has the details.");
+  return [block_node(model.tip), host_note, el("h2", undefined, "Warnings"), warnings];
 }
 
 // The toggle lives in the hash, so a reload, a link and the back button keep it. It shows the count, which the shown model no longer holds.
@@ -240,7 +241,7 @@ function settings_page(model: HelpModel): HTMLElement[] {
     el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
     el("p", CONFIG_SOURCE_CLASS, config_source_text(model)),
     el("h2", undefined, "Apply a config file edit"),
-    el("p", undefined, "After you edit the config files, run:"),
+    el("p", undefined, "If you keep the config files in ~/.config/desertfox/ (this needs the native host), run:"),
     el("ol", undefined, ...model.rebuild_steps.map((step) => el("li", undefined, el("code", undefined, step)))),
     install_native_host_button(),
     el("h2", undefined, "Export and import"),

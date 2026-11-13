@@ -47,9 +47,9 @@ A beta build is signed by Mozilla, built nightly from `main` and updates itself.
 
 ### Native host (optional)
 
-The native host is a small Linux helper program. Firefox does not let extensions read files or start programs, so the host serves the features that need them: editing a text field in your own editor with `<C-o>` in insert mode, the `,f` keys that open Firefox pages, and keys and settings in TOML files in `~/.config/desertfox/`.
+The native host is a small Linux helper program. You do not need it. In the browser you can change settings with `:set` or on the settings page, edit the config files in the files editor, import and export a zip, and rebind keys.
 
-Without the host, almost everything works. You change settings with `:set` or on the settings page.
+Firefox does not let extensions read files or start programs, so the host adds three things: editing a text field in your own editor with `<C-o>` in insert mode, the `,f` keys that open Firefox pages, and config files in `~/.config/desertfox/` that `config.reload` reads.
 
 To install it, run `:native.install` in DesertFox and paste the command it shows in a terminal. Then grant the `nativeMessaging` permission with the button on that page. See [host/README.md](host/README.md) for what the host can and cannot do, the config folder rule and the bridge setup.
 
@@ -215,7 +215,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site.
 - Change settings in the browser with `:set` or on the settings page.
-- Keep your keys, search engines and settings in TOML files, which needs the native host. DesertFox checks them and applies an edit with one key, with no restart.
+- Keep your keys, search engines and settings in TOML files. Edit them on the settings page or import a zip. With the native host, you can also keep them in `~/.config/desertfox/` and apply an edit with `config.reload`. DesertFox checks them and applies an edit with no restart.
 - Add your own commands as snippets (JavaScript files from your own config folder, or an import you accept).
 - Pick one of the built-in color themes, write your own, or restyle every surface with CSS.
 - Use the new tab page for a clock, links, recent tabs and bookmarks.
