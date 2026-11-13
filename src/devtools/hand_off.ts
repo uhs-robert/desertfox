@@ -29,7 +29,7 @@ export function run_page(deps: PageDeps): void {
     const port = deps.connect();
     port.postMessage({ type: "devtools_hello", tab_id: deps.tab_id });
     port.onMessage.addListener((message) => {
-      if ((message as { type?: string } | undefined)?.type === "devtools_pick") queue = queue.then(() => select_pick(deps.evaluate)).catch(() => {});
+      if ((message as { type?: string } | undefined)?.type === "devtools_pick") queue = queue.then(() => select_pick(deps.evaluate)).catch((error: unknown) => console.warn("desertfox: could not select the pick", error));
     });
     // The background restarting or reloading ends the port. The new background drains a waiting pick when this hello arrives.
     port.onDisconnect.addListener(() => deps.schedule(connect, RECONNECT_MS));
