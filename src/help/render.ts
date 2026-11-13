@@ -440,6 +440,64 @@ function section_heading(page: PageId, section: Section, level = 2): HTMLElement
 
 export const section_hash = (page: PageId, slug: string): string => `#section=${page}/${encodeURIComponent(slug)}`;
 
+// The section links of the current render with the id of the heading each one names, for the "you are here" mark.
+type SectionLink = { link: HTMLElement; heading_id: string };
+let section_links: SectionLink[] = [];
+
+// The link of the section the reader is in gets aria-current="location". That is the last heading at or above `line`, or the last heading of all once the page is scrolled to its end, where a short last section never reaches the line.
+// `top_of` gives a heading's distance from the viewport top, or undefined when it is not on the page or hidden.
+export function mark_current_section(entries: SectionLink[], top_of: (heading_id: string) => number | undefined, line: number, at_end: boolean): void {
+  const placed = entries.flatMap((entry) => {
+    const top = top_of(entry.heading_id);
+    return top === undefined ? [] : [{ entry, top }];
+  });
+  const above = placed.filter(({ top }) => top <= line);
+  const current = at_end && placed.length > 0 ? placed.reduce((a, b) => (b.top >= a.top ? b : a)) : above.reduce<(typeof placed)[number] | undefined>((a, b) => (a === undefined || b.top >= a.top ? b : a), undefined);
+  for (const entry of entries) {
+    if (entry === current?.entry) entry.link.setAttribute("aria-current", "location");
+    else entry.link.removeAttribute("aria-current");
+  }
+}
+
+const CURRENT_LINE_FRACTION = 0.3;
+let mark_queued = false;
+
+// One scroll listener for the whole page, throttled to one run per frame. It reads the links of the latest render, so a redraw needs no new listener.
+function queue_current_section(): void {
+  if (mark_queued || typeof requestAnimationFrame !== "function") return;
+  mark_queued = true;
+  requestAnimationFrame(() => {
+    mark_queued = false;
+    const top_of = (id: string) => {
+      const heading = document.getElementById(id);
+      return heading && heading.getClientRects().length > 0 ? heading.getBoundingClientRect().top : undefined;
+    };
+    const root = document.documentElement;
+    mark_current_section(section_links, top_of, window.innerHeight * CURRENT_LINE_FRACTION, window.scrollY + window.innerHeight >= root.scrollHeight - 2);
+    keep_current_link_visible();
+  });
+}
+
+// The sidebar scrolls on its own, so a long list can hide the current link. Only the sidebar moves, never the page.
+function keep_current_link_visible(): void {
+  const bar = document.querySelector<HTMLElement>(`#${SIDEBAR_ID}`);
+  const link = bar?.querySelector<HTMLElement>('.desertfox-help-sections a[aria-current="location"]');
+  if (!bar || !link || link.getClientRects().length === 0) return;
+  const bar_box = bar.getBoundingClientRect();
+  const link_box = link.getBoundingClientRect();
+  if (link_box.top < bar_box.top) bar.scrollTop += link_box.top - bar_box.top;
+  else if (link_box.bottom > bar_box.bottom) bar.scrollTop += link_box.bottom - bar_box.bottom;
+}
+
+let scroll_listener_added = false;
+function follow_scroll_for_current_section(): void {
+  if (!scroll_listener_added && typeof window !== "undefined" && window.addEventListener) {
+    scroll_listener_added = true;
+    window.addEventListener("scroll", queue_current_section, { passive: true });
+  }
+  queue_current_section();
+}
+
 function section_list(page: PageId, sections: Section[], expanded: boolean, keep_advanced = false): HTMLElement {
   const list = el("div", "desertfox-help-sections");
   list.id = `desertfox-help-sections-${page}`;
@@ -448,6 +506,7 @@ function section_list(page: PageId, sections: Section[], expanded: boolean, keep
     const link = el("a", undefined, title);
     const hash = section_hash(page, slug) + (keep_advanced ? ADVANCED_SUFFIX : "");
     link.setAttribute("href", hash);
+    section_links.push({ link, heading_id: section_anchor(page, slug) });
     // The same hash fires no hashchange, so a click would not scroll back from where the reader moved.
     link.addEventListener("click", () => {
       // A group the filter hides has no heading to scroll to, so a link to a group shows every setting.
@@ -582,6 +641,7 @@ export function render_help(root: HTMLElement, full_model: HelpModel, route: Rou
   const page = el("main", "desertfox-help-page", header, ...page_body(route, model, guide, advanced_total));
   // The sidebar scrolls on its own, so a fresh one starts at the top. Scroll is set after it is in the tree because a detached element ignores it.
   const old_scroll_top = root.querySelector(".desertfox-help-sidebar")?.scrollTop ?? 0;
+  section_links = [];
   const sidebar_node = sidebar(route.page, model, guide, route.advanced === true);
   sidebar_node.id = SIDEBAR_ID;
   const menu_toggle = el("button", "desertfox-help-menu-toggle", menu_icon());
@@ -595,4 +655,5 @@ export function render_help(root: HTMLElement, full_model: HelpModel, route: Rou
   wire_drawer(help, menu_toggle, sidebar_node, backdrop, heading);
   root.replaceChildren(help);
   sidebar_node.scrollTop = old_scroll_top;
+  follow_scroll_for_current_section();
 }

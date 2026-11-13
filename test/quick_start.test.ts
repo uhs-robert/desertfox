@@ -120,3 +120,10 @@ test("the Quick Start page opens on a first install only", async () => {
   }
   assert.deepEqual(opened, []);
 });
+
+test("quick start: a bound key is a keys inline and a command line or name is a code inline", () => {
+  const inlines = quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands).flatMap((block) => (block.kind === "paragraph" ? block.inlines : block.kind === "list" ? block.items.flat() : []));
+  assert.ok(inlines.some((inline) => inline.kind === "keys" && inline.text === "gg"));
+  assert.ok(inlines.some((inline) => inline.kind === "code" && inline.text === ":native.install"));
+  assert.ok(!inlines.some((inline) => inline.kind === "code" && inline.text === "gg"));
+});

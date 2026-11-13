@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { close_drawer_on_escape, close_drawer_on_window_blur, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
+import { close_drawer_on_escape, close_drawer_on_window_blur, mark_current_section, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
 import { parse_route, site_rules_help_url } from "../src/help/route.ts";
 import type { Route } from "../src/help/route.ts";
 import type { Block } from "../src/help/blocks.ts";
@@ -35,6 +35,7 @@ class FakeNode {
   }
   replaceChildren(...nodes: (FakeNode | string)[]) { this.children = []; this.append(...nodes); }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
+  removeAttribute(name: string) { delete this.attributes[name]; }
   addEventListener(name: string, listener: FakeListener) { this.listeners[name] = listener; }
   matches(selector: string): boolean {
     if (selector.startsWith(".")) return this.classList.contains(selector.slice(1));
@@ -504,4 +505,29 @@ test("a command card shows its keys in the head, one cap per key, and a dash whe
   const none = unbound!.find_all(by_class("desertfox-help-keys"))[0]!.children[0] as FakeNode;
   assert.equal(none.attributes["aria-label"], "no keys");
   assert.equal(bound!.attributes["data-accent"], "0");
+});
+
+test("a keys inline draws one cap per key and a code inline stays a code chip", () => {
+  (globalThis as { document?: unknown }).document = fake_document;
+  const root = new FakeNode("body");
+  fake_document.body = root;
+  reset_group_state();
+  const blocks: Block[] = [{ kind: "paragraph", inlines: [{ kind: "keys", text: "gg" }, { kind: "code", text: ":open" }] }];
+  render_help(root as never, { quick_start: blocks, groups: GROUPS, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," } } as never, { page: "quick-start" }, []);
+  assert.equal(root.find_all(by_class("desertfox-keycap")).map((cap) => cap.textContent).join(""), "gg");
+  assert.equal(root.find_all(by_class("desertfox-help-inline-code")).length, 1);
+});
+
+test("the section link of the last heading above the line is the current one, and the end of the page picks the last heading", () => {
+  const entries = ["a", "b", "c"].map((heading_id) => ({ link: new FakeNode("a") as unknown as HTMLElement, heading_id }));
+  const current = () => entries.filter(({ link }) => (link as unknown as FakeNode).attributes["aria-current"] === "location").map(({ heading_id }) => heading_id);
+  const mark = (tops: Record<string, number | undefined>, at_end = false) => mark_current_section(entries, (id) => tops[id], 100, at_end);
+  mark({ a: 300, b: 500, c: 900 });
+  assert.deepEqual(current(), [], "no heading reached the line yet");
+  mark({ a: -400, b: 60, c: 500 });
+  assert.deepEqual(current(), ["b"]);
+  mark({ a: -900, b: -300, c: 400 }, true);
+  assert.deepEqual(current(), ["c"], "scrolled to the end");
+  mark({ a: -900, b: -300, c: undefined });
+  assert.deepEqual(current(), ["b"], "a hidden heading is skipped");
 });
