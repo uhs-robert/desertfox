@@ -5,7 +5,9 @@ import { load_layers } from "../../src/background/edit_layers.ts";
 import type { KeymapEdits } from "../../src/background/edit_layers.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf } from "../../src/shared/prefix_tree.ts";
-import { FILES_SOURCE_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { answer_host_start_choice } from "../../src/background/host_start.ts";
+import type { HostStartPending } from "../../src/shared/messages.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
@@ -20,7 +22,7 @@ const bound = (local: Record<string, unknown>, mode: "normal" | "browser", keys:
 
 const set_keymap = (startup: Startup, edits: KeymapEdits) => startup.change_layers("keymap", () => edits);
 
-async function started(tag: string, files: Files = {}) {
+async function started(tag: string, files: Files = { "settings.toml": "" }) {
   const host = { files };
   const browser = install_fake_browser(host);
   const startup = await fresh_startup(tag);
@@ -130,4 +132,33 @@ test("a browser edit moves the Firefox shortcuts, a normal edit leaves them, and
   const last_x = updates.findLastIndex((update) => update.shortcut === "Alt+X");
   const last_y = updates.findLastIndex((update) => update.shortcut === "Alt+Y");
   assert.ok(last_y >= 0 && last_y < last_x, JSON.stringify(updates));
+});
+
+test("a key edit stays on top when a start applies the folder, and when the page answers to use the folder", async () => {
+  const host = { files: { "keymap.toml": '[normal]\nJ = "tab.prev"\n' } as Files };
+  const { local } = install_fake_browser(host);
+  const first = await fresh_startup("host_start_first");
+  await first.get_config();
+  await first.reload_config();
+  await set_keymap(first, { normal: { J: "tab.close" } });
+
+  // The browser copy holds no browser change, so the start applies the folder at once.
+  host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\n' };
+  const silent = await fresh_startup("host_start_silent");
+  await silent.reload_config_at_start();
+  assert.equal(bound(local, "normal", "K"), "tab.prev");
+  assert.equal(bound(local, "normal", "J"), "tab.close");
+
+  // An editor save makes the start ask, and the answer applies the folder.
+  const base = (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["keymap.toml"]!;
+  await silent.save_config_file("keymap.toml", '[normal]\nJ = "tab.next"\n', base);
+  host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\nK = "tab.goto"\n' };
+  const asked = await fresh_startup("host_start_asked");
+  await asked.reload_config_at_start();
+  const pending = local[HOST_START_PENDING_STORAGE_KEY] as HostStartPending;
+  assert.ok(pending, "a question is pending");
+  const answered = await answer_host_start_choice({ type: "host_start_choice", choice: "use_folder", host_digest: pending.host_digest, browser_digest: pending.browser_digest }, asked.choose_host_start);
+  assert.equal(answered.ok, true, answered.message);
+  assert.equal(bound(local, "normal", "K"), "tab.goto");
+  assert.equal(bound(local, "normal", "J"), "tab.close");
 });
