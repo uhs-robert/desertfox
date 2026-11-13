@@ -7,8 +7,7 @@ import { refused_as } from "../src/shared/swallow.ts";
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
   // 19.5 KB (admission clause A, it runs before the first key): the layout fallback reads a letter of another script by its physical key.
-  // 20 KB (clause A, it decides what happens to a key): the top frame's watch on a focused frame that hides, and a child frame's mode report on blur, which keep the keys and the FRAME badge with the frame that holds the focus (#619).
-  "content.js": 20 * 1024,
+  "content.js": 19.5 * 1024,
   // 48.5 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB.
   "hints.js": 48.5 * 1024,
   "caret.js": 32 * 1024,
