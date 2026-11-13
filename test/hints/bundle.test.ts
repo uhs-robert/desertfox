@@ -70,7 +70,7 @@ async function with_session(opened_from: "normal" | "media") {
       if (left === "hint") sinks.get("hint")!.exit(state.get_mode_());
     },
   };
-  const page: Record<string, unknown> = { desertfox_host: host, navigation, location: { href: "https://app.test/a" }, document: { hidden: false, querySelectorAll: () => [] }, performance: { now: () => 1 }, addEventListener: () => {}, setTimeout, clearTimeout };
+  const page: Record<string, unknown> = { desertfox_host: host, navigation, location: { href: "https://app.test/a" }, document: { hidden: false, querySelectorAll: () => [], compatMode: "CSS1Compat", documentElement: { clientWidth: 100, clientHeight: 50 }, body: null, defaultView: { innerWidth: 100, innerHeight: 50 } }, performance: { now: () => 1 }, addEventListener: () => {}, setTimeout, clearTimeout };
   page.top = page;
   const globals = globalThis as Record<string, unknown>;
   globals.window = page;

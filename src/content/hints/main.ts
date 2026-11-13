@@ -107,7 +107,7 @@ function windows_of(found: Found[]): Window[] {
 function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector), weak_test_for(filter)), site_selectors);
+  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector), weak_test_for(filter), true), site_selectors);
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
@@ -120,8 +120,7 @@ async function shown_of(current: Pick<Session, "filter" | "action" | "lower_text
   return current.lower_text_ === undefined ? visible : keep_text_matches(visible, current.lower_text_);
 }
 
-async function keep_visible_ones(all_candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
-  const candidates = drop_off_screen(all_candidates);
+async function keep_visible_ones(candidates: Found[], filter: HintFilter, skips_cover_test = false): Promise<Found[]> {
   const own_rects = (element: Element) => Array.from(element.getClientRects());
   const children = (element: Element) => Array.from(element.children);
   const owners = new Map(candidates.map((found) => [found.element, box_owners(found.element, own_rects, children)]));
@@ -142,7 +141,7 @@ const yank_deps = (register: string | undefined): YankDeps => ({
   find: all_links,
   strip_patterns: () => read_strip_patterns(window.location.href),
   keep_present_: keep_present_found,
-  keep_in_view_: (found) => keep_visible_ones(found, "links"),
+  keep_in_view_: (found) => keep_visible_ones(drop_off_screen(found), "links"),
   copy: (text) => copy_yank(navigator.clipboard, text, register),
   show_message_: (message) => create_view().show_message_(message),
 });

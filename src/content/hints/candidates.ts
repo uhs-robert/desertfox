@@ -106,17 +106,20 @@ const is_frame = (element: Element) => element.localName === "iframe" || element
 // Matches the strong selector, or else the weak test, and records which one did.
 export type WeakTest = (element: Element) => boolean;
 
-// Walks the whole tree once, so shadow hosts and same-origin frames are found where they stand.
-export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, frames: Element[] = [], found: Found[] = []): Found[] {
+// `only_in_view` reads each element's rect first and passes over a box wholly outside its own window, with its shadow root and frame. Its children are still visited one by one, so a positioned child that reaches into view is found. Only what the view can show reaches the weak test and the later passes.
+export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, only_in_view = false, frames: Element[] = [], found: Found[] = []): Found[] {
   if (query.selector === "") return found;
+  const doc = (root as Node).ownerDocument ?? (root as Document);
+  const { width, height } = only_in_view ? viewport_size(doc, doc.defaultView ?? window) : { width: 0, height: 0 };
   for (const element of Array.from(root.querySelectorAll("*"))) {
+    if (only_in_view && is_rect_off_screen(element.getBoundingClientRect(), width, height)) continue;
     if (element.matches(query.selector) && (query.test?.(element) ?? true)) found.push({ element, frames });
     else if (is_weak?.(element)) found.push({ element, frames, weak: true });
     const shadow = shadow_root_of(element);
-    if (shadow) collect(shadow, query, is_weak, frames, found);
+    if (shadow) collect(shadow, query, is_weak, only_in_view, frames, found);
     if (is_frame(element) && frames.length < MAX_FRAME_DEPTH) {
       const inner = document_of_frame(element);
-      if (inner) collect(inner, query, is_weak, [...frames, element], found);
+      if (inner) collect(inner, query, is_weak, only_in_view, [...frames, element], found);
     }
   }
   return found;
@@ -139,7 +142,7 @@ export function with_site_selectors(root: ParentNode, filter: HintFilter, found:
 }
 
 // Page reads behind the weak test, so tests run on fake elements.
-export type ClickStyles = { cursor_of_: (element: Element) => string; parent_of: (element: Element) => Element | null; is_off_screen_: (element: Element) => boolean };
+export type ClickStyles = { cursor_of_: (element: Element) => string; parent_of: (element: Element) => Element | null };
 
 const NEVER_WEAK = new Set(["html", "body", "head", "script", "style", "option"]);
 
@@ -154,8 +157,8 @@ export function has_click_sign(element: Element, styles: ClickStyles): boolean {
   return parent === null || styles.cursor_of_(parent) !== "pointer";
 }
 
-// The off-screen test comes first because a rect is far cheaper than the two style reads, and `keep_visible` drops an off-screen weak candidate anyway before `drop_redundant_weak` runs, so no ancestor check loses a candidate.
-export const make_weak_test = (styles: ClickStyles): WeakTest => (element) => element.matches(MENU_ITEM) || (!styles.is_off_screen_(element) && has_click_sign(element, styles));
+// An off-screen element never gets here: `collect` drops it before this test.
+export const make_weak_test = (styles: ClickStyles): WeakTest => (element) => element.matches(MENU_ITEM) || has_click_sign(element, styles);
 
 type Box = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 
@@ -172,7 +175,6 @@ export const is_element_off_screen = (element: Element): boolean => {
 const dom_styles: ClickStyles = {
   cursor_of_: (element) => (element.ownerDocument.defaultView ?? window).getComputedStyle(element).cursor,
   parent_of: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
-  is_off_screen_: is_element_off_screen,
 };
 
 // Only the filters that mean "anything clickable" look for weak candidates. `links`, `buttons`, `inputs` and `custom` are exact.
@@ -199,7 +201,7 @@ export function drop_redundant_weak(found: Found[]): Found[] {
   return found.filter((item) => !dropped.has(item.element));
 }
 
-// No rect read follows a write, so the layout flushes once. A box outside its window cannot intersect it, so dropping it here spares `keep_visible` the observer hop and the style reads.
+// No rect read follows a write, so the layout flushes once. A box outside its window cannot intersect it, so dropping it spares `keep_visible` the observer hop and the style reads. `collect` does this during the walk. The viewport scope of `copy.links` takes every link and calls this.
 export const drop_off_screen = (found: Found[]): Found[] => found.filter((item) => !is_element_off_screen(item.element));
 
 // Visibility comes first: a wrapper must not give way to a hidden or off-screen candidate that gets no hint.
