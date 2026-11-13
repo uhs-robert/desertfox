@@ -42,4 +42,51 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, take_
     await in_background(`(() => { const other = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.hash === "#/quick-start"); return other.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_date", action: "reset" }).then((answer) => answer.ok); })()`);
     await close_tabs();
   });
+
+  // The page is a tab of its own, so the hash changes under the first finder.
+  const any_view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html"))`;
+  const in_any = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${any_view}; ${code} })()`);
+  const reached = (slug) => in_any(`
+    const heading = view.document.getElementById("settings-${slug}");
+    if (!heading) return "no heading";
+    const top = Math.round(heading.getBoundingClientRect().top);
+    return top >= 0 && top < view.innerHeight / 2 && view.document.activeElement === heading ? "reached" : "heading at " + top + " of " + view.innerHeight;
+  `);
+  const section_slugs = () => in_any(`return [...view.document.querySelectorAll(".desertfox-help-sections:not([hidden]) a")].map((link) => decodeURIComponent(link.getAttribute("href").split("/")[1]));`);
+  const settle = () => in_any(`return new Promise((resolve) => view.setTimeout(resolve, 1200));`);
+
+  await run_case("settings page: every sidebar section link reaches its heading, from a click and from a fresh load", async () => {
+    await close_tabs();
+    await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
+    await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
+    await settle();
+    const slugs = await section_slugs();
+    expect(slugs.length > 3 && slugs[0] === "keys", `the sidebar listed ${JSON.stringify(slugs)}`);
+    const failures = [];
+    for (const slug of slugs) {
+      await in_any(`view.scrollTo(0, 0); view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/${slug}']").click();`);
+      await settle();
+      const state = await reached(slug);
+      if (state !== "reached") failures.push(`${slug}: ${state}`);
+    }
+    expect(failures.length === 0, `links that missed their heading: ${failures.join("; ")}`);
+
+    // The same link again, after the reader scrolled away, fires no hashchange.
+    await in_any(`view.scrollTo(0, 0);`);
+    await in_any(`view.document.querySelector(".desertfox-help-sections:not([hidden]) a[href$='/${slugs.at(-1)}']").click();`);
+    await settle();
+    expect((await reached(slugs.at(-1))) === "reached", `the same-hash click ended at ${await reached(slugs.at(-1))}`);
+
+    const fresh_failures = [];
+    for (const slug of slugs) {
+      await close_tabs();
+      await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#section=settings/${slug}") }).then(() => true)`);
+      await poll_until("the settings page to list the settings", () => in_any(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
+      await settle();
+      const state = await reached(slug);
+      if (state !== "reached") fresh_failures.push(`${slug}: ${state}`);
+    }
+    expect(fresh_failures.length === 0, `fresh loads that missed their heading: ${fresh_failures.join("; ")}`);
+    await close_tabs();
+  });
 }
