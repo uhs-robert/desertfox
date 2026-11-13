@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 // Repro cases for two caret mode bugs: j/k getting stuck, and the caret not starting at a find match.
 export const areas = ["caret", "find"];
 
-export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count }) {
+export async function run_cases({ run_case, expect, open_page, press_keys, poll_until, barrier, wait_cmdline, events, wait_event, rdp, extension_id, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, expect_absent, hint_label_count, sleep }) {
   const last_selection_text = (page_id) => events.filter((event) => event.type === "selection" && event.page_id === page_id && event.text !== "").at(-1)?.text;
 
   async function press_and_wait_for_badge(page_id, keys, label) {
@@ -484,6 +484,8 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     await press_keys("@", "b");
     await wait_event(mark, badge_is(page_id, "CARET"), "the replay to enter caret mode");
     await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, "the refusal toast");
+    // A failed replay drops the keys typed while it ran, the barrier key too, so the check waits for the replay to end.
+    await sleep(500);
     await expect_absent(mark, page_id, (event) => event.type === "tree_read" && event.page_id === "search_result", "a search opened from caret mode", { report_delay_ms: 500 });
     await escape_to_normal(page_id);
   });
