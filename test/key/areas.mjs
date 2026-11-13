@@ -47,6 +47,8 @@ export const area_rules = [
     globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,history_cache,bookmark_title}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick}.ts"],
     areas: ["cmdline"],
   },
+  // Before the general help rule: `areas_of_file` takes the first match.
+  { globs: ["src/background/{alias_message,quickmark_message}.ts", "src/help/pairs_*.ts"], areas: ["help", "config", "keys", "newtab"] },
   {
     globs: [
       "src/help/**",
@@ -81,7 +83,6 @@ export const area_rules = [
   },
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{engine_layer,engine_message}.ts", "src/shared/engine_fields.ts"], areas: ["config", "engines"] },
-  { globs: ["src/background/{alias_message,quickmark_message}.ts", "src/help/pairs_*.ts"], areas: ["config", "keys", "newtab"] },
   { globs: ["src/background/{default_keymap,default_site_rows,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },

@@ -2,7 +2,7 @@
 
 import type { MergedConfig } from "../shared/config.ts";
 import type { AliasRow, ChangeAliases, ChangeAliasesAnswer, ListAliasesAnswer } from "../shared/messages.ts";
-import { ConfigRefusal } from "./config_reload.ts";
+import { ConfigRefusal, failure } from "./config_reload.ts";
 import type { AliasEdits } from "./edit_layers.ts";
 import type { DroppedPiece } from "./engine_layer.ts";
 
@@ -14,7 +14,6 @@ export type AliasMessageDeps = {
   change_layers: (kind: "aliases", decide: (current: AliasEdits) => AliasEdits | undefined) => Promise<void>;
 };
 
-const failure = (error: unknown): { ok: false; message: string; problems?: string[] } => ({ ok: false, message: error instanceof Error ? error.message : String(error), ...(error instanceof Error && "problems" in error && Array.isArray(error.problems) && { problems: error.problems as string[] }) });
 
 export function rows_of(aliases: AliasEdits, dropped: DroppedPiece[]): AliasRow[] {
   return Object.entries(aliases).map(([name, target]) => {
