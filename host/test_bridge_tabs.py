@@ -7,7 +7,7 @@ import time
 import unittest
 
 from host_under_test import load_host
-from test_bridge import LIVENESS_S, BridgeTestCase, Client
+from test_bridge import BridgeTestCase, Client, liveness_s, scaled_s
 
 JPEG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0 fake image").decode()
 MAIL = {"tab_id": 10, "window_id": 1, "title": "Mail", "url": "https://mail.example/", "active": True, "audible": False, "discarded": False, "last_accessed": 5, "pinned": False, "hidden": False, "fav_icon_url": ""}
@@ -43,9 +43,10 @@ class TabsTest(BridgeTestCase):
 
     def test_with_sharing_off_the_extension_refusal_comes_back_unchanged(self):
         host = self.start()
-        for request in ({"verb": "tabs"}, {"verb": "activate", "tab_id": 10}, {"verb": "close", "tab_id": 10}, {"verb": "clear_preface", "window_id": 1}, {"verb": "run", "command": "tab.next", "tab_id": 10}, {"verb": "capture"}):
+        requests = ({"verb": "tabs"}, {"verb": "activate", "tab_id": 10}, {"verb": "close", "tab_id": 10}, {"verb": "clear_preface", "window_id": 1}, {"verb": "run", "command": "tab.next", "tab_id": 10}, {"verb": "capture"})
+        for index, request in enumerate(requests):
             client = Client(self.socket_path, request)
-            asked = host.read_request()
+            asked = host.read_request(what="%s (request %d of %d)" % (request["verb"], index + 1, len(requests)))
             host.send({"verb": "reply", "request_id": asked["request_id"], **OFF})
             self.assertEqual(client.result(), OFF, request["verb"])
 
@@ -129,7 +130,7 @@ class ActivateAndCloseTest(BridgeTestCase):
         host.close_stdin()
         for client in clients:
             self.assertEqual(client.result(), {"ok": False, "message": "the extension disconnected"})
-        self.assertLess(time.monotonic() - started, LIVENESS_S)
+        self.assertLess(time.monotonic() - started, liveness_s())
         self.assertEqual(host.wait(), 0)
 
     def test_run_with_a_tab_id_forwards_it(self):
@@ -400,7 +401,7 @@ class FaviconTest(BridgeTestCase):
         self.assertEqual(first["verb"], "favicon")
         reply = client.result()
         # The count proves the budget stopped the fills; the time bound only catches a hang, so it has room for a loaded machine.
-        self.assertLess(time.monotonic() - started, 13)
+        self.assertLess(time.monotonic() - started, scaled_s(13))
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)
         self.assertEqual([tab["fav_icon_path"] for tab in reply["tabs"]], [""] * 5)
