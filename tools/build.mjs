@@ -21,8 +21,8 @@ const MAX_BYTES = {
   "media.js": 5.5 * 1024,
   // 5 KB: the YouTube driver gained the captions toggle and its state read, and the rule answers a frame without a video by waiting for a media event and looking again for 10 s, inside open shadow roots too. The bundle loads on first use.
   "quality.js": 5 * 1024,
-  // The probe is the only script the media_quality rule injects into every frame, so it stays small. The names of the plain HTML elements, which the custom-element search for a video in shadow roots leaves out, are most of it.
-  "quality_probe.js": 2 * 1024,
+  // 2.5 KB: the probe queues a report asked for while another is out. It is the only script the media_quality rule injects into every frame, so it stays small. The names of the plain HTML elements, which the custom-element search for a video in shadow roots leaves out, are most of it.
+  "quality_probe.js": 2.5 * 1024,
   "site_actions.js": 4 * 1024,
   // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking.
   "cmdline_page.js": 57 * 1024,
