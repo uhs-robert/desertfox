@@ -1,11 +1,14 @@
 #!/bin/sh
 # Installs the DesertFox native-messaging host for Firefox on Linux.
 #
-#   install.sh <version|main> [--channel main]
+#   install.sh <version> --sha256 desertfox-host=<hex> --sha256 desertfox-bridge=<hex> --sha256 desertfox=<hex>
+#   install.sh main
 #
-# The extension passes its own version in the one-line command it shows. A version fetches the host from the GitHub
-# release of that version and checks its SHA-256. `main` fetches the host from the main branch with no checksum,
-# for beta and development builds. `--channel main` overrides a version.
+# The extension shows the one-line command that runs this script. For a release build it passes its own version and
+# the SHA-256 of each script from its signed build (host_sha256.json). A version fetches the scripts from the GitHub
+# release of that version and refuses any that does not match its given hash, or that has no hash. `main` fetches the
+# scripts from the main branch with no checksum, for development builds only. `--channel main` overrides a version and
+# ignores the hashes.
 # Installs two hosts, the config host and the bridge host, and the `desertfox` command line for the bridge. Writes only
 # $XDG_DATA_HOME/desertfox/desertfox-host, desertfox-bridge and desertfox (default ~/.local/share/desertfox),
 # ~/.mozilla/native-messaging-hosts/desertfox_host.json and desertfox_bridge.json, the symlink ~/.local/bin/desertfox,
@@ -25,12 +28,20 @@ fail() {
 main() {
     channel_arg=""
     force_main=0
+    host_sha256=""
+    bridge_sha256=""
+    cli_sha256=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --channel)
                 [ $# -ge 2 ] || fail "--channel needs a value (main)"
                 [ "$2" = "main" ] || fail "unknown channel '$2' (only main)"
                 force_main=1
+                shift 2
+                ;;
+            --sha256)
+                [ $# -ge 2 ] || fail "--sha256 needs a value (<script>=<hex>)"
+                take_hash "$2"
                 shift 2
                 ;;
             -*) fail "unknown option '$1'" ;;
@@ -41,7 +52,7 @@ main() {
                 ;;
         esac
     done
-    [ -n "$channel_arg" ] || fail "usage: install.sh <version|main> [--channel main]"
+    [ -n "$channel_arg" ] || fail "usage: install.sh <version> --sha256 <script>=<hex> (one per script), or install.sh main"
     [ "$force_main" -eq 1 ] && channel_arg="main"
     case "$channel_arg" in
         main) ;;
@@ -49,6 +60,13 @@ main() {
         [0-9]*.[0-9]*.[0-9]*) ;;
         *) fail "'$channel_arg' is not a version or main" ;;
     esac
+    if [ "$channel_arg" = "main" ]; then
+        echo "WARNING: installing the host from the main branch with no checksum. Use this for development builds only." >&2
+    else
+        for script in desertfox-host desertfox-bridge desertfox; do
+            [ -n "$(expected_hash "$script")" ] || fail "no hash given for $script. Pass --sha256 $script=<hex>, as the command on the DesertFox page does. Nothing was installed."
+        done
+    fi
 
     command -v python3 >/dev/null 2>&1 || fail "python3 3.9 or newer is required, and none was found. Install it, then run this again."
     python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' ||
@@ -79,7 +97,7 @@ main() {
     if [ "$channel_arg" = "main" ]; then
         echo "Fetched the scripts from the main branch. No checksum applies."
     else
-        echo "Checksums verified for version $channel_arg."
+        echo "Checksums verified for version $channel_arg against the hashes the extension gave."
     fi
 
     mkdir -p "$data_dir" "$manifest_dir"
@@ -99,14 +117,40 @@ take_update_lock() {
     flock -n 9 || fail "update running: a DesertFox host is updating now. Run this again in a minute."
 }
 
-# Downloads one host script into $work_dir. A release also fetches its checksum and refuses a mismatch.
+# Records one `--sha256 <script>=<hex>`. A hash for an unknown script, a second hash for one script or a value that is
+# not 64 hex digits is refused, so a typo never leaves a script unchecked.
+take_hash() {
+    hash_name="${1%%=*}"
+    hash_value="${1#*=}"
+    [ "$hash_name" != "$1" ] || fail "--sha256 takes <script>=<hex>, got '$1'"
+    case "$hash_value" in
+        *[!0-9a-f]*) fail "the hash for $hash_name must be 64 lowercase hex digits" ;;
+    esac
+    [ "${#hash_value}" -eq 64 ] || fail "the hash for $hash_name must be 64 lowercase hex digits"
+    [ -z "$(expected_hash "$hash_name")" ] || fail "more than one hash given for $hash_name"
+    case "$hash_name" in
+        desertfox-host) host_sha256="$hash_value" ;;
+        desertfox-bridge) bridge_sha256="$hash_value" ;;
+        desertfox) cli_sha256="$hash_value" ;;
+        *) fail "unknown script '$hash_name' in --sha256 (desertfox-host, desertfox-bridge or desertfox)" ;;
+    esac
+}
+
+expected_hash() {
+    case "$1" in
+        desertfox-host) echo "$host_sha256" ;;
+        desertfox-bridge) echo "$bridge_sha256" ;;
+        desertfox) echo "$cli_sha256" ;;
+    esac
+}
+
+# Downloads one host script into $work_dir. A release refuses a script whose SHA-256 differs from the hash on the
+# command line. The release's own .sha256 files are not read: they come from the same place as the scripts.
 fetch_host() {
     script="$1"
     curl -fsSL "$base_url/$script" -o "$work_dir/$script" || fail "could not download the host from $base_url/$script"
     if [ "$channel_arg" != "main" ]; then
-        curl -fsSL "$base_url/$script.sha256" -o "$work_dir/$script.sha256" || fail "could not download the checksum from $base_url/$script.sha256"
-        expected=$(python3 -I -c 'import sys; print(open(sys.argv[1]).read().split()[0].lower())' "$work_dir/$script.sha256" 2>/dev/null) ||
-            fail "the checksum file is empty or unreadable. Nothing was installed."
+        expected=$(expected_hash "$script")
         actual=$(python3 -I -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$work_dir/$script")
         if [ "$expected" != "$actual" ]; then
             fail "checksum mismatch for $script of version $channel_arg (expected $expected, got $actual). Nothing was installed."
