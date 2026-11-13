@@ -21,6 +21,10 @@ oasis-themes oasis_nvim_dir: install_deps
     npm run --silent themes:write
     npm run --silent completion:write
 
+# Benchmark DesertFox against the store builds of rival extensions in headless Firefox, and write tables to $MEASURE_DIR/rivals/out. Needs firefox, unzip and network. See tools/measure/README.md.
+measure-rivals: build
+    node tools/measure/rivals/rivals.mjs
+
 # Typecheck and bundle the extension into dist/.
 build: install_deps
     npm run --silent build
