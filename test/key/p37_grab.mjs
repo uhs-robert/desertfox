@@ -385,6 +385,16 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     expect((await attr_of("car", "index")) === at, "l flung after Escape");
   });
 
+  await run_case(";w then two fast l presses move two slides, one fling after the other", async () => {
+    await open_page("drag", "swipe_queue", { new_tab: true });
+    await press_keys(";w");
+    await pick("#car");
+    await press_keys("l", "l");
+    await poll_until("slide 2", async () => (await attr_of("car", "index")) === "2", { timeout_ms: 5000 });
+    expect((await attr_of("car", "downs")) === "2" && (await attr_of("car", "ups")) === "2", "the two flings did not press and release twice");
+    await press_keys("-k", "Escape");
+  });
+
   await run_case(";w on a page that ignores untrusted events moves nothing and leaves no raw press", async () => {
     await open_page("drag", "swipe_strict", { new_tab: true });
     await press_keys(";w");

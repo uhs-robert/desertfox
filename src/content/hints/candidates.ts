@@ -69,7 +69,7 @@ export const is_every_target = (element: Element): boolean => {
   return box.width > 0 && box.height > 0;
 };
 
-// What a swipe moves, besides what a drag moves: a carousel container by class. A scroll-snap box or one that sets `touch-action: pan-x` or `pan-y` (a carousel that leaves the other axis to the browser) is read with the style. `manipulation` is left out, because resets set it on every element.
+// What a swipe moves, besides what a drag moves: a carousel container by class. A scroll-snap box or one that sets `touch-action: pan-x` or `pan-y`, not both (a carousel that leaves the other axis to the browser) is read with the style. `manipulation` is left out, because resets set it on every element.
 const SWIPEABLE = ".swiper, .splide, .embla, .glide, .slick-list, .flickity-viewport";
 
 // What a drag moves. A plain link, image or button is out unless it sets draggable itself. The selector holds the explicit signs, the test adds the cursor a page sets on a widget it drags.
@@ -94,7 +94,7 @@ export const is_draggable = (element: Element, swipe = false): boolean => {
   if (element.matches(swipe ? `${DRAGGABLE}, ${SWIPEABLE}` : DRAGGABLE)) return true;
   const style_of = (target: Element) => window_of(target).getComputedStyle(target);
   const style = style_of(element);
-  if (style.touchAction === "none" || (swipe && (style.scrollSnapType !== "none" || style.touchAction.startsWith("pan")))) return true;
+  if (style.touchAction === "none" || (swipe && (style.scrollSnapType !== "none" || style.touchAction.includes("pan-x") !== style.touchAction.includes("pan-y")))) return true;
   if (!DRAG_CURSORS.has(style.cursor)) return false;
   const parent = element.parentElement;
   return parent === null || style_of(parent).cursor !== style.cursor;

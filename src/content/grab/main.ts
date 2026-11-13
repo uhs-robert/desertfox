@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { Outcome } from "../../shared/messages.ts";
-import { abort, center_of, drive, FLING_PACE, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
+import { abort, center_of, drive, FLING_STEPS, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 
 type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
@@ -16,14 +16,13 @@ const NOTHING_HELD = refused("Nothing is grabbed");
 // The page's reaction cannot be read, so the words say what ran and nothing about what it did.
 const DROPPED_TOAST = "Grab dropped";
 const KEYS_TOAST = "Grab: h j k l move, [ ] step, Enter drops, Escape cancels";
-const SWIPE_TOAST = "Swipe: h j k l";
 
 function register(host: BundleHostApi): void {
   // The element held in grab mode.
   let held: Held | undefined;
   // The first pick of `hint --grab`, until its target is picked or the second hint is left.
   let source: Element | undefined;
-  // The drag of a `hint --grab` in flight, or the fling of a swipe.
+  // The drag of a `hint --grab` in flight, or the latest fling of a swipe, which `abort` ignores once it has ended.
   let driving: Held | undefined;
   // The element a swipe mode flings. Swipe shares grab mode with the grab keys, so this is what tells `h j k l` to fling.
   let swiping: Element | undefined;
@@ -32,6 +31,7 @@ function register(host: BundleHostApi): void {
   function end_all(): void {
     const stopping = [held, driving];
     held = driving = source = swiping = undefined;
+    queue = { waiting: 0 };
     for (const drag of stopping) if (drag) abort(drag);
   }
 
@@ -86,22 +86,31 @@ function register(host: BundleHostApi): void {
     if (args.mode === "grab_swipe") {
       swiping = element;
       host.set_mode_("grab");
-      host.show_toast_(SWIPE_TOAST);
+      host.show_toast_("Swipe: h j k l");
       return ran;
     }
     source = element;
     return pick_target();
   });
 
-  // A second fling that arrives mid-fling ends the first with its release, so two never hold a button down.
-  async function swipe(target: Element, direction: Direction): Promise<Outcome> {
-    if (driving) abort(driving);
-    if (snap_scroll(target, direction)) return ran;
-    const { held: flung, to } = start_fling(target, direction);
-    driving = flung;
-    await drive(flung, to, FLING_PACE);
-    if (driving === flung) driving = undefined;
-    return ran;
+  // The flings of fast keys run one after another, so each finishes before the next presses. `end_all` swaps in a new queue, and a fling that waits in the old one sees that and never starts. A key past the cap is dropped, so a held key builds no backlog.
+  const MAX_WAITING_FLINGS = 4;
+  let queue = { waiting: 0 };
+  let last_fling: Promise<Outcome> = Promise.resolve(ran);
+  function swipe(target: Element, direction: Direction): Outcome | Promise<Outcome> {
+    const mine = queue;
+    if (mine.waiting >= MAX_WAITING_FLINGS) return ran;
+    mine.waiting++;
+    const turn = async (): Promise<Outcome> => {
+      mine.waiting--;
+      if (queue !== mine || snap_scroll(target, direction)) return ran;
+      const { held: flung, to, pause_ms } = start_fling(target, direction);
+      driving = flung;
+      await drive(flung, to, FLING_STEPS, pause_ms);
+      return ran;
+    };
+    // A fling that threw must not leave the queue rejected for every later one.
+    return (last_fling = last_fling.then(turn, turn));
   }
 
   host.register_handler_("grab.move", (args): Outcome | Promise<Outcome> => {

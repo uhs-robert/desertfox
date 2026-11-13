@@ -491,6 +491,12 @@ test("the swipeable filter keeps carousel containers, scroll-snap boxes and what
   touch.set(pan, "pan-y pinch-zoom");
   assert.equal(is_swipeable(pan), true);
   assert.equal(is_draggable(pan), false);
+  const both = fake("div", "none");
+  touch.set(both, "pan-x pan-y");
+  assert.equal(is_swipeable(both), false);
+  const sideways = fake("div", "none");
+  touch.set(sideways, "pan-x pinch-zoom");
+  assert.equal(is_swipeable(sideways), true);
   const manipulation = fake("div", "none");
   touch.set(manipulation, "manipulation");
   assert.equal(is_swipeable(manipulation), false);

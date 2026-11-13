@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abort, drive, FLING_PACE, move_to, nudge, press, press_point, release, route_of, scale_step, snap_scroll, start_fling } from "../../src/content/grab/drag.ts";
+import { abort, drive, FLING_STEPS, move_to, nudge, press, press_point, release, route_of, scale_step, snap_scroll, start_fling } from "../../src/content/grab/drag.ts";
 
 // Node has no DOM events. The fakes keep the type, the init and the data transfer.
 class FakeEvent {
@@ -281,9 +281,9 @@ test("the step keys halve and double the move within limits, and leave a range i
 
 test("a fling on a link or picture forces the pointer route and sends no dragstart", async () => {
   const slide = element({ localName: "a" });
-  const { held, to } = start_fling(as_element(slide), "right");
+  const { held, to, pause_ms } = start_fling(as_element(slide), "right");
   assert.equal(held.route, "pointer");
-  await drive(held, to, FLING_PACE);
+  await drive(held, to, FLING_STEPS, pause_ms);
   assert.equal(slide.log.includes("dragstart"), false);
   assert.deepEqual([slide.log[0], slide.log.at(-1)], ["pointerdown", "mouseup"]);
 });
@@ -313,16 +313,16 @@ test("the press goes to the element under the point when the picked box holds it
 
 test("a fling is six moves and one release", async () => {
   const slide = element();
-  const { held, to } = start_fling(as_element(slide), "right");
-  await drive(held, to, FLING_PACE);
+  const { held, to, pause_ms } = start_fling(as_element(slide), "right");
+  await drive(held, to, FLING_STEPS, pause_ms);
   assert.equal(slide.log.filter((type) => type === "pointermove").length, 6);
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
 });
 
 test("an abort in the middle of a fling releases once and the fling sends nothing more", async () => {
   const slide = element();
-  const { held, to } = start_fling(as_element(slide), "left");
-  const flinging = drive(held, to, FLING_PACE);
+  const { held, to, pause_ms } = start_fling(as_element(slide), "left");
+  const flinging = drive(held, to, FLING_STEPS, pause_ms);
   abort(held);
   await flinging;
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 1);
@@ -332,10 +332,10 @@ test("an abort in the middle of a fling releases once and the fling sends nothin
 test("a second fling after an abort presses again and never leaves the first pressed", async () => {
   const slide = element();
   const first = start_fling(as_element(slide), "right");
-  const first_flight = drive(first.held, first.to, FLING_PACE);
+  const first_flight = drive(first.held, first.to, FLING_STEPS, first.pause_ms);
   abort(first.held);
   const second = start_fling(as_element(slide), "right");
-  await Promise.all([first_flight, drive(second.held, second.to, FLING_PACE)]);
+  await Promise.all([first_flight, drive(second.held, second.to, FLING_STEPS, second.pause_ms)]);
   const downs = slide.log.filter((type) => type === "pointerdown").length;
   assert.equal(downs, 2);
   assert.equal(slide.log.filter((type) => type === "pointerup").length, 2);
@@ -356,4 +356,16 @@ test("a scroll-snap box scrolls by one view and gets no pointer events, and a bo
   } finally {
     delete (globalThis as Record<string, unknown>).getComputedStyle;
   }
+});
+
+test("the pause grows with the stroke, so the speed stays near 2 px per ms on any width", () => {
+  const speed_on = (width: number) => {
+    const slide = element({ getBoundingClientRect: () => ({ left: 0, top: 0, width, height: 20 }) });
+    const { held, to, pause_ms } = start_fling(as_element(slide), "right");
+    return Math.abs(to.x - held.start.x) / FLING_STEPS / pause_ms;
+  };
+  assert.ok(speed_on(600) <= 2);
+  assert.ok(Math.abs(speed_on(1200) - 2) < 0.01);
+  assert.ok(Math.abs(speed_on(1400) - 2) < 0.01);
+  assert.ok(speed_on(200) < 2);
 });
