@@ -21,15 +21,18 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 
 | File | Role |
 |---|---|
-| `rivals.mjs` | Downloads each pinned xpi into its own empty directory and checks its sha256 and version, saves the article page, runs every tool, then calls `analyze.mjs`. The pins are in `PINNED` |
+| `tools.mjs` | The pinned store builds (url, sha256, version, add-on id), the tool names and the page names, shared by the other scripts |
+| `rivals.mjs` | Downloads each pinned xpi into its own empty directory and checks its sha256, version and id, saves the article page, runs every tool, then calls `analyze.mjs` |
 | `run.mjs` | One tool in one fresh profile over the pages: load times, time from the hint key to the first label, memory of the page and extension processes |
 | `framescript.js` | Runs in the page's content process: sends a trusted key and watches for hint labels, also inside closed shadow roots |
 | `pages.mjs` | The pages: 20,000 elements, the saved article, 100 iframes, and the same page with none |
-| `analyze.mjs` | Medians and ranges into `$MEASURE_DIR/rivals/out/tables.md` |
+| `analyze.mjs` | Medians and ranges into `$MEASURE_DIR/rivals/out/tables.md`, for the pages that ran |
+
+The article is a snapshot taken on the first run and reused after it. Delete `$MEASURE_DIR/rivals/pages` to take a new one. The run stops with an error if the policy-installed DesertFox cannot be removed.
 
 Pages: `large` is 10,000 links and 10,000 divs, `wiki` is a saved long article with many links, `frames` has 100 same-origin iframes and `frames0` is its top page alone. Per-frame cost is `frames` minus `frames0`.
 
-Results go to `$MEASURE_DIR/rivals`, never into the repo. Load times swing by tens of milliseconds when other work runs on the machine, so compare medians of several runs and passes. A system policy that force-installs DesertFox into every profile would bias the run, so `run.mjs` removes it before measuring. The probe reads hint labels inside closed shadow roots through a chrome frame script, which makes the tools comparable. Only labels in the top document are counted: a tool that draws labels inside iframes shows a low count on `frames`.
+Results go to `$MEASURE_DIR/rivals`, never into the repo. Load times swing by tens of milliseconds when other work runs on the machine, so compare medians of several runs and passes. A system policy that force-installs DesertFox into every profile would bias the run, so `run.mjs` removes it before measuring and stops if it cannot. The probe reads hint labels inside closed shadow roots through a chrome frame script, which makes the tools comparable. Only labels in the top document are counted: a tool that draws labels inside iframes shows a low count on `frames`.
 
 ## Key-test pieces
 
