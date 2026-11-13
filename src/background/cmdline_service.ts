@@ -2,6 +2,7 @@
 
 import type { CmdlineOpened } from "../shared/messages.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
+import { keep_chain } from "../shared/swallow.ts";
 
 export const HISTORY_LIMIT = 100;
 
@@ -55,7 +56,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined, tab: { url?: string | undefined; index?: number | undefined } = {}, incognito = false): Promise<CmdlineOpened | undefined> => {
       if (typeof ticket !== "string" || tab_id === undefined || frame_id === undefined || window_id === undefined) return undefined;
       const redeemed = (redemptions.get(ticket) ?? Promise.resolve()).then(() => redeem(ticket));
-      const settled = redeemed.catch(() => undefined);
+      const settled = keep_chain(redeemed);
       redemptions.set(ticket, settled);
       void settled.then(() => redemptions.get(ticket) === settled && redemptions.delete(ticket));
       if ((await redeemed) !== tab_id) return undefined;
@@ -84,13 +85,13 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
     // For a browser-wide history clear: the typed lines hold page addresses. Waits for the writes before it, so a late record cannot bring the old list back.
     clear_history: (): Promise<void> => {
       const cleared = last_write.then(() => deps.storage.remove(CMDLINE_HISTORY_STORAGE_KEY));
-      last_write = cleared.catch(() => undefined);
+      last_write = keep_chain(cleared);
       return cleared;
     },
     record: (text: string, from_private_window: boolean): Promise<void> => {
       if (from_private_window || text.trim() === "") return Promise.resolve();
       const written = last_write.then(async () => deps.storage.set({ [CMDLINE_HISTORY_STORAGE_KEY]: add_to_history(await read(), text) }));
-      last_write = written.catch(() => undefined);
+      last_write = keep_chain(written);
       return written;
     },
   };

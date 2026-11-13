@@ -1,4 +1,5 @@
 import { create_previous_tabs } from "./previous_tab.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 // The one place that unloads and loads tabs. Nothing else calls `tabs.discard`. Callers choose the ids: the tab
 // commands, the command line row key and, later, a sidebar selection. This file owns the rules.
@@ -106,7 +107,7 @@ function to_discard_tab(tab: browser.tabs.Tab): DiscardTab {
 // The alternate tab is read through a second reader of the same storage. A write still queued in the first reader may not show yet.
 export const browser_discard_deps: DiscardDeps = {
   read_tab: async (tab_id) => {
-    const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+    const tab = await ignore_refusal(browser.tabs.get(tab_id));
     return tab && to_discard_tab(tab);
   },
   tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map(to_discard_tab).sort((a, b) => a.index - b.index),

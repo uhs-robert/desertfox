@@ -2,6 +2,7 @@
 
 import type { QualityAnswer, QualityReport, QualityRequest } from "../shared/quality.ts";
 import type { RegisterItem } from "../shared/messages.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 // The reports that frames push when the bundle runs in them. A request listens for its tab while it waits, so a report that arrives with no request waiting is dropped.
 export function create_quality_reports() {
@@ -76,7 +77,7 @@ export async function ask_quality(deps: QualityDeps, tab_id: number, request: Qu
   const late = new Promise<undefined>((resolve) => (stop_waiting = resolve));
   const give_up = setTimeout(() => stop_waiting(undefined), Math.max(0, deadline - Date.now()));
   try {
-    return (await Promise.race([deps.send(tab_id, frame_id, request).catch(() => undefined), late])) as QualityAnswer | undefined;
+    return (await Promise.race([refused_as(deps.send(tab_id, frame_id, request), undefined), late])) as QualityAnswer | undefined;
   } finally {
     clearTimeout(give_up);
   }

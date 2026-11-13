@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { write_commands_json } from "./write_commands_json.mjs";
 import { grey_svg } from "./grey_svg.mjs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { refused_as } from "../src/shared/swallow.ts";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
@@ -108,7 +109,7 @@ const command_count = await write_commands_json("dist");
 // that match them. A build with no stamp of its own version carries none, so its hosts never update themselves.
 const release_assets_dir = process.env.RELEASE_ASSETS_DIR || "release-assets";
 const manifest_version = JSON.parse(await readFile("src/manifest.json", "utf8")).version;
-const host_hashes_text = await readFile(`${release_assets_dir}/host_sha256.json`, "utf8").catch(() => null);
+const host_hashes_text = await refused_as(readFile(`${release_assets_dir}/host_sha256.json`, "utf8"), null);
 if (host_hashes_text !== null && JSON.parse(host_hashes_text).version === manifest_version) {
   await writeFile("dist/host_sha256.json", host_hashes_text);
 }

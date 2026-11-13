@@ -1,5 +1,6 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
 import { SEND_KEY_MAX_TIMES } from "../../shared/send_key_limit.ts";
+import { keep_chain } from "../../shared/swallow.ts";
 
 export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean };
 
@@ -49,7 +50,7 @@ async function wait_for_gap(): Promise<void> {
 
 export function queued_in_page<T>(task: () => Promise<T>): Promise<T> {
   const result = queue_tail.then(async () => (await wait_for_gap(), task()));
-  queue_tail = result.catch(() => undefined);
+  queue_tail = keep_chain(result);
   return result;
 }
 

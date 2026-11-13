@@ -1,3 +1,4 @@
+import { best_effort, refused_as } from "../shared/swallow.ts";
 // Reads the selection of a frame, and the scroll offset of its top page. The `page` bundle answers `get_selection`, not content.js, so a frame that has not loaded the bundle gives no answer to the first ask.
 
 export type SelectionAskDeps = {
@@ -9,10 +10,10 @@ export type SelectionAskDeps = {
 
 // Asks first and loads the bundle only on no answer, so a frame that has the bundle pays no injection. Nothing when the frame cannot answer at all.
 export async function ask_page_bundle(deps: SelectionAskDeps, tab_id: number, frame_id: number): Promise<unknown> {
-  const ask = () => deps.ask(tab_id, frame_id).catch(() => undefined);
+  const ask = () => refused_as(deps.ask(tab_id, frame_id), undefined);
   const answer = await ask();
   if (answer !== undefined) return answer;
-  await deps.load_page_bundle(tab_id, frame_id).catch(() => undefined);
+  await best_effort(deps.load_page_bundle(tab_id, frame_id));
   return ask();
 }
 

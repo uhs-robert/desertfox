@@ -9,6 +9,7 @@ import type { BundleName } from "../shared/bundles.ts";
 import { is_caret_mode } from "../shared/command.ts";
 import type { Mode } from "../shared/command.ts";
 import type { Outcome } from "../shared/messages.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 // Where a sink's mode went. A mode, or "page_hidden" when the tab or page went away while the mode was active.
 export type ExitDestination = Mode | "page_hidden";
@@ -199,7 +200,7 @@ export function create_bundle_host() {
           deps.on_idle_();
         };
         if (drop_on_hide) ending_on_hide.add(release);
-        void handed_back.catch(() => []).then(release);
+        void refused_as(handed_back, []).then(release);
       },
     } satisfies BundleHostApi,
   };

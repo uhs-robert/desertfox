@@ -1,6 +1,7 @@
 // The `media_quality` rule on the background side: a tab that navigates gets the `quality` bundle in every frame. Each frame reports, and the answer to a report from a frame with a video is the rule for that frame's address (`quality_report` in `main.ts`), so no frame asks for it again.
 // A frame that loads after the tab's last event misses the rule. That is a known limit. An about:blank frame gets it from the second pass (`about_blank_pass` below), which runs `settle_ms` after the first.
 import type { QualityReport } from "../shared/quality.ts";
+import { best_effort } from "../shared/swallow.ts";
 
 export type MediaQualityDeps = {
   // True when the extension is off, or the rule is `off` everywhere (the global value is `off` and no site row sets one), so no frame has anything to apply.
@@ -33,7 +34,7 @@ export function create_media_quality(deps: MediaQualityDeps) {
   async function about_blank_pass(tab_id: number, turn: number): Promise<void> {
     await deps.wait(deps.settle_ms);
     if (newest.get(tab_id) !== turn || (await deps.is_off()) || newest.get(tab_id) !== turn) return;
-    await deps.inject_about_blank(tab_id).catch(() => undefined);
+    await best_effort(deps.inject_about_blank(tab_id));
   }
   // Whether the rule was off at the last settings change, so a change from off to on is seen.
   let was_off: boolean | undefined;
@@ -46,8 +47,8 @@ export function create_media_quality(deps: MediaQualityDeps) {
       if (!turned_on) return;
       for (const { id, url } of await open_tabs()) {
         if (id === undefined || !is_web(url)) continue;
-        await deps.inject_all(id).catch(() => undefined);
-        await deps.inject_about_blank(id).catch(() => undefined);
+        await best_effort(deps.inject_all(id));
+        await best_effort(deps.inject_about_blank(id));
       }
     },
     async tab_updated(tab_id: number, change: TabChange, address: string | undefined): Promise<void> {
@@ -58,9 +59,9 @@ export function create_media_quality(deps: MediaQualityDeps) {
       newest.set(tab_id, turn);
       try {
         if ((await deps.is_off()) || newest.get(tab_id) !== turn) return;
-        await deps.inject_all(tab_id).catch(() => undefined);
+        await best_effort(deps.inject_all(tab_id));
         if (newest.get(tab_id) !== turn) return;
-        void about_blank_pass(tab_id, turn).catch(() => undefined);
+        void best_effort(about_blank_pass(tab_id, turn));
       } catch {
         // A tab that closed or a page that refuses scripts has no rule to apply.
       }

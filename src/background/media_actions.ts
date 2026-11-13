@@ -4,6 +4,7 @@ import { RuntimeRefusal, type CommandContext } from "../shared/command.ts";
 import { PLAYING_MIN_SHARE, type MediaAction, type MediaRequest, type MediaResult, type MediaScan, type MediaState, type MediaTarget } from "../shared/media.ts";
 import type { TabMedia } from "./tab_media.ts";
 import type { QualityAnswer, QualityRequest } from "../shared/quality.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export type MediaDeps = {
   // The ids of the frames the tab holds now, `data:` and sandboxed ones included. Rejects when the tab is gone.
@@ -163,7 +164,7 @@ async function run_quality(deps: MediaDeps, ctx: CommandContext, tab_id: number,
   const pinned_frame = await deps.tab_media.pin_of(tab_id);
   // As for the other keys, a pinned video that left the page no longer counts. Only a pin costs the scan.
   const pin_frame = pinned_frame !== undefined && (await scan_frames(deps, tab_id)).some((scan) => scan.frame_id === pinned_frame && scan.pinned) ? pinned_frame : undefined;
-  const ask = (request: Omit<QualityRequest, "type" | "times">) => deps.quality(tab_id, { type: "quality_apply", times, ...request }, pin_frame).catch(() => undefined);
+  const ask = (request: Omit<QualityRequest, "type" | "times">) => refused_as(deps.quality(tab_id, { type: "quality_apply", times, ...request }, pin_frame), undefined);
   if (args.action === "skip") {
     const direction = args.value === "previous" ? "previous" : "next";
     if (!(await ask({ op: "skip", value: direction }))?.skipped) throw new RuntimeRefusal(`No ${direction} video`);
@@ -202,11 +203,11 @@ export async function run_media(deps: MediaDeps, ctx: CommandContext, args: Medi
   // Only when no acted-on player had a track does the site player get the key. It is asked for the planned frame first, the pinned one when a video is pinned.
   if (args.action === "captions" && results.every((result) => result.state?.captions !== "on" && result.state?.captions !== "off")) {
     // No track on the element: a site player may draw its own captions. The generic path runs first so other pages never pay the quality bundle.
-    const answer = await deps.quality(tab_id, { type: "quality_apply", op: "captions", value: undefined, times: 1 }, plan[0]!.frame_id).catch(() => undefined);
+    const answer = await refused_as(deps.quality(tab_id, { type: "quality_apply", op: "captions", value: undefined, times: 1 }, plan[0]!.frame_id), undefined);
     if (!answer?.toggled) throw new RuntimeRefusal("No captions");
     // The player may not say what it did, so the notice claims no change then.
     return deps.toast(ctx, answer.captions ? `Captions ${answer.captions}` : "Asked the player to toggle captions");
   }
-  const quality = args.action === "info" ? (await deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined))?.levels.find((level) => level.active)?.label : undefined;
+  const quality = args.action === "info" ? (await refused_as(deps.quality(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }), undefined))?.levels.find((level) => level.active)?.label : undefined;
   await deps.toast(ctx, describe_change(args.action, state, acted, quality));
 }

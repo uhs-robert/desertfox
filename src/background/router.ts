@@ -11,6 +11,7 @@ import { apply_count } from "./count.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import { create_step_recorder, type RecordStep } from "./record_step.ts";
 import { place_in_tab, type JumpEntry } from "../shared/jump_names.ts";
+import { ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined; incognito?: boolean };
 
@@ -90,7 +91,7 @@ export async function read_place_in_time(read: Promise<PageOffset | undefined>, 
   const waited = new Promise<undefined>((resolve) => {
     timer = setTimeout(resolve, JUMP_READ_TIMEOUT_MS);
   });
-  const offset = await Promise.race([read.catch(() => undefined), waited]).finally(() => clearTimeout(timer));
+  const offset = await Promise.race([refused_as(read, undefined), waited]).finally(() => clearTimeout(timer));
   return offset && place_in_tab(offset, tab_url);
 }
 
@@ -115,7 +116,7 @@ export function create_router(deps: RouterDeps): Router {
   // Read at run time: an earlier step or repeat can change which tab is active. The first step is pinned to the sender, because
   // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab.
   async function read_now(request: RouteRequest, pin_to_sender: boolean): Promise<Now> {
-    const sender = pin_to_sender && request.sender_tab_id !== undefined ? await deps.get_tab(request.sender_tab_id).catch(() => undefined) : undefined;
+    const sender = pin_to_sender && request.sender_tab_id !== undefined ? await ignore_refusal(deps.get_tab(request.sender_tab_id)) : undefined;
     const active = sender ?? (await deps.active_tab());
     const tab_id = active?.tab_id ?? request.sender_tab_id;
     // The sender frame exists only in the sender tab. Another tab gets its top frame.
@@ -208,7 +209,7 @@ export function create_router(deps: RouterDeps): Router {
     // Not `debug.perf`, which would time itself into the numbers it reports. A refusal or a throw is not a round trip.
     if (command.runs_in === "background" && outcome.ok && command.id !== "debug.perf") deps.record_timing?.(command.id, performance.now() - started_ms);
     // A refused or cancelled command moved nothing.
-    if (left && outcome.ok && !outcome.cancelled) await deps.record_jump(left.window_id, left.is_private, left.entry).catch(() => undefined);
+    if (left && outcome.ok && !outcome.cancelled) await deps.record_jump(left.window_id, left.is_private, left.entry).catch(warn_and_go("deps.record_jump"));
     return outcome;
   }
 
@@ -250,7 +251,7 @@ export function create_router(deps: RouterDeps): Router {
     try {
       return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations, ...(request.instant && { repeat: true as const }) }, frame_id));
     } catch {
-      if (await request.lost_reply_is_done?.().catch(() => false)) return done;
+      if (await refused_as(request.lost_reply_is_done?.() ?? Promise.resolve(false), false)) return done;
       return refuse(needs_message(command, NO_PAGE, request));
     }
   }
@@ -267,10 +268,10 @@ export function create_router(deps: RouterDeps): Router {
   ): Promise<Outcome> {
     const typed: Record<string, unknown> = {};
     for (const [name, value] of Object.entries(args)) {
-      typed[name] = is_context_source(value) ? await read_chain(value, context, active).catch(() => undefined) : value;
+      typed[name] = is_context_source(value) ? await refused_as(read_chain(value, context, active), undefined) : value;
     }
     // The line opens when the key is pressed, because focus moves into the iframe and the selection with it.
-    if (prefill) typed[open_param] = await read_chain(prefill, context, active).catch(() => undefined);
+    if (prefill) typed[open_param] = await refused_as(read_chain(prefill, context, active), undefined);
     const { tab_id, frame_id } = context;
     if (tab_id === undefined) return refuse(`${command.label} needs a tab`);
     // A reply lost after the line opened means the page went away, as when Enter opens a link in this tab. Navigation cancels the wait,

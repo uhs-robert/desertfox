@@ -1,3 +1,4 @@
+import { refused_as } from "../shared/swallow.ts";
 // The newest history rows, kept in the background so history completion reaches pages older than one `history.search` answer holds.
 // Derived state: the browser's history is the truth, so every start of the background refills it with one search. A future event page refills on each wake, and a line that asks before the fill ends gets the plain search.
 
@@ -90,7 +91,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
     draining ??= (async () => {
       while (pending.length > 0) {
         const change = pending.shift()!;
-        if (needs_check(change) && !(await deps.listed((change as { visit: { url: string } }).visit.url).catch(() => false))) continue;
+        if (needs_check(change) && !(await refused_as(deps.listed((change as { visit: { url: string } }).visit.url), false))) continue;
         apply(change);
       }
     })().finally(() => (draining = undefined));

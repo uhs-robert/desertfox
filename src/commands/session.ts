@@ -7,6 +7,7 @@ import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { is_openable } from "./open_target.ts";
 import { browser_session_storage, make_session_store, NEW_NAME_PATTERN, plan_restore } from "../background/session_store.ts";
 import type { ContainerRef, SessionStore, SessionTab } from "../background/session_store.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 // A tab of the window being saved.
 export type LiveTab = {
@@ -136,15 +137,15 @@ export function make_session_handlers(deps: SessionDeps) {
       if (window_closed) throw new RuntimeRefusal(`The window closed while "${session.name}" was opening`);
       const skipped = planned.length - opened.length;
       if (opened.length === 0) {
-        if (into_window) await deps.close_window(target.window_id).catch(() => undefined);
+        if (into_window) await ignore_refusal(deps.close_window(target.window_id));
         throw new RuntimeRefusal(`No tab of "${session.name}" could be opened`);
       }
       // The active tab was one Firefox refused, so the first tab that opened takes its place and loads.
       if (into_window && active_tab_id === undefined) {
         active_tab_id = opened[0] as number;
-        await deps.activate(active_tab_id).catch(() => undefined);
+        await ignore_refusal(deps.activate(active_tab_id));
       }
-      if (target.blank_tab_id !== undefined) await deps.remove_tab(target.blank_tab_id).catch(() => undefined);
+      if (target.blank_tab_id !== undefined) await ignore_refusal(deps.remove_tab(target.blank_tab_id));
 
       const lost_container = planned.filter((tab) => tab.container_lost).length;
       const notes = [skipped > 0 ? `skipped ${skipped}` : "", lost_container > 0 ? `${plural(lost_container, "tab")} lost their container` : ""].filter(Boolean);
@@ -182,7 +183,7 @@ export const browser_session_deps: SessionDeps = {
     })),
   // With containers off the query rejects, and the sessions then carry no container.
   containers: async () => {
-    const identities = await browser.contextualIdentities.query({}).catch(() => undefined);
+    const identities = await ignore_refusal(browser.contextualIdentities.query({}));
     return Array.isArray(identities) ? identities.map((identity) => ({ id: identity.cookieStoreId, name: identity.name })) : [];
   },
   create_window: async () => {
@@ -191,7 +192,7 @@ export const browser_session_deps: SessionDeps = {
     if (created.id === undefined) throw new RuntimeRefusal("Firefox did not open a window");
     return { window_id: created.id, blank_tab_id: created.tabs?.[0]?.id };
   },
-  window_exists: (window_id) => browser.windows.get(window_id).then(() => true, () => false),
+  window_exists: (window_id) => ignore_refusal(browser.windows.get(window_id)).then((window) => window !== undefined),
   create_tab: async (open) => {
     const created = await browser.tabs.create({
       windowId: open.window_id,

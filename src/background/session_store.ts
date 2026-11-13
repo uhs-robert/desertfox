@@ -4,6 +4,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { SessionItem } from "../shared/messages.ts";
 import { SESSIONS_STORAGE_KEY } from "./storage_keys.ts";
+import { keep_chain } from "../shared/swallow.ts";
 
 export type SessionTab = {
   url: string;
@@ -104,7 +105,7 @@ export function make_session_store(storage: SessionStorage, now: () => number = 
   let queue: Promise<unknown> = Promise.resolve();
   const exclusive = <Result>(change: () => Promise<Result>): Promise<Result> => {
     const run = queue.then(change, change);
-    queue = run.catch(() => undefined);
+    queue = keep_chain(run);
     return run;
   };
 

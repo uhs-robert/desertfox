@@ -6,6 +6,7 @@ import { queued_in_page } from "../site_actions/send_key.ts";
 import { copy_text } from "../caret/copy_text.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
+import { refused_as } from "../../shared/swallow.ts";
 
 // Editors that draw only the lines near the viewport, or keep the focus in a hidden textarea. What they expose is a slice of the document.
 export const VIRTUALIZED_EDITOR = ".cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
@@ -120,14 +121,14 @@ async function replace_whole_text(field: HTMLElement, text: string, original: st
     if (!replaced) collapse_selection(field);
   }
   // A paste event proves only that the editor saw it. A read-only editor drops the text, so the document is read back. An empty document copies as nothing (the marker stays) or, where the editor copies the caret line, as one line break.
-  const now_holds = await copy_then_collapse(field).catch(() => "");
+  const now_holds = await refused_as(copy_then_collapse(field), "");
   return now_holds === text || (text === "" && now_holds === "\n") ? "pasted" : "refused";
 }
 
 export function paste_through_clipboard(field: HTMLElement, text: string, original: string): Promise<{ outcome: PasteOutcome; restored: boolean }> {
   if (!field.isConnected) return Promise.resolve({ outcome: "changed", restored: true });
-  return queued_in_page(async () => {
+  return refused_as(queued_in_page(async () => {
     const { value, restored } = await with_clipboard_saved(() => replace_whole_text(field, text, original));
     return { outcome: value ?? "refused", restored };
-  }).catch(() => ({ outcome: "refused" as const, restored: true }));
+  }), { outcome: "refused" as const, restored: true });
 }

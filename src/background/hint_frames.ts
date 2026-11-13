@@ -5,6 +5,7 @@
 import { clean_letters, make_labels } from "../content/hints/labels.ts";
 import type { HintFramesCollect, HintFramesEnd, HintFramesLabels, HintFramesPick, HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesUnhover, Outcome } from "../shared/messages.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "./storage_keys.ts";
+import { keep_chain, refused_as, best_effort } from "../shared/swallow.ts";
 
 // Slow ad frames answer late, and a frame that has not reported by then gets no labels. The labels already drawn are never redrawn for it.
 export const HINT_FRAMES_WAIT_MS = 500;
@@ -66,7 +67,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
   let chain: Promise<unknown> = Promise.resolve();
   const in_turn = <T>(step: () => Promise<T>): Promise<T> => {
     const run = chain.then(step);
-    chain = run.catch(() => undefined);
+    chain = keep_chain(run);
     return run;
   };
   const waits = new Map<string, Wait>();
@@ -84,7 +85,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
     return session?.session_id === session_id && session.labels && session.keyboard_frame === frame_id ? session : undefined;
   };
   // A frame that navigated keeps its id, so the session id in every message lets its new page ignore what was meant for the old one.
-  const send_quietly = (tab_id: number, message: HintFramesMessage, frame_id?: number) => deps.send(tab_id, message, frame_id).catch(() => undefined);
+  const send_quietly = (tab_id: number, message: HintFramesMessage, frame_id?: number) => best_effort(deps.send(tab_id, message, frame_id));
 
   // The keyboard frame's own count is in already, so only the other frames race the deadline.
   async function collect(tab_id: number, session_id: string, args: Record<string, unknown>, own: Wait["texts"]): Promise<Wait["texts"]> {
@@ -173,7 +174,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
       if (owner === undefined) return { ok: false, message: `No hint has the label ${label}` };
       let timer: unknown;
       const deadline = new Promise<undefined>((resolve) => (timer = deps.set_timer(() => resolve(undefined), deps.pick_ms)));
-      const reply = deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)).catch(() => undefined);
+      const reply = refused_as(deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)), undefined);
       try {
         const answer = await Promise.race([reply, deadline]);
         return is_pick_answer(answer) ? answer : FRAME_GONE;

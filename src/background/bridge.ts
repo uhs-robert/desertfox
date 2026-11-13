@@ -11,6 +11,7 @@ import { create_bridge_events, TABS_OFF_EVENT } from "./bridge_events.ts";
 import type { TabChange } from "./bridge_events.ts";
 import { BUILT_IN_THEME_NAMES } from "../shared/theme_names.ts";
 import { mode_label } from "../content/ui/mode_label.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export const BRIDGE_HOST_NAME = "desertfox_bridge";
 
@@ -211,7 +212,7 @@ export function create_bridge(deps: BridgeDeps) {
 
   async function connect(): Promise<void> {
     if (!bridge_on || port) return;
-    if (!(await deps.permission_granted().catch(() => false))) return schedule_retry();
+    if (!(await refused_as(deps.permission_granted(), false))) return schedule_retry();
     // Calls overlap across the await above. `connect` and the `port` assignment below run with no await between them, so the first call to get here wins and the others return on this check.
     if (!bridge_on || port) return;
     let opened: BridgePort;

@@ -15,6 +15,7 @@ import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/p
 
 import { is_available } from "./availability.ts";
 import { normal_tree_for, site_columns_for } from "./page_keymap.ts";
+import { warn_and_go } from "../shared/swallow.ts";
 
 // The modes where the matcher reads `"` as the register prefix.
 const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line"];
@@ -110,7 +111,7 @@ export async function list_keys(
   const keymap = await stored_keymap(storage);
   // The register prefix is no key of the tree: it waits for a register name, so the panel lists the registers that hold something. A user binding of `"` keeps its own tree.
   if (registers && request.prefix.length === 1 && request.prefix[0] === UNNAMED_REGISTER && REGISTER_PREFIX_MODES.includes(request.mode) && !keymap?.modes[request.mode as keyof CompiledKeymap["modes"]]?.children[UNNAMED_REGISTER]) {
-    const items = await registers().catch((): RegisterItem[] => []);
+    const items = await registers().catch(warn_and_go("list_keys.registers", [] as RegisterItem[]));
     return { title: ["registers"], rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })), border: keymap?.which_key_border ?? "square" };
   }
   const mode_root = keymap?.modes[request.mode as keyof CompiledKeymap["modes"]];
@@ -129,7 +130,7 @@ async function with_quickmarks(panel: WhichKeyPanel, root: TreeBranch | undefine
   for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
   const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
   if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "quickmark.open" || step.invocation.id === "quickmark.add")) return panel;
-  const rows = Object.entries(await quickmarks().catch((): QuickmarkTable => ({}))).map(([key, url]) => ({ keys: key, command: shorten_address(url), description: "", more: false })).sort(compare_rows);
+  const rows = Object.entries(await quickmarks().catch(warn_and_go("list_keys.quickmarks", {} as QuickmarkTable))).map(([key, url]) => ({ keys: key, command: shorten_address(url), description: "", more: false })).sort(compare_rows);
   return rows.length === 0 ? panel : { ...panel, rows };
 }
 
@@ -139,7 +140,7 @@ async function with_stored_macros(panel: WhichKeyPanel, root: TreeBranch | undef
   for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
   const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
   if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "macro.record" || step.invocation.id === "macro.play")) return panel;
-  const items = await macros().catch((): RegisterItem[] => []);
+  const items = await macros().catch(warn_and_go("list_keys.macros", [] as RegisterItem[]));
   return items.length === 0 ? panel : { ...panel, rows: items.map(({ name, description }) => ({ keys: name, command: description, description: "", more: false })) };
 }
 
@@ -149,7 +150,7 @@ async function with_page_marks(panel: WhichKeyPanel, root: TreeBranch | undefine
   for (const token of prefix) node = node?.kind === "branch" ? node.children[token] : undefined;
   const capture = node?.kind === "branch" && Object.keys(node.children).length === 1 ? node.children[ANY_KEY] : undefined;
   if (capture?.kind !== "leaf" || !capture.steps.every((step) => step.invocation.id === "mark.add" || step.invocation.id === "mark.jump")) return panel;
-  const stored = await marks().catch((): MarkItem[] => []);
+  const stored = await marks().catch(warn_and_go("list_keys.marks", [] as MarkItem[]));
   const shown_items = capture.steps[0]?.invocation.id === "mark.add" ? stored.filter((item) => item.key !== PREVIOUS_MARK) : stored;
   if (shown_items.length === 0) return panel;
   const rows_of = (items: MarkItem[]) => items.map(mark_row).sort(compare_rows);

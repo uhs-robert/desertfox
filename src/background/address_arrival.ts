@@ -5,6 +5,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import { mark_page_url } from "../shared/mark_names.ts";
 import { PAGE_READY_TIMEOUT_MS, type PageReady, type PageWatch } from "./page_ready.ts";
+import { best_effort, keep_chain } from "../shared/swallow.ts";
 
 export type MarkTab = { id: number; window_id: number; index: number; url: string; incognito: boolean; last_accessed: number; discarded: boolean };
 
@@ -69,7 +70,7 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       const reply = (await push(tab_id, arrival.data, arrival.number)) as { ok?: boolean; message?: string } | undefined;
       if (reply?.ok === false) await deps.show_refusal(tab_id, reply.message ?? deps.failed_text);
     } catch (error) {
-      await deps.show_refusal(tab_id, error instanceof Error ? error.message : String(error)).catch(() => undefined);
+      await best_effort(deps.show_refusal(tab_id, error instanceof Error ? error.message : String(error)));
     } finally {
       // A newer step of the tab owns its own entry.
       if (arrivals.get(tab_id) === arrival) arrivals.delete(tab_id);
@@ -111,7 +112,7 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
       const earlier_switch = switches.get(from.id) ?? Promise.resolve();
       // Before the step that navigates: right after it the tab still reads as loaded.
       const watch = deps.watch(target_id);
-      const own_switch = earlier_switch.catch(() => undefined).then(() => switch_to(from, found, url, next));
+      const own_switch = keep_chain(earlier_switch).then(() => switch_to(from, found, url, next));
       switches.set(from.id, own_switch);
       // The ended step's target goes, so the map holds no address of a tab that closed.
       const end_target = () => targets.get(from.id)?.arrival === next && targets.delete(from.id);
@@ -143,7 +144,7 @@ export function create_address_arrivals<Data>(deps: AddressDeps) {
     if (found) {
       await deps.activate_tab(found.id);
       // A compositor may refuse to raise a window. The tab is active in its window anyway.
-      if (found.window_id !== from.window_id) await deps.focus_window(found.window_id).catch(() => undefined);
+      if (found.window_id !== from.window_id) await best_effort(deps.focus_window(found.window_id));
       return true;
     }
     await deps.navigate(from.id, url).catch(() => {

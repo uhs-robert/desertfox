@@ -4,6 +4,7 @@ import { open_help_url } from "./help_tab.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap, type CompiledKeymap } from "../shared/prefix_tree.ts";
 import { define, registry } from "../shared/registry/builtin.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 define("help.whichkey", {
   label: "Which key",
@@ -30,7 +31,7 @@ define("help.open", {
     const name = args.name as string;
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
     // The help page holds no web address, so asking from it leaves the Site Rules page without one.
-    const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+    const tab = ctx.tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(ctx.tab_id));
     const address = tab?.url?.startsWith(help_page_url) ? undefined : tab?.url;
     const url = help_name_url(help_page_url, name, command_ids, address) as string; // `strict` limits name to the choices that resolve
     await open_help_url(ctx, help_page_url, url);
@@ -49,7 +50,7 @@ define("help.key", {
     const keys = args.keys as string;
     const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
     // A tab the command has no hold of (none, or gone) gets the global tree.
-    const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+    const tab = ctx.tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(ctx.tab_id));
     const found = key_command_id_on_page(current_keymap(stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined), tab?.url, keys);
     if (found.error !== undefined) throw new RuntimeRefusal(found.error);
     if (!command_ids.has(found.id)) throw new RuntimeRefusal(`${keys} runs ${found.id}, which has no help card`);

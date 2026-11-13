@@ -16,6 +16,7 @@ import { create_tab_switch } from "./tab_switch.ts";
 import type { TabSwitch } from "./tab_switch.ts";
 import { create_router } from "./router.ts";
 import type { RouterDeps } from "./router.ts";
+import { ignore_refusal, warn_and_go } from "../shared/swallow.ts";
 
 const as_bridge_window = (window: browser.windows.Window): BridgeWindow | undefined =>
   window.id === undefined ? undefined : { id: window.id, focused: window.focused === true, private: window.incognito === true };
@@ -24,7 +25,7 @@ type TargetApi = { windows: { getLastFocused: () => Promise<{ id?: number | unde
 
 // The active tab of the last focused window, when that window is a normal one. Firefox ignores `windowTypes` here, so the type is read from the window: a popup is never a target.
 export async function focused_normal_target(api: TargetApi = browser): Promise<BridgeRunTarget | undefined> {
-  const window = await api.windows.getLastFocused().catch(() => undefined);
+  const window = await ignore_refusal(api.windows.getLastFocused());
   if (window?.id === undefined || window.type !== "normal") return undefined;
   const [tab] = await api.tabs.query({ active: true, windowId: window.id });
   return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: window.id, url: tab.url, incognito: window.incognito === true };
@@ -91,11 +92,11 @@ export const browser_bridge_deps = (recall_mode: (tab_id: number) => Promise<Mod
   },
   permission_granted: () => browser.permissions.contains({ permissions: ["nativeMessaging"] }),
   last_focused_window: async () => {
-    const window = await browser.windows.getLastFocused().catch(() => undefined);
+    const window = await ignore_refusal(browser.windows.getLastFocused());
     return window && as_bridge_window(window);
   },
   window_of: async (window_id) => {
-    const window = await browser.windows.get(window_id).catch(() => undefined);
+    const window = await ignore_refusal(browser.windows.get(window_id));
     return window && as_bridge_window(window);
   },
   active_tab_of: async (window_id) => (await browser.tabs.query({ active: true, windowId: window_id }))[0]?.id,
@@ -126,8 +127,8 @@ export function start_bridge(recall_mode: (tab_id: number) => Promise<Mode>, rou
   browser.tabs.onRemoved.addListener((tab_id) => bridge.tab_removed(tab_id));
   browser.permissions.onAdded.addListener(() => bridge.permission_added());
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) void bridge.settings_changed().catch(() => undefined);
+    if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) void bridge.settings_changed().catch(warn_and_go("bridge.settings_changed"));
   });
-  void bridge.start().catch(() => undefined);
+  void bridge.start().catch(warn_and_go("bridge.start"));
   return bridge;
 }

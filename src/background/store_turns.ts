@@ -1,3 +1,4 @@
+import { keep_chain } from "../shared/swallow.ts";
 // What the stores that keep private data in `storage.session` share: a queue that runs their writes one at a time, and the cleanup that drops private data when the last private window closes.
 
 // Each write reads, edits and writes, so two writes from two tabs must not interleave. A failed job does not block the next one.
@@ -5,7 +6,7 @@ export function create_write_queue() {
   let queue: Promise<unknown> = Promise.resolve();
   return <Result>(job: () => Promise<Result>): Promise<Result> => {
     const turn = queue.then(job, job);
-    queue = turn.catch(() => undefined);
+    queue = keep_chain(turn);
     return turn;
   };
 }

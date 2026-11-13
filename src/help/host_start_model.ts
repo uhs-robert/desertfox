@@ -1,6 +1,7 @@
 // No DOM: the state of the settings page's banner for a pending host start (`background/host_start.ts`). It reads the stored question and sends the user's answer with the digests it showed.
 
 import type { HostFileChange, HostStartChoice, HostStartChoiceAnswer, HostStartPending } from "../shared/messages.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 export type HostStartState = {
   pending?: HostStartPending | undefined;
@@ -33,7 +34,7 @@ export function create_host_start_session(deps: HostStartDeps) {
 
   // The message of the last answer stays after the question goes, so the user sees what happened.
   async function load(): Promise<void> {
-    set({ pending: checked_pending(await deps.read_pending().catch(() => undefined)) });
+    set({ pending: checked_pending(await refused_as(deps.read_pending(), undefined)) });
   }
 
   async function choose(choice: HostStartChoice["choice"]): Promise<void> {

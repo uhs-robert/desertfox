@@ -209,10 +209,16 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
 };
 
 // The router shows a refusal of its own, so the answer only decides whether a sequence goes on. Visual mode ends as the command goes out.
-function run_in_background(id: string, args: Record<string, unknown>): Promise<Outcome> {
+async function run_in_background(id: string, args: Record<string, unknown>): Promise<Outcome> {
   const sent = browser.runtime.sendMessage({ type: "run", invocations: [{ id, args }], mode: "visual" }) as Promise<RunResponse>;
   page.desertfox_host.set_mode_("caret");
-  return sent.then((answer): Outcome => (answer.ok ? answer : { ok: true, cancelled: true }), (): Outcome => ({ ok: false, message: "DesertFox background did not answer" }));
+  let answer: RunResponse;
+  try {
+    answer = await sent;
+  } catch {
+    return { ok: false, message: "DesertFox background did not answer" };
+  }
+  return answer.ok ? answer : { ok: true, cancelled: true };
 }
 
 const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> | undefined => {

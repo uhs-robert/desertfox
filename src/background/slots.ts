@@ -3,6 +3,7 @@
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { TreeBranch } from "../shared/prefix_tree.ts";
 import { to_firefox_shortcut } from "../shared/keys/firefox_shortcut.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 export const SLOT_COUNT = 10;
 
@@ -118,7 +119,7 @@ export async function apply_slot_plan(
   const warnings: string[] = [];
   const applied: SlotAssignment[] = [];
   for (const name of plan.unused_slot_names) {
-    await commands.reset(name).catch(() => undefined);
+    await ignore_refusal(commands.reset(name));
   }
   for (const assignment of plan.assignments) {
     try {
@@ -126,7 +127,7 @@ export async function apply_slot_plan(
       applied.push(assignment);
     } catch (error) {
       warnings.push(`browser: Firefox refused "${assignment.shortcut}": ${String(error)}`);
-      await commands.reset(assignment.slot_name).catch(() => undefined);
+      await ignore_refusal(commands.reset(assignment.slot_name));
     }
   }
   return { warnings, applied };
@@ -134,5 +135,5 @@ export async function apply_slot_plan(
 
 // Frees every slot chord, so Firefox stops taking them from the page.
 export async function release_slots(plan: SlotPlan, commands: Pick<typeof browser.commands, "reset">): Promise<void> {
-  for (const name of [...plan.assignments.map((assignment) => assignment.slot_name), ...plan.unused_slot_names]) await commands.reset(name).catch(() => undefined);
+  for (const name of [...plan.assignments.map((assignment) => assignment.slot_name), ...plan.unused_slot_names]) await ignore_refusal(commands.reset(name));
 }

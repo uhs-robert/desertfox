@@ -38,6 +38,7 @@ import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
 import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
 import { arm_leave_watch } from "../page/leave_watch.ts";
+import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
 
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
 type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_caret_target?: Element; desertfox_content_loaded?: true | (() => void) };
@@ -170,7 +171,7 @@ const SITE_SELECTORS_WAIT_MS = 2000;
 // Asked at every `hint.run`, so a settings edit or a new address applies from the next run on. A rapid session keeps what its run read.
 // A selector that does not parse drops out with one notice for the run, and the rest still apply.
 async function read_site_selectors(show_toast: (message: string) => void): Promise<SiteSelectors> {
-  const asked = browser.runtime.sendMessage({ type: "read_hint_selectors" }).catch(() => undefined);
+  const asked = ignore_refusal(browser.runtime.sendMessage({ type: "read_hint_selectors" }));
   const reply = (await Promise.race([asked, new Promise((resolve) => setTimeout(resolve, SITE_SELECTORS_WAIT_MS))])) as { hint_add?: string[]; hint_remove?: string[] } | undefined;
   const bad: string[] = [];
   const parsed = (selectors: string[] | undefined) => (selectors ?? []).filter((selector) => parses_as_selector(selector) || (bad.push(selector), false));
@@ -290,7 +291,7 @@ const texts_of = (found: Found[]): string[] => found.map((item) => text_of(item.
 let starting = 0;
 
 // To the background, which passes it on. Nothing waits for the answer.
-const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_collect" | "hint_frames_labels" }>) => void browser.runtime.sendMessage(message).catch(() => undefined);
+const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_collect" | "hint_frames_labels" }>) => void best_effort(browser.runtime.sendMessage(message));
 
 const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_caret_, inspect_ };
 
@@ -299,7 +300,7 @@ function register(host: BundleHostApi): void {
   // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode as Escape does, so hints opened from media mode return to it.
   arm_leave_watch(host).listen_(() => session && !picking && host.escape_());
   // The picks of other frames' hovers, by session id, until Escape releases them. Each release waits for its pick's answer and names its pick, so a late one cannot clear a newer hover.
-  let hovers_across: { session_id: string; answered: Promise<void> }[] = [];
+  let hovers_across: { session_id: string; answered: Promise<unknown> }[] = [];
   // The ids an end reached while this frame waited for its start answer. The end can overtake the answer, which would then show hint mode on a dead session. Cleared when no start waits.
   const ended_ids = new Set<string>();
 
@@ -363,7 +364,7 @@ function register(host: BundleHostApi): void {
     starting++;
     let answer: HintFramesStartAnswer | undefined;
     try {
-      const asked = browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length, texts: texts_of(found) } satisfies HintFramesStart).catch(() => undefined);
+      const asked = ignore_refusal(browser.runtime.sendMessage({ type: "hint_frames_start", letters: letters.join(""), args: current.args, count: found.length, texts: texts_of(found) } satisfies HintFramesStart));
       answer = (await Promise.race([asked, new Promise((resolve) => setTimeout(resolve, ACROSS_START_WAIT_MS))])) as HintFramesStartAnswer | undefined;
       // A late answer drew labels in the other frames, which this frame no longer picks from.
       if (!answer) void asked.then((late: HintFramesStartAnswer | undefined) => late?.ok && send_across({ type: "hint_frames_end", session_id: late.session_id }));
@@ -389,9 +390,9 @@ function register(host: BundleHostApi): void {
     if (own !== undefined) return { run: () => perform_pick(current, labeled.found[own]!.element as HTMLElement) };
     const keys = !leaves || current.waiting_tokens_.length === 0 ? undefined : [...current.waiting_tokens_];
     const answer: Promise<HintFramesPickAnswer | undefined> = browser.runtime.sendMessage({ type: "hint_frames_pick", session_id: labeled.session_id_!, label: labeled.labels[index]!, ...(keys && { keys }) } satisfies HintFramesPick);
-    if (current.action === "hover") hovers_across.push({ session_id: labeled.session_id_!, answered: answer.then(() => undefined, () => undefined) });
+    if (current.action === "hover") hovers_across.push({ session_id: labeled.session_id_!, answered: best_effort(answer) });
     // A mode that started in the owner takes no typeahead. A mode that failed to start leaves the keys for a replay here.
-    const left = answer.then((reply) => (reply?.ok === true && starts_caret(current.action) ? [] : reply?.left ?? keys ?? []), () => keys ?? []);
+    const left = ignore_refusal(answer).then((reply) => (reply?.ok === true && starts_caret(current.action) ? [] : reply?.left ?? keys ?? []));
     return { run: () => answer.then((reply) => (reply && "text" in reply ? (current.action === "prompt" ? open_line_(reply.text) : copy_of_pick(current)(reply.text, reply.what)) : reply)), left };
   }
 
@@ -433,7 +434,7 @@ function register(host: BundleHostApi): void {
     // Every build starts in label mode. `text` only filters the hints, it does not start text mode, so the labels stay typable.
     const picker = create_picker(labels, text_of_found_);
     current.ready = { ...labeled, picker, view, stop_following_: follow_windows(windows_of(found), view.reposition), relayed_: JSON.stringify({ type: "hint_frames_typed", session_id: labeled.session_id_, typed: "" }) };
-    void browser.runtime.sendMessage({ type: "record_timing", name: "hint.build", ms: performance.now() - started_ms } satisfies RecordTiming).catch(() => undefined);
+    void best_effort(browser.runtime.sendMessage({ type: "record_timing", name: "hint.build", ms: performance.now() - started_ms } satisfies RecordTiming));
     // The queue stays on the session while the loop drains it: a pick hands what is left to normal mode, a rapid pick leaves it for the next build.
     while (current.ready && !current.cancelled && current.waiting_tokens_.length > 0) handle_token(current, current.waiting_tokens_.shift()!, current.waiting_physical_.shift());
   }
@@ -614,7 +615,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     }
     if (across !== current) return;
     current.found = found;
-    void browser.runtime.sendMessage({ type: "hint_frames_report", session_id: current.session_id, count: found.length, texts: texts_of(found) } satisfies HintFramesReport).catch(() => undefined);
+    void best_effort(browser.runtime.sendMessage({ type: "hint_frames_report", session_id: current.session_id, count: found.length, texts: texts_of(found) } satisfies HintFramesReport));
   }
 
   // The answer of a pick is the action's outcome, which the keyboard frame shows. A copy or a prompt answers with its text, which the keyboard frame copies or opens.

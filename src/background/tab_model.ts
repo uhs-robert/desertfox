@@ -10,6 +10,7 @@ import { site_key } from "../shared/site_key.ts";
 import { TAB_MODEL_PORT_NAME, TAB_MODEL_PORT_NORMAL, TAB_MODEL_PORT_PRIVATE } from "../shared/tab_model_port.ts";
 import { listed_favicon, numbered_windows, read_container_identities } from "./complete_items.ts";
 import type { ContainerIdentity, WindowLike } from "./complete_items.ts";
+import { refused_as } from "../shared/swallow.ts";
 
 const PORT_PRIVACY: Record<string, boolean | undefined> = { [TAB_MODEL_PORT_NAME]: undefined, [TAB_MODEL_PORT_NORMAL]: false, [TAB_MODEL_PORT_PRIVATE]: true };
 export const FLUSH_DELAY_MS = 30;
@@ -253,8 +254,10 @@ export function create_tab_model(deps: TabModelDeps) {
     }
   };
   const number_windows = (windows: readonly WindowLike[]): WindowNumbers => new Map(numbered_windows(windows).map((window) => [window.id, window.number]));
+  // The fallback covers the refused read only; an error in number_windows still propagates.
+  const read_window_numbers = () => refused_as(deps.windows(), undefined).then((windows) => windows && number_windows(windows));
   const reread_windows = latest_only(
-    () => deps.windows().then(number_windows, () => undefined),
+    read_window_numbers,
     (numbers) => {
       if (!numbers) return;
       window_numbers = numbers;
@@ -262,7 +265,7 @@ export function create_tab_model(deps: TabModelDeps) {
     },
   );
   const reread_containers = latest_only(
-    () => deps.containers().catch((): Containers => new Map()),
+    () => refused_as(deps.containers(), new Map() as Containers),
     (read) => {
       containers = read;
       relabel_rows();
@@ -302,9 +305,9 @@ export function create_tab_model(deps: TabModelDeps) {
           let loaded_groups: Group[];
           let previous_by_window: Map<number, number | undefined>;
           try {
-            [tabs, windows, loaded_containers, loaded_groups] = await Promise.all([deps.query(), deps.windows(), deps.containers().catch((): Containers => new Map()), deps.groups().catch((): Group[] => [])]);
+            [tabs, windows, loaded_containers, loaded_groups] = await Promise.all([deps.query(), deps.windows(), refused_as(deps.containers(), new Map() as Containers), refused_as(deps.groups(), [] as Group[])]);
             const window_ids = windows.flatMap((window) => (window.id === undefined ? [] : [window.id]));
-            previous_by_window = new Map(await Promise.all(window_ids.map(async (id) => [id, await deps.previous_of(id).catch(() => undefined)] as const)));
+            previous_by_window = new Map(await Promise.all(window_ids.map(async (id) => [id, await refused_as(deps.previous_of(id), undefined)] as const)));
           } catch (error) {
             // An event that raced a failed query is the only trigger left to query again.
             if (raced) continue;
@@ -384,10 +387,10 @@ export function create_tab_model(deps: TabModelDeps) {
         const seen = events_seen;
         // Windows and containers too, so a missed window or container event heals the labels as well.
         const [tabs, numbers, read_containers, read_groups] = await Promise.all([
-          deps.query().catch(() => undefined),
-          deps.windows().then(number_windows, () => undefined),
-          deps.containers().catch((): Containers => new Map()),
-          deps.groups().catch(() => undefined),
+          refused_as(deps.query(), undefined),
+          read_window_numbers(),
+          refused_as(deps.containers(), new Map() as Containers),
+          refused_as(deps.groups(), undefined),
         ]);
         if (call !== reconciles) return newest_reconcile;
         if (tabs === undefined) return;
@@ -564,7 +567,7 @@ export function create_tab_model(deps: TabModelDeps) {
     if (!deps.is_web_accessible_page(port)) return admit();
     const tab_id = sender_tab?.id;
     const frame_id = port.sender?.frameId;
-    const opener_check = tab_id === undefined || frame_id === undefined ? Promise.resolve(false) : deps.is_opener(tab_id, frame_id).catch(() => false);
+    const opener_check = tab_id === undefined || frame_id === undefined ? Promise.resolve(false) : refused_as(deps.is_opener(tab_id, frame_id), false);
     void opener_check.then((opener) => {
       if (disconnected) return;
       if (opener) return admit();

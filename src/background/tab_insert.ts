@@ -2,6 +2,7 @@
 
 import type { Mode } from "../shared/command.ts";
 import { clear_insert_hold, read_insert_hold, write_insert_hold } from "./tab_modes.ts";
+import { best_effort, keep_chain } from "../shared/swallow.ts";
 
 type HoldStorage = Parameters<typeof read_insert_hold>[0] & Parameters<typeof clear_insert_hold>[0] & Parameters<typeof write_insert_hold>[0];
 
@@ -14,7 +15,7 @@ export type TabInsertDeps = {
 };
 
 export function create_tab_insert(deps: TabInsertDeps) {
-  const send_to_all = (tab_id: number, mode: "insert" | "normal") => deps.send_mode(tab_id, mode).catch(() => undefined);
+  const send_to_all = (tab_id: number, mode: "insert" | "normal") => best_effort(deps.send_mode(tab_id, mode));
 
   // Each hold operation reads the hold and then writes it and sends, so two at once in one tab could send in the wrong order or leave twice. They run one after another per tab, in the order their messages arrived.
   const queues = new Map<number, Promise<unknown>>();
@@ -23,7 +24,7 @@ export function create_tab_insert(deps: TabInsertDeps) {
       await deps.modes_cleared;
       return operation();
     });
-    const tail = result.catch(() => undefined);
+    const tail = keep_chain(result);
     queues.set(tab_id, tail);
     void tail.then(() => queues.get(tab_id) === tail && queues.delete(tab_id));
     return result;

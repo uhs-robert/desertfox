@@ -8,6 +8,7 @@ import type { MarkAnswer, MarkJump } from "../shared/messages.ts";
 import { create_address_arrivals, type AddressDeps } from "./address_arrival.ts";
 import { read_place_in_time, type PageOffset } from "./router.ts";
 import type { GlobalJump, MarkSender, MarkStore } from "./mark_store.ts";
+import { warn_and_go } from "../shared/swallow.ts";
 
 export { find_mark_tab, type MarkTab } from "./address_arrival.ts";
 
@@ -32,7 +33,7 @@ export function create_global_mark_jump(deps: GlobalJumpDeps): GlobalJump {
   }
   // In the list of the window the jump lands in, so `<C-o>` there comes back.
   const record = async (window_id: number, is_private: boolean, left: JumpEntry | undefined) => {
-    if (left) await deps.record_jump(window_id, is_private, left).catch(() => undefined);
+    if (left) await deps.record_jump(window_id, is_private, left).catch(warn_and_go("deps.record_jump"));
   };
 
   return async (request: MarkJump, tab: MarkSender): Promise<MarkAnswer> => {

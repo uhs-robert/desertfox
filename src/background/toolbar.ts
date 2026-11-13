@@ -6,6 +6,7 @@ import { COMPILED_KEYMAP_VERSION } from "../shared/prefix_tree.ts";
 import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
+import { best_effort, keep_chain } from "../shared/swallow.ts";
 
 // The manifest `commands` entry that toggles. It is not a slot: no keymap chord reaches it, and it runs while DesertFox is off.
 export const TOGGLE_COMMAND = "toggle_enabled";
@@ -38,14 +39,14 @@ export function create_toolbar(deps: ToolbarDeps) {
   let queue: Promise<unknown> = Promise.resolve();
   const enqueue = <T>(step: () => Promise<T>): Promise<T> => {
     const run = queue.then(step);
-    queue = run.catch(() => undefined);
+    queue = keep_chain(run);
     return run;
   };
 
   // Open tabs keep the mode they are in, and the empty keymap alone does not end a hint, command line or insert mode.
   async function leave_modes(): Promise<void> {
     const tabs = await deps.tabs();
-    await Promise.all(tabs.map((tab) => deps.set_tab_mode(tab.tab_id, "normal").catch(() => undefined)));
+    await Promise.all(tabs.map((tab) => best_effort(deps.set_tab_mode(tab.tab_id, "normal"))));
   }
 
   async function apply(disabled: boolean): Promise<void> {

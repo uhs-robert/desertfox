@@ -10,6 +10,7 @@ import { openable_url, require_openable, url_target } from "./url_build.ts";
 import type { OwnPages } from "./url_build.ts";
 import { pick_by } from "../shared/folder_pick.ts";
 import type { Pickable } from "../shared/folder_pick.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 
 export const WHERE = ["here", "tab", "background", "window"] as const;
 export type Where = (typeof WHERE)[number];
@@ -41,7 +42,7 @@ export type FindContainerStoreId = (container_name: string) => Promise<string | 
 
 // Tolerates a browser with containers turned off: the lookup then finds nothing.
 export const find_container_store_id: FindContainerStoreId = async (container_name) => {
-  const identities = await browser.contextualIdentities.query({ name: container_name }).catch(() => undefined);
+  const identities = await ignore_refusal(browser.contextualIdentities.query({ name: container_name }));
   return Array.isArray(identities) ? identities.find((identity) => identity.name === container_name)?.cookieStoreId : undefined;
 };
 
@@ -73,7 +74,7 @@ export async function current_tab_url(ctx: CommandContext): Promise<string> {
 // What the page slots read. Undefined when the tab cannot be read, so page slots then refuse with their own message.
 export async function current_page(ctx: CommandContext): Promise<PageInfo | undefined> {
   if (ctx.tab_id === undefined) return undefined;
-  const tab = await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+  const tab = await ignore_refusal(browser.tabs.get(ctx.tab_id));
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
@@ -103,7 +104,7 @@ async function open_in_with_id(ctx: CommandContext, url: string, where: Where, c
 // Firefox opens a window with no container and not private unless told otherwise, so a window opened from a container or private tab must carry that tab's state. An unreadable sender tab gives the old plain window.
 // A private window has no containers, so naming one from a private tab is refused. `default` is a named container and still counts.
 async function new_window_context(ctx: CommandContext, container_store_id: string | undefined): Promise<{ cookieStoreId?: string; incognito?: true }> {
-  const tab = ctx.tab_id === undefined ? undefined : await browser.tabs.get(ctx.tab_id).catch(() => undefined);
+  const tab = ctx.tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(ctx.tab_id));
   if (tab?.incognito) {
     if (container_store_id !== undefined) throw new RuntimeRefusal("A private window has no containers");
     return { incognito: true };

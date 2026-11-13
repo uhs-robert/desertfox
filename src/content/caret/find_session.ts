@@ -7,6 +7,7 @@ import { collect_matches, compile_query, describe_match, describe_timeout, neare
 import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";
 import { create_painter } from "./find_paint.ts";
 import type { FindColors, Painter } from "./find_paint.ts";
+import { best_effort } from "../../shared/swallow.ts";
 import { scroll_to_index } from "./screen_line.ts";
 import { find_colors_of, stored_theme } from "./selection_colors.ts";
 import { first_visible_index } from "./start_point.ts";
@@ -103,7 +104,7 @@ export function create_find(host: Host, deps: FindDeps) {
   // Bumped by each `step` that has to scan again, so an older scan does not paint over a newer one.
   let step_generation = 0;
   // Presses of `n` and `N` run one after the other, so each moves one match. A press that ran beside another would cancel it through `step_generation`.
-  let steps: Promise<void> = Promise.resolve();
+  let steps: Promise<unknown> = Promise.resolve();
   // The last query whose regex ran past the time limit. `n` and `N` search it as text at once, so a page whose text keeps changing does not cost each press the full limit.
   // Typing it on the line runs the regex again, and an answer clears it.
   let timed_out_query: string | undefined;
@@ -310,7 +311,7 @@ export function create_find(host: Host, deps: FindDeps) {
           origin = undefined;
         }
       });
-      steps = done.then(() => {}, () => {});
+      steps = best_effort(done);
       return done;
     },
 
@@ -325,7 +326,7 @@ export function create_find(host: Host, deps: FindDeps) {
           origin = undefined;
         }
       });
-      steps = done.then(() => {}, () => {});
+      steps = best_effort(done);
       return done;
     },
 

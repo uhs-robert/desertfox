@@ -1,3 +1,4 @@
+import { refused_as } from "../shared/swallow.ts";
 // Waits for a tab to finish loading and its content script to answer. Global mark jumps use it, and a macro replay can use it between steps.
 // The browser is injected, so a test drives every result with fakes.
 
@@ -87,7 +88,7 @@ export function watch_page_ready(deps: PageReadyDeps, tab_id: number): PageWatch
           if (removed || stopped) return finish("gone");
           if (status !== "complete" || (requires_navigation && !loading_seen)) return;
           checking = true;
-          const has_script = await deps.has_content_script(tab_id).catch(() => false);
+          const has_script = await refused_as(deps.has_content_script(tab_id), false);
           checking = false;
           if (!finished) finish(has_script ? "ready" : "no_script");
         }

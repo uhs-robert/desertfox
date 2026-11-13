@@ -1,4 +1,5 @@
 import "./command_modules.ts";
+import { best_effort, ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
 import type { ContentToBackground, DevtoolsHello, FocusedFrameMode, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
@@ -103,15 +104,15 @@ const record_step: RecordStep = async (steps, outcome, origin) => {
 };
 const media_discovery = create_media_discovery({
   storage: browser.storage.session,
-  tab_is_open: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined)) !== undefined,
+  tab_is_open: async (tab_id) => (await ignore_refusal(browser.tabs.get(tab_id))) !== undefined,
   which_key_delay_ms: async () => effective_settings((await get_config()).settings).which_key_delay_ms,
-  close_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "whichkey", args: {}, bundle: "whichkey" }] }, 0),
-  open_panel: (tab_id) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0),
+  close_panel: (tab_id) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "whichkey", args: {}, bundle: "whichkey" }] }, 0)),
+  open_panel: (tab_id) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0)),
 });
 const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
 const router = create_router(router_deps);
 const watch_tab = (tab_id: number) =>
-  watch_page_ready({ get_tab: (id) => browser.tabs.get(id).catch(() => undefined), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id);
+  watch_page_ready({ get_tab: (id) => ignore_refusal(browser.tabs.get(id)), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id);
 const macro_replay = create_macro_replay({
   read_macro: async (register, is_private) => {
     const value = await browser_register_store.read(register, is_private);
@@ -120,7 +121,7 @@ const macro_replay = create_macro_replay({
   // No command line opens: the recorder stored each prompted step with its value.
   run_step: (step, { tab_id, frame_id, mode, step_number }, lost_reply_is_done) => router.run({ invocations: [step], mode, frame_id, instant: true, lost_reply_is_done, macro_step: step_number, ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }) }),
   active_tab_id: async () => (await router_deps.active_tab())?.tab_id,
-  is_loading: async (tab_id) => (await browser.tabs.get(tab_id).catch(() => undefined))?.status === "loading",
+  is_loading: async (tab_id) => (await ignore_refusal(browser.tabs.get(tab_id)))?.status === "loading",
   watch: watch_tab,
   hold_keys: (tab_id) => send_to_tab(tab_id, { type: "replay_hold" }),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "macro.play", message }),
@@ -154,11 +155,11 @@ const jump_step = create_jump_step({
 const jump_leave = create_jump_leave({
   store: browser_jump_store,
   tab_now: async (tab_id) => {
-    const tab = await browser.tabs.get(tab_id).catch(() => undefined);
+    const tab = await ignore_refusal(browser.tabs.get(tab_id));
     return tab && { url: tab.url, status: tab.status };
   },
 });
-const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await browser.tabs.get(tab_id).catch(() => undefined))?.incognito === true;
+const is_private_tab = async (tab_id: number | undefined) => tab_id !== undefined && (await ignore_refusal(browser.tabs.get(tab_id)))?.incognito === true;
 // A replay is a request like any other: it stores itself again, so `3.` keeps its count for the next `.`.
 wire_repeat({
   load: async (ctx) => repeat_memory.load(await is_private_tab(ctx.tab_id)),
@@ -171,7 +172,7 @@ const cmdline = create_cmdline_service({
   new_ticket: () => crypto.randomUUID(),
   sources: async () => ({ search_engines: await get_search_engine_names(), containers: await container_names() }),
   // A failed query must not stop the line from opening.
-  tab_count: async (window_id) => (await browser.tabs.query({ windowId: window_id }).catch(() => [])).length,
+  tab_count: async (window_id) => (await refused_as(browser.tabs.query({ windowId: window_id }), [])).length,
   container_stores,
   page_config: async () => {
     const config = await get_config();
@@ -196,11 +197,11 @@ const complete_items = create_complete_items({
   search_engines: async () => (await get_config()).search_engines,
   page_of,
   marks: async (url, is_private) => (url === undefined ? [] : mark_list_rows(await browser_mark_store.items(url, is_private))),
-  quality_levels: async (tab_id) => quality_rows(await ask_quality_in_tab(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }).catch(() => undefined)),
+  quality_levels: async (tab_id) => quality_rows(await ignore_refusal(ask_quality_in_tab(tab_id, { type: "quality_apply", op: "list", value: undefined, times: 1 }))),
   quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.table((await get_config()).quickmarks, is_private)),
   saved_quickmarks: async (is_private) => quickmark_list_rows(await browser_quickmark_store.saved(is_private)),
   quickmark_table: async (is_private) => browser_quickmark_store.table((await get_config()).quickmarks, is_private),
-  read_tab: (tab_id) => browser.tabs.get(tab_id).catch(() => undefined),
+  read_tab: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)),
   discard: { ...browser_discard_deps, alternate_of: previous_tabs.previous_of },
   tab_actions: browser_tab_action_deps,
   open_settings: async () => {
@@ -285,15 +286,15 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab = sender.tab;
     const tab_id = sender.tab.id;
     // The top frame leaving insert by any route ends the hold.
-    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(() => undefined);
-    void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(() => undefined);
+    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(warn_and_go("tab_insert.top_frame_left_insert"));
+    void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.reported"));
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true };
-    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true).catch(() => undefined);
+    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true).catch(warn_and_go("tab_media.reported"));
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top }) => {
       // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
       if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
-      if (tell_top) void browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }).catch(() => undefined);
+      if (tell_top) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }));
     });
   }
   if (request?.type === "quality_report") {
@@ -325,7 +326,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true, stamp));
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
-  if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(() => undefined);
+  if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(warn_and_go("jump_leave.leave"));
   if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id);
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
@@ -335,7 +336,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender.url);
   if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
   if (request?.type === "read_keymap") {
-    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(() => undefined).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));
+    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));
     return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
   }
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
@@ -374,7 +375,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
   }
   if (request?.type !== "run") return undefined;
-  if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(() => undefined);
+  if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.key_ran"));
   return get_config().then(async (config) => {
     await macro_replay.wait_unless_from(sender.tab?.id);
     const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
@@ -441,14 +442,14 @@ if (browser.omnibox) {
     record_history: cmdline.record,
   });
   browser.omnibox.setDefaultSuggestion({ description: OMNIBOX_HINT });
-  browser.omnibox.onInputChanged.addListener((text, suggest) => void omnibox.changed(text, suggest).catch(() => undefined));
-  browser.omnibox.onInputEntered.addListener((text, disposition) => void omnibox.entered(text, disposition).catch((error: unknown) => router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) }).catch(() => undefined)));
+  browser.omnibox.onInputChanged.addListener((text, suggest) => void omnibox.changed(text, suggest).catch(warn_and_go("omnibox.changed")));
+  browser.omnibox.onInputEntered.addListener((text, disposition) => void omnibox.entered(text, disposition).catch((error: unknown) => best_effort(router_deps.show_refusal(undefined, { id: "omnibox", message: error instanceof Error ? error.message : String(error) }))));
 }
 
 const site_zoom = create_site_zoom({
   session: browser.storage.session,
   level_for: make_level_for(browser.storage.local, async () => effective_settings((await get_config()).settings).zoom, read_disabled),
-  address_of: (tab_id) => browser.tabs.get(tab_id).then((tab) => tab.url, () => undefined),
+  address_of: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)).then((tab) => tab?.url),
   set_zoom: (tab_id, level) => browser.tabs.setZoom(tab_id, level),
 });
 
@@ -458,13 +459,13 @@ const external_editor = create_external_editor({
   send_done: (tab_id, frame_id, message) => browser.tabs.sendMessage(tab_id, message, { frameId: frame_id }),
   save_text: (text, is_private) => browser_register_store.yank("", text, is_private),
   toast: (tab_id, frame_id, message) => show_toast_on_tab({ tab_id, frame_id }, "text.edit_external", message, "error"),
-  tab_exists: (tab_id) => browser.tabs.get(tab_id).then(() => true, () => false),
+  tab_exists: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)).then((tab) => tab !== undefined),
   private_window_open: has_private_window,
   now: () => Date.now(),
   pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 const editor_ext_for = make_editor_ext_for(browser.storage.local, async () => effective_settings((await get_config()).settings).editor_ext);
-void external_editor.resume().catch(() => undefined);
+void external_editor.resume().catch(warn_and_go("external_editor.resume"));
 
 const media_quality = create_media_quality({
   is_off: async () => (await read_disabled()) || media_quality_is_off(browser.storage.local),
@@ -475,7 +476,7 @@ const media_quality = create_media_quality({
 });
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => void media_quality.tab_updated(tab_id, change, tab.url), { properties: ["url", "status"] });
-const media_quality_settings_changed = () => void media_quality.settings_changed(() => browser.tabs.query({})).catch(() => undefined);
+const media_quality_settings_changed = () => void media_quality.settings_changed(() => browser.tabs.query({})).catch(warn_and_go("media_quality.settings_changed"));
 media_quality_settings_changed();
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
@@ -483,39 +484,39 @@ browser.storage.onChanged.addListener((changes, area) => {
 
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
-  if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(() => undefined);
+  if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(warn_and_go("tab_media.navigated"));
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
-  if (change.status === "loading") void external_editor.orphan(tab_id).catch(() => undefined);
-  void jump_leave.updated({ tab_id, incognito: tab.incognito, url: tab.url, status: tab.status }, change).catch(() => undefined);
+  if (change.status === "loading") void external_editor.orphan(tab_id).catch(warn_and_go("external_editor.orphan"));
+  void jump_leave.updated({ tab_id, incognito: tab.incognito, url: tab.url, status: tab.status }, change).catch(warn_and_go("jump_leave.updated"));
   if (change.status === "loading") void inspect_relay.forget(tab_id);
-  void hint_frames.navigated(tab_id, change).catch(() => undefined);
+  void hint_frames.navigated(tab_id, change).catch(warn_and_go("hint_frames.navigated"));
   void tab_modes.forget_on_navigation(tab_id, change);
 });
 
-browser.tabs.onRemoved.addListener((tab_id) => void jump_leave.forget(tab_id).catch(() => undefined));
-browser.windows.onRemoved.addListener((window_id) => void browser_jump_store.forget_window(window_id).catch(() => undefined));
-browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(() => undefined));
+browser.tabs.onRemoved.addListener((tab_id) => void jump_leave.forget(tab_id).catch(warn_and_go("jump_leave.forget")));
+browser.windows.onRemoved.addListener((window_id) => void browser_jump_store.forget_window(window_id).catch(warn_and_go("browser_jump_store.forget_window")));
+browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(warn_and_go("repeat_memory.clear_private_without_window")));
 wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);
 
 // Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
 browser.history.onVisited.addListener(history_cache.visited);
 browser.history.onTitleChanged.addListener(history_cache.title_changed);
 browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
-browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_removed(removal, { marks: browser_mark_store, cmdline }).catch(() => undefined));
+browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_removed(removal, { marks: browser_mark_store, cmdline }).catch(warn_and_go("clear_on_history_removed")));
 void history_cache.start();
 
 browser.tabs.onActivated.addListener(({ windowId, previousTabId }) => void previous_tabs.activated(windowId, previousTabId));
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
-  void external_editor.orphan(tab_id).catch(() => undefined);
+  void external_editor.orphan(tab_id).catch(warn_and_go("external_editor.orphan"));
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
-  void hint_frames.forget(tab_id).catch(() => undefined);
-  void tab_media.forget(tab_id).catch(() => undefined);
-  void media_discovery.forget(tab_id).catch(() => undefined);
+  void hint_frames.forget(tab_id).catch(warn_and_go("hint_frames.forget"));
+  void tab_media.forget(tab_id).catch(warn_and_go("tab_media.forget"));
+  void media_discovery.forget(tab_id).catch(warn_and_go("media_discovery.forget"));
   void tab_modes.forget(tab_id);
 });
 

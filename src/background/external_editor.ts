@@ -11,6 +11,7 @@ import { site_columns_for, site_value } from "./page_keymap.ts";
 import type { EditorCollectReply, EditorStartRequest } from "./native_client.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { EDITOR_JOBS_STORAGE_KEY } from "./storage_keys.ts";
+import { best_effort, refused_as } from "../shared/swallow.ts";
 
 export type EditorJob = { job: string; tab_id: number; token: string; frame_id: number; is_private: boolean; orphaned?: true };
 // Keyed by the host's job id.
@@ -71,9 +72,9 @@ export function create_external_editor(deps: ExternalEditorDeps) {
   // The result reaches the page, or else the register. Either way the user's saved text survives.
   async function deliver(held: EditorJob, text: string | undefined): Promise<void> {
     const done: EditorDone = { type: "editor_done", token: held.token, ...(text === undefined ? {} : { text }) };
-    const delivered = !held.orphaned && (await deps.send_done(held.tab_id, held.frame_id, done).catch(() => undefined)) === true;
+    const delivered = !held.orphaned && (await refused_as(deps.send_done(held.tab_id, held.frame_id, done), undefined)) === true;
     if (delivered || text === undefined) return;
-    const toast = (message: string) => deps.toast(held.tab_id, held.frame_id, message).catch(() => undefined);
+    const toast = (message: string) => best_effort(deps.toast(held.tab_id, held.frame_id, message));
     if (held.is_private && !(await deps.private_window_open())) return void (await toast("The private window was gone when the editor ended, so the edited text was dropped"));
     try {
       await deps.save_text(text, held.is_private);
@@ -102,7 +103,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
           }
           const current = await clear(held.job);
           const where = unknown_job ? "" : ` The saved text stays in ${SCRATCH_DIR}.`;
-          if (current && !current.orphaned) await deps.toast(current.tab_id, current.frame_id, failure_text(error) + where).catch(() => undefined);
+          if (current && !current.orphaned) await best_effort(deps.toast(current.tab_id, current.frame_id, failure_text(error) + where));
           return;
         }
         if ("pending" in reply) {
