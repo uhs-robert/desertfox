@@ -489,3 +489,19 @@ test("the Search engines intro names the Find anything key from the model, not a
   assert.equal(intro.length, 1);
   assert.equal(root.find_all((node) => node.tag === "code" && node.children[0] === ",,").length, 0);
 });
+
+test("a command card shows its keys in the head, one cap per key, and a dash when it has none", () => {
+  (globalThis as { document?: unknown }).document = fake_document;
+  const root = new FakeNode("body");
+  fake_document.body = root;
+  reset_group_state();
+  const command = { id: "tab.next", name: "tab", label: "Next tab", intent: "Go on.", usage: "tab", params: [], advanced: false };
+  const groups = [{ name: "tab", commands: [{ ...command, keys: [{ mode: "normal", keys: "gt" }] }, { ...command, id: "tab.none", keys: [] }] }];
+  render_help(root as never, { quick_start: [], groups, warnings: [], config_source: "", rebuild_steps: [], engines: [], tip: { kind: "tip", inlines: [] }, keys: { reload: ",r", find_anything: ",," } } as never, { page: "commands" }, []);
+  const [bound, unbound] = root.find_all(by_class("desertfox-help-command"));
+  const head = bound!.find_all(by_class("desertfox-help-command-head"))[0]!;
+  assert.equal(head.find_all(by_class("desertfox-keycap")).map((cap) => cap.textContent).join(" "), "g t");
+  const none = unbound!.find_all(by_class("desertfox-help-keys"))[0]!.children[0] as FakeNode;
+  assert.equal(none.attributes["aria-label"], "no keys");
+  assert.equal(bound!.attributes["data-accent"], "0");
+});

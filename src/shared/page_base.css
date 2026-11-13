@@ -7,6 +7,11 @@
   --desertfox-primary: #7fa3c9;
   --desertfox-secondary: #f0e68c;
   --desertfox-border: #4e6578;
+  --desertfox-accent: #e0a458;
+  --desertfox-info: #81c0ff;
+  --desertfox-ok: #a3e39a;
+  --desertfox-warn: #f0c674;
+  --desertfox-error: #ff9a9a;
   --desertfox-font: 1rem/1.5 system-ui, sans-serif;
   --desertfox-radius: 6px;
   --desertfox-mono: ui-monospace, monospace;
@@ -26,6 +31,11 @@
     --desertfox-primary: #2b5f94;
     --desertfox-secondary: #8a6d00;
     --desertfox-border: #9aa5b1;
+    --desertfox-accent: #a35b00;
+    --desertfox-info: #1f5f9f;
+    --desertfox-ok: #1e6b2e;
+    --desertfox-warn: #8a5a00;
+    --desertfox-error: #b3261e;
   }
 }
 /* The new tab page's rem unit. The help page sets its own 16px root after this sheet, because its layout is measured in 16px rems. */

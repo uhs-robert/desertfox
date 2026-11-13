@@ -132,7 +132,7 @@ function sentence(compiled: CompiledKeymap | undefined, commands: CommandMeta[],
       if (!part.startsWith("{")) return { kind: "text", text: part };
       const binding: Binding = BINDINGS[part.slice(1, -1) as BindingName];
       const [shortest] = key_paths(compiled, commands, binding);
-      if (shortest) return { kind: "code", text: shortest.join("") };
+      if (shortest) return { kind: "keys", text: shortest.join("") };
       const command_line = command_line_of(commands, binding);
       return command_line === undefined ? { kind: "text", text: NO_KEY } : { kind: "code", text: command_line };
     });
