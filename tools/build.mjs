@@ -30,8 +30,8 @@ const MAX_BYTES = {
   "site_actions.js": 4 * 1024,
   // 6 KB: the thumb press point, the per-drag step keys (`[` and `]`) and the swipe fling (`snap_scroll`, `start_fling`).
   "grab.js": 6 * 1024,
-  // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking.
-  "cmdline_page.js": 57 * 1024,
+  // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry.
+  "cmdline_page.js": 57.5 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,
 };

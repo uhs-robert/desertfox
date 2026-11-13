@@ -1,11 +1,11 @@
 // The `grab` bundle: drags an element from the keys. `grab.mode` takes a hint pick, the way `caret.mode` does: the hints bundle leaves the element in `desertfox_pick_target` and passes the action as `mode`. `hint --grab` asks the hints bundle for a second pick, the target, and drives the drag to it. `hint --grab_move` holds the element and enters grab mode, whose keys (`grab.move`, `grab.drop`, `grab.cancel`) move, drop and cancel it.
 
-import type { BundleHostApi } from "../bundle_host.ts";
+import type { PageHostApi } from "../bundle_host.ts";
 import type { Outcome } from "../../shared/messages.ts";
 import { abort, center_of, drive, FLING_SETTLE_MS, FLING_STEPS, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 
-type GrabWindow = { desertfox_host?: BundleHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
+type GrabWindow = { desertfox_host?: PageHostApi; desertfox_grab_ready?: true; desertfox_pick_target?: Element };
 const grab = window as unknown as GrabWindow;
 
 const refused = (message: string): Outcome => ({ ok: false, message });
@@ -17,7 +17,7 @@ const NOTHING_HELD = refused("Nothing is grabbed");
 const DROPPED_TOAST = "Grab dropped";
 const KEYS_TOAST = "Grab: h j k l move, [ ] step, Enter drops, Escape cancels";
 
-function register(host: BundleHostApi): void {
+function register(host: PageHostApi): void {
   // The element held in grab mode.
   let held: Held | undefined;
   // The first pick of `hint --grab`, until its target is picked or the second hint is left.
@@ -44,7 +44,7 @@ function register(host: BundleHostApi): void {
     const from = source!;
     source = undefined;
     if (from.ownerDocument !== target.ownerDocument) return refused("Grab works inside one frame");
-    const dragged = press(from);
+    const dragged = press(from, host.grab_step_px_());
     if (!dragged) return REFUSED;
     driving = dragged;
     const stoppers = ["keydown", "pagehide"];
@@ -77,7 +77,7 @@ function register(host: BundleHostApi): void {
     if (source) return drop_on(element);
     end_all();
     if (args.mode === "grab_move") {
-      held = press(element);
+      held = press(element, host.grab_step_px_());
       if (!held) return REFUSED;
       host.set_mode_("grab");
       host.show_toast_(KEYS_TOAST);

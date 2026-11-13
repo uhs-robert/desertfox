@@ -13,6 +13,7 @@ const EXPECTATIONS: Record<string, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
   toast_ms: "a whole number of milliseconds, from 500 to 30000",
   toast_error_ms: "a whole number of milliseconds, from 500 to 30000",
+  grab_step_px: "3, 6, 12, 24, 48, 96 or 192",
   which_key_repeat: "true or false",
   which_key_border: '"square", "round" or "chamfer"',
   which_key_skip: "a list of key prefixes in keymap notation",
@@ -74,6 +75,7 @@ test("every setting keeps its listed values", () => {
   assert.ok(theme?.includes("oasis_moonlight"));
   assert.deepEqual(rest, {
     which_key_repeat: ["true", "false"],
+    grab_step_px: ["3", "6", "12", "24", "48", "96", "192"],
     which_key_border: ["square", "round", "chamfer"],
     layout_fallback: ["true", "false"],
     mode_indicator: ["always", "not_normal", "off"],
@@ -113,6 +115,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   which_key_delay_ms: [0, 0.5, 300],
   toast_ms: [500, 3000, 30000],
   toast_error_ms: [500, 6000, 30000],
+  grab_step_px: [3, 6, 12, 24, 48, 96, 192],
   which_key_repeat: [true, false],
   which_key_border: ["square", "round", "chamfer"],
   which_key_skip: [[], ["g", ",", "<C-w>"]],
@@ -168,6 +171,7 @@ const REFUSES: Record<string, unknown[]> = {
   which_key_delay_ms: [-1, Number.POSITIVE_INFINITY, Number.NaN, "300"],
   toast_ms: [499, 30001, 1000.5, "3000"],
   toast_error_ms: [499, 30001, 1000.5, "6000"],
+  grab_step_px: [0, 2, 4, 384, "3"],
   which_key_repeat: ["true", 1],
   which_key_border: ["Square", "", 1],
   which_key_skip: ["g", [""], ["<S-1>"], ["g", "<a>"]],
@@ -276,6 +280,7 @@ test("the defaults stay the same", () => {
     which_key_delay_ms: 300,
     toast_ms: 3000,
     toast_error_ms: 6000,
+    grab_step_px: 3,
     which_key_repeat: true,
     which_key_border: "square",
     which_key_skip: [],
@@ -358,7 +363,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   // #620 rewrote every description for a first-time reader.
   const described_now = settings_schema().properties as Record<string, { description: string }>;
   for (const [name, property] of Object.entries(properties as Record<string, { description?: string | undefined }>)) property.description = described_now[name]?.description;

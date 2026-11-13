@@ -61,6 +61,7 @@ test("each setting kind gets its control", async () => {
     const kind = (name: string) => control_of(rows.get(name)!, ["google"]).type;
     assert.equal(kind("newtab_date"), "checkbox");
     assert.equal(kind("which_key_border"), "select");
+    assert.equal(kind("grab_step_px"), "select");
     assert.equal(kind("light_intensity"), "select");
     assert.equal(kind("history_completion_max"), "number");
     assert.equal(kind("home_page"), "text");
