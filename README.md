@@ -100,14 +100,20 @@ Sources, read in November 2026: each project's documentation, source code and sh
 > The last row shows size, not page speed. The sizes are as shipped.
 > DesertFox and Vimium C are minified, and Vimium and Tridactyl are not. DesertFox defers loading hint and caret code to first use.
 
-### Where another tool fits better
+<details>
+<summary><b>🧭 Where another tool fits better</b></summary>
 
 - You use Chrome, Edge or Safari. DesertFox runs on desktop Firefox only. Vimium and Vimium C cover the other browsers.
 - You want keys on every page, with no exception. Only a browser built for the keyboard, such as qutebrowser, gives that. An extension cannot run on Firefox's own pages.
 - You want to run shell commands or your own scripting language from the browser. Tridactyl allows both. DesertFox leaves them out on purpose.
 - You want the smallest set of keys and nothing to configure. Vimium has the fewest commands, but you learn them from its help page. DesertFox shows the next keys in its which-key popup after a short pause.
 
-### Switching from Tridactyl, Vimium or Vim
+</details>
+
+<a id="switching-from-tridactyl-vimium-or-vim"></a>
+
+<details>
+<summary><b>🔀 Switching from Tridactyl, Vimium or Vim</b></summary>
 
 Most keys work as you know them:
 
@@ -128,6 +134,8 @@ You lose:
 
 - Shell commands and a scripting language. Tridactyl has both (see its command source above), and DesertFox leaves them out on purpose.
 - DesertFox has no `bind` or `:source` command like Tridactyl's. Keys live in a `keymap.toml` file that DesertFox checks and applies with one key. Your own commands are snippets (JavaScript files from your own config folder, or an import you accept).
+
+</details>
 
 ## ✨ Features
 
