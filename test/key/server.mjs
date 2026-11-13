@@ -1,5 +1,7 @@
 // Test pages for the key test. Each page posts what it sees to /report, and the test reads the event list.
 import http from "node:http";
+import { readFileSync } from "node:fs";
+import { DRAG_PAGES } from "./drag_pages.mjs";
 
 const REPORTER = `
 const page_id = new URLSearchParams(location.search).get("id") ?? "none";
@@ -187,6 +189,10 @@ export function start_server() {
       response.writeHead(200, { "content-type": "audio/wav" });
       return response.end(Buffer.concat([header, Buffer.alloc(samples, 0x80)]));
     }
+    if (url.pathname === "/sortable.js") {
+      response.writeHead(200, { "content-type": "text/javascript" });
+      return response.end(readFileSync(new URL("./vendor/Sortable.min.js", import.meta.url)));
+    }
     if (url.pathname === "/clip.webm") {
       // Thirty seconds of a 16 px orange square, one frame per 5 s and no sound: a video track for picture-in-picture, which refuses audio alone. Made with ffmpeg from the lavfi color source.
       response.writeHead(200, { "content-type": "video/webm" });
@@ -194,6 +200,7 @@ export function start_server() {
     }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     const id = url.searchParams.get("id") ?? "none";
+    if (url.pathname === "/drag") return response.end(page(`drag ${id}`, DRAG_PAGES[id.split("_")[0]] ?? ""));
     if (url.pathname === "/field") {
       return response.end(page(`field ${id}`, '<input id="field" autofocus>', "<script>addEventListener('load', () => document.getElementById('field').focus())</script>"));
     }

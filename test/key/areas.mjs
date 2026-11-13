@@ -30,7 +30,7 @@ export const area_rules = [
   // The hand-off of a hidden input frame, which p15_frame_mode tests, and the `gi` search that returns into it.
   { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
   { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
-  { globs: ["src/content/hints/**", "src/commands/{hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/hints/**", "src/content/grab/**", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
