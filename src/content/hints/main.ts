@@ -231,7 +231,8 @@ function open_link_(url: string, place: Place): Promise<unknown> {
 // The caret bundle reads the element in `start_session` when the mode starts, and loads on that first entry. A failed load fails the pick.
 function start_caret_(target: Element, mode: CaretMode): Promise<Outcome> {
   page.desertfox_caret_target = target;
-  return page.desertfox_host.run_command_("caret.mode", "caret", { mode });
+  const bundle = mode[0] === "g" ? "grab" : "caret";
+  return page.desertfox_host.run_command_(`${bundle}.mode`, bundle, { mode });
 }
 
 const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window as never, target, () => browser.runtime.sendMessage({ type: "inspect_pick" }), setTimeout, (message) => create_view().show_message_(message));

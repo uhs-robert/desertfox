@@ -32,6 +32,7 @@ import "../commands/cmdline.ts";
 import "../commands/caret.ts";
 import "../commands/visual.ts";
 import "../commands/find.ts";
+import "../commands/grab.ts";
 import "../commands/engine.ts";
 import "../commands/command.ts";
 import "../commands/native.ts";
