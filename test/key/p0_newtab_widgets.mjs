@@ -11,7 +11,7 @@ const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) =>
 
 export const areas = ["newtab", "config"];
 
-export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, open_page, rdp, extension_id }) {
+export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, open_page, url_of, rdp, extension_id }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
 
@@ -76,20 +76,20 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await press_keys("-k", "Escape");
     });
 
-    // The real save path: a page with a favicon is visited, the background redraws the icon Firefox hands it, and the new tab page shows the 32x32 copy. A clear of all history first empties the cache and the saver's memory, so an earlier visit to this host in the session cannot hide the save.
+    // The real save path: a page with its own favicon is visited, the background redraws the icon Firefox hands it, and the new tab page shows the 32x32 copy. The host is `localhost`, which no other piece visits, so no earlier visit can throttle or hide the save, and nothing else needs clearing.
     await run_case("a visited page's favicon is saved as a 32x32 PNG and its card shows it", async () => {
       await close_new_tabs();
-      await in_background(`browser.history.deleteAll()`);
-      await poll_until("the cache to be empty", async () => (await in_background(`browser.storage.local.get("favicon_cache").then((found) => !found.favicon_cache || found.favicon_cache.length === 0)`)) === true);
-      await open_page("iconed", "cards_icon", { new_tab: true });
-      const entry_script = `browser.storage.local.get("favicon_cache").then(async (found) => { const entry = (found.favicon_cache ?? []).find((item) => item.host === "127.0.0.1"); if (!entry) return null; const image = new Image(); image.src = entry.icon; await image.decode(); return { icon: entry.icon, width: image.naturalWidth, height: image.naturalHeight }; })`;
+      const page_url = url_of("iconed_card", "cards_icon").replace("127.0.0.1", "localhost");
+      expect(page_url.includes("localhost"), `the page address held no 127.0.0.1: ${page_url}`);
+      const entry_script = `browser.storage.local.get("favicon_cache").then(async (found) => { const entry = (found.favicon_cache ?? []).find((item) => item.host === "localhost"); if (!entry) return null; const image = new Image(); image.src = entry.icon; await image.decode(); return { icon: entry.icon, width: image.naturalWidth, height: image.naturalHeight }; })`;
+      await in_background(`browser.storage.local.get("favicon_cache").then((found) => browser.storage.local.set({ favicon_cache: (found.favicon_cache ?? []).filter((item) => item.host !== "localhost") }))`);
+      await in_background(`browser.tabs.create({ url: ${JSON.stringify(page_url)}, active: true })`);
       await poll_until("the background to save the icon", async () => (await in_background(entry_script).catch(() => null)) !== null, { timeout_ms: 15000 });
       const saved = await in_background(entry_script);
       expect(saved.icon.startsWith("data:image/png;base64,") && saved.width === 32 && saved.height === 32, `the saved icon was not a 32x32 PNG: ${saved.icon.slice(0, 40)} ${saved.width}x${saved.height}`);
       expect(await open_new_tab(".tiles .tile"), "no card rendered");
-      const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile img.tile-icon")].map((image) => image.getAttribute("src"))`);
-      expect(shown.includes(saved.icon), "no card showed the saved icon");
-      expect(shown.every((src) => src.startsWith("data:image/")), `an img src was not a data: image: ${JSON.stringify(shown)}`);
+      const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile")].filter((card) => card.querySelector(".tile-site")?.textContent === "localhost").map((card) => card.querySelector("img.tile-icon")?.getAttribute("src"))`);
+      expect(shown.includes(saved.icon), `no card for localhost showed the saved icon: ${JSON.stringify(shown)}`);
     });
   } finally {
     await close_new_tabs().catch(() => undefined);

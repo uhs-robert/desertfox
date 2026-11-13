@@ -57,7 +57,8 @@ export function make_favicon_cache(storage: CacheStorage, warn: (message: string
   };
   return {
     read: async () => icons_by_host(await stored()),
-    entry_for: async (host: string) => (await stored()).find((entry) => entry.host === host),
+    // The source key of each stored host, oldest saved first, so the saver can load what it knows once.
+    sources: async (): Promise<[string, string][]> => (await stored()).map((entry) => [entry.host, entry.source]),
     generation: () => generation,
     // A full storage warns once until a write succeeds again, because every page load would repeat it.
     save: (entry: FaviconEntry, started_in: number) =>

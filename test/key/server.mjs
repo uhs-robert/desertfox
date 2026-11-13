@@ -176,6 +176,11 @@ export function start_server() {
       response.writeHead(200, { "content-type": "image/svg+xml" });
       return response.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#e8a33d"/><path d="M5 8l2 2 4-4" fill="none" stroke="#fff" stroke-width="2"/></svg>');
     }
+    // A second icon with its own bytes and a wide shape, for the key case that checks the favicon save path.
+    if (url.pathname === "/icon_card.svg") {
+      response.writeHead(200, { "content-type": "image/svg+xml" });
+      return response.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 12"><rect width="24" height="12" rx="3" fill="#2a7fb8"/></svg>');
+    }
     if (url.pathname === "/captions.vtt") {
       response.writeHead(200, { "content-type": "text/vtt" });
       return response.end("WEBVTT\n\n00:00:00.000 --> 00:00:20.000\nA caption\n");
@@ -778,6 +783,7 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const filler = Array.from({ length: 60 }, (_, index) => `<p>filler line ${index} with some text</p>`).join("");
       return response.end(page(`caret_bug_find ${id}`, `<p>start of page</p>${filler}<p>the needle sits here</p>${filler}`));
     }
+    if (url.pathname === "/iconed_card") return response.end(page(`iconed_card ${id}`, "", '<link rel="icon" href="/icon_card.svg">'));
     if (url.pathname === "/iconed") return response.end(page(`iconed ${id}`, "", '<link rel="icon" href="/icon.svg">'));
     if (url.pathname === "/swallow") return response.end(page(`swallow ${id}`, tall_filler, CANCEL_KEYS_IN_CAPTURE));
     response.end(page(`page ${id}`, tall_filler));
