@@ -1,5 +1,5 @@
 // Key test cases of the Search engines section on the settings page: the add form saves an engine with a key letter, the letter searches in an open tab at once,
-// the starter set adds the sample engines, and the export carries the layer. Stored layers survive across cases, so the teardown removes every engine through the background's own message.
+// the starter set adds the sample engines, and the export carries the layer. Stored layers survive across cases, so the teardown clears the layer in storage and publishes twice.
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["help", "config", "engines"];
@@ -18,13 +18,14 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the engines section to load", () => in_page(`return !!view && view.document.querySelector(".desertfox-engines input") !== null && !view.document.querySelector(".desertfox-engines").textContent.includes("Loading");`).catch(() => false), { timeout_ms: 10000 });
   }
 
-  // The layer is cleared in storage and one publish follows through the toolbar switch, so no engine is removed one by one and no letter stays behind.
+  // The layer is cleared in storage, then the toolbar switch goes off and on: two publishes, so no engine is removed one by one and no letter stays behind. The switch must end on, or every later piece would run with DesertFox off.
   on_teardown(async () => {
     const stored = await layer();
     if (Object.keys(stored.engines ?? {}).length + Object.keys(stored.letters ?? {}).length > 0) {
       await open_settings();
-      await in_page(`return view.browser.storage.local.set({ desertfox_engine_edits: {} }).then(() => view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: true })).then(() => view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: false }));`);
-      await poll_until("the engines layer to be gone from the config", () => in_background(`browser.storage.local.get("desertfox_layered_config").then((got) => got.desertfox_layered_config == null)`));
+      const answers = await in_page(`return view.browser.storage.local.set({ desertfox_engine_edits: {} }).then(async () => [await view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: true }), await view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: false })]);`);
+      expect(answers.every((answer) => answer.ok), `the toolbar switch answered ${JSON.stringify(answers)}`);
+      await poll_until("the engines layer to be gone and DesertFox back on", () => in_background(`browser.storage.local.get(["desertfox_layered_config", "desertfox_disabled"]).then((got) => got.desertfox_layered_config == null && got.desertfox_disabled !== true)`));
     }
     await close_settings_tabs();
   });
