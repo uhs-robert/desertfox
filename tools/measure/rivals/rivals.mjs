@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { PINNED_BUILDS, PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
+import { CHECK_FAILED_STATUS, PINNED_BUILDS, PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const repo_dir = new URL("../../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -67,7 +67,9 @@ for (let pass = 1; pass <= pass_count; pass++) {
     console.log(`pass ${pass}: ${tool}`);
     // A busy machine can make the debugger connection time out at startup, so each tool gets one retry.
     const attempt = () => spawnSync("node", [`${here}run.mjs`, tool, timed_runs], { env: { ...env, PASS: String(pass) }, stdio: ["ignore", "inherit", "inherit"] });
-    const result = attempt().status === 0 ? { status: 0 } : attempt();
+    const first = attempt();
+    if (first.status === CHECK_FAILED_STATUS) throw new Error(`run.mjs ${tool} failed a coverage check: not retried`);
+    const result = first.status === 0 ? first : attempt();
     if (result.status !== 0) throw new Error(`run.mjs ${tool} failed twice (status ${result.status})`);
   }
 }
