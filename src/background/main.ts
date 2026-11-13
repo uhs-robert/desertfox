@@ -21,7 +21,7 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { strip_patterns_for } from "./strip_patterns.ts";
-import { hint_selectors_reply, join_mode, media_quality_is_off, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -500,7 +500,7 @@ const editor_ext_for = make_editor_ext_for(browser.storage.local, async () => ef
 void external_editor.resume().catch(warn_and_go("external_editor.resume"));
 
 const media_quality = create_media_quality({
-  is_off: async () => (await read_disabled()) || media_quality_is_off(browser.storage.local),
+  is_off: async () => (await read_disabled()) || media_quality_is_idle(browser.storage.local),
   inject_all: inject_probe_for_rule,
   inject_about_blank: inject_probe_about_blank,
   inject_frame: inject_quality_into_frame,

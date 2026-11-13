@@ -1,6 +1,6 @@
-// The media_quality rule: a fake site player (the /quality fixture) starts at 720p, and the rule takes it to its level on a fresh load and after an in-site navigation. Site rows override the global max, off leaves the page alone, and a manual `media quality` choice stands.
+// The media_quality rule: a fake site player (the /quality fixture) starts at 720p, and the rule takes it to its level on a fresh load and after an in-site navigation. The config sets the global max, because the shipped default auto leaves players alone. Site rows override it, off leaves the page alone, and a manual `media quality` choice stands.
 // The rows live in a config copy, so no other piece sees them. The fixture reports each range call the extension makes as a quality_set event.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["media", "config"];
@@ -29,7 +29,10 @@ const QUIET_MS = 3500;
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, in_active_tab, wait_event, expect_absent, events, poll_until, run_line, sleep, expect }) {
   await setup("load a config with media_quality rows for the p26_ pages", async () => {
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), ROWS);
+    // The global key goes first: after a table header it would belong to that table.
+    const settings_path = join(dir, "settings.toml");
+    writeFileSync(settings_path, `media_quality = "max"\n${readFileSync(settings_path, "utf8")}`);
+    appendFileSync(settings_path, ROWS);
     await load_config_dir(dir);
   });
 
@@ -41,7 +44,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     })()`);
   const navigate = () => in_active_tab('document.getElementById("navigate").click(); 0');
 
-  await run_case("the global default max takes a fresh load to the top level, and an in-site navigation to the top again", async () => {
+  await run_case("the global max takes a fresh load to the top level, and an in-site navigation to the top again", async () => {
     let mark = events.length;
     await open_page("quality", "p26_yt", { new_tab: true });
     await wait_event(mark, on_set("p26_yt", (event) => event.low === "hd1080" && event.high === "hd1080"), "the fresh load at 1080p");
