@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 443 (normal 230, media 52, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 445 (normal 232, media 52, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
 
 ### normal
 
@@ -67,6 +67,8 @@ bound: 443 (normal 230, media 52, hint 8, cmdline 19, caret 36, visual 44, visua
 | `gt` | bound | `tab.goto` | Next tab |  |
 | `gT` | bound | `tab.prev` | Previous tab |  |
 | `ga` | bound | `tab.goto_audible` | Go to audible tab |  |
+| `gp` | bound | `tab.split_other` | Other pane |  |
+| `gP` | bound | `tab.split_swap` | Swap panes |  |
 | `gF` | bound | `frame.exit` | Focus top page |  |
 | `g0` | bound | `tab.goto 1` | First tab |  |
 | `g^` | bound | `tab.goto 1` | First tab |  |

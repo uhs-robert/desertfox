@@ -28,6 +28,8 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "tab.load": [/matches .* equally/, /loaded 0 tabs/],
   "tab.reopen_in_container": [/No container named/],
   "tab.attach": [/already in that window/],
+  "tab.split_other": [/not in a split view/],
+  "tab.split_swap": [/not in a split view/],
   "tabgroup.remove": [/no group/],
   "tabgroup.name": [/no group/],
   "tabgroup.collapse": [/no group/],

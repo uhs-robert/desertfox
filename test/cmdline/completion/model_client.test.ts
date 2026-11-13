@@ -23,6 +23,7 @@ const row = (id: number, window_id: number, index: number, extra: Partial<TabRow
   container_color: "",
   container_icon: "",
   group_id: -1,
+  split_id: -1,
   ...extra,
 });
 
@@ -91,7 +92,7 @@ test("a row carries the flags, the container and the window number as the list r
   client.receive({
     type: "snapshot",
     rev: 0,
-    tabs: [row(1, 10, 2, { pinned: true, audible: true, muted: true, discarded: true, favicon_url: "https://a.test/i.png", container_color: "blue", container_icon: "fingerprint", title: "two\n lines" })],
+    tabs: [row(1, 10, 2, { pinned: true, audible: true, muted: true, discarded: true, split_id: 2, favicon_url: "https://a.test/i.png", container_color: "blue", container_icon: "fingerprint", title: "two\n lines" })],
     groups: [],
   });
   assert.deepEqual(client.items(), [
@@ -106,6 +107,7 @@ test("a row carries the flags, the container and the window number as the list r
       pinned: true,
       muted: true,
       discarded: true,
+      split: true,
     },
   ]);
 });

@@ -38,6 +38,7 @@ export function create_model_client(deps: ModelClientDeps) {
       ...(row.audible && !row.muted ? { audible: true as const } : {}),
       ...(row.muted ? { muted: true as const } : {}),
       ...(row.discarded ? { discarded: true as const } : {}),
+      ...(row.split_id !== -1 ? { split: true as const } : {}),
     };
   };
 

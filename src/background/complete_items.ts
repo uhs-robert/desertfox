@@ -31,6 +31,7 @@ export type TabLike = {
   audible?: boolean | undefined;
   mutedInfo?: { muted?: boolean | undefined } | undefined;
   discarded?: boolean | undefined;
+  splitViewId?: number | undefined;
   lastAccessed?: number | undefined;
 };
 
@@ -93,6 +94,7 @@ export function listed_tabs(tabs: readonly TabLike[], scope: LineScope, containe
         ...(tab.audible && !tab.mutedInfo?.muted ? { audible: true as const } : {}),
         ...(tab.mutedInfo?.muted ? { muted: true as const } : {}),
         ...(tab.discarded ? { discarded: true as const } : {}),
+        ...(tab.splitViewId !== undefined && tab.splitViewId !== -1 ? { split: true as const } : {}),
       };
     })
     .sort((a, b) => Number(b.window_id === scope.window_id) - Number(a.window_id === scope.window_id) || a.window_id - b.window_id || a.number - b.number);

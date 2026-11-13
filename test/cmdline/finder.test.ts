@@ -218,7 +218,7 @@ test("speed: ranking 1000 history rows, 3000 bookmarks and 300 tabs per key", as
 });
 
 test("empty query: only the line's own tab is left out, not the active tab of another window", async () => {
-  const base = { favicon_url: "", site: "", pinned: false, muted: false, audible: false, discarded: false, previous: false, container: "", container_name: "", container_color: "", container_icon: "", group_id: -1 };
+  const base = { favicon_url: "", site: "", pinned: false, muted: false, audible: false, discarded: false, previous: false, container: "", container_name: "", container_color: "", container_icon: "", group_id: -1, split_id: -1 };
   const row = (id: number, window_id: number, active: boolean) => ({ ...base, id, window_id, index: 0, title: `Tab ${id}`, url: `https://t${id}.test/`, active, window_number: window_id === 10 ? 1 : 2 });
   const client = create_model_client({ line_window_id: 10, all_windows: false, request_resync: () => {}, on_change: () => {} });
   client.receive({ type: "snapshot", rev: 0, tabs: [row(1, 10, true), row(2, 11, true), row(3, 11, false)], groups: [] });

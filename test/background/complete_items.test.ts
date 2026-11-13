@@ -485,6 +485,11 @@ test("the flags appear only when true", () => {
   assert.equal(listed_tabs([in_window(1, { mutedInfo: { muted: false } })], { window_id: 10, incognito: false })[0]!.muted, undefined);
 });
 
+test("a tab in a split view carries the split flag, a tab with split id -1 does not", () => {
+  const [plain, split] = listed_tabs([in_window(1, { splitViewId: -1 }), in_window(2, { splitViewId: 4 })], { window_id: 10, incognito: false });
+  assert.deepEqual([plain!.split, split!.split], [undefined, true]);
+});
+
 test("only http, https and short data: favicons go on the wire", () => {
   assert.equal(listed_favicon("https://a.test/icon.png"), "https://a.test/icon.png");
   assert.equal(listed_favicon("http://a.test/icon.png"), "http://a.test/icon.png");

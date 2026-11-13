@@ -19,7 +19,7 @@ import { host_of, matching_sites } from "./sites.ts";
 import { cursor_context, quote_word } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
 
-export type TabFlag = "pinned" | "audible" | "muted" | "discarded";
+export type TabFlag = "pinned" | "audible" | "muted" | "discarded" | "split";
 
 // What a tab row draws before its name. `status` is `%` for the current tab, `#` for the alternate one and empty otherwise.
 // `window_number` is present only when the list spans more than one window.
@@ -216,7 +216,7 @@ function open_ranked(word: string, rows: Row[], items: OpenItems, usage: string)
   return rank(word, rows).filter((row) => (shown[row.tag as string] = (shown[row.tag as string] ?? 0) + 1) <= (caps[row.tag as string] ?? Infinity));
 }
 
-const FLAGS: TabFlag[] = ["pinned", "audible", "muted", "discarded"];
+const FLAGS: TabFlag[] = ["pinned", "audible", "muted", "discarded", "split"];
 
 const omit_window = ({ window_number, ...marks }: TabMarks): TabMarks => marks;
 

@@ -143,6 +143,8 @@ const BASE_SECTIONS: KeymapConfig = {
     gt: { id: "tab.goto", label: "Next tab" },
     gT: { id: "tab.prev" },
     ga: { id: "tab.goto_audible" },
+    gp: { id: "tab.split_other" },
+    gP: { id: "tab.split_swap" },
     gF: { id: "frame.exit" },
     g0: { id: "tab.goto", args: { index: 1 }, label: "First tab" },
     "g^": { id: "tab.goto", args: { index: 1 }, label: "First tab" },
