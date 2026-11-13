@@ -16,7 +16,7 @@ export function button(label: string, on_click: () => void, disabled = false): H
   return node;
 }
 
-function download(file: ExportFile): void {
+export function download(file: ExportFile): void {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([file.bytes as BlobPart], { type: file.mime ?? "application/zip" }));
   link.download = file.name;

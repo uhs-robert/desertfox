@@ -29,6 +29,8 @@ import type { ConfigImportPreview, SnippetPreview } from "../shared/messages.ts"
 import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
+import { classify_host_start, clear_host_pending, has_config_files, read_kept_digest, settle_host_start, store_host_pending } from "./host_start.ts";
+import type { HostStartChoice } from "../shared/messages.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
 // The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
@@ -186,6 +188,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     const published = await publish(step, edits);
     // One `set`, so the config and the files it was built from never part.
     await browser.storage.local.set({ [FILES_CONFIG_STORAGE_KEY]: stored, [FILES_SOURCE_STORAGE_KEY]: { files, dir_label } satisfies FilesSource });
+    await clear_host_pending();
     load_step = Promise.resolve(step);
     commit(published.config);
     swap_count += 1;
@@ -217,17 +220,17 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
       throw error instanceof NativeHostError ? new ConfigRefusal(`${KEPT_CURRENT.reload} ${error.message}`) : error;
     });
     // An empty build here would replace the user's config with the defaults, most likely because the host reads the wrong folder.
-    if (!reply.config_dir_exists) {
-      throw new ConfigRefusal(missing_folder_message(reply.config_dir));
-    }
+    if (!reply.config_dir_exists) throw new ConfigRefusal(missing_folder_message(reply.config_dir));
+    if (!has_config_files(reply.files)) throw new ConfigRefusal(empty_folder_message(reply.config_dir));
     const { warnings } = await apply_files(reply.files, reply.config_dir, "reload");
     return { config_dir: reply.config_dir, warnings };
   });
 }
 
 // Runs once per start. Edits made to the files while the browser was closed reach the stored build here, without a `config.reload`.
-// No permission, no host, a host error or a missing config folder keep the stored config and only warn on the console. Most users have no host, and the installer never creates the folder.
-// A broken file keeps it too, and a toast names the problem so the user learns the edit failed.
+// No permission, no host, a host error, or a missing or empty config folder keep the stored config and only warn on the console. Most users have no host, and the installer never creates the folder.
+// A folder that differs from a filled browser copy replaces nothing: the start stores what it would change, and the user chooses on the settings page (`host_start.ts`).
+// A broken file keeps the stored config too, and a toast names the problem so the user learns the edit failed.
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
   const swaps_before = swap_count;
@@ -236,36 +239,56 @@ export async function reload_config_at_start(): Promise<void> {
     reply = await native_host.read_config();
   } catch (error) {
     console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`);
+    // A choice needs the host, so a question left from an earlier start cannot be answered now.
+    await in_change_queue(clear_host_pending).catch(() => undefined);
     return;
   }
   await in_change_queue(async () => {
     await get_config();
     if (swap_count !== swaps_before) return;
-    // An empty build here would replace the stored config with the defaults, as it would on a reload.
-    if (!reply.config_dir_exists) return console.warn(missing_folder_message(reply.config_dir));
-    const stored = await load_files_source();
-    if (stored.dir_label === reply.config_dir && same_files(stored.files, reply.files)) return;
+    const plan = await classify_host_start(reply, (await load_files_source()).files, await read_kept_digest());
+    if (plan.kind === "ask") {
+      await store_host_pending(plan.pending);
+      await toast_start(HOST_DIFFERS_MESSAGE, "warning");
+      return;
+    }
+    if (plan.kind === "ignore") {
+      if (plan.reason === "missing") console.warn(missing_folder_message(reply.config_dir));
+      if (plan.reason === "empty") console.warn(empty_folder_message(reply.config_dir));
+      await clear_host_pending();
+      return;
+    }
     try {
       await apply_files(reply.files, reply.config_dir, "reload");
     } catch (error) {
       if (!(error instanceof ConfigRefusal)) throw error;
-      await toast_start_refusal(error.message);
+      await toast_start(error.message, "error");
     }
   }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
 }
 
-async function toast_start_refusal(message: string): Promise<void> {
+const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";
+
+// The answer to the settings page's question. In the change queue, so it never interleaves with a save, an import or a reload.
+export function choose_host_start(choice: HostStartChoice["choice"], seen: { host_digest: string; browser_digest: string }): Promise<{ warnings: number }> {
+  return in_change_queue(() =>
+    settle_host_start(choice, seen, {
+      read_host: () => native_host.read_config(),
+      read_browser_files: async () => (await load_files_source()).files,
+      apply_folder: (files, config_dir) => apply_files(files, config_dir, "reload"),
+    }),
+  );
+}
+
+async function toast_start(message: string, kind: "error" | "warning"): Promise<void> {
   console.warn(message);
   const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
-  await show_toast_on_tab({ tab_id: tab?.id }, "config_start", message, "error");
+  await show_toast_on_tab({ tab_id: tab?.id }, "config_start", message, kind);
 }
 
 const missing_folder_message = (config_dir: string) => `${KEPT_CURRENT.reload} The native host found no config folder at ${config_dir}. Create it, or set DESERTFOX_CONFIG_DIR for the host.`;
-
-function same_files(left: Record<string, string>, right: Record<string, string>): boolean {
-  const names = Object.keys(left);
-  return names.length === Object.keys(right).length && names.every((name) => Object.hasOwn(right, name) && left[name] === right[name]);
-}
+// The host creates the folder itself when it writes autoconfig.toml, so a folder holding only that file is as good as missing.
+const empty_folder_message = (config_dir: string) => `${KEPT_CURRENT.reload} The native host found no config files in ${config_dir}. Put your config files there, or set DESERTFOX_CONFIG_DIR for the host.`;
 
 // What an import would change, for the consent screen. It stores nothing and runs no snippet.
 export async function preview_config_import(source: unknown): Promise<ConfigImportPreview> {

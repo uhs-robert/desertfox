@@ -60,7 +60,7 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, remove_snippet, republish, save_config_file, set_desktop_palette, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -71,6 +71,7 @@ import { accept_hint_timing } from "./timing_log.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_settings_messages, is_extension_page } from "./settings_message.ts";
+import { answer_host_start_choice } from "./host_start.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { create_tab_modes, shortcut_allowed } from "./tab_modes.ts";
@@ -258,6 +259,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (page_request?.type === "config_files") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may edit the config files" });
     return answer_config_files(page_request, { read_files: async () => (await load_files_source()).files, save: save_config_file });
+  }
+  if (page_request?.type === "host_start_choice") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may answer the config folder question" });
+    return answer_host_start_choice(page_request, choose_host_start);
   }
   if (page_request?.type === "export_sessions" || page_request?.type === "import_sessions") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or import sessions" });

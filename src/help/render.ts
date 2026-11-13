@@ -235,6 +235,8 @@ export function update_config_source(model: HelpModel): void {
 // Settings go in after the render: `main.ts` fills `.desertfox-settings` from the background.
 function settings_page(model: HelpModel): HTMLElement[] {
   return [
+    // Empty unless a host start waits on the user: `main.ts` fills it.
+    el("div", "desertfox-host-start"),
     el("p", undefined, "A change is saved at once, the same as ", el("code", undefined, ":set"), ". Each setting shows the layer that sets its value. Reset drops the saved and temp edit, so the config file value applies."),
     el("p", CONFIG_SOURCE_CLASS, config_source_text(model)),
     el("h2", undefined, "Apply a config file edit"),
@@ -245,7 +247,7 @@ function settings_page(model: HelpModel): HTMLElement[] {
     el("p", undefined, "Export the config as a zip in the layout of ", el("code", undefined, "~/.config/desertfox/"), ", with your saved edits in it. Snippets go in a second zip. An import takes a zip or a folder, replaces the config files, keeps your installed snippets and asks before it stores any snippet it carries."),
     el("div", "desertfox-transfer"),
     el("h2", undefined, "Config files"),
-    el("p", undefined, "Edit the config files stored in the browser. A save rebuilds the config at once. When the build fails, the files and the config stay as they were. What you save here counts as your own config: no import check runs, so paste only text you trust. With the native host installed, the config folder replaces these files at the next start, for now."),
+    el("p", undefined, "Edit the config files stored in the browser. A save rebuilds the config at once. When the build fails, the files and the config stay as they were. What you save here counts as your own config: no import check runs, so paste only text you trust. With the native host installed, a start that finds different files in the config folder asks before it replaces these."),
     el("div", "desertfox-files"),
     el("div", "desertfox-settings", ...page_sections("settings", []).flatMap((section, index) => {
       const group = el("div", "desertfox-settings-group");

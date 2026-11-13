@@ -109,7 +109,7 @@ const STUB_ANSWERS: Record<string, unknown> = {
   "storage.session.get": {},
   "storage.local.get": {},
   "runtime.getURL": "moz-extension://stub/home.html",
-  "runtime.sendNativeMessage": { ok: true, config_dir: "/stub/desertfox", config_dir_exists: true, files: {} },
+  "runtime.sendNativeMessage": { ok: true, config_dir: "/stub/desertfox", config_dir_exists: true, files: { "settings.toml": "" } },
 };
 
 // A `browser` whose calls answer from STUB_ANSWERS, so a handler runs past its first browser call into its own checks.

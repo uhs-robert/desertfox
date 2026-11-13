@@ -426,7 +426,16 @@ export type ConfigFilesAnswer =
   | { ok: false; message: string; problems?: string[] }
   | { ok: false; message: string; consent: SnippetPreview };
 
-export type PageToBackground = ConfigFilesRequest | ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+// What the background found at start when the native host's config folder differs from the browser copy of the files. Stored in `storage.local` until the user chooses, a later start finds no difference, or any swap of the files.
+// The digests name the compared files (without `autoconfig.toml`), so a choice made on an older view is refused. `changes` is per file, as seen from the browser copy: `replaced` differs, `added` is only in the folder, `removed` only in the browser copy.
+export type HostFileChange = { path: string; kind: "replaced" | "added" | "removed" };
+export type HostStartPending = { config_dir: string; host_digest: string; browser_digest: string; changes: HostFileChange[] };
+
+// From an extension page: the user's answer to a pending host start. The digests are the ones the page showed.
+export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
+export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
+
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From the `media` bundle in each frame the background injected it into, with that frame's media. The frame comes from the message sender.
 export type MediaReport = {

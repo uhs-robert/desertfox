@@ -7,6 +7,10 @@ export { FILES_CONFIG_STORAGE_KEY } from "../shared/storage_watch.ts";
 // A key of its own, written in the same `set` as the config: the pages read the config at every redraw and need none of the text.
 export const FILES_SOURCE_STORAGE_KEY = "desertfox_files_source";
 
+// The host start waiting on the user's choice (`HostStartPending`), and the folder digest the user chose to keep the browser copy over. See `host_start.ts`.
+export const HOST_START_PENDING_STORAGE_KEY = "desertfox_host_start_pending";
+export const HOST_START_KEPT_STORAGE_KEY = "desertfox_host_start_kept";
+
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 
