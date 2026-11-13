@@ -27,3 +27,12 @@ test("every class the base defines is on the Styling page", async () => {
   const defined = new Set(read("src/shared/page_base.css").match(/\.desertfox-[a-z-]+/g)!.map((name) => name.slice(1)));
   for (const name of defined) assert.ok(listed.includes(name), name);
 });
+
+test("the help page keeps a 16px root and sets its font through the token a theme can replace", () => {
+  const html = read("src/help/home.html");
+  assert.match(html, /html \{[^}]*font-size: 16px/);
+  const rule = /\n  \.desertfox-help \{([^}]*)\}/.exec(html)![1]!;
+  assert.match(rule, /--desertfox-font: 15px\/1\.5 system-ui, sans-serif;/);
+  assert.match(rule, /font: var\(--desertfox-font\);/);
+  assert.ok(!/(^|[\s;])font-size:/.test(rule), "a font-size longhand would beat the theme's --desertfox-font");
+});

@@ -10,13 +10,14 @@
   /* The help layout is measured in 16px rems (sidebar 12rem, column 60rem), so the page keeps that root. The text stays 15px. */
   html { background: var(--desertfox-bg-core); font-size: 16px; }
   body { margin: 0; }
+  /* Set here, below the base, so the theme sheet that follows can still replace it. */
   .desertfox-help {
+    --desertfox-font: 15px/1.5 system-ui, sans-serif;
     display: flex;
     min-height: 100vh;
     background: var(--desertfox-bg-core);
     color: var(--desertfox-fg-core);
     font: var(--desertfox-font);
-    font-size: 15px;
   }
   .desertfox-help-page { box-sizing: border-box; flex: 1; min-width: 0; max-width: 60rem; padding: 1rem 2rem 4rem; }
   .desertfox-help-sidebar {
