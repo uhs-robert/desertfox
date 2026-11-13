@@ -15,7 +15,9 @@ import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user
 import { mount_transfer } from "./transfer_page.ts";
 import { mount_files } from "./files_page.ts";
 import { create_files_session } from "./files_model.ts";
-import { FILES_SOURCE_STORAGE_KEY } from "../background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../background/storage_keys.ts";
+import { create_host_start_session } from "./host_start_model.ts";
+import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "./route.ts";
 
 let stop_settings: (() => void) | undefined;
@@ -25,9 +27,18 @@ let transfer_hold: UserCssHold = NO_USER_CSS_HOLD;
 let files_hold: UserCssHold = NO_USER_CSS_HOLD;
 // One session for the page's life: leaving the settings route and coming back keeps an unsaved draft and a running save.
 const files_session = create_files_session({ send: (message) => browser.runtime.sendMessage(message), on_change: () => undefined });
-// An import, a reload or another tab changed the stored files: the editor reads them again.
+// Redraws the banner of the mounted settings route, if any.
+let draw_host_start: () => void = () => undefined;
+const host_start_session = create_host_start_session({
+  read_pending: async () => (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY],
+  send: (message) => browser.runtime.sendMessage(message),
+  on_change: () => draw_host_start(),
+});
+void host_start_session.load();
+// An import, a reload or another tab changed the stored files: the editor reads them again. A start, a choice or a swap changed the host start question: the banner follows.
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && FILES_SOURCE_STORAGE_KEY in changes) void files_session.load();
+  if (area === "local" && HOST_START_PENDING_STORAGE_KEY in changes) void host_start_session.load();
 });
 
 // `refresh` draws the same route again after a settings change. The caller keeps scroll and focus, so the route's own scroll and focus rules stay out.
@@ -38,6 +49,9 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never);
+  const host_start_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-host-start") : null;
+  draw_host_start = host_start_box ? mount_host_start(host_start_box, host_start_session, (message) => browser.runtime.sendMessage(message)) : () => undefined;
+  draw_host_start();
   const transfer_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-transfer") : null;
   transfer_hold.dispose();
   transfer_hold = open_user_css_hold();

@@ -14,6 +14,9 @@ export function install_fake_browser(host: { files: Files; reply?: () => Promise
     set: async (values: Record<string, unknown>) => {
       Object.assign(store, structuredClone(values));
     },
+    remove: async (key: string | string[]) => {
+      for (const name of [key].flat()) delete store[name];
+    },
   });
   const tabs: { id: number }[] = [];
   const told: number[] = [];
