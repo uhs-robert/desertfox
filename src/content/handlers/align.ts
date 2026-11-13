@@ -1,3 +1,4 @@
+import { RuntimeRefusal } from "../../shared/command.ts";
 import type { AlignFocus, AlignPosition, AlignSelection } from "../align_target.ts";
 import { choose_align_target, SCROLL_BLOCK } from "../align_target.ts";
 import { deepest_focused_element } from "../editable.ts";
@@ -24,6 +25,6 @@ function selection_target(blurred: Element | undefined): AlignSelection<Element>
 export function align_focus(position: AlignPosition, last_blurred: Element | undefined): void {
   const blurred = last_blurred?.isConnected ? last_blurred : undefined;
   const target = choose_align_target(focused_element(), selection_target(blurred), blurred);
-  if (!target) throw new Error("Nothing focused or selected to align");
+  if (!target) throw new RuntimeRefusal("Nothing focused or selected to align");
   target.scrollIntoView({ block: SCROLL_BLOCK[position], behavior: "instant" });
 }

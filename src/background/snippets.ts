@@ -2,6 +2,7 @@
 // active tab, only when the tab URL matches the snippet's list. The background checks `matches`,
 // never the page.
 
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { CheckedArgs, CommandContext, CommandDef } from "../shared/command.ts";
 import type { SnippetEntry } from "../shared/config.ts";
 import { slot_of } from "../shared/engines/index.ts";
@@ -63,20 +64,20 @@ export function create_snippets(registry: Registry, deps: SnippetDeps, router_de
   const entries_by_id = new Map<string, SnippetEntry>();
 
   async function run_snippet(entry: SnippetEntry, context: CommandContext, args: CheckedArgs, depth: number): Promise<void> {
-    if (context.tab_id === undefined) throw new Error(`${entry.id}: needs a tab`);
+    if (context.tab_id === undefined) throw new RuntimeRefusal(`${entry.id}: needs a tab`);
     const url = await deps.tab_url(context.tab_id);
     if (url === undefined || !entry.matches.some((pattern) => matches_pattern(pattern, url))) {
-      throw new Error(`${entry.id}: does not run on this page`);
+      throw new RuntimeRefusal(`${entry.id}: does not run on this page`);
     }
     const unmet = (entry.requires ?? []).find((name) => !is_available([name], { url }));
-    if (unmet !== undefined) throw new Error(`${entry.id}: ${slot_of(unmet)?.message ?? `the page needs ${unmet}`}`);
+    if (unmet !== undefined) throw new RuntimeRefusal(`${entry.id}: ${slot_of(unmet)?.message ?? `the page needs ${unmet}`}`);
     let answer: unknown;
     try {
       answer = await deps.execute_in_top_frame(context.tab_id, wrap_snippet_code(entry.code, args, depth, url));
     } catch (error) {
-      throw new Error(`${entry.id}: ${message_of(error)}`);
+      throw new RuntimeRefusal(`${entry.id}: ${message_of(error)}`);
     }
-    if (typeof answer === "string") throw new Error(`${entry.id}: ${answer}`);
+    if (typeof answer === "string") throw new RuntimeRefusal(`${entry.id}: ${answer}`);
   }
 
   // A snippet that runs from a snippet knows its level, so the limit needs no state outside the call.
