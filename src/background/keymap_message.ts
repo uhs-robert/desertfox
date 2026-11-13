@@ -100,6 +100,13 @@ function with_key_edit(edits: KeymapEdits, mode: KeymapMode, keys: string, text:
   return Object.keys(table).length === 0 ? modes : { ...modes, [mode]: table };
 }
 
+// The edits with the binding on `keys` gone: a file or default binding takes an empty text, and a key only an edit binds drops the edit.
+function without_binding(edits: KeymapEdits, config: MergedConfig, default_keymap: KeymapConfig, mode: KeymapMode, keys: string): KeymapEdits {
+  const file_bindings = by_spelling(config.keymap[mode] ?? {});
+  const underlying = Object.hasOwn(file_bindings, keys) ? file_bindings[keys] : default_keymap[mode]?.[keys];
+  return with_key_edit(edits, mode, keys, underlying ? "" : undefined);
+}
+
 const is_mode = (mode: unknown): mode is KeymapMode => (KEYMAP_MODES as readonly unknown[]).includes(mode);
 
 // Diffs a compile with the candidate against one without it, so the answer holds only what this binding adds.
@@ -195,7 +202,11 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
 
   async function check(request: CheckBinding): Promise<CheckBindingAnswer> {
     try {
-      return { ok: true, ...check_candidate(await deps.read_keymap_state(), deps.registry, request) };
+      let state = await deps.read_keymap_state();
+      const from = is_mode(request.mode) && typeof request.move_from === "string" ? normalized_keys(request.mode, request.move_from) : undefined;
+      // A move frees the old key first, so a full set of slots has room for the new chord.
+      if (from && !("problem" in from) && is_mode(request.mode)) state = { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, request.mode, from.keys) } };
+      return { ok: true, ...check_candidate(state, deps.registry, request) };
     } catch (error) {
       return failure(error);
     }
@@ -209,11 +220,20 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
     const normalized = normalized_keys(mode, request.keys);
     if ("problem" in normalized) return { ok: false, message: `${mode} "${request.keys}": ${normalized.problem}` };
     const { keys } = normalized;
+    // A move: the set also frees the key the row had, in the same change.
+    let old_keys: string | undefined;
+    if (action === "set" && typeof request.move_from === "string") {
+      const from = normalized_keys(mode, request.move_from);
+      if ("problem" in from) return { ok: false, message: `${mode} "${request.move_from}": ${from.problem}` };
+      if (from.keys !== keys) old_keys = from.keys;
+    }
     try {
       if (action === "set") {
         if (typeof request.text !== "string" || request.text.trim() === "") return { ok: false, message: "the edit names no command" };
         // The check and the change are two queue turns: a reload between them can still make the text bad, and then the compile drops it with a warning.
-        const verdict = check_candidate(await deps.read_keymap_state(), deps.registry, { mode, keys, text: request.text });
+        let state = await deps.read_keymap_state();
+        if (old_keys !== undefined) state = { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, mode, old_keys) } };
+        const verdict = check_candidate(state, deps.registry, { mode, keys, text: request.text });
         if (!verdict.saves) {
           const problems = [...verdict.problems, ...verdict.warnings];
           return { ok: false, message: `${mode} "${keys}" not saved: ${problems[0] ?? "the compile skips it"}`, problems };
@@ -228,14 +248,15 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
         const underlying = Object.hasOwn(file_bindings, keys) ? file_bindings[keys] : deps.default_keymap[mode]?.[keys];
         already_unbound = action === "remove" && Boolean(underlying) && current[mode]?.[keys] === "";
         const text = action === "set" ? request.text : action === "remove" && underlying ? "" : undefined;
-        const next = with_key_edit(current, mode, keys, text);
+        const set = with_key_edit(current, mode, keys, text);
+        const next = old_keys === undefined ? set : without_binding(set, config, deps.default_keymap, mode, old_keys);
         row = rows_of(config, next).find((candidate) => candidate.mode === mode && candidate.keys === keys);
         changed = JSON.stringify(next) !== JSON.stringify(current);
         return changed ? next : undefined;
       });
       // A key only a generator binds (`search_keys` and the like), or bound nowhere, has nothing here to change.
       if (!changed) return { ok: false, message: `Nothing to change: ${{ set: "it already runs that text", remove: already_unbound ? "it is already unbound" : "no file or default binding to remove", reset: "no edit to reset" }[action]} on ${mode} "${keys}".` };
-      const done = { set: `Bound ${keys} in ${mode} mode`, remove: `Unbound ${keys} in ${mode} mode`, reset: `Reset ${keys} in ${mode} mode` }[action];
+      const done = { set: old_keys === undefined ? `Bound ${keys} in ${mode} mode` : `Moved ${old_keys} to ${keys} in ${mode} mode`, remove: `Unbound ${keys} in ${mode} mode`, reset: `Reset ${keys} in ${mode} mode` }[action];
       return { ok: true, ...(row && { row }), message: done };
     } catch (error) {
       return failure(error);

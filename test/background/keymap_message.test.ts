@@ -210,3 +210,18 @@ test("a repeat remove says the key is already unbound", async () => {
   const again = await messages.change({ type: "change_keymap", mode: "normal", keys: "J", action: "remove" });
   assert.deepEqual(again, { ok: false, message: 'Nothing to change: it is already unbound on normal "J".' });
 });
+
+test("a set with move_from frees the old key in the same change: a default is unbound, an edit-only key is dropped", async () => {
+  const stored = { edits: { normal: { zq: "tab.next" } } as KeymapEdits };
+  const messages = messages_over(config_with({}), stored);
+  const moved_default = await messages.change({ type: "change_keymap", mode: "normal", keys: "X", action: "set", text: "tab.next", move_from: "J" });
+  assert.equal(moved_default.ok, true, JSON.stringify(moved_default));
+  assert.deepEqual(stored.edits, { normal: { zq: "tab.next", J: "", X: "tab.next" } });
+  const moved_edit = await messages.change({ type: "change_keymap", mode: "normal", keys: "Y", action: "set", text: "tab.next", move_from: "zq" });
+  assert.equal(moved_edit.ok && moved_edit.message, "Moved zq to Y in normal mode");
+  assert.deepEqual(stored.edits, { normal: { J: "", X: "tab.next", Y: "tab.next" } });
+  // The old key is checked as freed, and a refused new key leaves the old one bound.
+  const refused = await messages.change({ type: "change_keymap", mode: "normal", keys: "W", action: "set", text: "not.a.command", move_from: "X" });
+  assert.equal(refused.ok, false);
+  assert.equal(stored.edits.normal?.X, "tab.next");
+});

@@ -10,7 +10,7 @@ import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
 import { event_to_token } from "../shared/keys/token.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 
-export type CaptureHandlers = { token: (token: string) => void; backspace: () => void; cancel: () => void };
+export type CaptureHandlers = { token: (token: string) => void; backspace: () => void; cancel: () => void; save: () => void };
 
 // The one window keydown listener of the capture box, registered by `main.ts` before `content.js` and the drawer's Escape handler load, so it runs first.
 // A listener added on focus would run after the content script's, which has already run the key. This one does nothing unless a box holds focus, and `bind` is the only way to make one active.
@@ -25,12 +25,15 @@ export function create_key_capture() {
     }
     const { handlers } = active;
     const plain = !(event.ctrlKey || event.altKey || event.metaKey || event.shiftKey);
+    // Tab and Shift+Tab move the focus as usual, so the box never traps the keyboard.
+    if (event.key === "Tab" && !(event.ctrlKey || event.altKey || event.metaKey)) return;
     const token = event_to_token(event);
     // A modifier on its own, a dead key and an IME key press end up here: swallowed, nothing captured.
     event.preventDefault();
     event.stopImmediatePropagation();
     if (plain && event.key === "Escape") handlers.cancel();
     else if (plain && event.key === "Backspace") handlers.backspace();
+    else if (plain && event.key === "Enter") handlers.save();
     else if (token !== null) handlers.token(token);
   };
 
@@ -54,7 +57,7 @@ export function create_key_capture() {
     };
   }
 
-  return { on_keydown, bind, is_active: () => active !== undefined };
+  return { on_keydown, bind };
 }
 
 export type KeyCapture = ReturnType<typeof create_key_capture>;
@@ -134,6 +137,7 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
   release_capture = capture.bind(capture_box, {
     token: (token) => session.capture(token),
     backspace: () => session.capture_backspace(),
+    save: () => void session.save(),
     cancel: () => {
       session.cancel_capture();
       capture_box.blur();
@@ -198,6 +202,8 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
     return section;
   }
 
+  let focused_open = 0;
+
   function draw_rows(): void {
     const { open } = session.state;
     // Moving a focused node drops its focus, so the box or field that had it takes it back after the redraw.
@@ -208,7 +214,11 @@ export function mount_keys(container: HTMLElement, deps: Omit<KeysDeps, "on_chan
     tables.replaceChildren(...KEYMAP_MODES.map((mode) => mode_section(mode, open)));
     // An open row the filter hides leaves the editor out of the page, and the draft stays in the session.
     if (open) sync_editor(open);
-    if (had_focus && keeps_place && editor_row.isConnected) had_focus.focus();
+    // A new open moves the focus into the capture box. A redraw of the same editor gives it back to what had it.
+    if (open && session.state.opened !== focused_open && editor_row.isConnected) {
+      focused_open = session.state.opened;
+      capture_box.focus();
+    } else if (had_focus && keeps_place && editor_row.isConnected) had_focus.focus();
   }
 
   session = create_keys_session({
