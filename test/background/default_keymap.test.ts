@@ -96,7 +96,7 @@ test("the , group holds the DesertFox commands", () => {
 test("plain r, t and x are prefixes only", () => {
   const normal = Object.keys(DEFAULT_KEYMAP.normal ?? {});
   for (const key of ["r", "t", "x"]) assert.ok(!normal.includes(key), key);
-  for (const key of ["rr", "rh", "tt", "tT", "td", "tm", "tn", "tp", "ta", "tf", "tl", "xx", "xp"]) assert.ok(normal.includes(key), key);
+  for (const key of ["rr", "rh", "tt", "tT", "td", "tm", "tn", "tp", "ta", "t0", "t^", "t$", "tl", "gl", "xx", "xp"]) assert.ok(normal.includes(key), key);
 });
 
 test("zz, zt and zb align the focused field", () => {

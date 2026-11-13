@@ -61,6 +61,8 @@ export function make_tab_handlers(deps: TabDeps) {
     return { tabs, current };
   }
 
+  const current_window_id = (ctx: CommandContext): number => ctx.window_id!;
+
   async function activate_at(tabs: TabInfo[], index: number): Promise<void> {
     const target = tabs[index];
     if (target) await deps.activate(target.id);
@@ -153,6 +155,13 @@ export function make_tab_handlers(deps: TabDeps) {
       const { tabs, current } = await position_of(ctx);
       if (tabs.length === 1) throw new RuntimeRefusal("this is the only tab in its window");
       await deps.detach_to_new_window(current.id);
+    },
+    alternate: async (ctx: CommandContext) => {
+      const { tabs, current } = await position_of(ctx);
+      const previous_id = await deps.discard.alternate_of(current_window_id(ctx));
+      const target = tabs.find((tab) => tab.id === previous_id && tab.id !== current.id);
+      if (!target) throw new RuntimeRefusal("no previous tab");
+      await deps.activate(target.id);
     },
     goto_audible: async (ctx: CommandContext) => {
       const { tabs, current } = await position_of(ctx);
@@ -420,6 +429,14 @@ define("tab.goto", {
   runs_in: "background",
   count: { param: "index" },
   run: (ctx, args) => handlers.goto(ctx, args as { index: number }),
+});
+
+define("tab.alternate", {
+  label: "Previous tab in this window",
+  intent: "Switch to the previous tab. It ignores a count.",
+  bridge: true,
+  runs_in: "background",
+  run: (ctx) => handlers.alternate(ctx),
 });
 
 define("tab.goto_audible", {
