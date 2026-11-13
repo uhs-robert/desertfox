@@ -23,15 +23,13 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 
 ## 🏆 Why DesertFox
 
-- **You learn it as you go.** A popup shows the keys that can follow each key you press.
-- **It checks what you give it.** A typo is an error with a message, never a silent no-op.
-- **It stays light on every page.** The script on each page is small, and the heavy parts load on first use.
-- **It is always ready.** A page gets its keys within milliseconds of starting to load.
+- **You learn it as you go.** A popup shows the keys that can follow each key you press. [Details](docs/design.md#which-key).
+- **It checks what you give it.** A typo is an error with a message, never a silent no-op. [Details](docs/design.md#registry).
+- **It stays light on every page.** The script on each page is small, and the heavy parts load on first use. [Details](docs/design.md#content-script-size).
+- **It is always ready.** A page gets its keys within milliseconds of starting to load. [Details](docs/design.md#constraints-from-firefox).
 - **It grows with you.** The first day needs a few keys. Macros, per-site rules and your own commands wait until you want them. See [Features](#-features).
-- **It is safe by design.** DesertFox never evaluates text as code, and its optional helper program takes a fixed set of requests.
-- **It is tested with real key presses.** A test suite presses real keys in a real Firefox.
-
-The numbers and the mechanism behind each line are in [docs/design.md](docs/design.md#what-the-readme-promises).
+- **It is safe by design.** DesertFox never evaluates text as code, and its optional helper program takes a fixed set of requests. [Details](host/README.md#what-the-host-can-and-cannot-do).
+- **It is tested with real key presses.** A test suite presses real keys in a real Firefox. [Details](AGENTS.md#commands).
 
 ## 📦 Install
 
