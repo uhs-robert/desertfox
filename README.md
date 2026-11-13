@@ -19,7 +19,9 @@ DesertFox lets you use Firefox from the keyboard. Press `f` and a short label ap
 
 You do not have to memorize keys. After any key, a short pause opens a which-key popup (a popup that lists the keys that can follow and what each does). Press `g?` to open the help page, which lists every key. Type `:help.whichkey` to show the top-level keys of the current mode in the popup.
 
-The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, counts, registers and macros. You do not need to know Vim.
+The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, counts, registers and macros. You do not need to know Vim. If you come from another keyboard tool for the browser, see [Switching](#switching-from-tridactyl-vimium-or-vim).
+
+You can edit any text box in Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)).
 
 ## 🏆 Why DesertFox
 
@@ -28,7 +30,7 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 - **It stays light on every page.** The script on each page is small, and the heavy parts load on first use. [Details](docs/design.md#content-script-size).
 - **It is always ready.** A page gets its keys within milliseconds of starting to load. [Details](docs/design.md#constraints-from-firefox).
 - **It grows with you.** The first day needs a few keys. Macros, per-site rules and your own commands wait until you want them. See [Features](#-features).
-- **It is safe by design.** DesertFox never evaluates text as code, and its optional helper program takes a fixed set of requests. [Details](docs/design.md#decisions).
+- **It is safe by design.** DesertFox never runs the keys, commands or config lines you type as code, and its optional helper program takes a fixed set of requests. [Details](docs/design.md#decisions).
 - **It is tested with real key presses.** A test suite presses real keys in a real Firefox.
 
 ## 📦 Install
@@ -36,6 +38,8 @@ The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` 
 > [!WARNING]
 > DesertFox is under construction.
 > It has no stable release and no listing on addons.mozilla.org yet. A signed beta is available.
+
+DesertFox runs in Firefox on desktop. The native host is Linux only.
 
 ### Beta
 
@@ -107,7 +111,8 @@ Sources, read in November 2026: each project's documentation, source code and sh
 
 Most keys work as you know them:
 
-- `f` and `F` hint links, `j` and `k` scroll, `gg` and `G` jump to the top and bottom, `H` and `L` go back and forward, and `J` and `K` switch tabs.
+- `f` and `F` hint links, `j` and `k` scroll, `gg` and `G` jump to the top and bottom, and `H` and `L` go back and forward.
+- `J` goes to the next tab and `K` to the previous one, which follows `j` and `k` going down and up in a vertical tab layout. Vimium has them the other way round. `gt` and `gT` go to the next and previous tab as Vimium users expect.
 - `/` searches the page, with `n` and `N` for the next and previous match. `o` and `O` open an address, `yy` copies the page address and `T` lists your tabs.
 - `:` opens a command line with completion. Counts, `.`, registers (`"ay`) and macros (`q` and `@`) work as in Vim.
 
@@ -122,7 +127,7 @@ You gain:
 You lose:
 
 - Shell commands and a scripting language. Tridactyl has both (see its command source above), and DesertFox leaves them out on purpose.
-- DesertFox has no `bind` or `:source` command like Tridactyl's. Keys live in a `keymap.toml` file that DesertFox checks and applies with one key. Your own commands are snippets of page code.
+- DesertFox has no `bind` or `:source` command like Tridactyl's. Keys live in a `keymap.toml` file that DesertFox checks and applies with one key. Your own commands are snippets (JavaScript files from your own config folder, or an import you accept).
 
 ## ✨ Features
 
@@ -203,7 +208,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site.
 - Change settings in the browser with `:set` or on the settings page.
 - Keep your keys, search engines and settings in TOML files, which needs the native host. DesertFox checks them and applies an edit with one key, with no restart.
-- Add your own commands as snippets of page code.
+- Add your own commands as snippets (JavaScript files from your own config folder, or an import you accept).
 - Pick one of the built-in color themes, write your own, or restyle every surface with CSS.
 - Use the new tab page for a clock, links, recent tabs and bookmarks.
 
