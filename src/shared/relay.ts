@@ -12,12 +12,9 @@ const RELAYED: Record<string, { bundle: BundleName; to: "top" | "frame" }> = {
   "cmdline.open": { bundle: "cmdline", to: "top" },
   "cmdline.token": { bundle: "cmdline", to: "top" },
   "cmdline.headings": { bundle: "cmdline", to: "top" },
-  "cmdline.find_status": { bundle: "cmdline", to: "top" },
   "cmdline.focus": { bundle: "cmdline", to: "frame" },
   "cmdline.end": { bundle: "cmdline", to: "frame" },
   "cmdline.headings_ask": { bundle: "cmdline", to: "frame" },
-  "cmdline.find_text": { bundle: "cmdline", to: "frame" },
-  "cmdline.find_end": { bundle: "cmdline", to: "frame" },
 };
 
 const TOP_FRAME = 0;

@@ -7,7 +7,7 @@ test("a drawing handler goes to the top frame, with the sender's frame added", (
 });
 
 test("a frame handler goes to the frame it names, and never to the top by name", () => {
-  assert.deepEqual(relay_plan({ type: "relay", to: 5, id: "cmdline.find_text", args: { text: "a" } }, 0)?.frame_id, 5);
+  assert.deepEqual(relay_plan({ type: "relay", to: 5, id: "cmdline.focus", args: { text: "a" } }, 0)?.frame_id, 5);
   assert.equal(relay_plan({ type: "relay", to: "top", id: "cmdline.focus", args: {} }, 5), undefined);
   assert.equal(relay_plan({ type: "relay", to: -1, id: "cmdline.focus", args: {} }, 0), undefined);
   assert.equal(relay_plan({ type: "relay", to: 1.5, id: "cmdline.focus", args: {} }, 0), undefined);
