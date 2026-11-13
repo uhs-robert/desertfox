@@ -574,6 +574,7 @@ Firefox split view shows two tabs side by side in one window. The extension API 
 - `tab.next`, `tab.prev` and `tab.goto` count the two tabs of a pair as two stops, so `gp` is the jump to the other pane.
 - `tab.close` closes one tab, and the other tab stays and takes the focus. `tab.move` moves the pair as one unit: the move acts on the pair's first tab, the place is where the pair starts, and one step right moves the tab after the pair over it, because a move onto the partner's place would swap. Pinning one tab of a pair ends the split. A tab group command on one tab acts on both.
 - A session restore loses the split. The saved tabs carry no split id, and the extension cannot create a split.
+
 ### Live tab model
 
 - The background keeps one map of tab rows (`src/background/tab_model.ts`), built from one `tabs.query` and kept current from tab events. It stores nothing, because one query rebuilds it. Each row carries the tab's site key (`src/shared/site_key.ts`) and a favicon only when the list rule allows it. Changes batch on a 30 ms flush and go to clients on the port `desertfox_tab_model` as a snapshot, then patches (`TabRow` and the messages are in `src/shared/messages.ts`).
