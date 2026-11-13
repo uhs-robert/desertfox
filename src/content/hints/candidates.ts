@@ -157,15 +157,18 @@ export function has_click_sign(element: Element, styles: ClickStyles): boolean {
 // The off-screen test comes first because a rect is far cheaper than the two style reads, and `keep_visible` drops an off-screen weak candidate anyway before `drop_redundant_weak` runs, so no ancestor check loses a candidate.
 export const make_weak_test = (styles: ClickStyles): WeakTest => (element) => element.matches(MENU_ITEM) || (!styles.is_off_screen_(element) && has_click_sign(element, styles));
 
+type Box = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+
+// An empty box on either axis (`display: none`, `display: contents`, a zero-height card with visible content) is not placed, so it stays a candidate for `keep_visible` to judge, as `has_area` does.
+export const is_rect_off_screen = (rect: Box, view_width: number, view_height: number): boolean =>
+  rect.width > 0 && rect.height > 0 && (rect.bottom < 0 || rect.right < 0 || rect.top > view_height || rect.left > view_width);
+
 const dom_styles: ClickStyles = {
   cursor_of_: (element) => (element.ownerDocument.defaultView ?? window).getComputedStyle(element).cursor,
   parent_of: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
-  // An empty rect (`display: none`, `display: contents`) is not placed, so it stays a candidate for `keep_visible` to judge.
   is_off_screen_: (element) => {
-    const rect = element.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return false;
     const view = element.ownerDocument.defaultView ?? window;
-    return rect.bottom < 0 || rect.right < 0 || rect.top > view.innerHeight || rect.left > view.innerWidth;
+    return is_rect_off_screen(element.getBoundingClientRect(), view.innerWidth, view.innerHeight);
   },
 };
 

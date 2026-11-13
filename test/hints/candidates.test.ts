@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -187,12 +187,18 @@ test("an off-screen element is not weak and costs no style read", () => {
   assert.deepEqual(reads, ["shown"]);
 });
 
-test("an off-screen weak wrapper does not hide the visible link in it", () => {
-  const wrapper = el({ name: "wrapper", local: "div", cursor: "pointer", off_screen: true, plain: true });
-  const child = el({ name: "child", local: "a", parent: wrapper as unknown as Dom });
-  const found = collect({ querySelectorAll: () => [wrapper, child] } as unknown as ParentNode, { selector: "a[href]" }, make_weak_test(dom_styles));
-  assert.deepEqual(names_of(found), ["child"]);
-  assert.deepEqual(names_of(drop_redundant_weak(found)), ["child"]);
+test("the off-screen rule: empty boxes stay, each edge rejects, a box just inside stays", () => {
+  const box = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, width, height });
+  const off = (rect: ReturnType<typeof box>) => is_rect_off_screen(rect, 100, 50);
+  assert.equal(off(box(500, 500, 0, 0)), false, "empty on both axes");
+  assert.equal(off(box(500, 500, 0, 10)), false, "zero width");
+  assert.equal(off(box(500, 500, 10, 0)), false, "zero height");
+  assert.equal(off(box(-20, 10, 10, 10)), true, "left of the window");
+  assert.equal(off(box(10, -20, 10, 10)), true, "above the window");
+  assert.equal(off(box(101, 10, 10, 10)), true, "right of the window");
+  assert.equal(off(box(10, 51, 10, 10)), true, "below the window");
+  assert.equal(off(box(-9, 10, 10, 10)), false, "one pixel inside on the left");
+  assert.equal(off(box(100, 50, 10, 10)), false, "touching the right and bottom edge");
 });
 
 test("the roving group rule is part of the weak menu selector, so plain-list menus are found", () => {
