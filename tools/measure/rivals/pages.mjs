@@ -1,4 +1,4 @@
-// The pages run.mjs serves. `large` has 20,000 elements (10,000 links and 10,000 divs), the size where hint collection cost shows. `wiki` is a saved long article with many links. `frames` has 100 same-origin iframes of 20 links each, and `frames0` is its top page alone, so (frames minus frames0) / 100 is the cost of one frame.
+// The pages run.mjs serves. `yt_embed` is the one page of the live-site check (PAGES=sites) served here. `large` has 20,000 elements (10,000 links and 10,000 divs), the size where hint collection cost shows. `wiki` is a saved long article with many links. `frames` has 100 same-origin iframes of 20 links each, and `frames0` is its top page alone, so (frames minus frames0) / 100 is the cost of one frame.
 import { readFileSync } from "node:fs";
 
 const pages_dir = `${process.env.RIVALS_DIR}/pages`;
@@ -37,6 +37,21 @@ function coverage_body() {
   return `<!doctype html><title>coverage</title><body style="margin:0;height:20000px">${parts.join("")}<script>scrollTo(0, 2000)</script></body>`;
 }
 
+// The live YouTube player in a cross-site iframe, through YouTube's iframe API. The player frame runs in another process, so the page copies the player's state and volume onto the body, where the frame script reads them. The spacer gives the scroll check room to move.
+function yt_embed_body() {
+  return `<!doctype html><title>yt_embed</title><body><div style="display:flex;align-items:center;gap:20px;margin-top:100px"><div id="player"></div><a href="/p?beside_player">a link beside the player</a></div><div style="height:3000px"></div>
+<script>
+function onYouTubeIframeAPIReady() {
+  const player = new YT.Player("player", { width: 640, height: 360, videoId: "jNQXAC9IVRw", playerVars: { origin: location.origin } });
+  setInterval(() => {
+    if (typeof player.getPlayerState !== "function") return;
+    document.body.dataset.ytState = player.getPlayerState();
+    document.body.dataset.ytVolume = player.isMuted() ? 0 : player.getVolume();
+  }, 200);
+}
+</script><script src="https://www.youtube.com/iframe_api"></script></body>`;
+}
+
 const links = (count, tag) => Array.from({ length: count }, (_, i) => `<a href="/p?${tag}=${i}">link ${tag} ${i}</a> text <span>x</span>`).join("<br>");
 
 export function page_body(name) {
@@ -54,6 +69,7 @@ export function page_body(name) {
   }
   if (name === "tab") return `<!doctype html><title>tab</title><body><p>tab</p></body>`;
   if (name === "coverage") return coverage_body();
+  if (name === "yt_embed") return yt_embed_body();
   if (name === "frame") return `<!doctype html><title>f</title><body>${links(20, "f")}</body>`;
   return null;
 }

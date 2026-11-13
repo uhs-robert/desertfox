@@ -26,9 +26,13 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 | `run.mjs` | One tool in one fresh profile over the pages: load times, time from the hint key to the first label, memory of the page and extension processes |
 | `framescript.js` | Runs in the page's content process: sends a trusted key and watches for hint labels, also inside closed shadow roots |
 | `pages.mjs` | The pages: 20,000 elements, the saved article, 100 iframes, and the same page with none |
-| `analyze.mjs` | Medians and ranges into `$MEASURE_DIR/rivals/out/tables.md`, for the pages that ran |
+| `analyze.mjs` | Medians and ranges into `$MEASURE_DIR/rivals/out/tables.md`, for the pages that ran, and for a live-site run the dated `sites-<date>.json` |
+| `sites.mjs` | The live-site check (`PAGES=sites`): the site list, each tool's default keys, and the judges that turn what the page did into pass or fail with a reason |
+| `hand_checks.md` | The checklist for the login sites the rig cannot reach, filled in by hand |
 
 The article is a snapshot taken on the first run and reused after it. Delete `$MEASURE_DIR/rivals/pages` to take a new one. The run stops with an error if the policy-installed DesertFox cannot be removed.
+
+`PAGES=sites PASSES=1 just measure-rivals` loads each public site in `sites.mjs` per tool and records pass or fail for a key scroll, hints on visible targets, a hint that activates its target, Escape out of hints, and the per-site checks. It needs network, not a quiet machine. A consent wall, bot check or login page marks the site `blocked` or `login`, not failed. `SITES=youtube,wikipedia` limits the run. Live pages change, so a run is a dated snapshot.
 
 Pages: `large` is 10,000 links and 10,000 divs, `wiki` is a saved long article with many links, `frames` has 100 same-origin iframes and `frames0` is its top page alone. Per-frame cost is `frames` minus `frames0`.
 

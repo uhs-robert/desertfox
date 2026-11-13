@@ -1,5 +1,6 @@
 // Runs the rival-extension benchmark: DesertFox from dist/ against the pinned store builds in tools.mjs, and a no-extension baseline.
 // Settings by environment: MEASURE_DIR (default /tmp/desertfox-measure), PAGES (default the four timing pages; `coverage` is not timed and runs only when asked for), RUNS (timed runs per page and tool, default 8), PASSES (1 or 2, default 2; pass 2 runs the tools in reverse order, so a slow minute on the machine does not land on one tool only).
+// PAGES=sites is the live-site check (sites.mjs): it loads public sites over the network and records pass or fail per check, so run it with PASSES=1. SITES=youtube,wikipedia limits it to some sites.
 // Everything it downloads or writes goes to $MEASURE_DIR/rivals. A downloaded file is touched only by `unzip -p manifest.json`, to check its version and id.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

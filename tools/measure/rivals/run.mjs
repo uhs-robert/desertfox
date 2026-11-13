@@ -2,12 +2,13 @@
 // usage: node run.mjs <tool> [runs]
 // Per page it records load times, the time from the hint key to the first label, and the memory of the page and extension processes.
 import { connect_rdp, install_temporary_addon, evaluate_in_chrome } from "../../../test/key/rdp.mjs";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
+import { GENERIC_CHECKS, judge_activation, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, page_wall, pick_activation, SITES, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -68,6 +69,7 @@ if (!rdp) { await stop_firefox(); throw new Error("no debugger connection to Fir
 const chrome = (code) => evaluate_in_chrome(rdp, code);
 const selected_browser = `Services.wm.getMostRecentWindow("navigator:browser").gBrowser.selectedBrowser`;
 let slot_count = 0;
+const RESULT_SLICE = 8000;
 
 // The debugger gives one evaluation 5 s, so a long job stores its result in a chrome global and node polls for it.
 async function chrome_long(async_code, limit_ms) {
@@ -76,8 +78,11 @@ async function chrome_long(async_code, limit_ms) {
   const deadline = Date.now() + limit_ms;
   while (Date.now() < deadline) {
     await sleep(150);
-    const stored = await chrome(`globalThis.${slot} ?? null`);
-    if (typeof stored === "string") {
+    const length = await chrome(`globalThis.${slot}?.length ?? -1`);
+    if (length >= 0) {
+      // The debugger sends a string over about 10,000 characters only by reference, so a long result comes in slices.
+      let stored = "";
+      for (let at = 0; at < length; at += RESULT_SLICE) stored += await chrome(`globalThis.${slot}.slice(${at}, ${at + RESULT_SLICE})`);
       await chrome(`(delete globalThis.${slot}, 1)`);
       const value = JSON.parse(stored);
       // The wrapper above stores a rejection as { error }, and a failed job must fail the run, not pass as a result.
@@ -133,19 +138,20 @@ async function remove_policy_addon() {
   throw new Error("the policy-installed DesertFox is still present: the run would be biased");
 }
 
-// Navigates the selected tab to the page and waits until it has loaded. Returns the last page state and whether it loaded, so a failed load keeps its diagnosis.
-async function open_page(page) {
+// Navigates the selected tab to the url and waits until it has loaded. Returns the last page state and whether it loaded, so a failed load keeps its diagnosis.
+// A document with no navigation entry, such as the PDF viewer, reports a null load time and counts as loaded once complete.
+async function open_page(url, attempts = 150) {
   await navigate("about:blank");
   await sleep(700);
-  await navigate(`${base_url}/${page}`);
+  await navigate(url);
   let page_state = null;
-  for (let attempt = 0; attempt < 150; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     await sleep(100);
     try {
       await load_frame_script();
       page_state = await ask_page("state");
     } catch { continue; }
-    if (page_state?.ready === "complete" && page_state.load > 0 && page_state.url.startsWith(base_url)) return { page_state, loaded: true };
+    if (page_state?.ready === "complete" && (page_state.load ?? 1) > 0 && page_state.url !== "about:blank") return { page_state, loaded: true };
   }
   return { page_state, loaded: false };
 }
@@ -216,7 +222,76 @@ async function tab_switch_run(next_key) {
   return { ...timing, selects: marks.selects, presses_b_ms: marks.presses_b_ms };
 }
 
-const result = { tool, base_url, firefox: "", meta: {}, runs: [] };
+// One site for the live-site check: the per-site checks first, on the fresh page, then the generic ones. Typing a label comes last because it can leave the page.
+// A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
+// open_page polls every 100 ms, so a live page gets about 30 s to load.
+const LIVE_LOAD_ATTEMPTS = 300;
+const RENDER_MS = 5000;
+async function check_site(site) {
+  const keys = TOOL_KEYS[tool];
+  const url = site.url ?? `${base_url}/${site.path}`;
+  const check_names = [...site.extra, ...GENERIC_CHECKS];
+  const { page_state, loaded } = await open_page(url, LIVE_LOAD_ATTEMPTS);
+  if (!page_state) return { url, checks: Object.fromEntries(check_names.map((name) => [name, { status: "error", reason: "the page never answered" }])) };
+  // Apps render after the load event, and a page that never completes still gets its checks.
+  await sleep(RENDER_MS);
+  await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
+  // A page that swapped its content process has lost the frame script, so a first miss loads it again.
+  const info = await ask_page("page_info", {}, 5000).catch(async () => { await load_frame_script(); return ask_page("page_info", {}, 5000); });
+  const record = { url, loaded, landed_url: info.url, title: info.title, checks: {} };
+  const wall = page_wall(info);
+  if (wall) { for (const name of check_names) record.checks[name] = wall; return record; }
+  const no_key = { status: "fail", reason: "no default key" };
+  const press_and_compare = async (key, read, judge, wait_ms) => {
+    if (!key) return no_key;
+    const before = await ask_page(read, {}, 5000);
+    await ask_page("keys", { keys: key }, 5000);
+    await sleep(wait_ms);
+    return judge(before, await ask_page(read, {}, 5000));
+  };
+  // The embedded player answers once YouTube's iframe API has loaded it.
+  const wait_for_embed = async () => {
+    for (let waited = 0; waited < 20000; waited += 500) { if (await ask_page("embed_state", {}, 5000)) return; await sleep(500); }
+  };
+  const extra_checks = {
+    play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
+    volume: () => press_and_compare(keys.volume_down, "video_state", judge_volume, 1000),
+    cell_move: () => press_and_compare(keys.scroll_down, "name_box", judge_cell_move, 1000),
+    jk_clash: async () => {
+      const post_before = await ask_page("post_focus", {}, 5000);
+      const scroll = await ask_page("scroll_check", { keys: keys.scroll_down, wait_ms: 1000 }, 10000);
+      const post_after = await ask_page("post_focus", {}, 5000);
+      return judge_jk_clash({ scrolled: scroll.window_dy !== 0 || scroll.element_dy !== 0, post_focus_moved: post_after !== null && post_after !== post_before });
+    },
+    embed_play_pause: async () => { await wait_for_embed(); return press_and_compare(keys.play_pause, "embed_state", judge_play_pause, 2500); },
+    embed_volume: () => press_and_compare(keys.volume_down, "embed_state", judge_volume, 1500),
+  };
+  const show_hints = () => ask_page("hints", { keys: keys.hint, settle_ms: 1500 }, 15000);
+  let shown = null;
+  const generic_checks = {
+    scroll: async () => judge_scroll(await ask_page("scroll_check", { keys: keys.scroll_down, wait_ms: 1000 }, 10000)),
+    hints: async () => { shown = await show_hints(); return judge_hints(shown.labels, shown.targets); },
+    escape: async () => {
+      if (!shown?.labels.length) return { status: "fail", reason: "no labels to leave" };
+      await ask_page("escape");
+      await sleep(800);
+      return judge_escape(await ask_page("label_count", {}, 5000));
+    },
+    activate: async () => {
+      const again = await show_hints();
+      const pick = pick_activation(again.labels, again.targets);
+      if (!pick) return { status: "fail", reason: "no label on a visible target to type" };
+      return { ...judge_activation(await ask_page("activate", { ...pick, wait_ms: 3000 }, 15000)), typed: pick.keys };
+    },
+  };
+  for (const name of check_names) {
+    try { record.checks[name] = await (extra_checks[name] ?? generic_checks[name])(); }
+    catch (error) { record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) }; }
+  }
+  return record;
+}
+
+const result = { tool, base_url, date: new Date().toISOString(), firefox: "", meta: {}, runs: [] };
 const log_row = (row) => console.log(JSON.stringify(row));
 try {
   result.firefox = await chrome(`Services.appinfo.version`);
@@ -234,7 +309,9 @@ try {
     result.meta.install_ms = Date.now() - installing_since;
     // The extension's background start-up and first-run work settle in this time.
     await sleep(8000);
-    result.meta.permissions = await chrome(`(async () => { const policy = WebExtensionPolicy.getByID(${JSON.stringify(addon.id)}); return policy ? { manifest_version: policy.manifestVersion, active: policy.active, host_all: policy.allowedOrigins.matches("http://127.0.0.1/") } : null; })()`);
+    result.meta.permissions = await chrome(`(async () => { const policy = WebExtensionPolicy.getByID(${JSON.stringify(addon.id)}); return policy ? { manifest_version: policy.manifestVersion, active: policy.active, host_all: policy.allowedOrigins.matches("http://127.0.0.1/"), host_live: policy.allowedOrigins.matches("https://example.com/") } : null; })()`);
+    result.meta.version = await chrome_long(`{ const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs"); return (await AddonManager.getAddonByID(${JSON.stringify(addon.id)}))?.version ?? null; }`, 8000);
+    if (tool === "desertfox") result.meta.commit = spawnSync("git", ["-C", repo_dir, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).stdout.trim();
     if (!result.meta.permissions?.active) throw new Error(`${tool} is not active after install`);
     if (tool !== "desertfox" && (await policy_addon_state()) !== "absent") throw new Error("the policy-installed DesertFox came back after the install");
     // Close tabs the extension opened (options, welcome pages) and refocus the first.
@@ -243,12 +320,24 @@ try {
   }
   log_row(result.meta);
   for (const page of page_names) {
+    if (page === "sites") {
+      if (!addon) continue;
+      result.meta.sites = { keys: TOOL_KEYS[tool], settings: "extension defaults" };
+      const only_sites = process.env.SITES?.split(",");
+      for (const site of SITES.filter((entry) => !only_sites || only_sites.includes(entry.name))) {
+        // One site that hangs the debugger must not cost the other sites their results.
+        const record = await check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries([...site.extra, ...GENERIC_CHECKS].map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
+        result.runs.push({ page, run: 0, site: site.name, ...record });
+        log_row({ site: site.name, ...Object.fromEntries(Object.entries(record.checks).map(([name, check]) => [name, `${check.status}: ${check.reason}`])) });
+      }
+      continue;
+    }
     if (page === "tabswitch") {
       if (!addon) continue;
       // Default settings for every tool, nothing turned off. The warm-up run (-1) covers the first load after install, and the timed runs are warm.
       result.meta.tabswitch = { next_key: NEXT_TAB_KEY[tool], retry_ms: RETRY_MS, cache: "server sends cache-control: no-store, so each tab load fetches the page again; the browser start-up cache and the extension's script cache are warm after run -1", settings: "extension defaults", early_keys: "DesertFox holds keys that arrive before its keymap is read and replays them. How Vimium, Vimium C and Tridactyl treat early keys was not checked, so a press count for them is presses sent before landing, not proven lost presses" };
       for (let run = -1; run < timed_runs; run++) {
-        if (!(await open_page("tab")).loaded) throw new Error("the start tab did not load");
+        if (!(await open_page(`${base_url}/tab`)).loaded) throw new Error("the start tab did not load");
         await sleep(1500);
         const tabswitch = await tab_switch_run(NEXT_TAB_KEY[tool]);
         result.runs.push({ page, run, tabswitch });
@@ -258,7 +347,7 @@ try {
     }
     // Run -1 is a warm-up. It stays in the data as the first press on this page in this browser process (only the first page of a tool starts in a fresh browser), and the analysis leaves it out of the medians.
     for (let run = -1; run < timed_runs; run++) {
-      const { page_state, loaded } = await open_page(page);
+      const { page_state, loaded } = await open_page(`${base_url}/${page}`);
       if (!loaded) { result.runs.push({ page, run, error: "not loaded", page_state }); continue; }
       await sleep(1500);
       await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
