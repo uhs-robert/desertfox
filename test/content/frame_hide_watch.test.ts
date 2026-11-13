@@ -69,3 +69,11 @@ test("the top frame's own focus pauses the check, and the end of the child's foc
   tick();
   assert.equal(taken(), 0, "a new watch starts from not shown");
 });
+
+test("the watch looks at once when armed, so a frame that hides before the first period still counts as shown", (t) => {
+  const { frame, watch, tick, taken } = fixture(t);
+  watch(true);
+  frame.look.visible = false;
+  tick();
+  assert.equal(taken(), 1);
+});
