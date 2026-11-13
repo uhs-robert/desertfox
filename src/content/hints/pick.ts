@@ -79,11 +79,10 @@ export function create_picker(labels: readonly string[], texts: () => readonly (
     }
     if (!is_hint_char(token)) return { kind: "pass" };
     // The typed letter first, so custom non-Latin `hint_letters` work. The key's Latin letter only when the typed one fits no label.
-    const letter = physical && narrow(labels, typed + token.toLowerCase()).still_possible_.length === 0 ? physical : token;
-    const next = typed + letter.toLowerCase();
+    const next = typed + token.toLowerCase();
     const { still_possible_, complete } = narrow(labels, next);
     // A letter that continues no label is taken and dropped, so a slip does not leak into the page.
-    if (still_possible_.length === 0) return label_outcome();
+    if (still_possible_.length === 0) return physical ? on_label_token(physical) : label_outcome();
     typed = next;
     return label_outcome(complete);
   }
