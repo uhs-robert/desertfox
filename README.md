@@ -206,7 +206,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - Play, pause, seek, change speed and volume, toggle captions, fullscreen and picture-in-picture from the keyboard.
 - Press `aa` for a media mode with one-key controls. It starts by itself when a video goes fullscreen.
-- Pick the video quality on sites whose player DesertFox knows. The `media_quality` setting sets a level for every site or for chosen sites, and it applies when a video loads.
+- Pick the video quality on sites whose player DesertFox knows. The `media_quality` setting sets a level for every site or for chosen sites, and it applies when a video loads. The default, `auto`, leaves the player to the site.
 
 </details>
 

@@ -10,7 +10,7 @@ function make({ off = false as boolean | (() => boolean), inject = async (_tab_i
   const injected: number[] = [];
   const about_blank: number[] = [];
   const quality = create_media_quality({
-    is_off: async () => (typeof off === "function" ? off() : off),
+    is_idle: async () => (typeof off === "function" ? off() : off),
     inject_all: (tab_id) => (injected.push(tab_id), inject(tab_id)),
     inject_about_blank: async (tab_id) => void about_blank.push(tab_id),
     inject_frame: (tab_id, frame_id) => (into_frame.push([tab_id, frame_id]), inject_frame(tab_id, frame_id)),
@@ -59,7 +59,7 @@ test("a frame that refuses the script does not stop the about:blank pass", async
 });
 
 test("a tab that closed while the bundle was injected throws nothing", async () => {
-  const closing = create_media_quality({ is_off: async () => false, inject_all: async () => Promise.reject(new Error("no such tab")), inject_about_blank: async () => Promise.reject(new Error("no such tab")), inject_frame: async () => undefined, frame_address: async () => undefined, wait: async () => undefined, settle_ms: 0 });
+  const closing = create_media_quality({ is_idle: async () => false, inject_all: async () => Promise.reject(new Error("no such tab")), inject_about_blank: async () => Promise.reject(new Error("no such tab")), inject_frame: async () => undefined, frame_address: async () => undefined, wait: async () => undefined, settle_ms: 0 });
   await closing.tab_updated(2, { url: web }, web);
   await flush();
 });

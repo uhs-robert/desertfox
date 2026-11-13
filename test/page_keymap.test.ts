@@ -178,15 +178,17 @@ test("the strip rule is the global list on by default, none where a site row tur
 });
 
 test("the rule is off everywhere only when the global value is off and no site row sets one", async () => {
-  const is_off = (settings: Record<string, unknown>) => media_quality_is_idle(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled));
-  assert.equal(await is_off({}), true, "the default auto leaves every player alone");
-  assert.equal(await is_off({ media_quality: "auto" }), true);
-  assert.equal(await is_off({ media_quality: "max" }), false, "an explicit max, written at its old default, is kept");
-  assert.equal(await is_off({ media_quality: "auto", site_rules: [{ site: "https://a.test/*", media_quality: "max" }] }), false, "a row that asks for a quality injects under the default");
-  assert.equal(await is_off({ media_quality: "off" }), true);
-  assert.equal(await is_off({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: "off" }] }), false, "a row that sets a value, even off, still injects so the reply can decide");
-  assert.equal(await is_off({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: 720 }] }), false);
-  assert.equal(await is_off({ media_quality: "off", site_rules: [{ site: "https://a.test/*", off: true }] }), true);
+  const is_idle = (settings: Record<string, unknown>) => media_quality_is_idle(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled));
+  assert.equal(await is_idle({}), true, "the default auto leaves every player alone");
+  assert.equal(await is_idle({ media_quality: "auto" }), true);
+  assert.equal(await is_idle({ media_quality: "max" }), false, "an explicit max, written at its old default, is kept");
+  assert.equal(await is_idle({ media_quality: "auto", site_rules: [{ site: "https://a.test/*", media_quality: "max" }] }), false, "a row that asks for a quality injects under the default");
+  assert.equal(await is_idle({ media_quality: "off" }), true);
+  assert.equal(await is_idle({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: "off" }] }), true, "an off row asks for nothing under an idle global");
+  assert.equal(await is_idle({ media_quality: "auto", site_rules: [{ site: "https://a.test/*", media_quality: "auto" }, { site: "https://b.test/*", media_quality: "off" }] }), true, "so does an auto row");
+  assert.equal(await is_idle({ media_quality: "max", site_rules: [{ site: "https://a.test/*", media_quality: "auto" }] }), false, "under a global max an auto row still injects so the reply can say auto");
+  assert.equal(await is_idle({ media_quality: "off", site_rules: [{ site: "https://a.test/*", media_quality: 720 }] }), false);
+  assert.equal(await is_idle({ media_quality: "off", site_rules: [{ site: "https://a.test/*", off: true }] }), true);
   assert.equal(await media_quality_is_idle(storage_of(undefined)), true, "no stored keymap keeps the default auto");
 });
 
@@ -524,11 +526,11 @@ test("join_mode: insert beats media, media is not asked when insert holds, and a
 
 test("a tab opened under the default auto gets no probe, and switching to max reaches it with no navigation, and back to auto stops it", async () => {
   let settings: Record<string, unknown> = {};
-  const is_off = () => media_quality_is_idle(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled));
+  const is_idle = () => media_quality_is_idle(storage_of(compile_keymap(KEYMAP, settings, resolve).compiled));
   const probed: number[] = [];
   const bundled: number[] = [];
   const quality = create_media_quality({
-    is_off,
+    is_idle,
     inject_all: async (tab_id) => void probed.push(tab_id),
     inject_about_blank: async () => undefined,
     inject_frame: async (tab_id) => void bundled.push(tab_id),
@@ -554,4 +556,10 @@ test("a tab opened under the default auto gets no probe, and switching to max re
   settings = { media_quality: "max" };
   await quality.settings_changed(tabs);
   assert.deepEqual(probed, [1, 1], "and max again reaches the tab again");
+});
+
+test("a site row auto under a global max answers auto, which the rule treats as hands-off", async () => {
+  const compiled = compile_keymap(KEYMAP, { media_quality: "max", site_rules: [{ site: "https://a.test/*", media_quality: "auto" }] }, resolve).compiled;
+  assert.equal(await media_quality_reply(storage_of(compiled), "https://a.test/"), "auto");
+  assert.equal(await media_quality_reply(storage_of(compiled), "https://b.test/"), "max");
 });

@@ -16,7 +16,7 @@ async function load_page({ videos, off = false }: Page) {
   // The background is built below, and a frame's probe reports to it.
   const frames: { probe: ReturnType<typeof create_probe>; rule: ReturnType<typeof create_rule>; bundle_runs: number }[] = [];
   const quality = create_media_quality({
-    is_off: async () => off,
+    is_idle: async () => off,
     inject_all: async () => void frames.forEach((frame) => (counts.probe_runs++, frame.probe.run())),
     inject_about_blank: async () => void frames.forEach((frame) => (counts.probe_runs++, frame.probe.run())),
     frame_address: async () => web,
