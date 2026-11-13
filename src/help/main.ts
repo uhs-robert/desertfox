@@ -24,6 +24,7 @@ import { parse_route } from "./route.ts";
 
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
+let stop_section_hold: (() => void) | undefined;
 // Its one window listener is registered below, ahead of `content.js` and the drawer's Escape handler.
 const key_capture = create_key_capture();
 // The hold of the mounted import section. A new mount replaces it, and the old one can no longer change the gate.
@@ -46,9 +47,30 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && HOST_START_PENDING_STORAGE_KEY in changes) void host_start_session.load();
 });
 
+const SECTION_HOLD_MS = 5000;
+
+// The Keys, files and settings boxes fill in after the render and push the headings below them down, so a heading scrolled to at render time ends up far off screen. Scroll to it again as the page grows, until the reader scrolls or types or the load is over.
+function hold_section_in_view(heading: HTMLElement): void {
+  const page = document.querySelector(".desertfox-help-page");
+  if (!page) return;
+  const observer = new ResizeObserver(() => heading.scrollIntoView());
+  observer.observe(page);
+  const reader_events = ["wheel", "touchstart", "pointerdown", "keydown"];
+  const stop = () => {
+    clearTimeout(timer);
+    observer.disconnect();
+    for (const name of reader_events) window.removeEventListener(name, stop, true);
+    stop_section_hold = undefined;
+  };
+  const timer = setTimeout(stop, SECTION_HOLD_MS);
+  for (const name of reader_events) window.addEventListener(name, stop, { capture: true, passive: true });
+  stop_section_hold = stop;
+}
+
 // `refresh` draws the same route again after a settings change. The caller keeps scroll and focus, so the route's own scroll and focus rules stay out.
 function show_route(model: HelpModel, guide: Block[], engines: string[], cause: "first" | "moved" | "refresh"): void {
   const route = parse_route(location.hash);
+  stop_section_hold?.();
   stop_settings?.();
   stop_settings = undefined;
   stop_keys?.();
@@ -75,6 +97,7 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   if (section_heading) {
     section_heading.scrollIntoView();
     section_heading.focus({ preventScroll: true });
+    hold_section_in_view(section_heading);
     return;
   }
   if (cause === "moved") document.querySelector<HTMLElement>(".desertfox-help-page h1")?.focus({ preventScroll: true });
