@@ -253,6 +253,12 @@ test("the press lands on the thumb: a role slider child, else aria-valuenow alon
   assert.deepEqual(press_point(as_element(valued)), { x: 25, y: 10 });
   const vertical = element({ attrs: { role: "slider", "aria-orientation": "vertical", "aria-valuenow": "25" } });
   assert.deepEqual(press_point(as_element(vertical)), { x: 50, y: 15 });
+  const scrollbar = element({ attrs: { role: "scrollbar", "aria-valuenow": "25" } });
+  assert.deepEqual(press_point(as_element(scrollbar)), { x: 50, y: 5 });
+  const at_max = element({ attrs: { "aria-valuenow": "100" } });
+  assert.deepEqual(press_point(as_element(at_max)), { x: 99, y: 10 });
+  const vertical_min = element({ attrs: { role: "slider", "aria-orientation": "vertical", "aria-valuenow": "0" } });
+  assert.deepEqual(press_point(as_element(vertical_min)), { x: 50, y: 19 });
   const thumb = element({ getBoundingClientRect: () => ({ left: 60, top: 0, width: 10, height: 20 }) });
   const track = element({ querySelector: () => thumb, attrs: { "aria-valuenow": "0" } });
   assert.deepEqual(press_point(as_element(track)), { x: 65, y: 10 });
