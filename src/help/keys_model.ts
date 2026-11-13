@@ -224,7 +224,7 @@ export function create_keys_session(deps: KeysDeps) {
 
   async function run_check(editor: Editor, serial: number): Promise<void> {
     cancel_check = undefined;
-    const answer = await ask<CheckBindingAnswer>({ type: "check_binding", mode: editor.mode, keys: keys_of(editor.tokens), text: editor.text, ...moved_from(editor) });
+    const answer = await ask<CheckBindingAnswer>({ type: "check_binding", mode: editor.mode, keys: keys_of(editor.tokens), text: editor.text, ...(freed_keys(editor) !== undefined && { move_from: freed_keys(editor)! }) });
     if (serial !== check_serial || state.open !== editor) return;
     if (!answer.ok) editor.check = { state: "failed", message: answer.message };
     else {
