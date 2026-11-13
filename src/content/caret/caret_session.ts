@@ -1,5 +1,5 @@
 // The one caret or visual session of this page. Only the sink's `enter` starts one, and the sink's `exit` ends it.
-// A generation counts each session start and each start of a visual run, so work that awaits (a copy, a search step, the search line) acts only on the run that started it.
+// A generation counts each session start and each start of a visual run. Work that awaits (a copy, a search step, the search line) takes the generation before its await and acts only if that run is still open.
 
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import type { PageText } from "./page_text.ts";
@@ -102,6 +102,11 @@ export function create_sessions({ host, page_text, start_, foreign_move_, first_
     take_click_,
     current_: current,
     read_again_: read_again,
+    // `visual.act` and `visual.open` act on a selection, which only the visual modes hold. A click that ended visual mode leaves none either.
+    selected_(): Session | string {
+      const open = current();
+      return typeof open === "string" ? open : open && is_visual(open.mode) ? open : "No selection";
+    },
     // A command that needs a session from outside one enters `mode` first, so the sink makes the session and the badge shows it. Caret mode takes any session mode, visual mode only itself.
     require_(mode: CaretMode): Session | string | undefined {
       const held = host.get_mode();

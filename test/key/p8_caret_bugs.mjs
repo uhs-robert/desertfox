@@ -471,6 +471,23 @@ export async function run_cases({ run_case, expect, open_page, press_keys, poll_
     });
   }
 
+  // A macro reaches a handler without the keymap's mode, so visual.act can run in caret mode. Caret mode holds no selection, so it refuses, and the search the step asks for never opens.
+  await run_case("visual.act replayed in caret mode refuses and searches nothing", async () => {
+    const page_id = "act_caret";
+    const steps = [
+      { id: "mode.set", args: { mode: "caret" } },
+      { id: "visual.act", args: { action: "search" } },
+    ];
+    await evaluate_in_background(rdp, extension_id, `browser.storage.local.set({ desertfox_register_b: ${JSON.stringify(steps)} })`);
+    await open_page("caret", page_id, { new_tab: true });
+    const mark = events.length;
+    await press_keys("@", "b");
+    await wait_event(mark, badge_is(page_id, "CARET"), "the replay to enter caret mode");
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, "the refusal toast");
+    await expect_absent(mark, page_id, (event) => event.type === "tree_read" && event.page_id === "search_result", "a search opened from caret mode", { report_delay_ms: 500 });
+    await escape_to_normal(page_id);
+  });
+
   // The harness has no pointer, so the click is a collapsed selection, which is all the caret code reads. The next key sees it: visual mode ends before the keymap reads that key, so the key runs in caret mode from the click.
   await run_case("a click in visual mode ends it, and the next key runs in caret mode from the click", async () => {
     const page_id = "click_visual";

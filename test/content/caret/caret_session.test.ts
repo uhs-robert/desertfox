@@ -186,6 +186,33 @@ test("a copy still ends its own visual run after the page changed its text", asy
 });
 
 // The n/N/*/# pin: a step follows only the run it started from.
+// main.ts captures the generation before the await, so a switch to another visual run during the await drops the follow.
+test("a step pinned before its await is not the open run once a v during the await started a visual run", () => {
+  const { sessions, set_mode } = setup();
+  set_mode("caret");
+  const open = sessions.open_()!;
+  const run = open.generation_;
+  set_mode("visual");
+  assert.equal(sessions.is_run_(run), false, "the step followed into the new visual run");
+  assert.equal(sessions.is_run_(open.generation_), true, "a generation read after the await names the new run");
+  set_mode("caret");
+  set_mode("visual");
+  assert.equal(sessions.is_run_(run), false, "the step followed into a run after v, Escape, v");
+});
+
+// visual.act and visual.open, as a macro or a user binding reaches them in caret mode.
+test("a selection command refuses in caret mode, and after a click ended visual mode", () => {
+  const { sessions, set_mode, click } = setup();
+  set_mode("caret");
+  assert.equal(sessions.selected_(), "No selection");
+  set_mode("visual");
+  assert.equal(typeof sessions.selected_(), "object");
+  click(3);
+  assert.equal(sessions.selected_(), "No selection");
+  set_mode("normal");
+  assert.equal(sessions.selected_(), "No selection");
+});
+
 test("a step whose session ended or was replaced during its await is not the open run", () => {
   const { sessions, set_mode } = setup();
   set_mode("caret");

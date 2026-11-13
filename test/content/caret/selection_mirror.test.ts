@@ -189,6 +189,14 @@ test("a click after the paint answers the index it landed on, in visual mode too
   assert.equal(mirror.foreign_move_(model), 4);
 });
 
+// A click is a collapsed selection. A drag over one character is not, so it stays a drag and keeps visual mode.
+test("a one-character drag after the paint is a cursor, not a click", () => {
+  const { top, model, mirror, second_node } = setup();
+  mirror.paint(model, { from: 0, to: 1 }, "visual");
+  top.selection.setBaseAndExtent(second_node, 1, second_node, 2);
+  assert.deepEqual(mirror.foreign_move_(model), { anchor: 4, caret: 4 });
+});
+
 test("a drag after the paint is taken whole, and a backward one puts the caret at its start", () => {
   const { top, model, mirror, second_node } = setup();
   mirror.paint(model, { from: 0, to: 1 }, "visual");

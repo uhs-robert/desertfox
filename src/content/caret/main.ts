@@ -208,12 +208,6 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
   paint(open);
 };
 
-// `visual.act` and `visual.open` act on a selection, which only the visual modes hold. A click that ended visual mode leaves none either.
-function selection_session(): Session | string {
-  const open = sessions.current_();
-  return typeof open === "object" && is_visual(open.mode) ? open : (open ?? "No selection");
-}
-
 // The router shows a refusal of its own, so the answer only decides whether a sequence goes on. Visual mode ends as the command goes out.
 function run_in_background(id: string, args: Record<string, unknown>): Promise<Outcome> {
   const sent = browser.runtime.sendMessage({ type: "run", invocations: [{ id, args }], mode: "visual" }) as Promise<RunResponse>;
@@ -223,7 +217,7 @@ function run_in_background(id: string, args: Record<string, unknown>): Promise<O
 
 const handle_act = (args: Record<string, unknown>): Outcome | Promise<Outcome> | undefined => {
   find_mode.end();
-  const open = selection_session();
+  const open = sessions.selected_();
   if (typeof open === "string") return { ok: false, message: open };
   const action = args.action as "yank" | "swap" | "search";
   if (action === "swap") {
@@ -257,7 +251,7 @@ const handle_object = (args: Record<string, unknown>): Outcome | undefined => {
 // Line breaks inside the selection are spaces, so a URL or a search sees one line. A blank selection stays selected.
 const handle_open = (args: Record<string, unknown>): Outcome | Promise<Outcome> => {
   find_mode.end();
-  const open = selection_session();
+  const open = sessions.selected_();
   if (typeof open === "string") return { ok: false, message: open };
   const text = selected_text(open.model_.text, open.span_).replace(/\s+/g, " ").trim();
   if (text === "") return { ok: false, message: "Nothing to open in the selection" };
@@ -312,9 +306,9 @@ function follow_search(open: Session, take_match: boolean): void {
 
 const found_match = (outcome: Outcome) => outcome.ok && !("cancelled" in outcome && outcome.cancelled);
 
-// A search step follows only the run it started from: during its await the session can end, start anew or switch to another visual run.
-function follow_step(started: Session | undefined, outcome: Outcome): void {
-  if (started && sessions.is_run_(started.generation_)) follow_search(started, found_match(outcome));
+// A search step follows only the run it started from, so it takes the generation before its await: a mode switch to another visual run bumps the generation on the same session object.
+function follow_step(started: Session | undefined, run: number | undefined, outcome: Outcome): void {
+  if (started && sessions.is_run_(run)) follow_search(started, found_match(outcome));
 }
 
 // `n` and `N`: step to the match, and an open session takes its caret there. A session searches from its caret, so it first catches up with the page. Normal mode has no session.
@@ -323,8 +317,9 @@ async function find_step(reverse: boolean): Promise<Outcome> {
   try {
     const started = sessions.current_();
     if (typeof started === "string") return { ok: false, message: started };
+    const run = started?.generation_;
     const outcome = await find.step(reverse, started && started.model_.point_at_(started.cursor.caret));
-    follow_step(started, outcome);
+    follow_step(started, run, outcome);
     return outcome;
   } finally {
     release_if_idle();
@@ -340,8 +335,9 @@ async function find_word(direction: "forward" | "backward"): Promise<Outcome> {
     if (typeof started === "string") return { ok: false, message: started };
     const target = word_target();
     if (typeof target === "string") return { ok: false, message: target };
+    const run = started?.generation_;
     const outcome = await find.jump(target.pattern, direction, target.from);
-    follow_step(started, outcome);
+    follow_step(started, run, outcome);
     return outcome;
   } finally {
     release_if_idle();
