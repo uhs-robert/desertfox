@@ -1,6 +1,7 @@
 // The built-in page: the clock (analog or digital), the date and the lists of links.
 import type { Settings } from "../shared/config.ts";
 import { browser_page_readers, read_sections, type ListSection, type PageReaders } from "./lists.ts";
+import { warn_and_go } from "../shared/swallow.ts";
 import { draw_tile } from "./tile.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
@@ -41,7 +42,7 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
         anchor.addEventListener("click", (event) => {
           event.preventDefault();
           // The session may be gone (restored or forgotten elsewhere), so open the address instead.
-          void browser.sessions.restore(session_id).catch(() => browser.tabs.create({ url: row.url }));
+          void browser.sessions.restore(session_id).catch(() => browser.tabs.create({ url: row.url }).catch(warn_and_go("closed tab card: restore and open both failed")));
         });
       }
       if (tab) {
