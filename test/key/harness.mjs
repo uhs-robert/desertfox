@@ -673,6 +673,33 @@ export async function create_session({ name: session_name, timings, sweep = true
     }
   }
 
+  // The key probe for an extension page, which sends no key reports to the server. A young new tab page drops keys too: the page misses a key pressed in about its first 120 ms (docs/firefox-behavior.md, "Keys on a young new tab page").
+  // A listener the background adds to the page counts PROBE_KEY. content.js passes the unbound key, so a listener added after its own still sees it.
+  const wait_view_takes_keys = (view_name) => timings.time("waits", () => wait_view_takes_keys_untimed(view_name));
+  async function wait_view_takes_keys_untimed(view_name) {
+    const view = extension_view(view_name);
+    // A page that went away reads -1, so its probe times out.
+    const read_probe_count = `(${view}?.desertfox_probe_count ?? -1)`;
+    await poll_until_untimed(`${view_name} to take the probe listener`, () => background_call(`(() => {
+      const view = ${view};
+      if (!view) return false;
+      if (view.desertfox_probe_count === undefined) {
+        view.desertfox_probe_count = 0;
+        view.addEventListener("keydown", (event) => event.key === "${PROBE_KEY}" && view.desertfox_probe_count++, true);
+      }
+      return true;
+    })()`));
+    const deadline = Date.now() + KEY_PROBE_TIMEOUT_MS;
+    for (let presses = 1; ; presses++) {
+      const before = await background_call(read_probe_count);
+      await press_keys("-k", PROBE_KEY);
+      const seen = await poll_until_untimed(`${view_name} to take the probe key ${PROBE_KEY}`, async () => (await background_call(read_probe_count)) > before, { timeout_ms: KEY_PROBE_TRY_MS, step_ms: 20, expected_timeout: true }).then(() => true, () => false);
+      if (seen) return;
+      if (Date.now() > deadline) throw wait_timeout_error(`${view_name} to take the probe key ${PROBE_KEY} (${presses} presses)`);
+      measurements.key_probe_retries = (measurements.key_probe_retries ?? 0) + 1;
+    }
+  }
+
   // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
   async function wait_for_tabs(what, count_expr, expected) {
     await poll_until(what, async () => (await in_background(count_expr)) === expected, { timeout_ms: 30000 });
@@ -929,7 +956,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     // Stores a number for the end-of-run measurements line.
     const record = (key, value) => { measurements[key] = value; };
     // The cases of a piece file in test/key/p<number>_*.mjs get these helpers.
-    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, expect_no_tab_shown, scroll_of, last_scroll_y,
+    const context = { config_dir, config_copy, load_config_dir, take_shot: (path) => timings.time("driver", () => session.shot(path)), run_case: run_piece_case, setup, on_teardown, expect, open_page, open_page_by_keys, send_keys, press_keys, settle_focus, wait_takes_keys, wait_view_takes_keys, poll_until, wait_tab_quiet, barrier, expect_absent, read_cmdline_state, wait_cmdline, close_cmdline, open_cmdline, type_in_line, complete_in_line, run_line, type_in_address_bar, scroll_report_wait_ms: SCROLL_REPORT_DELAY_MS + 100, which_key_delay_ms: WHICH_KEY_DELAY_MS, sleep, events, wait_event, since, find_event, url_of, rdp, extension_id: EXTENSION_ID, scroll_delta_after, scroll_delta_by_press, wait_active_tab, tab_switch_mark, tabs_shown_since, expect_no_tab_shown, scroll_of, last_scroll_y,
       // Moved out of the run.mjs cases. Pieces may use them too.
       in_background, clear_notices, set_optional_permissions, read_local, reload_in_place, wait_reinject_report, injections_of, settled_injection_count, expect_no_scroll, expect_exactly_one_visible, hint_label_count, in_active_tab, shown_range_in, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, extension_view, close_tabs_with, record };
     return { context, state, piece_file };

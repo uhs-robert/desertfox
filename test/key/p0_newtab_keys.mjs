@@ -3,14 +3,14 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["newtab"];
 
-export async function run_cases({ run_case, expect, press_keys, poll_until, wait_tab_quiet, rdp, extension_id, injections_of, extension_view }) {
+export async function run_cases({ run_case, expect, press_keys, poll_until, wait_view_takes_keys, rdp, extension_id, injections_of, extension_view }) {
   const evaluate = (code) => evaluate_in_background(rdp, extension_id, code);
 
   await run_case("the new tab page takes : and f, loading hints and the command line through the page tag", async () => {
     const tab_id = await evaluate(`browser.tabs.create({ url: browser.runtime.getURL("newtab.html") }).then((tab) => tab.id)`);
     expect(Number.isInteger(tab_id), `no new tab id: ${tab_id}`);
     await poll_until("the new tab page to render and take focus", async () => await evaluate(`(() => { const view = ${extension_view("newtab.html")}; return !!view?.document.querySelector(".desertfox-newtab") && view.document.hasFocus(); })()`).catch(() => false), { timeout_ms: 10000 });
-    await wait_tab_quiet(tab_id);
+    await wait_view_takes_keys("newtab.html");
     const mode = () => evaluate(`${extension_view("newtab.html")}?.desertfox_host?.get_mode() ?? null`);
     const wait_mode = (wanted) => poll_until(`the mode to be ${wanted}`, async () => (await mode()) === wanted).catch(async (error) => { throw new Error(`${error.message} (it is ${await mode()})`); });
     await press_keys(":");

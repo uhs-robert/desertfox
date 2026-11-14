@@ -86,6 +86,21 @@ Result: delivery works. No fallback is needed.
 - `mode_changed` arrived at the background with `sender.tab.id` set and `frameId` 0, for `normal` and then `ignore` after `<S-Escape>`. The stored per-tab mode followed.
 - `repair_tabs_after_reload` skips the help tab, because its URL does not match `INJECTABLE_URL` (`https?|file|ftp`). It cannot throw or loop on it. After an extension reload Firefox closes extension pages, so there is nothing to repair.
 
+## Keys on a young new tab page (first-key-race, #667)
+
+Question: the key test's first `f` on a fresh new tab page drew no labels in about half the runs, and a second `f` worked. Is a key lost in DesertFox, or before the page gets it?
+
+Setup: Firefox 160 in the key test session. `p0_newtab_widgets` alone, 7 runs, one `f` press after the ready attribute. A test-side listener logged every keydown that reached `content.js` (a wrapped `stopImmediatePropagation` for the keys it cancels, a capture listener after its own for the keys it passes). A capture listener in the browser window logged the keys Firefox got.
+
+Result: Firefox drops the key between its window and the page.
+
+- The test pressed `f` 107 to 380 ms after the page document started, because the page renders its cards in about 100 ms.
+- 3 of 7 presses were lost, at 107 to 117 ms. 4 of 7 were kept, at 121 to 380 ms.
+- The browser window got every press. The page got none of the lost ones, and they never arrived later (3 s).
+- In every run the page had the focus, the address bar did not, the document was not replaced and the keymap was installed 14 to 49 ms after the document started.
+
+DesertFox cannot catch a key that the page never gets. The key test now runs a key probe on the new tab page before its first key.
+
 ## Caret drawing (P7a)
 
 Question: does Firefox paint a caret for a collapsed selection in page text?

@@ -11,7 +11,7 @@ const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) =>
 
 export const areas = ["newtab", "config"];
 
-export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, wait_cmdline, close_cmdline, open_page, url_of, rdp, extension_id }) {
+export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, wait_view_takes_keys, wait_cmdline, close_cmdline, open_page, url_of, rdp, extension_id }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
 
@@ -75,17 +75,10 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
       const cards_now = await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`);
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
-      // The first f can draw no label (#667). This retry hides it and comes out when #667 is fixed.
-      for (let attempt = 1; ; attempt++) {
-        await press_keys("f");
-        try {
-          await poll_until("the hint labels to show", async () => (await labels()) > 0, { timeout_ms: 1500 });
-          break;
-        } catch (error) {
-          if (attempt >= 5) throw error;
-          await press_keys("-k", "Escape");
-        }
-      }
+      // The page renders in about 100 ms, when it can still drop a key.
+      await wait_view_takes_keys("newtab.html");
+      await press_keys("f");
+      await poll_until("the hint labels to show", async () => (await labels()) > 0);
       // One label per card, plus the three built-in links and the command line hint.
       expect((await labels()) === cards_now + 4, `expected ${cards_now + 4} labels, found ${await labels()}`);
       await press_keys("-k", "Escape");
