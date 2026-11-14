@@ -48,7 +48,7 @@ Extension process RSS after load, in MB, the same on every page: none 36.4, Dese
 Caveats:
 
 - One machine and one Firefox build.
-- Each tool ran in its own Firefox process, so the extension process figure is a reading per pass and not a per-page measurement.
+- Each tool ran in its own Firefox process, and that process stays up across the pages of a pass. The rig samples the extension process after every page load, so each page cell is the median of 16 samples of the same process. The medians match across pages for that reason. Across all samples the range was 52.5 to 55.0 for DesertFox, 36.7 to 38.3 for Vimium, 51.2 to 54.7 for Vimium C, 45.0 to 46.1 for Tridactyl and 36.3 to 38.2 for none.
 
 Page-load cost on the article page (a saved article of 2.0 MB) against no extension:
 
@@ -57,7 +57,7 @@ Page-load cost on the article page (a saved article of 2.0 MB) against no extens
 - A page load gap under 100 ms reads as instant to a user, so these figures are far below what a user notices.
 - The rivals run on the same page (16 runs) gave +17 ms for DesertFox, +21 for Vimium, +19 for Vimium C and +80 for Tridactyl.
 
-Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). Each run started after a check that the 1-minute load average was under 3, and the highest load sampled during a run was 1.44.
+Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). The script checked that the 1-minute load average was under 3 before each variant's 13 runs, not before every run. The highest load sampled during a variant was 1.44.
 
 ```
 MEASURE_DIR=<dir outside /tmp> RUNS=8 PASSES=2 just measure-rivals
