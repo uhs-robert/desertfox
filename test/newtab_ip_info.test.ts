@@ -90,7 +90,7 @@ test("is_ip_address takes real IPv4 and IPv6 forms only", () => {
   for (const bad of ["dead", "1.2.3", "256.1.1.1", "01.2.3.4", "1.2.3.4.5", "1:2", ":::", "12345::1", "2001:db8::1::2", "ab", "..", "::g"]) assert.equal(is_ip_address(bad), false, bad);
 });
 
-test("forget_ip_info removes only the card's own key", async () => {
+test("forget_ip_info removes only the line's own key", async () => {
   const removed: string[] = [];
   await forget_ip_info(async (key) => void removed.push(key));
   assert.deepEqual(removed, [net_cache_key("ip")]);
