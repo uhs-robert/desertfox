@@ -581,7 +581,7 @@ async function check_site(site) {
     return { labels, targets, frame_labels: in_frames.labels };
   };
   const judged_movement = async (movement_keys) => {
-    const { before, after, focus } = await movement_check({ keys: movement_keys }, site.scroll_probe, { leave_keys: ["Escape"] });
+    const { before, after, focus, leave_key_sent } = await movement_check({ keys: movement_keys }, site.scroll_probe, { leave_keys: ["Escape"] });
     return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, leave_key_sent, before, after };
   };
   const actions = {
