@@ -192,6 +192,9 @@ answer("focus_view", async ({ probe }) => {
   return { focused: describe(content.document.activeElement) };
 });
 
+// Whether the focus is inside the site's work area, for the Tab steps of the scored movement rows.
+answer("focus_inside", async ({ selector }) => !!content.document.activeElement?.closest?.(selector));
+
 // X marks the post its j moved to by focusing the article.
 answer("post_focus", async () => { const post = content.document.activeElement?.closest?.("article"); return post ? [...content.document.querySelectorAll("article")].indexOf(post) : null; });
 

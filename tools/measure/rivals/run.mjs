@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -585,19 +585,19 @@ async function check_site(site) {
     let focus = await focus_now();
     const leave_key_sent = needs_leave_key(focus);
     if (leave_key_sent) { await press_keys(["Escape"]); await sleep(600); }
-    const tabs = site.tab_count ?? 0;
-    if (tabs > 0) await press_keys(Array.from({ length: tabs }, () => "Tab"));
-    if (leave_key_sent || tabs > 0) { await sleep(300); focus = await focus_now(); }
-    return { focus: focus.path, leave_key_sent, tabs };
+    const tab_stops = site.work_area ? await tab_into_work_area({ press_tab: async () => { await press_keys(["Tab"]); await sleep(150); }, is_inside: () => ask_page("focus_inside", { selector: site.work_area }, 5000) }) : null;
+    if (leave_key_sent || tab_stops?.tabs > 0) { await sleep(300); focus = await focus_now(); }
+    return { focus: focus.path, leave_key_sent, tabs: tab_stops?.tabs ?? 0, tab_reached: tab_stops?.reached ?? null };
   };
+  const with_tab_note = (result, start) => (site.work_area ? { ...result, reason: `${result.reason} (${tab_note({ tabs: start.tabs, reached: start.tab_reached })})` } : result);
   // One scored movement row: a probe site reads its own view, any other site reads the scroll offsets of the window and the main scroller.
   const judged_movement = async (movement_keys) => {
     if (!site.scroll_probe) {
       const start = await keyboard_start();
-      return { ...judge_scroll(await scroll_check(movement_keys)), start };
+      return { ...with_tab_note(judge_scroll(await scroll_check(movement_keys)), start), start };
     }
     const { before, after, focus, start } = await movement_check({ keys: movement_keys }, site.scroll_probe, { start: keyboard_start });
-    return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, start, before, after };
+    return { ...with_tab_note(judge_movement({ probe: site.scroll_probe, before, after }), start), focus, start, before, after };
   };
   const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
