@@ -40,15 +40,29 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     expect(last_scroll_y(other_id) === other_before, `j also scrolled ${other_id}`);
   };
 
-  // Opens a page whose frame focuses itself on load, and waits for the park (the frame's blur). Firefox does not always give a frame in a new tab its load focus, and a page without it is opened again under a new id.
-  const open_load_focus = async (name) => {
+  const tab_mode_record = async () => {
+    const tab_id = await in_background(`(async () => (await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0].id)()`);
+    return (await read_local(`desertfox_tab_mode_${tab_id}`)) ?? {};
+  };
+  // The park is the background's record of it plus the focus back in the top page. The frame's blur is no sign: Firefox can take the load focus back to the top page with no blur in the frame, and the background parks the frame all the same.
+  const wait_parked = () =>
+    poll_until("the background to park the frame and the top page to hold the focus", async () => (await tab_mode_record()).parked !== undefined && (await in_active_tab(`document.hasFocus() && !document.activeElement?.contentWindow`)));
+  // Loads the page until its frame takes its load focus, then requires the park. Firefox does not always give a frame its load focus, so only a load without it is tried again, up to four loads.
+  const load_until_parked = async (frame_id_of, load_page) => {
     for (let attempt = 0; ; attempt++) {
-      const id = `p6_hybrid_${name}_load_focus${attempt === 0 ? "" : `_retry${attempt}`}`;
-      await open_page("hybrid_frames", id, { new_tab: true });
-      const parked = await poll_until("the frame to be parked", async () => frame_events(`${id}_cross`, "frame_blur").length >= 1, { timeout_ms: 1500, expected_timeout: true }).then(() => true, () => false);
-      if (parked) return { id, frame_id: `${id}_cross` };
-      expect(attempt < 3, "the frame never took its load focus in four pages");
+      const frame_id = frame_id_of(attempt);
+      const focuses = frame_events(frame_id, "frame_focus").length;
+      await load_page(attempt);
+      const took_focus = await poll_until("the frame to take its load focus", async () => frame_events(frame_id, "frame_focus").length > focuses, { timeout_ms: 1500, expected_timeout: true }).then(() => true, () => false);
+      if (took_focus) return (await wait_parked(), attempt);
+      expect(attempt < 3, "the frame never took its load focus in four loads");
     }
+  };
+  // Opens a page whose frame focuses itself on load, each try under a new page id.
+  const open_load_focus = async (name, kind = "load_focus") => {
+    const id_of = (attempt) => `p6_hybrid_${name}_${kind}${attempt === 0 ? "" : `_retry${attempt}`}`;
+    const attempt = await load_until_parked((n) => `${id_of(n)}_cross`, (n) => open_page("hybrid_frames", id_of(n), { new_tab: true }));
+    return { id: id_of(attempt), frame_id: `${id_of(attempt)}_cross` };
   };
   const state = {};
   await run_case("a cross-origin frame that focuses itself on load is parked: j scrolls the top page and the badge is not FRAME", async () => {
@@ -57,7 +71,6 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     Object.assign(state, opened);
     await sleep(400);
     expect(frame_events(state.frame_id, "frame_focus").length === 1, `the frame took the focus ${frame_events(state.frame_id, "frame_focus").length} times: Gecko handed it back, or it was parked twice`);
-    expect(frame_events(state.frame_id, "frame_blur").length >= 1, "the frame was never blurred, so it was not parked");
     await j_scrolls(state.id, state.frame_id);
     expect(!find_event(mark, badge_is(state.id, "FRAME")), "the badge showed FRAME for a parked frame");
   });
@@ -108,6 +121,20 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await wait_event(mark, badge_is(id, "INSERT"), "the badge to show the frame's insert mode");
     const tab_id = await in_background(`(async () => (await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0].id)()`);
     expect((await read_local(`desertfox_tab_mode_${tab_id}`)).parked === undefined, "the pick left the park record in place");
+  });
+
+  await run_case("a frame that loses its load focus with no blur is parked, and a hint into its field still ends the park", async () => {
+    const { id, frame_id } = await open_load_focus("lost", "lost_focus");
+    await sleep(400);
+    expect(frame_events(frame_id, "frame_blur").length === 0, "the frame saw a blur, so the case drove the usual order");
+    await run_line("hint --inputs");
+    let labels;
+    await poll_until("the label of the frame's field", async () => (labels = await labels_by_frame()).frame.length >= 1);
+    const mark = events.length;
+    await press_keys(labels.frame[0]);
+    await wait_event(mark, on_page(frame_id, "frame_focus"), "the picked field's frame to take the focus");
+    await wait_event(mark, badge_is(id, "INSERT"), "the badge to show the frame's insert mode");
+    await poll_until("the pick to end the park", async () => (await tab_mode_record()).parked === undefined);
   });
 
   await run_case("a frame is parked once: Tab into an idle frame parks it, and the next Tab enters it and it keeps the keys", async () => {
@@ -208,11 +235,11 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
   await run_case("a reload of the top page parks its frame again, and closing the tab removes the record", async () => {
     const { id, frame_id } = await open_load_focus("reload");
     await sleep(400);
-    const blurs = frame_events(frame_id, "frame_blur").length;
-    const mark = events.length;
-    await in_active_tab(`location.reload(); 0`);
-    await wait_event(mark, on_page(id, "tree_read"), "the reloaded page to start");
-    await poll_until("the reloaded frame to be parked again", async () => frame_events(frame_id, "frame_blur").length > blurs);
+    await load_until_parked(() => frame_id, async () => {
+      const mark = events.length;
+      await in_active_tab(`location.reload(); 0`);
+      await wait_event(mark, on_page(id, "tree_read"), "the reloaded page to start");
+    });
     await sleep(300);
     await j_scrolls(id, frame_id);
     const tab_id = await in_background(`(async () => (await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0].id)()`);

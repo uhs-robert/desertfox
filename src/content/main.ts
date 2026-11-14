@@ -426,7 +426,8 @@ function start(): void {
       if (message.park) {
         const free = answer_park(window === window.top, document.activeElement, activated());
         // A frame the user clicked after the park was decided says so at once, so the background ends the park and the badge shows FRAME.
-        if (!free) report_mode();
+        // A frame that already lost the focus says so too: Firefox can hand the load focus to the top page before this script starts, with no blur event, and only a blur report lets a later hint into the frame end the park.
+        if (!free || !holds_own_focus(document)) report_mode();
         return Promise.resolve(free);
       }
       focus_page_content();
