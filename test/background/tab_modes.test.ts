@@ -479,3 +479,23 @@ test("a second report of the same focus, as a mode change sends before the blur,
   await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
   assert.equal(await modes.parked_frame(4), undefined, "a focus after the blur does");
 });
+
+test("a frame that answers the park with not free sends a fresh report: the record names it as the focused child and holds no park", async () => {
+  const storage = fake_storage();
+  const modes = create_tab_modes(storage);
+  const told: string[] = [];
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  // The frame was clicked after the park was decided: it reports with its click, then answers not free.
+  await hand_back_parked_frame(
+    async () => {
+      await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, activated: true });
+      return false;
+    },
+    async () => void told.push("top"),
+  );
+  assert.deepEqual(told, [], "the top page is not asked to blur the frame");
+  const record = storage.data["desertfox_tab_mode_4"] as { parked?: number; focused_child?: { frame_id: number; mode: string } };
+  assert.deepEqual(record.focused_child, { frame_id: CHILD, mode: "normal" });
+  assert.equal(record.parked, undefined);
+  assert.equal(await modes.recall(4), "normal");
+});

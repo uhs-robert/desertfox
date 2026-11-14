@@ -404,7 +404,12 @@ function start(): void {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
     if (message.type === "focus_page") {
-      if (message.park) return Promise.resolve(answer_park(window === window.top, document.activeElement, activated()));
+      if (message.park) {
+        const free = answer_park(window === window.top, document.activeElement, activated());
+        // A frame the user clicked after the park was decided says so at once, so the background ends the park and the badge shows FRAME.
+        if (!free) report_mode();
+        return Promise.resolve(free);
+      }
       focus_page_content();
       return Promise.resolve(true);
     }
