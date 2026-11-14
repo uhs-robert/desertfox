@@ -322,7 +322,20 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
       "oasis_scorpion",
       "oasis_sol",
       "oasis_starlight",
-      "oasis_twilight"
+      "oasis_twilight",
+      "catppuccin",
+      "catppuccin_frappe",
+      "catppuccin_macchiato",
+      "dracula",
+      "gruvbox",
+      "gruvbox_hard",
+      "gruvbox_soft",
+      "nord",
+      "rose_pine",
+      "rose_pine_moon",
+      "tokyo_night",
+      "tokyo_night_moon",
+      "tokyo_night_storm"
     ]
   },
   {

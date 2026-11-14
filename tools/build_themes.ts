@@ -153,7 +153,7 @@ function read_oasis_css(dir: string): Record<string, OasisTheme> {
 }
 
 const oasis_themes = read_oasis_css(join(themes_dir, "oasis"));
-const repo_themes = read_theme_dir(themes_dir, problems, ["README.md", "oasis"]);
+const repo_themes = read_theme_dir(themes_dir, problems, ["README.md", "NOTICE.md", "oasis"]);
 for (const name of Object.keys(repo_themes)) {
   if (Object.hasOwn(oasis_themes, name)) problems.push(`themes/${name}.toml: the name belongs to a built-in Oasis theme`);
 }
