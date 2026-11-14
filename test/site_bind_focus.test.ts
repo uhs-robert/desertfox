@@ -22,7 +22,7 @@ const MAP = 'div[role="application"][tabindex="0"]';
 const MAPS = "https://www.google.com/maps/@42.36,-71.06,15z";
 
 // A stand-in element: `matches` answers for the one selector it carries.
-const element = (matching: string | undefined) => ({ matches: (selector: string) => selector === matching }) as unknown as Element;
+const element = (matching: string | undefined): Element => ({ matches: (selector: string) => selector === matching, closest: (selector: string) => (selector === matching ? element(matching) : null) }) as unknown as Element;
 const body = element(undefined);
 const leaf = (id: string, extra: Partial<TreeLeaf> = {}): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }], ...extra });
 
@@ -37,10 +37,16 @@ test("the guard runs the replaced leaf when another element has focus, and nothi
   assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: MAP }), element("#panel"), body), undefined);
 });
 
+test("focus on an element inside a matching element counts as a match", () => {
+  const inside = { matches: () => false, closest: (selector: string) => (selector === MAP ? element(MAP) : null) } as unknown as Element;
+  const guarded = leaf("page.send_key", { when_focus: MAP, otherwise: leaf("scroll.lines") });
+  assert.equal(leaf_for_focus(guarded, inside, body), guarded);
+});
+
 test("a leaf with no guard runs whatever has focus, and a selector that does not parse falls through", () => {
   const plain = leaf("scroll.lines");
   assert.equal(leaf_for_focus(plain, element("#panel"), body), plain);
-  const throwing = { matches: () => { throw new SyntaxError("bad selector"); } } as unknown as Element;
+  const throwing = { matches: () => { throw new SyntaxError("bad selector"); }, closest: () => { throw new SyntaxError("bad selector"); } } as unknown as Element;
   const otherwise = leaf("scroll.lines");
   assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: "[[", otherwise }), throwing, body), otherwise);
 });
@@ -81,6 +87,12 @@ test("a keymap binding with when_focus is skipped with a warning, since it repla
   const { compiled, warnings } = compile_keymap({ normal: { j: { id: "a.j", when_focus: MAP } } }, {}, resolve);
   assert.equal(compiled.modes.normal?.children["j"], undefined);
   assert.match(warnings.join("\n"), /when_focus works only in a site row bind/);
+});
+
+test("a keymap entry with when_focus is skipped before it can drop the default key it extends", () => {
+  const { compiled, warnings } = compile_keymap({ normal: { j: { id: "a.j" }, jx: { id: "a.jx", when_focus: MAP } } }, {}, resolve, { engine_labels: {} }, { normal: { j: { id: "a.j" } } });
+  assert.equal((compiled.modes.normal?.children["j"] as TreeLeaf | undefined)?.steps[0]?.invocation.id, "a.j");
+  assert.match(warnings.join("\n"), /"jx": when_focus works only in a site row bind/);
 });
 
 test("a site row takes when_focus on a run table and on an invocation table, and refuses one that is not text", () => {

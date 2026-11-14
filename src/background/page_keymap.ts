@@ -67,7 +67,7 @@ export async function media_quality_is_idle(storage: KeymapStorage): Promise<boo
 // The bind among `all` whose keys are a proper prefix of this bind's keys. It is a complete binding, so it hides this bind.
 export const hiding_bind = (all: readonly SiteBind[], { tokens }: SiteBind): SiteBind | undefined => all.find((other) => other.tokens.length < tokens.length && other.tokens.every((token, index) => tokens[index] === token));
 
-// A guarded bind keeps the leaf it replaces, so the key falls through to it when focus is elsewhere. A replaced branch is not kept: falling through to it would mean waiting for more keys after the key already ran.
+// A guarded bind keeps the leaf it replaces, so the key falls through to it when focus is elsewhere. A replaced branch is not kept: falling through to it means waiting for more keys after the key already ran.
 const with_otherwise = (leaf: TreeLeaf, replaced: TreeNode | undefined): TreeLeaf => (leaf.when_focus !== undefined && replaced?.kind === "leaf" ? { ...leaf, otherwise: replaced } : leaf);
 
 // A bound key replaces whatever the tree holds at that key. A key under a leaf of the tree turns the leaf into a branch, and a bind that is a prefix of tree keys replaces the whole subtree. Copies the path and never mutates the input.

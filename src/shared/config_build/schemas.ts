@@ -68,7 +68,7 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
-const WHEN_FOCUS: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while nothing has focus or the focused element matches it, and the key runs the binding it replaced otherwise" };
+const WHEN_FOCUS: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while nothing has focus or the focused element sits on or inside a match, and the key runs the binding it replaced otherwise" };
 
 // The formats of a keymap binding, plus the invocation table `{ id, args }` that the build stores and a saved edit exports.
 const BIND_STEP: Schema = {

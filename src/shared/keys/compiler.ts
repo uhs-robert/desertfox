@@ -142,6 +142,11 @@ function entries_for_mode(
         continue;
       }
       const normalized = parsed.tokens.join("");
+      // A keymap binding replaces no other binding, so it has nothing to run when focus is elsewhere. The skip comes before the default keys it extends are dropped.
+      if (binding !== null && [binding].flat()[0]?.when_focus !== undefined) {
+        warnings.push(`${mode}: skipped "${sequence}": when_focus works only in a site row bind`);
+        continue;
+      }
       if (binding === null) {
         by_normalized_sequence.delete(normalized);
         removed.add(normalized);
@@ -261,11 +266,6 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
   const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_group_names(entry.tokens, group_names), warnings);
   if (!resolved) return;
-  // A keymap binding replaces no other binding, so it would have nothing to run when focus is elsewhere.
-  if (resolved.when_focus !== undefined) {
-    warnings.push(`${mode}: skipped "${entry.sequence}": when_focus works only in a site row bind`);
-    return;
-  }
 
   let branch = root;
   for (const [depth, token] of entry.tokens.entries()) {
