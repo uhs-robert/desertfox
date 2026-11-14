@@ -6,7 +6,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { close_window, type CloseDeps } from "./close.ts";
+import { close_window } from "./close.ts";
 import { check_hint } from "./hints.ts";
 import { canonical_worktree, default_roots, unit_name, window_paths, type WindowPaths } from "./paths.ts";
 import { is_same_process, parse_debug_port, read_start_ticks } from "./process_guard.ts";
@@ -14,7 +14,8 @@ import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "./lock.ts";
 import { Refusal } from "./refusal.ts";
 import { probe_window, reload_window, type ProbeOutcome } from "./rdp_probe.ts";
 import { seed_user_js } from "./profile.ts";
-import { read_state, write_state, type WindowState } from "./state.ts";
+import { real_close_deps } from "./system_deps.ts";
+import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "./state.ts";
 import { stamp_label, stamp_manifest, tail_lines, web_ext_args } from "./web_ext.ts";
 
 const MIN_FREE_BYTES = 2 * 1024 ** 3;
@@ -48,26 +49,6 @@ function build_and_stamp(worktree: string): string {
   const manifest_file = join(worktree, "dist", "manifest.json");
   writeFileSync(manifest_file, JSON.stringify(stamp_manifest(JSON.parse(readFileSync(manifest_file, "utf8")), label), null, 2));
   return label;
-}
-
-function real_close_deps(): CloseDeps {
-  return {
-    read_start_ticks: (pid) => read_start_ticks(pid),
-    signal: (pid, signal) => {
-      try { process.kill(pid, signal); } catch { /* already gone */ }
-    },
-    sleep,
-    stop_unit: (unit) => {
-      spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
-      // "is-active" prints "active" or "activating" while the unit runs. A missing unit or no systemd prints something else or nothing.
-      return !/^activ/.test(spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout.trim());
-    },
-    remove_profile: (profile) => rmSync(profile, { recursive: true, force: true }),
-    remove_window_files: (log, window_dir) => {
-      rmSync(log, { force: true });
-      try { rmdirSync(window_dir); } catch { /* not empty or gone */ }
-    },
-  };
 }
 
 async function close(paths: WindowPaths): Promise<boolean> {
@@ -186,6 +167,7 @@ async function open(worktree: string, paths: WindowPaths, hints: string[]): Prom
   };
   write_state(paths.state_file, state);
   const started = start_window(worktree, paths, join(worktree, "dist"));
+  if (discard_state_of_failed_spawn(started, paths.state_file)) fail("the plain spawn of web-ext returned no process id, so no window started. Its state file is removed. Run again.");
   state.unit = started.unit;
   state.web_ext_pid = started.pid;
   state.web_ext_start_ticks = read_start_ticks(started.pid) ?? 0;

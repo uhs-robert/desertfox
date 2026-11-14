@@ -8,7 +8,8 @@ import { canonical_worktree, is_strictly_inside, unit_name, window_paths, worktr
 import { judge_probe } from "../tools/owner_test/probe.ts";
 import { is_same_process, parse_debug_port, parse_start_ticks, read_start_ticks } from "../tools/owner_test/process_guard.ts";
 import { seed_user_js } from "../tools/owner_test/profile.ts";
-import { read_state, write_state, type WindowState } from "../tools/owner_test/state.ts";
+import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "../tools/owner_test/state.ts";
+import { real_close_deps } from "../tools/owner_test/system_deps.ts";
 import { stamp_manifest, tail_lines, web_ext_args } from "../tools/owner_test/web_ext.ts";
 import { flock_argv, LOCK_BUSY_EXIT } from "../tools/owner_test/lock.ts";
 import { Refusal } from "../tools/owner_test/refusal.ts";
@@ -272,6 +273,7 @@ test("web-ext arguments keep the profile, take no input, stay out of the running
   const args = web_ext_args({ dist: "/w/a/dist", profile: "/p" });
   for (const wanted of ["--keep-profile-changes", "--no-input", "--args=-no-remote"]) assert.ok(args.includes(wanted), wanted);
   assert.ok(args.includes("--no-reload"), "web-ext's own watcher stays off");
+  assert.ok(args.includes("--verbose"), "web-ext logs why Firefox closed");
   assert.ok(!args.includes("--watch-file"));
   assert.ok(args.includes("--pref=browser.startup.page=1") && args.includes("--pref=browser.startup.homepage=about:home"));
   assert.equal(args[args.indexOf("--firefox-profile") + 1], "/p");
@@ -476,4 +478,25 @@ test("probe exits on its own when the TCP connect never completes", async (t) =>
 test("a reload that the debugger does not answer is a Refusal, not a stack trace", async (t) => {
   const port = await silent_debugger(t);
   await assert.rejects(reload_window(port, 400), Refusal);
+});
+
+test("a plain spawn with no pid leaves no state file, and a unit or a real pid keeps it", (t) => {
+  const roots = make_roots(t);
+  const { paths } = make_window("/w/a", roots, { web_ext_pid: 0, web_ext_start_ticks: 0, firefox_pid: 0, firefox_start_ticks: 0 });
+  assert.equal(discard_state_of_failed_spawn({ unit: "u", pid: 0 }, paths.state_file), false);
+  assert.equal(discard_state_of_failed_spawn({ unit: null, pid: 4001 }, paths.state_file), false);
+  assert.equal(existsSync(paths.state_file), true);
+  assert.equal(discard_state_of_failed_spawn({ unit: null, pid: 0 }, paths.state_file), true);
+  assert.equal(existsSync(paths.state_file), false);
+});
+
+test("close without systemctl on PATH treats the unit as stopped and does not throw", (t) => {
+  const empty_dir = make_tmp_dir("desertfox-owner-test-path-", t);
+  const saved = process.env.PATH;
+  process.env.PATH = empty_dir;
+  try {
+    assert.equal(real_close_deps().stop_unit("desertfox-owner-test-x"), true);
+  } finally {
+    process.env.PATH = saved;
+  }
 });
