@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -223,7 +223,7 @@ async function tab_switch_run(next_key) {
   return { ...timing, selects: marks.selects, presses_b_ms: marks.presses_b_ms };
 }
 
-// The live-site check (PAGES=sites), in the three steps of sites.mjs, on one page load.
+// The live-site check (PAGES=sites), in the three steps of sites.mjs, on one page load, except for the DesertFox frame branch, which loads the page again.
 // A user's key reaches the focused frame because the parent process routes it there. A key made inside the top page's process never reaches a frame of another origin. So every key of this check goes in through the parent process, into the browser window.
 // Key names longer than one character are named keys. Uppercase goes out with Shift held, as a typed capital would.
 const NAMED_KEY_CODES = { Escape: 27 };
@@ -293,23 +293,8 @@ function read_probe() {
   delete globalThis.__rivals_probe;
   return probe.seen;
 }
-function count_visible_labels(frame_window, selectors) {
-  let count = 0;
-  const visit = (node) => {
-    if (node.nodeType !== 1) return;
-    if (selectors.some((selector) => node.matches(selector))) {
-      const rect = node.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < frame_window.innerHeight && rect.left < frame_window.innerWidth && node.checkVisibility({ opacityProperty: true, visibilityProperty: true })) count++;
-    }
-    const root = node.openOrClosedShadowRoot;
-    if (root) for (const child of root.children) visit(child);
-    for (const child of node.children) visit(child);
-  };
-  if (frame_window.document.documentElement) visit(frame_window.document.documentElement);
-  return count;
-}
-// The texts of the visible labels in one frame, in document order, so the frame branch can type one.
-function frame_label_texts(frame_window, selectors) {
+// The texts of the visible labels in one frame, in document order: the count is their number, and the frame branch types the first.
+function visible_label_texts(frame_window, selectors) {
   const texts = [];
   const visit = (node) => {
     if (node.nodeType !== 1) return;
@@ -381,8 +366,8 @@ async function count_labels({ frames_only }) {
   for (const context of await page_contexts()) {
     if (frames_only && context.top) continue;
     // Null means the frame closed before the read, which leaves nothing to count.
-    const count = context.pid ? await in_context(context, count_visible_labels, HINT_SELECTORS).catch((error) => ({ error: String(error) })) : { error: "no content process" };
-    if (typeof count === "number") labels += count;
+    const count = context.pid ? await in_context(context, visible_label_texts, HINT_SELECTORS).catch((error) => ({ error: String(error) })) : { error: "no content process" };
+    if (Array.isArray(count)) labels += count.length;
     else if (count !== null) unread++;
   }
   return { labels, unread };
@@ -418,7 +403,7 @@ async function load_live(url) {
 async function check_site(site) {
   const keys = TOOL_KEYS[tool];
   const url = site.url ?? `${base_url}/${site.path}`;
-  const check_names = ["mode_on_load", "leave", ...site.extra, ...NORMAL_ACTIONS];
+  const check_names = check_names_of(site, tool);
   const error_record = (reason) => ({ url, checks: Object.fromEntries(check_names.map((name) => [name, { status: "error", reason }])) });
   const page = await load_live(url);
   if (!page) return error_record("the page never answered");
@@ -449,7 +434,7 @@ async function check_site(site) {
       await press_keys(keys.hint);
       await sleep(1500);
       const focused = (await focus_contexts()).at(-1);
-      frame_shown_texts = focused?.pid ? await in_context(focused, frame_label_texts, HINT_SELECTORS).catch(() => []) : [];
+      frame_shown_texts = focused?.pid ? await in_context(focused, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
       const top_labels = await ask_page("top_labels", {}, 5000);
       const in_frames = await count_labels({ frames_only: true });
       return judge_frame_hints({ frame_labels: in_frames.labels, top_labels });
@@ -462,9 +447,8 @@ async function check_site(site) {
       await press_keys(typed);
       await sleep(2500);
       const reply = await in_context(focused, read_frame_reaction).catch(() => null);
-      const still_there = (await page_contexts()).some((context) => context.context_id === focused.context_id);
-      const frame_gone = !still_there || !is_frame_mode(await frame_mode_now());
-      return { ...judge_frame_activation({ reply: reply?.error ? null : reply, frame_gone }), typed };
+      const context_gone = !(await page_contexts()).some((context) => context.context_id === focused.context_id);
+      return { ...judge_frame_activation({ reply: reply?.error ? null : reply, context_gone }), typed };
     });
     // A dismissed popup leaves no frame, so the page loads again for step 3.
     if (!is_frame_mode(await frame_mode_now())) await load_live(url);
@@ -590,7 +574,7 @@ try {
       const only_sites = process.env.SITES?.split(",");
       for (const site of SITES.filter((entry) => !only_sites || only_sites.includes(entry.name))) {
         // One site that hangs the debugger must not cost the other sites their results.
-        const run_site = () => check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries(["mode_on_load", "leave", ...site.extra, ...NORMAL_ACTIONS].map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
+        const run_site = () => check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries(check_names_of(site, tool).map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
         let record = await run_site();
         // A timeout says nothing about the tool, so the site runs once more. The first record stays in the data, marked, and the table scores the retry.
         if (timed_out(record)) {
