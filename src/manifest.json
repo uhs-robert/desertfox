@@ -55,7 +55,8 @@
   ],
   "optional_permissions": [
     "nativeMessaging",
-    "browsingData"
+    "browsingData",
+    "geolocation"
   ],
   "icons": {
     "48": "icons/desertfox.svg",

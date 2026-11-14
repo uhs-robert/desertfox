@@ -3,10 +3,11 @@ import type { Settings } from "../shared/config.ts";
 import { browser_page_readers, read_sections, type ListSection, type PageReaders } from "./lists.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 import { draw_tile } from "./tile.ts";
+import { start_weather } from "./weather.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
-type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_command_hint" | "newtab_links">;
+type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_command_hint" | "newtab_links" | "newtab_weather" | "newtab_weather_city" | "newtab_weather_units">;
 
 // Each widget needs only to be not `false`. The clock is analog unless set to "digital".
 export function enabled_widgets(settings: WidgetSettings) {
@@ -144,6 +145,13 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
   }
   if (sections.length > 0) next.page.append(draw_sections(sections));
   if (settings.newtab_command_hint) next.page.append(draw_command_hint());
+  if (settings.newtab_weather === true) {
+    // Under the date when the page has one. The fetch is not awaited, so a slow or failed request never holds the page.
+    const slot = document.createElement("div");
+    slot.className = "weather";
+    (next.page.querySelector(".time") ?? next.page).append(slot);
+    void start_weather(slot, settings);
+  }
   if (previous) {
     previous.stop_ticker();
     previous.page.replaceWith(next.page);

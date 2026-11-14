@@ -61,9 +61,9 @@ test("the panel shows the checked command only for a release build with the sign
   }
 });
 
-test("nativeMessaging and browsingData are optional, cookies stays required", () => {
+test("nativeMessaging, browsingData and geolocation are optional, cookies stays required", () => {
   const manifest = JSON.parse(readFileSync(new URL("../src/manifest.json", import.meta.url), "utf8"));
-  assert.deepEqual(manifest.optional_permissions, ["nativeMessaging", "browsingData"]);
+  assert.deepEqual(manifest.optional_permissions, ["nativeMessaging", "browsingData", "geolocation"]);
   // cookies backs the cookieStoreId option of tabs.create, windows.create and downloads.download, so it cannot be optional.
   assert.ok(manifest.permissions.includes("cookies"));
   for (const permission of manifest.optional_permissions) assert.ok(!manifest.permissions.includes(permission), permission);

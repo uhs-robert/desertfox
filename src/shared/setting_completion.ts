@@ -589,6 +589,36 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "newtab_weather",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "newtab_weather_city",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a city name",
+    "values": []
+  },
+  {
+    "name": "newtab_weather_units",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "\"metric\" or \"imperial\"",
+    "values": [
+      "metric",
+      "imperial"
+    ]
+  },
+  {
     "name": "newtab_links",
     "settable": true,
     "is_toggle": false,

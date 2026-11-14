@@ -135,6 +135,11 @@ export const SETTINGS_TABLE = {
   newtab_top_sites: { kind: "boolean", default: true },
   newtab_top_sites_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_command_hint: { kind: "boolean", default: true },
+  // Opt-in network: with `newtab_weather` on, the page asks Open-Meteo for the weather.
+  newtab_weather: { kind: "boolean", default: false },
+  // No default: absent means no city, and the card then offers the location permission.
+  newtab_weather_city: { kind: "text", expectation: "a city name" },
+  newtab_weather_units: { kind: "enum", values: ["metric", "imperial"], default: "metric" },
   // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
   newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [] },
 } as const satisfies Record<string, SettingRow>;

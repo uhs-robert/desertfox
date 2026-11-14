@@ -8,8 +8,8 @@ import { refused_as } from "../src/shared/swallow.ts";
 const MAX_BYTES = {
   // 20 KB (admission clause A, it runs before the first key): the layout fallback reads a letter of another script by its physical key. The proxy that holds a plain NORMAL badge until the load event (clause C) took it past 19.5 KB.
   "content.js": 20 * 1024,
-  // 48.5 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB.
-  "hints.js": 48.5 * 1024,
+  // 49 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB. The three newtab_weather settings add their default values, which every bundle that imports the defaults carries.
+  "hints.js": 49 * 1024,
   "caret.js": 32 * 1024,
   // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
   // 9 KB (owner approved): the top frame keeps its own panel when a subframe's late erase arrives (`relayed_panel.ts`, #619).
@@ -30,7 +30,7 @@ const MAX_BYTES = {
   "site_actions.js": 4 * 1024,
   // 6.5 KB: the thumb press point, the per-drag step keys (`[` and `]`), the swipe fling (`snap_scroll`, `start_fling`) and the start step read from `grab_step_px`.
   "grab.js": 6.5 * 1024,
-  // 58.5 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings.
+  // 58.5 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings, and the three newtab_weather settings.
   "cmdline_page.js": 58.5 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,
