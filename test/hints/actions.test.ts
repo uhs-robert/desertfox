@@ -639,7 +639,7 @@ test("a frame has no text to copy", () => {
 test("focus, hover and delete reach a frame, and here focuses it instead of clicking", () => {
   const page = frame({ tabIndex: 0 });
   with_sent_messages(() => page.run("focus"));
-  page.run("here");
+  with_sent_messages(() => page.run("here"));
   assert.deepEqual(page.calls, ["focus", "focus"]);
   page.run("delete");
   assert.equal(page.calls.at(-1), "remove");
@@ -665,10 +665,10 @@ test("focus on a frame also focuses the frame's window, the call that enters a f
   assert.deepEqual(window_focus_calls, ["window"]);
 });
 
-test("focus on a frame asks for the one-time cue, and a here pick on a frame does not", () => {
+test("a focus on a frame marks the entry and asks for the one-time cue, a here pick marks the entry only, and a link marks nothing", () => {
   const focused = with_sent_messages(() => frame({ tabIndex: 0 }).run("focus"));
-  assert.deepEqual(focused, [{ type: "frame_cue" }]);
-  assert.deepEqual(with_sent_messages(() => frame({ tabIndex: 0 }).run("here")), []);
+  assert.deepEqual(focused, [{ type: "frame_cue", toast: true }]);
+  assert.deepEqual(with_sent_messages(() => frame({ tabIndex: 0 }).run("here")), [{ type: "frame_cue", toast: false }]);
   assert.deepEqual(with_sent_messages(() => fixture("a", { href: "https://example.com/" }).run("focus")), []);
 });
 

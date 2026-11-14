@@ -97,9 +97,11 @@ export type Relay = {
   args: Record<string, unknown>;
 };
 
-// The `;f` pick is about to focus a frame: the background shows the one-time toast in the top frame, and the next frame to take its first focus is not parked.
+// The extension is about to focus a frame (`;f`, a hint pick): that frame is not parked at its first focus, and `;f` also shows the one-time toast in the top frame.
 export type FrameCue = {
   type: "frame_cue";
+  // Whether the top frame shows the toast. A `here` pick or a pick inside the frame marks the entry and shows none.
+  toast: boolean;
 };
 
 // From the command line page when it opens: asks for the history, the commands, and the lists the grammar needs to read bare words.
