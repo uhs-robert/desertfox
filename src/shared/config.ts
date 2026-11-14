@@ -4,7 +4,7 @@
 import type { CommandMeta } from "./command.ts";
 import type { KeymapConfig } from "./keymap.ts";
 import type { Settings } from "./settings_table.ts";
-import type { LocalTheme } from "./theme/roles.ts";
+import type { Theme } from "./theme/roles.ts";
 import { DEFAULT_SETTINGS } from "./default_settings.ts";
 import { BUILT_IN_PAGE, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 
@@ -98,8 +98,8 @@ export type MergedConfig = {
   snippets: SnippetEntry[];
   // User CSS as text: `style.css` then `style.d/*.css`.
   css: string;
-  // Present only when `theme` names a theme in the config directory.
-  local_theme?: LocalTheme;
+  // Every theme file of the config directory, by theme name. Absent when there is none. The imported themes of the browser join them at publish.
+  local_themes?: Record<string, Theme>;
 };
 
 // One layer of settings changed in the browser, by `:set`, `:toggle` or the settings page.

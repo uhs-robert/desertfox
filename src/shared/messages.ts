@@ -443,6 +443,15 @@ export type ListQuickmarksAnswer = { ok: true; quickmarks: QuickmarkRow[] } | { 
 export type ChangeQuickmarks = { type: "change_quickmarks"; action: "set"; key: string; url: string } | { type: "change_quickmarks"; action: "remove"; key: string };
 export type ChangeQuickmarksAnswer = { ok: true; message: string } | { ok: false; message: string };
 
+// From an extension page: the themes the base16 importer saved, for the list under the theme picker.
+export type ListImportedThemes = { type: "list_imported_themes" };
+export type ListImportedThemesAnswer = { ok: true; names: string[] } | { ok: false; message: string };
+
+// From an extension page: saves the scheme in `text` under `name`, or removes the import of that name. The background parses the text itself, so a page cannot store a theme the parser would refuse.
+// A save over an existing name is refused with `needs_replace` until the request says `replace: true`, so the page can ask first.
+export type ChangeImportedThemes = { type: "change_imported_themes"; action: "save"; name: string; text: string; replace?: boolean } | { type: "change_imported_themes"; action: "remove"; name: string };
+export type ChangeImportedThemesAnswer = { ok: true; message: string } | { ok: false; message: string; needs_replace?: true };
+
 // What the toolbar popup asks. Only a top-level extension page may send them.
 export type ToolbarRequest =
   | { type: "toolbar_set_disabled"; disabled: boolean }
@@ -520,7 +529,7 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ListImportedThemes | ChangeImportedThemes | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };

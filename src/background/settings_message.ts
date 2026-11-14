@@ -15,6 +15,8 @@ export type SettingsMessageDeps = {
   change_edits: (decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined) => Promise<void>;
   // The file layer and the stored edits, read fresh.
   read_layers: () => Promise<{ source: ConfigSource; config_settings: MergedConfig["settings"]; edits: SettingEdits }>;
+  // The names of the imported themes, which the theme picker lists.
+  read_theme_names: () => Promise<string[]>;
 };
 
 // The text `:set` or `:unset` gives for a name it does not take, from the same validator.
@@ -35,7 +37,7 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
         return undefined;
       });
       const { source, config_settings } = await deps.read_layers();
-      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits!)) };
+      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits!), await deps.read_theme_names()) };
     } catch (error) {
       return failure(error);
     }
@@ -63,7 +65,7 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
       // The row comes from the edits this change left, so a later change in the queue does not alter this reply.
       const { source, config_settings } = await deps.read_layers();
       const status = build_config_status(source, config_settings, final_edits!);
-      return { ok: true, setting: build_setting_list(status).find((row) => row.name === name)!, message };
+      return { ok: true, setting: build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!, message };
     } catch (error) {
       return failure(error);
     }

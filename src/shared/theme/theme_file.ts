@@ -41,6 +41,23 @@ export function parse_color(value: unknown): string | undefined {
   return `#${hex_pair(channel(0))}${hex_pair(channel(8))}${hex_pair(channel(4))}`;
 }
 
+// The stored config can be edited by hand, so a local theme's shape is not taken on trust. Every role is needed, because the
+// stored theme sets every token and a missing one would leave a surface on its fallback. A value that is not a color
+// would be published as an invalid CSS declaration, so it fails the same check the theme files pass. Returns the first
+// problem as text, or undefined when the theme is usable.
+export function local_theme_problem(colors: unknown): string | undefined {
+  for (const variant of ["dark", "light"] as const) {
+    const table = (colors as Record<string, unknown> | null | undefined)?.[variant];
+    if (typeof table !== "object" || table === null) return `[${variant}] is not a table`;
+    for (const role of ROLES) {
+      const value = (table as Record<string, unknown>)[role];
+      if (value === undefined) return `[${variant}] is missing ${role}`;
+      if (parse_color(value) === undefined) return `[${variant}] ${role} is ${JSON.stringify(value)}, not a color as ${COLOR_FORMATS}`;
+    }
+  }
+  return undefined;
+}
+
 const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 function check_table(file: string, variant: Variant, table: unknown, problems: string[]): RoleColors | undefined {

@@ -280,7 +280,9 @@ function settings_group_section(page_section: Section, group: (typeof GROUPS)[nu
   const box = el("div", "desertfox-settings-group");
   box.setAttribute("data-group", group.title);
   const intro = el("p", "desertfox-help-muted", group.intro, ...(group.title === "Appearance" ? [" For full control with CSS, see ", page_link("Styling", "styling"), "."] : []));
-  return el("div", "desertfox-settings-section", section_heading("settings", page_section), intro, box);
+  // `main.ts` fills `.desertfox-themes`.
+  const importer = group.title === "Appearance" ? [el("h4", undefined, "Import a theme"), el("p", "desertfox-help-muted", "Bring in a base16 or base24 color scheme. Paste its text or choose its file, check the preview, then save it. Use it with the theme setting above, or with :set theme and its name."), el("div", "desertfox-themes")] : [];
+  return el("div", "desertfox-settings-section", section_heading("settings", page_section), intro, box, ...importer);
 }
 
 const settings_section = (title: string): Section => settings_sections[SETTINGS_SECTION_TITLES.indexOf(title)]!;

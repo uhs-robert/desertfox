@@ -133,24 +133,24 @@ test("a local theme that still uses the old role names is an error", () => {
 
 const LOCAL_THEME = '[dark]\nbg_core = "#101010"\nfg_core = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n';
 
-test("theme picks a local theme from the config directory's themes folder", () => {
+test("every theme file of the config directory's themes folder is kept", () => {
   const dir = config_dir_with({ "settings.toml": 'theme = "mine"', "themes/mine.toml": LOCAL_THEME });
   const config = build_config(dir, commands);
-  assert.equal(config.local_theme?.name, "mine");
-  assert.equal(config.local_theme?.colors.light.bg_core, "#101010");
-  assert.equal(config.local_theme?.colors.dark.mode_normal, "#88aaff");
+  assert.equal(Object.keys(config.local_themes ?? {}).join(), "mine");
+  assert.equal(config.local_themes?.mine?.light.bg_core, "#101010");
+  assert.equal(config.local_themes?.mine?.dark.mode_normal, "#88aaff");
 });
 
 test("a local theme wins over a repo theme of the same name", () => {
   const dir = config_dir_with({ "settings.toml": 'theme = "shared"', "themes/shared.toml": LOCAL_THEME });
-  assert.equal(build_config(dir, commands, [], ["shared"]).local_theme?.colors.dark.bg_core, "#101010");
+  assert.equal(build_config(dir, commands, [], ["shared"]).local_themes?.shared?.dark.bg_core, "#101010");
 });
 
-test("a repo theme or an Oasis theme needs no local theme in the output", () => {
+test("a repo theme or an Oasis theme is not copied into the local themes", () => {
   const repo = config_dir_with({ "settings.toml": 'theme = "shared"' });
-  assert.equal(build_config(repo, commands, [], ["shared"]).local_theme, undefined);
+  assert.equal(build_config(repo, commands, [], ["shared"]).local_themes, undefined);
   const builtin = config_dir_with({ "settings.toml": 'theme = "oasis_cactus"', "themes/mine.toml": LOCAL_THEME });
-  assert.equal(build_config(builtin, commands).local_theme, undefined);
+  assert.deepEqual(Object.keys(build_config(builtin, commands).local_themes ?? {}), ["mine"]);
 });
 
 test("every local theme file is checked, even one theme does not pick", () => {

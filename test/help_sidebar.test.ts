@@ -393,6 +393,7 @@ test("Settings puts the groups and forms first and the files, backup and host in
   assert.ok(texts.includes("Config files."));
   const headings = page.find_all((node) => node.tag === "h2" || node.tag === "h3").map((node) => node.children[0]);
   assert.deepEqual(headings, ["Appearance", "New tab", "Search", "Command line and completion", "General", "Keys", "Search engines", "Aliases", "Quickmarks", "Advanced: settings files", "Advanced: back up and restore", "Advanced: edit files"]);
+  assert.equal(page.find_all(by_class("desertfox-themes")).length, 1, "the theme importer sits in the Appearance group");
   const [advanced] = page.find_all((node) => node.tag === "details");
   assert.ok(advanced && advanced.find_all((node) => node.tag === "ol").length === 1);
   assert.equal(advanced.find_all(by_class("desertfox-settings-install")).length, 1);

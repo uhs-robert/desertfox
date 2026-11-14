@@ -123,9 +123,10 @@ export function compile_config(input: CompileInput): CompileOutput {
     warnings.push(`settings: light_intensity ${JSON.stringify(light_intensity)} is not 1 to 5, using ${DEFAULT_LIGHT_INTENSITY}`);
     light_intensity = DEFAULT_LIGHT_INTENSITY;
   }
-  const requested_theme = load_theme(String(requested_name), light_intensity, input.config.local_theme);
+  const requested_theme = load_theme(String(requested_name), light_intensity, input.config.local_themes);
   if (!requested_theme) {
-    const local_problem = input.config.local_theme?.name === requested_name ? local_theme_problem(input.config.local_theme.colors) : undefined;
+    const local_theme = input.config.local_themes && Object.hasOwn(input.config.local_themes, String(requested_name)) ? input.config.local_themes[String(requested_name)] : undefined;
+    const local_problem = local_theme ? local_theme_problem(local_theme) : undefined;
     warnings.push(`settings: theme "${String(requested_name)}" ${local_problem ? `is a local theme with a problem: ${local_problem}` : "names no theme"}, using ${DEFAULT_THEME}`);
   }
   const theme = requested_theme ?? load_theme(DEFAULT_THEME, light_intensity)!;

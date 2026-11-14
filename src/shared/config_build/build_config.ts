@@ -6,7 +6,7 @@ import { CONFIG_FORMAT_VERSION, DEFAULT_THEME, type MergedConfig, type SnippetEn
 import type { Registry } from "../registry/index.ts";
 import { build_commands_file } from "../registry/index.ts";
 import { built_in_theme_names } from "../theme/load.ts";
-import { DESKTOP_THEME, type LocalTheme, type Theme } from "../theme/roles.ts";
+import { DESKTOP_THEME, type Theme } from "../theme/roles.ts";
 import { build_registry, check_config, resolve_bindings } from "./check.ts";
 import { ConfigErrors } from "./errors.ts";
 import { merge_layers, origin_key } from "./merge.ts";
@@ -20,15 +20,13 @@ export function commands_of_registry(registry: Registry): CommandMeta[] {
   return build_commands_file(registry).commands;
 }
 
-// Also rejects a `theme` setting that names no theme at all.
-function pick_local_theme(merged: MergedData, local_themes: Record<string, Theme>, built_in_names: readonly string[], problems: string[]): LocalTheme | undefined {
+// Rejects a `theme` setting that names no theme at all.
+function check_theme_name(merged: MergedData, local_themes: Record<string, Theme>, built_in_names: readonly string[], problems: string[]): void {
   const name = merged.settings.theme ?? DEFAULT_THEME;
-  if (Object.hasOwn(local_themes, name)) return { name, colors: local_themes[name]! };
-  if (name === DESKTOP_THEME || built_in_names.includes(name)) return undefined;
+  if (Object.hasOwn(local_themes, name) || name === DESKTOP_THEME || built_in_names.includes(name)) return;
   const file = merged.origins.get(origin_key("settings", "theme")) ?? "config";
   const known = new Set([...Object.keys(local_themes), ...built_in_names]);
   problems.push(`${file}: theme: no theme named "${name}" (known: ${[...known].join(", ")})`);
-  return undefined;
 }
 
 export type BuildOptions = {
@@ -53,8 +51,9 @@ export function build_config(files: ConfigFiles, commands: CommandMeta[], warnin
   const problems: string[] = [];
   const sources = parse_source_files(files, dir_label, problems);
   const merged = merge_layers(sources.layers, problems);
-  // Every local theme file is checked, not only the one `theme` names, so a broken file fails before it is picked.
-  const local_theme = pick_local_theme(merged, parse_theme_files(theme_files_of(files), labeled_path(dir_label, "themes"), problems), built_in_names, problems);
+  // Every local theme file is checked, so a broken file fails the build.
+  const local_themes = parse_theme_files(theme_files_of(files), labeled_path(dir_label, "themes"), problems);
+  check_theme_name(merged, local_themes, built_in_names, problems);
 
   const snippets: SnippetEntry[] = [];
   const snippet_paths: string[] = [];
@@ -80,6 +79,6 @@ export function build_config(files: ConfigFiles, commands: CommandMeta[], warnin
     settings: merged.settings,
     snippets,
     css: sources.css_files.map((file) => file.text).join("\n"),
-    ...(local_theme && { local_theme }),
+    ...(Object.keys(local_themes).length > 0 && { local_themes }),
   };
 }

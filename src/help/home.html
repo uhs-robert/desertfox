@@ -187,6 +187,27 @@
   .desertfox-transfer-snippet, .desertfox-transfer-installed { display: flex; flex-direction: column; gap: .25rem; padding: .6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
   .desertfox-transfer-code { max-height: 16rem; overflow: auto; margin: 0; padding: .5rem; border-radius: var(--desertfox-radius); background: color-mix(in srgb, var(--desertfox-fg-core) 8%, var(--desertfox-bg-core)); white-space: pre-wrap; }
   .desertfox-transfer-warning { color: var(--desertfox-warn); font-weight: bold; }
+  .desertfox-theme-preview { display: flex; flex-direction: column; gap: .5rem; padding: .75rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); }
+  .desertfox-preview-columns { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+  .desertfox-preview-line, .desertfox-preview-toasts { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+  .desertfox-preview-toasts { flex-direction: column; align-items: flex-start; }
+  .desertfox-preview-hint { padding: 0 .3rem; border-radius: 3px; background: var(--desertfox-primary); color: var(--desertfox-bg-core); font-weight: bold; }
+  .desertfox-preview-badge { padding: 0 .5rem; border-radius: var(--desertfox-radius); color: var(--desertfox-bg-core); font-weight: bold; }
+  .desertfox-preview-mode-normal { background: var(--desertfox-mode-normal); }
+  .desertfox-preview-mode-insert { background: var(--desertfox-mode-insert); }
+  .desertfox-preview-mode-ignore { background: var(--desertfox-mode-ignore); }
+  .desertfox-preview-mode-caret { background: var(--desertfox-mode-caret); }
+  .desertfox-preview-mode-visual { background: var(--desertfox-mode-visual); }
+  .desertfox-preview-search { background: var(--desertfox-search-bg); color: var(--desertfox-search-fg); }
+  .desertfox-preview-search-current { background: var(--desertfox-search-current-bg); color: var(--desertfox-search-current-fg); }
+  .desertfox-preview-toast { padding: .3rem .6rem; border: 1px solid; border-left-width: 4px; border-radius: var(--desertfox-radius); background: var(--desertfox-bg-mantle); color: var(--desertfox-fg-core); }
+  .desertfox-preview-toast-success { border-color: var(--desertfox-ok); }
+  .desertfox-preview-toast-info { border-color: var(--desertfox-info); }
+  .desertfox-preview-toast-warning { border-color: var(--desertfox-warn); }
+  .desertfox-preview-toast-error { border-color: var(--desertfox-error); }
+  .desertfox-preview-whichkey { padding: .5rem .75rem; border: 1px solid color-mix(in srgb, var(--desertfox-primary) 60%, var(--desertfox-bg-core)); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); }
+  .desertfox-preview-whichkey-key { display: inline-block; min-width: 2ch; color: var(--desertfox-secondary); }
+  .desertfox-preview-whichkey-group { color: var(--desertfox-primary); font-weight: bold; }
   .desertfox-settings-message:empty { display: none; }
   .desertfox-host-start:not(:empty) { margin-bottom: 1rem; padding: 0 1rem .75rem; border: 1px solid var(--desertfox-warn); border-radius: var(--desertfox-radius); }
   .desertfox-settings-error { color: var(--desertfox-error); }

@@ -112,11 +112,11 @@ test("the theme picks the stored theme: local theme, Oasis theme with its light 
   const compile = (config: ReturnType<typeof empty_config>) =>
     compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: [] } });
   const colors = derive_roles({ bg_core: "#101010", fg_core: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
-  const local = compile({ ...empty_config(), settings: { theme: "mine" }, local_theme: { name: "mine", colors: { dark: colors, light: colors } } });
+  const local = compile({ ...empty_config(), settings: { theme: "mine" }, local_themes: { mine: { dark: colors, light: colors } } });
   assert.equal(local.theme.dark.mode_normal, "#88aaff");
   assert.deepEqual(local.warnings, []);
   assert.equal("mode_colors" in local.compiled, false);
-  const functional = compile({ ...empty_config(), settings: { theme: "mine" }, local_theme: { name: "mine", colors: { dark: { ...colors, accent: "rgb(255, 0, 0)" }, light: colors } } });
+  const functional = compile({ ...empty_config(), settings: { theme: "mine" }, local_themes: { mine: { dark: { ...colors, accent: "rgb(255, 0, 0)" }, light: colors } } });
   assert.equal(functional.theme.dark.accent, "#ff0000");
   // A hand-edited config can hold any light_intensity. The keymap must still compile.
   for (const bad of [0, 6, 2.5, "3"]) {
@@ -129,7 +129,7 @@ test("the theme picks the stored theme: local theme, Oasis theme with its light 
   const unknown = compile({ ...empty_config(), settings: { theme: "moonlight" } });
   assert.deepEqual(unknown.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
   assert.deepEqual(unknown.warnings, ['settings: theme "moonlight" names no theme, using oasis_moonlight']);
-  const broken = compile({ ...empty_config(), settings: { theme: "mine" }, local_theme: { name: "mine", colors: { dark: { ...moonlight.dark, accent: "red" }, light: moonlight.light } } });
+  const broken = compile({ ...empty_config(), settings: { theme: "mine" }, local_themes: { mine: { dark: { ...moonlight.dark, accent: "red" }, light: moonlight.light } } });
   assert.deepEqual(broken.theme.dark, load_theme("oasis_moonlight", 3)!.dark);
   assert.deepEqual(broken.warnings, ['settings: theme "mine" is a local theme with a problem: [dark] accent is "red", not a color as #rgb, #rrggbb, rgb(), rgba() with alpha 1, or hsl(), using oasis_moonlight']);
 });

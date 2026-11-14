@@ -4,7 +4,11 @@
 import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
-import { ALIAS_EDITS_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY } from "./storage_keys.ts";
+import { theme_name_shape_problem } from "../shared/theme/base16.ts";
+import { ROLES } from "../shared/theme/roles.ts";
+import type { RoleColors, Theme } from "../shared/theme/roles.ts";
+import { local_theme_problem, parse_color } from "../shared/theme/theme_file.ts";
+import { ALIAS_EDITS_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 
 // Mode to key sequence to the command text, as keymap.toml writes it. `""` unbinds a default or file binding.
 export type KeymapEdits = Partial<Record<KeymapMode, Record<string, string>>>;
@@ -16,8 +20,11 @@ export type EngineEdits = { engines?: Record<string, Record<string, unknown>>; l
 // The command aliases the browser adds, alias name to command id, as command_aliases.toml writes them. The build checks the name and the target.
 export type AliasEdits = Record<string, string>;
 
+// The themes the base16 importer saved, by theme name. Each has every role filled. Unlike the engines and aliases they do not go through the config build: `publish` lays them over the theme files, and an export writes each as `themes/<name>.toml`.
+export type ThemeEdits = Record<string, Theme>;
+
 // A layer with nothing in it is left out of `load_layers` unless it is `keymap`, which every reader already expects.
-export type EditLayers = { keymap: KeymapEdits; engines?: EngineEdits; aliases?: AliasEdits };
+export type EditLayers = { keymap: KeymapEdits; engines?: EngineEdits; aliases?: AliasEdits; themes?: ThemeEdits };
 export type LayerKind = keyof EditLayers;
 export type LayerOf<K extends LayerKind> = NonNullable<EditLayers[K]>;
 
@@ -79,10 +86,23 @@ function checked_alias_edits(stored: unknown): AliasEdits {
   return Object.fromEntries(Object.entries(stored).filter(([name, target]) => name !== "" && typeof target === "string" && target !== "")) as AliasEdits;
 }
 
+// Keeps a theme that is whole and has a usable name, with only the role keys, as #rrggbb. A broken one is dropped, so a hand-edited or half-written store never reaches the compile or the export.
+function checked_theme_edits(stored: unknown): ThemeEdits {
+  if (!is_record(stored)) return {};
+  const kept: ThemeEdits = {};
+  for (const [name, theme] of Object.entries(stored)) {
+    if (theme_name_shape_problem(name) !== undefined || local_theme_problem(theme) !== undefined) continue;
+    const table = (variant: "dark" | "light") => Object.fromEntries(ROLES.map((role) => [role, parse_color((theme as Record<string, Record<string, unknown>>)[variant]![role])])) as RoleColors;
+    kept[name] = { dark: table("dark"), light: table("light") };
+  }
+  return kept;
+}
+
 export const EDIT_LAYERS: { [K in LayerKind]: LayerSpec<K> } = {
   keymap: { storage_key: KEYMAP_EDITS_STORAGE_KEY, check: checked_keymap_edits, optional: false },
   engines: { storage_key: ENGINE_EDITS_STORAGE_KEY, check: checked_engine_edits, optional: true },
   aliases: { storage_key: ALIAS_EDITS_STORAGE_KEY, check: checked_alias_edits, optional: true },
+  themes: { storage_key: THEME_EDITS_STORAGE_KEY, check: checked_theme_edits, optional: true },
 };
 
 // The engines layer, empty when none is stored.

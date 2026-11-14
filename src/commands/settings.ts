@@ -35,7 +35,7 @@ function edit_with(current: SettingEdits, layer: EditLayer, name: keyof Settings
 // The build tool only warns about these two, so a live change does the same.
 function naming_nothing(name: keyof Settings, value: unknown, config: MergedConfig): string | undefined {
   if (name === "default_engine" && typeof value === "string" && !Object.hasOwn(config.search_engines, value)) return `no search engine is named "${value}"`;
-  if (name === "theme" && typeof value === "string" && value !== DESKTOP_THEME && !built_in_theme_names().includes(value) && config.local_theme?.name !== value) return `no theme is named "${value}"`;
+  if (name === "theme" && typeof value === "string" && value !== DESKTOP_THEME && !built_in_theme_names().includes(value) && !Object.hasOwn(config.local_themes ?? {}, value)) return `no theme is named "${value}"`;
   return undefined;
 }
 
