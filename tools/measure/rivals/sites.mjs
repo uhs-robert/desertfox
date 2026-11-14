@@ -13,9 +13,6 @@ import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 
 // `activate_selector` names the element every tool must activate on that site, for pages where a label hangs off the corner of a link and lands on a neighbour (Hacker News: the vote arrow and the from?site= link sit beside the story link). Without it the activation check takes any target.
 
-// The site's own movement key, sent by the control pass and by the passthrough record.
-export const PASSTHROUGH_KEYS = ["ArrowDown"];
-
 // `extra` names the per-site actions of step 3, run before the generic ones. `path` instead of `url` is a page that pages.mjs serves.
 // Picked for stable public URLs: Google's own API sample doc and sheet, the first YouTube video, Notion's official public page.
 export const SITES = [
@@ -67,6 +64,9 @@ export async function tab_into_work_area({ press_tab, is_inside, max = MAX_TAB_P
   }
 }
 export const tab_note = ({ tabs, reached }) => (reached ? `Tab presses to reach the work area: ${tabs}` : `Tab did not reach the work area in ${tabs} presses`);
+
+// The site's own movement key, sent by the control pass and by the passthrough record.
+export const PASSTHROUGH_KEYS = ["ArrowDown"];
 
 // What the control pass sends: the site's own movement input, a wheel scroll where the site has no movement key.
 export const control_of = (site) => site.control ?? { keys: PASSTHROUGH_KEYS };
@@ -368,7 +368,8 @@ export function judge_movement({ probe, before, after }) {
     if (from !== to) return pass(`first visible line ${from} to ${to}`);
     const [cursor_from, cursor_to] = [monaco_cursor_line(before?.cursor_lines), monaco_cursor_line(after?.cursor_lines)];
     if (cursor_from !== null && cursor_to !== null && cursor_from !== cursor_to) return pass(`cursor line ${cursor_from} to ${cursor_to}`);
-    return fail(`first visible line stayed ${from} and the cursor line stayed ${cursor_from ?? "unread"}`);
+    if (cursor_from === null || cursor_to === null) return unreadable("the cursor line on both reads (the first visible line stayed)");
+    return fail(`first visible line stayed ${from} and the cursor line stayed ${cursor_from}`);
   }
   if (probe === "sheets") {
     const [from, to] = [sheets_view(before), sheets_view(after)];

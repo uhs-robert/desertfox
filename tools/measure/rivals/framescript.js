@@ -184,7 +184,7 @@ answer("move_state", async ({ probe }) => {
   return null;
 });
 
-// Puts the focus where a click on the site's work area would. Every row of a movement probe starts here, so the control and every tool meet the same focus: the site's own keys reach the grid, the map or the editor only from there.
+// Puts the focus where a click on the site's work area would. Only the unscored control row starts here. Scored rows start from the keyboard, so a tool's own focus handling is part of what they measure. The site's own keys reach the grid, the map or the editor only from this focus.
 const VIEW_SELECTORS = { sheets: "#waffle-rich-text-editor", maps: "[role=application]", excalidraw: ".excalidraw canvas.interactive", stackblitz: ".monaco-editor textarea" };
 answer("focus_view", async ({ probe }) => {
   const el = VIEW_SELECTORS[probe] ? content.document.querySelector(VIEW_SELECTORS[probe]) : null;
