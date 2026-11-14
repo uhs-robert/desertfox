@@ -433,6 +433,18 @@ async function check_site(site) {
 
   let frame_shown_texts = [];
   async function run_frame_branch() {
+    // gF goes first, on the load the leave step used, as a user presses it. Later steps dismiss the popup, and a reload for gF would test a page the user never meets.
+    await run_check("frame_leave", async () => {
+      await press_keys("gF");
+      await sleep(800);
+      return judge_frame_leave({ mode_after: await frame_mode_now(), focus_after: await focus_now() });
+    });
+    // gF left the frame. Loading the page again brings the frame back for the checks inside it.
+    await load_live(url);
+    if (!is_frame_mode(await frame_mode_now())) {
+      for (const name of ["frame_hints", "frame_activate"]) record.checks[name] = { status: "unknown", reason: "the frame did not come back after gF and a reload" };
+      return;
+    }
     await run_check("frame_hints", async () => {
       await press_keys(keys.hint);
       await sleep(1500);
@@ -454,16 +466,8 @@ async function check_site(site) {
       const frame_gone = !still_there || !is_frame_mode(await frame_mode_now());
       return { ...judge_frame_activation({ reply: reply?.error ? null : reply, frame_gone }), typed };
     });
-    // A dismissed popup leaves no frame to leave, so the page loads again and Escape runs as in step 2.
+    // A dismissed popup leaves no frame, so the page loads again for step 3.
     if (!is_frame_mode(await frame_mode_now())) await load_live(url);
-    await press_keys(["Escape"]);
-    await sleep(600);
-    await run_check("frame_leave", async () => {
-      if (!is_frame_mode(await frame_mode_now())) return { status: "unknown", reason: "the frame was gone after the dismiss and did not come back on reload, so gF had no frame to leave" };
-      await press_keys("gF");
-      await sleep(800);
-      return judge_frame_leave({ mode_after: await frame_mode_now(), focus_after: await focus_now() });
-    });
     shown = null;
   }
 
