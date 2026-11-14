@@ -124,6 +124,7 @@ test("the shipped maps rows send arrows to the map behind a guard that falls bac
       assert.ok(node.otherwise, `${url} ${key} falls back`);
     }
     assert.equal((tree.children["j"] as TreeLeaf).otherwise?.steps[0]?.invocation.id, default_j);
+    assert.equal((await page_keymap_for(storage_of(with_defaults({})), [url]))!.site_values?.blur_on_load, true, `${url} takes back the search box focus of the load`);
   }
   for (const url of ["https://www.google.com/search?q=maps", "https://www.google.de/maps", "https://maps.example.org/maps"]) {
     const node: TreeNode | undefined = (await page_tree(with_defaults({}), url)).children["j"];
