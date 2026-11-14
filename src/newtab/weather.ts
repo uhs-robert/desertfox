@@ -114,6 +114,8 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   const units = settings.newtab_weather_units === "imperial" ? "imperial" : "metric";
   const show_weather = (weather: Weather) => show({ kind: "weather", weather });
   const has_permission = await refused_as(deps.has_geolocation_permission(), false);
+  // Offered until the permission is granted, even with a city set. Once granted, the position wins over the city.
+  if (!has_permission) show({ kind: "ask_location" });
   if (has_permission) {
     const earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units), deps.net);
     if (earlier) show_weather(earlier);
@@ -132,13 +134,13 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
     const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce };
     return load_cached<Weather>(spec, deps.net, show_weather);
   }
-  // A granted permission with no position and no city is a dead end, so the card stays empty and offers nothing to click.
-  if (!has_permission) show({ kind: "ask_location" });
+  // A granted permission with no position and no city is a dead end: the card stays empty and offers nothing to click.
 }
 
+// The reading and the permission button are separate children, so a city reading and the button show together and a new reading never removes the button.
 export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () => void): void {
-  slot.replaceChildren();
   if (view.kind === "ask_location") {
+    if (slot.querySelector(".weather-ask")) return;
     const ask = document.createElement("button");
     ask.type = "button";
     ask.className = "weather-ask";
@@ -154,7 +156,11 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
   const text = document.createElement("span");
   text.className = "weather-text";
   text.textContent = place ? `${describe_code(code)}, ${place}` : describe_code(code);
-  slot.append(degrees, text);
+  const reading = document.createElement("span");
+  reading.className = "weather-reading";
+  reading.append(degrees, text);
+  slot.querySelector(".weather-reading")?.remove();
+  slot.prepend(reading);
 }
 
 export const browser_weather_deps = (): WeatherDeps => ({
@@ -169,7 +175,7 @@ export const browser_weather_deps = (): WeatherDeps => ({
 export function start_weather(slot: HTMLElement, settings: WeatherSettings, deps: WeatherDeps = browser_weather_deps()): Promise<void> {
   const show = (view: WeatherView) =>
     draw_weather(slot, view, () => {
-      void refused_as(deps.request_geolocation_permission(), false).then((granted) => (granted ? start_weather(slot, settings, deps) : undefined));
+      void refused_as(deps.request_geolocation_permission(), false).then((granted) => (granted ? (slot.replaceChildren(), start_weather(slot, settings, deps)) : undefined));
     });
   return refused_as(run_weather(settings, deps, show), undefined) as Promise<void>;
 }
