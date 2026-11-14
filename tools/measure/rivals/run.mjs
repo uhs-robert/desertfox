@@ -470,6 +470,8 @@ async function check_site(site) {
   // DesertFox parks a cross-origin frame that takes the focus on load with no click or key and not on a field: the page keeps the keys and f also labels that frame's targets. Runs last, on a fresh load, because the activate step dismisses the popup.
   // A popup site must show the park: page focus on load and labels in a frame. Other sites that may show a frame (Stack Overflow, some passes) are n/a when no frame has a label.
   async function check_parked_frame() {
+    // The n/a rows filled before step 3 say the site showed no frame. From here a row is unknown until the check sets it, so a check that throws is not read as not applicable.
+    for (const name of FRAME_ROWS) record.checks[name] = { status: "unknown", reason: "the parked-frame check did not finish" };
     await load_live(url);
     const mode_after = await frame_mode_now();
     const focus_after = await focus_now();

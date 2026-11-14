@@ -94,8 +94,8 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
       await wait_event(press_mark, (event) => event.type === "window_focus" && event.page_id.startsWith(`${page_id}_`), "a frame to take the focus after Tab");
     }
     await wait_event(mark, on_page(`${page_id}_tiny`, "tree_read"), "the 10 px frame to start on its Tab focus");
-    const tiny_focus_at = events.findIndex(on_page(`${page_id}_tiny`, "window_focus"));
-    await wait_event(tiny_focus_at, on_page(page_id, "window_focus"), "the top page to take the focus back from the parked 10 px frame");
+    // The frame and the top page report on separate requests that can arrive in either order, so the hand-back is read from the page itself: the park is recorded and the top document has no iframe element focused.
+    await poll_until("the 10 px frame to be parked", async () => (await in_active_tab(`document.activeElement?.localName !== "iframe"`)) === true && (await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(async ([tab]) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id]?.parked ?? null)`)) !== null);
   });
 
   await run_case("a focused cross-origin frame that navigates keeps the keys, and once removed the top page takes them", async () => {

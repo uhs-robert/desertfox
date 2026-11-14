@@ -5,19 +5,26 @@ import { CTRL } from "./harness.mjs";
 
 export const areas = ["keys"];
 
-export async function run_cases({ sleep, run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, poll_until, hint_label_count, scroll_delta_by_press, scroll_of, in_active_tab, in_background }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, poll_until, hint_label_count, scroll_delta_by_press, scroll_of, in_active_tab, in_background }) {
   const wait_badge = (mark, page_id, label) => wait_event(mark, (event) => event.type === "indicator" && event.page_id === page_id && event.label === label, `${label} on ${page_id}`);
   const page_sees = (mark, page_id, key) => wait_event(mark, (event) => event.type === "keydown" && event.key === key && event.page_id === page_id, `${page_id} to see ${key}`);
   const focus_frame = async (mark, frame_id, element_id) => {
+    const before_focus = events.length;
     await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
     await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === frame_id, `${frame_id} to take the focus`);
-    // A first script focus into a frame of another site parks it (src/background/tab_modes.ts), so the focus is given a second time.
-    await sleep(300);
-    const parked = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id]?.parked ?? null)`);
-    if (parked !== null) {
-      const again = events.length;
-      await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
-      await wait_event(again, (event) => event.type === "window_focus" && event.page_id === frame_id, `${frame_id} to take the focus again`);
+    // A first script focus into a frame of another site parks it unless the frame has had a click or key (src/background/tab_modes.ts). The decision is in the record once the frame is parked or holds the focus. A parked frame gets its focus a second time, after the top page took the focus back.
+    if (element_id === "cross") {
+      const record = () => in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id] ?? {})`);
+      await poll_until("the background to decide the first focus of the frame", async () => {
+        const { parked, focused_child } = await record();
+        return parked !== undefined || focused_child !== undefined;
+      });
+      if ((await record()).parked !== undefined) {
+        await wait_event(before_focus, (event) => event.type === "window_focus" && event.page_id === frame_id.replace(/_[a-z]+$/, ""), "the top page to take the focus back from the parked frame");
+        const again = events.length;
+        await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
+        await wait_event(again, (event) => event.type === "window_focus" && event.page_id === frame_id, `${frame_id} to take the focus again`);
+      }
     }
     await wait_takes_keys(frame_id);
   };

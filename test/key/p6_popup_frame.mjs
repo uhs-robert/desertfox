@@ -3,7 +3,7 @@
 
 // A popup frame that takes the focus on load with no click is parked, which blurs its window and closes a popup that closes on a window blur. That is the cost of the park: the last case drives it once, and checks that Gecko's hand-back does not loop.
 
-import { evaluate_in_chrome } from "./rdp.mjs";
+import { click_element } from "./native_click.mjs";
 
 export const areas = ["cmdline", "ui"];
 
@@ -13,20 +13,7 @@ export async function run_cases({ run_case, press_keys, open_page, open_cmdline,
   const closed_popups = () => events.filter((event) => event.page_id === frame_id && event.type === "popup_closed").map((event) => event.name);
   const expect_no_popup_closed = (when) => expect(closed_popups().length === 0, `${when}: popups closed: ${closed_popups().join(", ")}`);
 
-  // A real mouse press through the widget at the middle of the frame, so the frame gets user activation and is not parked.
-  const click_frame = async () => {
-    const [x, y] = await in_active_tab(`(() => { const box = document.getElementById("cross").getBoundingClientRect(); return [box.left + 150, box.top + 100]; })()`);
-    await evaluate_in_chrome(rdp, `(async () => {
-      const win = Services.wm.getMostRecentWindow("navigator:browser");
-      const browser = win.gBrowser.selectedBrowser;
-      const box = browser.getBoundingClientRect();
-      const at = [(win.mozInnerScreenX + box.left + ${x}) * win.devicePixelRatio, (win.mozInnerScreenY + box.top + ${y}) * win.devicePixelRatio];
-      for (const message of [win.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
-        win.windowUtils.sendNativeMouseEvent(at[0], at[1], message, 0, 0, browser, null);
-        await new Promise((resolve) => win.setTimeout(resolve, 20));
-      }
-    })()`);
-  };
+  const click_frame = () => click_element(rdp, in_active_tab, "cross", 150, 100);
 
   await run_case("the frame takes the keys and its three popups are open", async () => {
     await open_page("popup_frames", top_id, { new_tab: true });

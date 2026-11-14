@@ -4,7 +4,7 @@
 
 export const areas = ["media", "keys", "hints"];
 
-export async function run_cases({ sleep, run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
   const indicator = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const media = (page_id, type, video, check = () => true) => (event) => event.page_id === page_id && event.type === `media_${type}` && event.video === video && check(event);
   const read_toast = () =>
@@ -39,15 +39,22 @@ export async function run_cases({ sleep, run_case, open_page, press_keys, wait_e
   };
   const focus_frame = async (host_id, element_id = "frame", page_id = `${host_id}_inner`) => {
     const mark = events.length;
+    const before_focus = mark;
     await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
     await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === page_id, `${page_id} to take the focus`);
-    // A first script focus into a frame of another site parks it (src/background/tab_modes.ts), so the focus is given a second time.
-    await sleep(300);
-    const parked = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id]?.parked ?? null)`);
-    if (parked !== null) {
-      const again = events.length;
-      await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
-      await wait_event(again, (event) => event.type === "window_focus" && event.page_id === page_id, `${page_id} to take the focus again`);
+    // A first script focus into a frame of another site parks it unless the frame has had a click or key (src/background/tab_modes.ts). The decision is in the record once the frame is parked or holds the focus. A parked frame gets its focus a second time, after the top page took the focus back.
+    if (element_id === "slow") {
+      const record = () => in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id] ?? {})`);
+      await poll_until("the background to decide the first focus of the frame", async () => {
+        const { parked, focused_child } = await record();
+        return parked !== undefined || focused_child !== undefined;
+      });
+      if ((await record()).parked !== undefined) {
+        await wait_event(before_focus, (event) => event.type === "window_focus" && event.page_id === host_id, "the top page to take the focus back from the parked frame");
+        const again = events.length;
+        await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
+        await wait_event(again, (event) => event.type === "window_focus" && event.page_id === page_id, `${page_id} to take the focus again`);
+      }
     }
     await wait_takes_keys(page_id);
   };

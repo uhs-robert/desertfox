@@ -25,7 +25,7 @@ import { fullscreen_step, takes_media_step } from "./mode_state.ts";
 import { site_mode } from "./site_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
-import { focus_page_content, start_content_once } from "./handlers/focus.ts";
+import { answer_park, focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 
@@ -244,6 +244,9 @@ function follow_field_change(): void {
 // A key or click gives the page user activation, which ends the window. It also counts input from before this script started, as in any subframe, which starts on its first focus.
 let load_blur_ends_ms = 0;
 // True when it blurred. `blur()` returns undefined, so `!` of it is true: the shortest form for the byte cap.
+// Whether a click or key has reached this window.
+const activated = (): boolean => navigator.userActivation.hasBeenActive;
+
 const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && !navigator.userActivation.isActive && is_editable_element(target) && !((target as HTMLElement).blur() as unknown);
 
 let matcher_installed = false;
@@ -343,15 +346,15 @@ function start(): void {
   // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
   // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
   // A frame with no click or key yet reports a task late, with the claim it had when the report was asked for: its window focus comes before the focus of its element, and the background parks a frame that is not on a field.
-  // One late report covers the several that one focus event starts, because the background reads a second claim as the frame taking the focus back from its park. The claim is not read late: the focus can slip away in that task, and a frame that held it at its focus event must still claim it.
+  // One late report covers the several that one focus event starts, because the background reads a second claim as the frame taking the focus back from its park. The claim is the one made when the report was asked for or the one at send time: the focus can slip away in that task, and the document can get it only in that task.
   let late_claim = false;
   let late_pending = false;
   const report_mode = () => {
     setTimeout(hand_focus_to_parent);
-    const send = (focus: boolean) => void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus, step: media_by_step, activated: navigator.userActivation.hasBeenActive, in_field: is_editable_element(deepest_focused_element()) });
-    if (window === window.top || navigator.userActivation.hasBeenActive) return send(holds_own_focus(document));
+    const send = (focus: boolean) => void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus, step: media_by_step, activated: activated(), in_field: is_editable_element(deepest_focused_element()) });
+    if (window === window.top || activated()) return send(holds_own_focus(document));
     late_claim = holds_own_focus(document);
-    if (!late_pending) (late_pending = true), setTimeout(() => ((late_pending = false), send(late_claim)));
+    if (!late_pending) (late_pending = true), setTimeout(() => ((late_pending = false), send(late_claim || holds_own_focus(document))));
   };
 
   wire_mode_reports(page_mode, (mode) => {
@@ -401,6 +404,7 @@ function start(): void {
     const message = raw as BackgroundToContent;
     if (message.type === "ping") return Promise.resolve(true);
     if (message.type === "focus_page") {
+      if (message.park) return Promise.resolve(answer_park(window === window.top, document.activeElement, activated()));
       focus_page_content();
       return Promise.resolve(true);
     }

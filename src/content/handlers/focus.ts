@@ -22,3 +22,6 @@ export function focus_page_content(focus_window: () => void = () => window.focus
   focus_window();
   blur_active();
 }
+
+// The answer to a park message (see `hand_back_parked_frame`). A frame answers whether no click or key reached it. The top frame blurs its iframe element only, so a field the page or the user focused in the meantime is not undone.
+export const answer_park = (is_top: boolean, active: Pick<Element, "localName"> | null, activated: boolean, hand_back: () => void = focus_page_content): boolean => (is_top ? (/frame$/.test(active?.localName ?? "") && hand_back(), true) : !activated);

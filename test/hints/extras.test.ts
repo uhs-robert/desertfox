@@ -1500,9 +1500,16 @@ test("a frame that starts hints across frames ignores the collect, because its s
 
 test("across frames a frame its parent can read labels nothing itself, because the parent's walk labels it", async () => {
   const page = await page_with(["one", "two"], {}, { in_readable_frame: true });
-  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links" } });
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links", frames: "all_frames" } });
   await settle();
   assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 0, texts: [] }]);
+});
+
+test("a frame its parent can read labels its own targets when it alone is asked, as a parked frame inside a frame of the same origin is", async () => {
+  const page = await page_with(["one", "two"], {}, { in_readable_frame: true });
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "here", filter: "links", frames: "same_origin" } });
+  await settle();
+  assert.deepEqual(page.sent, [{ type: "hint_frames_report", session_id: "s1", count: 2, texts: ["one", "two"] }]);
 });
 
 test("across frames a keyboard frame its parent can read sends no count of its own", async () => {

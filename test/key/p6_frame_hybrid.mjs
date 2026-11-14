@@ -2,7 +2,7 @@
 // A frame on a field, a same-origin frame, and a frame the user clicked or tabbed into keep the keys as before. A frame is parked at its first focus only.
 // The fixture is /hybrid_frames (see hybrid_pages.mjs): one frame whose kind the page id names. The frame reports its focus, blur and the close button.
 
-import { evaluate_in_chrome } from "./rdp.mjs";
+import { click_element } from "./native_click.mjs";
 
 export const areas = ["hints", "scroll", "ui"];
 
@@ -23,20 +23,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
   };
   const wait_for_no_labels = (what) => poll_until(what, async () => Object.values(await labels_by_frame()).flat().length === 0);
 
-  // A real mouse press through the widget at the middle of the frame, so the frame gets trusted events and user activation.
-  const click_frame = async () => {
-    const [x, y] = await in_active_tab(`(() => { const box = document.getElementById("cross").getBoundingClientRect(); return [box.left + 150, box.top + 150]; })()`);
-    await evaluate_in_chrome(rdp, `(async () => {
-      const win = Services.wm.getMostRecentWindow("navigator:browser");
-      const browser = win.gBrowser.selectedBrowser;
-      const box = browser.getBoundingClientRect();
-      const at = [(win.mozInnerScreenX + box.left + ${x}) * win.devicePixelRatio, (win.mozInnerScreenY + box.top + ${y}) * win.devicePixelRatio];
-      for (const message of [win.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
-        win.windowUtils.sendNativeMouseEvent(at[0], at[1], message, 0, 0, browser, null);
-        await new Promise((resolve) => win.setTimeout(resolve, 20));
-      }
-    })()`);
-  };
+  const click_frame = () => click_element(rdp, in_active_tab, "cross");
   // Presses Tab until the frame reports its `count`th focus. A press right after the load can miss, so it repeats.
   const tab_into_frame = async (frame_id, count) => {
     for (let presses = 0; presses < 6 && frame_events(frame_id, "frame_focus").length < count; presses++) {

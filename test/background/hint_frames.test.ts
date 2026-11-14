@@ -45,7 +45,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: (frame_i
       return frame_id === undefined ? Object.keys(frames).length : 1;
     },
     parked_frame: async () => parked,
-    expect_entry: async () => void entries.push(1),
+    expect_entry: async (_tab_id, frame_id) => void entries.push(frame_id),
     unpark: async (_tab_id, frame_id) => void (parked === frame_id && ((parked = undefined), unparked.push(frame_id))),
     send: async (tab_id, message, frame_id) => {
       assert.equal(tab_id, TAB);
@@ -53,7 +53,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: (frame_i
       if (sends_hang) return new Promise(() => {});
       if (frame_id !== undefined && frames[frame_id]?.gone) throw new Error("Could not establish connection. Receiving end does not exist.");
       if (message.type === "hint_frames_collect") {
-        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void (frame.late ? flush() : Promise.resolve()).then(() => current.report(TAB, Number(id), message.session_id, frame.count, frame.texts ?? Array.from({ length: frame.count }, (_, index) => `${id}:${index}`)));
+        for (const [id, frame] of Object.entries(frames)) if ((frame_id === undefined || Number(id) === frame_id) && !frame.silent && !frame.gone && Number(id) !== keyboard_frame) void (frame.late ? flush() : Promise.resolve()).then(() => current.report(TAB, Number(id), message.session_id, frame.count, frame.texts ?? Array.from({ length: frame.count }, (_, index) => `${id}:${index}`)));
       }
       if (message.type === "hint_frames_pick") return frames[frame_id!]?.pick?.(message.label, message.keys);
       return undefined;
@@ -493,13 +493,22 @@ test("all_frames ignores the park and asks every frame", async () => {
   assert.deepEqual(fake.injected, [undefined]);
 });
 
-test("a pick into another frame tells the background first, so the frame's first focus is not parked, and a pick in the keyboard frame does not", async () => {
+test("a collect aimed at the parked frame is answered by that frame only: a silent parked frame is not stood in for by another frame", async () => {
+  const fake = harness({ 0: { count: 2 }, 3: { count: 2, silent: true }, 5: { count: 9 } }, { parked: 3 });
+  const started = fake.hints.start(TAB, 0, PARKED_START);
+  await flush();
+  fake.fire_timers();
+  const answer = await started;
+  assert.deepEqual(fake.of_type("hint_frames_collect").map((entry) => entry.frame_id), [3]);
+  assert.equal(answer.ok && answer.labels.length, 2, "only the top page's labels: frame 5 added none");
+});
+
+test("a pick into another frame marks that frame's entry by its id before the pick goes out, and a pick of the keyboard frame's own label marks nothing", async () => {
   const fake = harness({ 0: { count: 1, pick: () => ({ ok: true }) }, 3: { count: 1, pick: () => ({ ok: true }) } });
   const answer = await fake.hints.start(TAB, 0, START);
   assert.ok(answer.ok);
-  const [own_label, frame_label] = [answer.labels[0]!, answer.labels[1]!];
-  await fake.hints.pick(TAB, 0, "s1", own_label);
-  assert.deepEqual(fake.entries, [], "the keyboard frame's own label picks nothing in another frame");
-  await fake.hints.pick(TAB, 0, "s1", frame_label);
-  assert.deepEqual(fake.entries, [1]);
+  await fake.hints.pick(TAB, 0, "s1", answer.labels[0]!);
+  assert.deepEqual(fake.entries, []);
+  await fake.hints.pick(TAB, 0, "s1", answer.labels[1]!);
+  assert.deepEqual(fake.entries, [3]);
 });

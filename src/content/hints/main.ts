@@ -608,7 +608,8 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     let found: Found[] = [];
     const [site_selectors, patterns] = await Promise.all([read_site_selectors(() => {}), read_strip_patterns(window.location.href)]);
     strip_patterns = patterns;
-    if (!parent_labels_me()) try {
+    // A parent labels its readable child only when it is asked itself, which only `all_frames` does. A lone parked frame labels its own targets.
+    if (!parent_labels_me() || current.args.frames !== "all_frames") try {
       const candidates = find_candidates(filter, args.selector as string | undefined, action, site_selectors);
       found = await shown_of({ filter, action, lower_text_: text?.toLowerCase() }, candidates);
     } catch {
