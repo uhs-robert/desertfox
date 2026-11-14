@@ -70,7 +70,7 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # docs, themes, settings defaults and setting completion checks, the promise lint (`npm run lint`), then unit tests: registry, parser, prefix tree, config merge, and the Python host tests
+just test        # docs, themes, settings defaults and setting completion checks, the promise lint (`npm run lint`), the TypeScript typecheck (`npm run typecheck`), then unit tests: registry, parser, prefix tree, config merge, and the Python host tests
 just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/shared/setting_completion.ts
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts

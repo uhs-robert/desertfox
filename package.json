@@ -18,7 +18,7 @@
     "completion:write": "node --no-warnings tools/build_setting_completion.ts --write",
     "completion:check": "node --no-warnings tools/build_setting_completion.ts --check",
     "lint": "eslint",
-    "test": "npm run --silent docs:check && npm run --silent themes:check && npm run --silent defaults:check && npm run --silent completion:check && npm run --silent lint && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""
+    "test": "npm run --silent docs:check && npm run --silent themes:check && npm run --silent defaults:check && npm run --silent completion:check && npm run --silent lint && npm run --silent typecheck && node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
