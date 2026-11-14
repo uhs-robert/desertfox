@@ -193,8 +193,7 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   // Split on whitespace as `parse_setting_text` does: a quoted token can hold several items.
   const already_typed = new Set(other_words.flatMap((token) => token.text.split(/\s+/)));
   // The generated list holds the built-in themes. The config's theme files and imports are known only at runtime.
-  const values = setting === "theme" ? [...new Set([...spec.values, ...theme_names])] : spec.values;
-  return values.filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
+  return spec.values.concat(setting === "theme" ? theme_names : []).filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
 }
 
 // With no word typed, the bookmark list shows this many of the newest.
