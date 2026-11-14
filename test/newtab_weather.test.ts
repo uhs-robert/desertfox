@@ -103,7 +103,7 @@ test("a stored value for metric is not shown for imperial", async () => {
 test("the permission request runs inside the click handler, before any await", () => {
   const { deps, calls } = fake_deps();
   const buttons: { listeners: Record<string, () => void> }[] = [];
-  const slot = { replaceChildren() {}, append(...nodes: { listeners?: Record<string, () => void> }[]) { for (const node of nodes) if (node.listeners) buttons.push(node as never); } };
+  const slot = { replaceChildren() {}, querySelector: () => null, prepend() {}, append(...nodes: { listeners?: Record<string, () => void> }[]) { for (const node of nodes) if (node.listeners) buttons.push(node as never); } };
   const had_document = "document" in globalThis;
   const earlier_document = (globalThis as { document?: unknown }).document;
   Object.assign(globalThis, {
@@ -178,4 +178,18 @@ test("a stored reading older than the age limit is not drawn when the refresh fa
   await collect(on(), first.deps);
   const later = { ...first.deps, net: { ...first.deps.net, now: () => 5_000_000 + 7 * 3_600_000, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
   assert.deepEqual(await collect(on(), later), []);
+});
+
+test("with a city set and no permission the card offers the button and still draws the city reading", async () => {
+  const { deps } = fake_deps();
+  const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
+  assert.equal(views[0]!.kind, "ask_location");
+  assert.deepEqual(views.map((view) => view.kind), ["ask_location", "weather"]);
+});
+
+test("once the permission is granted the position wins over the city and no button shows", async () => {
+  const { deps, urls } = fake_deps({ allowed: true });
+  const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
+  assert.ok(views.every((view) => view.kind === "weather"));
+  assert.doesNotMatch(urls.join(" "), /geocoding/);
 });
