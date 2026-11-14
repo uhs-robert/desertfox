@@ -5,6 +5,7 @@ import { fetch_text, load_cached, type NetEnv } from "./net_widget.ts";
 
 export type WeatherSettings = Pick<Settings, "newtab_weather" | "newtab_weather_city" | "newtab_weather_units">;
 
+// Also the age Firefox may reuse a position, so a new tab inside the window reads no fresh fix.
 export const WEATHER_TTL_MS = 30 * 60_000;
 export const GEOLOCATION_TIMEOUT_MS = 5000;
 
@@ -72,9 +73,11 @@ const is_weather = (stored: unknown): stored is Weather => {
   return typeof value?.temperature === "number" && typeof value.code === "number" && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
 };
 
+// Where to ask about. `cache_key` names the place without its coordinates, so a stored answer can show before a position arrives.
 type Place = { cache_key: string; resolve: () => Promise<{ latitude: number; longitude: number; place: string } | undefined> };
 
-async function geolocated(deps: WeatherDeps): Promise<Place | undefined> {
+// Undefined without the permission, and when the browser or the user refuses or the read takes too long. The permission is never requested here, because only a click may do that.
+async function granted_position_place(deps: WeatherDeps): Promise<Place | undefined> {
   const allowed = await refused_as(deps.has_geolocation_permission(), false);
   if (!allowed) return undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -91,7 +94,7 @@ async function geolocated(deps: WeatherDeps): Promise<Place | undefined> {
   }
 }
 
-const named = (city: string, net: NetEnv): Place => ({
+const geocoded_city_place = (city: string, net: NetEnv): Place => ({
   cache_key: `city:${city}`,
   resolve: async () => {
     const text = await fetch_text(geocode_url(city), net);
@@ -104,9 +107,11 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   if (settings.newtab_weather !== true) return;
   if (await refused_as(deps.page_is_private(), true)) return;
   const city = (settings.newtab_weather_city ?? "").trim();
-  const place = (await geolocated(deps)) ?? (city ? named(city, deps.net) : undefined);
+  const place = (await granted_position_place(deps)) ?? (city ? geocoded_city_place(city, deps.net) : undefined);
   if (!place) {
-    if (!(await refused_as(deps.has_geolocation_permission(), true))) show({ kind: "ask_location" });
+    // A granted permission with no position and no city is a dead end, so the card stays empty and offers nothing to click.
+    const can_ask_for_location = !(await refused_as(deps.has_geolocation_permission(), true));
+    if (can_ask_for_location) show({ kind: "ask_location" });
     return;
   }
   const units = settings.newtab_weather_units === "imperial" ? "imperial" : "metric";

@@ -17,6 +17,7 @@ export async function fetch_text(url: string, env: NetEnv): Promise<string | und
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), NET_TIMEOUT_MS);
   try {
+    // `redirect: "error"` keeps a provider from bouncing the request to a host the settings text does not name.
     const response = await env.fetch(url, { credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store", redirect: "error", signal: abort.signal });
     return response.ok ? await response.text() : undefined;
   } catch {
