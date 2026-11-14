@@ -98,8 +98,11 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, extensio
 
   await run_case("importer: Remove on the theme in use puts the theme setting back and the default theme on", async () => {
     await open_settings();
-    await in_page(`view.document.querySelector('[aria-label="Remove the theme p39_dusk"]').click();`);
-    await poll_until("the theme to be gone", async () => Object.keys(await stored("desertfox_imported_themes")).length === 0);
+    // The list redraws after each answer, so a click on a button that was just replaced is lost. The click repeats until the theme is gone.
+    await poll_until("the theme to be gone", async () => {
+      await in_page(`view.document.querySelector('[aria-label="Remove the theme p39_dusk"]')?.click();`);
+      return Object.keys(await stored("desertfox_imported_themes")).length === 0;
+    });
     await poll_until("the default theme to be published again", async () => JSON.stringify(await stored("desertfox_theme")) === default_theme);
     const setting = await in_page(`return view.browser.runtime.sendMessage({ type: "list_settings" }).then((answer) => answer.settings.find((row) => row.name === "theme"));`);
     expect(setting.top_layer === "default" && setting.value === "oasis_moonlight", `the theme setting was ${JSON.stringify(setting)}`);
