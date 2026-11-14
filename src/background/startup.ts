@@ -9,7 +9,7 @@ import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
 import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, store_layers } from "./edit_layers.ts";
-import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
+import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf, ThemeEdits } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
 import type { EngineState } from "./engine_message.ts";
 import type { AliasState } from "./alias_message.ts";
@@ -104,7 +104,9 @@ async function compile_input(config: MergedConfig, layers: EditLayers): Promise<
 async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers): Promise<{ config: MergedConfig; warnings: string[] }> {
   const in_force = layers ?? (await load_layers());
   const layered = has_build_edits(in_force) ? await layered_build(step, engine_edits_of(in_force), alias_edits_of(in_force)) : undefined;
-  const config = with_edits(layered?.loaded.config ?? step.loaded.config, edits);
+  const edited = with_edits(layered?.loaded.config ?? step.loaded.config, edits);
+  // An import wins over a theme file of the same name, as a browser edit wins over a file. The config the readers get holds both, so `:set theme` names either.
+  const config: MergedConfig = in_force.themes === undefined ? edited : { ...edited, local_themes: { ...edited.local_themes, ...in_force.themes } };
   const { compiled, theme, warnings } = compile_config(await compile_input(config, in_force));
   // The build repeats the warnings of the files build, which the load warnings hold already.
   const layer_warnings = layered ? [...layered.loaded.warnings.filter((warning) => !step.load_warnings.includes(warning)), ...layered.dropped.map(dropped_warning)] : [];
@@ -268,6 +270,11 @@ export function read_engine_state(): Promise<EngineState> {
     const aliases = alias_edits_of(layers);
     return { config, engines: engine_edits_of(layers), aliases, kept: current?.kept ?? {}, kept_aliases: current?.kept_aliases ?? {}, dropped: current?.dropped ?? [], trial: (other) => build_layered(files, dir_label, built_in_commands(), other, aliases) };
   });
+}
+
+// The imported themes, read in the change queue so a change still writing is not seen half done.
+export function read_theme_edits(): Promise<ThemeEdits> {
+  return in_change_queue(async () => (await load_layers()).themes ?? {});
 }
 
 export function read_alias_state(): Promise<AliasState> {

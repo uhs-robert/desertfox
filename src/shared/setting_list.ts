@@ -15,12 +15,13 @@ export function top_layer_of(status: Omit<LayerStatus, "settings"> | undefined, 
   return status?.temp.includes(name) ? "temp" : status?.saved.includes(name) ? "saved" : status?.configured.includes(name) ? "settings.toml" : undefined;
 }
 
-// A tag shows on any edited name, even one whose value equals the default.
-export function build_setting_list(status: LayerStatus): SettingListRow[] {
+// A tag shows on any edited name, even one whose value equals the default. `imported_themes` are the names of the browser's imported themes, which the theme picker offers after the built-in ones.
+export function build_setting_list(status: LayerStatus, imported_themes: readonly string[] = []): SettingListRow[] {
   return SETTING_NAMES.map((name) => {
     const row = SETTINGS_TABLE[name];
     const spec = SETTING_SPECS[name];
-    const allowed = row.kind === "enum" || row.kind === "enum_list" ? row.values : spec.listed_values?.();
+    const listed = row.kind === "enum" || row.kind === "enum_list" ? row.values : spec.listed_values?.();
+    const allowed = name === "theme" && listed ? [...listed, ...imported_themes] : listed;
     return {
       name,
       value: status.settings[name],

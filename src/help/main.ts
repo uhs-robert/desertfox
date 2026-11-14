@@ -21,6 +21,7 @@ import type { ListSnippetsAnswer } from "../shared/messages.ts";
 import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { mount_files } from "./files_page.ts";
+import { mount_themes } from "./themes_page.ts";
 import { create_files_session } from "./files_model.ts";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../background/storage_keys.ts";
 import { create_host_start_session } from "./host_start_model.ts";
@@ -34,6 +35,7 @@ let stop_keys: (() => void) | undefined;
 let stop_engines: (() => void) | undefined;
 let stop_aliases: (() => void) | undefined;
 let stop_quickmarks: (() => void) | undefined;
+let stop_themes: (() => void) | undefined;
 let stop_section_hold: (() => void) | undefined;
 // Its one window listener is registered below, ahead of `content.js` and the drawer's Escape handler.
 const key_capture = create_key_capture();
@@ -110,6 +112,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   stop_aliases = undefined;
   stop_quickmarks?.();
   stop_quickmarks = undefined;
+  stop_themes?.();
+  stop_themes = undefined;
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never, model.keys.reload);
@@ -122,6 +126,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   // `M` writes the store without a publish, so the rows follow the store's key as well as the config.
   const quickmarks_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-quickmarks") : null;
   if (quickmarks_box) stop_quickmarks = mount_pairs(quickmarks_box, QUICKMARKS_KIND, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never, (changes, area) => touches_settings(changes, area) || (area === "local" && QUICKMARK_STORAGE_KEY in changes));
+  const themes_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-themes") : null;
+  if (themes_box) stop_themes = mount_themes(themes_box, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never);
   const host_start_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-host-start") : null;
   draw_host_start = host_start_box ? mount_host_start(host_start_box, host_start_session, (message) => browser.runtime.sendMessage(message)) : () => undefined;
   draw_host_start();

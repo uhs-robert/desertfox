@@ -7,20 +7,20 @@ import { OASIS_THEMES } from "../../src/shared/themes.ts";
 const colors = derive_roles({ bg_core: "#101010", fg_core: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
 
 test("a local theme with every role wins over a built-in theme of the same name", () => {
-  assert.equal(load_theme("oasis_moonlight", 3, { name: "oasis_moonlight", colors: { dark: colors, light: colors } })?.dark.primary, "#88aaff");
+  assert.equal(load_theme("oasis_moonlight", 3, { oasis_moonlight: { dark: colors, light: colors } })?.dark.primary, "#88aaff");
 });
 
 test("a local theme missing a role is not used, and the name falls back to the built-in lookup", () => {
   const { accent: _accent, ...partial } = colors;
-  assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: partial, light: colors } } as never), undefined);
-  assert.notEqual(load_theme("oasis_moonlight", 3, { name: "oasis_moonlight", colors: { dark: partial, light: colors } } as never)?.dark.primary, "#88aaff");
+  assert.equal(load_theme("mine", 3, { mine: { dark: partial, light: colors } } as never), undefined);
+  assert.notEqual(load_theme("oasis_moonlight", 3, { oasis_moonlight: { dark: partial, light: colors } } as never)?.dark.primary, "#88aaff");
 });
 
 test("a local theme with an empty or non-hex role value is not used", () => {
   for (const bad of ["", "not-a-color"]) {
     const broken = { ...colors, primary: bad };
-    assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: broken, light: colors } }), undefined);
-    assert.equal(load_theme("mine", 3, { name: "mine", colors: { dark: colors, light: broken } }), undefined);
+    assert.equal(load_theme("mine", 3, { mine: { dark: broken, light: colors } }), undefined);
+    assert.equal(load_theme("mine", 3, { mine: { dark: colors, light: broken } }), undefined);
   }
 });
 
@@ -35,12 +35,12 @@ test("light_intensity picks the light set and leaves dark alone", () => {
 test("a name no theme answers to finds nothing, the bare Oasis names included", () => {
   assert.equal(load_theme("neon", 3), undefined);
   assert.equal(load_theme("moonlight", 3), undefined);
-  assert.deepEqual(load_theme("oasis_moonlight", 3, { name: "other", colors: { dark: colors, light: colors } }), load_theme("oasis_moonlight", 3));
+  assert.deepEqual(load_theme("oasis_moonlight", 3, { other: { dark: colors, light: colors } }), load_theme("oasis_moonlight", 3));
 });
 
 test("a hand-edited local theme with a missing variant falls back instead of crashing", () => {
   for (const broken of [{ dark: null, light: colors }, { dark: { bg_core: "#000000" }, light: colors }]) {
-    assert.deepEqual(load_theme("oasis_moonlight", 3, { name: "oasis_moonlight", colors: broken } as never), load_theme("oasis_moonlight", 3));
+    assert.deepEqual(load_theme("oasis_moonlight", 3, { oasis_moonlight: broken } as never), load_theme("oasis_moonlight", 3));
   }
 });
 

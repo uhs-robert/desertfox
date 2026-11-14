@@ -51,7 +51,7 @@ async function make(file_settings: Record<string, unknown> = {}) {
   const fake = install_fake_browser(file_settings);
   const startup = (await import(`../../src/background/startup.ts?settings_message_${Math.random()}`)) as typeof import("../../src/background/startup.ts");
   await startup.get_config();
-  return { ...fake, startup, messages: create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config }) };
+  return { ...fake, startup, messages: create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()) }) };
 }
 
 test("a save stores the typed value, and the reply names the value and its top layer", async () => {
