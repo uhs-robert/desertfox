@@ -1,12 +1,14 @@
 // The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off unless `newtab_weather` is true. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
-import { fetch_text, load_cached, type NetEnv } from "./net_widget.ts";
+import { browser_net_env, fetch_text, load_cached, peek_cached, type NetEnv } from "./net_widget.ts";
 
 export type WeatherSettings = Pick<Settings, "newtab_weather" | "newtab_weather_city" | "newtab_weather_units">;
 
 // Also the age Firefox may reuse a position, so a new tab inside the window reads no fresh fix.
 export const WEATHER_TTL_MS = 30 * 60_000;
+// Past this a stored answer is too old to show, even offline. Weather changes within hours, so an older reading would mislead.
+export const WEATHER_MAX_AGE_MS = 6 * 3_600_000;
 export const GEOLOCATION_TIMEOUT_MS = 5000;
 
 export type Weather = { temperature: number; code: number; place: string; units: "metric" | "imperial" };
@@ -73,20 +75,14 @@ const is_weather = (stored: unknown): stored is Weather => {
   return typeof value?.temperature === "number" && typeof value.code === "number" && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
 };
 
-// Where to ask about. `cache_key` names the place without its coordinates, so a stored answer can show before a position arrives.
-type Place = { cache_key: string; resolve: () => Promise<{ latitude: number; longitude: number; place: string } | undefined> };
+type Where = { latitude: number; longitude: number; place: string };
 
 // Undefined without the permission, and when the browser or the user refuses or the read takes too long. The permission is never requested here, because only a click may do that.
-async function granted_position_place(deps: WeatherDeps): Promise<Place | undefined> {
-  const allowed = await refused_as(deps.has_geolocation_permission(), false);
-  if (!allowed) return undefined;
+async function granted_position(deps: WeatherDeps): Promise<{ latitude: number; longitude: number } | undefined> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), GEOLOCATION_TIMEOUT_MS)));
   try {
-    const position = await Promise.race([deps.current_position(), timeout]);
-    if (!position) return undefined;
-    const { latitude, longitude } = position;
-    return { cache_key: "geo", resolve: async () => ({ latitude, longitude, place: "" }) };
+    return await Promise.race([deps.current_position(), timeout]);
   } catch {
     return undefined;
   } finally {
@@ -94,44 +90,50 @@ async function granted_position_place(deps: WeatherDeps): Promise<Place | undefi
   }
 }
 
-const geocoded_city_place = (city: string, net: NetEnv): Place => ({
-  cache_key: `city:${city}`,
-  resolve: async () => {
-    const text = await fetch_text(geocode_url(city), net);
-    return text === undefined ? undefined : parse_geocode(text);
-  },
-});
+async function geocode_city(city: string, net: NetEnv): Promise<Where | undefined> {
+  const text = await fetch_text(geocode_url(city), net);
+  return text === undefined ? undefined : parse_geocode(text);
+}
 
-// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Geolocation comes first when its permission is already granted. A city is the fallback, and with neither the card offers the permission button and sends no request.
+async function forecast_at(where: Where, units: "metric" | "imperial", net: NetEnv): Promise<Weather | undefined> {
+  const text = await fetch_text(forecast_url(where.latitude, where.longitude, units), net);
+  const now = text === undefined ? undefined : parse_forecast(text);
+  return now && { ...now, place: where.place, units };
+}
+
+const GEO_KEY_PREFIX = "geo:";
+
+// A stored reading in the units asked for. Before the position arrives, the card draws a stored reading made for any coordinates (`GEO_KEY_PREFIX`), because the read can take seconds. The refresh after it replaces it when the coordinates differ.
+const is_weather_in = (units: "metric" | "imperial") => (stored: unknown): stored is Weather => is_weather(stored) && stored.units === units;
+
+// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Geolocation comes first when its permission is already granted, and a stored reading draws before the position arrives. A city is the fallback, and with neither the card offers the permission button and sends no request.
 export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, show: (view: WeatherView) => void): Promise<void> {
   if (settings.newtab_weather !== true) return;
   if (await refused_as(deps.page_is_private(), true)) return;
   const city = (settings.newtab_weather_city ?? "").trim();
-  const place = (await granted_position_place(deps)) ?? (city ? geocoded_city_place(city, deps.net) : undefined);
-  if (!place) {
-    // A granted permission with no position and no city is a dead end, so the card stays empty and offers nothing to click.
-    const can_ask_for_location = !(await refused_as(deps.has_geolocation_permission(), true));
-    if (can_ask_for_location) show({ kind: "ask_location" });
-    return;
-  }
   const units = settings.newtab_weather_units === "imperial" ? "imperial" : "metric";
-  await load_cached<Weather>(
-    {
-      name: "weather",
-      key: `${place.cache_key}|${units}`,
-      ttl_ms: WEATHER_TTL_MS,
-      is_value: is_weather,
-      produce: async () => {
-        const where = await place.resolve();
-        if (!where) return undefined;
-        const text = await fetch_text(forecast_url(where.latitude, where.longitude, units), deps.net);
-        const now = text === undefined ? undefined : parse_forecast(text);
-        return now && { ...now, place: where.place, units };
-      },
-    },
-    deps.net,
-    (weather) => show({ kind: "weather", weather }),
-  );
+  const show_weather = (weather: Weather) => show({ kind: "weather", weather });
+  const has_permission = await refused_as(deps.has_geolocation_permission(), false);
+  if (has_permission) {
+    const earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units), deps.net);
+    if (earlier) show_weather(earlier);
+    const position = await granted_position(deps);
+    if (position) {
+      const [latitude, longitude] = [round_coordinate(position.latitude), round_coordinate(position.longitude)];
+      // The rounded coordinates are in the key, so after travel the old place never counts as current.
+      return load_cached<Weather>({ name: "weather", key: `${GEO_KEY_PREFIX}${latitude},${longitude}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce: () => forecast_at({ latitude, longitude, place: "" }, units, deps.net) }, deps.net, show_weather);
+    }
+  }
+  if (city) {
+    const produce = async () => {
+      const where = await geocode_city(city, deps.net);
+      return where && forecast_at(where, units, deps.net);
+    };
+    const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce };
+    return load_cached<Weather>(spec, deps.net, show_weather);
+  }
+  // A granted permission with no position and no city is a dead end, so the card stays empty and offers nothing to click.
+  if (!has_permission) show({ kind: "ask_location" });
 }
 
 export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () => void): void {
@@ -160,7 +162,7 @@ export const browser_weather_deps = (): WeatherDeps => ({
   has_geolocation_permission: () => browser.permissions.contains({ permissions: ["geolocation"] }),
   current_position: () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition((found) => resolve(found.coords), reject, { timeout: GEOLOCATION_TIMEOUT_MS, maximumAge: WEATHER_TTL_MS })),
   request_geolocation_permission: () => browser.permissions.request({ permissions: ["geolocation"] }),
-  net: { fetch: (input, init) => fetch(input, init), now: Date.now, storage: browser.storage.local },
+  net: browser_net_env(),
 });
 
 // Fills `slot` and keeps the page free: nothing here is awaited by the draw, and a failure leaves the slot empty. A click on the permission button asks first, then runs the card again.
