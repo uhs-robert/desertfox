@@ -40,9 +40,6 @@ export type Variant = (typeof VARIANTS)[number];
 export type RoleColors = Record<Role, string>;
 export type Theme = Record<Variant, RoleColors>;
 
-// The theme a user's config directory holds under the theme's name, filled by tools/build-config.
-export type LocalTheme = { name: string; colors: Theme };
-
 // The `theme` value that follows the theme the desktop pushed over the bridge.
 export const DESKTOP_THEME = "desktop";
 

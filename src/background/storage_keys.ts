@@ -46,6 +46,9 @@ export const LAYERED_CONFIG_STORAGE_KEY = "desertfox_layered_config";
 // Setting name to the value `:set --temp` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
 export const TEMP_SETTINGS_STORAGE_KEY = "desertfox_temp_settings";
 
+// Theme name to the theme a base16 import made (`edit_layers.ts`): `{ dark, light }` with every role filled. Global, private windows included.
+export const THEME_EDITS_STORAGE_KEY = "desertfox_imported_themes";
+
 // Slot name to the invocations its chord runs. `commands.onCommand` reads it, because the background can restart.
 export const SLOT_TABLE_STORAGE_KEY = "desertfox_slot_table";
 

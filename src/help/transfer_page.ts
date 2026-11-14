@@ -25,7 +25,7 @@ export function download(file: ExportFile): void {
 }
 
 // A hidden input behind a button. The pick resets the input, so choosing the same file twice still fires.
-function picker(label: string, name: string, on_pick: (files: PickedFile[]) => void, options: { folder?: boolean; accept?: string }): HTMLElement {
+export function picker(label: string, name: string, on_pick: (files: PickedFile[]) => void, options: { folder?: boolean; accept?: string }): HTMLElement {
   const input = el("input", "desertfox-transfer-input") as HTMLInputElement;
   input.type = "file";
   input.setAttribute("aria-label", name);

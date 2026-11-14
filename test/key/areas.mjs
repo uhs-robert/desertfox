@@ -53,6 +53,7 @@ export const area_rules = [
   },
   // Before the general help rule: `areas_of_file` takes the first match.
   { globs: ["src/background/{alias_message,quickmark_message}.ts", "src/help/pairs_*.ts"], areas: ["help", "config", "keys", "newtab"] },
+  { globs: ["src/background/theme_message.ts", "src/help/themes_*.ts"], areas: ["help", "config"] },
   {
     globs: [
       "src/help/**",
