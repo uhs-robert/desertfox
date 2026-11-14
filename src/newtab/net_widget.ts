@@ -1,5 +1,6 @@
 // The one way a new tab card reaches the network: a fetch with no credentials and a short timeout, and a result kept in `storage.local` so a reopened tab draws at once. A card calls this only after its own setting is on and the page is not private. Nothing here checks either, so the caller must.
-export const NET_CACHE_KEY = "newtab_net_cache";
+// One storage key per card, so two cards that finish together never overwrite each other's answer.
+export const net_cache_key = (name: string): string => `newtab_net_cache_${name}`;
 export const NET_TIMEOUT_MS = 5000;
 
 type StoredEntry = { key: string; at: number; value: unknown };
@@ -29,8 +30,7 @@ export async function fetch_text(url: string, env: NetEnv): Promise<string | und
 
 async function read_entry(name: string, env: NetEnv): Promise<StoredEntry | undefined> {
   try {
-    const all = (await env.storage.get(NET_CACHE_KEY))[NET_CACHE_KEY] as Record<string, StoredEntry> | undefined;
-    const entry = all?.[name];
+    const entry = (await env.storage.get(net_cache_key(name)))[net_cache_key(name)] as StoredEntry | undefined;
     return entry && typeof entry.key === "string" && typeof entry.at === "number" ? entry : undefined;
   } catch {
     return undefined;
@@ -39,8 +39,7 @@ async function read_entry(name: string, env: NetEnv): Promise<StoredEntry | unde
 
 async function write_entry(name: string, entry: StoredEntry, env: NetEnv): Promise<void> {
   try {
-    const all = ((await env.storage.get(NET_CACHE_KEY))[NET_CACHE_KEY] as Record<string, StoredEntry> | undefined) ?? {};
-    await env.storage.set({ [NET_CACHE_KEY]: { ...all, [name]: entry } });
+    await env.storage.set({ [net_cache_key(name)]: entry });
   } catch {
     // A full or missing store only costs the next page a fetch.
   }
@@ -52,6 +51,8 @@ export type CachedFetch<T> = {
   // What the value depends on, such as the place and the units. A stored value with another key is never shown.
   key: string;
   ttl_ms: number;
+  // A stored value older than this is never shown, even when a refresh fails, so an offline page does not show an arbitrarily old answer.
+  max_age_ms: number;
   // Makes the value from the network, or undefined on any failure. `is_value` rechecks what storage returns.
   produce: () => Promise<T | undefined>;
   is_value: (stored: unknown) => stored is T;
@@ -60,11 +61,17 @@ export type CachedFetch<T> = {
 // Shows a stored value of the same key at once, whatever its age. Fetches only when that value is missing or older than the TTL, and shows the new value when it lands. A failed fetch keeps what is on screen and draws nothing new.
 export async function load_cached<T>(spec: CachedFetch<T>, env: NetEnv, show: (value: T) => void): Promise<void> {
   const stored = await read_entry(spec.name, env);
-  const usable = stored?.key === spec.key && spec.is_value(stored.value) ? stored : undefined;
+  const usable = stored?.key === spec.key && env.now() - stored.at < spec.max_age_ms && spec.is_value(stored.value) ? stored : undefined;
   if (usable) show(usable.value as T);
   if (usable && env.now() - usable.at < spec.ttl_ms) return;
   const value = await spec.produce();
   if (value === undefined) return;
   await write_entry(spec.name, { key: spec.key, at: env.now(), value }, env);
   show(value);
+}
+
+// The stored value of a slot whose key starts with `key_prefix` and is younger than `max_age_ms`, or undefined. It lets a card draw before it knows its full key, such as before a position arrives. The caller must then run `load_cached`, which refreshes or replaces the value.
+export async function peek_cached<T>(name: string, key_prefix: string, max_age_ms: number, is_value: (stored: unknown) => stored is T, env: NetEnv): Promise<T | undefined> {
+  const stored = await read_entry(name, env);
+  return stored?.key.startsWith(key_prefix) && env.now() - stored.at < max_age_ms && is_value(stored.value) ? stored.value : undefined;
 }

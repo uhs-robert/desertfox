@@ -90,7 +90,7 @@ test("a second run inside the TTL draws from the stored value and makes no reque
   await collect(on(), deps);
   const second = await collect(on(), deps);
   assert.equal(urls.length, 1);
-  assert.equal(second.length, 1);
+  assert.ok(second.length >= 1 && second.every((view) => view.kind === "weather"));
 });
 
 test("a stored value for metric is not shown for imperial", async () => {
@@ -104,14 +104,21 @@ test("the permission request runs inside the click handler, before any await", (
   const { deps, calls } = fake_deps();
   const buttons: { listeners: Record<string, () => void> }[] = [];
   const slot = { replaceChildren() {}, append(...nodes: { listeners?: Record<string, () => void> }[]) { for (const node of nodes) if (node.listeners) buttons.push(node as never); } };
+  const had_document = "document" in globalThis;
+  const earlier_document = (globalThis as { document?: unknown }).document;
   Object.assign(globalThis, {
     document: { createElement: () => ({ listeners: {} as Record<string, () => void>, addEventListener(name: string, handler: () => void) { this.listeners[name] = handler; } }) },
   });
-  return start_weather(slot as unknown as HTMLElement, on(), deps).then(() => {
-    assert.equal(calls.permission_requests, 0, "drawing the button asks for nothing");
-    buttons[0]!.listeners["click"]!();
-    assert.equal(calls.permission_requests, 1, "the click asks at once");
-  });
+  return start_weather(slot as unknown as HTMLElement, on(), deps)
+    .then(() => {
+      assert.equal(calls.permission_requests, 0, "drawing the button asks for nothing");
+      buttons[0]!.listeners["click"]!();
+      assert.equal(calls.permission_requests, 1, "the click asks at once");
+    })
+    .finally(() => {
+      if (had_document) Object.assign(globalThis, { document: earlier_document });
+      else delete (globalThis as { document?: unknown }).document;
+    });
 });
 
 test("the helpers: rounding, urls, parsing and descriptions", () => {
@@ -137,4 +144,38 @@ test("a position that never arrives falls back to the city after the timeout", a
   const views = await pending;
   assert.match(urls[0]!, /geocoding/);
   assert.equal(views.length, 1);
+});
+
+test("a granted permission with no position and no city draws nothing and offers no button", async () => {
+  const { deps, urls } = fake_deps({ allowed: true, current_position: async () => Promise.reject(new Error("denied")) });
+  assert.deepEqual(await collect(on(), deps), []);
+  assert.deepEqual(urls, []);
+});
+
+test("a stored reading draws before the position arrives, and a slow position does not hold it back", async (context) => {
+  const first = fake_deps({ allowed: true });
+  await collect(on(), first.deps);
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const slow = { ...first.deps, current_position: () => new Promise<never>(() => {}) };
+  const shown: WeatherView[] = [];
+  void run_weather(on(), slow, (view) => shown.push(view));
+  for (let turn = 0; turn < 10; turn++) await Promise.resolve();
+  assert.equal(shown.length, 1, "the stored reading drew while the position read was still pending");
+});
+
+test("after travel the stored place is replaced: other rounded coordinates fetch again", async () => {
+  const first = fake_deps({ allowed: true });
+  await collect(on(), first.deps);
+  const moved = { ...first.deps, current_position: async () => ({ latitude: 48.85, longitude: 2.35 }) };
+  const shown: WeatherView[] = [];
+  await run_weather(on(), moved, (view) => shown.push(view));
+  assert.equal(first.urls.length, 2, "the new coordinates caused a second forecast request");
+  assert.match(first.urls[1]!, /latitude=48\.85&longitude=2\.35/);
+});
+
+test("a stored reading older than the age limit is not drawn when the refresh fails", async () => {
+  const first = fake_deps({ allowed: true });
+  await collect(on(), first.deps);
+  const later = { ...first.deps, net: { ...first.deps.net, now: () => 5_000_000 + 7 * 3_600_000, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
+  assert.deepEqual(await collect(on(), later), []);
 });

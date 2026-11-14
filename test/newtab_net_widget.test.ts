@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fetch_text, load_cached, NET_CACHE_KEY, type NetEnv } from "../src/newtab/net_widget.ts";
+import { fetch_text, load_cached, net_cache_key, peek_cached, type NetEnv } from "../src/newtab/net_widget.ts";
 
 function fake_env(options: { respond?: (url: string, init: RequestInit) => Promise<Response>; start?: number } = {}) {
   const calls: { url: string; init: RequestInit }[] = [];
@@ -18,7 +18,7 @@ function fake_env(options: { respond?: (url: string, init: RequestInit) => Promi
 }
 
 const is_text = (stored: unknown): stored is string => typeof stored === "string";
-const spec = (produce: () => Promise<string | undefined>, key = "k") => ({ name: "card", key, ttl_ms: 1000, produce, is_value: is_text });
+const spec = (produce: () => Promise<string | undefined>, key = "k") => ({ name: "card", key, ttl_ms: 1000, max_age_ms: 10_000, produce, is_value: is_text });
 
 test("fetch_text sends no credentials or referrer, and returns the body", async () => {
   const { env, calls } = fake_env();
@@ -45,7 +45,7 @@ test("load_cached fetches once, stores the value and shows it", async () => {
   const shown: string[] = [];
   await load_cached(spec(async () => "fresh"), env, (value) => shown.push(value));
   assert.deepEqual(shown, ["fresh"]);
-  assert.ok(NET_CACHE_KEY in store);
+  assert.ok(net_cache_key("card") in store);
 });
 
 test("load_cached inside the TTL shows the stored value and does not fetch", async () => {
@@ -86,4 +86,28 @@ test("a broken store only costs a fetch", async () => {
   const shown: string[] = [];
   await load_cached(spec(async () => "fresh"), env, (value) => shown.push(value));
   assert.deepEqual(shown, ["fresh"]);
+});
+
+test("a stored value older than max_age_ms is not shown, and a failed refresh draws nothing", async () => {
+  const { env, clock } = fake_env();
+  await load_cached(spec(async () => "first"), env, () => {});
+  clock.now += 10_000;
+  const shown: string[] = [];
+  await load_cached(spec(async () => undefined), env, (value) => shown.push(value));
+  assert.deepEqual(shown, []);
+});
+
+test("two cards keep their own storage keys, so one write never erases the other", async () => {
+  const { env, store } = fake_env();
+  await Promise.all([load_cached({ ...spec(async () => "a"), name: "one" }, env, () => {}), load_cached({ ...spec(async () => "b"), name: "two" }, env, () => {})]);
+  assert.deepEqual([net_cache_key("one") in store, net_cache_key("two") in store], [true, true]);
+});
+
+test("peek_cached matches a key prefix and the age limit only", async () => {
+  const { env, clock } = fake_env();
+  await load_cached(spec(async () => "first", "geo:1,2|metric"), env, () => {});
+  assert.equal(await peek_cached("card", "geo:", 10_000, is_text, env), "first");
+  assert.equal(await peek_cached("card", "city:", 10_000, is_text, env), undefined);
+  clock.now += 10_000;
+  assert.equal(await peek_cached("card", "geo:", 10_000, is_text, env), undefined);
 });

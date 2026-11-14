@@ -134,7 +134,7 @@ export const SETTING_HELP: Record<SettingName, { label: string; summary: string 
   newtab_top_sites: { label: "Top sites on the new tab page", summary: "Lists the sites you visit most on the new tab page. Turn it on to reach a favorite site in one click." },
   newtab_top_sites_max: { label: "Number of top sites shown", summary: "How many top sites the new tab page lists. Raise it to see more, or lower it for a shorter page." },
   newtab_weather: { label: "Weather on the new tab page", summary: "Shows the weather on the new tab page. It is the one card that uses the network, so it is off until you turn it on." },
-  newtab_weather_city: { label: "City for the weather", summary: "The city the weather card shows when you have not allowed your location. Leave it empty to use your location." },
+  newtab_weather_city: { label: "City for the weather", summary: "The city the weather card shows when you have not allowed your location. Leave it out to use your location." },
   newtab_weather_units: { label: "Weather units", summary: "Shows the temperature in degrees Celsius or Fahrenheit." },
   newtab_command_hint: { label: "Command line hint on the new tab page", summary: "Shows a hint on the new tab page that the colon key opens the command line. Turn it off once you know the key." },
   newtab_links: { label: "Your links on the new tab page", summary: "Your own links on the new tab page, such as the sites you open every day. Add a link to reach a site in one click." },
