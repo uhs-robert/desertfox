@@ -76,3 +76,9 @@ export async function peek_cached<T>(name: string, key_prefix: string, max_age_m
   const stored = await read_entry(name, env);
   return stored?.key.startsWith(key_prefix) && env.now() - stored.at < max_age_ms && is_value(stored.value) ? stored.value : undefined;
 }
+
+// `net` with a stop: once `is_live` is false it sends no request and writes no cache. A card whose run a redraw replaces uses it, so a late answer never overwrites the newer card.
+export function stoppable_net(net: NetEnv, is_live: () => boolean): NetEnv {
+  const stopped_answer = () => new Response(null, { status: 503 });
+  return { ...net, fetch: (input, init) => (is_live() ? net.fetch(input, init) : Promise.resolve(stopped_answer())), storage: { get: (key) => net.storage.get(key), set: async (items) => (is_live() ? net.storage.set(items) : undefined) } };
+}

@@ -59,6 +59,7 @@ export const DEFAULT_NEWTAB_TOP_SITES_MAX: Settings["newtab_top_sites_max"] = 8;
 export const DEFAULT_NEWTAB_COMMAND_HINT: Settings["newtab_command_hint"] = true;
 export const DEFAULT_NEWTAB_WEATHER: Settings["newtab_weather"] = false;
 export const DEFAULT_NEWTAB_WEATHER_UNITS: Settings["newtab_weather_units"] = "metric";
+export const DEFAULT_NEWTAB_IP_INFO: Settings["newtab_ip_info"] = false;
 export const DEFAULT_NEWTAB_LINKS: Settings["newtab_links"] = [];
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -118,5 +119,6 @@ export const DEFAULT_SETTINGS: Settings = {
   newtab_command_hint: DEFAULT_NEWTAB_COMMAND_HINT,
   newtab_weather: DEFAULT_NEWTAB_WEATHER,
   newtab_weather_units: DEFAULT_NEWTAB_WEATHER_UNITS,
+  newtab_ip_info: DEFAULT_NEWTAB_IP_INFO,
   newtab_links: DEFAULT_NEWTAB_LINKS,
 };

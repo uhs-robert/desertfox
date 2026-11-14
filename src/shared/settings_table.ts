@@ -140,6 +140,8 @@ export const SETTINGS_TABLE = {
   // No default: absent means no city, and the card then offers the location permission.
   newtab_weather_city: { kind: "text", expectation: "a city name" },
   newtab_weather_units: { kind: "enum", values: ["metric", "imperial"], default: "metric" },
+  // Opt-in network: with `newtab_ip_info` on, the page asks Cloudflare for the public IP and country.
+  newtab_ip_info: { kind: "boolean", default: false },
   // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
   newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [] },
 } as const satisfies Record<string, SettingRow>;
