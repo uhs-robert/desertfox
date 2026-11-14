@@ -62,7 +62,7 @@ test("a name that is taken asks before replacing, and a refusal keeps the draft"
   });
   themes.set_text(NAMED);
   await themes.save();
-  assert.equal(themes.state.replacing, "my_scheme");
+  assert.equal(themes.state.replacing?.name, "my_scheme");
   assert.equal(themes.state.text, NAMED);
   assert.equal(can_save(themes.state) && themes.state.replacing === undefined, false);
   themes.cancel_replace();
@@ -100,4 +100,58 @@ test("remove sends the name and lists again", async () => {
   assert.deepEqual(sent[0], { type: "change_imported_themes", action: "remove", name: "a" });
   assert.equal(themes.state.message?.text, "Removed the theme a.");
   assert.equal(themes.state.loaded, true);
+});
+
+test("a name change after the replace question asks again, and a confirm sends the name and text that were asked", async () => {
+  const { themes, sent } = session((message) => (message.type === "list_imported_themes" ? { ok: true, names: ["my_scheme"] } : message.action === "save" && !message.replace ? { ok: false, needs_replace: true, message: "taken" } : { ok: true, message: "Replaced." }));
+  themes.set_text(NAMED);
+  await themes.save();
+  assert.deepEqual(themes.state.replacing, { name: "my_scheme", text: NAMED });
+  themes.set_name("other_name");
+  assert.equal(themes.state.replacing, undefined);
+  const before = sent.length;
+  await themes.confirm_replace();
+  assert.equal(sent.length, before, "a confirm with no question sent a request");
+  await themes.save();
+  assert.equal((themes.state.replacing as { name: string } | undefined)?.name, "other_name");
+});
+
+test("a draft changed while the save ran gets no replace question for the old one", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { themes } = session(async (message) => {
+    if (message.type === "list_imported_themes") return { ok: true, names: [] };
+    await gate;
+    return { ok: false, needs_replace: true, message: "taken" };
+  });
+  themes.set_text(NAMED);
+  const saving = themes.save();
+  themes.set_name("changed");
+  release();
+  await saving;
+  assert.equal(themes.state.replacing, undefined);
+});
+
+test("an older file read does not replace newer input, and the last pick wins", async () => {
+  const { themes } = session(() => ({ ok: true, names: [] }));
+  const slow = (text: string) => {
+    let done!: () => void;
+    const read = new Promise<string>((resolve) => (done = () => resolve(text)));
+    return { file: { name: "x.yaml", size: text.length, text: () => read, arrayBuffer: async () => new ArrayBuffer(0) }, done };
+  };
+  const first = slow(NAMED);
+  const second = slow(NAMED.replace("My Scheme", "Second"));
+  const one = themes.load_file(first.file);
+  const two = themes.load_file(second.file);
+  second.done();
+  await two;
+  first.done();
+  await one;
+  assert.equal(themes.state.scheme?.name, "Second");
+  const third = slow(NAMED);
+  const three = themes.load_file(third.file);
+  themes.set_text("typed after the pick");
+  third.done();
+  await three;
+  assert.equal(themes.state.text, "typed after the pick");
 });

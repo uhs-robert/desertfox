@@ -62,7 +62,9 @@ function scalar_of(rest: string): string {
     const end = text.indexOf(quote, 1);
     return end < 0 ? text.slice(1) : text.slice(1, end);
   }
-  return text.replace(/\s+#.*$/, "").trim();
+  // A scan, not a regex: `\s+#` backtracks quadratically on a long run of spaces.
+  for (let at = 1; at < text.length; at++) if (text[at] === "#" && /\s/.test(text[at - 1]!)) return text.slice(0, at).trim();
+  return text;
 }
 
 // A name a user can type after `:set theme`: lowercase words, digits, `_` and `-`.

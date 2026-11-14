@@ -77,7 +77,7 @@ export function mount_themes(container: HTMLElement, deps: Omit<ThemesDeps, "on_
     confirm_box.replaceChildren(
       ...(state.replacing === undefined
         ? []
-        : [el("span", undefined, `A theme named ${state.replacing} is already imported. Replace it?`), button("Replace", () => void session.confirm_replace(), state.busy), button("Keep the old one", () => session.cancel_replace())]),
+        : [el("span", undefined, `A theme named ${state.replacing.name} is already imported. Replace it?`), button("Replace", () => void session.confirm_replace(), state.busy), button("Keep the old one", () => session.cancel_replace())]),
     );
     message.textContent = state.message?.text ?? "";
     message.className = state.message?.ok === false ? "desertfox-settings-error" : "desertfox-help-muted";

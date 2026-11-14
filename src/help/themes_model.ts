@@ -17,8 +17,8 @@ export type ThemesState = {
   scheme?: ImportedScheme | undefined;
   // Why the text does not parse. Empty text says nothing.
   text_problem?: string | undefined;
-  // The name a save is waiting to replace. The page asks the user, and `confirm_replace` or `cancel_replace` answers.
-  replacing?: string | undefined;
+  // The name and text a save is waiting to replace. The page asks the user, and `confirm_replace` or `cancel_replace` answers. A confirm sends exactly these, and any edit of the name or text clears them.
+  replacing?: { name: string; text: string } | undefined;
   busy: boolean;
   message?: { ok: boolean; text: string } | undefined;
   error?: string | undefined;
@@ -56,7 +56,15 @@ export function create_themes_session(deps: ThemesDeps) {
     deps.on_change();
   }
 
+  // Bumped by each typed text and each file pick. A file read that finds a newer number is stale and is dropped.
+  let draft_revision = 0;
+
   function set_text(text: string): void {
+    draft_revision++;
+    apply_text(text);
+  }
+
+  function apply_text(text: string): void {
     state.text = text;
     delete state.message;
     delete state.replacing;
@@ -92,7 +100,9 @@ export function create_themes_session(deps: ThemesDeps) {
       deps.on_change();
       return;
     }
-    set_text(await file.text());
+    const mine = ++draft_revision;
+    const text = await file.text();
+    if (mine === draft_revision) apply_text(text);
   }
 
   function clear(): void {
@@ -116,17 +126,21 @@ export function create_themes_session(deps: ThemesDeps) {
       delete state.replacing;
       on_saved();
     } else if ("needs_replace" in answer && answer.needs_replace && request.action === "save") {
-      state.replacing = request.name;
+      // Only while the draft is still the one that was sent.
+      if (state.name === request.name && state.text === request.text) state.replacing = { name: request.name, text: request.text };
     } else state.message = { ok: false, text: answer.message };
     await refresh();
   }
 
-  async function save(replace = false): Promise<void> {
+  async function save(): Promise<void> {
     if (!can_save(state)) return;
-    const sent = state.text;
-    await change({ type: "change_imported_themes", action: "save", name: state.name, text: state.text, ...(replace && { replace }) }, () => {
+    await send_save(state.name, state.text, false);
+  }
+
+  async function send_save(name: string, text: string, replace: boolean): Promise<void> {
+    await change({ type: "change_imported_themes", action: "save", name, text, ...(replace && { replace }) }, () => {
       // A draft typed while the request ran stays.
-      if (state.text === sent) clear_keeping_message();
+      if (state.text === text) clear_keeping_message();
     });
   }
 
@@ -137,7 +151,11 @@ export function create_themes_session(deps: ThemesDeps) {
     deps.on_change();
   }
 
-  const confirm_replace = () => save(true);
+  async function confirm_replace(): Promise<void> {
+    const asked = state.replacing;
+    if (asked === undefined || state.busy) return;
+    await send_save(asked.name, asked.text, true);
+  }
 
   function cancel_replace(): void {
     delete state.replacing;

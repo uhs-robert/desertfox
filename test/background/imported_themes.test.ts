@@ -4,7 +4,7 @@ import "../../src/background/command_modules.ts";
 import { answer_config_transfer } from "../../src/background/config_transfer.ts";
 import { load_edits } from "../../src/background/config_load.ts";
 import { load_layers } from "../../src/background/edit_layers.ts";
-import { create_theme_messages } from "../../src/background/theme_message.ts";
+import { create_theme_messages, selection_released } from "../../src/background/theme_message.ts";
 import { THEME_EDITS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { plan_set_value } from "../../src/commands/settings.ts";
 import { DEFAULT_SETTINGS } from "../../src/shared/config.ts";
@@ -51,11 +51,7 @@ async function started(tag: string, files: Files = { "settings.toml": "" }) {
   const messages = create_theme_messages({
     read_theme_edits: startup.read_theme_edits,
     change_layers: startup.change_layers,
-    release_theme: (name) =>
-      startup.change_edits((current) => {
-        const drop = (layer: typeof current.saved) => (layer.theme === name ? Object.fromEntries(Object.entries(layer).filter(([key]) => key !== "theme")) : layer);
-        return current.saved.theme === name ? { saved: drop(current.saved), temp: drop(current.temp) } : undefined;
-      }),
+    release_theme: (name) => startup.change_edits((current) => selection_released(name, current)),
   });
   const export_all = async () => {
     const answer = await answer_config_transfer({ type: "export_config" }, {
@@ -217,4 +213,43 @@ test("removing an imported theme that is not in use leaves the setting and the p
   const restarted = (await import(`../../src/background/startup.ts?imported_themes_${"remove_other_restart"}`)) as Startup;
   assert.equal((await restarted.get_config()).settings.theme, "other");
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(OTHER_SCHEME));
+});
+
+test("selection_released drops only the layers that name the theme", () => {
+  assert.deepEqual(selection_released("a", { saved: { theme: "a" }, temp: { theme: "b" } }), { saved: {}, temp: { theme: "b" } });
+  assert.deepEqual(selection_released("a", { saved: { theme: "b" }, temp: { theme: "a", toast_ms: 5 } }), { saved: { theme: "b" }, temp: { toast_ms: 5 } });
+  assert.equal(selection_released("a", { saved: { theme: "b" }, temp: {} }), undefined);
+});
+
+test("a failed removal keeps the theme selection", async () => {
+  const { messages, set_theme, local, startup } = await started("remove_fails");
+  await messages.change(save("dusk_one", SCHEME));
+  await set_theme("dusk_one");
+  const failing = create_theme_messages({
+    read_theme_edits: startup.read_theme_edits,
+    change_layers: async () => {
+      throw new Error("storage down");
+    },
+    release_theme: (name) => startup.change_edits((current) => selection_released(name, current)),
+  });
+  assert.equal((await failing.change({ type: "change_imported_themes", action: "remove", name: "dusk_one" })).ok, false);
+  assert.equal((await startup.get_config()).settings.theme, "dusk_one");
+  assert.deepEqual(local[THEME_STORAGE_KEY], mapped(SCHEME));
+});
+
+test("a config stored with the single local_theme key still gives that theme", async () => {
+  const { pick_config } = await import("../../src/background/config_load.ts");
+  const theme = mapped(SCHEME);
+  const stored = { format_version: 1, keymap: {}, search_engines: {}, command_aliases: {}, quickmarks: {}, settings: {}, snippets: [], css: "", local_theme: { name: "mine", colors: theme } };
+  const { CONFIG_FORMAT_VERSION } = await import("../../src/shared/config.ts");
+  const loaded = pick_config({ ...stored, format_version: CONFIG_FORMAT_VERSION });
+  assert.equal(loaded.source, "files");
+  assert.deepEqual(loaded.config.local_themes?.mine, theme);
+});
+
+test("the picker lists config file themes as well as imports, without repeating a built-in name", () => {
+  const status = { settings: DEFAULT_SETTINGS, saved: [], temp: [], configured: [] };
+  const allowed = build_setting_list(status, ["from_file", "oasis_cactus"]).find((row) => row.name === "theme")?.allowed ?? [];
+  assert.ok(allowed.includes("from_file"));
+  assert.equal(allowed.filter((name) => name === "oasis_cactus").length, 1);
 });
