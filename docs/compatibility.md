@@ -12,7 +12,6 @@ Each result cell is a mark and an evidence tag, such as `✅ R`.
 | ⚠️ | The main tasks work by keyboard, but a step needs one click first, for example into a pane, or movement works only with some keys. The note says which. |
 | ❌ | A main task has no lasting key path. Keys stay trapped, or every step needs a click again, or an action such as selecting items has no key. The note says which. |
 | n/a | The check does not apply. |
-| pending | The check is not done yet. |
 
 | Tag | Meaning |
 | --- | --- |
@@ -29,7 +28,7 @@ DesertFox lets a user override key bindings for one site. A `site_rules` row in 
 
 Site extras that the site's own keys already cover, such as YouTube play and volume, stay out of the mark. Starting in insert mode where the site focused a field is correct and is not scored. A check the rig cannot score on a page is left out of the mark, and the note names it.
 
-The rig cannot log in, so sites behind a login are checked by hand. A login site not yet checked reads `pending H`.
+The rig cannot log in, so sites behind a login are checked by hand.
 
 ## Sites
 
@@ -56,8 +55,6 @@ The rig cannot log in, so sites behind a login are checked by hand. A login site
 | YouTube video embedded in another site | ✅ R | Yes: the YouTube media code | ✅ R | ✅ R | ✅ R | The rig loads the live player into a local fixture page. Hint and activation checks target the link beside the player. The rig found no hints for Tridactyl there, so its hints and activation are not scored. |
 | Google Drive (login) | ✅ H | No | ❌ H | ✅ H | ✅ H | Vimium: cannot select items to act on. Source check: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
 | Gmail (login) | ✅ H | No | ❌ H | ❌ H | ✅ H | Vimium and Vimium C: no key works in Gmail. Vimium excludes `mail.google.com` by default ([`lib/settings.js`, v2.4.2](https://github.com/philc/vimium/blob/v2.4.2/lib/settings.js#L42)). Its documented fix is a pass-keys rule in its settings, which this table does not count because it scores default settings ([Disabling Vimium](https://github.com/philc/vimium/wiki/Disabling-Vimium)). |
-| Figma (login) | pending H | No | pending H | pending H | pending H | Also check that Figma's own single-letter keys still work on the canvas. |
-| Slack (login) | pending H | No | pending H | pending H | pending H | |
 | Discord (login) | ✅ H | No | ⚠️ H | ✅ H | ✅ H | Vimium: hints miss the channel list, so choosing a channel needs a click. |
 | ChatGPT (login) | ✅ H | No | ⚠️ H | ⚠️ H | ⚠️ H | Only DesertFox focuses and scrolls the side panel and the chat by keyboard, with no click. The others scroll a pane once a click puts focus in it, so they need one click per pane. |
 | Claude web (login) | ✅ H | No | ⚠️ H | ⚠️ H | ⚠️ H | Only DesertFox focuses and scrolls the side panel and the chat by keyboard, with no click. The others scroll a pane once a click puts focus in it, so they need one click per pane. |
