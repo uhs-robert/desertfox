@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, leave_key_after_click, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
