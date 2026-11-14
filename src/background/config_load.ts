@@ -91,7 +91,10 @@ function with_all_sections(raw: Record<string, unknown>, source: ConfigSource, w
 export function pick_config(files: unknown): LoadedConfig {
   const warnings: string[] = [];
   if (is_config_object(files)) {
-    if (files.format_version === CONFIG_FORMAT_VERSION) return { config: with_all_sections(files, "files", warnings), source: "files", warnings };
+    // A build from before `local_themes` stored the one theme `theme` named as `local_theme`. It keeps working until the next reload rebuilds the config.
+    const legacy = files.local_theme as { name?: unknown; colors?: unknown } | undefined;
+    const stored = legacy && typeof legacy.name === "string" && files.local_themes === undefined ? { ...files, local_themes: { [legacy.name]: legacy.colors } } : files;
+    if (files.format_version === CONFIG_FORMAT_VERSION) return { config: with_all_sections(stored, "files", warnings), source: "files", warnings };
     warnings.push(`config (files): skipped, format_version ${String(files.format_version)} is not ${CONFIG_FORMAT_VERSION}`);
   }
   return { config: empty_config(), source: "defaults", warnings };

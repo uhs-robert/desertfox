@@ -48,9 +48,12 @@ export function clamped_fg_dim(colors: Pick<RoleColors, "bg_core" | "bg_mantle" 
   const lighter_first = !backgrounds.every((background) => luminance(background) > luminance(colors.fg_dim));
   // Backgrounds on opposite sides of fg_dim leave no safe direction, so the second direction is the fallback.
   for (const step of lighter_first ? [0.002, -0.002] : [-0.002, 0.002]) {
-    for (let next = lightness; next >= 0 && next <= 1; next += step) {
-      const candidate = hsl_to_rgb(hue, saturation, next);
+    // The last candidate sits on the endpoint, which a fixed step can jump over.
+    for (let next = lightness; ; next += step) {
+      const at = Math.min(1, Math.max(0, next));
+      const candidate = hsl_to_rgb(hue, saturation, at);
       if (enough(candidate)) return candidate;
+      if (at === 0 || at === 1) break;
     }
   }
   return undefined;

@@ -3,14 +3,21 @@
 import type { ChangeImportedThemes, ChangeImportedThemesAnswer, ListImportedThemesAnswer } from "../shared/messages.ts";
 import { parse_base16, theme_name_problem } from "../shared/theme/base16.ts";
 import { ConfigRefusal, failure } from "./config_reload.ts";
+import type { SettingEdits, SettingOverrides } from "../shared/config.ts";
 import type { ThemeEdits } from "./edit_layers.ts";
 
 export type ThemeMessageDeps = {
   read_theme_edits: () => Promise<ThemeEdits>;
   change_layers: (kind: "themes", decide: (current: ThemeEdits) => ThemeEdits | undefined) => Promise<void>;
-  // Drops the saved and temp `theme` edit when it names `name`, so removing the theme in use puts the setting back to the file value or the default.
+  // Drops the saved and temp `theme` edit when it names `name` (`selection_released`), so removing the theme in use puts the setting back to the file value or the default.
   release_theme: (name: string) => Promise<void>;
 };
+
+// The edits with the `theme` setting dropped from each layer that names `name`, or undefined when none does.
+export function selection_released(name: string, current: SettingEdits): SettingEdits | undefined {
+  const drop = (layer: SettingOverrides): SettingOverrides => (layer.theme === name ? Object.fromEntries(Object.entries(layer).filter(([setting]) => setting !== "theme")) : layer);
+  return current.saved.theme === name || current.temp.theme === name ? { saved: drop(current.saved), temp: drop(current.temp) } : undefined;
+}
 
 export function create_theme_messages(deps: ThemeMessageDeps) {
   async function list(): Promise<ListImportedThemesAnswer> {
@@ -39,12 +46,13 @@ export function create_theme_messages(deps: ThemeMessageDeps) {
 
   async function remove(name: string): Promise<string> {
     if (!Object.hasOwn(await deps.read_theme_edits(), name)) throw new ConfigRefusal(`No theme named ${name} was imported.`);
-    await deps.release_theme(name);
     await deps.change_layers("themes", (current) => {
       if (!Object.hasOwn(current, name)) return undefined;
       const { [name]: _gone, ...kept } = current;
       return kept;
     });
+    // After the removal, so a failed removal keeps the selection. The two are separate queue turns: between them the setting names a theme that finds nothing and falls back with a warning.
+    await deps.release_theme(name);
     return `Removed the theme ${name}.`;
   }
 

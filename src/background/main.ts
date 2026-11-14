@@ -3,7 +3,6 @@ import { best_effort, ignore_refusal, refused_as, warn_and_go } from "../shared/
 import type { ContentToBackground, DevtoolsHello, FocusedFrameMode, FocusPage, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
-import type { SettingOverrides } from "../shared/config.ts";
 import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { run_image_action } from "./image_actions.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
@@ -86,7 +85,7 @@ import { create_keymap_messages, exportable_key_edits } from "./keymap_message.t
 import { create_engine_messages } from "./engine_message.ts";
 import { create_alias_messages } from "./alias_message.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
-import { create_theme_messages } from "./theme_message.ts";
+import { create_theme_messages, selection_released } from "./theme_message.ts";
 import { create_quickmark_messages } from "./quickmark_message.ts";
 import { ConfigRefusal } from "./config_reload.ts";
 import { dropped_warning } from "./engine_layer.ts";
@@ -286,7 +285,7 @@ const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, 
 host_update.on_updated(() => bridge.reconnect());
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
-const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await read_theme_edits()).sort() });
+const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort() });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
   const missing = new ConfigRefusal("The starter engines file starter_engines.toml is missing from this build.");
@@ -304,11 +303,7 @@ const alias_messages = create_alias_messages({ read_alias_state, change_layers }
 const theme_messages = create_theme_messages({
   read_theme_edits,
   change_layers,
-  release_theme: (name) =>
-    change_edits((current) => {
-      const drop = (layer: SettingOverrides): SettingOverrides => (layer.theme === name ? Object.fromEntries(Object.entries(layer).filter(([setting]) => setting !== "theme")) : layer);
-      return current.saved.theme === name || current.temp.theme === name ? { saved: drop(current.saved), temp: drop(current.temp) } : undefined;
-    }),
+  release_theme: (name) => change_edits((current) => selection_released(name, current)),
 });
 const quickmark_messages = create_quickmark_messages({ store: browser_quickmark_store, configured: async () => (await get_config()).quickmarks });
 const keymap_messages = create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });

@@ -29,6 +29,7 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, extensio
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings"), active: true }).then(() => true)`);
     await poll_until("the importer to load", () => in_page(`return !!view && view.document.querySelector(".desertfox-themes textarea") !== null;`).catch(() => false), { timeout_ms: 10000 });
   }
+  let default_theme;
   async function paste(text) {
     await in_page(`const box = view.document.querySelector(".desertfox-themes textarea"); box.value = ${JSON.stringify(text)}; box.dispatchEvent(new view.Event("input"));`);
   }
@@ -49,6 +50,7 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, extensio
 
   await run_case("importer: a pasted scheme shows its preview, a built-in name keeps Save off, Save stores it whole", async () => {
     await open_settings();
+    default_theme = JSON.stringify(await stored("desertfox_theme"));
     await shot("theme-import-empty");
     await paste(SCHEME);
     await poll_until("the preview to show", () => in_page(`return view.document.querySelector(".desertfox-themes .desertfox-theme-preview") !== null;`));
@@ -98,7 +100,7 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, extensio
     await open_settings();
     await in_page(`view.document.querySelector('[aria-label="Remove the theme p39_dusk"]').click();`);
     await poll_until("the theme to be gone", async () => Object.keys(await stored("desertfox_imported_themes")).length === 0);
-    await poll_until("the default theme to be back", async () => (await stored("desertfox_theme")).dark?.bg_core !== "#0a0b12");
+    await poll_until("the default theme to be published again", async () => JSON.stringify(await stored("desertfox_theme")) === default_theme);
     const setting = await in_page(`return view.browser.runtime.sendMessage({ type: "list_settings" }).then((answer) => answer.settings.find((row) => row.name === "theme"));`);
     expect(setting.top_layer === "default" && setting.value === "oasis_moonlight", `the theme setting was ${JSON.stringify(setting)}`);
     await shot("theme-import-removed");

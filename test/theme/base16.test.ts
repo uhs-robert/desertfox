@@ -154,3 +154,15 @@ test("names: a scheme name becomes a theme name, and built-in, desktop and odd n
   assert.match(theme_name_problem("desktop") ?? "", /built-in/);
   for (const bad of ["", "Has Space", "__proto__", "-x", "a".repeat(49), "a/b"]) assert.notEqual(theme_name_problem(bad), undefined, bad);
 });
+
+test("a long run of spaces in a value is read in linear time", () => {
+  const started = performance.now();
+  const spaced = parse_base16(CLASSIC.replace('base00: "282828"', `base00: 282828${" ".repeat(60_000)}`));
+  assert.ok(spaced.ok);
+  assert.ok(performance.now() - started < 500, "the comment scan took too long");
+});
+
+test("fg_dim reaches white when only the lightness endpoint gives 3:1", () => {
+  // White on #9b9394 is just over 3:1 and #fefefe is just under, so a 0.002 step from a light fg_dim jumps over lightness 1.
+  assert.equal(clamped_fg_dim({ bg_core: "#9b9394", bg_mantle: "#9b9394", fg_dim: "#f5f5f5" }), "#ffffff");
+});
