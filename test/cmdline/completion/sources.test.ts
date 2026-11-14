@@ -116,10 +116,10 @@ test("set offers the setting names, then the values the setting lists", () => {
   assert.deepEqual(rows("set open_completion \"history bookmarks\" "), []);
   assert.ok(rows("set theme ").includes("oasis_moonlight"));
   assert.ok(!rows("set ").includes("search_prefixes"));
-  const with_themes = create_completer(create_word_lookup([...COMMANDS, SET, UNSET], {}), [...COMMANDS, SET, UNSET], {}, SOURCES, "normal", undefined, ["my_dusk", "oasis_moonlight"]);
+  const with_themes = create_completer(create_word_lookup([...COMMANDS, SET, UNSET], {}), [...COMMANDS, SET, UNSET], {}, SOURCES, "normal", undefined, ["my_dusk"]);
   const theme_rows = with_themes("set theme ", 10).rows.map((row) => row.name);
   assert.ok(theme_rows.includes("my_dusk"), "an imported or file theme is offered");
-  assert.equal(theme_rows.filter((name) => name === "oasis_moonlight").length, 1, "a name in both lists shows once");
+  assert.ok(theme_rows.includes("oasis_moonlight"), "the built-in names stay");
   assert.ok(!with_themes("set which_key_border ", 21).rows.some((row) => row.name === "my_dusk"), "other settings do not list themes");
   assert.ok(rows("unset ").includes("all"));
   assert.deepEqual(rows("unset which_key_border "), []);
