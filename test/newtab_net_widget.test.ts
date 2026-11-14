@@ -108,6 +108,8 @@ test("peek_cached matches a key prefix and the age limit only", async () => {
   await load_cached(spec(async () => "first", "geo:1,2|metric"), env, () => {});
   assert.equal(await peek_cached("card", "geo:", 10_000, is_text, env), "first");
   assert.equal(await peek_cached("card", "city:", 10_000, is_text, env), undefined);
+  assert.equal(await peek_cached("card", "geo:", 10_000, is_text, env, "|metric"), "first");
+  assert.equal(await peek_cached("card", "geo:", 10_000, is_text, env, "|auto"), undefined, "a key made for another units setting is not previewed");
   clock.now += 10_000;
   assert.equal(await peek_cached("card", "geo:", 10_000, is_text, env), undefined);
 });

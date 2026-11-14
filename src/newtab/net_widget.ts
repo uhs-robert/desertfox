@@ -71,10 +71,10 @@ export async function load_cached<T>(spec: CachedFetch<T>, env: NetEnv, show: (v
   return true;
 }
 
-// The stored value of a slot whose key starts with `key_prefix` and is younger than `max_age_ms`, or undefined. It lets a card draw before it knows its full key, such as before a position arrives. The caller must then run `load_cached`, which refreshes or replaces the value.
-export async function peek_cached<T>(name: string, key_prefix: string, max_age_ms: number, is_value: (stored: unknown) => stored is T, env: NetEnv): Promise<T | undefined> {
+// The stored value of a slot whose key starts with `key_prefix` and is younger than `max_age_ms`, or undefined. It lets a card draw before it knows its full key, such as before a position arrives. `key_suffix` also pins the end of the key, such as the units setting. The caller must then run `load_cached`, which refreshes or replaces the value.
+export async function peek_cached<T>(name: string, key_prefix: string, max_age_ms: number, is_value: (stored: unknown) => stored is T, env: NetEnv, key_suffix = ""): Promise<T | undefined> {
   const stored = await read_entry(name, env);
-  return stored?.key.startsWith(key_prefix) && env.now() - stored.at < max_age_ms && is_value(stored.value) ? stored.value : undefined;
+  return stored?.key.startsWith(key_prefix) && stored.key.endsWith(key_suffix) && env.now() - stored.at < max_age_ms && is_value(stored.value) ? stored.value : undefined;
 }
 
 // `net` with a stop: once `is_live` is false it sends no request and writes no cache. A card whose run a redraw replaces uses it, so a late answer never overwrites the newer card.

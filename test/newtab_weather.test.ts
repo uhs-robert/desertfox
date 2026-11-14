@@ -716,7 +716,7 @@ function auto_deps(over: { timezone?: string; country_code?: string; allowed?: b
 const auto = (extra: Partial<WeatherSettings> = {}): WeatherSettings => on({ newtab_weather_units: "auto", ...extra });
 
 test("auto units for a city follow the geocoder's country: imperial for US, LR and MM, metric elsewhere, and the request asks in that unit", async () => {
-  for (const [code, units, fahrenheit] of [["US", "imperial", true], ["us", "imperial", true], ["LR", "imperial", true], ["MM", "imperial", true], ["NO", "metric", false], ["GB", "metric", false]] as const) {
+  for (const [code, units, fahrenheit] of [["US", "imperial", true], ["us", "imperial", true], ["LR", "imperial", true], ["MM", "imperial", true], ["PR", "imperial", true], ["GU", "imperial", true], ["VI", "imperial", true], ["AS", "imperial", true], ["MP", "imperial", true], ["NO", "metric", false], ["GB", "metric", false]] as const) {
     const { deps, urls } = auto_deps({ country_code: code });
     const views = await collect(auto({ newtab_weather_city: "X" }), deps);
     const shown = views.find((view) => view.kind === "weather") as { weather: { units: string; temperature: number } };
@@ -738,7 +738,7 @@ test("auto units for a position map the forecast's time zone: one request, conve
   assert.equal(Math.round(weather.high * 10) / 10, 57.6);
   assert.equal(Math.round(weather.wind_speed * 10) / 10, 7.2);
   assert.equal(Math.round(weather.detail.hours[0]!.temperature * 10) / 10, 53.6);
-  for (const [zone, units] of [["Europe/Oslo", "metric"], ["Africa/Monrovia", "imperial"], ["Asia/Yangon", "imperial"], ["America/Indiana/Knox", "imperial"], ["Pacific/Honolulu", "imperial"], ["America/Toronto", "metric"], ["America/Mexico_City", "metric"], ["Asia/Tokyo", "metric"]] as const) {
+  for (const [zone, units] of [["Europe/Oslo", "metric"], ["Africa/Monrovia", "imperial"], ["Asia/Yangon", "imperial"], ["America/Indiana/Knox", "imperial"], ["Pacific/Honolulu", "imperial"], ["America/Puerto_Rico", "imperial"], ["Pacific/Guam", "imperial"], ["Pacific/Saipan", "imperial"], ["Pacific/Pago_Pago", "imperial"], ["America/St_Thomas", "imperial"], ["America/Toronto", "metric"], ["America/Mexico_City", "metric"], ["Asia/Tokyo", "metric"]] as const) {
     const run = auto_deps({ allowed: true, timezone: zone });
     const [shown] = await collect(auto(), run.deps);
     assert.equal((shown as { weather: { units: string } }).weather.units, units, zone);
@@ -788,15 +788,16 @@ test("hours_that_fit gives at least 6 and at most 11, from the panel width, at 3
   assert.ok(hours_that_fit(1280, 8) <= 11);
 });
 
-test("each hour is four rows in one row of columns: time, icon without a label, temperature, rain, with the rain row kept empty when absent", () =>
+test("each hour is four rows in one row of columns: time, a labelled icon, temperature, rain, with the rain row kept empty when absent", () =>
   with_fake_document(() => {
     const slot = new FakeNode("div");
     const hours = WEATHER_DETAIL.hours.map((hour, index) => (index === 2 ? { time: hour.time, temperature: hour.temperature, code: hour.code } : hour));
     draw_weather(slot as never, weather_view({ detail: { ...WEATHER_DETAIL, hours } }), () => {}, 24, () => NOW_MS);
     const [first, second] = slot.querySelectorAll(".weather-hour");
     assert.deepEqual(first!.children.map((child) => child.tag), ["span", "svg", "span", "span"]);
-    assert.equal(first!.children[1]!.getAttribute("aria-hidden"), "true");
-    assert.equal(first!.children[1]!.getAttribute("role"), null);
+    assert.equal(first!.children[1]!.getAttribute("role"), "img");
+    assert.equal(first!.children[1]!.getAttribute("aria-label"), "Rain");
+    assert.equal(first!.children[1]!.getAttribute("aria-hidden"), null);
     assert.equal(first!.children[3]!.textContent, "31%");
     assert.equal(second!.children[3]!.textContent, "");
     assert.equal(slot.querySelectorAll(".weather-hours").length, 1);
@@ -805,3 +806,26 @@ test("each hour is four rows in one row of columns: time, icon without a label, 
 test("the strip is capped to the count that fits", () => {
   assert.equal(later_hours(WEATHER_DETAIL.hours, 0, NOW_MS, 6).length, 6);
 });
+
+test("with auto units the position preview skips a stored reading made for a fixed unit", async () => {
+  const { deps } = fake_deps({ allowed: true });
+  await collect(on({ newtab_weather_units: "metric" }), deps);
+  const views = await collect(auto(), deps);
+  assert.deepEqual(views.map((view) => view.kind), ["weather"], "one draw: the fresh auto reading, not the metric preview first");
+});
+
+test("reopening More clears the old air row first, so a failed refresh never shows an expired reading", () =>
+  with_fake_document(async () => {
+    let fail = false;
+    const card = await air_card({ air_response: async () => (fail ? Promise.reject(new Error("offline")) : new Response(AIR_BODY)) });
+    card.click();
+    await settle();
+    assert.equal(card.air_text()?.startsWith("34 Fair"), true);
+    card.click();
+    // Past the max age the stored answer is not shown, and the refresh fails.
+    card.store["newtab_net_cache_air"] = { ...(card.store["newtab_net_cache_air"] as object), at: NOW_MS - 7 * 3_600_000 };
+    fail = true;
+    card.click();
+    await settle();
+    assert.equal(card.air_text(), null);
+  }));

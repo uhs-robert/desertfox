@@ -139,9 +139,10 @@ const is_weather = (stored: unknown): stored is Weather => {
 // `country_code` is the geocoder's ISO 3166 code, present for a city.
 type Where = { latitude: number; longitude: number; place: string; country_code?: string };
 
-const IMPERIAL_COUNTRIES = new Set(["US", "LR", "MM"]);
-// Open-Meteo does not reverse geocode, but the forecast names the time zone of a position. These are the zones of the imperial countries: the United States, Liberia and Myanmar.
-const IMPERIAL_ZONE = /^(America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Adak|Boise|Detroit|Juneau|Menominee|Metlakatla|Nome|Sitka|Yakutat|Indiana\/.+|Kentucky\/.+|North_Dakota\/.+)|Pacific\/Honolulu|Africa\/Monrovia|Asia\/(Yangon|Rangoon))$/;
+// The United States, its territories that use Fahrenheit, Liberia and Myanmar.
+const IMPERIAL_COUNTRIES = new Set(["US", "PR", "GU", "VI", "AS", "MP", "LR", "MM"]);
+// Open-Meteo does not reverse geocode, but the forecast names the time zone of a position. These are the zones of the imperial countries above.
+const IMPERIAL_ZONE = /^(America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Adak|Boise|Detroit|Juneau|Menominee|Metlakatla|Nome|Sitka|Yakutat|Indiana\/.+|Kentucky\/.+|North_Dakota\/.+)|Pacific\/(Honolulu|Guam|Saipan|Pago_Pago)|America\/(Puerto_Rico|St_Thomas)|Africa\/Monrovia|Asia\/(Yangon|Rangoon))$/;
 
 export const units_for_country = (country_code: string): Units => (IMPERIAL_COUNTRIES.has(country_code.toUpperCase()) ? "imperial" : "metric");
 export const units_for_zone = (timezone: unknown): Units => (typeof timezone === "string" && IMPERIAL_ZONE.test(timezone) ? "imperial" : "metric");
@@ -203,7 +204,7 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   if (!has_permission) show({ kind: "ask_location" });
   let earlier: Weather | undefined;
   if (has_permission) {
-    earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units, deps.net.now), deps.net);
+    earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units, deps.net.now), deps.net, `|${units}`);
     if (earlier) show_weather(earlier);
     const position = await granted_position(deps);
     if (position) {
@@ -297,6 +298,8 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
     // The air quality request starts here and nowhere earlier. The row joins the panel only while the panel is open and still on the page, so a closed panel or a redraw while the request is out gets no late draw.
     const open_panel = () => {
       redraw_strip();
+      // A reading from an earlier open may be expired by now. The loader draws a valid stored or fresh one back.
+      panel.querySelector(".weather-air")?.remove();
       load_air?.({ latitude, longitude, units }, (air) => {
         if (panel.hidden || !panel.isConnected) return;
         panel.querySelector(".weather-air")?.remove();

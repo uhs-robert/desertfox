@@ -1,7 +1,7 @@
 // The part of the weather card that opens under the More button: UV index, sunrise and sunset, and the next hours. Everything here comes from the one forecast request. The air quality row (`air_quality.ts`) is the only part that sends a request, and only on open.
 import type { ClockFormat } from "./digital_clock.ts";
-import { draw_decorative_icon } from "./weather_icon.ts";
-import type { WeatherDetail, WeatherHour } from "./weather.ts";
+import { draw_weather_icon } from "./weather_icon.ts";
+import { describe_code, type WeatherDetail, type WeatherHour } from "./weather.ts";
 
 // Under this many later hours the strip is hidden: a reading kept for hours would otherwise show a strip that has run out.
 export const MIN_STRIP_HOURS = 3;
@@ -70,7 +70,7 @@ function draw_hour(hour: WeatherHour, format: ClockFormat): HTMLElement {
   const rain = document.createElement("span");
   rain.className = "weather-label";
   rain.textContent = hour.rain_chance === undefined ? "" : `${Math.round(hour.rain_chance)}%`;
-  column.append(label, draw_decorative_icon(hour.code), degrees, rain);
+  column.append(label, draw_weather_icon(hour.code, describe_code(hour.code)), degrees, rain);
   return column;
 }
 
