@@ -75,7 +75,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
       const cards_now = await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`);
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
-      // The lists land after the content script read the page, and f pressed before it scans them draws no label. Press again until labels show.
+      // The first f can draw no label (#667). This retry hides it and comes out when #667 is fixed.
       for (let attempt = 1; ; attempt++) {
         await press_keys("f");
         try {
