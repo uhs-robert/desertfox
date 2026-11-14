@@ -94,6 +94,19 @@ owner-test-status worktree=".":
 owner-test-close worktree=".":
     node --no-warnings tools/owner_test/cli.ts close {{quote(worktree)}}
 
+# Open one visible Firefox window per tool (DesertFox from this checkout, Vimium, Vimium C, Tridactyl at the rig's pinned versions) in fresh profiles, each with the given URLs. See tools/measure/rivals/README.md.
+[positional-arguments]
+compare *urls: build
+    node --no-warnings tools/measure/rivals/compare.mjs open "$@"
+
+# Open a URL as the active tab in every open compare window.
+compare-add url:
+    node --no-warnings tools/measure/rivals/compare.mjs add {{quote(url)}}
+
+# Close the compare windows by their recorded pids and delete their profiles. Safe to run twice.
+compare-close:
+    node --no-warnings tools/measure/rivals/compare.mjs close
+
 # Build main as pushed and publish it as a beta, by starting the CI beta workflow and watching its run. A failed run is not rerun: start `just beta` again. Needs gh, logged in.
 beta:
     #!/usr/bin/env bash

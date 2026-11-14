@@ -16,3 +16,5 @@ The window shows on the maintainer's desktop, not in the nested key-test session
 7. Do not start Firefox or web-ext any other way. Do not put a profile in `/tmp`.
 
 Running `just owner-test` again on the same worktree replaces that worktree's window with a new profile. Use the reload to keep the profile.
+
+When the hands-on test compares DesertFox with the rivals, use `just compare <url>...` instead of `just owner-test`. It opens one window per tool. Add pages with `just compare-add <url>` and end with `just compare-close`, and check that each tool printed `closed`. Never leave the windows open. See `tools/measure/rivals/README.md`.
