@@ -132,20 +132,59 @@ test("a window the unit stop already ended counts as closed, and one gone before
   assert.deepEqual(gone.lines, ["Vimium: already gone"]);
 });
 
+// Fake liveness: `alive` maps pid to ticks, `by_profile` maps a profile path to the pid of a Firefox on it, `units` lists active units.
+const liveness_of = (alive: Record<number, number>, by_profile: Record<string, number> = {}, units: string[] = []) => ({
+  ticks_of_pid: (pid: number) => alive[pid] ?? null,
+  find_pid: (profile: string) => by_profile[profile] ?? null,
+  unit_active: (unit: string) => units.includes(unit),
+});
+const tools_of = (windows: { tool: string }[]) => windows.map((w) => w.tool);
+
 test("open drops windows closed by hand, with their profiles, and keeps the running ones", () => {
   const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
   try {
     const windows = [window_of(dir, "desertfox", 100, 5000), window_of(dir, "vimium", 101, 5001), window_of(dir, "vimiumc", 102, 5002), window_of(dir, "tridactyl", 0, 0)];
     for (const w of windows) mkdirSync(w.profile, { recursive: true });
     write_state(dir, windows);
-    const live: Record<number, number> = { 100: 5000, 102: 7777 };
-    const { running, dropped } = prune_dead_windows(dir, (pid: number) => live[pid] ?? null);
-    assert.deepEqual(running.map((w: { tool: string }) => w.tool), ["desertfox"]);
-    assert.deepEqual(dropped.map((w: { tool: string }) => w.tool), ["vimium", "vimiumc", "tridactyl"]);
-    assert.deepEqual(read_state(dir).map((w: { tool: string }) => w.tool), ["desertfox"]);
+    const { running, dropped } = prune_dead_windows(dir, liveness_of({ 100: 5000, 102: 7777 }));
+    assert.deepEqual(tools_of(running), ["desertfox"]);
+    assert.deepEqual(tools_of(dropped), ["vimium", "vimiumc", "tridactyl"]);
+    assert.deepEqual(tools_of(read_state(dir)), ["desertfox"]);
     assert.equal(existsSync(windows[0].profile), true);
     assert.equal(existsSync(windows[1].profile), false);
     assert.deepEqual(tools_to_open(COMPARE_TOOLS, running), ["vimium", "vimiumc", "tridactyl"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a pid-0 record whose Firefox runs on its profile is adopted, not pruned", () => {
+  const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
+  try {
+    const w = window_of(dir, "tridactyl", 0, 0);
+    mkdirSync(w.profile, { recursive: true });
+    write_state(dir, [w]);
+    const { running, dropped } = prune_dead_windows(dir, liveness_of({ 777: 9000 }, { [w.profile]: 777 }));
+    assert.deepEqual(dropped, []);
+    assert.deepEqual(running, [{ ...w, pid: 777, start_ticks: 9000 }]);
+    assert.deepEqual(read_state(dir), running);
+    assert.equal(existsSync(w.profile), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Firefox that restarted under a new pid is adopted, and an active unit alone keeps the record", () => {
+  const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
+  try {
+    const restarted = window_of(dir, "vimium", 101, 5001);
+    const unit_only = window_of(dir, "vimiumc", 0, 0);
+    for (const w of [restarted, unit_only]) mkdirSync(w.profile, { recursive: true });
+    write_state(dir, [restarted, unit_only]);
+    const { running, dropped } = prune_dead_windows(dir, liveness_of({ 300: 8000 }, { [restarted.profile]: 300 }, [unit_of("vimiumc")]));
+    assert.deepEqual(dropped, []);
+    assert.deepEqual(running, [{ ...restarted, pid: 300, start_ticks: 8000 }, unit_only]);
+    assert.equal(existsSync(unit_only.profile), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -155,10 +194,10 @@ test("when every window is dead, pruning removes the state file so open starts c
   const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
   try {
     write_state(dir, [window_of(dir, "vimium", 101, 5001)]);
-    const { running } = prune_dead_windows(dir, () => null);
+    const { running } = prune_dead_windows(dir, liveness_of({}));
     assert.deepEqual(running, []);
     assert.equal(existsSync(state_file_of(dir)), false);
-    assert.deepEqual(prune_dead_windows(dir, () => null), { running: [], dropped: [] });
+    assert.deepEqual(prune_dead_windows(dir, liveness_of({})), { running: [], dropped: [] });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

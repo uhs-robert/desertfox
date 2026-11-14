@@ -4,7 +4,7 @@
 // The launch, lock, profile seed and stop come from tools/owner_test, shared with the owner-test windows.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,14 +79,29 @@ export async function close_window(dir, w, deps) {
   return { lines: was_running && process_gone ? [`${LABELS[w.tool]}: closed`] : lines, gone: unit_gone && process_gone };
 }
 
-// Windows the owner closed by hand still sit in the state file. Open drops them, with their profile folders, so it starts from the windows that really run.
-export function prune_dead_windows(dir, ticks_of_pid = read_start_ticks) {
-  const { running, gone } = pick_close_targets(read_state(dir), ticks_of_pid);
-  if (gone.length === 0) return { running, dropped: [] };
-  for (const w of gone) if (owns_profile(dir, w)) rmSync(dirname(w.profile), { recursive: true, force: true });
-  if (running.length > 0) write_state(dir, running);
-  else rmSync(state_file_of(dir), { force: true });
-  return { running, dropped: gone };
+const unit_is_active = (unit) => /^(active|activating|deactivating|reloading)$/.test(spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout.trim());
+const real_liveness = () => ({ ticks_of_pid: read_start_ticks, find_pid: firefox_pid_for, unit_active: unit_is_active });
+
+// Windows the owner closed by hand still sit in the state file. Open drops them, with their profile folders, so it starts from the windows that really run. A record counts as gone only when its pid is dead, no Firefox runs on its profile and its unit is down: a record without a pid, or a Firefox that restarted, still owns a live window. A Firefox found by profile is adopted under its current pid.
+export function prune_dead_windows(dir, liveness = real_liveness()) {
+  const running = [];
+  const dropped = [];
+  let changed = false;
+  for (const w of read_state(dir)) {
+    if (pick_close_targets([w], liveness.ticks_of_pid).running.length > 0) { running.push(w); continue; }
+    const pid = liveness.find_pid(w.profile) ?? 0;
+    if (pid > 1) {
+      running.push({ ...w, pid, start_ticks: liveness.ticks_of_pid(pid) ?? 0 });
+      changed = true;
+    } else if (liveness.unit_active(unit_of(w.tool))) running.push(w);
+    else dropped.push(w);
+  }
+  for (const w of dropped) if (owns_profile(dir, w)) rmSync(dirname(w.profile), { recursive: true, force: true });
+  if (dropped.length > 0 || changed) {
+    if (running.length > 0) write_state(dir, running);
+    else rmSync(state_file_of(dir), { force: true });
+  }
+  return { running, dropped };
 }
 
 // Windows that run are left alone. Only the wanted tools without one get opened.
@@ -115,7 +130,13 @@ const free_port = () => new Promise((res) => { const s = createServer(); s.liste
 
 // The pinned xpi is fetched once into the compare folder and checked against the rig's sha256 pin every time it is used.
 async function addon_for(dir, tool) {
-  if (tool === "desertfox") return { path: join(repo_dir, "dist"), id: DESERTFOX_ID, version: JSON.parse(readFileSync(join(repo_dir, "dist", "manifest.json"), "utf8")).version };
+  if (tool === "desertfox") {
+    // A copy, so a later build never rewrites the files a running window loaded from.
+    const path = join(dir, tool, "addon");
+    rmSync(path, { recursive: true, force: true });
+    cpSync(join(repo_dir, "dist"), path, { recursive: true });
+    return { path, id: DESERTFOX_ID, version: JSON.parse(readFileSync(join(path, "manifest.json"), "utf8")).version };
+  }
   const pin = PINNED_BUILDS[tool];
   const path = xpi_path(dir, tool);
   if (!existsSync(path)) {
@@ -175,6 +196,7 @@ async function start_window_unchecked(dir, tool, urls, windows, addon) {
     unit: unit_of(tool), command: "firefox", cwd: dir, log_file: log_file_of(dir, tool), who: "compare",
     args: ["-no-remote", "-profile", profile, "-start-debugger-server", String(port), name_page(tool), ...urls],
   });
+  if (started.unit === null && started.pid === 0) throw new Error("the plain spawn of firefox returned no process id, so no window started");
   record.pid = started.pid;
   record.start_ticks = read_start_ticks(started.pid) ?? 0;
   write_state(dir, windows);
@@ -199,13 +221,17 @@ async function open_windows(dir, urls, wanted) {
   for (const w of dropped) console.log(`${LABELS[w.tool]}: window was closed by hand, dropped from the state file`);
   const missing = tools_to_open(wanted, running);
   for (const tool of wanted) if (!missing.includes(tool)) console.log(`${LABELS[tool]}: already open, left running (the urls are not added to it, use just compare-add)`);
+  if (missing.includes("desertfox")) {
+    const build = spawnSync("npm", ["run", "--silent", "build"], { cwd: repo_dir, stdio: "inherit" });
+    if (build.status !== 0) throw new Error("the build failed");
+  }
   const addons = {};
   for (const tool of missing) addons[tool] = await addon_for(dir, tool);
   const windows = [...running];
   try {
     for (const tool of missing) await start_window(dir, tool, urls, windows, addons[tool]);
   } catch (error) {
-    console.error(`compare: ${error.message}. Closing what opened.`);
+    console.error("compare: a window failed to start. Closing what opened.");
     await close_windows(dir, undefined, missing);
     throw error;
   }
