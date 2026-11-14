@@ -21,7 +21,7 @@ Each result cell is a mark and an evidence tag, such as `✅ R`.
 | A | Automated test on a local stand-in page, never the live site. |
 | S | Source check: the project's code was read, nothing was run. |
 
-All R cells: 2026-11-14, Firefox 160.0 (headless, fresh profile per tool, default keys and settings), DesertFox 0.1.24, Vimium 2.4.2, Vimium C 2.12.3, Tridactyl 1.25.1, three passes per site and tool. A cell shows the result most passes gave. Run 7b covers every site (rig commit `88b037dc`, extension build `eb5086b1`). Run 8b (build `c77c6e05`) reran Reddit and X. A later rerun of Reddit and X on main `0f4b1821` (3 passes, same rival versions) supplies DesertFox's cells on those two rows. The run 7b build predates #656, which affects only the embed `play` result. The H cells come from hand checks: DesertFox on Docs on 2026-11-13, and all four tools on Sheets (view), Sheets (editing), Docs (view), Docs (editing) and Reddit on 2026-11-14 with the same pinned versions as run 7b. A rig run is a dated snapshot, not a test, because sites change.
+All R cells: 2026-11-14, Firefox 160.0 (headless, fresh profile per tool, default keys and settings), DesertFox 0.1.24, Vimium 2.4.2, Vimium C 2.12.3, Tridactyl 1.25.1, three passes per site and tool. A cell shows the result most passes gave. Run 7b covers every site (rig commit `88b037dc`, extension build `eb5086b1`). Run 8b (build `c77c6e05`) reran Reddit and X. A later rerun of Reddit and X on main `0f4b1821` (3 passes, same rival versions) supplies DesertFox's cells on those two rows. The run 7b build predates #656, which affects only the embed `play` result. The H cells come from hand checks: DesertFox on Docs on 2026-11-13, and all four tools on Sheets (view), Sheets (editing), Docs (view), Docs (editing), Reddit, Google Drive, Gmail, Discord and ChatGPT on 2026-11-14 with the same pinned versions as run 7b. A rig run is a dated snapshot, not a test, because sites change.
 
 A site is scored by whether a keyboard user can get around it with the tool. The three core tasks are: move around the site, open links and controls by hint, and leave a text field. Movement passes when any keys move it with the tool active, the tool's own keys or the site's own keys. If movement fails, the mark is ❌ whatever else works. If movement works but another core task fails, the mark is ⚠️.
 
@@ -56,12 +56,14 @@ Sites behind a login are `pending H`: the rig cannot log in, so these sites are 
 | Twitch | ✅ R | No | ✅ R | ✅ R | pending R | Being retested. |
 | Firefox PDF viewer | n/a | No | n/a | n/a | n/a | Firefox limit: it runs no extension content script in its PDF viewer, so hints do not work for any tool. Scroll works through the viewer's own `j`. Sources: [`design.md`](design.md) and "Keys in PDF files" in [`firefox-behavior.md`](firefox-behavior.md). |
 | YouTube video embedded in another site | ✅ R | Yes: the YouTube media code | ✅ R | ✅ R | ✅ R | The rig loads the live player into a local fixture page. Hint and activation checks target the link beside the player. The rig found no hints for Tridactyl there, so its hints and activation are not scored. |
-| Google Drive (login) | pending H | No | pending H | pending H | pending H | S: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
-| Gmail (login) | pending H | No | pending H | pending H | pending H | |
+| Google Drive (login) | ✅ H | No | pending H | pending H | ✅ H | S: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
+| Gmail (login) | ✅ H | No | ❌ H | ❌ H | ✅ H | Vimium and Vimium C: does not work in Gmail. |
 | Figma (login) | pending H | No | pending H | pending H | pending H | Also check that Figma's own single-letter keys still work on the canvas. |
-| Slack or Discord (login) | pending H | No | pending H | pending H | pending H | |
+| Slack (login) | pending H | No | pending H | pending H | pending H | |
+| Discord (login) | ✅ H | No | ⚠️ H | ✅ H | ✅ H | Vimium: hints miss the channel list, so choosing a channel needs a click. |
 | Outlook or Microsoft 365 (login) | pending H | No | pending H | pending H | pending H | |
-| ChatGPT or Claude web (login) | pending H | No | pending H | pending H | pending H | |
+| ChatGPT (login) | ✅ H | No | ⚠️ H | ⚠️ H | ⚠️ H | Only DesertFox focuses and scrolls the side panel and the chat by keyboard. The others need a click into each pane. |
+| Claude web (login) | pending H | No | pending H | pending H | pending H | |
 
 ## Source checks of the rivals
 
