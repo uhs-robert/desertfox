@@ -92,3 +92,42 @@ Site checked (ChatGPT or Claude web):
 | 3. Activate | | | | |
 | 3. `Escape` out of hints | | | | |
 | Typing in the prompt box sends no key to the extension | | | | |
+
+## Google Maps
+
+URL: `https://www.google.com/maps`
+
+Start from the page as loaded, with the keyboard only.
+
+| Check | DesertFox | Vimium | Vimium C | Tridactyl |
+| --- | --- | --- | --- | --- |
+| Scroll with `j` moves the map | | | | |
+| The arrow keys pan the map | | | | |
+| The arrow keys pan the map after `Escape` | | | | |
+| Hints | | | | |
+| Directions: `Escape` leaves the start or end field | | | | |
+| Any command runs on the page | | | | |
+
+## Excalidraw
+
+URL: `https://excalidraw.com`
+
+Start from the page as loaded, with the keyboard only.
+
+| Check | DesertFox | Vimium | Vimium C | Tridactyl |
+| --- | --- | --- | --- | --- |
+| Hints select a tool or an item | | | | |
+| A key moves the view or the drawing without the mouse | | | | |
+| Any command runs on the page | | | | |
+
+## StackBlitz (lodash)
+
+URL: `https://stackblitz.com/github/lodash/lodash?file=lodash.js`
+
+Start from the page as loaded, with the keyboard only.
+
+| Check | DesertFox | Vimium | Vimium C | Tridactyl |
+| --- | --- | --- | --- | --- |
+| Keys focus the editor (hint flags count) | | | | |
+| Keys move the view in the editor | | | | |
+| Any command runs on the page | | | | |
