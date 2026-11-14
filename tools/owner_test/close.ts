@@ -22,7 +22,7 @@ export type CloseResult = { lines: string[]; closed: boolean; complete: boolean 
 const POLL_MS = 100;
 
 // SIGTERM, wait, SIGKILL, and re-read the start ticks before each signal, so a pid recycled in between is never hit. Returns false when the process still runs after SIGKILL and a bounded wait: the caller then keeps the profile and state.
-async function stop_process(label: string, pid: number, start_ticks: number, deps: CloseDeps, lines: string[]): Promise<boolean> {
+export async function stop_process(label: string, pid: number, start_ticks: number, deps: CloseDeps, lines: string[]): Promise<boolean> {
   const still_ours = () => start_ticks > 0 && deps.read_start_ticks(pid) === start_ticks;
   const wait_until_gone = async (limit_ms: number) => {
     for (let waited = 0; waited < limit_ms && still_ours(); waited += POLL_MS) await deps.sleep(POLL_MS);

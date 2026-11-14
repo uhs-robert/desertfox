@@ -1,20 +1,20 @@
 // usage: node tools/owner_test/cli.ts <open|reload|status|close> [worktree] [':set name value']...
 // Opens a real Firefox window with a worktree's build for the maintainer's hands-on test. See README.md.
 
-import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, rmdirSync, statfsSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { close_window } from "./close.ts";
 import { check_hint } from "./hints.ts";
+import { check_environment, firefox_pid_for, real_close_deps, sleep, start_unit } from "./system.ts";
 import { canonical_worktree, default_roots, unit_name, window_paths, type WindowPaths } from "./paths.ts";
 import { is_same_process, parse_debug_port, read_start_ticks } from "./process_guard.ts";
 import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "./lock.ts";
 import { Refusal } from "./refusal.ts";
 import { probe_window, reload_window, type ProbeOutcome } from "./rdp_probe.ts";
 import { seed_user_js } from "./profile.ts";
-import { real_close_deps, sleep } from "./system.ts";
 import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "./state.ts";
 import { stamp_label, stamp_manifest, tail_lines, web_ext_args } from "./web_ext.ts";
 
@@ -34,12 +34,6 @@ function check_worktree(worktree: string): void {
   if (!existsSync(join(worktree, "node_modules", ".bin", "web-ext"))) fail(`${worktree} has no node_modules/.bin/web-ext. Run npm install there first.`);
 }
 
-// The window must show on the maintainer's desktop. The nested key-test session keeps its runtime dir under /tmp.
-function check_environment(): void {
-  if (!process.env.WAYLAND_DISPLAY) fail("WAYLAND_DISPLAY is not set, so there is no desktop to open a window on.");
-  if (process.env.DESERTFOX_CONFIG_DIR || (process.env.XDG_RUNTIME_DIR ?? "").startsWith("/tmp/")) fail("this looks like the nested key-test session. Run owner-test from the maintainer's own session.");
-}
-
 function build_and_stamp(worktree: string): string {
   const build = spawnSync("npm", ["run", "--silent", "build"], { cwd: worktree, stdio: "inherit" });
   if (build.status !== 0) fail("the build failed");
@@ -54,17 +48,6 @@ async function close(paths: WindowPaths): Promise<boolean> {
   const result = await close_window(paths, real_close_deps());
   for (const line of result.lines) console.log(line);
   return result.complete;
-}
-
-function firefox_pid_for(profile: string): number | null {
-  for (const entry of readdirSync("/proc")) {
-    if (!/^\d+$/.test(entry)) continue;
-    try {
-      const words = readFileSync(`/proc/${entry}/cmdline`, "utf8").split("\0");
-      if (words.includes("-start-debugger-server") && words.includes(profile)) return Number(entry);
-    } catch { /* the process ended */ }
-  }
-  return null;
 }
 
 function debug_port_of(profile: string): number | null {
@@ -100,30 +83,6 @@ function check_free_space(cache_root: string): void {
   if (stats.bavail * stats.bsize < MIN_FREE_BYTES) fail(`less than 2 GB free under ${cache_root}`);
 }
 
-// Through a systemd user unit when possible, so the window outlives the agent's own scope and has a memory cap. Plain detached spawn otherwise.
-function start_window(worktree: string, paths: WindowPaths, dist: string): { unit: string | null; pid: number } {
-  const args = web_ext_args({ dist, profile: paths.profile_dir });
-  const web_ext = join(worktree, "node_modules", ".bin", "web-ext");
-  const unit = unit_name(paths.key);
-  const env_args = ["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DISPLAY", "HOME", "PATH", "DBUS_SESSION_BUS_ADDRESS", "XDG_CONFIG_HOME", "XDG_DATA_HOME"]
-    .filter((name) => process.env[name]).map((name) => `--setenv=${name}=${process.env[name]}`);
-  const unit_run = spawnSync("systemd-run", [
-    "--user", "--collect", "--quiet", `--unit=${unit}`, "-p", "MemoryMax=4G", `--working-directory=${worktree}`,
-    "-p", `StandardOutput=append:${paths.log_file}`, "-p", `StandardError=append:${paths.log_file}`,
-    ...env_args, "--", web_ext, ...args,
-  ], { stdio: "ignore" });
-  if (unit_run.status === 0) {
-    const pid = Number(spawnSync("systemctl", ["--user", "show", "-p", "MainPID", "--value", unit], { encoding: "utf8" }).stdout.trim());
-    return { unit, pid: pid || 0 };
-  }
-  console.error("owner-test: systemd-run failed, so the window runs without a systemd unit and may end with this session.");
-  const log_fd = openSync(paths.log_file, "a");
-  const child = spawn(web_ext, args, { cwd: worktree, detached: true, stdio: ["ignore", log_fd, log_fd] });
-  child.unref();
-  closeSync(log_fd);
-  return { unit: null, pid: child.pid ?? 0 };
-}
-
 // Stops early when web-ext has exited, so a crash fails in a second and not after the whole timeout.
 async function wait_for_install(log_file: string, web_ext_alive: () => boolean): Promise<boolean> {
   const deadline = Date.now() + START_TIMEOUT_MS;
@@ -147,7 +106,7 @@ function print_report(state: WindowState, hints: string[], permissions: string, 
 }
 
 async function open(worktree: string, paths: WindowPaths, hints: string[]): Promise<void> {
-  check_environment();
+  check_environment("owner-test");
   check_worktree(worktree);
   for (const hint of hints) {
     const checked = check_hint(hint);
@@ -165,7 +124,10 @@ async function open(worktree: string, paths: WindowPaths, hints: string[]): Prom
     web_ext_pid: 0, web_ext_start_ticks: 0, firefox_pid: 0, firefox_start_ticks: 0,
   };
   write_state(paths.state_file, state);
-  const started = start_window(worktree, paths, join(worktree, "dist"));
+  const started = start_unit({
+    unit: unit_name(paths.key), command: join(worktree, "node_modules", ".bin", "web-ext"), args: web_ext_args({ dist: join(worktree, "dist"), profile: paths.profile_dir }),
+    cwd: worktree, log_file: paths.log_file, who: "owner-test",
+  });
   if (discard_state_of_failed_spawn(started, paths.state_file)) fail("the plain spawn of web-ext returned no process id, so no window started. Its state file is removed. Run again.");
   state.unit = started.unit;
   state.web_ext_pid = started.pid;

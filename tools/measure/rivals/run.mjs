@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
+import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
 import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, pick_chosen_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
@@ -126,18 +127,7 @@ async function memory() {
   }`, 30000);
 }
 
-// A system policy (/etc/firefox/policies) can force-install the release DesertFox into every profile, which would bias every row.
-const policy_addon_state = () => chrome_long(`{ const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs"); const addon = await AddonManager.getAddonByID("${DESERTFOX_ID}"); if (addon && !addon.temporarilyInstalled) { await addon.uninstall(); return "removed"; } return addon ? "temporary" : "absent"; }`, 8000);
-
-async function remove_policy_addon() {
-  // The policy installs after startup, so "absent" counts only after a wait that covers a late install.
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const state = await policy_addon_state();
-    if (state === "removed" || (state === "absent" && attempt >= 12)) return state;
-    await sleep(500);
-  }
-  throw new Error("the policy-installed DesertFox is still present: the run would be biased");
-}
+const policy_chrome = (block) => chrome_long(block, 8000);
 
 // Navigates the selected tab to the url and waits until it has loaded. Returns the last page state and whether it loaded, so a failed load keeps its diagnosis.
 // A document with no navigation entry, such as the PDF viewer, reports a null load time and counts as loaded once complete.
@@ -595,7 +585,7 @@ try {
     await sleep(500);
   }
   await sleep(1000);
-  result.meta.policy_addon = await remove_policy_addon();
+  result.meta.policy_addon = await remove_policy_addon(policy_chrome);
   await sleep(1000);
   await load_frame_script();
   if (addon) {
@@ -608,7 +598,7 @@ try {
     result.meta.version = await chrome_long(`{ const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs"); return (await AddonManager.getAddonByID(${JSON.stringify(addon.id)}))?.version ?? null; }`, 8000);
     if (tool === "desertfox") result.meta.commit = spawnSync("git", ["-C", repo_dir, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).stdout.trim();
     if (!result.meta.permissions?.active) throw new Error(`${tool} is not active after install`);
-    if (tool !== "desertfox" && (await policy_addon_state()) !== "absent") throw new Error("the policy-installed DesertFox came back after the install");
+    if (tool !== "desertfox" && (await policy_addon_state(policy_chrome)) !== "absent") throw new Error("the policy-installed DesertFox came back after the install");
     // Close tabs the extension opened (options, welcome pages) and refocus the first.
     await chrome(`(async () => { const tabs = Services.wm.getMostRecentWindow("navigator:browser").gBrowser; while (tabs.tabs.length > 1) tabs.removeTab(tabs.tabs[tabs.tabs.length - 1]); tabs.selectedTab = tabs.tabs[0]; return 1; })()`);
     await sleep(500);
