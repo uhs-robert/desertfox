@@ -99,6 +99,9 @@ await copyFile("src/shared/page_base.css", "dist/page_base.css");
 // The font is copied as is with its licence: the licence reserves the name "DSEG", so a converted or edited font could not keep it.
 for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(`src/newtab/fonts/${file}`, `dist/${file}`);
 
+// The theme colors ship compiled into themes.ts, so the credits and the Apache-2.0 text (section 4(a)) travel with the package.
+for (const file of ["NOTICE.md", "LICENSE-Apache-2.0.txt"]) await copyFile(`themes/${file}`, `dist/${file}`);
+
 await mkdir("dist/icons", { recursive: true });
 await copyFile("src/icons/desertfox.svg", "dist/icons/desertfox.svg");
 await writeFile("dist/icons/desertfox-off.svg", grey_svg(await readFile("src/icons/desertfox.svg", "utf8")));
