@@ -93,20 +93,6 @@ Site checked (Slack or Discord):
 | 3. `Escape` out of hints | | | | |
 | Typing in the message box sends no key to the extension | | | | |
 
-## Outlook or Microsoft 365
-
-Site checked (Outlook or Microsoft 365):
-
-| Check | DesertFox | Vimium | Vimium C | Tridactyl |
-| --- | --- | --- | --- | --- |
-| 1. Mode on load (focus, mode) | | | | |
-| 2. Leave with `Escape` | | | | |
-| 3. Scroll | | | | |
-| 3. Hints | | | | |
-| 3. Activate | | | | |
-| 3. `Escape` out of hints | | | | |
-| A hint on a message row opens the message | | | | |
-
 ## ChatGPT or Claude web
 
 Site checked (ChatGPT or Claude web):
