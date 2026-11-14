@@ -399,20 +399,21 @@ const wheel_over_view = (delta_y) => chrome_long(`{
   return 1;
 }`, 20000);
 
-// Every row of a movement probe starts the same way: wait until the view can be read, click into the work area, then (tool rows) send the tool's leave key. The baseline is read just before the input, as in scroll_check. The wait after it covers the debounced Maps address and Excalidraw save.
-// input: { keys } or { wheel_dy }. leave_keys: the tool's leave key for tool rows, null for the control. focus is what the input met.
+// Every row of a movement probe starts the same way: wait until the view can be read, click into the work area, then (tool rows) send the tool's leave key when the click put the focus in a typing field. The baseline is read just before the input, as in scroll_check. The wait after it covers the debounced Maps address and Excalidraw save.
+// input: { keys } or { wheel_dy }. leave_keys: the tool's leave key for tool rows, null for the control. focus is what the input met, leave_key_sent whether the leave key went out.
 async function movement_check(input, probe_name, { leave_keys = null } = {}) {
   await wait_for_view(probe_name);
   await ask_page("focus_view", { probe: probe_name }, 5000);
   await sleep(300);
-  if (leave_keys) { await press_keys(leave_keys); await sleep(600); }
-  const focus = await focus_now();
+  let focus = await focus_now();
+  const left = Boolean(leave_keys) && leave_key_after_click(focus);
+  if (left) { await press_keys(leave_keys); await sleep(600); focus = await focus_now(); }
   const before = await read_view(probe_name);
   if (input.wheel_dy !== undefined) await wheel_over_view(input.wheel_dy);
   else await press_keys(input.keys);
   await sleep(1500);
   const after = await read_view(probe_name);
-  return { before, after, focus: focus.path };
+  return { before, after, focus: focus.path, leave_key_sent: left };
 }
 
 // A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
@@ -581,7 +582,7 @@ async function check_site(site) {
   };
   const judged_movement = async (movement_keys) => {
     const { before, after, focus } = await movement_check({ keys: movement_keys }, site.scroll_probe, { leave_keys: ["Escape"] });
-    return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, before, after };
+    return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, leave_key_sent, before, after };
   };
   const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
