@@ -9,7 +9,7 @@ Every result cell (the DesertFox status and rival columns) starts with an eviden
 | Tag | Meaning |
 | --- | --- |
 | R | Rig run on the live site, 2026-11-14. `PAGES=sites PASSES=3 just measure-rivals`, see [`tools/measure/rivals/README.md`](../tools/measure/rivals/README.md). |
-| H | Hand check on a real logged-in account, with the date. Steps in [`tools/measure/rivals/hand_checks.md`](../tools/measure/rivals/hand_checks.md). |
+| H | Hand check in a real browser session, with the date. Steps in [`tools/measure/rivals/hand_checks.md`](../tools/measure/rivals/hand_checks.md). |
 | A | Automated test on a local stand-in page, never the live site. The test file is named. |
 | S | Source check: the project's code was read, nothing was run. |
 
