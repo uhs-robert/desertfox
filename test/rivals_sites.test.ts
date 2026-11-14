@@ -391,20 +391,21 @@ test("Excalidraw passes when either offset moves by 1 or more, and fails when bo
 });
 
 test("StackBlitz passes when the first visible line changes, and is unknown when the editor drew no lines", () => {
-  const judge = (before: string[], after: string[]) => judge_movement({ probe: "stackblitz", before: { line_numbers: before }, after: { line_numbers: after } });
+  const judge = (before: string[], after: string[]) => judge_movement({ probe: "stackblitz", before: { line_numbers: before, cursor_lines: ["1"] }, after: { line_numbers: after, cursor_lines: ["1"] } });
   assert.equal(judge(["1", "2", "3"], ["12", "13", "14"]).status, "pass");
   assert.match(judge(["1", "2", "3"], ["12", "13"]).reason, /1 to 12/);
   assert.equal(judge(["1", "2", "3"], ["1", "2", "3"]).status, "fail");
   assert.equal(judge([], ["1"]).status, "unknown");
 });
 
-test("StackBlitz also passes when only the cursor line moves, and names it", () => {
+test("StackBlitz also passes when only the cursor line moves, names it, and is unknown when a cursor read is missing", () => {
   const view = (cursor: string[]) => ({ line_numbers: ["1", "2", "3"], cursor_lines: cursor });
   const moved = judge_movement({ probe: "stackblitz", before: view(["1"]), after: view(["2"]) });
   assert.equal(moved.status, "pass");
   assert.match(moved.reason, /cursor line 1 to 2/);
   assert.equal(judge_movement({ probe: "stackblitz", before: view(["1"]), after: view(["1"]) }).status, "fail");
-  assert.equal(judge_movement({ probe: "stackblitz", before: view([]), after: view([]) }).status, "fail");
+  assert.equal(judge_movement({ probe: "stackblitz", before: view([]), after: view([]) }).status, "unknown");
+  assert.equal(judge_movement({ probe: "stackblitz", before: view(["1"]), after: view([]) }).status, "unknown");
 });
 
 test("Sheets passes when the selection or the grid offset moves, names which one, and fails when neither does", () => {
