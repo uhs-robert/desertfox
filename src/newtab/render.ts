@@ -5,7 +5,7 @@ import { draw_tile } from "./tile.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
-type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_links">;
+type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_command_hint" | "newtab_links">;
 
 // Each widget needs only to be not `false`. The clock is analog unless set to "digital".
 export function enabled_widgets(settings: WidgetSettings) {
@@ -36,6 +36,13 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
     for (const row of section.rows) {
       const anchor = draw_tile(row);
       const tab = row.tab;
+      const session_id = row.session_id;
+      if (session_id) {
+        anchor.addEventListener("click", (event) => {
+          event.preventDefault();
+          void browser.sessions.restore(session_id);
+        });
+      }
       if (tab) {
         anchor.addEventListener("click", (event) => {
           event.preventDefault();
@@ -48,6 +55,24 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
     lists.append(list);
   }
   return lists;
+}
+
+// A button, so a hint reaches it. It asks the background to run `cmdline.open` in this tab, the same command the colon key runs. No input, so the address bar keeps the focus on a new tab.
+export function draw_command_hint(): HTMLButtonElement {
+  const hint = document.createElement("button");
+  hint.type = "button";
+  hint.className = "command-hint";
+  const key = document.createElement("kbd");
+  key.textContent = ":";
+  const before = document.createElement("span");
+  before.textContent = "press ";
+  const after = document.createElement("span");
+  after.textContent = " for the command line";
+  hint.append(before, key, after);
+  hint.addEventListener("click", () => {
+    void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "cmdline.open" }], mode: "normal" });
+  });
+  return hint;
 }
 
 // Calls `tick` now and every second while the tab is visible. A hidden tab stops ticking. The first tick after it shows again lands past the animation gap, so the hands jump to the time. Returns the stop, which also removes the page listener.
@@ -116,6 +141,7 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
     throw error;
   }
   if (sections.length > 0) next.page.append(draw_sections(sections));
+  if (settings.newtab_command_hint) next.page.append(draw_command_hint());
   if (previous) {
     previous.stop_ticker();
     previous.page.replaceWith(next.page);

@@ -61,6 +61,11 @@ const EXPECTATIONS: Record<string, string> = {
   newtab_bookmarks_max: "a whole number, 0 or more",
   newtab_recent_tabs: "true or false",
   newtab_recent_tabs_max: "a whole number, 0 or more",
+  newtab_closed_tabs: "true or false",
+  newtab_closed_tabs_max: "a whole number, 0 or more",
+  newtab_top_sites: "true or false",
+  newtab_top_sites_max: "a whole number, 0 or more",
+  newtab_command_hint: "true or false",
   newtab_links: 'a list of tables with "label", an http or https "url" and an optional "group"',
 };
 
@@ -100,6 +105,9 @@ test("every setting keeps its listed values", () => {
     newtab_clock_format: ["12", "24"],
     newtab_bookmarks: ["true", "false"],
     newtab_recent_tabs: ["true", "false"],
+    newtab_closed_tabs: ["true", "false"],
+    newtab_top_sites: ["true", "false"],
+    newtab_command_hint: ["true", "false"],
   });
 });
 
@@ -108,7 +116,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, layout_fallback: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false });
+  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, layout_fallback: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, completion_all_windows: false, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, newtab_closed_tabs: true, newtab_top_sites: true, newtab_command_hint: true });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -164,6 +172,11 @@ const ACCEPTS: Record<string, unknown[]> = {
   newtab_bookmarks_max: [0, 8],
   newtab_recent_tabs: [false],
   newtab_recent_tabs_max: [3],
+  newtab_closed_tabs: [false],
+  newtab_closed_tabs_max: [0, 3],
+  newtab_top_sites: [false],
+  newtab_top_sites_max: [0, 3],
+  newtab_command_hint: [false],
   newtab_links: [[], [{ label: "A", url: "https://a.example/", group: "G" }, { label: "B", url: "http://b.example/" }]],
 };
 
@@ -222,6 +235,11 @@ const REFUSES: Record<string, unknown[]> = {
   newtab_bookmarks_max: [-1, 1.5],
   newtab_recent_tabs: ["yes"],
   newtab_recent_tabs_max: [Number.NaN],
+  newtab_closed_tabs: ["yes"],
+  newtab_closed_tabs_max: [-1, 1.5],
+  newtab_top_sites: [0],
+  newtab_top_sites_max: [Number.NaN],
+  newtab_command_hint: ["no"],
   newtab_links: ["x", [{ label: "A", url: "javascript:alert(1)" }], [{ label: "A", url: "https://a.example/", group: "" }], [{ url: "https://a.example/" }]],
 };
 
@@ -326,6 +344,11 @@ test("the defaults stay the same", () => {
     newtab_bookmarks_max: 8,
     newtab_recent_tabs: false,
     newtab_recent_tabs_max: 8,
+    newtab_closed_tabs: true,
+    newtab_closed_tabs_max: 8,
+    newtab_top_sites: true,
+    newtab_top_sites_max: 8,
+    newtab_command_hint: true,
     newtab_links: [],
   });
   assert.equal("home_page" in DEFAULT_SETTINGS, false, "page.home refuses without one");
@@ -336,7 +359,7 @@ test("the new tab page reads an absent setting as before", async () => {
   assert.deepEqual(enabled_widgets(effective_settings({})), { clock: true, clock_style: "analog", date: true });
   assert.deepEqual(enabled_widgets(effective_settings({ newtab_clock: true, newtab_date: false })), { clock: true, clock_style: "analog", date: false });
   const tabs = Array.from({ length: 12 }, (_, index) => ({ id: index, url: `https://t${index}.example/`, title: `T${index}`, lastAccessed: index, windowId: 1, incognito: false }));
-  const readers = { query_tabs: async () => tabs, bookmark_tree: async () => [], page_is_private: async () => false, cached_icons: async () => new Map() } as never;
+  const readers = { query_tabs: async () => tabs, bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() } as never;
   assert.deepEqual(await read_sections(effective_settings({}), readers), []);
   const sections = await read_sections(effective_settings({ newtab_recent_tabs: true }), readers);
   assert.equal(sections[0]?.rows.length, 8);
@@ -363,7 +386,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
   // #620 rewrote every description for a first-time reader.
   const described_now = settings_schema().properties as Record<string, { description: string }>;
   for (const [name, property] of Object.entries(properties as Record<string, { description?: string | undefined }>)) property.description = described_now[name]?.description;

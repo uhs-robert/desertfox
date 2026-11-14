@@ -51,6 +51,9 @@
   .desertfox-newtab .tile-text { display: flex; flex-direction: column; min-width: 0; }
   .desertfox-newtab .tile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .desertfox-newtab .tile-site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
+  .desertfox-newtab .command-hint { flex: none; align-self: center; margin: 0.75rem 0 0; padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
+  .desertfox-newtab .command-hint:hover, .desertfox-newtab .command-hint:focus-visible { border-color: var(--desertfox-border); outline: none; }
+  .desertfox-newtab .command-hint kbd { padding: 0 0.4em; border: 1px solid var(--desertfox-border); border-radius: 4px; background: var(--desertfox-bg-mantle); font: inherit; }
   /* After the script-drawn page in the body column, so it has its own background. */
   .builtin-links { flex: none; padding: 0.75rem 0 1.5rem; background: var(--desertfox-bg-core); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
   .builtin-links a { color: var(--desertfox-primary); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }

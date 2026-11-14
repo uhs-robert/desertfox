@@ -66,6 +66,11 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   newtab_bookmarks_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists bookmarks (newtab_bookmarks).",
   newtab_recent_tabs: "Off by default. The tab you used last shows first. Tabs in private windows never show. Set how many show with newtab_recent_tabs_max.",
   newtab_recent_tabs_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists your open tabs (newtab_recent_tabs).",
+  newtab_closed_tabs: "On by default. The tab you closed last shows first. Clicking one brings it back. Tabs from private windows never show. Set how many show with newtab_closed_tabs_max.",
+  newtab_closed_tabs_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists closed tabs (newtab_closed_tabs).",
+  newtab_top_sites: "On by default. Sites are ranked by visits in the last 90 days, one card per site. The page reads your history and sends nothing. Set how many show with newtab_top_sites_max.",
+  newtab_top_sites_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists top sites (newtab_top_sites).",
+  newtab_command_hint: "On by default. Shows \"press : for the command line\" on the new tab page. Click it to open the command line.",
   newtab_links: "Each link has a label, a web address that starts with http:// or https://, and an optional group. Links with the same group show together in one list. In a settings file, write each link as its own [[newtab_links]] table.",
 };
 
@@ -121,5 +126,10 @@ export const SETTING_HELP: Record<SettingName, { label: string; summary: string 
   newtab_bookmarks_max: { label: "Number of bookmarks shown", summary: "How many bookmarks the new tab page lists. Raise it to see more, or lower it for a shorter page." },
   newtab_recent_tabs: { label: "Open tabs on the new tab page", summary: "Lists your open tabs on the new tab page. Turn it on to get back to a tab in one click." },
   newtab_recent_tabs_max: { label: "Number of open tabs shown", summary: "How many open tabs the new tab page lists. Raise it to see more, or lower it for a shorter page." },
+  newtab_closed_tabs: { label: "Closed tabs on the new tab page", summary: "Lists the tabs you closed last on the new tab page. Turn it on to bring a tab back in one click." },
+  newtab_closed_tabs_max: { label: "Number of closed tabs shown", summary: "How many closed tabs the new tab page lists. Raise it to see more, or lower it for a shorter page." },
+  newtab_top_sites: { label: "Top sites on the new tab page", summary: "Lists the sites you visit most on the new tab page. Turn it on to reach a favorite site in one click." },
+  newtab_top_sites_max: { label: "Number of top sites shown", summary: "How many top sites the new tab page lists. Raise it to see more, or lower it for a shorter page." },
+  newtab_command_hint: { label: "Command line hint on the new tab page", summary: "Shows a hint on the new tab page that the colon key opens the command line. Turn it off once you know the key." },
   newtab_links: { label: "Your links on the new tab page", summary: "Your own links on the new tab page, such as the sites you open every day. Add a link to reach a site in one click." },
 };
