@@ -98,6 +98,30 @@ Read from source in November 2026 (Vimium 49a3942, Vimium C 3188526, Tridactyl a
 - **Key integrations for specific sites.** DesertFox ships one: Google Sheets, with `hjkl` cell movement, `x`, `y` and `p` through the page clipboard, and a visual range. Vimium has hint rules for Google Drive and the Docs file list (`siteSpecificClickables` in `link_hints.js`), which are not key integrations, so its cell is no. Vimium C has no per-site rule table. Tridactyl treats `role=application` elements, which Google Sheets uses, as handling their own keys and stops capturing there, a generic rule keyed on the element and not on a site, with no `hjkl` and no clipboard, so it counts as no. qutebrowser ships site quirks (`content.site_specific_quirks`), such as a user-agent change for Google Docs, and none changes keys, so it counts as no.
 - **Script on every page and frame.** From each tool's `manifest.json` (the pinned store builds for the rivals): DesertFox, Vimium and Vimium C set `all_frames` and so load their script in every frame. Tridactyl does not set it, so its script loads in the top page only. Sizes are as shipped.
 
+## Compare by hand
+
+Three commands open the tools side by side for a hands-on check. Each tool gets its own visible Firefox window in a fresh profile under `~/.cache/desertfox-compare/` (apart from the rig's profiles). DesertFox is built from the current checkout. The rivals are the pinned builds from `tools.mjs`, checked against their sha256.
+
+```
+just compare <url>...       # one window per tool: a tab naming the tool, then the URLs
+just compare --tool <name> <url>...   # only that tool's window (desertfox, vimium, vimiumc or tridactyl)
+just compare-add <url>      # open a URL as the active tab in every open window
+just compare-close          # close only these windows, by recorded pid, and delete their profiles
+```
+
+`just compare` first drops windows you closed by hand from the state file, leaves the windows that still run, and opens only the tools that have none. A window that runs already does not get the URLs: use `just compare-add`.
+
+The windows open wherever the desktop puts them. The add-ons are temporary installs, so a window restart drops its add-on. Close and run `just compare` again instead.
+
+Check with the keyboard alone, in every window, with each tool's default keys:
+
+- Movement: scroll, page up and down, top and bottom.
+- Hints: open the hints, follow a link, leave with `Escape`.
+- Leaving a field: focus a text field, type, and get back to the page keys.
+- Frames from other sites: hints and scrolling inside an embedded frame.
+
+Record each result in [`hand_checks.md`](hand_checks.md), the (H) cells in the rig's tables: one line per tool and check, `pass` or `fail`, plus a short reason when it fails.
+
 ## Rerun
 
 ```

@@ -1,6 +1,10 @@
 // The tools under test, shared by rivals.mjs, run.mjs and analyze.mjs: the pinned store builds and the id of each add-on.
 // framescript.js keeps its own list of hint selectors, one per tool, because it runs in the content process and cannot import.
 
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { rmSync, writeFileSync } from "node:fs";
+
 export const DESERTFOX_ID = "desertfox@uhs-robert";
 
 // Pinned store builds. A new version needs a new url and sha256, so a run never measures a build nobody checked.
@@ -21,3 +25,32 @@ export const xpi_path = (work_dir, tool) => `${work_dir}/xpi/${PINNED_BUILDS[too
 
 // Exit status of run.mjs when a coverage result fails its checks. rivals.mjs retries other failures (debugger timeouts) but not this one, so a bad result is never retried into a clean one.
 export const CHECK_FAILED_STATUS = 3;
+
+const XPI_FETCH_TIMEOUT_MS = 60000;
+
+function manifest_of(xpi_file) {
+  const unzipped = spawnSync("unzip", ["-p", xpi_file, "manifest.json"], { encoding: "utf8" });
+  if (unzipped.error || unzipped.status !== 0) throw new Error(`cannot read manifest.json from ${xpi_file} (is unzip installed?): ${unzipped.error ?? unzipped.stderr}`);
+  return JSON.parse(unzipped.stdout);
+}
+
+// Downloads a pinned build to `xpi_file` (its folder must exist). A build that fails the sha256, version or id check is never left behind for a later run to use. Returns the sha256.
+export async function fetch_pinned_xpi(name, xpi_file) {
+  const pin = PINNED_BUILDS[name];
+  const response = await fetch(pin.url, { signal: AbortSignal.timeout(XPI_FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`${pin.url}: HTTP ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (sha256 !== pin.sha256) throw new Error(`${name}: sha256 ${sha256} does not match the pin ${pin.sha256}`);
+  writeFileSync(xpi_file, bytes);
+  try {
+    const manifest = manifest_of(xpi_file);
+    const gecko_id = manifest.browser_specific_settings?.gecko?.id ?? manifest.applications?.gecko?.id;
+    if (manifest.version !== pin.version) throw new Error(`${name}: manifest version ${manifest.version}, pinned ${pin.version}`);
+    if (gecko_id !== pin.gecko_id) throw new Error(`${name}: manifest id ${gecko_id}, pinned ${pin.gecko_id}`);
+  } catch (error) {
+    rmSync(xpi_file, { force: true });
+    throw error;
+  }
+  return sha256;
+}

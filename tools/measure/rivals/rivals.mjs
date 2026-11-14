@@ -3,9 +3,8 @@
 // PAGES=sites is the live-site check (sites.mjs): it loads public sites over the network and records pass or fail per check. A live page varies from load to load, so run it with PASSES=3 at least: the table scores each cell by the majority of the passes. SITES=youtube,wikipedia limits it to some sites.
 // Everything it downloads or writes goes to $MEASURE_DIR/rivals. A downloaded file is touched only by `unzip -p manifest.json`, to check its version and id.
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { CHECK_FAILED_STATUS, PINNED_BUILDS, PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
+import { CHECK_FAILED_STATUS, fetch_pinned_xpi, PINNED_BUILDS, PAGE_NAMES, TOOL_NAMES } from "./tools.mjs";
 
 const here = new URL(".", import.meta.url).pathname;
 const repo_dir = new URL("../../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -28,24 +27,10 @@ async function fetch_checked(url, headers = {}) {
   return response;
 }
 
-function manifest_of(xpi_file) {
-  const unzipped = spawnSync("unzip", ["-p", xpi_file, "manifest.json"], { encoding: "utf8" });
-  if (unzipped.error || unzipped.status !== 0) throw new Error(`cannot read manifest.json from ${xpi_file} (is unzip installed?): ${unzipped.error ?? unzipped.stderr}`);
-  return JSON.parse(unzipped.stdout);
-}
-
 for (const [name, pin] of Object.entries(PINNED_BUILDS)) {
   const dir = `${work_dir}/xpi/${pin.dir}`;
   mkdirSync(dir);
-  const bytes = Buffer.from(await (await fetch_checked(pin.url)).arrayBuffer());
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  if (sha256 !== pin.sha256) throw new Error(`${name}: sha256 ${sha256} does not match the pin ${pin.sha256}`);
-  const xpi_file = `${dir}/${pin.dir}.xpi`;
-  writeFileSync(xpi_file, bytes);
-  const manifest = manifest_of(xpi_file);
-  if (manifest.version !== pin.version) throw new Error(`${name}: manifest version ${manifest.version}, pinned ${pin.version}`);
-  const gecko_id = manifest.browser_specific_settings?.gecko?.id ?? manifest.applications?.gecko?.id;
-  if (gecko_id !== pin.gecko_id) throw new Error(`${name}: manifest id ${gecko_id}, pinned ${pin.gecko_id}`);
+  const sha256 = await fetch_pinned_xpi(name, `${dir}/${pin.dir}.xpi`);
   console.log(`${name} ${pin.version} sha256 ${sha256.slice(0, 12)}`);
 }
 
