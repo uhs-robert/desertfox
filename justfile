@@ -212,6 +212,12 @@ test-all: install_deps
     echo "test-all: $((SECONDS - start_s)) s"
     exit "$failed"
 
+# Record the README demo: a looping GIF of five scenes (hints, which-key, command line, tab finder, caret mode) and four 1280x800 stills, written to docs/images (or DEMO_OUT_DIR). Plays real key presses in a key-test session and films it with wf-recorder, so it needs wf-recorder, ffmpeg, grim and the key-test tools. Takes the key-test lock, so never wrap it in `flock`. About 2 minutes.
+readme-demo: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exec flock -o -w 900 /tmp/desertfox-key-test.lock node test/key/demo.mjs
+
 # Replay the key-test lifecycle probes: signals at startup and mid-run, a killed worker, a crashed Firefox, the deadline, distinct ports, a foreign sweep and a SIGKILLed run followed by a rerun. Serial, about 2 minutes, one probe at a time. Takes the key-test lock like `just key-test`, so never wrap it in `flock`. Name probes to run only those: `just key-test-lifecycle deadline kill-worker`.
 key-test-lifecycle *probes: build
     #!/usr/bin/env bash
