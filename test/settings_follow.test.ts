@@ -51,6 +51,13 @@ class FakeNode {
   addEventListener(type: string, listener: (event: { preventDefault(): void }) => void) {
     (this.listeners[type] ??= []).push(listener);
   }
+  querySelector(_selector: string): FakeNode | null {
+    return null;
+  }
+  replaceChildren(...nodes: FakeNode[]) {
+    this.children = [];
+    this.append(...nodes);
+  }
   getBoundingClientRect() {}
   focus() {
     this.focused++;
@@ -252,6 +259,66 @@ test("a failed read during a redraw keeps the old page and its one clock, and st
     assert.notEqual(body.children[0], old_page);
     assert.equal(page_listeners.get("visibilitychange")?.size, 1);
   } finally {
+    mock.timers.reset();
+  }
+});
+
+const find_by_class = (node: FakeNode, class_name: string): FakeNode[] => [...(node.className === class_name ? [node] : []), ...node.children.flatMap((child) => find_by_class(child, class_name))];
+
+test("the IP info card adds a slot only while its setting is on, forgets its answer while off, and a redraw stops the old run", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  const real_fetch = globalThis.fetch;
+  try {
+    const { body } = install_fakes();
+    const store: Record<string, unknown> = {};
+    const removed: string[] = [];
+    let release_first: () => void = () => {};
+    const first_gate = new Promise<void>((resolve) => (release_first = resolve));
+    let first_started: () => void = () => {};
+    const first_request = new Promise<void>((resolve) => (first_started = resolve));
+    let requests = 0;
+    Object.assign((globalThis as unknown as { browser: object }).browser, {
+      windows: { getCurrent: async () => ({ incognito: false }) },
+      storage: { onChanged: { addListener: () => {} }, local: { get: async (key: string) => ({ [key]: store[key] }), set: async (items: Record<string, unknown>) => void Object.assign(store, items), remove: async (key: string) => void removed.push(key) } },
+    });
+    globalThis.fetch = (async () => {
+      requests++;
+      if (requests === 1) {
+        first_started();
+        await first_gate;
+        return new Response("ip=203.0.113.7\nloc=NO");
+      }
+      return new Response("ip=198.51.100.9\nloc=SE");
+    }) as typeof fetch;
+    const fresh_module = "../src/newtab/render.ts?ip_info";
+    const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
+    const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() };
+    const body_node = body as unknown as HTMLElement;
+    const off = effective_settings({ newtab_clock: true, newtab_ip_info: false } as never);
+    await render_new_tab(body_node, off, readers);
+    await settled();
+    assert.deepEqual(find_by_class(body.children[0]!, "ip-info"), []);
+    assert.equal(requests, 0);
+    assert.deepEqual(removed, ["newtab_net_cache_ip"]);
+
+    const on = effective_settings({ newtab_clock: true, newtab_ip_info: true } as never);
+    await render_new_tab(body_node, on, readers);
+    const [first_slot] = find_by_class(body.children[0]!, "ip-info");
+    assert.ok(first_slot);
+    await first_request;
+    // The redraw swaps the page, which must stop the first run while its request is out.
+    await render_new_tab(body_node, on, readers);
+    await settled();
+    const [second_slot] = find_by_class(body.children[0]!, "ip-info");
+    assert.notEqual(second_slot, first_slot);
+    release_first();
+    await settled();
+    assert.deepEqual(first_slot.children, [], "the stopped run drew nothing");
+    assert.equal(second_slot!.children[0]?.textContent, "198.51.100.9");
+    assert.equal((store["newtab_net_cache_ip"] as { value: { ip: string } }).value.ip, "198.51.100.9", "the stopped run wrote no cache");
+    assert.equal(removed.length, 1, "the setting on never forgets");
+  } finally {
+    globalThis.fetch = real_fetch;
     mock.timers.reset();
   }
 });

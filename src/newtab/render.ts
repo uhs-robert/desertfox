@@ -1,13 +1,14 @@
 // The built-in page: the clock (analog or digital), the date and the lists of links.
 import type { Settings } from "../shared/config.ts";
 import { browser_page_readers, read_sections, type ListSection, type PageReaders } from "./lists.ts";
-import { warn_and_go } from "../shared/swallow.ts";
+import { refused_as, warn_and_go } from "../shared/swallow.ts";
 import { draw_tile } from "./tile.ts";
+import { forget_ip_info, start_ip_info } from "./ip_info.ts";
 import { start_weather } from "./weather.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
-type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_command_hint" | "newtab_links" | "newtab_weather" | "newtab_weather_city" | "newtab_weather_units">;
+type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_command_hint" | "newtab_links" | "newtab_weather" | "newtab_weather_city" | "newtab_weather_units" | "newtab_ip_info">;
 
 // Each widget needs only to be not `false`. The clock is analog unless set to "digital".
 export function enabled_widgets(settings: WidgetSettings) {
@@ -156,6 +157,18 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
     next.stop_ticker = () => {
       stop_ticker();
       weather.stop();
+    };
+  }
+  if (settings.newtab_ip_info !== true) void refused_as(forget_ip_info(), undefined);
+  if (settings.newtab_ip_info === true) {
+    const slot = document.createElement("div");
+    slot.className = "ip-info";
+    (next.page.querySelector(".time") ?? next.page).append(slot);
+    const ip_info = start_ip_info(slot, settings);
+    const stop_ticker = next.stop_ticker;
+    next.stop_ticker = () => {
+      stop_ticker();
+      ip_info.stop();
     };
   }
   if (previous) {
