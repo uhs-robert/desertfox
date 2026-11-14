@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, leave_key_after_click, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -216,7 +216,7 @@ async function tab_switch_run(next_key) {
 // The live-site check (PAGES=sites), in the three steps of sites.mjs, on one page load, except for the DesertFox frame branch, which loads the page again.
 // A user's key reaches the focused frame because the parent process routes it there. A key made inside the top page's process never reaches a frame of another origin. So every key of this check goes in through the parent process, into the browser window.
 // Key names longer than one character are named keys. Uppercase goes out with Shift held, as a typed capital would.
-const NAMED_KEY_CODES = { Escape: 27, ArrowDown: 40 };
+const NAMED_KEY_CODES = { Escape: 27, Tab: 9, ArrowDown: 40 };
 const press_keys = (keys, gap_ms = 80) => chrome_long(`{
   const win = Services.wm.getMostRecentWindow("navigator:browser");
   const browser = win.gBrowser.selectedBrowser;
@@ -399,21 +399,21 @@ const wheel_over_view = (delta_y) => chrome_long(`{
   return 1;
 }`, 20000);
 
-// Every row of a movement probe starts the same way: wait until the view can be read, click into the work area, then (tool rows) send the tool's leave key when the click put the focus in a typing field. The baseline is read just before the input, as in scroll_check. The wait after it covers the debounced Maps address and Excalidraw save.
-// input: { keys } or { wheel_dy }. leave_keys: the tool's leave key for tool rows, null for the control. focus is what the input met, leave_key_sent whether the leave key went out.
-async function movement_check(input, probe_name, { leave_keys = null } = {}) {
+// A probe row reads the view just before the input and again after the wait, which covers the debounced Maps address and Excalidraw save.
+// start: the keyboard start of a scored row (see needs_leave_key), or null for the control, which clicks into the work area instead because it only proves the probe reads movement.
+// input: { keys } or { wheel_dy }. The result has the focus the input met, and the start's record.
+async function movement_check(input, probe_name, { start = null } = {}) {
   await wait_for_view(probe_name);
-  await ask_page("focus_view", { probe: probe_name }, 5000);
-  await sleep(300);
-  let focus = await focus_now();
-  const left = Boolean(leave_keys) && leave_key_after_click(focus);
-  if (left) { await press_keys(leave_keys); await sleep(600); focus = await focus_now(); }
+  let started = null;
+  if (start) started = await start();
+  else { await ask_page("focus_view", { probe: probe_name }, 5000); await sleep(300); }
+  const focus = started?.focus ?? (await focus_now()).path;
   const before = await read_view(probe_name);
   if (input.wheel_dy !== undefined) await wheel_over_view(input.wheel_dy);
   else await press_keys(input.keys);
   await sleep(1500);
   const after = await read_view(probe_name);
-  return { before, after, focus: focus.path, leave_key_sent: left };
+  return { before, after, focus, start: started };
 }
 
 // A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
@@ -580,9 +580,24 @@ async function check_site(site) {
     const in_frames = await count_labels({ frames_only: true });
     return { labels, targets, frame_labels: in_frames.labels };
   };
+  // The keyboard start of the scored movement rows: the tool's leave key when a typing field has the focus, then the site's Tab presses. No click.
+  const keyboard_start = async () => {
+    let focus = await focus_now();
+    const leave_key_sent = needs_leave_key(focus);
+    if (leave_key_sent) { await press_keys(["Escape"]); await sleep(600); }
+    const tabs = site.tab_count ?? 0;
+    if (tabs > 0) await press_keys(Array.from({ length: tabs }, () => "Tab"));
+    if (leave_key_sent || tabs > 0) { await sleep(300); focus = await focus_now(); }
+    return { focus: focus.path, leave_key_sent, tabs };
+  };
+  // One scored movement row: a probe site reads its own view, any other site reads the scroll offsets of the window and the main scroller.
   const judged_movement = async (movement_keys) => {
-    const { before, after, focus, leave_key_sent } = await movement_check({ keys: movement_keys }, site.scroll_probe, { leave_keys: ["Escape"] });
-    return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, leave_key_sent, before, after };
+    if (!site.scroll_probe) {
+      const start = await keyboard_start();
+      return { ...judge_scroll(await scroll_check(movement_keys)), start };
+    }
+    const { before, after, focus, start } = await movement_check({ keys: movement_keys }, site.scroll_probe, { start: keyboard_start });
+    return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, start, before, after };
   };
   const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
@@ -596,8 +611,8 @@ async function check_site(site) {
     },
     embed_play_pause: async () => { await wait_for_embed(); return press_and_compare(keys.play_pause, "embed_state", judge_play_pause, 2500); },
     embed_volume: () => press_and_compare(keys.volume_down, "embed_state", judge_volume, 1500),
-    scroll: async () => (site.scroll_probe ? judged_movement(keys.scroll_down) : judge_scroll(await scroll_check(keys.scroll_down))),
-    passthrough: async () => ({ ...(await judged_movement(PASSTHROUGH_KEYS)), status: "info" }),
+    scroll: () => judged_movement(keys.scroll_down),
+    passthrough: () => judged_movement(PASSTHROUGH_KEYS),
     hints: async () => { shown = await show_hints(); return judge_hints(shown.labels, shown.targets, shown.frame_labels); },
     hints_escape: async () => {
       if (!shown?.labels.length && !shown?.frame_labels) return { status: "fail", reason: "no labels to leave" };
