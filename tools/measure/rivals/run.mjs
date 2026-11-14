@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, pick_chosen_activation, PASSTHROUGH_KEYS, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -383,15 +383,36 @@ async function wait_for_view(probe_name) {
   }
 }
 
-// Reads the site's view, sends the key, waits for the debounced saves, and reads again. The baseline is just before the key, as in scroll_check. focus_first is the control pass: no extension, so the page needs the focus a click would give.
-async function movement_check(keys, probe_name, { focus_first = false } = {}) {
+// One read of the view. An unreadable read gets one more try a second later, because the page can be between two renders.
+async function read_view(probe_name) {
+  const facts = await ask_page("move_state", { probe: probe_name }, 5000);
+  if (judge_movement({ probe: probe_name, before: facts, after: facts }).status !== "unknown") return facts;
+  await sleep(1000);
+  return ask_page("move_state", { probe: probe_name }, 5000);
+}
+
+// A wheel scroll over the lower left of the page, clear of centred overlays such as a welcome screen, through the parent process like the keys: the control of a site with no movement key.
+const wheel_over_view = (delta_y) => chrome_long(`{
+  const win = Services.wm.getMostRecentWindow("navigator:browser");
+  const rect = win.gBrowser.selectedBrowser.getBoundingClientRect();
+  win.windowUtils.sendWheelEvent(rect.left + rect.width * 0.2, rect.top + rect.height * 0.7, 0, ${Number(delta_y)}, 0, 0, 0, 0, 0, 0);
+  return 1;
+}`, 20000);
+
+// Every row of a movement probe starts the same way: wait until the view can be read, click into the work area, then (tool rows) send the tool's leave key. The baseline is read just before the input, as in scroll_check. The wait after it covers the debounced Maps address and Excalidraw save.
+// input: { keys } or { wheel_dy }. leave_keys: the tool's leave key for tool rows, null for the control. focus is what the input met.
+async function movement_check(input, probe_name, { leave_keys = null } = {}) {
   await wait_for_view(probe_name);
-  const focus = focus_first ? await ask_page("focus_view", { probe: probe_name }, 5000) : await focus_now();
-  const before = await ask_page("move_state", { probe: probe_name }, 5000);
-  await press_keys(keys);
+  await ask_page("focus_view", { probe: probe_name }, 5000);
+  await sleep(300);
+  if (leave_keys) { await press_keys(leave_keys); await sleep(600); }
+  const focus = await focus_now();
+  const before = await read_view(probe_name);
+  if (input.wheel_dy !== undefined) await wheel_over_view(input.wheel_dy);
+  else await press_keys(input.keys);
   await sleep(1500);
-  const after = await ask_page("move_state", { probe: probe_name }, 5000);
-  return { before, after, focus: focus.path ?? focus.focused };
+  const after = await read_view(probe_name);
+  return { before, after, focus: focus.path };
 }
 
 // A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
@@ -436,10 +457,10 @@ async function check_site(site) {
     }
   };
 
-  // The control pass: no extension, so only the site's own movement key can move the view. When it moves nothing, no tool can pass and the table reads the site as not scored.
+  // The control pass: no extension, so only the site's own movement key can move the view. When it moves nothing, the table adds a note to every tool's cell.
   if (tool === "none") {
     await run_check("scroll", async () => {
-      const { before, after, focus } = await movement_check(PASSTHROUGH_KEYS, site.scroll_probe, { focus_first: true });
+      const { before, after, focus } = await movement_check(control_of(site), site.scroll_probe);
       return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, before, after };
     });
     return record;
@@ -559,7 +580,7 @@ async function check_site(site) {
     return { labels, targets, frame_labels: in_frames.labels };
   };
   const judged_movement = async (movement_keys) => {
-    const { before, after, focus } = await movement_check(movement_keys, site.scroll_probe);
+    const { before, after, focus } = await movement_check({ keys: movement_keys }, site.scroll_probe, { leave_keys: ["Escape"] });
     return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, before, after };
   };
   const actions = {
@@ -598,7 +619,7 @@ async function check_site(site) {
       return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via, at: pick.at, label_rect: pick.label_rect, target_rect: pick.target_rect };
     },
   };
-  for (const name of [...site.extra, ...NORMAL_ACTIONS, ...(site.scroll_probe ? ["passthrough"] : [])]) await run_check(name, async () => as_action(await actions[name]()));
+  for (const name of step3_names(site)) await run_check(name, async () => as_action(await actions[name]()));
   if (frame_mode_seen || (tool === "desertfox" && PARK_SITES.has(site.name))) {
     // The reload can fail on its own. Steps 1 to 3 are done by now and must survive it.
     try { await (frame_mode_seen ? check_inside_frame() : check_parked_frame()); }
@@ -640,7 +661,7 @@ try {
   log_row(result.meta);
   for (const page of page_names) {
     if (page === "sites") {
-      result.meta.sites = tool === "none" ? { keys: { control: PASSTHROUGH_KEYS }, settings: "no extension, the control pass of the movement probe sites only" } : { keys: TOOL_KEYS[tool], settings: "extension defaults" };
+      result.meta.sites = tool === "none" ? { keys: { control: Object.fromEntries(SITES.filter((entry) => entry.scroll_probe).map((entry) => [entry.name, control_of(entry)])) }, settings: "no extension, the control pass of the movement probe sites only" } : { keys: TOOL_KEYS[tool], settings: "extension defaults" };
       const only_sites = process.env.SITES?.split(",");
       for (const site of SITES.filter((entry) => (!only_sites || only_sites.includes(entry.name)) && (addon || entry.scroll_probe))) {
         // One site that hangs the debugger must not cost the other sites their results.

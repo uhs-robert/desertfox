@@ -184,8 +184,8 @@ answer("move_state", async ({ probe }) => {
   return null;
 });
 
-// Puts the focus where a click on the site's work area would, for the control pass: the site's own key reaches the map, the canvas or the editor only from there. Sheets has the focus on its grid already.
-const VIEW_SELECTORS = { maps: "[role=application]", excalidraw: ".excalidraw canvas.interactive", stackblitz: ".monaco-editor textarea" };
+// Puts the focus where a click on the site's work area would. Every row of a movement probe starts here, so the control and every tool meet the same focus: the site's own keys reach the grid, the map or the editor only from there.
+const VIEW_SELECTORS = { sheets: "#waffle-rich-text-editor", maps: "[role=application]", excalidraw: ".excalidraw canvas.interactive", stackblitz: ".monaco-editor textarea" };
 answer("focus_view", async ({ probe }) => {
   const el = VIEW_SELECTORS[probe] ? content.document.querySelector(VIEW_SELECTORS[probe]) : null;
   el?.focus();
