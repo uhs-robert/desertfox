@@ -22,7 +22,7 @@ export const set_editable_rules = (values: typeof rules = {}): void => {
 };
 
 // A selector that does not parse matches nothing, so one bad entry leaves the rest working.
-const matches_any = (element: Element, selectors: string[] = []): boolean =>
+export const matches_any = (element: Element, selectors: string[] = []): boolean =>
   selectors.some((selector) => {
     try {
       return element.matches(selector);

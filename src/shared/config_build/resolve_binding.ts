@@ -8,7 +8,7 @@ import type { Registry } from "../registry/index.ts";
 
 type Step = string | BoundInvocation;
 
-export function is_labeled_binding(entry: unknown): entry is { run: Step | readonly Step[]; label?: string; intent?: string } {
+export function is_labeled_binding(entry: unknown): entry is { run: Step | readonly Step[]; label?: string; intent?: string; when_focus?: string } {
   return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 
@@ -26,7 +26,7 @@ export function make_entry_resolver(registry: Registry, sources: EnumSources, pr
     const parsed = run.map((step) => resolve_step(step, where));
     return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
   };
-  // The label and the intent sit on the first invocation, as the compiler reads them there.
+  // The label, the intent and the focus guard sit on the first invocation, as the compiler reads them there.
   return (entry: unknown, where: string): BoundInvocation | BoundInvocation[] | undefined => {
     if (!is_labeled_binding(entry)) return resolve_run(entry as Step | readonly Step[], where);
     const binding = resolve_run(entry.run, where);
@@ -39,6 +39,7 @@ export function make_entry_resolver(registry: Registry, sources: EnumSources, pr
       if (entry.label !== undefined) [binding].flat()[0]!.label = entry.label;
       if (entry.intent !== undefined) [binding].flat()[0]!.intent = entry.intent;
     }
+    if (entry.when_focus !== undefined) [binding].flat()[0]!.when_focus = entry.when_focus;
     return binding;
   };
 }

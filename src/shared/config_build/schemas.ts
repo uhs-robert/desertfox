@@ -68,9 +68,11 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
+const WHEN_FOCUS: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while nothing has focus or the focused element matches it, and the key runs the binding it replaced otherwise" };
+
 // The formats of a keymap binding, plus the invocation table `{ id, args }` that the build stores and a saved edit exports.
 const BIND_STEP: Schema = {
-  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT }, required: ["id"], additionalProperties: false }],
+  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS }, required: ["id"], additionalProperties: false }],
 };
 const BIND_STEPS: Schema = { type: "array", minItems: 1, maxItems: MAX_BIND_STEPS, items: BIND_STEP };
 
@@ -78,7 +80,7 @@ const BINDINGS_SCHEMA: Schema = {
   type: "object",
   minProperties: 1,
   additionalProperties: {
-    anyOf: [BIND_STEP, BIND_STEPS, { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT }, required: ["run"], additionalProperties: false }],
+    anyOf: [BIND_STEP, BIND_STEPS, { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS }, required: ["run"], additionalProperties: false }],
   },
 };
 

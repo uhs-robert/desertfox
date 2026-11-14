@@ -59,9 +59,16 @@ const SHEETS_PASS = "<C-a> <C-x> <C-v>";
 // Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.
 // The cell editor stays focused, parked with no width, while a cell is only selected, so it counts as a field only once it has width. The id stands for the site: a rule on zero width alone would also catch the hidden field a web terminal types into.
 // The second pattern is the address form of a Google Workspace domain.
+// Google Maps pans on arrow keys only while its map element has focus, and Escape blurs it, but a synthetic arrow sent to the map pans it with body focused. The guard leaves j and k to scroll the place panel when it has focus. The aria-label of the map is localized, so the selector skips it. The matcher cannot name every google.<country> host, so the rows cover google.com alone.
+const MAPS_TARGET = 'div[role="application"][tabindex="0"]';
+const map_arrow = (key: string, key_code: number): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: MAPS_TARGET }, when_focus: MAPS_TARGET });
+const MAPS_BIND: BindingTable = { h: map_arrow("ArrowLeft", 37), j: map_arrow("ArrowDown", 40), k: map_arrow("ArrowUp", 38), l: map_arrow("ArrowRight", 39) };
+
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
   { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
+  { name: "maps", row: { site: "https://www.google.com/maps*", bind: MAPS_BIND } },
+  { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

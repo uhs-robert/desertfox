@@ -95,15 +95,15 @@ function bind_steps_problem(steps: unknown): string | undefined {
   for (const step of list) {
     if (is_text(step)) continue;
     if (!is_table(step) || !is_text(step.id)) return 'has a step that is neither a command string nor a table with an "id"';
-    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", "label", "intent"].includes(name));
+    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", "label", "intent", "when_focus"].includes(name));
     if (unknown_field !== undefined) return `has a step with the unknown field "${unknown_field}"`;
     if ((step.args !== undefined && !is_table(step.args)) || (step.prompt !== undefined && !is_table(step.prompt))) return 'has a step with "args" or "prompt" that is not a table';
-    if ([step.label, step.intent].some((text) => text !== undefined && typeof text !== "string")) return 'has a step with a "label" or "intent" that is not text';
+    if ([step.label, step.intent, step.when_focus].some((text) => text !== undefined && typeof text !== "string")) return 'has a step with a "label", "intent" or "when_focus" that is not text';
   }
   return undefined;
 }
 
-// Whether each key is valid notation and each value is a binding as the keymap writes it: a command string, a list of steps, a `{ run, label, intent }` table, or an invocation table `{ id, args }`, which is what the build stores. Whether the command exists and takes the args is the compiler's check, with the registry validator.
+// Whether each key is valid notation and each value is a binding as the keymap writes it: a command string, a list of steps, a `{ run, label, intent, when_focus }` table, or an invocation table `{ id, args }`, which is what the build stores. Whether the command exists and takes the args is the compiler's check, with the registry validator.
 function bindings_problem(value: unknown): string | undefined {
   if (!is_table(value) || Object.keys(value).length === 0) return "is not a table of keys to commands";
   for (const [key, binding] of Object.entries(value)) {
@@ -111,9 +111,9 @@ function bindings_problem(value: unknown): string | undefined {
     if (error !== undefined) return `binds "${key}", which ${error}`;
     const labeled = is_table(binding) && "run" in binding;
     if (labeled) {
-      const unknown_field = Object.keys(binding).find((name) => !["run", "label", "intent"].includes(name));
+      const unknown_field = Object.keys(binding).find((name) => !["run", "label", "intent", "when_focus"].includes(name));
       if (unknown_field !== undefined) return `binds "${key}" with the unknown field "${unknown_field}"`;
-      if ([binding.label, binding.intent].some((text) => text !== undefined && typeof text !== "string")) return `binds "${key}" with a "label" or "intent" that is not text`;
+      if ([binding.label, binding.intent, binding.when_focus].some((text) => text !== undefined && typeof text !== "string")) return `binds "${key}" with a "label", "intent" or "when_focus" that is not text`;
     }
     const problem = bind_steps_problem(labeled ? binding.run : binding);
     if (problem !== undefined) return `binds "${key}" to something that ${problem}`;
