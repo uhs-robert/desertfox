@@ -195,7 +195,7 @@ const cmdline = create_cmdline_service({
   page_config: async () => {
     const config = await get_config();
     const settings = effective_settings(config.settings);
-    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, theme_names: Object.keys(config.local_themes ?? {}), prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
   },
 });
 
