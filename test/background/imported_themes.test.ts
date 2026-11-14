@@ -81,21 +81,21 @@ const save = (name: string, text: string, replace = false) => ({ type: "change_i
 
 test("a saved scheme is stored whole, :set theme accepts its name, and the published theme is the mapped one", async () => {
   const { messages, startup, local, set_theme } = await started("save");
-  const answer = await messages.change(save("gruvbox", SCHEME));
+  const answer = await messages.change(save("dusk_one", SCHEME));
   assert.equal(answer.ok, true);
-  assert.deepEqual(Object.keys(local[THEME_EDITS_STORAGE_KEY] as object), ["gruvbox"]);
-  assert.deepEqual(local[THEME_EDITS_STORAGE_KEY], { gruvbox: mapped(SCHEME) });
-  assert.deepEqual(await messages.list(), { ok: true, names: ["gruvbox"] });
+  assert.deepEqual(Object.keys(local[THEME_EDITS_STORAGE_KEY] as object), ["dusk_one"]);
+  assert.deepEqual(local[THEME_EDITS_STORAGE_KEY], { dusk_one: mapped(SCHEME) });
+  assert.deepEqual(await messages.list(), { ok: true, names: ["dusk_one"] });
 
-  await set_theme("gruvbox");
+  await set_theme("dusk_one");
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(SCHEME));
-  assert.equal(load_theme("gruvbox", 3, (await startup.get_config()).local_themes)?.dark.bg_core, "#282828");
+  assert.equal(load_theme("dusk_one", 3, (await startup.get_config()).local_themes)?.dark.bg_core, "#282828");
 });
 
 test(":set theme to an unknown name still warns, so only imported names are new", async () => {
   const { startup } = await started("unknown");
   await startup.change_edits((current, config) => {
-    const plan = plan_set_value("theme", "gruvbox", "saved", current, config);
+    const plan = plan_set_value("theme", "dusk_one", "saved", current, config);
     assert.equal(plan.toast.kind, "warning");
     return undefined;
   });
@@ -153,20 +153,20 @@ test("a damaged store keeps only the whole themes, so the compile and the export
 
 test("the settings export carries each imported theme, and importing it elsewhere gives the same theme by name", async () => {
   const first = await started("export_a");
-  await first.messages.change(save("gruvbox", SCHEME));
+  await first.messages.change(save("dusk_one", SCHEME));
   await first.messages.change(save("other", OTHER_SCHEME));
   await first.set_theme("other");
   const exported = (await first.export_all()).config_files;
-  assert.deepEqual(Object.keys(exported).filter((path) => path.startsWith("themes/")).sort(), ["themes/gruvbox.toml", "themes/other.toml"]);
+  assert.deepEqual(Object.keys(exported).filter((path) => path.startsWith("themes/")).sort(), ["themes/dusk_one.toml", "themes/other.toml"]);
   assert.match(exported["settings.d/zz-saved-edits.toml"] ?? "", /theme = "other"/);
 
   const second = await started("export_b", { "settings.toml": "" });
   await second.startup.import_config({ kind: "zip", bytes: write_zip(exported) }, {});
   const config = await second.startup.get_config();
-  assert.deepEqual(config.local_themes?.gruvbox, mapped(SCHEME));
+  assert.deepEqual(config.local_themes?.dusk_one, mapped(SCHEME));
   assert.deepEqual(config.local_themes?.other, mapped(OTHER_SCHEME));
   assert.deepEqual(second.local[THEME_STORAGE_KEY], mapped(OTHER_SCHEME));
-  await second.set_theme("gruvbox");
+  await second.set_theme("dusk_one");
   assert.deepEqual(second.local[THEME_STORAGE_KEY], mapped(SCHEME));
 });
 
@@ -183,34 +183,34 @@ test("the import wins over a theme file of the same name, in the running config 
 
 test("the picker lists the imported names after the built-in ones", () => {
   const status = { settings: DEFAULT_SETTINGS, saved: [], temp: [], configured: [] };
-  const allowed = build_setting_list(status, ["gruvbox"]).find((row) => row.name === "theme")?.allowed;
-  assert.equal(allowed?.at(-1), "gruvbox");
+  const allowed = build_setting_list(status, ["dusk_one"]).find((row) => row.name === "theme")?.allowed;
+  assert.equal(allowed?.at(-1), "dusk_one");
   assert.ok(allowed?.includes("oasis_cactus"));
-  assert.equal(build_setting_list(status).find((row) => row.name === "theme")?.allowed?.includes("gruvbox"), false);
+  assert.equal(build_setting_list(status).find((row) => row.name === "theme")?.allowed?.includes("dusk_one"), false);
 });
 
 test("removing the active imported theme falls back to the default with no warning, and the theme edit goes with it", async () => {
   const { messages, startup, local, set_theme } = await started("remove_active");
-  await messages.change(save("gruvbox", SCHEME));
+  await messages.change(save("dusk_one", SCHEME));
   await messages.change(save("other", OTHER_SCHEME));
-  await set_theme("gruvbox");
+  await set_theme("dusk_one");
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(SCHEME));
 
-  const removed = await messages.change({ type: "change_imported_themes", action: "remove", name: "gruvbox" });
+  const removed = await messages.change({ type: "change_imported_themes", action: "remove", name: "dusk_one" });
   assert.equal(removed.ok, true);
   assert.deepEqual(local[THEME_STORAGE_KEY], load_theme("oasis_moonlight", 3));
   assert.deepEqual(Object.keys(local[THEME_EDITS_STORAGE_KEY] as object), ["other"]);
   assert.equal((await startup.get_config()).settings.theme, undefined);
   assert.deepEqual((local[WARNINGS_STORAGE_KEY] as string[]).filter((warning) => warning.includes("theme")), []);
-  assert.equal((await messages.change({ type: "change_imported_themes", action: "remove", name: "gruvbox" })).ok, false);
+  assert.equal((await messages.change({ type: "change_imported_themes", action: "remove", name: "dusk_one" })).ok, false);
 });
 
 test("removing an imported theme that is not in use leaves the setting and the published theme alone, across a restart", async () => {
   const { messages, startup, local, set_theme } = await started("remove_other");
-  await messages.change(save("gruvbox", SCHEME));
+  await messages.change(save("dusk_one", SCHEME));
   await messages.change(save("other", OTHER_SCHEME));
   await set_theme("other");
-  await messages.change({ type: "change_imported_themes", action: "remove", name: "gruvbox" });
+  await messages.change({ type: "change_imported_themes", action: "remove", name: "dusk_one" });
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(OTHER_SCHEME));
   assert.equal((await startup.get_config()).settings.theme, "other");
   // A restart reads the edit and the stored list again.

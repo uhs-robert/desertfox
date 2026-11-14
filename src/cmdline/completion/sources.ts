@@ -174,7 +174,7 @@ function value_rows(command: Command, param: ParamDef, sources: EnumSources): Ro
 }
 
 // `set`, `toggle` and `unset` take setting names first. The words after the name of a setting that lists values offer those values.
-function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text: string, usage: string): Row[] | undefined {
+function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text: string, usage: string, theme_names: readonly string[]): Row[] | undefined {
   const command_id = context.command.id;
   if (command_id !== "settings.set" && command_id !== "settings.unset" && command_id !== "settings.toggle") return undefined;
   const row = (name: string, insert: string, description: string): Row => ({ name, insert, description, args: "", also_named: [], keywords: [], usage });
@@ -192,7 +192,9 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   const other_words = [...(Array.isArray(typed) ? typed.slice(2) : []), ...(Array.isArray(after) ? after : [])];
   // Split on whitespace as `parse_setting_text` does: a quoted token can hold several items.
   const already_typed = new Set(other_words.flatMap((token) => token.text.split(/\s+/)));
-  return spec.values.filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
+  // The generated list holds the built-in themes. The config's theme files and imports are known only at runtime.
+  const values = setting === "theme" ? [...new Set([...spec.values, ...theme_names])] : spec.values;
+  return values.filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
 }
 
 // With no word typed, the bookmark list shows this many of the newest.
@@ -356,6 +358,7 @@ export function create_completer(
   sources: EnumSources,
   opened_from = "normal",
   live?: Pick<LiveSource, "read"> & Partial<Pick<LiveSource, "read_all_tabs">>,
+  theme_names: readonly string[] = [],
 ) {
   const all_commands = command_rows(commands, command_aliases, opened_from);
   return (text: string, caret: number): Completion => {
@@ -365,7 +368,7 @@ export function create_completer(
     if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands), listing: true };
     const usage = usage_line(context.command);
     if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command, context.typed)), listing: true };
-    const settings = context.kind === "subject" ? setting_rows(context, text, usage) : undefined;
+    const settings = context.kind === "subject" ? setting_rows(context, text, usage, theme_names) : undefined;
     if (settings) return { ...span, usage, rows: rank(context.word, settings), listing: settings.length > 0 };
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;
     // `media quality ` lists the levels of the page's player: the first word that is not a flag is the action, and the subject after it is the value.

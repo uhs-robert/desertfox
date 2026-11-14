@@ -33,7 +33,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     new_ticket: () => `ticket-${++issued}`,
     sources: async () => ({ search_engines: ["arch"], containers: [] }),
     container_stores: async () => [{ name: "default", cookie_store_id: "firefox-default" }],
-    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, prompt: ">> ", all_windows: false, statusbar_widgets: ["url", "tabs"] }),
+    page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, theme_names: [], prompt: ">> ", all_windows: false, statusbar_widgets: ["url", "tabs"] }),
     tab_count: async (window_id) => (window_id === 10 ? 4 : 0),
     frame_exists: async (_tab_id, frame_id) => !gone_frames.has(frame_id),
   });
