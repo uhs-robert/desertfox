@@ -1,7 +1,7 @@
 // The air quality row in the weather detail. It needs a second Open-Meteo host, so nothing is fetched until the reader opens the More panel, and a reader who never opens it sends no request. The caller checks the setting and privacy first, as for every card on `net_widget.ts`.
 import { refused_as } from "../shared/swallow.ts";
 import { fetch_text, load_cached, type NetEnv } from "./net_widget.ts";
-import { stat } from "./weather_detail.ts";
+import { divider } from "./weather_detail.ts";
 
 export const AIR_TTL_MS = 30 * 60_000;
 export const AIR_MAX_AGE_MS = 6 * 3_600_000;
@@ -38,9 +38,16 @@ export function parse_air_quality(text: string, units: "metric" | "imperial"): A
 const US_BANDS: [number, string][] = [[50, "Good"], [100, "Moderate"], [150, "Sensitive"], [200, "Unhealthy"], [300, "Very unhealthy"]];
 const EU_BANDS: [number, string][] = [[20, "Good"], [40, "Fair"], [60, "Moderate"], [80, "Poor"], [100, "Very poor"]];
 
+// 0 is the best band and 5 the worst. Both scales have six.
+export function air_level(air: Pick<AirQuality, "scale" | "index">): number {
+  const bands = air.scale === "us" ? US_BANDS : EU_BANDS;
+  const level = bands.findIndex(([top]) => air.index <= top);
+  return level === -1 ? bands.length : level;
+}
+
 export function air_band(air: Pick<AirQuality, "scale" | "index">): string {
   const bands = air.scale === "us" ? US_BANDS : EU_BANDS;
-  return bands.find(([top]) => air.index <= top)?.[1] ?? (air.scale === "us" ? "Hazardous" : "Extremely poor");
+  return bands[air_level(air)]?.[1] ?? (air.scale === "us" ? "Hazardous" : "Extremely poor");
 }
 
 export const is_air_quality = (stored: unknown): stored is AirQuality => {
@@ -48,13 +55,39 @@ export const is_air_quality = (stored: unknown): stored is AirQuality => {
   return (value?.scale === "us" || value?.scale === "eu") && is_number(value.index) && [value.pm2_5, value.pm10, value.ozone].every((part) => part === undefined || is_number(part));
 };
 
-// The index with its band, then the pollutants Open-Meteo gave.
+const text_span = (class_name: string, text: string): HTMLElement => {
+  const span = document.createElement("span");
+  span.className = class_name;
+  span.textContent = text;
+  return span;
+};
+
+// Under its own divider: the index with a dot colored for its band, then the band name, and the particles and ozone as smaller values.
 export function draw_air_quality(air: AirQuality): HTMLElement {
+  const group = document.createElement("div");
+  group.className = "weather-air";
   const row = document.createElement("div");
-  row.className = "weather-facts weather-air";
-  row.append(stat(`${Math.round(air.index)} ${air_band(air)}`, air.scale === "us" ? "Air quality (US AQI)" : "Air quality (EU AQI)"));
-  for (const [value, label] of [[air.pm2_5, "PM2.5"], [air.pm10, "PM10"], [air.ozone, "Ozone"]] as const) if (value !== undefined) row.append(stat(String(Math.round(value)), label));
-  return row;
+  row.className = "weather-air-row";
+  const index = document.createElement("div");
+  index.className = "weather-air-index";
+  const dot = document.createElement("span");
+  dot.className = `weather-aqi-dot weather-aqi-level-${air_level(air)}`;
+  const text = document.createElement("div");
+  text.className = "weather-fact-text";
+  text.append(text_span("weather-label", air.scale === "us" ? "Air quality (US AQI)" : "Air quality (EU AQI)"), text_span("weather-value", `${Math.round(air.index)} ${air_band(air)}`));
+  index.append(dot, text);
+  const parts = document.createElement("div");
+  parts.className = "weather-air-parts";
+  for (const [value, label] of [[air.pm2_5, "PM2.5"], [air.pm10, "PM10"], [air.ozone, "Ozone"]] as const) {
+    if (value === undefined) continue;
+    const part = document.createElement("div");
+    part.className = "weather-air-part";
+    part.append(text_span("weather-label", label), text_span("weather-air-value", String(Math.round(value))));
+    parts.append(part);
+  }
+  row.append(index, parts);
+  group.append(divider(), row);
+  return group;
 }
 
 export type AirLoader = (place: AirPlace, show: (air: AirQuality) => void) => void;
