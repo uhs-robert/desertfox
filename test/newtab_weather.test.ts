@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NetEnv } from "../src/newtab/net_widget.ts";
 import { draw_weather_icon, icon_kind } from "../src/newtab/weather_icon.ts";
-import { clock_text, compass_point, later_hours } from "../src/newtab/weather_detail.ts";
+import { clock_text, compass_point, hours_that_fit, later_hours } from "../src/newtab/weather_detail.ts";
 import { net_cache_key } from "../src/newtab/net_widget.ts";
 import { air_band, air_quality_url, parse_air_quality } from "../src/newtab/air_quality.ts";
 import { describe_code, draw_weather, forecast_url, forget_weather, geocode_url, parse_forecast, parse_geocode, round_coordinate, run_weather, start_weather, type WeatherDeps, type WeatherSettings, type WeatherView } from "../src/newtab/weather.ts";
@@ -12,13 +12,13 @@ const HOUR_TIMES = Array.from({ length: 12 }, (_, index) => new Date(Date.UTC(20
 const forecast_body = (over: Record<string, unknown> = {}) => ({
   utc_offset_seconds: 3600,
   current: { temperature_2m: 12.4, apparent_temperature: 10.1, relative_humidity_2m: 44, weather_code: 3, wind_speed_10m: 11.6, wind_direction_10m: 320 },
-  hourly: { time: HOUR_TIMES, temperature_2m: HOUR_TIMES.map((_, index) => 12 - index), precipitation_probability: HOUR_TIMES.map((_, index) => 30 + index) },
+  hourly: { time: HOUR_TIMES, temperature_2m: HOUR_TIMES.map((_, index) => 12 - index), precipitation_probability: HOUR_TIMES.map((_, index) => 30 + index), weather_code: HOUR_TIMES.map((_, index) => (index % 2 ? 61 : 3)) },
   daily: { time: ["2026-11-14"], temperature_2m_max: [14.2], temperature_2m_min: [5.8], uv_index_max: [2.4], sunrise: ["2026-11-14T07:42"], sunset: ["2026-11-14T15:31"] },
   ...over,
 });
 const FORECAST = JSON.stringify(forecast_body());
 const WEATHER_CARD = { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: "2026-11-14", utc_offset_seconds: 3600, wind_speed: 11.6, wind_direction: 320, latitude: 59.91, longitude: 10.75, code: 3 };
-const WEATHER_DETAIL = { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: HOUR_TIMES.map((time, index) => ({ time, temperature: 12 - index, rain_chance: 30 + index })) };
+const WEATHER_DETAIL = { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: HOUR_TIMES.map((time, index) => ({ time, temperature: 12 - index, rain_chance: 30 + index, code: index % 2 ? 61 : 3 })) };
 const GEOCODE = JSON.stringify({ results: [{ name: "Oslo", latitude: 59.91273, longitude: 10.74609 }] });
 
 function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; is_private?: boolean; fail_fetch?: boolean } = {}) {
@@ -332,7 +332,7 @@ const weather_view = (over: Record<string, unknown> = {}): WeatherView => ({ kin
 test("the forecast url asks for the card, the daily set and 12 hours in one request, with mph only for imperial", () => {
   const metric = new URL(forecast_url(59.91273, 10.74609, "metric"));
   assert.equal(metric.searchParams.get("current"), "temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m");
-  assert.equal(metric.searchParams.get("hourly"), "temperature_2m,precipitation_probability");
+  assert.equal(metric.searchParams.get("hourly"), "temperature_2m,precipitation_probability,weather_code");
   assert.equal(metric.searchParams.get("daily"), "temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset");
   assert.equal(metric.searchParams.get("forecast_hours"), "12");
   assert.equal(metric.searchParams.get("forecast_days"), "1");
@@ -360,8 +360,8 @@ test("a missing daily block or odd hours leave the card, and only the detail gro
   assert.equal("detail" in no_daily, false);
   assert.equal(parse_forecast(JSON.stringify(forecast_body({ daily: {} }))), undefined, "high and low are card fields");
   assert.equal(parse_forecast(JSON.stringify(forecast_body({ current: { temperature_2m: 1, apparent_temperature: 0, relative_humidity_2m: 5, weather_code: 0 } }))), undefined, "wind is a card field");
-  const uneven = parse_forecast(JSON.stringify(forecast_body({ hourly: { time: ["2026-11-14T15:00", "2026-11-14T16:00", 7], temperature_2m: [3, "x"], precipitation_probability: [10] } })))!;
-  assert.deepEqual(uneven.detail!.hours, [{ time: "2026-11-14T15:00", temperature: 3, rain_chance: 10 }]);
+  const uneven = parse_forecast(JSON.stringify(forecast_body({ hourly: { time: ["2026-11-14T15:00", "2026-11-14T16:00", 7], temperature_2m: [3, "x"], precipitation_probability: [10], weather_code: [3, 3] } })))!;
+  assert.deepEqual(uneven.detail!.hours, [{ time: "2026-11-14T15:00", temperature: 3, rain_chance: 10, code: 3 }]);
 });
 
 test("a stored entry of the previous shape is fetched again once instead of throwing", async () => {
@@ -701,3 +701,107 @@ test("a failed or odd air quality answer draws no row and leaves the rest of the
       assert.equal("newtab_net_cache_air" in card.store, false);
     }
   }));
+
+// Units auto, hour strip and the default-on card.
+const geocode_in = (country_code: string) => JSON.stringify({ results: [{ name: "Somewhere", latitude: 40.71, longitude: -74.0, country_code }] });
+function auto_deps(over: { timezone?: string; country_code?: string; allowed?: boolean }) {
+  const { deps, urls } = fake_deps({ allowed: over.allowed ?? false });
+  deps.net.fetch = (async (input: string) => {
+    urls.push(String(input));
+    if (String(input).includes("geocoding")) return new Response(geocode_in(over.country_code ?? ""));
+    return new Response(JSON.stringify({ ...forecast_body(), ...(over.timezone ? { timezone: over.timezone } : {}) }));
+  }) as typeof fetch;
+  return { deps, urls };
+}
+const auto = (extra: Partial<WeatherSettings> = {}): WeatherSettings => on({ newtab_weather_units: "auto", ...extra });
+
+test("auto units for a city follow the geocoder's country: imperial for US, LR and MM, metric elsewhere, and the request asks in that unit", async () => {
+  for (const [code, units, fahrenheit] of [["US", "imperial", true], ["us", "imperial", true], ["LR", "imperial", true], ["MM", "imperial", true], ["NO", "metric", false], ["GB", "metric", false]] as const) {
+    const { deps, urls } = auto_deps({ country_code: code });
+    const views = await collect(auto({ newtab_weather_city: "X" }), deps);
+    const shown = views.find((view) => view.kind === "weather") as { weather: { units: string; temperature: number } };
+    assert.equal(shown.weather.units, units, code);
+    assert.equal(urls.length, 2);
+    assert.equal(new URL(urls[1]!).searchParams.get("temperature_unit"), fahrenheit ? "fahrenheit" : "celsius", code);
+    assert.equal(shown.weather.temperature, 12.4, "the server converts, the page does not");
+  }
+});
+
+test("auto units for a position map the forecast's time zone: one request, converted locally when the zone is imperial", async () => {
+  const us = auto_deps({ allowed: true, timezone: "America/Chicago" });
+  const [view] = await collect(auto(), us.deps);
+  assert.equal(us.urls.length, 1);
+  assert.equal(new URL(us.urls[0]!).searchParams.get("temperature_unit"), "celsius");
+  const weather = (view as { weather: { units: string; temperature: number; feels_like: number; high: number; wind_speed: number; detail: { hours: { temperature: number }[] }; latitude: number } }).weather;
+  assert.equal(weather.units, "imperial");
+  assert.equal(Math.round(weather.temperature * 10) / 10, 54.3);
+  assert.equal(Math.round(weather.high * 10) / 10, 57.6);
+  assert.equal(Math.round(weather.wind_speed * 10) / 10, 7.2);
+  assert.equal(Math.round(weather.detail.hours[0]!.temperature * 10) / 10, 53.6);
+  for (const [zone, units] of [["Europe/Oslo", "metric"], ["Africa/Monrovia", "imperial"], ["Asia/Yangon", "imperial"], ["America/Indiana/Knox", "imperial"], ["Pacific/Honolulu", "imperial"], ["America/Toronto", "metric"], ["America/Mexico_City", "metric"], ["Asia/Tokyo", "metric"]] as const) {
+    const run = auto_deps({ allowed: true, timezone: zone });
+    const [shown] = await collect(auto(), run.deps);
+    assert.equal((shown as { weather: { units: string } }).weather.units, units, zone);
+  }
+  const none = auto_deps({ allowed: true });
+  assert.equal(((await collect(auto(), none.deps))[0] as { weather: { units: string } }).weather.units, "metric", "no zone in the answer is metric");
+});
+
+test("a fixed units choice wins over the country, and the stored answer is keyed by the setting", async () => {
+  const fixed = auto_deps({ country_code: "US" });
+  await collect(on({ newtab_weather_units: "metric", newtab_weather_city: "X" }), fixed.deps);
+  assert.equal(new URL(fixed.urls[1]!).searchParams.get("temperature_unit"), "celsius");
+  const imperial = auto_deps({ allowed: true, timezone: "Europe/Oslo" });
+  const [shown] = await collect(on({ newtab_weather_units: "imperial" }), imperial.deps);
+  assert.equal(new URL(imperial.urls[0]!).searchParams.get("temperature_unit"), "fahrenheit");
+  assert.equal((shown as { weather: { units: string } }).weather.units, "imperial");
+  const keyed = auto_deps({ allowed: true });
+  await collect(auto(), keyed.deps);
+  assert.equal(await keyed.deps.net.storage.get("newtab_net_cache_weather").then((found) => (found["newtab_net_cache_weather"] as { key: string }).key), "geo:59.91,10.75|auto");
+  await collect(auto(), keyed.deps);
+  assert.equal(keyed.urls.length, 1, "a stored auto answer is reused whatever unit it resolved to");
+});
+
+test("air quality follows the resolved units, also when auto resolved them", () =>
+  with_fake_document(async () => {
+    const us = await air_card({ units: "imperial" });
+    us.click();
+    await settle();
+    assert.match(us.requests[0]!.url, /current=us_aqi/);
+  }));
+
+test("with newtab_weather on by default and no permission and no city, the card only offers the button and sends nothing", async () => {
+  const { deps, urls } = fake_deps();
+  const settings = { newtab_weather: true, newtab_weather_units: "auto", newtab_clock_format: 12 } as WeatherSettings;
+  assert.deepEqual(await collect(settings, deps), [{ kind: "ask_location" }]);
+  assert.deepEqual(urls, []);
+  const priv = fake_deps({ is_private: true, allowed: true });
+  assert.deepEqual(await collect(settings, priv.deps), []);
+  assert.deepEqual(priv.urls, []);
+});
+
+test("hours_that_fit gives at least 6 and at most 11, from the panel width, at 360 px and at full width", () => {
+  assert.equal(hours_that_fit(360, 16), 6);
+  assert.equal(hours_that_fit(1280, 16), 7);
+  assert.equal(hours_that_fit(300, 16), 6, "never under 6");
+  assert.equal(hours_that_fit(360, 20), 6, "zoom leaves fewer, down to 6");
+  assert.ok(hours_that_fit(1280, 8) <= 11);
+});
+
+test("each hour is four rows in one row of columns: time, icon without a label, temperature, rain, with the rain row kept empty when absent", () =>
+  with_fake_document(() => {
+    const slot = new FakeNode("div");
+    const hours = WEATHER_DETAIL.hours.map((hour, index) => (index === 2 ? { time: hour.time, temperature: hour.temperature, code: hour.code } : hour));
+    draw_weather(slot as never, weather_view({ detail: { ...WEATHER_DETAIL, hours } }), () => {}, 24, () => NOW_MS);
+    const [first, second] = slot.querySelectorAll(".weather-hour");
+    assert.deepEqual(first!.children.map((child) => child.tag), ["span", "svg", "span", "span"]);
+    assert.equal(first!.children[1]!.getAttribute("aria-hidden"), "true");
+    assert.equal(first!.children[1]!.getAttribute("role"), null);
+    assert.equal(first!.children[3]!.textContent, "31%");
+    assert.equal(second!.children[3]!.textContent, "");
+    assert.equal(slot.querySelectorAll(".weather-hours").length, 1);
+  }));
+
+test("the strip is capped to the count that fits", () => {
+  assert.equal(later_hours(WEATHER_DETAIL.hours, 0, NOW_MS, 6).length, 6);
+});

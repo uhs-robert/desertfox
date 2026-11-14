@@ -1,12 +1,14 @@
-// The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off unless `newtab_weather` is true. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
+// The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off when `newtab_weather` is false, and sends nothing until a position is granted or a city is set. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { draw_weather_icon } from "./weather_icon.ts";
-import { compass_point, draw_hours_strip, draw_weather_detail, stat } from "./weather_detail.ts";
+import { compass_point, draw_hours_strip, draw_weather_detail, hours_that_fit, MAX_STRIP_HOURS, stat } from "./weather_detail.ts";
 import type { ClockFormat } from "./digital_clock.ts";
 import { draw_air_quality, make_air_loader, type AirLoader } from "./air_quality.ts";
 import { browser_net_env, fetch_text, load_cached, net_cache_key, peek_cached, stoppable_net, type NetEnv } from "./net_widget.ts";
 
+type Units = "metric" | "imperial";
+type UnitsSetting = Units | "auto";
 export type WeatherSettings = Pick<Settings, "newtab_weather" | "newtab_weather_city" | "newtab_weather_units" | "newtab_clock_format">;
 
 // Also the age Firefox may reuse a position, so a new tab inside the window reads no fresh fix.
@@ -15,12 +17,12 @@ export const WEATHER_TTL_MS = 30 * 60_000;
 export const WEATHER_MAX_AGE_MS = 6 * 3_600_000;
 export const GEOLOCATION_TIMEOUT_MS = 5000;
 
-// `time` is the place's own local hour, `2026-11-14T15:00`, as Open-Meteo gives it with `timezone=auto`. `rain_chance` is a percent and absent when Open-Meteo gives none.
-export type WeatherHour = { time: string; temperature: number; rain_chance?: number };
+// `time` is the place's own local hour, `2026-11-14T15:00`, as Open-Meteo gives it with `timezone=auto`. `rain_chance` is a percent and absent when Open-Meteo gives none. `code` is the hour's WMO weather code.
+export type WeatherHour = { time: string; temperature: number; rain_chance?: number; code: number };
 // The group behind the More button. `sunrise` and `sunset` are local `HH:MM`. A card whose answer lacks any of it draws with no button.
 export type WeatherDetail = { uv_index: number; sunrise: string; sunset: string; hours: WeatherHour[] };
 // `latitude` and `longitude` are the rounded coordinates the forecast used, so the air quality request asks about the same place. `date` is the place's local date of the forecast (`2026-11-14`) and `utc_offset_seconds` its offset, so a stored answer is stale once the place's date moves on. `rain_chance` is the percent for the current hour. `wind_direction` is the degrees the wind comes from. Wind speed is km/h for metric and mph for imperial, `high` and `low` are today's.
-export type Weather = { temperature: number; feels_like: number; humidity: number; rain_chance?: number; high: number; low: number; date: string; utc_offset_seconds: number; wind_speed: number; wind_direction: number; detail?: WeatherDetail; latitude: number; longitude: number; code: number; place: string; units: "metric" | "imperial" };
+export type Weather = { temperature: number; feels_like: number; humidity: number; rain_chance?: number; high: number; low: number; date: string; utc_offset_seconds: number; wind_speed: number; wind_direction: number; detail?: WeatherDetail; latitude: number; longitude: number; code: number; place: string; units: Units };
 export type WeatherView = { kind: "weather"; weather: Weather } | { kind: "ask_location" } | { kind: "clear_reading" };
 
 export type WeatherDeps = {
@@ -35,12 +37,12 @@ export type WeatherDeps = {
 
 export const round_coordinate = (degrees: number): number => Math.round(degrees * 100) / 100;
 
-export function forecast_url(latitude: number, longitude: number, units: "metric" | "imperial"): string {
+export function forecast_url(latitude: number, longitude: number, units: Units): string {
   const query = new URLSearchParams({
     latitude: String(round_coordinate(latitude)),
     longitude: String(round_coordinate(longitude)),
     current: "temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m",
-    hourly: "temperature_2m,precipitation_probability",
+    hourly: "temperature_2m,precipitation_probability,weather_code",
     daily: "temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset",
     forecast_hours: "12",
     forecast_days: "1",
@@ -78,7 +80,8 @@ function parse_detail(parsed: { hourly?: Record<string, unknown[] | undefined>; 
   (Array.isArray(hourly?.["time"]) ? hourly["time"] : []).forEach((time, index) => {
     const temperature = hourly?.["temperature_2m"]?.[index];
     const chance = hourly?.["precipitation_probability"]?.[index];
-    if (local_clock(time) !== undefined && is_number(temperature)) hours.push({ time: time as string, temperature, ...(is_number(chance) ? { rain_chance: chance } : {}) });
+    const code = hourly?.["weather_code"]?.[index];
+    if (local_clock(time) !== undefined && is_number(temperature) && is_number(code)) hours.push({ time: time as string, temperature, ...(is_number(chance) ? { rain_chance: chance } : {}), code });
   });
   return { uv_index, sunrise, sunset, hours };
 }
@@ -96,10 +99,10 @@ export function parse_forecast(text: string): Omit<Weather, "place" | "units" | 
   return { temperature: temperature_2m, feels_like: apparent_temperature, humidity: relative_humidity_2m, ...(is_number(chance) ? { rain_chance: chance } : {}), high, low, date, utc_offset_seconds: parsed.utc_offset_seconds, wind_speed: wind_speed_10m, wind_direction: wind_direction_10m, ...(detail ? { detail } : {}), code: weather_code };
 }
 
-export function parse_geocode(text: string): { latitude: number; longitude: number; place: string } | undefined {
-  const found = (parse_json(text) as { results?: { latitude?: unknown; longitude?: unknown; name?: unknown }[] } | undefined)?.results?.[0];
+export function parse_geocode(text: string): Where | undefined {
+  const found = (parse_json(text) as { results?: { latitude?: unknown; longitude?: unknown; name?: unknown; country_code?: unknown }[] } | undefined)?.results?.[0];
   if (typeof found?.latitude !== "number" || typeof found.longitude !== "number" || typeof found.name !== "string") return undefined;
-  return { latitude: round_coordinate(found.latitude), longitude: round_coordinate(found.longitude), place: found.name };
+  return { latitude: round_coordinate(found.latitude), longitude: round_coordinate(found.longitude), place: found.name, ...(typeof found.country_code === "string" ? { country_code: found.country_code } : {}) };
 }
 
 // WMO weather interpretation codes, as Open-Meteo reports them.
@@ -119,7 +122,7 @@ export function describe_code(code: number): string {
 
 const is_hour = (stored: unknown): stored is WeatherHour => {
   const value = stored as Partial<WeatherHour> | undefined;
-  return typeof value?.time === "string" && is_number(value.temperature) && (value.rain_chance === undefined || is_number(value.rain_chance));
+  return typeof value?.time === "string" && is_number(value.temperature) && is_number(value.code) && (value.rain_chance === undefined || is_number(value.rain_chance));
 };
 
 const is_detail = (stored: unknown): stored is WeatherDetail => {
@@ -133,7 +136,24 @@ const is_weather = (stored: unknown): stored is Weather => {
   return is_number(value?.temperature) && is_number(value.feels_like) && is_number(value.humidity) && (value.rain_chance === undefined || is_number(value.rain_chance)) && is_number(value.high) && is_number(value.low) && typeof value.date === "string" && is_number(value.utc_offset_seconds) && is_number(value.wind_speed) && is_number(value.wind_direction) && is_number(value.latitude) && is_number(value.longitude) && (value.detail === undefined || is_detail(value.detail)) && is_number(value.code) && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
 };
 
-type Where = { latitude: number; longitude: number; place: string };
+// `country_code` is the geocoder's ISO 3166 code, present for a city.
+type Where = { latitude: number; longitude: number; place: string; country_code?: string };
+
+const IMPERIAL_COUNTRIES = new Set(["US", "LR", "MM"]);
+// Open-Meteo does not reverse geocode, but the forecast names the time zone of a position. These are the zones of the imperial countries: the United States, Liberia and Myanmar.
+const IMPERIAL_ZONE = /^(America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Adak|Boise|Detroit|Juneau|Menominee|Metlakatla|Nome|Sitka|Yakutat|Indiana\/.+|Kentucky\/.+|North_Dakota\/.+)|Pacific\/Honolulu|Africa\/Monrovia|Asia\/(Yangon|Rangoon))$/;
+
+export const units_for_country = (country_code: string): Units => (IMPERIAL_COUNTRIES.has(country_code.toUpperCase()) ? "imperial" : "metric");
+export const units_for_zone = (timezone: unknown): Units => (typeof timezone === "string" && IMPERIAL_ZONE.test(timezone) ? "imperial" : "metric");
+
+const fahrenheit = (celsius: number): number => (celsius * 9) / 5 + 32;
+const mph = (kmh: number): number => kmh * 0.621371;
+
+// The forecast of a position is asked for before its time zone is known, so it comes back metric and is converted here when the zone says imperial.
+export function to_imperial<T extends Omit<Weather, "place" | "units" | "latitude" | "longitude">>(forecast: T): T {
+  const hours = forecast.detail?.hours.map((hour) => ({ ...hour, temperature: fahrenheit(hour.temperature) }));
+  return { ...forecast, temperature: fahrenheit(forecast.temperature), feels_like: fahrenheit(forecast.feels_like), high: fahrenheit(forecast.high), low: fahrenheit(forecast.low), wind_speed: mph(forecast.wind_speed), ...(forecast.detail && hours ? { detail: { ...forecast.detail, hours } } : {}) };
+}
 
 // Undefined without the permission, and when the browser or the user refuses or the read takes too long. The permission is never requested here, because only a click may do that.
 async function granted_position(deps: WeatherDeps): Promise<{ latitude: number; longitude: number } | undefined> {
@@ -153,16 +173,20 @@ async function geocode_city(city: string, net: NetEnv): Promise<Where | undefine
   return text === undefined ? undefined : parse_geocode(text);
 }
 
-async function forecast_at(where: Where, units: "metric" | "imperial", net: NetEnv): Promise<Weather | undefined> {
-  const text = await fetch_text(forecast_url(where.latitude, where.longitude, units), net);
+// `setting` is `newtab_weather_units`. A fixed choice is asked for as is. For auto, a city already names its country, so the request follows it. A position names no country, so the request is metric and the answer's time zone decides whether it is converted.
+async function forecast_at(where: Where, setting: UnitsSetting, net: NetEnv): Promise<Weather | undefined> {
+  const known: Units | undefined = setting !== "auto" ? setting : where.country_code ? units_for_country(where.country_code) : undefined;
+  const text = await fetch_text(forecast_url(where.latitude, where.longitude, known ?? "metric"), net);
   const now = text === undefined ? undefined : parse_forecast(text);
-  return now && { ...now, latitude: where.latitude, longitude: where.longitude, place: where.place, units };
+  if (!now || text === undefined) return undefined;
+  const units = known ?? units_for_zone((parse_json(text) as { timezone?: unknown } | undefined)?.timezone);
+  return { ...(known === undefined && units === "imperial" ? to_imperial(now) : now), latitude: where.latitude, longitude: where.longitude, place: where.place, units };
 }
 
 const GEO_KEY_PREFIX = "geo:";
 
 // A stored reading in the units asked for. Before the position arrives, the card draws a stored reading made for any coordinates (`GEO_KEY_PREFIX`), because the read can take seconds. The refresh after it replaces it when the coordinates differ.
-const is_weather_in = (units: "metric" | "imperial", now: () => number) => (stored: unknown): stored is Weather => is_weather(stored) && stored.units === units && !is_past_date(stored, now());
+const is_weather_in = (setting: UnitsSetting, now: () => number) => (stored: unknown): stored is Weather => is_weather(stored) && (setting === "auto" || stored.units === setting) && !is_past_date(stored, now());
 
 // The forecast is for one local date. After midnight at the place its high, low, UV and sun times belong to yesterday, so the stored answer is fetched again instead of shown.
 const is_past_date = (weather: Pick<Weather, "date" | "utc_offset_seconds">, now_ms: number): boolean => new Date(now_ms + weather.utc_offset_seconds * 1000).toISOString().slice(0, 10) !== weather.date;
@@ -172,7 +196,7 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   if (settings.newtab_weather !== true) return;
   if (await refused_as(deps.page_is_private(), true)) return;
   const city = (settings.newtab_weather_city ?? "").trim();
-  const units = settings.newtab_weather_units === "imperial" ? "imperial" : "metric";
+  const units: UnitsSetting = settings.newtab_weather_units === "imperial" || settings.newtab_weather_units === "metric" ? settings.newtab_weather_units : "auto";
   const show_weather = (weather: Weather) => show({ kind: "weather", weather });
   const has_permission = await refused_as(deps.has_geolocation_permission(), false);
   // Offered until the permission is granted, even with a city set. Once granted, the position wins over the city.
@@ -209,6 +233,12 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
 
 // The More button of an earlier draw says whether the reader had the detail open. A redraw rebuilds the reading (a stored value, then a fresh one), so the state is read back from the old button.
 const detail_was_open = (slot: HTMLElement): boolean => slot.querySelector(".weather-more")?.getAttribute("aria-expanded") === "true";
+
+// The panel is open when this runs, and the window width and zoom are read now, so each open fits the strip to the window as it is.
+function hours_in_view(panel: HTMLElement): number {
+  const view = panel.ownerDocument?.defaultView;
+  return view ? hours_that_fit(view.innerWidth, parseFloat(view.getComputedStyle(view.document.documentElement).fontSize)) : MAX_STRIP_HOURS;
+}
 
 function draw_more_button(panel: HTMLElement, open: boolean, on_open: () => void): HTMLButtonElement {
   const button = document.createElement("button");
@@ -261,7 +291,7 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
     // Hours pass while the panel stays closed, so each open draws the strip again from the stored hours. That part sends nothing.
     const redraw_strip = () => {
       panel.querySelector(".weather-hours")?.remove();
-      const strip = draw_hours_strip(detail.hours, utc_offset_seconds, format, now());
+      const strip = draw_hours_strip(detail.hours, utc_offset_seconds, format, now(), hours_in_view(panel));
       if (strip) panel.append(strip);
     };
     // The air quality request starts here and nowhere earlier. The row joins the panel only while the panel is open and still on the page, so a closed panel or a redraw while the request is out gets no late draw.

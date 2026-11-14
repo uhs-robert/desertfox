@@ -57,8 +57,8 @@ export const DEFAULT_NEWTAB_CLOSED_TABS_MAX: Settings["newtab_closed_tabs_max"] 
 export const DEFAULT_NEWTAB_TOP_SITES: Settings["newtab_top_sites"] = true;
 export const DEFAULT_NEWTAB_TOP_SITES_MAX: Settings["newtab_top_sites_max"] = 8;
 export const DEFAULT_NEWTAB_COMMAND_HINT: Settings["newtab_command_hint"] = true;
-export const DEFAULT_NEWTAB_WEATHER: Settings["newtab_weather"] = false;
-export const DEFAULT_NEWTAB_WEATHER_UNITS: Settings["newtab_weather_units"] = "metric";
+export const DEFAULT_NEWTAB_WEATHER: Settings["newtab_weather"] = true;
+export const DEFAULT_NEWTAB_WEATHER_UNITS: Settings["newtab_weather_units"] = "auto";
 export const DEFAULT_NEWTAB_IP_INFO: Settings["newtab_ip_info"] = false;
 export const DEFAULT_NEWTAB_LINKS: Settings["newtab_links"] = [];
 

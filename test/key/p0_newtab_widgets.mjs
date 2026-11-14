@@ -51,7 +51,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     const cards_config = mkdtempSync(join(tmpdir(), "desertfox-cards-"));
     cpSync(test_config_dir, cards_config, { recursive: true });
     const links = ["Docs", "Mail", "News"].map((name) => `[[newtab_links]]\nlabel = "${name}"\nurl = "https://${name.toLowerCase()}.example.org/"\ngroup = "Pinned"\n`).join("\n");
-    writeFileSync(join(cards_config, "settings.toml"), `newtab_recent_tabs = true\nnewtab_bookmarks = true\nnewtab_bookmarks_max = 4\n\n${links}`);
+    writeFileSync(join(cards_config, "settings.toml"), `newtab_weather = false\nnewtab_recent_tabs = true\nnewtab_bookmarks = true\nnewtab_bookmarks_max = 4\n\n${links}`);
     await close_new_tabs();
     await open_page("page", "cards_a", { new_tab: true });
     await open_page("page", "cards_b", { new_tab: true });

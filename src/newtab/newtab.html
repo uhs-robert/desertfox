@@ -69,8 +69,11 @@
   .desertfox-newtab .weather-detail { box-sizing: border-box; max-width: min(22rem, calc(100vw - 2.5rem)); max-height: 60vh; overflow: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--desertfox-bg-mantle); border: 1px solid var(--desertfox-border); border-radius: 8px; }
   .desertfox-newtab .weather-detail[hidden] { display: none; }
   .desertfox-newtab .weather-facts { display: flex; gap: 1rem; }
-  .desertfox-newtab .weather-hours { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem 0.75rem; }
-  .desertfox-newtab .weather-hour { flex: none; display: flex; flex-direction: column; align-items: center; }
+  /* One row, never wrapped or scrolled: `hours_that_fit` in weather_detail.ts sizes it from these widths, so change them together. */
+  .desertfox-newtab .weather-hours { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 0.25rem; }
+  .desertfox-newtab .weather-hour { flex: none; box-sizing: border-box; width: 2.5rem; display: flex; flex-direction: column; align-items: center; text-align: center; white-space: nowrap; }
+  .desertfox-newtab .weather-hour .weather-icon { width: 1.25rem; height: 1.25rem; margin: 0.125rem 0; }
+  .desertfox-newtab .weather-hour .weather-label:empty::before { content: "\00a0"; }
   /* After the `.weather` rule, which has the same specificity. Below 32rem the card takes its own row above the clock. Up to 61rem it does so only while the 22rem detail is open, because the open panel would otherwise reach the centered clock and the closed card does not. */
   @media (max-width: 32rem) { .desertfox-newtab .weather { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }
   @media (max-width: 61rem) { .desertfox-newtab .weather:has(.weather-detail:not([hidden])) { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }
