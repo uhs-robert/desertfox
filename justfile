@@ -77,6 +77,23 @@ install_deps:
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} {{flags}}
 
+# Open a real Firefox window on the owner's desktop with a worktree's build, replacing that worktree's own window if one is open. Each argument after the worktree is one command the owner must type, quoted, for example ':set newtab_weather true'. See tools/owner_test/README.md.
+[positional-arguments]
+owner-test worktree="." *hints="": install_deps
+    node --no-warnings tools/owner_test/cli.ts open "$@"
+
+# Rebuild a worktree and reload its test window in place, keeping its profile and granted permissions.
+owner-test-reload worktree=".": install_deps
+    node --no-warnings tools/owner_test/cli.ts reload {{quote(worktree)}}
+
+# Show whether a worktree's test window is open.
+owner-test-status worktree=".":
+    node --no-warnings tools/owner_test/cli.ts status {{quote(worktree)}}
+
+# Close a worktree's test window and delete its profile. Safe to run twice.
+owner-test-close worktree=".":
+    node --no-warnings tools/owner_test/cli.ts close {{quote(worktree)}}
+
 # Build main as pushed and publish it as a beta, by starting the CI beta workflow and watching its run. A failed run is not rerun: start `just beta` again. Needs gh, logged in.
 beta:
     #!/usr/bin/env bash
