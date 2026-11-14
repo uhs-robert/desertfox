@@ -4,7 +4,7 @@ import { browser_page_readers, read_sections, type ListSection, type PageReaders
 import { refused_as, warn_and_go } from "../shared/swallow.ts";
 import { draw_tile } from "./tile.ts";
 import { forget_ip_info, start_ip_info } from "./ip_info.ts";
-import { start_weather } from "./weather.ts";
+import { forget_weather, start_weather } from "./weather.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
@@ -146,6 +146,7 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
   }
   if (sections.length > 0) next.page.append(draw_sections(sections));
   if (settings.newtab_command_hint) next.page.append(draw_command_hint());
+  if (settings.newtab_weather !== true) void refused_as(forget_weather(), undefined);
   if (settings.newtab_weather === true) {
     // A corner of the page, outside the centered column. The fetch is not awaited, so a slow or failed request never holds the page.
     const slot = document.createElement("div");

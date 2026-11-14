@@ -299,7 +299,7 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     await settled();
     assert.deepEqual(find_by_class(body.children[0]!, "ip-info"), []);
     assert.equal(requests, 0);
-    assert.deepEqual(removed, ["newtab_net_cache_ip"]);
+    assert.deepEqual(removed, ["newtab_net_cache_weather", "newtab_net_cache_ip"], "each card that is off deletes its own answer");
 
     const on = effective_settings({ newtab_clock: true, newtab_ip_info: true } as never);
     await render_new_tab(body_node, on, readers);
@@ -316,7 +316,7 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     assert.equal(first_slot.textContent, "", "the stopped run drew nothing");
     assert.equal(second_slot!.textContent, "198.51.100.9, Sweden");
     assert.equal((store["newtab_net_cache_ip"] as { value: { ip: string } }).value.ip, "198.51.100.9", "the stopped run wrote no cache");
-    assert.equal(removed.length, 1, "the setting on never forgets");
+    assert.deepEqual(removed.filter((key) => key === "newtab_net_cache_ip"), ["newtab_net_cache_ip"], "the setting on never forgets");
   } finally {
     globalThis.fetch = real_fetch;
     mock.timers.reset();
