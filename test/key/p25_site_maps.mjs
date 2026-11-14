@@ -1,5 +1,5 @@
 // The shipped Maps rows: hjkl send arrow keys to the map while nothing else has focus, and fall through to DesertFox's own keys when another element has focus. The shipped rows match google.com only, so this piece lays the shipped binds on a test address with the site pattern swapped.
-// The stand-in map records each keydown it receives, as Maps pans only on keys sent to its map element. Beside it sits a focusable panel that scrolls, as the Maps place panel does.
+// The stand-in map records each keydown it receives while it has focus, as Maps pans only on keys sent to its map element while that element has focus. Beside it sits a focusable panel that scrolls, as the Maps place panel does.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
@@ -28,7 +28,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
       map.tabIndex = 0;
       map.style.cssText = "width:300px;height:100px";
       document.documentElement.dataset.pan = "";
-      map.addEventListener("keydown", (event) => { document.documentElement.dataset.pan += event.key + ","; });
+      map.addEventListener("keydown", (event) => { if (document.activeElement === map) document.documentElement.dataset.pan += event.key + ","; });
       const panel = document.createElement("div");
       panel.id = "panel";
       panel.tabIndex = 0;
@@ -74,7 +74,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
         map.tabIndex = 0;
         map.style.cssText = "width:300px;height:100px";
         document.documentElement.dataset.pan = "";
-        map.addEventListener("keydown", (event) => { document.documentElement.dataset.pan += event.key + ","; });
+        map.addEventListener("keydown", (event) => { if (document.activeElement === map) document.documentElement.dataset.pan += event.key + ","; });
         document.body.prepend(map);
         setTimeout(() => document.getElementById("first").focus(), 300);
       });`;
@@ -96,6 +96,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
   await run_case("with the map focused, j pans the map", async () => {
     await open_map("focused");
     expect(await focus('div[role="application"]'), "the map took no focus");
+    await press_keys("j");
+    await expect_pans("ArrowDown,");
+  });
+
+  await run_case("after Escape blurs the focused map, j focuses it again and pans", async () => {
+    await open_map("escape");
+    expect(await focus('div[role="application"]'), "the map took no focus");
+    await press_keys("-k", "Escape");
+    await poll_until("Escape blurred the map", async () => (await in_active_tab("document.activeElement === document.body")) === true);
     await press_keys("j");
     await expect_pans("ArrowDown,");
   });

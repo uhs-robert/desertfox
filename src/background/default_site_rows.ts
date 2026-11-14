@@ -59,9 +59,9 @@ const SHEETS_PASS = "<C-a> <C-x> <C-v>";
 // Sheets cancels a cell edit on Escape, so `escape_to_page` lets its own handler see the key.
 // The cell editor stays focused, parked with no width, while a cell is only selected, so it counts as a field only once it has width. The id stands for the site: a rule on zero width alone would also catch the hidden field a web terminal types into.
 // The second pattern is the address form of a Google Workspace domain.
-// Google Maps pans on arrow keys, real or synthetic, only while its map element has focus. Maps focuses its search box as it loads, so `focus_on_load` hands the focus to the map in its place, and hjkl send arrows there. The guard leaves j and k to scroll the place panel when it has focus. The aria-label of the map is localized, so the selector skips it. The matcher cannot name every google.<country> host, so the rows cover google.com alone.
+// Google Maps pans on arrow keys, real or synthetic, only while its map element has focus. Maps focuses its search box as it loads, so `focus_on_load` hands the focus to the map in its place. hjkl focus the map and send arrows there, so they pan again after Escape blurs it. The guard leaves j and k to scroll the place panel when it has focus. The aria-label of the map is localized, so the selector skips it. The matcher cannot name every google.<country> host, so the rows cover google.com alone.
 const MAPS_TARGET = 'div[role="application"][tabindex="0"]';
-const map_arrow = (key: string, key_code: number): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: MAPS_TARGET }, when_focus: MAPS_TARGET });
+const map_arrow = (key: string, key_code: number): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: MAPS_TARGET, focus: true }, when_focus: MAPS_TARGET });
 const MAPS_BIND: BindingTable = { h: map_arrow("ArrowLeft", 37), j: map_arrow("ArrowDown", 40), k: map_arrow("ArrowUp", 38), l: map_arrow("ArrowRight", 39) };
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [

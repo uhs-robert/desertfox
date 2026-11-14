@@ -27,6 +27,17 @@ test("send_key sends a keydown then a keyup with the key and key code to the sel
   );
 });
 
+test("send_key focuses the target before the keydown only when focus is on", () => {
+  const order: string[] = [];
+  const target = { focus: () => order.push("focus"), dispatchEvent: (event: Event) => (order.push((event as unknown as Sent).type), true) } as unknown as EventTarget;
+  const doc = { querySelector: () => target, activeElement: null };
+  const make_event = (type: string, init: KeyboardEventInit) => ({ type, init }) as unknown as Event;
+  send_key(doc, { key: "ArrowDown", key_code: 40, target: "#map", focus: true }, make_event);
+  send_key(doc, { key: "ArrowDown", key_code: 40, target: "#map" }, make_event);
+  assert.deepEqual(order, ["focus", "keydown", "keyup", "keydown", "keyup"]);
+  assert.equal(check_args(registry.get("page.send_key")!, { key: "ArrowDown", key_code: 40, focus: "yes" }, {}).ok, false);
+});
+
 test("send_key sets the modifier flags that are on and none otherwise", () => {
   const { doc, log, make_event } = fake_page({}, "focused");
   send_key(doc, { key: "Home", key_code: 36, ctrl: true, meta: true }, make_event);

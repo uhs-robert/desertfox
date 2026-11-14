@@ -444,7 +444,7 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
   const leaf = with_defaults({}).modes.insert?.children["<A-Escape>"];
   assert.equal(leaf?.kind, "leaf");
   const invocation = leaf?.kind === "leaf" ? leaf.steps[0]!.invocation : undefined;
-  assert.deepEqual([invocation?.id, invocation?.args], ["page.send_key", { key: "Escape", key_code: 27, target: "", times: 1, ctrl: false, shift: false, alt: false, meta: false, keypress: false }]);
+  assert.deepEqual([invocation?.id, invocation?.args], ["page.send_key", { key: "Escape", key_code: 27, target: "", times: 1, ctrl: false, shift: false, alt: false, meta: false, keypress: false, focus: false }]);
 });
 
 test("default_site_rows_off turns off both sheets rows", async () => {
