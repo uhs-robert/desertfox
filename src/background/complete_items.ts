@@ -249,11 +249,11 @@ export function site_items(nodes: readonly HistoryNode[], listed: ReadonlySet<st
     .sort((left, right) => right.boost - left.boost);
 }
 
-// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows and tabs with no session id drop out.
+// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows, private tabs (which `getRecentlyClosed` returns while their window is open) and tabs with no session id drop out.
 export type ClosedSession = { tab?: { sessionId?: string | undefined; title?: string | undefined; url?: string | undefined; incognito?: boolean | undefined } | undefined };
 
 export function closed_tab_rows(sessions: readonly ClosedSession[]): ClosedTabRow[] {
-  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
+  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !tab.incognito && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
 }
 
 // Each tab of the privacy asked for, with the time it was last active.

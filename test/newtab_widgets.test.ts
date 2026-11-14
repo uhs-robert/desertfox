@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { advance_hands, clock_angles, time_label, unwrap_angle } from "../src/newtab/clock.ts";
 import { digital_parts } from "../src/newtab/digital_clock.ts";
 import { date_text, enabled_widgets } from "../src/newtab/render.ts";
+import { closed_tab_rows } from "../src/background/complete_items.ts";
 import { closed_rows, top_site_rows } from "../src/newtab/widgets.ts";
 import { effective_settings } from "../src/shared/config.ts";
 
@@ -151,6 +152,11 @@ test("closed tabs: newest first, web addresses only, capped, none on a private p
 test("closed tabs: a closed private tab is dropped before the row limit", () => {
   const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/", incognito: false } }];
   assert.deepEqual(closed_rows(sessions, 1, false).map((row) => row.session_id), ["2"]);
+});
+
+test("closed_tab_rows, shared with the command line completion, drops a private tab", () => {
+  const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/" } }];
+  assert.deepEqual(closed_tab_rows(sessions).map((row) => row.session_id), ["2"]);
 });
 
 test("top sites: visits add up per host, the best page stands for the site, most visited first", () => {
