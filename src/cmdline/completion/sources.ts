@@ -341,7 +341,10 @@ const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
 // The engine takes the first word of `search`, ahead of the query that follows it.
 function first_word_param(command: Command, engine_settled: boolean): ParamDef | undefined {
   const bare = bare_word_param(command);
-  return !engine_settled && bare && is_dynamic_values(bare.values) && bare.values.from === "search_engines" ? bare : (subject_param(command) ?? bare);
+  if (!engine_settled && bare && is_dynamic_values(bare.values) && bare.values.from === "search_engines") return bare;
+  // The positional word comes ahead of the subject, so its fixed list is the first word's (`media ` lists the actions).
+  const positional = positional_params(command)[0];
+  return positional && static_values(positional) ? positional : (subject_param(command) ?? bare);
 }
 
 // The completer reads the commands once, so each keystroke only ranks.

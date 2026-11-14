@@ -182,3 +182,26 @@ test("a mid-line caret in a whole-text subject ranks the words before it and rep
   const foo = whole_text("tab foo --x", 7);
   assert.deepEqual([foo.start, foo.end], [4, 11]);
 });
+
+const MEDIA: CommandMeta = {
+  id: "media.act",
+  name: "media",
+  label: "Control media",
+  intent: "Control the media.",
+  params: [
+    { name: "action", type: "string", values: ["play_pause", "speed", "quality"], strict: true },
+    { name: "value", type: "string", main: true, when: { action: ["speed"] } },
+  ],
+};
+const media_complete = create_completer(create_word_lookup([...COMMANDS, MEDIA], {}), [...COMMANDS, MEDIA], {}, SOURCES);
+const media_names = (text: string) => media_complete(text, text.length).rows.map((row) => row.name);
+
+test("the first word of a command with a fixed-list positional param lists the values", () => {
+  assert.deepEqual(media_names("media "), ["play_pause", "speed", "quality"]);
+  assert.deepEqual(media_names("media sp"), ["speed"]);
+  assert.deepEqual(media_complete("media ", 6).rows.map((row) => row.description), ["", "", ""]);
+});
+
+test("the word after the action offers no action values", () => {
+  assert.deepEqual(media_names("media speed "), []);
+});
