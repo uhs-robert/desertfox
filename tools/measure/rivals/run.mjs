@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, CROSS_FRAME_ROWS, FRAME_ROWS, judge_frame_entry, judge_load_focus, LOAD_FOCUS_ROWS, needs_load_focus, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -35,7 +35,7 @@ class CheckFailed extends Error {}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const server = createServer((request, response) => {
-  const body = page_body(new URL(request.url, "http://x").pathname.slice(1));
+  const body = page_body(new URL(request.url, "http://x").pathname.slice(1), request.socket.localPort);
   response.writeHead(body === null ? 404 : 200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
   response.end(body ?? "");
 });
@@ -299,6 +299,10 @@ function visible_label_texts(frame_window, selectors) {
   if (frame_window.document.documentElement) visit(frame_window.document.documentElement);
   return texts;
 }
+// The names of the focus events the fixture frame reported, kept on its document element by cross_site_frame_inner_body.
+function read_focus_reports(frame_window) {
+  return frame_window.document.documentElement.dataset.reports ?? "";
+}
 // A click or a focus on an element of the frame, seen before the page's own handlers. The label's own element is DesertFox's or a rival's, so it is not a reaction.
 function arm_frame_reaction(frame_window, selectors) {
   const seen = { event: null, tag: null };
@@ -489,7 +493,7 @@ async function check_site(site) {
       // Only a subframe counts. When the hint key moved the focus to the top page, its labels are no evidence for the frame.
       frame_context = subframe_of(await focus_contexts());
       frame_texts = frame_context ? await in_context(frame_context, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
-      const top_labels = await ask_page("top_labels", {}, 5000);
+      const top_labels = (await ask_page("top_labels", {}, 5000)).length;
       return judge_frame_hints({ frame_labels: frame_texts.length, top_labels });
     });
     await run_check("frame_activate", () => activate_in_frame(frame_context, frame_texts));
@@ -508,6 +512,51 @@ async function check_site(site) {
     return { ...judge_frame_activation({ reply: reply?.error ? null : reply, context_gone, url_before, url_after: await current_url() }), typed };
   }
 
+  // What the frame's own focus reports say about the load, read from the fixture's frame (see cross_site_frame_inner_body). Without a report the frame never took the focus and the page was an ordinary page.
+  async function frame_load_focus() {
+    let reports = "";
+    for (const context of (await page_contexts()).filter((candidate) => !candidate.top && candidate.pid)) reports += await in_context(context, read_focus_reports).catch(() => "");
+    return judge_load_focus(reports);
+  }
+
+  // The first frame, not the top page, that shows a label after the hint key.
+  async function first_labelled_frame() {
+    for (const context of (await page_contexts()).filter((candidate) => !candidate.top && candidate.pid)) {
+      const texts = await in_context(context, visible_label_texts, HINT_SELECTORS).catch(() => []);
+      if (texts.length > 0) return { frame_context: context, frame_texts: texts };
+    }
+    return { frame_context: null, frame_texts: [] };
+  }
+
+  // The local cross-site frame page, every tool, on a fresh load because the pick changes the page. Hints must reach the frame, a label picked there must act in it (and for DesertFox enter frame mode), and the leave must give the page's keys back: the tool's j scrolls the top page.
+  async function check_cross_frame() {
+    for (const name of CROSS_FRAME_ROWS) record.checks[name] = { status: "unknown", reason: "the cross-site frame check did not finish" };
+    await load_live(url);
+    const load_focus = await frame_load_focus();
+    await press_keys(keys.hint);
+    await sleep(1500);
+    const { frame_context, frame_texts } = await first_labelled_frame();
+    await run_check("xframe_hints", async () => judge_frame_hints({ frame_labels: frame_texts.length, top_labels: (await ask_page("top_labels", {}, 5000)).length }));
+    await run_check("xframe_enter", async () => {
+      const typed = frame_texts.find((text) => text)?.toLowerCase();
+      if (!typed || !frame_context) return { status: "fail", reason: "no label in the frame to type" };
+      await in_context(frame_context, arm_frame_reaction, HINT_SELECTORS);
+      const url_before = await current_url();
+      await press_keys(typed);
+      await sleep(2500);
+      const reply = await in_context(frame_context, read_frame_reaction).catch(() => null);
+      const context_gone = !(await page_contexts()).some((context) => context.context_id === frame_context.context_id);
+      return { ...judge_frame_entry({ reply: reply?.error ? null : reply, context_gone, url_before, url_after: await current_url(), mode_after: await frame_mode_now(), has_badge: tool === "desertfox" }), typed };
+    });
+    await run_check("xframe_leave", async () => {
+      await press_keys(["Escape"]);
+      await sleep(600);
+      if (keys.frame_leave) { await press_keys(keys.frame_leave); await sleep(800); }
+      const scrolled = judge_scroll(await scroll_check(keys.scroll_down));
+      return needs_load_focus({ ...scrolled, reason: `after Escape${keys.frame_leave ? ` and ${keys.frame_leave}` : " (no default key leaves a frame)"}: ${scrolled.reason}` }, load_focus);
+    });
+  }
+
   // DesertFox parks a cross-origin frame that takes the focus on load with no click or key and not on a field: the page keeps the keys and f also labels that frame's targets. Runs last, on a fresh load, because the activate step dismisses the popup.
   // A popup site must show the park: page focus on load and labels in a frame. Other sites that may show a frame (Stack Overflow, some passes) are n/a when no frame has a label.
   async function check_parked_frame() {
@@ -518,20 +567,18 @@ async function check_site(site) {
     const focus_after = await focus_now();
     await press_keys(keys.hint);
     await sleep(1500);
-    let frame_context = null;
-    let frame_texts = [];
-    for (const context of (await page_contexts()).filter((candidate) => !candidate.top && candidate.pid)) {
-      const texts = await in_context(context, visible_label_texts, HINT_SELECTORS).catch(() => []);
-      if (texts.length > 0) { frame_context = context; frame_texts = texts; break; }
-    }
+    const { frame_context, frame_texts } = await first_labelled_frame();
     if (!frame_context && !POPUP_SITES.has(site.name)) {
       for (const name of FRAME_ROWS) record.checks[name] = { status: "n/a", reason: "no frame had a label after the hint key, so no frame was parked" };
       return;
     }
     record.checks.frame_leave = judge_frame_leave({ mode_after, focus_after });
-    await run_check("frame_hints", async () => judge_frame_hints({ frame_labels: frame_texts.length, top_labels: await ask_page("top_labels", {}, 5000) }));
+    await run_check("frame_hints", async () => judge_frame_hints({ frame_labels: frame_texts.length, top_labels: (await ask_page("top_labels", {}, 5000)).length }));
     await run_check("frame_activate", () => activate_in_frame(frame_context, frame_texts));
   }
+
+  // A page where the frame missed its load focus is an ordinary page, so the rows that start from the load say nothing about the frame.
+  const load_focus = site.cross_frame && tool !== "none" ? await frame_load_focus() : null;
 
   // Step 1. Every tool gets the same probe key, DesertFox too, so all four meet the same page in step 2.
   await run_check("mode_on_load", async () => {
@@ -636,12 +683,20 @@ async function check_site(site) {
     },
   };
   for (const name of step3_names(site)) await run_check(name, async () => as_action(await actions[name]()));
+  if (load_focus) for (const name of LOAD_FOCUS_ROWS) if (record.checks[name]) record.checks[name] = needs_load_focus(record.checks[name], load_focus);
   if (frame_mode_seen || (tool === "desertfox" && PARK_SITES.has(site.name))) {
     // The reload can fail on its own. Steps 1 to 3 are done by now and must survive it.
     try { await (frame_mode_seen ? check_inside_frame() : check_parked_frame()); }
     catch (error) {
       if (connection_lost(error)) throw error;
       for (const name of ["frame_hints", "frame_activate"]) record.checks[name] ??= { status: "unknown", reason: `the frame checks did not run: ${String(error.message ?? error).slice(0, 150)}` };
+    }
+  }
+  if (site.cross_frame) {
+    try { await check_cross_frame(); }
+    catch (error) {
+      if (connection_lost(error)) throw error;
+      for (const name of CROSS_FRAME_ROWS) if (record.checks[name]?.status === "unknown") record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 150) };
     }
   }
   return record;

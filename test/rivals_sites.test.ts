@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, CROSS_FRAME_ROWS, judge_frame_entry, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, judge_load_focus, needs_load_focus, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -275,6 +275,37 @@ test("check names hold the frame checks for DesertFox only, so an error or wall 
   const site = { extra: ["jk_clash"] };
   assert.deepEqual(check_names_of(site, "desertfox"), ["mode_on_load", "leave", "frame_leave", "frame_hints", "frame_activate", "jk_clash", "scroll", "passthrough", "hints", "hints_escape", "activate"]);
   assert.deepEqual(check_names_of(site, "rival"), ["mode_on_load", "leave", "jk_clash", "scroll", "passthrough", "hints", "hints_escape", "activate"]);
+});
+
+test("a cross-site frame site adds its rows for every tool, after step 3", () => {
+  const site = { extra: [], cross_frame: true };
+  assert.deepEqual(check_names_of(site, "vimium").slice(-3), CROSS_FRAME_ROWS);
+  assert.deepEqual(check_names_of(site, "desertfox").slice(-3), CROSS_FRAME_ROWS);
+  assert.deepEqual(check_names_of(site, "none"), ["scroll"]);
+  assert.equal(check_names_of({ extra: [] }, "vimium").includes("xframe_hints"), false);
+  assert.deepEqual(SITES.filter((entry: { cross_frame?: boolean }) => entry.cross_frame).map((entry: { name: string }) => entry.name), ["cross_site_frame"]);
+});
+
+test("a pick in the frame passes on a reaction, and DesertFox must also read FRAME", () => {
+  const base = { reply: { event: "click", tag: "button" }, context_gone: false, url_before: "http://127.0.0.1/x", url_after: "http://127.0.0.1/x" };
+  assert.equal(judge_frame_entry({ ...base, mode_after: null, has_badge: false }).status, "pass");
+  assert.equal(judge_frame_entry({ ...base, mode_after: "FRAME", has_badge: true }).status, "pass");
+  assert.equal(judge_frame_entry({ ...base, mode_after: "NORMAL", has_badge: true }).status, "fail");
+  assert.equal(judge_frame_entry({ ...base, reply: null, mode_after: "FRAME", has_badge: true }).status, "fail");
+});
+
+test("a load where the frame never took the focus leaves the load-time rows unknown", () => {
+  const passed = { status: "pass", reason: "window moved 50 px" };
+  assert.deepEqual(needs_load_focus(passed, judge_load_focus("frame_load,frame_focus,frame_focusin,")), passed);
+  const missed = needs_load_focus(passed, judge_load_focus("frame_load,"));
+  assert.equal(missed.status, "unknown");
+  assert.match(missed.reason, /never took the focus/);
+  assert.equal(needs_load_focus(passed, judge_load_focus("")).status, "unknown");
+  assert.equal(judge_load_focus("frame_blur,").took_focus, false);
+});
+
+test("every tool but Tridactyl has a default frame-leave key", () => {
+  assert.deepEqual(Object.entries(TOOL_KEYS as Record<string, { frame_leave: string | null }>).map(([tool, keys]) => [tool, keys.frame_leave]), [["desertfox", "gF"], ["vimium", "gF"], ["vimiumc", "gF"], ["tridactyl", null]]);
 });
 
 test("a wrong-target status and an n/a frame row show in the cell, and an n/a majority names itself", () => {
