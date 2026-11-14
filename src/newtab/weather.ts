@@ -121,8 +121,9 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   const has_permission = await refused_as(deps.has_geolocation_permission(), false);
   // Offered until the permission is granted, even with a city set. Once granted, the position wins over the city.
   if (!has_permission) show({ kind: "ask_location" });
+  let earlier: Weather | undefined;
   if (has_permission) {
-    const earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units), deps.net);
+    earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units), deps.net);
     if (earlier) show_weather(earlier);
     const position = await granted_position(deps);
     if (position) {
@@ -135,13 +136,16 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
       return;
     }
   }
+  // No position: the preview, if any, was made for a place this page cannot confirm, so only a reading the city lookup establishes may stay.
+  if (earlier && !city) show({ kind: "clear_reading" });
   if (city) {
     const produce = async () => {
       const where = await geocode_city(city, deps.net);
       return where && forecast_at(where, units, deps.net);
     };
     const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce };
-    await load_cached<Weather>(spec, deps.net, show_weather);
+    const known = await load_cached<Weather>(spec, deps.net, show_weather);
+    if (earlier && !known) show({ kind: "clear_reading" });
     return;
   }
   // A granted permission with no position and no city is a dead end: the card stays empty and offers nothing to click.

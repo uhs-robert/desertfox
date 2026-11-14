@@ -255,3 +255,16 @@ test("a stored reading from before feels-like and humidity is not used", async (
   assert.equal(urls.length, 1, "the old shape forced a fresh request");
   assert.deepEqual(views.map((view) => view.kind), ["weather"]);
 });
+
+test("a failed position takes down the preview of the old place, with or without a city", async () => {
+  const first = fake_deps({ allowed: true });
+  await collect(on(), first.deps);
+  const lost = { ...first.deps, current_position: async () => Promise.reject(new Error("denied")) };
+  const without_city: WeatherView[] = [];
+  await run_weather(on(), lost, (view) => without_city.push(view));
+  assert.deepEqual(without_city.map((view) => view.kind), ["weather", "clear_reading"]);
+  const offline = { ...lost, net: { ...first.deps.net, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
+  const failed_city: WeatherView[] = [];
+  await run_weather(on({ newtab_weather_city: "Paris" }), offline, (view) => failed_city.push(view));
+  assert.deepEqual(failed_city.map((view) => view.kind), ["weather", "clear_reading"]);
+});
