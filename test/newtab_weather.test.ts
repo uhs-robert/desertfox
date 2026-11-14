@@ -4,6 +4,7 @@ import type { NetEnv } from "../src/newtab/net_widget.ts";
 import { draw_weather_icon, icon_kind } from "../src/newtab/weather_icon.ts";
 import { clock_text, compass_point, later_hours } from "../src/newtab/weather_detail.ts";
 import { net_cache_key } from "../src/newtab/net_widget.ts";
+import { air_band, air_quality_url, parse_air_quality } from "../src/newtab/air_quality.ts";
 import { describe_code, draw_weather, forecast_url, forget_weather, geocode_url, parse_forecast, parse_geocode, round_coordinate, run_weather, start_weather, type WeatherDeps, type WeatherSettings, type WeatherView } from "../src/newtab/weather.ts";
 
 const NOW_MS = Date.parse("2026-11-14T14:30:00Z");
@@ -16,7 +17,7 @@ const forecast_body = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const FORECAST = JSON.stringify(forecast_body());
-const WEATHER_CARD = { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: "2026-11-14", utc_offset_seconds: 3600, wind_speed: 11.6, wind_direction: 320, code: 3 };
+const WEATHER_CARD = { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: "2026-11-14", utc_offset_seconds: 3600, wind_speed: 11.6, wind_direction: 320, latitude: 59.91, longitude: 10.75, code: 3 };
 const WEATHER_DETAIL = { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: HOUR_TIMES.map((time, index) => ({ time, temperature: 12 - index, rain_chance: 30 + index })) };
 const GEOCODE = JSON.stringify({ results: [{ name: "Oslo", latitude: 59.91273, longitude: 10.74609 }] });
 
@@ -307,7 +308,10 @@ class FakeNode {
   append(...nodes: FakeNode[]) { for (const node of nodes) (node.parent = this, this.children.push(node)); }
   prepend(...nodes: FakeNode[]) { for (const node of nodes) node.parent = this; this.children.unshift(...nodes); }
   replaceChildren() { this.children = []; }
-  remove() { if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this); }
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this); this.parent = undefined; }
+  after(node: FakeNode) { const siblings = this.parent!.children; node.parent = this.parent; siblings.splice(siblings.indexOf(this) + 1, 0, node); }
+  is_root = false;
+  get isConnected(): boolean { return this.is_root || (this.parent?.isConnected ?? false); }
   all(): FakeNode[] { return this.children.flatMap((child) => [child, ...child.all()]); }
   querySelector(selector: string) { return this.all().find((node) => node.class_name.split(" ").includes(selector.slice(1))) ?? null; }
   querySelectorAll(selector: string) { return this.all().filter((node) => node.class_name.split(" ").includes(selector.slice(1))); }
@@ -346,7 +350,8 @@ test("a full run sends exactly one forecast request", async () => {
 
 test("parse_forecast reads the card, the daily set and the hours, and slices local times without a date parse", () => {
   const parsed = parse_forecast(FORECAST)!;
-  assert.deepEqual(parsed, { ...WEATHER_CARD, detail: WEATHER_DETAIL });
+  const { latitude: _latitude, longitude: _longitude, ...card } = WEATHER_CARD;
+  assert.deepEqual(parsed, { ...card, detail: WEATHER_DETAIL });
 });
 
 test("a missing daily block or odd hours leave the card, and only the detail group goes", () => {
@@ -498,10 +503,10 @@ test("a location grant while the forecast is out stops the old run and only the 
     assert.equal((store["newtab_net_cache_weather"] as { key: string }).key.startsWith("geo:"), true);
   }));
 
-test("forget_weather removes only the card's own key", async () => {
+test("forget_weather removes the forecast and the air quality keys and nothing else", async () => {
   const removed: string[] = [];
   await forget_weather(async (key) => void removed.push(key));
-  assert.deepEqual(removed, [net_cache_key("weather")]);
+  assert.deepEqual(removed, [net_cache_key("weather"), net_cache_key("air")]);
 });
 
 test("the weather icon carries role img and its label instead of aria-hidden", () =>
@@ -547,4 +552,152 @@ test("opening More draws the strip again, so hours that passed while it was clos
     slot.querySelector(".weather-more")!.listeners["click"]!();
     assert.equal(slot.querySelector(".weather-hours"), null, "under the minimum the strip goes");
     assert.equal(slot.querySelectorAll(".weather-detail").length, 1);
+  }));
+
+// The air quality row. A stored forecast keeps the weather fetch out of these tests, so every request counted here is an air quality request.
+const AIR_BODY = JSON.stringify({ current: { european_aqi: 34, us_aqi: 61, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 } });
+async function air_card(over: { units?: "metric" | "imperial"; air_response?: () => Promise<Response>; air_seed?: { at: number } } = {}) {
+  const units = over.units ?? "metric";
+  const store: Record<string, unknown> = { newtab_net_cache_weather: { key: `city:Oslo|${units}`, at: NOW_MS, value: { ...(weather_view() as { weather: object }).weather, units } } };
+  if (over.air_seed) store["newtab_net_cache_air"] = { key: `59.91,10.75|${units}`, at: over.air_seed.at, value: { scale: units === "imperial" ? "us" : "eu", index: 10 } };
+  const requests: { url: string; init: RequestInit | undefined }[] = [];
+  const net: NetEnv = {
+    fetch: (async (input: string, init?: RequestInit) => (requests.push({ url: String(input), init }), over.air_response ? over.air_response() : new Response(AIR_BODY))) as typeof fetch,
+    now: () => NOW_MS,
+    storage: { get: async (key) => ({ [key]: store[key] }), set: async (items) => void Object.assign(store, items) },
+  };
+  const slot = new FakeNode("div");
+  slot.is_root = true;
+  const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo", newtab_weather_units: units }), { ...fake_deps().deps, net });
+  await run.finished;
+  const click = () => slot.querySelector(".weather-more")!.listeners["click"]!();
+  const air_text = () => slot.querySelector(".weather-air")?.textContent ?? null;
+  return { slot, run, store, requests, click, air_text };
+}
+const settle = async () => { for (let turn = 0; turn < 6; turn++) await new Promise((done) => setImmediate(done)); };
+
+test("the air quality url asks for the US index for imperial and the European index for metric, with the rounded coordinates", () => {
+  const imperial = new URL(air_quality_url({ latitude: 59.91, longitude: 10.75, units: "imperial" }));
+  assert.equal(imperial.host, "air-quality-api.open-meteo.com");
+  assert.equal(imperial.searchParams.get("current"), "us_aqi,pm2_5,pm10,ozone");
+  assert.equal(imperial.searchParams.get("latitude"), "59.91");
+  assert.equal(new URL(air_quality_url({ latitude: 1, longitude: 2, units: "metric" })).searchParams.get("current"), "european_aqi,pm2_5,pm10,ozone");
+});
+
+test("air quality parsing takes the scale of the units, keeps what is numeric and refuses an answer with no index", () => {
+  assert.deepEqual(parse_air_quality(AIR_BODY, "metric"), { scale: "eu", index: 34, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 });
+  assert.deepEqual(parse_air_quality(AIR_BODY, "imperial"), { scale: "us", index: 61, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 });
+  assert.deepEqual(parse_air_quality(JSON.stringify({ current: { us_aqi: 5, pm10: "x" } }), "imperial"), { scale: "us", index: 5 });
+  for (const bad of ["not json", "null", "{}", JSON.stringify({ current: { us_aqi: null } }), JSON.stringify({ current: { us_aqi: 5 } })]) if (bad !== "x") assert.equal(parse_air_quality(bad, "metric"), undefined, bad);
+});
+
+test("each band label sits at its limit", () => {
+  assert.deepEqual([0, 50, 51, 100, 101, 150, 151, 200, 201, 300, 301].map((index) => air_band({ scale: "us", index })), ["Good", "Good", "Moderate", "Moderate", "Sensitive", "Sensitive", "Unhealthy", "Unhealthy", "Very unhealthy", "Very unhealthy", "Hazardous"]);
+  assert.deepEqual([0, 20, 21, 40, 60, 80, 100, 101].map((index) => air_band({ scale: "eu", index })), ["Good", "Good", "Fair", "Fair", "Moderate", "Poor", "Very poor", "Extremely poor"]);
+});
+
+test("a card that is drawn but never opened sends no air quality request", () =>
+  with_fake_document(async () => {
+    const card = await air_card();
+    await settle();
+    assert.ok(card.slot.querySelector(".weather-more"));
+    assert.deepEqual(card.requests, []);
+    assert.equal(card.air_text(), null);
+  }));
+
+test("opening More sends one request without credentials, draws the row in the units' scale and caches it under its own key", () =>
+  with_fake_document(async () => {
+    const card = await air_card();
+    card.click();
+    await settle();
+    assert.equal(card.requests.length, 1);
+    assert.match(card.requests[0]!.url, /^https:\/\/air-quality-api\.open-meteo\.com\/v1\/air-quality\?latitude=59\.91&longitude=10\.75&current=european_aqi/);
+    assert.equal(card.requests[0]!.init?.credentials, "omit");
+    assert.equal(card.air_text(), "34 FairAir quality (EU AQI)8PM2.515PM1070Ozone");
+    assert.equal((card.store["newtab_net_cache_air"] as { key: string }).key, "59.91,10.75|metric");
+    const imperial = await air_card({ units: "imperial" });
+    imperial.click();
+    await settle();
+    assert.equal(imperial.air_text(), "61 ModerateAir quality (US AQI)8PM2.515PM1070Ozone");
+  }));
+
+test("opening More twice quickly sends one request", () =>
+  with_fake_document(async () => {
+    const release: (() => void)[] = [];
+    const card = await air_card({ air_response: () => new Promise((done) => release.push(() => done(new Response(AIR_BODY)))) });
+    card.click();
+    card.click();
+    card.click();
+    await settle();
+    assert.equal(card.requests.length, 1);
+    release[0]!();
+    await settle();
+    assert.equal(card.air_text()?.startsWith("34 Fair"), true, "the joined open still drew the row");
+    card.click();
+    card.click();
+    await settle();
+    assert.equal(card.requests.length, 1, "a fresh stored answer needs no request");
+  }));
+
+test("closing the panel while the request is out leaves no late draw, and the next open draws from the stored answer", () =>
+  with_fake_document(async () => {
+    const release: (() => void)[] = [];
+    const card = await air_card({ air_response: () => new Promise((done) => release.push(() => done(new Response(AIR_BODY)))) });
+    card.click();
+    await settle();
+    card.click();
+    release[0]!();
+    await settle();
+    assert.equal(card.air_text(), null, "no row was drawn into the closed panel");
+    card.click();
+    await settle();
+    assert.equal(card.requests.length, 1);
+    assert.equal(card.air_text()?.startsWith("34 Fair"), true);
+  }));
+
+test("a redraw while the request is out leaves no late draw and no cache write", () =>
+  with_fake_document(async () => {
+    const release: (() => void)[] = [];
+    const card = await air_card({ air_response: () => new Promise((done) => release.push(() => done(new Response(AIR_BODY)))) });
+    card.click();
+    await settle();
+    card.run.stop();
+    release[0]!();
+    await settle();
+    assert.equal(card.air_text(), null);
+    assert.equal("newtab_net_cache_air" in card.store, false);
+    const rebuilt = card.slot.querySelector(".weather-reading");
+    draw_weather(card.slot as never, weather_view({ temperature: 20 }), () => {}, 12, () => NOW_MS);
+    assert.notEqual(card.slot.querySelector(".weather-reading"), rebuilt);
+    release.splice(0);
+    await settle();
+    assert.equal(card.air_text(), null, "the old panel is off the page, so its listener drew nothing");
+  }));
+
+test("a stale stored answer shows at once and is refreshed, and one past the max age is not shown", () =>
+  with_fake_document(async () => {
+    const stale = await air_card({ air_seed: { at: NOW_MS - 31 * 60_000 } });
+    stale.click();
+    await settle();
+    assert.equal(stale.requests.length, 1, "past the TTL it refreshes");
+    assert.equal(stale.air_text()?.startsWith("34 Fair"), true, "the fresh value replaced the stored one");
+    assert.equal((stale.store["newtab_net_cache_air"] as { at: number }).at, NOW_MS);
+    const old = await air_card({ air_seed: { at: NOW_MS - 7 * 3_600_000 }, air_response: () => Promise.reject(new Error("offline")) });
+    old.click();
+    await settle();
+    assert.equal(old.air_text(), null, "an answer past the max age is never shown, even when the refresh fails");
+  }));
+
+test("a failed or odd air quality answer draws no row and leaves the rest of the panel alone", () =>
+  with_fake_document(async () => {
+    for (const air_response of [() => Promise.reject(new Error("offline")), async () => new Response("nope", { status: 500 }), async () => new Response("{}")]) {
+      const card = await air_card({ air_response });
+      card.click();
+      await settle();
+      assert.equal(card.air_text(), null);
+      assert.equal(card.slot.querySelector(".weather-detail")!.hidden, false);
+      assert.deepEqual(card.slot.querySelectorAll(".weather-facts").map((node) => node.textContent), ["2UV index7:42 AMSunrise3:31 PMSunset"]);
+      assert.ok(card.slot.querySelectorAll(".weather-hour").length >= 3, "the strip is intact");
+      assert.equal("newtab_net_cache_air" in card.store, false);
+    }
   }));

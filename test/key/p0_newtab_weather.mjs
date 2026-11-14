@@ -21,7 +21,9 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
   const close_new_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
   // A backstop only: timing entries appear when a request completes. The unit tests count request starts with a fake fetch.
   const weather_requests = () => in_background(`${NEWTAB_VIEW}.performance.getEntriesByType("resource").filter((entry) => entry.name.includes("open-meteo.com")).length`);
-  const WEATHER_SEED = `(() => { const hours = Array.from({ length: 12 }, (_, index) => new Date(Math.floor(Date.now() / 3600000) * 3600000 + index * 3600000).toISOString().slice(0, 16)); return browser.storage.local.set({ newtab_net_cache_weather: { key: "city:Oslo|metric", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: new Date().toISOString().slice(0, 10), utc_offset_seconds: 0, wind_speed: 11.6, wind_direction: 320, detail: { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: hours.map((time, index) => ({ time, temperature: 10 - index, rain_chance: 30 + index })) }, code: 0, place: "Oslo", units: "metric" } } }); })()`;
+  // A fresh air quality answer for the seeded place, so opening More reads storage and sends nothing.
+  const AIR_SEED = `browser.storage.local.set({ newtab_net_cache_air: { key: "59.91,10.75|metric", at: Date.now(), value: { scale: "eu", index: 34, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 } } })`;
+  const WEATHER_SEED = `(() => { const hours = Array.from({ length: 12 }, (_, index) => new Date(Math.floor(Date.now() / 3600000) * 3600000 + index * 3600000).toISOString().slice(0, 16)); return browser.storage.local.set({ newtab_net_cache_weather: { key: "city:Oslo|metric", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: new Date().toISOString().slice(0, 10), utc_offset_seconds: 0, wind_speed: 11.6, wind_direction: 320, latitude: 59.91, longitude: 10.75, detail: { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: hours.map((time, index) => ({ time, temperature: 10 - index, rain_chance: 30 + index })) }, code: 0, place: "Oslo", units: "metric" } } }); })()`;
   // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots rewrite that rule on the page and its narrow frame, never the machine's scheme.
   const take_both_shots = async (name) => {
     for (const [scheme, target] of [["dark", "@media not all"], ["light", "@media all"]]) {
@@ -59,6 +61,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     // A stored reading younger than the TTL draws with no request, so the layout shows without a network. The hours start at the current UTC hour, so the strip has later hours whatever time the test runs.
     await use_settings("weather_card", "newtab_weather = true\nnewtab_weather_city = \"Oslo\"\n");
     await in_background(WEATHER_SEED);
+    await in_background(AIR_SEED);
     await run_case("a stored reading draws in the top-right corner with the stats and the icon label, and the button beside it", async () => {
       expect(await open_new_tab(".weather-reading"), "the stored reading never drew");
       const shape = await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const box = page.querySelector(".weather").getBoundingClientRect(); const main = page.querySelector(".desertfox-newtab").getBoundingClientRect(); const icon = page.querySelector("svg.weather-icon"); return { temp: page.querySelector(".weather-temp").textContent, labels: [...page.querySelectorAll(".weather-reading > .weather-stat .weather-label")].map((node) => node.textContent), values: [...page.querySelectorAll(".weather-reading > .weather-stat .weather-value")].map((node) => node.textContent), icon: !!icon?.querySelector("path"), icon_role: icon?.getAttribute("role"), icon_label: icon?.getAttribute("aria-label"), icon_hidden: icon?.getAttribute("aria-hidden"), ask: !!page.querySelector(".weather-ask"), right_gap: main.right - box.right, top_gap: box.top - main.top, in_right_half: box.left > main.width / 2 }; })()`);
@@ -73,7 +76,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
 
     await run_case("the More button opens the detail in place and Less closes it, with no request", async () => {
       expect(await open_new_tab(".weather-more"), "the More button never drew");
-      const state = () => in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const button = page.querySelector(".weather-more"); const panel = page.querySelector(".weather-detail"); return { tag: button.tagName, text: button.textContent, expanded: button.getAttribute("aria-expanded"), controls: button.getAttribute("aria-controls") === panel.id, shown: panel.getClientRects().length > 0, facts: [...panel.querySelectorAll(".weather-facts .weather-stat")].map((node) => node.textContent), hours: panel.querySelectorAll(".weather-hour").length }; })()`);
+      const state = () => in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const button = page.querySelector(".weather-more"); const panel = page.querySelector(".weather-detail"); return { tag: button.tagName, text: button.textContent, expanded: button.getAttribute("aria-expanded"), controls: button.getAttribute("aria-controls") === panel.id, shown: panel.getClientRects().length > 0, facts: [...panel.querySelectorAll(".weather-facts:not(.weather-air) .weather-stat")].map((node) => node.textContent), hours: panel.querySelectorAll(".weather-hour").length }; })()`);
       const closed = await state();
       expect(closed.tag === "BUTTON" && closed.text === "More" && closed.expanded === "false" && closed.controls && !closed.shown, `the closed state was wrong: ${JSON.stringify(closed)}`);
       const expected_before = await in_background(`browser.storage.local.get("newtab_net_cache_weather").then((found) => { const hour = new Date().toISOString().slice(0, 13); return Math.min(11, found.newtab_net_cache_weather.value.detail.hours.filter((entry) => entry.time.slice(0, 13) > hour).length); })`);
@@ -84,11 +87,22 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       // The seed starts at the hour it was made, so a render across an hour boundary drops one. The expected count comes from the seeded hours and the clock before and after the read.
       const expected_hours = () => in_background(`browser.storage.local.get("newtab_net_cache_weather").then((found) => { const hour = new Date().toISOString().slice(0, 13); return Math.min(11, found.newtab_net_cache_weather.value.detail.hours.filter((entry) => entry.time.slice(0, 13) > hour).length); })`);
       expect(open.hours === expected_before || open.hours === (await expected_hours()), `the strip had ${open.hours} hours, expected ${expected_before} or ${await expected_hours()}`);
+      const air = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".weather-air .weather-stat")].map((node) => node.textContent)`);
+      expect(JSON.stringify(air) === JSON.stringify(["34 FairAir quality (EU AQI)", "8PM2.5", "15PM10", "70Ozone"]), `the air quality row was wrong: ${JSON.stringify(air)}`);
       if (shot_dir) await take_both_shots("newtab-weather-open");
       await in_background(`${NEWTAB_VIEW}.document.querySelector(".weather-more").click()`);
       const again = await state();
       expect(again.text === "More" && again.expanded === "false" && !again.shown, `the second click did not close it: ${JSON.stringify(again)}`);
       expect((await weather_requests()) === 0, "opening the detail sent a request");
+    });
+
+    await run_case("with no stored air quality, a drawn card with the panel closed sends no air quality request and draws no row", async () => {
+      await in_background(`browser.storage.local.remove("newtab_net_cache_air")`);
+      expect(await open_new_tab(".weather-more"), "the More button never drew");
+      await new Promise((done) => setTimeout(done, 1500));
+      expect((await weather_requests()) === 0, "the closed panel sent a request to open-meteo");
+      expect(await in_background(`!${NEWTAB_VIEW}.document.querySelector(".weather-air")`), "an air quality row drew with no data");
+      await in_background(AIR_SEED);
     });
 
     // Below 61rem the open 22rem panel would reach the centered clock, so the card must sit in its own row. Each width is a same-origin frame, since a key test cannot resize the window.
@@ -128,9 +142,10 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
 
     await use_settings("weather_forget", "newtab_weather = false\n");
     await in_background(WEATHER_SEED);
+    await in_background(AIR_SEED);
     await run_case("with newtab_weather off a draw deletes the stored answer and sends nothing", async () => {
       expect(await open_new_tab(".date"), "the page never rendered");
-      await poll_until("the stored weather answer to be deleted", async () => !(await in_background(`browser.storage.local.get("newtab_net_cache_weather").then((found) => "newtab_net_cache_weather" in found)`)));
+      await poll_until("the stored weather and air quality answers to be deleted", async () => !(await in_background(`browser.storage.local.get(["newtab_net_cache_weather", "newtab_net_cache_air"]).then((found) => "newtab_net_cache_weather" in found || "newtab_net_cache_air" in found)`)));
       expect((await weather_requests()) === 0, "the page requested open-meteo while the setting is off");
     });
   } finally {

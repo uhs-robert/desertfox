@@ -1,4 +1,4 @@
-// The part of the weather card that opens under the More button: UV index, sunrise and sunset, and the next hours. Everything here comes from the one forecast request, so opening it sends nothing.
+// The part of the weather card that opens under the More button: UV index, sunrise and sunset, and the next hours. Everything here comes from the one forecast request. The air quality row (`air_quality.ts`) is the only part that sends a request, and only on open.
 import type { ClockFormat } from "./digital_clock.ts";
 import type { WeatherDetail, WeatherHour } from "./weather.ts";
 
