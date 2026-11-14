@@ -210,8 +210,8 @@ function change(player: Player, request: Extract<MediaRequest, { type: "media_ap
 }
 
 export async function apply_in_frame(view: FrameView, request: Extract<MediaRequest, { type: "media_apply" }>): Promise<MediaResult> {
-  // A frame step needs a picture, so an audio element in the targets is left alone.
   toggled.clear();
+  // A frame step needs a picture, so an audio element in the targets is left alone.
   const players = targets_of(view, request).filter((player) => request.action !== "frame" || is_video(player));
   const settled = await Promise.allSettled(players.map((player) => change(player, request, view)));
   const failure = settled.find((outcome) => outcome.status === "rejected");

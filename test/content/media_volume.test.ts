@@ -114,12 +114,20 @@ test("pause on a playing player goes through the player, and a press in the lag 
 });
 
 test("a player without the play calls plays and pauses the element", async () => {
-  const { element, page, movie_player } = youtube_page();
+  const { element, movie_player } = youtube_page();
   const bare = { document: { getElementById: () => ({ getVolume: movie_player.getVolume, setVolume: movie_player.setVolume }) } };
   let plays = 0;
   element.play = async () => { plays++; };
   const result = await apply_in_frame(view_of(element, () => youtube_player(bare)), apply({ action: "play_pause", value: undefined }));
   assert.equal(plays, 1);
   assert.equal(result.state?.paused, true);
-  void page;
+});
+
+test("a paused element with a player that still runs pauses through the player", async () => {
+  const { element, page, movie_player } = youtube_page();
+  movie_player.state = 1;
+  element.paused = true;
+  const result = await apply_in_frame(view_of(element, () => youtube_player(page)), apply({ action: "play_pause", value: undefined }));
+  assert.deepEqual(movie_player.calls, ["pause"]);
+  assert.equal(result.state?.paused, true);
 });
