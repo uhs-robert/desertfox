@@ -9,7 +9,7 @@ Every result cell (the DesertFox status and rival columns) starts with an eviden
 | Tag | Meaning |
 | --- | --- |
 | R | Rig run on the live site, 2026-11-14. `PAGES=sites PASSES=3 just measure-rivals`, see [`tools/measure/rivals/README.md`](../tools/measure/rivals/README.md). |
-| H | Hand check by the owner, with the date. Steps in [`tools/measure/rivals/hand_checks.md`](../tools/measure/rivals/hand_checks.md). |
+| H | Hand check on a real logged-in account, with the date. Steps in [`tools/measure/rivals/hand_checks.md`](../tools/measure/rivals/hand_checks.md). |
 | A | Automated test on a local stand-in page, never the live site. The test file is named. |
 | S | Source check: the project's code was read, nothing was run. |
 
@@ -31,7 +31,7 @@ The other three tools keep keys on the page instead. That is a different design 
 
 ## Sites
 
-Public sites are R cells. Sites behind a login are `hand check pending`: the rig cannot log in, so the owner checks them by hand.
+Public sites are R cells. Sites behind a login are `hand check pending`: the rig cannot log in, so these sites are checked by hand.
 
 | Site | DesertFox status | Site integration | Vimium | Vimium C | Tridactyl | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
