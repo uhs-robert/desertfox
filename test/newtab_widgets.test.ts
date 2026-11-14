@@ -154,9 +154,10 @@ test("closed tabs: a closed private tab is dropped before the row limit", () => 
   assert.deepEqual(closed_rows(sessions, 1, false).map((row) => row.session_id), ["2"]);
 });
 
-test("closed_tab_rows, shared with the command line completion, drops a private tab", () => {
+test("closed_tab_rows, shared with the command line completion: a normal window sees no private tab, a private window sees only private tabs", () => {
   const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/" } }];
-  assert.deepEqual(closed_tab_rows(sessions).map((row) => row.session_id), ["2"]);
+  assert.deepEqual(closed_tab_rows(sessions, false).map((row) => row.session_id), ["2"]);
+  assert.deepEqual(closed_tab_rows(sessions, true).map((row) => row.session_id), ["1"]);
 });
 
 test("top sites: visits add up per host, the best page stands for the site, most visited first", () => {
