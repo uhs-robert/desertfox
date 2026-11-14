@@ -34,7 +34,7 @@ Only DesertFox has built-in keyboard drag of elements (`;g`, `;G`). Checked from
 
 Measured on 14 November 2026 at DesertFox commit f7652c1f, headless Firefox 160.0, on one machine. Each tool ran alone in a fresh profile, 16 runs per cell (8 runs x 2 passes). The 1-minute load average started at 0.41 and peaked at 1.86, with a mean of 0.49. Memory is resident set size (RSS, the memory the process holds in RAM). It varies with the machine and the Firefox version, so read the gaps and not the absolute figures.
 
-Page content process RSS after load, in MB. The delta is the cost over the `none` column, which has no extension.
+Page content process RSS after load, in MB. The delta is the cost over the `none` column, which has no extension. Deltas come from the unrounded medians, so they can differ by 0.1 from the difference of the printed values.
 
 | Page | none | DesertFox | Vimium C | Vimium | Tridactyl |
 | --- | --- | --- | --- | --- | --- |
@@ -50,13 +50,14 @@ Caveats:
 - One machine and one Firefox build.
 - Each tool ran in its own Firefox process, so the extension process figure is a reading per pass and not a per-page measurement.
 
-Page-load cost on the article page (a saved 2 MB article) against no extension:
+Page-load cost on the article page (a saved article of 2.0 MB) against no extension:
 
-- DesertFox adds about 15 ms to the load event and about 15 ms to DOMContentLoaded.
-- Over three rounds the load-event cost was +17.8, +7.8 and +15.5 ms, so the spread between rounds is wider than the gap to 15 ms.
+- DesertFox adds about 13 to 17 ms to the load event. Over three rounds the cost was +17.8, +7.8 and +15.5 ms (+13.1 pooled), so single rounds fall outside the range.
+- It adds about 15 ms to DOMContentLoaded (+14.8 pooled).
+- A page load gap under 100 ms reads as instant to a user, so these figures are far below what a user notices.
 - The rivals run on the same page (16 runs) gave +17 ms for DesertFox, +21 for Vimium, +19 for Vimium C and +80 for Tridactyl.
 
-Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). Each round started only when the load average was under 3.
+Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). Each run started after a check that the 1-minute load average was under 3, and the highest load sampled during a run was 1.44.
 
 ```
 MEASURE_DIR=<dir outside /tmp> RUNS=8 PASSES=2 just measure-rivals
