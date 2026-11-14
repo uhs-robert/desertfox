@@ -20,9 +20,16 @@ export const set_toast_durations = (keymap: { toast_ms: number; toast_error_ms: 
 export const show_toast = (message: string, kind?: ToastKind): void =>
   void bundles.run_command_("ui.toast", "ui", { message, kind, duration_ms: (kind ?? "error") === "error" ? toast_error_ms : toast_ms }, MISSING, false);
 
-// Content passes the state and the ui bundle words the label. A state of `undefined` hides the badge: that removes hosts an earlier instance left, which needs no bundle. Only the top frame draws the badge. A frame with no badge to remove does not load the bundle.
+// A plain NORMAL badge waits for the load event: drawn during load, the bundle injection, two storage reads and the page-wide style cost the page about 30 ms of load time. Every other state is a user-visible change and draws at once.
+// "complete" sorts before "interactive" and "loading", so `> "complete"` means still loading. The next call removes the waiting draw, which is harmless once it has fired. A frame that unloads before load takes it along.
+let waiting_draw: (() => void) | undefined;
+
+// Content passes the state and the ui bundle words the label. A state of `undefined` hides the badge: that removes hosts an earlier instance left, which needs no bundle. Only the top frame draws the badge. A frame with no badge to remove does not load the bundle. Each call replaces a draw that still waits, so the latest state wins.
 export function show_mode_label(state?: BadgeState): void {
+  if (waiting_draw) window.removeEventListener("load", waiting_draw);
   if (state === undefined) remove_badge_hosts();
   if (window !== window.top || (state === undefined && !bundles.has_handler_("ui.badge"))) return;
-  void bundles.run_command_("ui.badge", "ui", { ...state }, MISSING, false);
+  const draw = (): void => void bundles.run_command_("ui.badge", "ui", { ...state }, MISSING, false);
+  if (state?.mode === "normal" && !(state.pass_next || state.site_label) && document.readyState > "complete") window.addEventListener("load", (waiting_draw = draw));
+  else draw();
 }
