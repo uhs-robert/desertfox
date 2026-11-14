@@ -6,6 +6,7 @@
 // Known gap: Stack Overflow focuses the Google sign-in frame in some passes only. In run-7b DesertFox never entered frame mode there, so its frame rows read n/a. The doc counts Reddit and X as the frame sites.
 // 2b. Frame branch, DesertFox only and only when its badge reads FRAME after the leave step. The site dictates focus and DesertFox does not override it, so a site that focuses a frame (Reddit and X focus a Google sign-in frame) leaves DesertFox working inside that frame until the user dismisses it or leaves with gF. The rivals keep keys on the page and show no badge, so they have no frame mode to score. The branch has two parts. `gF` (`frame_leave`) runs right after the leave step, so step 3 meets the same page, popup included, for every tool. The checks inside the frame run last, after a reload that brings the frame back: hints in the frame (`frame_hints`) and a hint that activates a control in it (`frame_activate`), which dismisses the popup. A pass that never reaches frame mode records the three frame rows as n/a.
 // 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked, or wrong_target when the hint acted on another element than its label's target.
+// A site with `scroll_probe` (a canvas or grid that draws its own view) reads movement instead of an element's scroll offset: see judge_movement. The no-extension tool runs a control there, the site's own ArrowDown, and a site whose control moves nothing reads "not scored" for every tool. `passthrough` records, as information only, whether ArrowDown moves the view with the tool in normal mode.
 // Steps 1 to 3 run on one page load. Only the frame checks at the end of the DesertFox frame branch load it again. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
 // The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
@@ -15,15 +16,15 @@ import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 // Picked for stable public URLs: Google's own API sample doc and sheet, the first YouTube video, Notion's official public page.
 export const SITES = [
   { name: "youtube", url: "https://www.youtube.com/watch?v=jNQXAC9IVRw", extra: ["play_pause", "volume"] },
-  { name: "google_sheets", url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit", extra: ["cell_move"] },
+  { name: "google_sheets", url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit", extra: ["cell_move"], scroll_probe: "sheets" },
   { name: "google_docs", url: "https://docs.google.com/document/d/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE/edit", extra: [] },
   { name: "wikipedia", url: "https://en.wikipedia.org/wiki/Firefox", extra: [] },
   { name: "github", url: "https://github.com/mozilla-firefox/firefox", extra: [] },
   { name: "hacker_news", url: "https://news.ycombinator.com/", extra: [], activate_selector: ".titleline > a" },
   { name: "reddit", url: "https://www.reddit.com/r/firefox/", extra: [] },
-  { name: "google_maps", url: "https://www.google.com/maps/@48.8584,2.2945,15z", extra: [] },
-  { name: "excalidraw", url: "https://excalidraw.com/", extra: [] },
-  { name: "stackblitz", url: "https://stackblitz.com/edit/vitejs-vite", extra: [] },
+  { name: "google_maps", url: "https://www.google.com/maps/@48.8584,2.2945,15z", extra: [], scroll_probe: "maps" },
+  { name: "excalidraw", url: "https://excalidraw.com/", extra: [], scroll_probe: "excalidraw" },
+  { name: "stackblitz", url: "https://stackblitz.com/github/lodash/lodash?file=lodash.js", extra: [], scroll_probe: "stackblitz" },
   { name: "notion_public", url: "https://notion.notion.site/Notion-Official-83715d7703ee4b8699b5e659a4712dd8", extra: [] },
   { name: "google_search", url: "https://www.google.com/search?q=firefox", extra: [] },
   { name: "amazon", url: "https://www.amazon.com/", extra: [] },
@@ -41,7 +42,11 @@ export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
 
 // Every check a site record can hold for one tool. Wall and error records fill all of them, so a new check name goes here once. Only DesertFox has the frame checks.
 export const FRAME_ROWS = ["frame_leave", "frame_hints", "frame_activate"];
-export const check_names_of = (site, tool) => ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...site.extra, ...NORMAL_ACTIONS];
+// The no-extension tool runs only the control of the movement probe: its `scroll` row is the site's own ArrowDown. `passthrough` is information about the site's ArrowDown with the tool in normal mode.
+export const check_names_of = (site, tool) => (tool === "none" ? ["scroll"] : ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...site.extra, ...NORMAL_ACTIONS, ...(site.scroll_probe ? ["passthrough"] : [])]);
+
+// The site's own movement key, sent by the control pass and by the passthrough record.
+export const PASSTHROUGH_KEYS = ["ArrowDown"];
 
 // Each tool's own default keys, read from its default keymap. Null means the default keymap binds no key for it, which blocks the action.
 // Every tool documents Escape as the key that leaves insert mode and a field, so the frame script sends Escape for step 2.
@@ -283,6 +288,75 @@ export function judge_cell_move(before, after) {
   return before !== after ? pass(`cell ${before} to ${after}`) : fail(`cell stayed ${before}`);
 }
 
+// The movement probe of the canvas and grid sites (scroll_probe in SITES), where no element scrolls and the page draws its own view. Each reader turns one plain fact of the page into a position, or null when the page does not show it. judge_movement compares two positions, the same way for every tool.
+// Maps keeps the view's centre in the address: .../@48.8584,2.2945,15z.
+export function maps_center(url) {
+  const found = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(\d+(?:\.\d+)?)z/.exec(String(url ?? ""));
+  return found ? { lat: Number(found[1]), lng: Number(found[2]), zoom: Number(found[3]) } : null;
+}
+
+// Excalidraw saves the view offset in localStorage as JSON: {"scrollX":0,"scrollY":0,...}.
+export function excalidraw_scroll(state_json) {
+  try {
+    const { scrollX, scrollY } = JSON.parse(state_json);
+    return Number.isFinite(scrollX) && Number.isFinite(scrollY) ? { x: scrollX, y: scrollY } : null;
+  } catch { return null; }
+}
+
+// line_numbers: the texts of the line-number gutter cells Monaco has drawn. The smallest one is the first visible line.
+export function monaco_first_line(line_numbers) {
+  const lines = (line_numbers ?? []).map((text) => Number.parseInt(text, 10)).filter((line) => Number.isInteger(line) && line > 0);
+  return lines.length > 0 ? Math.min(...lines) : null;
+}
+
+// cursor_lines: the texts of the gutter cells Monaco marks as the cursor's line. One cell is the cursor's line.
+export function monaco_cursor_line(cursor_lines) {
+  const lines = (cursor_lines ?? []).map((text) => Number.parseInt(text, 10)).filter((line) => Number.isInteger(line) && line > 0);
+  return lines.length === 1 ? lines[0] : null;
+}
+
+// A pan under this many degrees is noise in the address, not a key's effect. One arrow key on a zoom 15 map pans well over it.
+const MAPS_MIN_PAN_DEGREES = 1e-4;
+
+// The selected cell from the name box, and the grid's vertical offset from the scroll bar element beside it.
+const sheets_view = (facts) => (typeof facts?.cell === "string" ? { cell: facts.cell, offset: Number.isFinite(facts.grid_offset) ? facts.grid_offset : null } : null);
+
+const unreadable = (what) => ({ status: "unknown", reason: `the rig could not read ${what}` });
+
+// before and after: what framescript.js move_state returned just before the key and after it. Pass when the view moved, fail when it did not, unknown when a read failed, so a missing read is never a fail of the tool.
+// Sheets passes on a moved selection or a moved grid, whichever moved, because DesertFox moves the selection by design. StackBlitz follows the same rule with the cursor line and the first visible line.
+export function judge_movement({ probe, before, after }) {
+  if (probe === "maps") {
+    const [from, to] = [maps_center(before?.url), maps_center(after?.url)];
+    if (!from || !to) return unreadable("the map centre in the address");
+    if (from.zoom !== to.zoom) return fail(`zoom changed ${from.zoom} to ${to.zoom}, which is no pan`);
+    const moved = Math.max(Math.abs(to.lat - from.lat), Math.abs(to.lng - from.lng));
+    return moved >= MAPS_MIN_PAN_DEGREES ? pass(`map centre moved ${moved.toFixed(5)} degrees`) : fail(`map centre stayed ${from.lat},${from.lng}`);
+  }
+  if (probe === "excalidraw") {
+    const [from, to] = [excalidraw_scroll(before?.state), excalidraw_scroll(after?.state)];
+    if (!from || !to) return unreadable("the saved scroll offset");
+    const moved = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
+    return moved >= 1 ? pass(`scroll offset moved ${Math.round(moved)} px (${from.x},${from.y} to ${to.x},${to.y})`) : fail(`scroll offset stayed ${from.x},${from.y}`);
+  }
+  if (probe === "stackblitz") {
+    const [from, to] = [monaco_first_line(before?.line_numbers), monaco_first_line(after?.line_numbers)];
+    if (from === null || to === null) return unreadable("the editor's line numbers");
+    if (from !== to) return pass(`first visible line ${from} to ${to}`);
+    const [cursor_from, cursor_to] = [monaco_cursor_line(before?.cursor_lines), monaco_cursor_line(after?.cursor_lines)];
+    if (cursor_from !== null && cursor_to !== null && cursor_from !== cursor_to) return pass(`cursor line ${cursor_from} to ${cursor_to}`);
+    return fail(`first visible line stayed ${from} and the cursor line stayed ${cursor_from ?? "unread"}`);
+  }
+  if (probe === "sheets") {
+    const [from, to] = [sheets_view(before), sheets_view(after)];
+    if (!from || !to) return unreadable("the name box or the grid offset");
+    if (from.cell !== to.cell) return pass(`selection ${from.cell} to ${to.cell}`);
+    if (from.offset !== to.offset) return pass(`grid offset ${from.offset} to ${to.offset}`);
+    return fail(`selection stayed ${from.cell} and the grid offset stayed ${from.offset}`);
+  }
+  return unreadable(`probe ${probe}`);
+}
+
 // X binds j to "next post" itself. That moves the focus to a post and scrolls it into view, so a scroll alone cannot be told apart from the tool's.
 export function judge_jk_clash({ scrolled, post_focus_moved }) {
   if (post_focus_moved) return fail(scrolled ? "X's own j ran (moved to the next post), the scroll cannot be told apart" : "X's own j ran, the tool's did not");
@@ -306,6 +380,16 @@ export function cell_of(results) {
 // A record replaced by a retry stays in the JSON but takes no part in the cell.
 export const scored_runs = (runs) => runs.filter((run) => !run.retried);
 
+// The control pass of a movement probe site: the no-extension runs of its `scroll` row. moved is false when the site's own ArrowDown moved nothing, so no tool could pass there. A site with no control runs, or a control that could not be read, is judged on the tools alone.
+export function control_verdict(control_runs, site_name) {
+  const site = SITES.find((entry) => entry.name === site_name);
+  if (!site?.scroll_probe) return null;
+  const results = scored_runs(control_runs ?? []).filter((run) => run.site === site_name && run.checks.scroll).map((run) => run.checks.scroll);
+  const { majority } = cell_of(results);
+  if (majority !== "fail") return null;
+  return { moved: false, reason: results.find((result) => result.status === "fail").reason };
+}
+
 // The markdown table of a live-site run: a row per site and check, a column per tool. runs_of: { tool: [{ site, checks: { name: { status, reason } } }] }, one entry per pass and retry.
 // A cell shows the majority status with the reason from one of its runs. A split cell shows only the statuses.
 export function sites_table(runs_of, tools) {
@@ -314,8 +398,10 @@ export function sites_table(runs_of, tools) {
   for (const site of site_names) {
     const check_names = [...new Set(tools.flatMap((tool) => scored_runs(runs_of[tool]).filter((run) => run.site === site).flatMap((run) => Object.keys(run.checks))))];
     for (const check of check_names) {
+      const control = check === "scroll" ? control_verdict(runs_of.none, site) : null;
       const cells = tools.map((tool) => {
         const results = scored_runs(runs_of[tool]).filter((run) => run.site === site && run.checks[check]).map((run) => run.checks[check]);
+        if (control && !control.moved && tool !== "none" && results.length > 0) return `not scored: probe saw no movement (control, no extension: ${control.reason})`;
         const { text, majority } = cell_of(results);
         return majority ? `${text}: ${results.find((result) => result.status === majority).reason}` : text;
       });

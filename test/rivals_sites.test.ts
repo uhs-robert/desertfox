@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -336,4 +336,112 @@ test("a selector that matches nothing fails with its own reason and never falls 
   assert.equal(result.pick, undefined);
   assert.match(result.reason, /matched no visible target/);
   assert.match(pick_chosen_activation([], []).reason, /matched no visible target/);
+});
+
+const MAPS = "https://www.google.com/maps/@48.8584,2.2945,15z?entry=ttu";
+
+test("the Maps centre is read from the @lat,lng,zoomz part of the address, and null without it", () => {
+  assert.deepEqual(maps_center(MAPS), { lat: 48.8584, lng: 2.2945, zoom: 15 });
+  assert.deepEqual(maps_center("https://www.google.com/maps/@-33.8,-70.6,12.5z/data=!3m1"), { lat: -33.8, lng: -70.6, zoom: 12.5 });
+  assert.equal(maps_center("https://www.google.com/maps/place/Paris"), null);
+  assert.equal(maps_center(undefined), null);
+});
+
+test("the Excalidraw offset is read from the saved state, and null when a key is missing or the JSON is bad", () => {
+  assert.deepEqual(excalidraw_scroll('{"theme":"light","scrollX":0,"scrollY":-120.5}'), { x: 0, y: -120.5 });
+  assert.equal(excalidraw_scroll('{"scrollX":3}'), null);
+  assert.equal(excalidraw_scroll("{not json"), null);
+  assert.equal(excalidraw_scroll(null), null);
+});
+
+test("the first visible Monaco line is the smallest gutter number, and null when none is drawn", () => {
+  assert.equal(monaco_first_line(["45", "44", "46"]), 44);
+  assert.equal(monaco_first_line(["", "x", "7"]), 7);
+  assert.equal(monaco_first_line([]), null);
+  assert.equal(monaco_first_line(undefined), null);
+});
+
+test("the Monaco cursor line is the one gutter cell marked active, and null when none or several are", () => {
+  assert.equal(monaco_cursor_line(["12"]), 12);
+  assert.equal(monaco_cursor_line([]), null);
+  assert.equal(monaco_cursor_line(["3", "4"]), null);
+  assert.equal(monaco_cursor_line(undefined), null);
+});
+
+test("Maps passes on a pan, fails on no move, a tiny drift or a zoom change, and is unknown when unreadable", () => {
+  const judge = (url_after: string | undefined) => judge_movement({ probe: "maps", before: { url: MAPS }, after: { url: url_after } });
+  assert.equal(judge("https://www.google.com/maps/@48.8584,2.2995,15z").status, "pass");
+  assert.equal(judge(MAPS).status, "fail");
+  assert.equal(judge("https://www.google.com/maps/@48.85840001,2.2945,15z").status, "fail");
+  assert.match(judge("https://www.google.com/maps/@48.8584,2.2945,16z").reason, /zoom changed/);
+  assert.equal(judge("https://www.google.com/maps/@48.8584,2.2945,16z").status, "fail");
+  assert.equal(judge("https://www.google.com/maps/place/Paris").status, "unknown");
+  assert.equal(judge(undefined).status, "unknown");
+});
+
+test("Excalidraw passes when either offset moves by 1 or more, and fails when both stay", () => {
+  const state = (x: number, y: number) => JSON.stringify({ scrollX: x, scrollY: y });
+  const judge = (after: string | null) => judge_movement({ probe: "excalidraw", before: { state: state(0, 0) }, after: { state: after } });
+  assert.equal(judge(state(0, -40)).status, "pass");
+  assert.equal(judge(state(25, 0)).status, "pass");
+  assert.equal(judge(state(0.4, 0)).status, "fail");
+  assert.equal(judge(state(0, 0)).status, "fail");
+  assert.equal(judge(null).status, "unknown");
+});
+
+test("StackBlitz passes when the first visible line changes, and is unknown when the editor drew no lines", () => {
+  const judge = (before: string[], after: string[]) => judge_movement({ probe: "stackblitz", before: { line_numbers: before }, after: { line_numbers: after } });
+  assert.equal(judge(["1", "2", "3"], ["12", "13", "14"]).status, "pass");
+  assert.match(judge(["1", "2", "3"], ["12", "13"]).reason, /1 to 12/);
+  assert.equal(judge(["1", "2", "3"], ["1", "2", "3"]).status, "fail");
+  assert.equal(judge([], ["1"]).status, "unknown");
+});
+
+test("StackBlitz also passes when only the cursor line moves, and names it", () => {
+  const view = (cursor: string[]) => ({ line_numbers: ["1", "2", "3"], cursor_lines: cursor });
+  const moved = judge_movement({ probe: "stackblitz", before: view(["1"]), after: view(["2"]) });
+  assert.equal(moved.status, "pass");
+  assert.match(moved.reason, /cursor line 1 to 2/);
+  assert.equal(judge_movement({ probe: "stackblitz", before: view(["1"]), after: view(["1"]) }).status, "fail");
+  assert.equal(judge_movement({ probe: "stackblitz", before: view([]), after: view([]) }).status, "fail");
+});
+
+test("Sheets passes when the selection or the grid offset moves, names which one, and fails when neither does", () => {
+  const view = (cell: string | null, grid_offset: number | null) => ({ cell, grid_offset });
+  const judge = (before: object, after: object) => judge_movement({ probe: "sheets", before, after });
+  assert.match(judge(view("A2", 0), view("A3", 0)).reason, /selection A2 to A3/);
+  assert.match(judge(view("A2", 0), view("A2", 120)).reason, /grid offset 0 to 120/);
+  assert.equal(judge(view("A2", 0), view("A3", 120)).status, "pass");
+  assert.equal(judge(view("A2", 0), view("A2", 0)).status, "fail");
+  assert.equal(judge(view("A2", null), view("A3", null)).status, "pass");
+  assert.equal(judge(view(null, 0), view("A2", 0)).status, "unknown");
+});
+
+test("an unknown probe is unreadable, never a pass", () => {
+  assert.equal(judge_movement({ probe: "nope", before: {}, after: {} }).status, "unknown");
+});
+
+test("every probe site names a known probe, and the four canvas and grid sites have one", () => {
+  const probes = Object.fromEntries(SITES.filter((site: { scroll_probe?: string }) => site.scroll_probe).map((site: { name: string; scroll_probe: string }) => [site.name, site.scroll_probe]));
+  assert.deepEqual(probes, { google_sheets: "sheets", google_maps: "maps", excalidraw: "excalidraw", stackblitz: "stackblitz" });
+});
+
+test("the passthrough row and the control run exist only for probe sites", () => {
+  const probe_site = { extra: [], scroll_probe: "maps" };
+  assert.deepEqual(check_names_of(probe_site, "vimium").slice(-2), ["activate", "passthrough"]);
+  assert.deepEqual(check_names_of(probe_site, "none"), ["scroll"]);
+  assert.equal(check_names_of({ extra: [] }, "vimium").includes("passthrough"), false);
+  assert.deepEqual(PASSTHROUGH_KEYS, ["ArrowDown"]);
+});
+
+test("a control that moved nothing makes every tool's scroll cell not scored, and a control that moved leaves the cells", () => {
+  const run = (site: string, status: string, reason = "r") => ({ site, checks: { scroll: { status, reason } } });
+  const stuck = { desertfox: [run("excalidraw", "blocked", "j")], none: [run("excalidraw", "fail", "scroll offset stayed 0,0")] };
+  assert.match(sites_table(stuck, ["desertfox", "none"]), /\| excalidraw \| scroll \| not scored: probe saw no movement \(control, no extension: scroll offset stayed 0,0\) \| fail: scroll offset stayed 0,0 \|/);
+  const moving = { desertfox: [run("excalidraw", "blocked", "j")], none: [run("excalidraw", "pass", "moved")] };
+  assert.match(sites_table(moving, ["desertfox", "none"]), /\| blocked: j \| pass: moved \|/);
+  assert.equal(control_verdict(undefined, "excalidraw"), null);
+  assert.equal(control_verdict([run("excalidraw", "unknown")], "excalidraw"), null);
+  assert.equal(control_verdict([run("hacker_news", "fail")], "hacker_news"), null);
+  assert.deepEqual(control_verdict([run("excalidraw", "fail", "x"), run("excalidraw", "fail", "x"), run("excalidraw", "pass")], "excalidraw"), { moved: false, reason: "x" });
 });

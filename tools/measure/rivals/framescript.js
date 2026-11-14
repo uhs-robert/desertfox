@@ -173,6 +173,25 @@ answer("video_state", async () => { const video = largest_video(); return video 
 // The Sheets name box shows the selected cell.
 answer("name_box", async () => content.document.querySelector("#t-name-box")?.value ?? null);
 
+// What the view of a canvas or grid site shows, as plain facts for judge_movement in sites.mjs. The Maps address and the Excalidraw state save are debounced, so run.mjs waits before the second read.
+// Monaco marks the cursor's line number with active-line-number. The Sheets grid offset is the scroll position of its vertical scroll bar element.
+answer("move_state", async ({ probe }) => {
+  const doc = content.document;
+  if (probe === "maps") return { url: String(content.location) };
+  if (probe === "excalidraw") return { state: content.localStorage.getItem("excalidraw-state") };
+  if (probe === "stackblitz") return { line_numbers: [...doc.querySelectorAll(".monaco-editor .line-numbers")].map((el) => el.textContent), cursor_lines: [...doc.querySelectorAll(".monaco-editor .active-line-number")].map((el) => el.textContent) };
+  if (probe === "sheets") return { cell: doc.querySelector("#t-name-box")?.value ?? null, grid_offset: doc.querySelector(".native-scrollbar-y")?.scrollTop ?? null };
+  return null;
+});
+
+// Puts the focus where a click on the site's work area would, for the control pass: the site's own key reaches the map, the canvas or the editor only from there. Sheets has the focus on its grid already.
+const VIEW_SELECTORS = { maps: "[role=application]", excalidraw: ".excalidraw canvas.interactive", stackblitz: ".monaco-editor textarea" };
+answer("focus_view", async ({ probe }) => {
+  const el = VIEW_SELECTORS[probe] ? content.document.querySelector(VIEW_SELECTORS[probe]) : null;
+  el?.focus();
+  return { focused: describe(content.document.activeElement) };
+});
+
 // X marks the post its j moved to by focusing the article.
 answer("post_focus", async () => { const post = content.document.activeElement?.closest?.("article"); return post ? [...content.document.querySelectorAll("article")].indexOf(post) : null; });
 
