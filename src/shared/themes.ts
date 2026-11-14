@@ -586,8 +586,8 @@ export const REPO_THEMES: Record<string, Theme> = {
       "mode_ignore": "#8d98ae",
       "mode_caret": "#ebcb8b",
       "mode_visual": "#b48ead",
-      "search_bg": "#5e81ac",
-      "search_fg": "#eceff4",
+      "search_bg": "#88c0d0",
+      "search_fg": "#3b4252",
       "search_current_bg": "#d08770",
       "search_current_fg": "#2e3440"
     },
@@ -613,8 +613,8 @@ export const REPO_THEMES: Record<string, Theme> = {
       "mode_ignore": "#8d98ae",
       "mode_caret": "#ebcb8b",
       "mode_visual": "#b48ead",
-      "search_bg": "#5e81ac",
-      "search_fg": "#eceff4",
+      "search_bg": "#88c0d0",
+      "search_fg": "#3b4252",
       "search_current_bg": "#d08770",
       "search_current_fg": "#2e3440"
     }
