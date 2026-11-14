@@ -135,11 +135,11 @@ export const SETTINGS_TABLE = {
   newtab_top_sites: { kind: "boolean", default: true },
   newtab_top_sites_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_command_hint: { kind: "boolean", default: true },
-  // Opt-in network: with `newtab_weather` on, the page asks Open-Meteo for the weather.
-  newtab_weather: { kind: "boolean", default: false },
+  // On by default, but the card sends no request until a location is granted or a city is set.
+  newtab_weather: { kind: "boolean", default: true },
   // No default: absent means no city, and the card then offers the location permission.
   newtab_weather_city: { kind: "text", expectation: "a city name" },
-  newtab_weather_units: { kind: "enum", values: ["metric", "imperial"], default: "metric" },
+  newtab_weather_units: { kind: "enum", values: ["auto", "metric", "imperial"], default: "auto" },
   // Opt-in network: with `newtab_ip_info` on, the page asks Cloudflare for the public IP and country.
   newtab_ip_info: { kind: "boolean", default: false },
   // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.

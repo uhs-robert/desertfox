@@ -612,8 +612,9 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "\"metric\" or \"imperial\"",
+    "expectation": "\"auto\", \"metric\" or \"imperial\"",
     "values": [
+      "auto",
       "metric",
       "imperial"
     ]

@@ -25,16 +25,28 @@ const PATHS: Record<IconKind, readonly string[]> = {
   storm: [HIGH_CLOUD, "M12.5 14.5l-2.5 3.5h3.5l-2.5 3.5"],
 };
 
-export function draw_weather_icon(code: number, label: string): SVGElement {
+function draw_icon(code: number): SVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("class", "weather-icon");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", label);
   for (const d of PATHS[icon_kind(code)]) {
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
     svg.append(path);
   }
+  return svg;
+}
+
+export function draw_weather_icon(code: number, label: string): SVGElement {
+  const svg = draw_icon(code);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", label);
+  return svg;
+}
+
+// For a place where the condition is already in the text next to it, such as an hour in the strip.
+export function draw_decorative_icon(code: number): SVGElement {
+  const svg = draw_icon(code);
+  svg.setAttribute("aria-hidden", "true");
   return svg;
 }

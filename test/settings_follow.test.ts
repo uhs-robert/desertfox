@@ -294,14 +294,14 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
     const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() };
     const body_node = body as unknown as HTMLElement;
-    const off = effective_settings({ newtab_clock: true, newtab_ip_info: false } as never);
+    const off = effective_settings({ newtab_clock: true, newtab_weather: false, newtab_ip_info: false } as never);
     await render_new_tab(body_node, off, readers);
     await settled();
     assert.deepEqual(find_by_class(body.children[0]!, "ip-info"), []);
     assert.equal(requests, 0);
     assert.deepEqual([...removed].sort(), ["newtab_net_cache_air", "newtab_net_cache_ip", "newtab_net_cache_weather"], "each card that is off deletes its own answer");
 
-    const on = effective_settings({ newtab_clock: true, newtab_ip_info: true } as never);
+    const on = effective_settings({ newtab_clock: true, newtab_weather: false, newtab_ip_info: true } as never);
     await render_new_tab(body_node, on, readers);
     const [first_slot] = find_by_class(body.children[0]!, "ip-info");
     assert.ok(first_slot);

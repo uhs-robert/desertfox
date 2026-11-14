@@ -38,7 +38,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect((await cloudflare_requests()) === 0, "the page requested 1.1.1.1 while the setting is off");
     });
 
-    await in_background(`browser.storage.local.set({ newtab_net_cache_ip: { key: "trace", at: Date.now(), value: { ip: "108.39.124.74", country: "US" } }, newtab_net_cache_weather: { key: "city:Oslo|metric", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: new Date().toISOString().slice(0, 10), utc_offset_seconds: 0, wind_speed: 11.6, wind_direction: 320, latitude: 59.91, longitude: 10.75, code: 0, place: "Oslo", units: "metric" } } })`);
+    await in_background(`browser.storage.local.set({ newtab_net_cache_ip: { key: "trace", at: Date.now(), value: { ip: "108.39.124.74", country: "US" } }, newtab_net_cache_weather: { key: "city:Oslo|auto", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: new Date().toISOString().slice(0, 10), utc_offset_seconds: 0, wind_speed: 11.6, wind_direction: 320, latitude: 59.91, longitude: 10.75, code: 0, place: "Oslo", units: "metric" } } })`);
     await use_settings("ip_on", "newtab_ip_info = true\nnewtab_weather = true\nnewtab_weather_city = \"Oslo\"\n");
     await run_case("a stored answer draws one muted line under the date, and the gear is the top-left Settings link", async () => {
       expect(await open_new_tab(".ip-info"), "the IP slot never drew");
