@@ -47,3 +47,10 @@ export function write_state(state_file: string, state: WindowState): void {
 export function remove_state(state_file: string): void {
   rmSync(state_file, { force: true });
 }
+
+// A plain spawn that gave no pid started nothing, so its record proves nothing and close would keep it forever. Returns true when it removed the state file.
+export function discard_state_of_failed_spawn(started: { unit: string | null; pid: number }, state_file: string): boolean {
+  if (started.unit !== null || started.pid !== 0) return false;
+  remove_state(state_file);
+  return true;
+}

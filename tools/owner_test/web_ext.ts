@@ -7,6 +7,8 @@ export function web_ext_args(options: { dist: string; profile: string }): string
     "--keep-profile-changes",
     "--no-input",
     "--no-reload",
+    // Without it web-ext logs nothing about why Firefox closed, and the log is the only trace of a window that ended.
+    "--verbose",
     // web-ext writes startup.page=0 and a blank home page after reading user.js, and only a --pref comes after that.
     "--pref=browser.startup.page=1",
     "--pref=browser.startup.homepage=about:home",
