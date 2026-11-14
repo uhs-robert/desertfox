@@ -98,9 +98,11 @@ test("build-config: a bad newtab_links item is named by index, label and field",
   assert.match(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\nlink = 1'), /item 1 \("A"\) has the unknown field "link"/);
 });
 
-test("the built-in links include Settings, third after Getting Started and Help", () => {
+test("the built-in text links are Getting Started and Help, and Settings is one gear anchor with a label", () => {
   const html = readFileSync(new URL("../src/newtab/newtab.html", import.meta.url), "utf8");
   const nav = /<nav class="builtin-links">([\s\S]*?)<\/nav>/.exec(html)![1]!;
   const anchors = [...nav.matchAll(/<a href="([^"]*)">([^<]*)<\/a>/g)].map((match) => [match[2], match[1]]);
-  assert.deepEqual(anchors, [["Getting Started", "home.html#/quick-start"], ["Help", "home.html"], ["Settings", "home.html#/settings"]]);
+  assert.deepEqual(anchors, [["Getting Started", "home.html#/quick-start"], ["Help", "home.html"]]);
+  assert.match(html, /<a class="settings-gear" href="home\.html#\/settings" aria-label="Settings"[^>]*>\s*<svg[^>]*aria-hidden="true">/);
+  assert.equal(html.match(/home\.html#\/settings/g)?.length, 1, "one Settings link");
 });
