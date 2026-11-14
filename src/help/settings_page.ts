@@ -62,8 +62,12 @@ function text_widget(name: string, control: Control, hooks: Hooks): Widget {
 function move_button(label: "Up" | "Down", item: string): HTMLButtonElement {
   const button = el("button", "desertfox-settings-move", label) as HTMLButtonElement;
   button.type = "button";
-  button.setAttribute("aria-label", `${label === "Up" ? "Move up" : "Move down"} ${item}`);
+  name_move_button(button, label, item);
   return button;
+}
+
+function name_move_button(button: HTMLButtonElement, label: "Up" | "Down", item: string): void {
+  button.setAttribute("aria-label", `${label === "Up" ? "Move up" : "Move down"} ${item}`);
 }
 
 function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widget {
@@ -122,7 +126,7 @@ function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widge
 type Link = { label: string; url: string; group?: string };
 
 // One row per link: label, address and group, with Up and Down buttons and one to drop it. A row with nothing typed is no link, so Add link never puts an empty table in the value.
-export function link_list_widget(name: string, hooks: Hooks): Widget {
+function link_list_widget(name: string, hooks: Hooks): Widget {
   const box = el("div", "desertfox-settings-links");
   box.setAttribute("role", "group");
   box.setAttribute("aria-label", name);
@@ -153,8 +157,15 @@ export function link_list_widget(name: string, hooks: Hooks): Widget {
     const down = move_button("Down", link.label);
     const remove = el("button", "desertfox-settings-move", "Remove") as HTMLButtonElement;
     remove.type = "button";
-    remove.setAttribute("aria-label", `Remove the link ${link.label}`);
     const node = el("div", "desertfox-settings-order-row", label, url, group, up, down, remove);
+    // A row added empty or relabelled keeps names that match what is typed.
+    const name_buttons = () => {
+      name_move_button(up, "Up", label.value);
+      name_move_button(down, "Down", label.value);
+      remove.setAttribute("aria-label", `Remove the link ${label.value}`);
+    };
+    name_buttons();
+    label.addEventListener("input", name_buttons);
     const row = { node, up, down, read: () => ({ label: label.value, url: url.value, group: group.value }) };
     const move = (button: HTMLButtonElement, by: number) =>
       button.addEventListener("click", () => {

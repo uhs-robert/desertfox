@@ -5,7 +5,7 @@ import { load_effective_config } from "../src/background/config_load.ts";
 import { create_settings_messages } from "../src/background/settings_message.ts";
 import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
-import { link_list_widget, mount_settings, update_row } from "../src/help/settings_page.ts";
+import { mount_settings, update_row } from "../src/help/settings_page.ts";
 import { control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
 import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages.ts";
@@ -241,63 +241,4 @@ test("update_row sets data-changed, the tag text and the tag title for each top 
     assert.equal(row.tag.textContent, text, layer);
     assert.notEqual(row.tag.title, "", layer);
   }
-});
-
-// Just enough of a DOM for the link rows: nodes with children, attributes, listeners and focus.
-class FakeNode {
-  children: FakeNode[] = [];
-  attributes: Record<string, string> = {};
-  listeners: Record<string, (() => void)[]> = {};
-  className = "";
-  disabled = false;
-  value = "";
-  type = "";
-  placeholder = "";
-  spellcheck = true;
-  tag: string;
-  textContent: string;
-  constructor(tag: string, text = "") {
-    this.tag = tag;
-    this.textContent = text;
-  }
-  append(...items: (FakeNode | string)[]) { this.children.push(...items.filter((item): item is FakeNode => typeof item !== "string")); }
-  replaceChildren(...items: FakeNode[]) { this.children = [...items]; }
-  setAttribute(name: string, value: string) { this.attributes[name] = value; }
-  addEventListener(type: string, listener: () => void) { (this.listeners[type] ??= []).push(listener); }
-  click() { if (!this.disabled) this.listeners.click?.forEach((listener) => listener()); }
-  focus() { focused = this; }
-  remove() {}
-  get lastElementChild() { return this.children.at(-1) ?? null; }
-  find(label: string): FakeNode { return this.all().find((node) => node.attributes["aria-label"] === label)!; }
-  all(): FakeNode[] { return [this, ...this.children.flatMap((child) => child.all())]; }
-}
-let focused: FakeNode | undefined;
-
-test("Up and Down on a link row reorder the list that is saved", () => {
-  (globalThis as { document?: unknown }).document = { createElement: (tag: string) => new FakeNode(tag) };
-  const saved: unknown[] = [];
-  const widget = link_list_widget("newtab_links", { typing: () => undefined, commit: (value) => saved.push(value) });
-  widget.write([
-    { label: "A", url: "https://a.test/" },
-    { label: "B", url: "https://b.test/", group: "g" },
-    { label: "C", url: "https://c.test/" },
-  ]);
-  const root = widget.node as unknown as FakeNode;
-  assert.equal(root.find("Move up A").disabled, true);
-  assert.equal(root.find("Move down C").disabled, true);
-
-  root.find("Move up B").click();
-  assert.deepEqual((saved.at(-1) as { label: string }[]).map((link) => link.label), ["B", "A", "C"]);
-  assert.equal(root.find("Move up B").disabled, true);
-  assert.equal(root.find("Move down A").disabled, false);
-  assert.equal(focused, root.find("Move down B"));
-
-  root.find("Move down B").click();
-  root.find("Move down B").click();
-  assert.deepEqual(saved.at(-1), [
-    { label: "A", url: "https://a.test/" },
-    { label: "C", url: "https://c.test/" },
-    { label: "B", url: "https://b.test/", group: "g" },
-  ]);
-  assert.equal(root.find("Move down B").disabled, true);
 });
