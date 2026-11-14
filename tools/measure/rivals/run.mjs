@@ -26,7 +26,8 @@ const profile_dir = `${work_dir}/profiles/${tool}`;
 rmSync(profile_dir, { recursive: true, force: true });
 mkdirSync(profile_dir, { recursive: true });
 // Timer precision is off so that sub-millisecond marks are not rounded to 1 ms or more.
-writeFileSync(`${profile_dir}/user.js`, `${readFileSync(`${repo_dir}/test/key/user.js`, "utf8")}\nuser_pref("privacy.reduceTimerPrecision", false);\n`);
+// The volume scale silences the sound output only: the media checks read the player's state and volume, which keep their values.
+writeFileSync(`${profile_dir}/user.js`, `${readFileSync(`${repo_dir}/test/key/user.js`, "utf8")}\nuser_pref("privacy.reduceTimerPrecision", false);\nuser_pref("media.volume_scale", "0.0");\n`);
 
 class CheckFailed extends Error {}
 
