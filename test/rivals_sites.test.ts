@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, leave_key_after_click, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -272,8 +272,8 @@ test("gF leaves the frame when the badge stops reading FRAME and the focus is on
 
 test("check names hold the frame checks for DesertFox only, so an error or wall record fills every row", () => {
   const site = { extra: ["jk_clash"] };
-  assert.deepEqual(check_names_of(site, "desertfox"), ["mode_on_load", "leave", "frame_leave", "frame_hints", "frame_activate", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
-  assert.deepEqual(check_names_of(site, "rival"), ["mode_on_load", "leave", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
+  assert.deepEqual(check_names_of(site, "desertfox"), ["mode_on_load", "leave", "frame_leave", "frame_hints", "frame_activate", "jk_clash", "scroll", "passthrough", "hints", "hints_escape", "activate"]);
+  assert.deepEqual(check_names_of(site, "rival"), ["mode_on_load", "leave", "jk_clash", "scroll", "passthrough", "hints", "hints_escape", "activate"]);
 });
 
 test("a wrong-target status and an n/a frame row show in the cell, and an n/a majority names itself", () => {
@@ -428,13 +428,14 @@ test("every probe site names a known probe, and the four canvas and grid sites h
   assert.deepEqual(probes, { google_sheets: "sheets", google_maps: "maps", excalidraw: "excalidraw", stackblitz: "stackblitz" });
 });
 
-test("the passthrough row and the control run exist only for probe sites", () => {
+test("passthrough follows scroll on every site, and the control run exists only for probe sites", () => {
   const probe_site = { extra: [], scroll_probe: "maps" };
   const names = check_names_of(probe_site, "tridactyl");
   assert.equal(names.indexOf("passthrough"), names.indexOf("scroll") + 1);
   assert.ok(names.indexOf("passthrough") < names.indexOf("hints"));
   assert.deepEqual(check_names_of(probe_site, "none"), ["scroll"]);
-  assert.equal(check_names_of({ extra: [] }, "vimium").includes("passthrough"), false);
+  assert.equal(check_names_of({ extra: [] }, "vimium").includes("passthrough"), true);
+  assert.deepEqual(check_names_of({ extra: [] }, "none"), ["scroll"]);
   assert.deepEqual(PASSTHROUGH_KEYS, ["ArrowDown"]);
 });
 
@@ -456,13 +457,25 @@ test("a control that moved nothing keeps each tool's own result and adds a note,
   assert.deepEqual(control_verdict([run("excalidraw", "fail", "x"), run("excalidraw", "fail", "x"), run("excalidraw", "pass")], "excalidraw"), { moved: false, reason: "x" });
 });
 
-test("a tool row sends its leave key after the click only when the focus takes typing", () => {
+test("a scored row sends the tool's leave key only when the focus is a typing field", () => {
   const field = focus_of([{ tag: "textarea", id: "", type: null, editable: false, design_mode: false, read_only: false, disabled: false }]);
   const map = focus_of([{ tag: "div", id: "", type: null, editable: false, design_mode: false, read_only: false, disabled: false }]);
   const editable = focus_of([{ tag: "div", id: "grid", type: null, editable: true, design_mode: false, read_only: false, disabled: false }]);
-  assert.equal(leave_key_after_click(field), true);
-  assert.equal(leave_key_after_click(editable), true);
-  assert.equal(leave_key_after_click(map), false);
-  assert.equal(leave_key_after_click(focus_of([])), false);
-  assert.equal(leave_key_after_click(focus_of(null)), false);
+  assert.equal(needs_leave_key(field), true);
+  assert.equal(needs_leave_key(editable), true);
+  assert.equal(needs_leave_key(map), false);
+  assert.equal(needs_leave_key(focus_of([])), false);
+  assert.equal(needs_leave_key(focus_of(null)), false);
+});
+
+test("the control note also covers the passthrough row of a probe site, and no other site", () => {
+  const run = (site: string, check: string, status: string, reason: string) => ({ site, checks: { [check]: { status, reason } } });
+  const runs = { desertfox: [run("excalidraw", "passthrough", "blocked", "offset stayed")], none: [run("excalidraw", "scroll", "fail", "offset stayed 0,0")] };
+  assert.match(sites_table(runs, ["desertfox", "none"]), /\| excalidraw \| passthrough \| blocked: offset stayed \(the control did not move: offset stayed 0,0\) \|/);
+  const other = { desertfox: [run("wikipedia", "passthrough", "blocked", "x")], none: [] };
+  assert.doesNotMatch(sites_table(other, ["desertfox", "none"]), /control did not move/);
+});
+
+test("a site may name Tab presses that reach its scrolling area, the same for every tool", () => {
+  for (const site of SITES) assert.ok(site.tab_count === undefined || (Number.isInteger(site.tab_count) && site.tab_count > 0), site.name);
 });

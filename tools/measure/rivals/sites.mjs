@@ -6,7 +6,7 @@
 // Known gap: Stack Overflow focuses the Google sign-in frame in some passes only. In run-7b DesertFox never entered frame mode there, so its frame rows read n/a. The doc counts Reddit and X as the frame sites.
 // 2b. Frame branch, DesertFox only and only when its badge reads FRAME after the leave step. The site dictates focus and DesertFox does not override it, so a site that focuses a frame (Reddit and X focus a Google sign-in frame) leaves DesertFox working inside that frame until the user dismisses it or leaves with gF. The rivals keep keys on the page and show no badge, so they have no frame mode to score. The branch has two parts. `gF` (`frame_leave`) runs right after the leave step, so step 3 meets the same page, popup included, for every tool. The checks inside the frame run last, after a reload that brings the frame back: hints in the frame (`frame_hints`) and a hint that activates a control in it (`frame_activate`), which dismisses the popup. A pass that never reaches frame mode records the three frame rows as n/a.
 // 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked, or wrong_target when the hint acted on another element than its label's target.
-// A site with `scroll_probe` (a canvas or grid that draws its own view) reads movement instead of an element's scroll offset: see judge_movement. The no-extension tool runs a control there, the site's own movement input, and a control that moves nothing adds a note to every tool's cell. `passthrough` records, as information only, whether ArrowDown moves the view with the tool in normal mode.
+// A site with `scroll_probe` (a canvas or grid that draws its own view) reads movement instead of an element's scroll offset: see judge_movement. The no-extension tool runs a control there, the site's own movement input, and a control that moves nothing adds a note to every tool's cell. Two rows score movement, both from the keyboard alone: `scroll` sends the tool's own j, and `passthrough` sends the site's ArrowDown with the tool active, so a tool that lets the site's keys through gets credit.
 // Steps 1 to 3 run on one page load. Only the frame checks at the end of the DesertFox frame branch load it again. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
 // The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
@@ -46,16 +46,16 @@ export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
 
 // Every check a site record can hold for one tool. Wall and error records fill all of them, so a new check name goes here once. Only DesertFox has the frame checks.
 export const FRAME_ROWS = ["frame_leave", "frame_hints", "frame_activate"];
-// Step 3 in run order. On a probe site passthrough follows scroll at once, before the hint checks change the focus.
+// Step 3 in run order. passthrough, the site's own ArrowDown with the tool active, follows scroll at once, before the hint checks change the focus.
 export const step3_names = (site) => {
   const [scroll, ...rest] = NORMAL_ACTIONS;
-  return [...site.extra, scroll, ...(site.scroll_probe ? ["passthrough"] : []), ...rest];
+  return [...site.extra, scroll, "passthrough", ...rest];
 };
-// The no-extension tool runs only the control: its `scroll` row is the site's own movement input (see control_of). `passthrough` is information about the site's ArrowDown with the tool in normal mode.
+// The no-extension tool runs only the control: its `scroll` row is the site's own movement input (see control_of).
 export const check_names_of = (site, tool) => (tool === "none" ? ["scroll"] : ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...step3_names(site)]);
 
-// focus: from focus_of, taken after the click into the work area. A tool row sends its leave key only when the click put the focus in a typing field, where the tool is in insert mode. A map or a canvas takes no leave key, so the tool is in normal mode already and keeps the focus the click gave.
-export const leave_key_after_click = (focus) => focus.takes_typing === true;
+// The scored movement rows (scroll with the tool's own key, passthrough with the site's ArrowDown) use the keyboard only and start from the page as loaded. focus: from focus_of. The tool's leave key goes first only when the focus is a typing field, where the tool is in insert mode. A site may name `tab_count` Tab presses that reach its scrolling area, the same for every tool. A click never counts. Only the control, which is not scored, clicks.
+export const needs_leave_key = (focus) => focus.takes_typing === true;
 
 // What the control pass sends: the site's own movement input, a wheel scroll where the site has no movement key.
 export const control_of = (site) => site.control ?? { keys: PASSTHROUGH_KEYS };
@@ -411,7 +411,7 @@ export function sites_table(runs_of, tools) {
   for (const site of site_names) {
     const check_names = [...new Set(tools.flatMap((tool) => scored_runs(runs_of[tool]).filter((run) => run.site === site).flatMap((run) => Object.keys(run.checks))))];
     for (const check of check_names) {
-      const control = check === "scroll" ? control_verdict(runs_of.none, site) : null;
+      const control = check === "scroll" || check === "passthrough" ? control_verdict(runs_of.none, site) : null;
       const cells = tools.map((tool) => {
         const results = scored_runs(runs_of[tool]).filter((run) => run.site === site && run.checks[check]).map((run) => run.checks[check]);
         const { text, majority } = cell_of(results);
