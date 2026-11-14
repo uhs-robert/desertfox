@@ -219,6 +219,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
   const steps: LeafStep[] = [];
   let label: string | undefined;
   let intent: string | undefined;
+  let when_focus: string | undefined;
   for (const invocation of invocations) {
     const info = resolve(invocation.id);
     if (!info) {
@@ -237,6 +238,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
         return undefined;
       }
       intent = invocation.intent;
+      when_focus = invocation.when_focus;
       label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
@@ -246,19 +248,24 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, intent: _intent, variant_label: _variant_label, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count, ...(info.bundle && { bundle: info.bundle }) });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label, intent };
+  return { steps, label, intent, when_focus };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
   const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_group_names(entry.tokens, group_names), warnings);
   if (!resolved) return;
+  // A keymap binding replaces no other binding, so it would have nothing to run when focus is elsewhere.
+  if (resolved.when_focus !== undefined) {
+    warnings.push(`${mode}: skipped "${entry.sequence}": when_focus works only in a site row bind`);
+    return;
+  }
 
   let branch = root;
   for (const [depth, token] of entry.tokens.entries()) {
@@ -342,7 +349,7 @@ function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: P
       warnings.push(...step_warnings.map((warning) => `site_rules: ${scope}bind ${warning.replace(/^normal: /, "")}`));
       continue;
     }
-    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps } };
+    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), ...(resolved.when_focus === undefined ? {} : { when_focus: resolved.when_focus }), steps: resolved.steps } };
   }
   return binds;
 }

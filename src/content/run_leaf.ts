@@ -1,5 +1,6 @@
 import type { ContentToBackground, Mode, Outcome, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { counted_invocations } from "./run_content.ts";
+import { matches_any } from "./editable.ts";
 
 // A leaf with a background step goes to the router whole: it reads the active tab at each step, so a step after tab.next runs in the new tab.
 // A leaf of content steps runs here and shows its own failure.
@@ -27,3 +28,7 @@ export async function run_leaf(
 // A captured key goes through the router, so the keys after it wait until the leaf has run. Only a leaf made of captured-key steps holds: a step that waits on the user (a hint pick) would never see its keys. A leaf with a jump step goes to the router whole on a first press, whatever its other steps, so it holds too: hint mode skips the holds, so a pick in it still gets its keys. In a field the held keys go to the page unprocessed, so a hold there skips the Escape that leaves insert mode.
 // `capture` is a param name, never empty, so its truth is its presence.
 export const holds_keys_after = (leaf: TreeLeaf, in_field: boolean): boolean => !in_field && (leaf.steps.some((step) => step.jump) || leaf.steps.every((step) => step.capture));
+
+// The leaf a key runs under a site row's focus guard: the bind itself, or the leaf it replaced, or nothing when it replaced none. Body counts as no focus, so a bind aimed at the page's main widget also runs before the user has focused it.
+export const leaf_for_focus = (leaf: TreeLeaf, focused: Element | null, body: Element | null): TreeLeaf | undefined =>
+  leaf.when_focus === undefined || focused === null || focused === body || matches_any(focused, [leaf.when_focus]) ? leaf : leaf.otherwise && leaf_for_focus(leaf.otherwise, focused, body);
