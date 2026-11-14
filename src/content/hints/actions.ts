@@ -193,7 +193,11 @@ const FLASH_MS = 700;
 const flashes = new WeakMap<object, { previous: readonly [string, string]; timer: ReturnType<typeof setTimeout> }>();
 
 // A box that is not focusable (tabIndex below 0) cannot take focus. tabindex=-1 lets a script focus it and leaves the tab order alone. A link, a button or a page tabindex stays as it is.
-function focus_target(target: Target): void {
+// The one place the extension tells the background that it is about to focus a frame, so the frame's first focus is not parked. It goes before the focus. A frame that sends it marks itself. The top frame cannot name a frame of another site, so its mark covers the next first focus of any frame.
+export const enter_frame = (toast: boolean): void => void best_effort(browser.runtime.sendMessage({ type: "frame_cue", toast } satisfies FrameCue));
+
+function focus_target(target: Target, toast = false): void {
+  if (is_frame_element(target)) enter_frame(toast);
   if (!takes_typing(target) && (target.tabIndex ?? 0) < 0) target.setAttribute?.("tabindex", "-1");
   target.focus();
   // Gecko leaves the focus outside a frame of another site on the element's focus(). Its window's focus() is one of the few calls another site allows, and it enters the frame.
@@ -249,9 +253,8 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") {
-    // Only `;f` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see. The message goes first: it tells the background that the frame's focus is the user's, so it parks nothing.
-    if (is_frame_element(target)) void best_effort(browser.runtime.sendMessage({ type: "frame_cue" } satisfies FrameCue));
-    focus_target(target);
+    // Only `;f` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see.
+    focus_target(target, true);
     return;
   }
   if (action === "hover") return hover(target);

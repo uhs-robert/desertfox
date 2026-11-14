@@ -124,6 +124,22 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     expect(frame_events(frame_id, "frame_focus").length === parked_focuses + 1, "the frame was handed back again after its second focus");
   });
 
+  await run_case("a here pick and a focus pick on a frame element enter it and are not parked", async () => {
+    for (const action of ["here", "focus"]) {
+      const id = `p6_hybrid_idle_pick_${action}`;
+      const frame_id = `${id}_cross`;
+      await open_page("hybrid_frames", id, { new_tab: true });
+      await run_line(`hint --frames --${action}`);
+      await poll_until("the label of the frame element", async () => (await hint_label_count()) > 0);
+      const mark = events.length;
+      await press_keys("a");
+      await wait_event(mark, on_page(frame_id, "frame_focus"), `the frame to take the focus from the ${action} pick`);
+      await sleep(500);
+      expect(frame_events(frame_id, "frame_blur").length === 0, `the ${action} pick was parked`);
+      await wait_event(mark, badge_is(id, "FRAME"), "the badge to show FRAME");
+    }
+  });
+
   await run_case("a frame the user clicked is never parked", async () => {
     const id = "p6_hybrid_idle_click";
     const frame_id = `${id}_cross`;

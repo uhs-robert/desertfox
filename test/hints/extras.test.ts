@@ -1536,6 +1536,20 @@ test("another frame focuses its window before a focus pick, and not before a lin
   assert.equal(page.window_focuses(), 1);
 });
 
+test("the frame marks its own entry just before it focuses its window, for a focus pick only", async () => {
+  const page = await page_with(["one", "two"]);
+  page.deliver({ type: "hint_frames_collect", session_id: "s1", args: { action: "background", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s1", labels: ["a", "s"] });
+  await page.deliver({ type: "hint_frames_pick", session_id: "s1", label: "a" });
+  assert.deepEqual(types_sent(page).filter((type) => type === "frame_cue"), []);
+  page.deliver({ type: "hint_frames_collect", session_id: "s2", args: { action: "focus", filter: "links" } });
+  await settle();
+  page.deliver({ type: "hint_frames_labels", session_id: "s2", labels: ["a", "s"] });
+  await page.deliver({ type: "hint_frames_pick", session_id: "s2", label: "s" });
+  assert.deepEqual(page.sent.filter((message) => (message as { type: string }).type === "frame_cue"), [{ type: "frame_cue", toast: false }]);
+});
+
 // The background's answer to a pick of the other frame's label: the text its owner handed over.
 const answer_picks_with = (page: { hold_sends: (held: (message: unknown) => Promise<unknown>) => void }, answers: Record<string, unknown>) =>
   page.hold_sends(async (message) => ((message as { type: string }).type === "hint_frames_pick" ? answers[(message as { label: string }).label] : undefined));

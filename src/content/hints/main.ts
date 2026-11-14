@@ -6,7 +6,7 @@ import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFrames
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";
+import { enter_frame, has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";
 import type { ModeAction, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
@@ -631,7 +631,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     let handed: { text: string; what: string | undefined } | undefined;
     const hand_over: HandOver = (text, what) => void (handed = { text, what });
     // The keyboard focus is in another frame. Gecko keeps an element's focus() out of a frame of another site that does not hold it, and the window's focus() brings it in.
-    if (pick_args.action === "focus" || starts_mode(pick_args.action) || takes_typing(element)) window.focus();
+    if (pick_args.action === "focus" || starts_mode(pick_args.action) || takes_typing(element)) (enter_frame(false), window.focus());
     // Only a pick that focuses a field takes the keys typed ahead. The keyboard frame replays the rest.
     if (pick_args.action === "hover") hovered_by = current.session_id;
     const types_ahead = keys && (pick_args.action === "here" || pick_args.action === "focus") && takes_typing(element);

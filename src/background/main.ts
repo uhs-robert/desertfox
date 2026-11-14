@@ -265,7 +265,6 @@ const find_scan = create_find_scan(browser_find_scan_deps());
 const hint_frames = create_hint_frames({
   ...browser_hint_frames_deps(),
   parked_frame: (tab_id) => tab_modes.parked_frame(tab_id),
-  expect_entry: (tab_id, frame_id) => tab_modes.expect_entry(tab_id, frame_id),
   unpark: async (tab_id, frame_id) => {
     const unparked = await tab_modes.unpark(tab_id, frame_id);
     if (unparked) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(unparked.child_mode === undefined ? {} : { mode: unparked.child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }));
@@ -408,8 +407,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "frame_cue" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
-    // The top page cannot name the frame of another site that it focuses, so its mark covers the next first focus of any frame.
-    return tab_modes.expect_entry(tab_id).then(() => frame_cue(tab_id));
+    // A frame that asks names itself. The top page cannot name the frame of another site that it focuses, so its mark covers the next first focus of any frame.
+    return tab_modes.expect_entry(tab_id, sender.frameId === 0 ? undefined : sender.frameId).then(() => (request.toast ? frame_cue(tab_id) : undefined));
   }
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
   if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));

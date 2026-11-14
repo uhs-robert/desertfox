@@ -23,8 +23,6 @@ export type HintFramesDeps = {
   inject_all: (tab_id: number, frame_id?: number) => Promise<number>;
   // The cross-origin frame that took the focus on load and was handed back to the top page, if one is still recorded. See `tab_modes.ts`.
   parked_frame: (tab_id: number) => Promise<number | undefined>;
-  // A pick is about to move the focus into the frame `frame_id`, so its first focus is not parked.
-  expect_entry: (tab_id: number, frame_id: number) => Promise<void>;
   // The parked frame is gone: end its record and tell the top page.
   unpark: (tab_id: number, frame_id: number) => Promise<void>;
   // To one frame, or with no frame to every frame of the tab.
@@ -191,8 +189,6 @@ export function create_hint_frames(deps: HintFramesDeps) {
       if (!session?.labels) return NO_SESSION;
       const owner = Object.entries(session.labels).find(([, labels]) => labels.includes(label))?.[0];
       if (owner === undefined) return { ok: false, message: `No hint has the label ${label}` };
-      // Not awaited: the owner must get the pick before the end that follows it. The mark queues ahead of the frame's own report. A pick that moves no focus leaves a mark that expires, on a frame the user just picked from.
-      if (Number(owner) !== frame_id) void best_effort(deps.expect_entry(tab_id, Number(owner)));
       let timer: unknown;
       const deadline = new Promise<undefined>((resolve) => (timer = deps.set_timer(() => resolve(undefined), deps.pick_ms)));
       const reply = refused_as(deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)), undefined);
@@ -237,7 +233,7 @@ export function create_hint_frames(deps: HintFramesDeps) {
 
 export type HintFrames = ReturnType<typeof create_hint_frames>;
 
-export function browser_hint_frames_deps(): Omit<HintFramesDeps, "parked_frame" | "unpark" | "expect_entry"> {
+export function browser_hint_frames_deps(): Omit<HintFramesDeps, "parked_frame" | "unpark"> {
   return {
     storage: browser.storage.session,
     // Document start runs the bundle at once, so a frame that still loads reports instead of holding the labels until it is idle. The bundle registers once per page, so a frame that has it already only counts.
