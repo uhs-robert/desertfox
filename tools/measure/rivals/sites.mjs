@@ -118,24 +118,24 @@ const innermost = (targets) => targets.filter((target, index) => !targets.some((
 // How much nearer one target must be than the next for the last fallback of pick_activation. Under half the 25 px reach, so a label between two targets never counts.
 const CLEAR_MARGIN = 8;
 
-// The label to type for the activation check, so the check knows which element should react. On a dense page a label is near several targets and the nearest can be the neighbour of the real one.
-// So the first choice is a label with exactly one target near it, then a label whose center lies inside exactly one target, then a label clearly nearer one target than any other (a toolbar of touching buttons).
+// The label to type for the activation check, so the check knows which element should react. A label belongs to the target whose box holds its center, and a label that only sits near a target can belong to an element the target list lacks.
+// So the first choice is a label whose center lies inside exactly one target. Only when no label does, the fallbacks run: a label with exactly one target near it, then a label clearly nearer one target than any other (a toolbar of touching buttons). `via` records which choice made the pick.
 export function pick_activation(labels, targets) {
   const typable = labels.filter((label) => label.text.trim());
-  const pick = (label, target) => ({ keys: label.text.trim().toLowerCase(), target: target.name });
+  const pick = (label, target, via) => ({ keys: label.text.trim().toLowerCase(), target: target.name, via, at: label_center(label) });
   // A toolbar or a list item can be a target itself and hold targets, so only the innermost of nested targets near a label count.
   const targets_within = (label, limit) => innermost(targets.filter((target) => distance_to(label_center(label), target.rect) <= limit));
   for (const label of typable) {
-    const near = targets_within(label, MAX_DISTANCE);
-    if (near.length === 1) return { ...pick(label, near[0]), at: label_center(label) };
+    const under = targets_within(label, 0);
+    if (under.length === 1) return pick(label, under[0], "inside");
   }
   for (const label of typable) {
-    const under = targets_within(label, 0);
-    if (under.length === 1) return { ...pick(label, under[0]), at: label_center(label) };
+    const near = targets_within(label, MAX_DISTANCE);
+    if (near.length === 1) return pick(label, near[0], "near");
   }
   for (const label of typable) {
     const [nearest, second] = targets.map((target) => ({ target, distance: distance_to(label_center(label), target.rect) })).sort((a, b) => a.distance - b.distance);
-    if (nearest && nearest.distance <= MAX_DISTANCE && (!second || second.distance - nearest.distance >= CLEAR_MARGIN)) return { ...pick(label, nearest.target), at: label_center(label) };
+    if (nearest && nearest.distance <= MAX_DISTANCE && (!second || second.distance - nearest.distance >= CLEAR_MARGIN)) return pick(label, nearest.target, "nearest");
   }
   return null;
 }

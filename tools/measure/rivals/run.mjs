@@ -538,7 +538,7 @@ async function check_site(site) {
       // A navigation into another content process takes the frame script's state with it, and then only the address can tell.
       const seen = await ask_page("activation_result", {}, 5000).catch(() => null);
       const url_after = await current_url();
-      return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag };
+      return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via };
     },
   };
   for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
