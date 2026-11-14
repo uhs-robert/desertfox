@@ -146,10 +146,10 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
   if (sections.length > 0) next.page.append(draw_sections(sections));
   if (settings.newtab_command_hint) next.page.append(draw_command_hint());
   if (settings.newtab_weather === true) {
-    // Under the date when the page has one. The fetch is not awaited, so a slow or failed request never holds the page.
+    // A corner of the page, outside the centered column. The fetch is not awaited, so a slow or failed request never holds the page.
     const slot = document.createElement("div");
     slot.className = "weather";
-    (next.page.querySelector(".time") ?? next.page).append(slot);
+    next.page.append(slot);
     const weather = start_weather(slot, settings);
     const stop_ticker = next.stop_ticker;
     // A redraw stops the weather run with the clock, so a pending request never outlives its page.
