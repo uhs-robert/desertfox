@@ -43,10 +43,3 @@ export function draw_weather_icon(code: number, label: string): SVGElement {
   svg.setAttribute("aria-label", label);
   return svg;
 }
-
-// For a place where the condition is already in the text next to it, such as an hour in the strip.
-export function draw_decorative_icon(code: number): SVGElement {
-  const svg = draw_icon(code);
-  svg.setAttribute("aria-hidden", "true");
-  return svg;
-}
