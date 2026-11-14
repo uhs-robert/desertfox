@@ -9,7 +9,7 @@ import { judge_probe } from "../tools/owner_test/probe.ts";
 import { is_same_process, parse_debug_port, parse_start_ticks, read_start_ticks } from "../tools/owner_test/process_guard.ts";
 import { seed_user_js } from "../tools/owner_test/profile.ts";
 import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "../tools/owner_test/state.ts";
-import { real_close_deps } from "../tools/owner_test/system.ts";
+import { is_confirmed_stopped, real_close_deps } from "../tools/owner_test/system.ts";
 import { stamp_manifest, tail_lines, web_ext_args } from "../tools/owner_test/web_ext.ts";
 import { flock_argv, LOCK_BUSY_EXIT } from "../tools/owner_test/lock.ts";
 import { Refusal } from "../tools/owner_test/refusal.ts";
@@ -499,4 +499,9 @@ test("close without systemctl on PATH reports the unit as not confirmed stopped 
   } finally {
     process.env.PATH = saved;
   }
+});
+
+test("a stop is confirmed only by inactive or failed, never by empty or transitional output", () => {
+  for (const stopped of ["inactive\n", "failed\n"]) assert.equal(is_confirmed_stopped(stopped), true, stopped);
+  for (const unconfirmed of ["", "\n", "active\n", "activating\n", "deactivating\n", "reloading\n", "unknown\n"]) assert.equal(is_confirmed_stopped(unconfirmed), false, JSON.stringify(unconfirmed));
 });
