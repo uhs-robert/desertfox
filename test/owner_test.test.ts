@@ -49,7 +49,10 @@ function fake_system(ticks: Map<number, number>, ignore_term = new Set<number>()
       if (signal === "SIGKILL" || !ignore_term.has(pid)) ticks.delete(pid);
     },
     sleep: async () => {},
-    stop_unit: (unit) => void stopped_units.push(unit),
+    stop_unit: (unit) => {
+      stopped_units.push(unit);
+      return true;
+    },
     remove_profile: (profile) => void removed.push(profile),
     remove_window_files: () => {},
     grace_ms: 300,
@@ -108,18 +111,48 @@ test("a stale state file with dead processes is cleaned and nothing is killed", 
   assert.equal(existsSync(paths.state_file), false);
 });
 
-test("a state that never started a process kills nothing", async (t) => {
+test("a record with no pids is proof only when a recorded unit is confirmed stopped", async (t) => {
   const roots = make_roots(t);
-  const { paths } = make_window("/w/a", roots, { web_ext_pid: 0, web_ext_start_ticks: 0, firefox_pid: 0, firefox_start_ticks: 0 });
-  const system = fake_system(new Map([[1, 1]]));
-  await close_window(paths, system.deps);
-  assert.deepEqual(system.signals, []);
+  const no_pids = { web_ext_pid: 0, web_ext_start_ticks: 0, firefox_pid: 0, firefox_start_ticks: 0 };
+  // Plain spawn (no unit): the record proves nothing, so the profile and state stay.
+  const plain = make_window("/w/a", roots, no_pids);
+  const plain_system = fake_system(new Map([[1, 1]]));
+  const plain_result = await close_window(plain.paths, plain_system.deps);
+  assert.deepEqual([plain_result.complete, plain_system.signals, plain_system.removed], [false, [], []]);
+  assert.equal(existsSync(plain.paths.state_file), true);
+  // A unit that is confirmed gone: carry on and clean up.
+  const unit = make_window("/w/b", roots, { ...no_pids, unit: "u" });
+  const unit_system = fake_system(new Map());
+  const unit_result = await close_window(unit.paths, unit_system.deps);
+  assert.deepEqual([unit_result.complete, unit_system.removed], [true, [unit.paths.profile_dir]]);
+  // A unit that still runs after the stop: incomplete.
+  const stuck = make_window("/w/c", roots, { ...no_pids, unit: "u" });
+  const stuck_system = fake_system(new Map());
+  stuck_system.deps.stop_unit = () => false;
+  assert.equal((await close_window(stuck.paths, stuck_system.deps)).complete, false);
+  assert.equal(existsSync(stuck.paths.profile_dir), true);
+});
+
+test("a record of another worktree signals nothing, even when its pids match live processes", async (t) => {
+  const roots = make_roots(t);
+  const { paths } = make_window("/w/a", roots, { worktree: "/w/b" });
+  const system = fake_system(new Map([[4001, 111], [4002, 222]]));
+  const result = await close_window(paths, system.deps);
+  assert.deepEqual([system.signals, system.removed, result.complete], [[], [], false]);
+  assert.match(result.lines.join("\n"), /another worktree/);
+  assert.equal(existsSync(paths.state_file), true);
+});
+
+test("a worktree whose name starts with two dots keys and guards like any other", () => {
+  assert.equal(is_strictly_inside("/c/root", "/c/root/..review/profile"), true);
+  assert.equal(is_strictly_inside("/c/root", "/c/root/../review"), false);
+  assert.match(worktree_key("/x/..review"), /^\.\.review-[0-9a-f]{10}$/);
 });
 
 test("close with no state file says nothing is open", async (t) => {
   const roots = make_roots(t);
   const result = await close_window(window_paths("/w/a", roots), fake_system(new Map()).deps);
-  assert.deepEqual(result, { lines: ["nothing open"], closed: false });
+  assert.deepEqual(result, { lines: ["nothing open"], closed: false, complete: true });
 });
 
 test("close deletes only the profile its own worktree maps to", async (t) => {
@@ -133,7 +166,7 @@ test("close deletes only the profile its own worktree maps to", async (t) => {
     const system = fake_system(new Map());
     const result = await close_window(own, system.deps);
     assert.deepEqual(system.removed, [], `deleted for ${profile}`);
-    assert.match(result.lines.join("\n"), /left alone/);
+    assert.match(result.lines.join("\n"), /left alone|nothing was signalled/);
   }
 });
 

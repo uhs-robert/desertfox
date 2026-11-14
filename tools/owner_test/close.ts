@@ -7,7 +7,8 @@ export type CloseDeps = {
   read_start_ticks: (pid: number) => number | null;
   signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => void;
   sleep: (ms: number) => Promise<void>;
-  stop_unit: (unit: string) => void;
+  // Stops the unit and says whether it is gone now.
+  stop_unit: (unit: string) => boolean;
   remove_profile: (profile: string) => void;
   remove_window_files: (log: string, window_dir: string) => void;
   grace_ms?: number;
@@ -15,7 +16,8 @@ export type CloseDeps = {
   kill_wait_ms?: number;
 };
 
-export type CloseResult = { lines: string[]; closed: boolean };
+// `closed` means a window was closed by this call. `complete` means nothing of the window is left running, so a new one may start.
+export type CloseResult = { lines: string[]; closed: boolean; complete: boolean };
 
 const POLL_MS = 100;
 
@@ -51,22 +53,37 @@ export function own_profile(state: WindowState, paths: WindowPaths): string | nu
   return named === paths.profile_dir && is_strictly_inside(paths.cache_root, named) ? named : null;
 }
 
+// A record belongs to the caller only when its worktree and profile are the ones the caller's key maps to.
+function is_own_record(state: WindowState, paths: WindowPaths): boolean {
+  return resolve(state.worktree) === paths.worktree && resolve(state.profile) === paths.profile_dir;
+}
+
+const unrecorded = (pid: number, start_ticks: number) => pid <= 1 || start_ticks <= 0;
+
 export async function close_window(paths: WindowPaths, deps: CloseDeps): Promise<CloseResult> {
   const read = read_state(paths.state_file);
   const lines: string[] = [];
   // The unit name is ours by construction, so stopping it is safe whatever the file says. It also clears a unit whose record was lost.
-  deps.stop_unit(unit_name(paths.key));
-  if (read.kind === "none") return { lines: ["nothing open"], closed: false };
+  const unit_gone = deps.stop_unit(unit_name(paths.key));
+  if (read.kind === "none") return { lines: ["nothing open"], closed: false, complete: true };
   if (read.kind === "corrupt") {
     remove_state(paths.state_file);
-    return { lines: [`state file was unreadable (${read.reason}) and is removed; no process was signalled and no folder was deleted`], closed: false };
+    return { lines: [`state file was unreadable (${read.reason}) and is removed; no process was signalled and no folder was deleted`], closed: false, complete: unit_gone };
   }
   const state = read.state;
+  if (!is_own_record(state, paths)) {
+    return { lines: [`the state file names another worktree or profile (${state.worktree}), so nothing was signalled or deleted. Remove ${paths.state_file} by hand if it is stale.`], closed: false, complete: false };
+  }
+  // Pids missing from the record prove nothing about a window run without a unit. A confirmed stop of the unit does.
+  if (unrecorded(state.web_ext_pid, state.web_ext_start_ticks) && (state.unit === null || !unit_gone)) {
+    lines.push("close is incomplete: the state records no web-ext process and no unit was confirmed stopped, so the profile and state are kept. Run close again.");
+    return { lines, closed: false, complete: false };
+  }
   const web_ext_gone = await stop_process("web-ext", state.web_ext_pid, state.web_ext_start_ticks, deps, lines);
   const firefox_gone = await stop_process("firefox", state.firefox_pid, state.firefox_start_ticks, deps, lines);
   if (!web_ext_gone || !firefox_gone) {
     lines.push("close is incomplete: a process still runs, so the profile and state are kept. Run close again.");
-    return { lines, closed: false };
+    return { lines, closed: false, complete: false };
   }
   const profile = own_profile(state, paths);
   if (profile === null) {
@@ -78,5 +95,5 @@ export async function close_window(paths: WindowPaths, deps: CloseDeps): Promise
   }
   remove_state(paths.state_file);
   lines.push("closed");
-  return { lines, closed: true };
+  return { lines, closed: true, complete: true };
 }

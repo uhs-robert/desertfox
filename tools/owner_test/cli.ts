@@ -57,7 +57,11 @@ function real_close_deps(): CloseDeps {
       try { process.kill(pid, signal); } catch { /* already gone */ }
     },
     sleep,
-    stop_unit: (unit) => void spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" }),
+    stop_unit: (unit) => {
+      spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+      // "is-active" prints "active" or "activating" while the unit runs. A missing unit or no systemd prints something else or nothing.
+      return !/^activ/.test(spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout.trim());
+    },
     remove_profile: (profile) => rmSync(profile, { recursive: true, force: true }),
     remove_window_files: (log, window_dir) => {
       rmSync(log, { force: true });
@@ -69,7 +73,7 @@ function real_close_deps(): CloseDeps {
 async function close(paths: WindowPaths): Promise<boolean> {
   const result = await close_window(paths, real_close_deps());
   for (const line of result.lines) console.log(line);
-  return result.closed;
+  return result.complete;
 }
 
 function firefox_pid_for(profile: string): number | null {
@@ -171,7 +175,7 @@ async function open(worktree: string, paths: WindowPaths, hints: string[]): Prom
   }
   const label = build_and_stamp(worktree);
   // A second open on this worktree replaces its window. Other worktrees keep theirs: the state file, profile folder and unit are keyed by worktree.
-  if (existsSync(paths.state_file)) await close(paths);
+  if (existsSync(paths.state_file) && !(await close(paths))) fail("the old window of this worktree is not closed, so no new one is opened over its profile. Fix that first, then run again.");
   check_free_space(paths.cache_root);
   mkdirSync(paths.profile_dir, { recursive: true, mode: 0o700 });
   writeFileSync(join(paths.profile_dir, "user.js"), seed_user_js(readFileSync(join(worktree, "test", "key", "user.js"), "utf8")));
@@ -254,7 +258,7 @@ try {
   if (action === "open") await open(worktree, paths, hints);
   else if (action === "reload") await reload(worktree, paths);
   else if (action === "status") await status(paths);
-  else if (action === "close") await close(paths);
+  else if (action === "close") process.exitCode = (await close(paths)) ? 0 : 1;
   else fail(`unknown action ${action}. Use open, reload, status or close.`);
 } catch (error) {
   if (!(error instanceof Refusal)) throw error;
