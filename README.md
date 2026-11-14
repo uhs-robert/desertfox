@@ -71,10 +71,10 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 | Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
 | --- | --- | --- | --- | --- | --- |
-| Hints with modifiers | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | 🟡 | ❌ | ❌ | ❌ |
+| [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
 | Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
