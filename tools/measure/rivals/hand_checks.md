@@ -65,23 +65,9 @@ URL: `https://mail.google.com/mail/u/0/#inbox`
 | 3. `Escape` out of hints | | | | |
 | A hint on a message row opens the message | | | | |
 
-## Figma
+## Discord
 
-URL: a design file you own, `https://www.figma.com/design/...`
-
-| Check | DesertFox | Vimium | Vimium C | Tridactyl |
-| --- | --- | --- | --- | --- |
-| 1. Mode on load (focus, mode) | | | | |
-| 2. Leave with `Escape` | | | | |
-| 3. Scroll | | | | |
-| 3. Hints | | | | |
-| 3. Activate | | | | |
-| 3. `Escape` out of hints | | | | |
-| Figma's own single-letter keys still work on the canvas | | | | |
-
-## Slack or Discord
-
-Site checked (Slack or Discord):
+Site checked (Discord):
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
@@ -92,20 +78,6 @@ Site checked (Slack or Discord):
 | 3. Activate | | | | |
 | 3. `Escape` out of hints | | | | |
 | Typing in the message box sends no key to the extension | | | | |
-
-## Outlook or Microsoft 365
-
-Site checked (Outlook or Microsoft 365):
-
-| Check | DesertFox | Vimium | Vimium C | Tridactyl |
-| --- | --- | --- | --- | --- |
-| 1. Mode on load (focus, mode) | | | | |
-| 2. Leave with `Escape` | | | | |
-| 3. Scroll | | | | |
-| 3. Hints | | | | |
-| 3. Activate | | | | |
-| 3. `Escape` out of hints | | | | |
-| A hint on a message row opens the message | | | | |
 
 ## ChatGPT or Claude web
 

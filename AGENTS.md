@@ -52,8 +52,9 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 
 This repository is public.
 
-- Do not name other vim-style browser extensions in code, docs, commits or PRs. The one exception is `README.md`, which can name them in a sourced, factual comparison and in its intro. Do not copy their code, because copied code brings its license with it.
-  - Carve-out: `tools/measure/rivals/` names the rival extensions it benchmarks (store ids, version pins, hint selectors). The owner approved this for that folder only. Every other file, the `just` recipe name and commit and PR text outside that folder keep the rule.
+- Do not name other vim-style browser extensions in code, docs, commits or PRs. The exceptions are `README.md`, which can name them in a sourced, factual comparison and in its intro, and any doc under `docs/`, which can name them in a sourced, factual comparison. Commit and PR text for a change to those docs can name them too. Do not copy their code, because copied code brings its license with it.
+  - Carve-out: `tools/measure/rivals/` names the rival extensions it benchmarks (store ids, version pins, hint selectors). This applies to that folder only. Every other file, the `just` recipe name and commit and PR text outside that folder keep the rule.
+- Public files (docs, READMEs, code comments, commit and PR text) never mention who owns the project, anyone's approvals or internal planning.
 - Never commit private config or personal data, for example personal site helpers or snippets.
 - Never assume a personal toolset (Oasis, Hyprland, a particular terminal). Oasis features stay optional behind the native host.
 
