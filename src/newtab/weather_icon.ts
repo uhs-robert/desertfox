@@ -43,3 +43,25 @@ export function draw_weather_icon(code: number, label: string): SVGElement {
   svg.setAttribute("aria-label", label);
   return svg;
 }
+
+export type FactIcon = "uv" | "sunrise" | "sunset";
+
+const FACT_PATHS: Record<FactIcon, readonly string[]> = {
+  uv: PATHS.clear,
+  sunrise: ["M3 20h18", "M7 20a5 5 0 0 1 10 0", "M12 12V5M9 8l3-3 3 3"],
+  sunset: ["M3 20h18", "M7 20a5 5 0 0 1 10 0", "M12 5v7M9 9l3 3 3-3"],
+};
+
+// A small line icon beside a fact whose label is text, so it is hidden from assistive technology.
+export function draw_fact_icon(kind: FactIcon): SVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "weather-fact-icon");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of FACT_PATHS[kind]) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
+}

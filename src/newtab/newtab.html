@@ -65,15 +65,35 @@
   .desertfox-newtab .weather-ask:hover, .desertfox-newtab .weather-ask:focus-visible { border-color: var(--desertfox-border); outline: none; }
   .desertfox-newtab .weather-more { align-self: flex-end; padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: var(--desertfox-primary); cursor: pointer; }
   .desertfox-newtab .weather-more:hover, .desertfox-newtab .weather-more:focus-visible { border-color: var(--desertfox-border); outline: none; }
-  /* In place under the button, so it needs no focus trap. Its own scroll keeps a short window from losing the lists under it. */
-  .desertfox-newtab .weather-detail { box-sizing: border-box; max-width: min(22rem, calc(100vw - 2.5rem)); max-height: 60vh; overflow: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--desertfox-bg-mantle); border: 1px solid var(--desertfox-border); border-radius: 8px; }
+  /* In place under the button, so it needs no focus trap. Its own scroll keeps a short window from losing the lists under it. The padding and radius match the card, and the gap between sections is the same above and below each divider. */
+  .desertfox-newtab .weather-detail { box-sizing: border-box; max-width: min(22rem, calc(100vw - 2.5rem)); max-height: 60vh; overflow: auto; display: flex; flex-direction: column; align-items: stretch; gap: 0.625rem; padding: 0.75rem; text-align: left; background: var(--desertfox-bg-mantle); border: 1px solid var(--desertfox-border); border-radius: 8px; }
   .desertfox-newtab .weather-detail[hidden] { display: none; }
-  .desertfox-newtab .weather-facts { display: flex; gap: 1rem; }
+  .desertfox-newtab .weather-strip, .desertfox-newtab .weather-air { display: flex; flex-direction: column; gap: 0.625rem; }
+  .desertfox-newtab .weather-divider { align-self: stretch; margin: 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--desertfox-border) 70%, transparent); }
+  .desertfox-newtab .weather-facts { display: flex; justify-content: space-between; gap: 0.75rem; }
+  .desertfox-newtab .weather-fact { display: flex; align-items: center; gap: 0.375rem; }
+  .desertfox-newtab .weather-fact-icon { flex: none; width: 1.25rem; height: 1.25rem; fill: none; stroke: var(--desertfox-secondary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .desertfox-newtab .weather-fact-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
   /* One row, never wrapped or scrolled: `hours_that_fit` in weather_detail.ts sizes it from these widths, so change them together. The columns shrink, so six still fit a window as narrow as about 256 px. */
-  .desertfox-newtab .weather-hours { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 0.25rem; max-width: 100%; }
+  .desertfox-newtab .weather-hours { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 0.25rem; max-width: 100%; }
   .desertfox-newtab .weather-hour { flex: 0 1 2.5rem; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; text-align: center; white-space: nowrap; }
   .desertfox-newtab .weather-hour .weather-icon { width: 1.25rem; height: 1.25rem; margin: 0.125rem 0; }
-  .desertfox-newtab .weather-hour .weather-label:empty::before { content: "\00a0"; }
+  .desertfox-newtab .weather-hour-now > .weather-label { color: var(--desertfox-fg-core); font-weight: 600; }
+  .desertfox-newtab .weather-rain { display: flex; flex-direction: column; align-items: center; gap: 0.125rem; align-self: stretch; }
+  .desertfox-newtab .weather-rain .weather-label:empty::before { content: "\00a0"; }
+  .desertfox-newtab .weather-rain-bar { align-self: stretch; height: 2px; border-radius: 1px; overflow: hidden; background: color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
+  .desertfox-newtab .weather-rain-bar > span { display: block; height: 100%; background: var(--desertfox-info); }
+  .desertfox-newtab .weather-air-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+  .desertfox-newtab .weather-air-index { display: flex; align-items: center; gap: 0.5rem; }
+  .desertfox-newtab .weather-aqi-dot { flex: none; width: 0.625rem; height: 0.625rem; border-radius: 50%; background: var(--desertfox-ok); }
+  .desertfox-newtab .weather-aqi-level-1 { background: color-mix(in srgb, var(--desertfox-ok) 50%, var(--desertfox-warn)); }
+  .desertfox-newtab .weather-aqi-level-2 { background: var(--desertfox-warn); }
+  .desertfox-newtab .weather-aqi-level-3 { background: color-mix(in srgb, var(--desertfox-warn) 50%, var(--desertfox-error)); }
+  .desertfox-newtab .weather-aqi-level-4 { background: var(--desertfox-error); }
+  .desertfox-newtab .weather-aqi-level-5 { background: var(--desertfox-error); box-shadow: 0 0 0 2px color-mix(in srgb, var(--desertfox-error) 35%, transparent); }
+  .desertfox-newtab .weather-air-parts { display: flex; gap: 0.75rem; }
+  .desertfox-newtab .weather-air-part { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
+  .desertfox-newtab .weather-air-value { font-size: var(--desertfox-text-small); font-weight: 600; color: var(--desertfox-fg-core); }
   /* After the `.weather` rule, which has the same specificity. Below 32rem the card takes its own row above the clock. Up to 61rem it does so only while the 22rem detail is open, because the open panel would otherwise reach the centered clock and the closed card does not. */
   @media (max-width: 32rem) { .desertfox-newtab .weather { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }
   @media (max-width: 61rem) { .desertfox-newtab .weather:has(.weather-detail:not([hidden])) { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }

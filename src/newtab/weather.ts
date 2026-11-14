@@ -291,9 +291,9 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
     panel.id = "weather-detail";
     // Hours pass while the panel stays closed, so each open draws the strip again from the stored hours. That part sends nothing.
     const redraw_strip = () => {
-      panel.querySelector(".weather-hours")?.remove();
+      panel.querySelector(".weather-strip")?.remove();
       const strip = draw_hours_strip(detail.hours, utc_offset_seconds, format, now(), hours_in_view(panel));
-      if (strip) panel.append(strip);
+      if (strip) panel.prepend(strip);
     };
     // The air quality request starts here and nowhere earlier. The row joins the panel only while the panel is open and still on the page, so a closed panel or a redraw while the request is out gets no late draw.
     const open_panel = () => {

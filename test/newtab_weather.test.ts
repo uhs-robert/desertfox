@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NetEnv } from "../src/newtab/net_widget.ts";
 import { draw_weather_icon, icon_kind } from "../src/newtab/weather_icon.ts";
-import { clock_text, compass_point, hours_that_fit, later_hours } from "../src/newtab/weather_detail.ts";
+import { clock_text, compass_point, hours_that_fit, hours_from_now } from "../src/newtab/weather_detail.ts";
 import { net_cache_key } from "../src/newtab/net_widget.ts";
-import { air_band, air_quality_url, parse_air_quality } from "../src/newtab/air_quality.ts";
+import { air_band, air_level, air_quality_url, parse_air_quality } from "../src/newtab/air_quality.ts";
 import { describe_code, draw_weather, forecast_url, forget_weather, geocode_url, parse_forecast, parse_geocode, round_coordinate, run_weather, start_weather, type WeatherDeps, type WeatherSettings, type WeatherView } from "../src/newtab/weather.ts";
 
 const NOW_MS = Date.parse("2026-11-14T14:30:00Z");
@@ -311,6 +311,7 @@ class FakeNode {
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this); this.parent = undefined; }
   after(node: FakeNode) { const siblings = this.parent!.children; node.parent = this.parent; siblings.splice(siblings.indexOf(this) + 1, 0, node); }
   is_root = false;
+  style: Record<string, string> = {};
   get isConnected(): boolean { return this.is_root || (this.parent?.isConnected ?? false); }
   all(): FakeNode[] { return this.children.flatMap((child) => [child, ...child.all()]); }
   querySelector(selector: string) { return this.all().find((node) => node.class_name.split(" ").includes(selector.slice(1))) ?? null; }
@@ -388,11 +389,11 @@ test("clock text follows the 12 or 24 hour format", () => {
   assert.equal(clock_text("15:31", 24), "15:31");
 });
 
-test("the strip keeps only hours after the place's current hour, in the place's time", () => {
-  assert.equal(later_hours(WEATHER_DETAIL.hours, 3600, NOW_MS)[0]!.time, "2026-11-14T16:00", "14:30 UTC with +1 h is 15:30 there, so 15:00 has gone");
-  assert.equal(later_hours(WEATHER_DETAIL.hours, 3600, NOW_MS).length, 11);
-  assert.equal(later_hours(WEATHER_DETAIL.hours, 3600, NOW_MS + 3 * 3_600_000).length, 8);
-  assert.equal(later_hours(WEATHER_DETAIL.hours, 0, NOW_MS)[0]!.time, "2026-11-14T15:00");
+test("the strip keeps the place's current hour and the hours after it, in the place's time", () => {
+  assert.equal(hours_from_now(WEATHER_DETAIL.hours, 3600, NOW_MS)[0]!.time, "2026-11-14T15:00", "14:30 UTC with +1 h is 15:30 there, so 15:00 is the current hour and stays");
+  assert.equal(hours_from_now(WEATHER_DETAIL.hours, 3600, NOW_MS).length, 11);
+  assert.equal(hours_from_now(WEATHER_DETAIL.hours, 3600, NOW_MS + 3 * 3_600_000).length, 9);
+  assert.equal(hours_from_now(WEATHER_DETAIL.hours, 0, NOW_MS)[0]!.time, "2026-11-14T15:00");
 });
 
 test("the card shows high and low, wind in the unit and the icon with a label, and hides the strip under 3 hours", () =>
@@ -402,7 +403,7 @@ test("the card shows high and low, wind in the unit and the icon with a label, a
     const values = slot.querySelectorAll(".weather-value").map((node) => node.textContent);
     assert.ok(values.includes("14\u00b0 / 6\u00b0") && values.includes("12 km/h NW"), values.join("|"));
     assert.equal(slot.querySelectorAll(".weather-hour").length, 11);
-    assert.equal(slot.querySelectorAll(".weather-hour")[0]!.textContent, "16:0011\u00b031%");
+    assert.equal(slot.querySelectorAll(".weather-hour")[0]!.textContent, "Now12\u00b030%");
     const icon = slot.querySelector(".weather-reading")!.all().find((node) => node.tag === "svg")!;
     assert.equal(icon.getAttribute("role"), "img");
     assert.equal(icon.getAttribute("aria-label"), "Overcast");
@@ -410,7 +411,7 @@ test("the card shows high and low, wind in the unit and the icon with a label, a
     const imperial = new FakeNode("div");
     draw_weather(imperial as never, weather_view({ units: "imperial" }), () => {}, 12, () => NOW_MS);
     assert.ok(imperial.querySelectorAll(".weather-value").some((node) => node.textContent === "12 mph NW"));
-    assert.equal(imperial.querySelectorAll(".weather-hour")[0]!.textContent, "4 PM11\u00b031%");
+    assert.equal(imperial.querySelectorAll(".weather-hour")[0]!.textContent, "Now12\u00b030%");
     const late = new FakeNode("div");
     draw_weather(late as never, weather_view(), () => {}, 12, () => Date.parse("2026-11-15T00:00:00Z") + 5 * 3_600_000);
     assert.equal(late.querySelector(".weather-hours"), null, "too few hours left for a strip");
@@ -546,9 +547,9 @@ test("opening More draws the strip again, so hours that passed while it was clos
     assert.equal(strip_hours(), 11);
     now_ms = NOW_MS + 4 * 3_600_000;
     slot.querySelector(".weather-more")!.listeners["click"]!();
-    assert.equal(strip_hours(), 7, "four hours later, four fewer");
+    assert.equal(strip_hours(), 8, "four hours later, four fewer");
     slot.querySelector(".weather-more")!.listeners["click"]!();
-    now_ms = NOW_MS + 9 * 3_600_000;
+    now_ms = NOW_MS + 10 * 3_600_000;
     slot.querySelector(".weather-more")!.listeners["click"]!();
     assert.equal(slot.querySelector(".weather-hours"), null, "under the minimum the strip goes");
     assert.equal(slot.querySelectorAll(".weather-detail").length, 1);
@@ -613,12 +614,12 @@ test("opening More sends one request without credentials, draws the row in the u
     assert.equal(card.requests.length, 1);
     assert.match(card.requests[0]!.url, /^https:\/\/air-quality-api\.open-meteo\.com\/v1\/air-quality\?latitude=59\.91&longitude=10\.75&current=european_aqi/);
     assert.equal(card.requests[0]!.init?.credentials, "omit");
-    assert.equal(card.air_text(), "34 FairAir quality (EU AQI)8PM2.515PM1070Ozone");
+    assert.equal(card.air_text(), "Air quality (EU AQI)34 FairPM2.58PM1015Ozone70");
     assert.equal((card.store["newtab_net_cache_air"] as { key: string }).key, "59.91,10.75|metric");
     const imperial = await air_card({ units: "imperial" });
     imperial.click();
     await settle();
-    assert.equal(imperial.air_text(), "61 ModerateAir quality (US AQI)8PM2.515PM1070Ozone");
+    assert.equal(imperial.air_text(), "Air quality (US AQI)61 ModeratePM2.58PM1015Ozone70");
   }));
 
 test("opening More twice quickly sends one request", () =>
@@ -632,7 +633,7 @@ test("opening More twice quickly sends one request", () =>
     assert.equal(card.requests.length, 1);
     release[0]!();
     await settle();
-    assert.equal(card.air_text()?.startsWith("34 Fair"), true, "the joined open still drew the row");
+    assert.equal(card.air_text()?.includes("34 Fair"), true, "the joined open still drew the row");
     card.click();
     card.click();
     await settle();
@@ -652,7 +653,7 @@ test("closing the panel while the request is out leaves no late draw, and the ne
     card.click();
     await settle();
     assert.equal(card.requests.length, 1);
-    assert.equal(card.air_text()?.startsWith("34 Fair"), true);
+    assert.equal(card.air_text()?.includes("34 Fair"), true);
   }));
 
 test("a redraw while the request is out leaves no late draw and no cache write", () =>
@@ -680,7 +681,7 @@ test("a stale stored answer shows at once and is refreshed, and one past the max
     stale.click();
     await settle();
     assert.equal(stale.requests.length, 1, "past the TTL it refreshes");
-    assert.equal(stale.air_text()?.startsWith("34 Fair"), true, "the fresh value replaced the stored one");
+    assert.equal(stale.air_text()?.includes("34 Fair"), true, "the fresh value replaced the stored one");
     assert.equal((stale.store["newtab_net_cache_air"] as { at: number }).at, NOW_MS);
     const old = await air_card({ air_seed: { at: NOW_MS - 7 * 3_600_000 }, air_response: () => Promise.reject(new Error("offline")) });
     old.click();
@@ -696,7 +697,7 @@ test("a failed or odd air quality answer draws no row and leaves the rest of the
       await settle();
       assert.equal(card.air_text(), null);
       assert.equal(card.slot.querySelector(".weather-detail")!.hidden, false);
-      assert.deepEqual(card.slot.querySelectorAll(".weather-facts").map((node) => node.textContent), ["2UV index7:42 AMSunrise3:31 PMSunset"]);
+      assert.deepEqual(card.slot.querySelectorAll(".weather-facts").map((node) => node.textContent), ["UV index2Sunrise7:42 AMSunset3:31 PM"]);
       assert.ok(card.slot.querySelectorAll(".weather-hour").length >= 3, "the strip is intact");
       assert.equal("newtab_net_cache_air" in card.store, false);
     }
@@ -793,18 +794,19 @@ test("each hour is four rows in one row of columns: time, a labelled icon, tempe
     const slot = new FakeNode("div");
     const hours = WEATHER_DETAIL.hours.map((hour, index) => (index === 2 ? { time: hour.time, temperature: hour.temperature, code: hour.code } : hour));
     draw_weather(slot as never, weather_view({ detail: { ...WEATHER_DETAIL, hours } }), () => {}, 24, () => NOW_MS);
-    const [first, second] = slot.querySelectorAll(".weather-hour");
-    assert.deepEqual(first!.children.map((child) => child.tag), ["span", "svg", "span", "span"]);
+    const [first, , second] = slot.querySelectorAll(".weather-hour");
+    assert.deepEqual(first!.children.map((child) => child.tag), ["span", "svg", "span", "div"]);
     assert.equal(first!.children[1]!.getAttribute("role"), "img");
-    assert.equal(first!.children[1]!.getAttribute("aria-label"), "Rain");
+    assert.equal(first!.children[1]!.getAttribute("aria-label"), "Overcast");
     assert.equal(first!.children[1]!.getAttribute("aria-hidden"), null);
-    assert.equal(first!.children[3]!.textContent, "31%");
+    assert.equal(first!.children[0]!.textContent, "Now");
+    assert.equal(first!.children[3]!.textContent, "30%");
     assert.equal(second!.children[3]!.textContent, "");
     assert.equal(slot.querySelectorAll(".weather-hours").length, 1);
   }));
 
 test("the strip is capped to the count that fits", () => {
-  assert.equal(later_hours(WEATHER_DETAIL.hours, 0, NOW_MS, 6).length, 6);
+  assert.equal(hours_from_now(WEATHER_DETAIL.hours, 0, NOW_MS, 6).length, 6);
 });
 
 test("with auto units the position preview skips a stored reading made for a fixed unit", async () => {
@@ -820,7 +822,7 @@ test("reopening More clears the old air row first, so a failed refresh never sho
     const card = await air_card({ air_response: async () => (fail ? Promise.reject(new Error("offline")) : new Response(AIR_BODY)) });
     card.click();
     await settle();
-    assert.equal(card.air_text()?.startsWith("34 Fair"), true);
+    assert.equal(card.air_text()?.includes("34 Fair"), true);
     card.click();
     // Past the max age the stored answer is not shown, and the refresh fails.
     card.store["newtab_net_cache_air"] = { ...(card.store["newtab_net_cache_air"] as object), at: NOW_MS - 7 * 3_600_000 };
@@ -829,3 +831,23 @@ test("reopening More clears the old air row first, so a failed refresh never sho
     await settle();
     assert.equal(card.air_text(), null);
   }));
+
+test("the panel reads strip, divider, facts, and the air row joins under its own divider with a dot for its band", () =>
+  with_fake_document(async () => {
+    const card = await air_card();
+    card.click();
+    await settle();
+    const panel = card.slot.querySelector(".weather-detail")!;
+    assert.deepEqual(panel.children.map((child) => child.class_name), ["weather-strip", "weather-facts", "weather-air"]);
+    assert.deepEqual(panel.children[0]!.children.map((child) => child.class_name), ["weather-hours", "weather-divider"]);
+    assert.deepEqual(panel.children[2]!.children.map((child) => child.class_name), ["weather-divider", "weather-air-row"]);
+    assert.deepEqual(panel.querySelectorAll(".weather-fact-text").slice(0, 3).map((node) => node.textContent), ["UV index2", "Sunrise7:42 AM", "Sunset3:31 PM"]);
+    assert.equal(panel.querySelector(".weather-aqi-dot")!.class_name, "weather-aqi-dot weather-aqi-level-1");
+    const first_rain = panel.querySelector(".weather-rain")!;
+    assert.equal(first_rain.querySelector(".weather-rain-bar")!.children[0]!.style["width"], first_rain.children[0]!.textContent, "the bar is as wide as the percent");
+  }));
+
+test("the band level runs 0 to 5 on both scales", () => {
+  assert.deepEqual([0, 51, 101, 151, 201, 301].map((index) => air_level({ scale: "us", index })), [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual([0, 21, 41, 61, 81, 101].map((index) => air_level({ scale: "eu", index })), [0, 1, 2, 3, 4, 5]);
+});
