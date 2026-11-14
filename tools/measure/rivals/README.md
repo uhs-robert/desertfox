@@ -132,4 +132,10 @@ PAGES=sites PASSES=3 just measure-rivals # checks on live public sites
 
 Login sites are checked by hand with [`hand_checks.md`](hand_checks.md).
 
+Site notes for the live-site checks (the `SITES` list in `sites.mjs`):
+
+- `activate_selector` names the element every tool must activate on that site. Hacker News uses `.titleline > a`, because a label can hang off the story link onto the vote arrow beside it. The activation record keeps `label_rect` and `target_rect`, so a wrong pick can be read from the saved JSON.
+- `scroll_probe` marks a canvas or grid site (Sheets, Maps, Excalidraw, StackBlitz) where no element scrolls. The check reads whether the view or the selection moved. The `none` column is an unscored control there: a click into the work area, then the site's own movement input. A control that moves nothing adds a note to every tool's cell.
+- The scored `scroll` row (the tool's own `j`) and `passthrough` row (the site's ArrowDown with the tool active) start from the keyboard alone, on the page as loaded. The tool's leave key goes out only when focus is in a typing field. A site with a `work_area` then gets Tab presses, up to 30, until focus is inside it. The count goes in the row's note.
+
 It needs Firefox, unzip and network access. Results go to `$MEASURE_DIR/rivals`, and load swings the numbers. See [`../README.md`](../README.md) for the settings.
