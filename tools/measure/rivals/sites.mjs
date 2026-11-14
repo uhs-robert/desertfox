@@ -213,10 +213,10 @@ export function judge_frame_activation({ reply, context_gone, url_before, url_af
   return fail("typing a label in the frame did nothing the frame saw");
 }
 
-// mode_after and focus_after follow gF. The leave works when the badge no longer reads FRAME and the focus sits in the top page.
+// mode_after and focus_after follow gF. The leave works when the badge no longer reads FRAME and the focus sits in the top page: a chain of one document. A focus in the browser window (an empty chain) or in a frame is no leave.
 export function judge_frame_leave({ mode_after, focus_after }) {
   if (!focus_after.readable) return { status: "unknown", reason: `the focus could not be read (${focus_after.path})` };
-  if (is_frame_mode(mode_after) || focus_after.depth > 1) return fail(`still in the frame: mode ${String(mode_after).toLowerCase()}, focus ${focus_after.path}`);
+  if (is_frame_mode(mode_after) || focus_after.depth !== 1) return fail(`not on the top page: mode ${String(mode_after).toLowerCase()}, focus ${focus_after.path}`);
   return pass(`left the frame, mode ${String(mode_after).toLowerCase()}, focus ${focus_after.path}`);
 }
 
@@ -256,6 +256,7 @@ export function judge_volume(before, after) {
 // The Sheets name box shows the selected cell, such as A1.
 export function judge_cell_move(before, after) {
   if (before === null) return fail("no name box: the grid did not load");
+  if (after === null) return fail(`no name box after the key (the cell was ${before})`);
   return before !== after ? pass(`cell ${before} to ${after}`) : fail(`cell stayed ${before}`);
 }
 
