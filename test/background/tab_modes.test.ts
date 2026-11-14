@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_mode_report, create_tab_modes, ENTRY_WINDOW_MS, is_cross_origin, shortcut_allowed, read_insert_hold, write_insert_hold } from "../../src/background/tab_modes.ts";
+import { apply_mode_report, create_tab_modes, ENTRY_WINDOW_MS, hand_back_parked_frame, is_cross_origin, shortcut_allowed, read_insert_hold, write_insert_hold } from "../../src/background/tab_modes.ts";
 
 function fake_storage() {
   const data: Record<string, unknown> = {};
@@ -355,7 +355,7 @@ test("the park is per frame: another frame of the tab is parked at its own first
   assert.equal(await modes.parked_frame(4), OTHER_CHILD);
 });
 
-test("a user click that lands during the park ends it: the clicked frame holds the keys and is not parked again", async () => {
+test("a click report that comes after the park decision ends the park in the record, and the frame holds the keys", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
   const click = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, activated: true });
@@ -365,7 +365,7 @@ test("a user click that lands during the park ends it: the clicked frame holds t
   assert.equal(await modes.recall(4), "normal");
 });
 
-test("a frame that holds a field mode keeps its mode when it is not parked, and a parked frame's blur claims nothing", async () => {
+test("a frame on a field is not parked and keeps its insert mode", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true, activated: false, in_field: true, cross_origin: true });
   assert.equal(await modes.recall(4), "insert");
@@ -427,19 +427,44 @@ test("is_cross_origin compares http and https origins only", () => {
   assert.equal(is_cross_origin("https://a.test/", undefined), false);
 });
 
-test("a frame the user is about to enter by a hint pick or ;f is not parked at that first focus, and the mark is used up by it", async () => {
+test("a mark made by the top page covers the next first focus of any frame and is spent by it", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.expect_entry(4);
   const first = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
   assert.equal(first.park, false);
   assert.equal(first.child_mode, "normal", "the frame keeps the keys");
-  // The mark is gone: a frame that loads and focuses itself later is parked.
-  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, ...LOAD_FOCUS })).park, true);
+  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, ...LOAD_FOCUS })).park, true, "the mark is used up");
 });
 
-test("an entry mark expires, so a load focus long after a pick is parked", () => {
-  const marked = { entered_ms: 1000 };
+test("a mark made by a frame covers that frame only, and another frame's first focus neither uses it nor is covered", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.expect_entry(4, CHILD);
+  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, ...LOAD_FOCUS })).park, true, "an ad frame that focuses itself is parked");
+  assert.equal((await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS })).park, false, "the marked frame still enters");
+});
+
+test("a later report of a frame already focused does not spend the mark", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, mode: "normal", focus: true, activated: true, in_field: false, cross_origin: true });
+  await modes.expect_entry(4, OTHER_CHILD);
+  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true, activated: true, in_field: true, cross_origin: true });
+  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, ...LOAD_FOCUS })).park, false, "the mark survived the other frame's report");
+});
+
+test("a mark expires, and a report with no clock never counts a mark as fresh", () => {
+  const marked = { entering: { ms: 1000 } };
   const report = { frame_id: CHILD, ...LOAD_FOCUS };
   assert.equal(apply_mode_report(marked, { ...report, now: 1500 }).parked, undefined);
   assert.equal(apply_mode_report(marked, { ...report, now: 1000 + ENTRY_WINDOW_MS + 1 }).parked, CHILD);
+  assert.equal(apply_mode_report(marked, report).parked, CHILD);
+});
+
+test("the hand-back tells the top page only while the frame is still free: a click after the decision keeps the user in the frame", async () => {
+  const told: string[] = [];
+  await hand_back_parked_frame(async () => true, async () => void told.push("top"));
+  assert.deepEqual(told, ["top"]);
+  await hand_back_parked_frame(async () => false, async () => void told.push("top after a click"));
+  assert.deepEqual(told, ["top"], "a frame with a click or key in it is not blurred");
+  await hand_back_parked_frame(() => Promise.reject(new Error("no receiver")), async () => void told.push("top for a gone frame"));
+  assert.deepEqual(told, ["top"], "a frame that is gone is left alone");
 });

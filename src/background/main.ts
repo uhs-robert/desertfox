@@ -90,7 +90,7 @@ import { dropped_warning } from "./engine_layer.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { create_tab_modes, is_cross_origin, shortcut_allowed } from "./tab_modes.ts";
+import { create_tab_modes, hand_back_parked_frame, is_cross_origin, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
 import type { SnippetCall } from "./snippets.ts";
 
@@ -265,7 +265,7 @@ const find_scan = create_find_scan(browser_find_scan_deps());
 const hint_frames = create_hint_frames({
   ...browser_hint_frames_deps(),
   parked_frame: (tab_id) => tab_modes.parked_frame(tab_id),
-  expect_entry: (tab_id) => tab_modes.expect_entry(tab_id),
+  expect_entry: (tab_id, frame_id) => tab_modes.expect_entry(tab_id, frame_id),
   unpark: async (tab_id, frame_id) => {
     const unparked = await tab_modes.unpark(tab_id, frame_id);
     if (unparked) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(unparked.child_mode === undefined ? {} : { mode: unparked.child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }));
@@ -361,7 +361,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top, park, parked }) => {
       // The frame that takes the focus on load is handed back through the path of `gF`. Gecko may give the focus back to the frame, and the park then ends in frame mode, as it was before parking.
-      if (park) void best_effort(browser.tabs.sendMessage(tab_id, { type: "focus_page" } satisfies FocusPage, { frameId: 0 }));
+      if (park) {
+        const park_message = { type: "focus_page", park: true } satisfies FocusPage;
+        void hand_back_parked_frame(async () => (await browser.tabs.sendMessage(tab_id, park_message, { frameId: sender.frameId })) === true, () => best_effort(browser.tabs.sendMessage(tab_id, park_message, { frameId: 0 })));
+      }
       // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
       if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
       if (tell_top) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }), ...(parked && { parked: true as const }) } satisfies FocusedFrameMode, { frameId: 0 }));
@@ -405,6 +408,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "frame_cue" && sender.tab?.id !== undefined) {
     const tab_id = sender.tab.id;
+    // The top page cannot name the frame of another site that it focuses, so its mark covers the next first focus of any frame.
     return tab_modes.expect_entry(tab_id).then(() => frame_cue(tab_id));
   }
   if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));

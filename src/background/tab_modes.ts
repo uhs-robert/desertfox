@@ -5,7 +5,7 @@
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { TAB_MODE_STORAGE_PREFIX } from "./storage_keys.ts";
-import { keep_chain } from "../shared/swallow.ts";
+import { keep_chain, refused_as } from "../shared/swallow.ts";
 
 type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 
@@ -14,8 +14,8 @@ const TOP_FRAME = 0;
 // Only two frames matter: the top frame, which draws the badge, and the child frame that holds the focus, if any.
 // `awaiting_commit` is set from the start of a load until its new page replaces the old one. See `forget_on_navigation`.
 // `parked` is the cross-origin child frame that took the focus on load and was handed back to the top page. `focused_once` holds every child frame that has had its first focus, parked or not: a frame is parked at that first focus only, so a frame that takes the focus back after a park, or a user's Tab into it, enters frame mode. A frame keeps its id through its own navigations, so a reloaded frame stays in `focused_once` until the top page navigates and the record goes.
-// `entered_ms` is the time a hint pick or `;f` was about to move the focus into a frame, so that frame's first focus is the user's own and is not parked.
-export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; focused_once?: number[]; entered_ms?: number };
+// `entering` marks a focus the extension is about to move into a frame (`;f`, a hint pick), so that frame's first focus is the user's own and is not parked. `frame_id` names the frame when the frame itself asked, and is absent when the top page asked, because it cannot read the id of a frame of another site. Only a first focus spends the mark.
+export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; focused_once?: number[]; entering?: { ms: number; frame_id?: number } };
 
 // `ModeChanged` in src/shared/messages.ts, with the frame that sent it. `cross_origin` is the background's own reading of the frame's address against the tab's.
 export type ModeReport = { frame_id: number; mode: Mode; focus: boolean; activated?: boolean; in_field?: boolean; cross_origin?: boolean; now?: number };
@@ -25,9 +25,17 @@ export const ENTRY_WINDOW_MS = 3000;
 
 // A frame of another site that took the focus with no click or key of its own and not on a field, as a sign-in popup does on load. A Tab into the frame looks the same to the frame, so it is parked too, once.
 const parks = (record: TabModeRecord, report: ModeReport): boolean =>
-  report.frame_id !== TOP_FRAME && report.focus && report.cross_origin === true && report.activated === false && report.in_field === false && !record.focused_once?.includes(report.frame_id) && !entered_by_user(record, report.now);
+  report.frame_id !== TOP_FRAME && report.focus && report.cross_origin === true && report.activated === false && report.in_field === false && !record.focused_once?.includes(report.frame_id) && !entry_covers(record, report);
 
-const entered_by_user = (record: TabModeRecord, now = 0): boolean => record.entered_ms !== undefined && now - record.entered_ms < ENTRY_WINDOW_MS;
+// A report with no clock reading never counts a mark as fresh.
+const entry_covers = ({ entering }: TabModeRecord, { frame_id, now }: ModeReport): boolean =>
+  entering !== undefined && now !== undefined && now - entering.ms < ENTRY_WINDOW_MS && (entering.frame_id === undefined || entering.frame_id === frame_id);
+
+// Hands the focus from a parked frame to the top page. The frame is asked first and answers whether it is still free: a click or key in it since the park was decided means the user is in it, and the top page must not blur it. A frame that is gone or does not answer is left alone too. The top page then blurs only its iframe element, so a field the page focused meanwhile keeps the focus.
+// Both steps can still lose a race to a click in the last few milliseconds. That click then ends in frame mode, as before the park.
+export async function hand_back_parked_frame(ask_frame: () => Promise<boolean>, tell_top: () => Promise<unknown>): Promise<void> {
+  if (await refused_as(ask_frame(), false)) await tell_top();
+}
 
 // Only http and https addresses have an origin worth comparing: an about:blank or srcdoc frame shares its parent's.
 export function is_cross_origin(frame_url: string | undefined, tab_url: string | undefined): boolean {
@@ -57,8 +65,9 @@ export function apply_mode_report(record: TabModeRecord, report: ModeReport): Ta
   const next = { ...record };
   const parked_now = parks(record, report);
   if (frame_id !== TOP_FRAME && focus) {
+    // Only a frame's first focus spends the mark: a later report of a frame already focused says nothing about the entry.
+    if (!record.focused_once?.includes(frame_id) && entry_covers(record, report)) delete next.entering;
     next.focused_once = [...new Set([...(record.focused_once ?? []), frame_id])];
-    delete next.entered_ms;
     // Any focus of the parked frame ends the park: the user clicked in, a hint moved the focus in, or Firefox handed it back.
     if (record.parked === frame_id) delete next.parked;
   }
@@ -108,11 +117,11 @@ export function create_tab_modes(storage: ModeStorage) {
         const parked_changed = record.parked !== before.parked;
         return { child_mode, tell_top: child_mode !== shown_child_mode(before) || report.frame_id === TOP_FRAME || parked_changed, park: parks(before, report), parked: record.parked !== undefined };
       }),
-    // A hint pick or `;f` is about to focus a frame, so the frame's first focus is the user's own.
-    expect_entry: (tab_id: number): Promise<void> =>
+    // The extension is about to focus a frame, so the frame's first focus is the user's own. `frame_id` is the frame that asked, or undefined for the top page.
+    expect_entry: (tab_id: number, frame_id?: number): Promise<void> =>
       in_turn(async () => {
         const record = await read(tab_id);
-        await storage.set({ [key_of(tab_id)]: { ...record, entered_ms: Date.now() } });
+        await storage.set({ [key_of(tab_id)]: { ...record, entering: { ms: Date.now(), ...(frame_id !== undefined && { frame_id }) } } });
       }),
     parked_frame: (tab_id: number): Promise<number | undefined> => in_turn(async () => (await read(tab_id)).parked),
     // The parked frame is gone or refused a script. Resolves with the mode the top page shows for a child, or undefined when the record no longer named the frame and the top page needs no word.

@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { make_browser_handlers } from "../src/commands/browser.ts";
 import { url_target, home_page_url } from "../src/commands/url_build.ts";
-import { focus_page_content, start_content_once } from "../src/content/handlers/focus.ts";
+import { answer_park, focus_page_content, start_content_once } from "../src/content/handlers/focus.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
@@ -240,4 +240,16 @@ test("a frame that waits for its first focus holds its start in the flag, which 
   assert.equal(win.desertfox_content_loaded, true);
   start_content_once(() => started++, win as never, false);
   assert.equal(started, 1);
+});
+
+test("a park message: a frame answers whether it is still free, and the top frame blurs an iframe element only", () => {
+  const calls: string[] = [];
+  const hand_back = () => void calls.push("blur");
+  assert.equal(answer_park(false, { localName: "div" }, false, hand_back), true, "a frame with no click or key is free");
+  assert.equal(answer_park(false, { localName: "div" }, true, hand_back), false, "a clicked frame is not");
+  assert.equal(answer_park(true, { localName: "iframe" }, false, hand_back), true);
+  assert.deepEqual(calls, ["blur"]);
+  assert.equal(answer_park(true, { localName: "input" }, false, hand_back), true);
+  assert.equal(answer_park(true, null, false, hand_back), true);
+  assert.deepEqual(calls, ["blur"], "a field the page focused meanwhile keeps the focus");
 });

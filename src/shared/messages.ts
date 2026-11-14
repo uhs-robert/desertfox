@@ -97,7 +97,7 @@ export type Relay = {
   args: Record<string, unknown>;
 };
 
-// The `;f` pick is about to focus a frame: the background shows the one-time toast in the top frame, and that frame is not parked.
+// The `;f` pick is about to focus a frame: the background shows the one-time toast in the top frame, and the next frame to take its first focus is not parked.
 export type FrameCue = {
   type: "frame_cue";
 };
@@ -659,8 +659,10 @@ export type GetJumpOffset = {
 };
 
 // Moves keyboard focus from the browser chrome into the page and leaves no field focused.
+// `park` is the hand-back of a frame the user has not entered. A frame answers whether it is still free (no click or key in it). The top frame answers true and blurs only an iframe element, never a field.
 export type FocusPage = {
   type: "focus_page";
+  park?: true;
 };
 
 // Presence check before the background injects the content script. Any truthy answer counts.

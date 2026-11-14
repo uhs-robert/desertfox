@@ -1,9 +1,11 @@
 // Key cases for the mode of the focused frame: the badge and the background's tab mode follow the frame that holds the focus, not only the top frame.
 // /hidden_input_frame stands in for Google Docs: on load it focuses a contenteditable in an offscreen same-origin frame.
 // Such a frame hands the focus to the top page whenever it is in normal mode, so normal-mode keys act on the page the user sees.
+import { click_element } from "./native_click.mjs";
+
 export const areas = ["ui", "keys"];
 
-export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_background, in_active_tab, wait_takes_keys, events, wait_event, scroll_of, last_scroll_y, sleep, settle_focus }) {
+export async function run_cases({ run_case, press_keys, open_page, expect, poll_until, in_background, in_active_tab, wait_takes_keys, events, wait_event, scroll_of, last_scroll_y, sleep, settle_focus, rdp }) {
   const page_id = "p15_hidden_input";
   const frame_page_id = `${page_id}_frame`;
   const active_tab = (read) => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => (${read})(tab))`);
@@ -346,10 +348,11 @@ export async function run_cases({ run_case, press_keys, open_page, expect, poll_
   await run_case("a field focused in a frame of another site shows INSERT, from the script that starts on that focus", async () => {
     await open_page("frames", "p15_frames", { new_tab: false });
     await expect_badge_and_mode("NORMAL");
-    // A script focus into a frame of another site is its first focus with no click or key, which parks the frame. The second focus is not parked, as when the user enters the frame.
-    await in_active_tab(`document.getElementById("cross").focus()`);
-    await poll_until("the first focus of the cross-origin frame to be parked", async () => (await active_tab(`async (tab) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id]?.parked ?? null`)) !== null);
-    await in_active_tab(`document.getElementById("cross").focus()`);
+    // The first focus is a real click, so the frame is entered and not parked, and its script starts on that focus.
+    for (let attempt = 0; attempt < 6 && (await focused_child()) === null; attempt++) {
+      await click_element(rdp, in_active_tab, "cross");
+      await sleep(300);
+    }
     // The frame's script starts on this focus. Its start report claims the focus in normal mode, so the insert claim below must replace that claim and not be the first one.
     let start_claim;
     await poll_until("the cross-origin frame's start report to claim the focus in normal mode", async () => (start_claim = await focused_child())?.frame_id > 0 && start_claim.mode === "normal", { timeout_ms: 3000, expected_timeout: true }).catch(() =>
