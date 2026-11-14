@@ -1,4 +1,4 @@
-// The IP info card. Cloudflare's trace page answers with the caller's public IP and country. It is off unless `newtab_ip_info` is true, and nothing but those two fields is read from the answer.
+// The IP info line. Cloudflare's trace page answers with the caller's public IP and country. It is off unless `newtab_ip_info` is true, and nothing but those two fields is read from the answer.
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { browser_net_env, fetch_text, load_cached, net_cache_key, stoppable_net, type NetEnv } from "./net_widget.ts";
@@ -6,7 +6,7 @@ import { browser_net_env, fetch_text, load_cached, net_cache_key, stoppable_net,
 export type IpInfoSettings = Pick<Settings, "newtab_ip_info">;
 
 export const IP_TRACE_URL = "https://1.1.1.1/cdn-cgi/trace";
-// The stored address draws first, and each new tab refreshes it once the stored one is a minute old. Checking a VPN or a network change is the reason to look at this card, so a longer wait would show the old address.
+// The stored address draws first, and each new tab refreshes it once the stored one is a minute old. Checking a VPN or a network change is the reason to look at this line, so a longer wait would show the old address.
 export const IP_TTL_MS = 60_000;
 export const IP_MAX_AGE_MS = 3_600_000;
 
@@ -45,7 +45,7 @@ const is_ip_info = (stored: unknown): stored is IpInfo => {
   return typeof value?.ip === "string" && is_ip_address(value.ip) && typeof value.country === "string" && is_country_code(value.country);
 };
 
-// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private or the fetch fails.
+// Calls `show` with what the line draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private or the fetch fails.
 export async function run_ip_info(settings: IpInfoSettings, deps: IpInfoDeps, show: (info: IpInfo) => void): Promise<void> {
   if (settings.newtab_ip_info !== true) return;
   if (await refused_as(deps.page_is_private(), true)) return;
@@ -56,7 +56,7 @@ export async function run_ip_info(settings: IpInfoSettings, deps: IpInfoDeps, sh
   await load_cached<IpInfo>({ name: "ip", key: "trace", ttl_ms: IP_TTL_MS, max_age_ms: IP_MAX_AGE_MS, produce, is_value: is_ip_info }, deps.net, show);
 }
 
-// The page calls this while the setting is off, so turning the card off also drops the last address from storage.
+// The page calls this while the setting is off, so turning the line off also drops the last address from storage.
 export async function forget_ip_info(remove: (key: string) => Promise<void> = (key) => browser.storage.local.remove(key)): Promise<void> {
   await remove(net_cache_key("ip"));
 }

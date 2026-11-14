@@ -1,4 +1,4 @@
-// The opt-in IP info card and the settings gear. With the card off the page has no slot and makes no request. With it on, a stored answer younger than a minute draws under the date with no request, because the test profile has no network. The gear is the one Settings link, in the top-left corner.
+// The opt-in IP info line and the settings gear. With the line off the page has no slot and makes no request. With it on, a stored answer younger than a minute draws under the date with no request, because the test profile has no network. The gear is the one Settings link, in the top-left corner.
 import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";

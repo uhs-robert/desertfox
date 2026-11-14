@@ -265,7 +265,7 @@ test("a failed read during a redraw keeps the old page and its one clock, and st
 
 const find_by_class = (node: FakeNode, class_name: string): FakeNode[] => [...(node.className === class_name ? [node] : []), ...node.children.flatMap((child) => find_by_class(child, class_name))];
 
-test("the IP info card adds a slot only while its setting is on, forgets its answer while off, and a redraw stops the old run", async () => {
+test("the IP info line adds a slot only while its setting is on, forgets its answer while off, and a redraw stops the old run", async () => {
   mock.timers.enable({ apis: ["setInterval"] });
   const real_fetch = globalThis.fetch;
   try {
