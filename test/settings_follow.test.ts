@@ -299,7 +299,7 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     await settled();
     assert.deepEqual(find_by_class(body.children[0]!, "ip-info"), []);
     assert.equal(requests, 0);
-    assert.deepEqual(removed, ["newtab_net_cache_weather", "newtab_net_cache_ip"], "each card that is off deletes its own answer");
+    assert.deepEqual([...removed].sort(), ["newtab_net_cache_air", "newtab_net_cache_ip", "newtab_net_cache_weather"], "each card that is off deletes its own answer");
 
     const on = effective_settings({ newtab_clock: true, newtab_ip_info: true } as never);
     await render_new_tab(body_node, on, readers);
