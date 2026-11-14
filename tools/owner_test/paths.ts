@@ -44,7 +44,7 @@ export function window_paths(worktree: string, roots: Roots): WindowPaths {
 // True only for a path strictly below `root`. The root itself and any `..` escape fail.
 export function is_strictly_inside(root: string, path: string): boolean {
   const from_root = relative(resolve(root), resolve(path));
-  return from_root !== "" && !from_root.startsWith("..") && !isAbsolute(from_root) && from_root.split(sep)[0] !== "..";
+  return from_root !== "" && !isAbsolute(from_root) && from_root.split(sep)[0] !== "..";
 }
 
 export function unit_name(key: string): string {
