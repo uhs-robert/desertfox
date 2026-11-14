@@ -40,7 +40,8 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
       if (session_id) {
         anchor.addEventListener("click", (event) => {
           event.preventDefault();
-          void browser.sessions.restore(session_id);
+          // The session may be gone (restored or forgotten elsewhere), so open the address instead.
+          void browser.sessions.restore(session_id).catch(() => browser.tabs.create({ url: row.url }));
         });
       }
       if (tab) {

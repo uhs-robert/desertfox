@@ -7,7 +7,8 @@ import type { CachedIcons, ListRow } from "./lists.ts";
 // Newest closed first, as `getRecentlyClosed` gives them. A click restores the session, so the tab comes back with its history.
 export function closed_rows(sessions: readonly ClosedSession[], max: number, page_is_private: boolean, cached: CachedIcons = new Map()): ListRow[] {
   if (page_is_private || max <= 0) return [];
-  return closed_tab_rows(sessions)
+  // `getRecentlyClosed` can return a private tab whose window is still open. Drop it before the limit, so a private tab never takes a slot or shows on a normal page.
+  return closed_tab_rows(sessions.filter((session) => !session.tab?.incognito))
     .filter((row) => is_web_url(row.url))
     .slice(0, max)
     .map((row) => {
