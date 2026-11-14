@@ -24,8 +24,9 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
   const WEATHER_SEED = `(() => { const hours = Array.from({ length: 12 }, (_, index) => new Date(Math.floor(Date.now() / 3600000) * 3600000 + index * 3600000).toISOString().slice(0, 16)); return browser.storage.local.set({ newtab_net_cache_weather: { key: "city:Oslo|metric", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, wind_speed: 11.6, wind_direction: 320, detail: { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", utc_offset_seconds: 0, hours: hours.map((time, index) => ({ time, temperature: 10 - index, rain_chance: 30 + index })) }, code: 0, place: "Oslo", units: "metric" } } }); })()`;
   // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots rewrite that rule on the page and its narrow frame, never the machine's scheme.
   const take_both_shots = async (name) => {
-    for (const [scheme, from, to] of [["dark", "@media (prefers-color-scheme: light)", "@media not all"], ["light", "@media not all", "@media all"]]) {
-      await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; for (const doc of [page, page.querySelector("#narrow")?.contentDocument].filter(Boolean)) for (const sheet of doc.querySelectorAll("style")) if (sheet.textContent.includes(${JSON.stringify(from)})) sheet.textContent = sheet.textContent.replaceAll(${JSON.stringify(from)}, ${JSON.stringify(to)}); })()`);
+    for (const [scheme, target] of [["dark", "@media not all"], ["light", "@media all"]]) {
+      // Whatever an earlier step left in the rule, this step sets its own scheme.
+      await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const rule = /@media (?:\\(prefers-color-scheme: light\\)|not all|all)(?![\\w-])/g; for (const doc of [page, page.querySelector("#narrow")?.contentDocument].filter(Boolean)) for (const sheet of doc.querySelectorAll("style")) if (sheet.textContent.includes("prefers-color-scheme: light") || sheet.dataset.scheme_set) { sheet.textContent = sheet.textContent.replace(rule, ${JSON.stringify(target)}); sheet.dataset.scheme_set = "1"; } })()`);
       await new Promise((done) => setTimeout(done, 700));
       await take_shot(`${shot_dir}/${name}-${scheme}.png`);
     }
@@ -89,14 +90,16 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
 
     // Below 61rem the open 22rem panel would reach the centered clock, so the card must sit in its own row. Each width is a same-origin frame, since a key test cannot resize the window.
     for (const width of [360, 800]) {
-      await run_case(`in a ${width} px window the card, open or closed, has its own row and does not overlap the clock`, async () => {
+      await run_case(`in a ${width} px window the card, open or closed, does not overlap the clock, and closed it leaves the clock in place above 32rem`, async () => {
         expect(await open_new_tab(".weather-reading"), "the stored reading never drew");
         await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const frame = page.createElement("iframe"); frame.id = "narrow"; frame.src = "newtab.html?builtin"; frame.style.cssText = "position:fixed;top:0;left:0;width:${width}px;height:720px;border:1px solid red;z-index:10;background:black"; page.body.append(frame); })()`);
         await poll_until("the narrow page to draw the card", async () => (await in_background(`!!${NEWTAB_VIEW}.document.querySelector("#narrow")?.contentDocument?.querySelector(".weather-more")`)).valueOf());
-        const measure = () => in_background(`(() => { const inner = ${NEWTAB_VIEW}.document.querySelector("#narrow").contentDocument; const card = inner.querySelector(".weather").getBoundingClientRect(); const clock = inner.querySelector(".time").getBoundingClientRect(); return { view: inner.defaultView.innerWidth, position: inner.defaultView.getComputedStyle(inner.querySelector(".weather")).position, panel_shown: inner.querySelector(".weather-detail").getClientRects().length > 0, card_bottom: card.bottom, clock_top: clock.top, card_right: card.right, card_left: card.left }; })()`);
+        const measure = () => in_background(`(() => { const inner = ${NEWTAB_VIEW}.document.querySelector("#narrow").contentDocument; const card = inner.querySelector(".weather").getBoundingClientRect(); const clock = inner.querySelector(".time").getBoundingClientRect(); return { view: inner.defaultView.innerWidth, position: inner.defaultView.getComputedStyle(inner.querySelector(".weather")).position, panel_shown: inner.querySelector(".weather-detail").getClientRects().length > 0, card_bottom: card.bottom, clock_top: clock.top, area_top: inner.querySelector(".time-area").getBoundingClientRect().top, page_top: inner.querySelector(".desertfox-newtab").getBoundingClientRect().top, card_right: card.right, card_left: card.left }; })()`);
         const closed = await measure();
         expect(closed.view >= width - 2 && closed.view <= width, `the frame was ${closed.view} wide`);
-        expect(closed.position === "static" && closed.card_bottom <= closed.clock_top && closed.card_left >= 0 && closed.card_right <= closed.view, `the closed card overlaps or leaves the window: ${JSON.stringify(closed)}`);
+        expect((width > 512 || (closed.position === "static" && closed.card_bottom <= closed.clock_top)) && closed.card_left >= 0 && closed.card_right <= closed.view, `the closed card overlaps or leaves the window: ${JSON.stringify(closed)}`);
+        // Between 32rem and 61rem the closed card stays in the corner, so the clock area starts at the page top as it does without a card.
+        if (width > 512) expect(closed.position === "absolute" && closed.area_top - closed.page_top < 2, `the closed card at ${width} px pushed the clock down: ${JSON.stringify(closed)}`);
         if (shot_dir) await take_both_shots(`newtab-weather-${width}`);
         await in_background(`${NEWTAB_VIEW}.document.querySelector("#narrow").contentDocument.querySelector(".weather-more").click()`);
         const open = await measure();
