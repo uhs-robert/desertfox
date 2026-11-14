@@ -3,7 +3,7 @@ import { SETTINGS_TABLE } from "../../src/shared/settings_table.ts";
 
 export type HintCheck = { ok: true } | { ok: false; error: string };
 
-// A hint is one `:set name value` the owner will type. Checking it here fails a typo at open time, not in front of the owner.
+// A hint is one `:set name value` the maintainer will type. Checking it here fails a typo at open time, not in front of the maintainer.
 export function check_hint(hint: string): HintCheck {
   const match = /^:set (\S+)(?: (.*))?$/.exec(hint.trim());
   if (!match) return { ok: false, error: `hint "${hint}" must look like ":set name value"` };
