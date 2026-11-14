@@ -56,7 +56,7 @@ Sites behind a login are `pending H`: the rig cannot log in, so these sites are 
 | Twitch | ✅ R | No | ✅ R | ✅ R | pending R | Being retested. |
 | Firefox PDF viewer | n/a | No | n/a | n/a | n/a | Firefox limit: it runs no extension content script in its PDF viewer, so hints do not work for any tool. Scroll works through the viewer's own `j`. Sources: [`design.md`](design.md) and "Keys in PDF files" in [`firefox-behavior.md`](firefox-behavior.md). |
 | YouTube video embedded in another site | ✅ R | Yes: the YouTube media code | ✅ R | ✅ R | ✅ R | The rig loads the live player into a local fixture page. Hint and activation checks target the link beside the player. The rig found no hints for Tridactyl there, so its hints and activation are not scored. |
-| Google Drive (login) | ✅ H | No | pending H | pending H | ✅ H | S: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
+| Google Drive (login) | ✅ H | No | ❌ H | ✅ H | ✅ H | Vimium: cannot select items to act on. S: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
 | Gmail (login) | ✅ H | No | ❌ H | ❌ H | ✅ H | Vimium and Vimium C: does not work in Gmail. |
 | Figma (login) | pending H | No | pending H | pending H | pending H | Also check that Figma's own single-letter keys still work on the canvas. |
 | Slack (login) | pending H | No | pending H | pending H | pending H | |
