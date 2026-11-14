@@ -21,15 +21,21 @@ export const show_toast = (message: string, kind?: ToastKind): void =>
   void bundles.run_command_("ui.toast", "ui", { message, kind, duration_ms: (kind ?? "error") === "error" ? toast_error_ms : toast_ms }, MISSING, false);
 
 // A plain NORMAL badge waits for the load event: drawn during load, the bundle injection, two storage reads and the page-wide style cost the page about 30 ms of load time. Every other state is a user-visible change and draws at once.
-// The next call removes the waiting draw, which is harmless once it has fired. A frame that unloads before load takes it along.
-let waiting_draw: (() => void) | undefined;
+// The 2 s timer covers a page whose load event never fires (a stuck subresource), so the badge still shows.
+// The next call cancels the waiting draw. A frame that unloads before load takes it along.
+const LOAD_WAIT_MAX_MS = 2000;
+let cancel_waiting_draw: (() => void) | undefined;
 
 // Content passes the state and the ui bundle words the label. A state of `undefined` hides the badge: that removes hosts an earlier instance left, which needs no bundle. Only the top frame draws the badge. A frame with no badge to remove does not load the bundle. Each call replaces a draw that still waits, so the latest state wins.
 export function show_mode_label(state?: BadgeState): void {
-  if (waiting_draw) window.removeEventListener("load", waiting_draw);
+  cancel_waiting_draw?.();
   if (state === undefined) remove_badge_hosts();
   if (window !== window.top || (state === undefined && !bundles.has_handler_("ui.badge"))) return;
   const draw = (): void => void bundles.run_command_("ui.badge", "ui", { ...state }, MISSING, false);
-  if (state?.mode === "normal" && !(state.pass_next || state.site_label || state.recording) && document.readyState !== "complete") window.addEventListener("load", (waiting_draw = draw));
-  else draw();
+  if (state?.mode === "normal" && !(state.pass_next || state.site_label || state.recording) && document.readyState !== "complete") {
+    const draw_once = (): void => (cancel_waiting_draw?.(), draw());
+    const timer = setTimeout(draw_once, LOAD_WAIT_MAX_MS);
+    window.addEventListener("load", draw_once);
+    cancel_waiting_draw = () => (clearTimeout(timer), window.removeEventListener("load", draw_once));
+  } else draw();
 }

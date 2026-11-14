@@ -109,3 +109,47 @@ test("a subframe adds no listener and draws nothing", async () => {
   assert.equal(load_listeners.size, 0);
   assert.equal(drawn.length, 0);
 });
+
+test("a page whose load never fires gets the badge after 2000 ms, once", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { show_mode_label, drawn } = await proxy_with_drawn_states();
+    show_mode_label(NORMAL);
+    mock.timers.tick(1999);
+    assert.equal(drawn.length, 0);
+    mock.timers.tick(1);
+    assert.deepEqual(drawn, [NORMAL]);
+    assert.equal(load_listeners.size, 0);
+    fire_load();
+    mock.timers.tick(5000);
+    assert.equal(drawn.length, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("the load event cancels the timeout, so the badge draws once", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { show_mode_label, drawn } = await proxy_with_drawn_states();
+    show_mode_label(NORMAL);
+    fire_load();
+    mock.timers.tick(5000);
+    assert.equal(drawn.length, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a mode change before load cancels the timeout", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { show_mode_label, drawn } = await proxy_with_drawn_states();
+    show_mode_label(NORMAL);
+    show_mode_label({ ...NORMAL, mode: "insert" });
+    mock.timers.tick(5000);
+    assert.equal(drawn.length, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
