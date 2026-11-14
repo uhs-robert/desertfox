@@ -94,7 +94,7 @@ owner-test-status worktree=".":
 owner-test-close worktree=".":
     node --no-warnings tools/owner_test/cli.ts close {{quote(worktree)}}
 
-# Open one visible Firefox window per tool (DesertFox from this checkout, Vimium, Vimium C, Tridactyl at the rig's pinned versions) in fresh profiles, each with the given URLs. See tools/measure/rivals/README.md.
+# Open one visible Firefox window per tool, or only the one named by --tool <desertfox|vimium|vimiumc|tridactyl> (DesertFox from this checkout, Vimium, Vimium C, Tridactyl at the rig's pinned versions) in fresh profiles, each with the given URLs. See tools/measure/rivals/README.md.
 [positional-arguments]
 compare *urls: build
     node --no-warnings tools/measure/rivals/compare.mjs open "$@"

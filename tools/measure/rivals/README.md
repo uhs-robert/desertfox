@@ -104,9 +104,12 @@ Three commands open the tools side by side for a hands-on check. Each tool gets 
 
 ```
 just compare <url>...       # one window per tool: a tab naming the tool, then the URLs
+just compare --tool <name> <url>...   # only that tool's window (desertfox, vimium, vimiumc or tridactyl)
 just compare-add <url>      # open a URL as the active tab in every open window
 just compare-close          # close only these windows, by recorded pid, and delete their profiles
 ```
+
+`just compare` first drops windows you closed by hand from the state file, leaves the windows that still run, and opens only the tools that have none. A window that runs already does not get the URLs: use `just compare-add`.
 
 The windows open wherever the desktop puts them. The add-ons are temporary installs, so a window restart drops its add-on. Close and run `just compare` again instead.
 

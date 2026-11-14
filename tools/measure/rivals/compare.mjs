@@ -1,5 +1,5 @@
 // Hands-on comparison: one visible Firefox window per tool (DesertFox from this checkout and the rig's pinned rivals), each in a fresh profile.
-// Usage: node compare.mjs open <url>... | add <url> | close
+// Usage: node compare.mjs open [--tool <name>] <url>... | add <url> | close
 // The windows run as systemd units and open where the desktop puts them. The add-ons are temporary installs, so a window restart drops its add-on: close and open again instead.
 // The launch, lock, profile seed and stop come from tools/owner_test, shared with the owner-test windows.
 import { spawnSync } from "node:child_process";
@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { connect_rdp, evaluate_in_chrome, install_temporary_addon } from "../../../test/key/rdp.mjs";
 import { stop_process } from "../../owner_test/close.ts";
 import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "../../owner_test/lock.ts";
@@ -77,8 +78,24 @@ export async function close_window(dir, w, deps) {
   return { lines: was_running && process_gone ? [`${LABELS[w.tool]}: closed`] : lines, gone: unit_gone && process_gone };
 }
 
-export async function close_windows(dir, deps = { ...real_close_deps(), find_pid: firefox_pid_for }) {
-  const windows = read_state(dir);
+// Windows the owner closed by hand still sit in the state file. Open drops them, with their profile folders, so it starts from the windows that really run.
+export function prune_dead_windows(dir, ticks_of_pid = read_start_ticks) {
+  const { running, gone } = pick_close_targets(read_state(dir), ticks_of_pid);
+  if (gone.length === 0) return { running, dropped: [] };
+  for (const w of gone) if (owns_profile(dir, w)) rmSync(dirname(w.profile), { recursive: true, force: true });
+  if (running.length > 0) write_state(dir, running);
+  else rmSync(state_file_of(dir), { force: true });
+  return { running, dropped: gone };
+}
+
+// Windows that run are left alone. Only the wanted tools without one get opened.
+export const tools_to_open = (wanted, running) => wanted.filter((tool) => !running.some((w) => w.tool === tool));
+
+// `only` limits the close to those tools, so a failed open never stops windows that were already running.
+export async function close_windows(dir, deps = { ...real_close_deps(), find_pid: firefox_pid_for }, only = COMPARE_TOOLS) {
+  const all = read_state(dir);
+  const windows = all.filter((w) => only.includes(w.tool));
+  const untouched = all.filter((w) => !only.includes(w.tool));
   const kept = [];
   for (const w of windows) {
     const result = await close_window(dir, w, deps);
@@ -87,7 +104,8 @@ export async function close_windows(dir, deps = { ...real_close_deps(), find_pid
     if (owns_profile(dir, w)) rmSync(dirname(w.profile), { recursive: true, force: true });
     else console.log(`${LABELS[w.tool]}: profile ${w.profile} is not ours, left alone`);
   }
-  if (kept.length > 0) write_state(dir, kept);
+  const remaining = [...untouched, ...kept];
+  if (remaining.length > 0) write_state(dir, remaining);
   else rmSync(state_file_of(dir), { force: true });
   return kept.length === 0;
 }
@@ -158,19 +176,29 @@ async function start_window(dir, tool, urls, windows, addon) {
   console.log(`${LABELS[tool]} ready on port ${port}`);
 }
 
-async function open_windows(dir, urls) {
+async function open_windows(dir, urls, wanted) {
   check_environment("compare");
-  if (read_state(dir).length > 0) throw new Error("compare windows are already recorded. Run just compare-close first.");
+  const { running, dropped } = prune_dead_windows(dir);
+  for (const w of dropped) console.log(`${LABELS[w.tool]}: window was closed by hand, dropped from the state file`);
+  const missing = tools_to_open(wanted, running);
+  for (const tool of wanted) if (!missing.includes(tool)) console.log(`${LABELS[tool]}: already open, left running (the urls are not added to it, use just compare-add)`);
   const addons = {};
-  for (const tool of COMPARE_TOOLS) addons[tool] = await addon_for(dir, tool);
-  const windows = [];
+  for (const tool of missing) addons[tool] = await addon_for(dir, tool);
+  const windows = [...running];
   try {
-    for (const tool of COMPARE_TOOLS) await start_window(dir, tool, urls, windows, addons[tool]);
+    for (const tool of missing) await start_window(dir, tool, urls, windows, addons[tool]);
   } catch (error) {
     console.error(`compare: ${error.message}. Closing what opened.`);
-    await close_windows(dir);
+    await close_windows(dir, undefined, missing);
     throw error;
   }
+}
+
+// The urls come first or last, and --tool picks one window. Without it, every tool opens.
+export function parse_open_args(args) {
+  const { values, positionals } = parseArgs({ args, options: { tool: { type: "string" } }, allowPositionals: true });
+  if (values.tool !== undefined && !COMPARE_TOOLS.includes(values.tool)) throw new Error(`--tool takes one of ${COMPARE_TOOLS.join(", ")}, not ${values.tool}`);
+  return { urls: positionals, wanted: values.tool === undefined ? COMPARE_TOOLS : [values.tool] };
 }
 
 const open_tab_in_chrome = (url) => `{ const w = Services.wm.getMostRecentWindow("navigator:browser"); const t = w.gBrowser.addTab(${JSON.stringify(url)}, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); w.gBrowser.selectedTab = t; return w.gBrowser.tabs.length + " tabs"; }`;
@@ -204,10 +232,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const dir = compare_dir();
   try {
     if ((action === "open" || action === "close") && process.env[LOCK_HELD_ENV] !== "1") rerun_under_lock(dir);
-    if (action === "open") await open_windows(dir, args);
+    if (action === "open") { const { urls, wanted } = parse_open_args(args); await open_windows(dir, urls, wanted); }
     else if (action === "add" && args.length === 1) await add_url(dir, args[0]);
     else if (action === "close") process.exitCode = (await close_windows(dir)) ? 0 : 1;
-    else { console.error("usage: compare.mjs open <url>... | add <url> | close"); process.exitCode = 2; }
+    else { console.error("usage: compare.mjs open [--tool <name>] <url>... | add <url> | close"); process.exitCode = 2; }
   } catch (error) {
     console.error(`compare: ${error.message}`);
     process.exitCode = 1;

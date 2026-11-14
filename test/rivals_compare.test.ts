@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { close_window, judge_window, owns_profile, pick_close_targets, profile_dir_of, read_state, state_file_of, unit_of, write_state } from "../tools/measure/rivals/compare.mjs";
+import { close_window, close_windows, COMPARE_TOOLS, judge_window, owns_profile, parse_open_args, pick_close_targets, profile_dir_of, prune_dead_windows, read_state, state_file_of, tools_to_open, unit_of, write_state } from "../tools/measure/rivals/compare.mjs";
 
 const window_of = (dir: string, tool: string, pid: number, start_ticks: number) => ({ tool, pid, start_ticks, port: 40000 + pid, profile: profile_dir_of(dir, tool) });
 
@@ -130,4 +130,59 @@ test("a window the unit stop already ended counts as closed, and one gone before
   assert.deepEqual((await close_window("/c", window_of("/c", "vimium", 101, 5001), deps)).lines, ["Vimium: closed"]);
   const gone = await close_window("/c", window_of("/c", "vimium", 101, 5001), fake_deps({}));
   assert.deepEqual(gone.lines, ["Vimium: already gone"]);
+});
+
+test("open drops windows closed by hand, with their profiles, and keeps the running ones", () => {
+  const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
+  try {
+    const windows = [window_of(dir, "desertfox", 100, 5000), window_of(dir, "vimium", 101, 5001), window_of(dir, "vimiumc", 102, 5002), window_of(dir, "tridactyl", 0, 0)];
+    for (const w of windows) mkdirSync(w.profile, { recursive: true });
+    write_state(dir, windows);
+    const live: Record<number, number> = { 100: 5000, 102: 7777 };
+    const { running, dropped } = prune_dead_windows(dir, (pid: number) => live[pid] ?? null);
+    assert.deepEqual(running.map((w: { tool: string }) => w.tool), ["desertfox"]);
+    assert.deepEqual(dropped.map((w: { tool: string }) => w.tool), ["vimium", "vimiumc", "tridactyl"]);
+    assert.deepEqual(read_state(dir).map((w: { tool: string }) => w.tool), ["desertfox"]);
+    assert.equal(existsSync(windows[0].profile), true);
+    assert.equal(existsSync(windows[1].profile), false);
+    assert.deepEqual(tools_to_open(COMPARE_TOOLS, running), ["vimium", "vimiumc", "tridactyl"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("when every window is dead, pruning removes the state file so open starts clean", () => {
+  const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
+  try {
+    write_state(dir, [window_of(dir, "vimium", 101, 5001)]);
+    const { running } = prune_dead_windows(dir, () => null);
+    assert.deepEqual(running, []);
+    assert.equal(existsSync(state_file_of(dir)), false);
+    assert.deepEqual(prune_dead_windows(dir, () => null), { running: [], dropped: [] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("close tolerates dead entries and closes only the tools it is given", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "compare-close-"));
+  try {
+    write_state(dir, [window_of(dir, "desertfox", 100, 5000), window_of(dir, "vimium", 101, 5001)]);
+    const deps = fake_deps({ 100: 5000 });
+    assert.equal(await close_windows(dir, deps, ["vimium"]), true);
+    assert.deepEqual(deps.signals, []);
+    assert.deepEqual(read_state(dir).map((w: { tool: string }) => w.tool), ["desertfox"]);
+    assert.equal(await close_windows(dir, deps), true);
+    assert.equal(existsSync(state_file_of(dir)), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("--tool picks one window, no flag picks all, and an unknown tool is refused", () => {
+  assert.deepEqual(parse_open_args(["--tool", "vimium", "https://a.test"]), { urls: ["https://a.test"], wanted: ["vimium"] });
+  assert.deepEqual(parse_open_args(["https://a.test", "--tool", "tridactyl"]).wanted, ["tridactyl"]);
+  assert.deepEqual(parse_open_args(["https://a.test"]), { urls: ["https://a.test"], wanted: COMPARE_TOOLS });
+  assert.throws(() => parse_open_args(["--tool", "firefox"]), /--tool takes one of/);
+  assert.deepEqual(tools_to_open(["vimium"], [window_of("/c", "vimium", 1, 1)]), []);
 });
