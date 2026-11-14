@@ -77,9 +77,9 @@ install_deps:
 build-config dir="" *flags="": build
     node tools/build-config/cli.ts {{ if dir == "" { "" } else { quote(dir) } }} {{flags}}
 
-# Open a real Firefox window on the owner's desktop with a worktree's build, replacing that worktree's own window if one is open. Each argument after the worktree is one command the owner must type, quoted, for example ':set newtab_weather true'. See tools/owner_test/README.md.
+# Open a real Firefox window on the maintainer's desktop with a worktree's build, replacing that worktree's own window if one is open. Each argument after the worktree is one command the maintainer must type, quoted, for example ':set newtab_weather true'. See tools/owner_test/README.md.
 [positional-arguments]
-owner-test worktree="." *hints="": install_deps
+owner-test worktree="." *hints: install_deps
     node --no-warnings tools/owner_test/cli.ts open "$@"
 
 # Rebuild a worktree and reload its test window in place, keeping its profile and granted permissions.

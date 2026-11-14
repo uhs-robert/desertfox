@@ -84,12 +84,13 @@ just beta        # build main as pushed and publish it as a beta: start the CI b
 just release_beta # CI only: the beta in src/manifest.json (stamp it first with tools/stamp_beta_manifest.ts): `release_beta_build` (hash the hosts, build), sign, then create the prerelease with the xpi; CI runs those as separate jobs; never bumps or writes package.json; RELEASE_DRY_RUN=1 skips sign and release
 just install-profile <dir>  # install into one Firefox profile directory
 just build-config [dir]     # lint the user config (writes nothing Firefox reads; apply an edit with `config.reload`, see tools/build-config/README.md)
-just owner-test [worktree] [':set ...']...   # open a real Firefox window on the owner's desktop with the worktree's build, one window per worktree (see tools/owner_test/README.md)
+just owner-test [worktree] [':set ...']...   # open a real Firefox window on the maintainer's desktop with the worktree's build, one window per worktree (see tools/owner_test/README.md)
 just owner-test-reload [worktree]            # rebuild and reload that window in place
+just owner-test-status [worktree]            # check that the window shows this worktree's build, not the beta
 just owner-test-close [worktree]             # close that window and delete its profile
 ```
 
-Before any hands-on owner test, open the window with `just owner-test` (the `owner-test` skill) and give the owner exact steps and `:set` commands. Reload it with `just owner-test-reload` after each fix. Close it with `just owner-test-close` once the owner is done. Never launch Firefox for the owner any other way.
+Before any hands-on maintainer test, open the window with `just owner-test` (the `owner-test` skill) and give the maintainer exact steps and `:set` commands. Reload it with `just owner-test-reload` after each fix. Close it with `just owner-test-close` once the maintainer is done. Never launch Firefox for the maintainer any other way.
 
 After `just build`, reload the add-on in Firefox. A rebuilt `dist/` under a loaded add-on runs old and new scripts together.
 

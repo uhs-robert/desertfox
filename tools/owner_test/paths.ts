@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { basename, join, relative, resolve, isAbsolute, sep } from "node:path";
 
 export type Roots = { state_home: string; cache_home: string };
@@ -10,6 +11,11 @@ export function default_roots(env: NodeJS.ProcessEnv, home: string): Roots {
   };
 }
 
+// The same worktree reached through a symlink must map to one window, so the key is taken from the real path.
+export function canonical_worktree(worktree: string): string {
+  return realpathSync(resolve(worktree));
+}
+
 // The name that keys one worktree's state file, profile folder and systemd unit. The hash of the full path keeps two worktrees with the same folder name apart.
 export function worktree_key(worktree: string): string {
   const path = resolve(worktree);
@@ -17,14 +23,16 @@ export function worktree_key(worktree: string): string {
   return `${readable}-${createHash("sha256").update(path).digest("hex").slice(0, 10)}`;
 }
 
-export type WindowPaths = { key: string; state_file: string; cache_root: string; window_dir: string; profile_dir: string; log_file: string };
+export type WindowPaths = { worktree: string; key: string; lock_file: string; state_file: string; cache_root: string; window_dir: string; profile_dir: string; log_file: string };
 
 export function window_paths(worktree: string, roots: Roots): WindowPaths {
   const key = worktree_key(worktree);
   const cache_root = join(roots.cache_home, "desertfox", "owner-test");
   const window_dir = join(cache_root, key);
   return {
+    worktree: resolve(worktree),
     key,
+    lock_file: join(roots.state_home, "desertfox", "owner-test", `${key}.lock`),
     state_file: join(roots.state_home, "desertfox", "owner-test", `${key}.json`),
     cache_root,
     window_dir,
