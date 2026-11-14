@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -74,7 +74,7 @@ test("activation passes on a click or focus on the labelled target or inside it,
   assert.equal(judge_activation({ ...stayed, event: "click", relation: "inside", tag: "yt-interaction" }).status, "pass");
   assert.equal(judge_activation({ ...stayed, event: "focus", relation: "self", tag: "input" }).status, "pass");
   // The masthead holds the labelled button: a click there is the same for every tool, a fail.
-  assert.equal(judge_activation({ ...stayed, event: "click", relation: "other", tag: "ytd-masthead#masthead" }).status, "fail");
+  assert.equal(judge_activation({ ...stayed, event: "click", relation: "other", tag: "ytd-masthead#masthead" }).status, "wrong_target");
   assert.equal(judge_activation({ ...stayed, event: null, relation: null, tag: null }).status, "fail");
 });
 
@@ -83,7 +83,7 @@ test("a navigation passes only when it reaches the link's own address", () => {
   const went = (url_after: string, expected_href: string | null) => judge_activation({ event: null, relation: null, tag: null, navigated: true, expected_href, url_before: page, url_after });
   assert.equal(went(link, link).status, "pass");
   assert.equal(went(`${link}#top`, link).status, "pass");
-  assert.equal(went("https://example.com/other", link).status, "fail");
+  assert.equal(went("https://example.com/other", link).status, "wrong_target");
   // A target that is not a link has no address to reach.
   assert.equal(went("https://example.com/other", null).status, "fail");
   // The frame script's state went with a process switch: the new address alone decides.
@@ -231,13 +231,19 @@ test("frame hints pass only for labels inside the frame, not on the top page", (
   assert.match(top_only.reason, /12 on the top page/);
 });
 
+const same_top = { url_before: "https://a.test/x", url_after: "https://a.test/x" };
+
 test("a frame control reacted when the frame saw a click or focus, or the frame went away", () => {
-  assert.equal(judge_frame_activation({ reply: { event: "click", tag: "button" }, context_gone: false }).status, "pass");
-  assert.equal(judge_frame_activation({ reply: null, context_gone: true }).status, "pass");
-  assert.equal(judge_frame_activation({ reply: { event: null, tag: null }, context_gone: false }).status, "fail");
-  assert.equal(judge_frame_activation({ reply: null, context_gone: false }).status, "fail");
+  assert.equal(judge_frame_activation({ reply: { event: "click", tag: "button" }, context_gone: false, ...same_top }).status, "pass");
+  assert.equal(judge_frame_activation({ reply: null, context_gone: true, ...same_top }).status, "pass");
+  assert.equal(judge_frame_activation({ reply: { event: null, tag: null }, context_gone: false, ...same_top }).status, "fail");
+  assert.equal(judge_frame_activation({ reply: null, context_gone: false, ...same_top }).status, "fail");
+  // A top-level navigation drops every frame context: that is no dismissal.
+  const navigated = judge_frame_activation({ reply: null, context_gone: true, url_before: "https://a.test/x", url_after: "https://a.test/y" });
+  assert.equal(navigated.status, "fail");
+  assert.match(navigated.reason, /top page navigated/);
   // The frame stays and nothing reacted: a changed badge is no dismissal.
-  assert.match(judge_frame_activation({ reply: { event: null, tag: null }, context_gone: false }).reason, /did nothing/);
+  assert.match(judge_frame_activation({ reply: { event: null, tag: null }, context_gone: false, ...same_top }).reason, /did nothing/);
 });
 
 test("gF leaves the frame when the badge stops reading FRAME and the focus is on the top page", () => {
@@ -252,4 +258,11 @@ test("check names hold the frame checks for DesertFox only, so an error or wall 
   const site = { extra: ["jk_clash"] };
   assert.deepEqual(check_names_of(site, "desertfox"), ["mode_on_load", "leave", "frame_leave", "frame_hints", "frame_activate", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
   assert.deepEqual(check_names_of(site, "vimium"), ["mode_on_load", "leave", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
+});
+
+test("a wrong-target status and an n/a frame row show in the cell, and an n/a majority names itself", () => {
+  assert.equal(as_action({ status: "wrong_target", reason: "x" }).status, "wrong_target");
+  assert.deepEqual(cell_of([{ status: "pass" }, { status: "n/a" }, { status: "n/a" }]), { text: "n/a 2/3", majority: "n/a" });
+  assert.deepEqual(cell_of([{ status: "wrong_target" }, { status: "wrong_target" }, { status: "wrong_target" }]), { text: "wrong_target", majority: "wrong_target" });
+  assert.deepEqual(FRAME_ROWS, ["frame_leave", "frame_hints", "frame_activate"]);
 });

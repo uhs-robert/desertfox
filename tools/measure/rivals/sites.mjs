@@ -4,9 +4,9 @@
 // 1. Mode on load (`mode_on_load`), information only: where the focus is, through frames, and the tool's mode. A tool that starts in insert mode where the site focused a field is right.
 // 2. Leave (`leave`), scored: the tool's own leave key, and whether the focused element, in whatever frame holds it, still takes typing.
 // Known gap: on Stack Overflow the Google sign-in frame does not come back after gF and the reload, so frame_hints and frame_activate read unknown there. It was not investigated, and the doc counts Reddit and X as the frame sites.
-// 2b. Frame branch, DesertFox only and only when its badge reads FRAME after the leave step. The site dictates focus and DesertFox does not override it, so a site that focuses a frame (Reddit and X focus a Google sign-in frame) leaves DesertFox working inside that frame until the user dismisses it or leaves with gF. The rivals keep keys on the page and show no badge, so they have no frame mode to score. The branch scores `gF` first (`frame_leave`), on the load the leave step used, then loads the page again and scores hints in the frame (`frame_hints`) and a hint that activates a control in it (`frame_activate`). The normal checks of step 3 follow for every tool. gF goes first because a page loaded again after a dismissal leaves the badge on FRAME with the focus in the browser window, where gF cannot work.
-// 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked.
-// All three run on one page load, except that the frame branch loads the page again. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
+// 2b. Frame branch, DesertFox only and only when its badge reads FRAME after the leave step. The site dictates focus and DesertFox does not override it, so a site that focuses a frame (Reddit and X focus a Google sign-in frame) leaves DesertFox working inside that frame until the user dismisses it or leaves with gF. The rivals keep keys on the page and show no badge, so they have no frame mode to score. The branch has two parts. `gF` (`frame_leave`) runs right after the leave step, so step 3 meets the same page, popup included, for every tool. The checks inside the frame run last, after a reload that brings the frame back: hints in the frame (`frame_hints`) and a hint that activates a control in it (`frame_activate`), which dismisses the popup. A pass that never reaches frame mode records the three frame rows as n/a.
+// 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked, or wrong_target when the hint acted on another element than its label's target.
+// Steps 1 to 3 run on one page load. Only the frame checks at the end of the DesertFox frame branch load it again. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
 // The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 
@@ -39,7 +39,8 @@ export const SITES = [
 export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
 
 // Every check a site record can hold for one tool. Wall and error records fill all of them, so a new check name goes here once. Only DesertFox has the frame checks.
-export const check_names_of = (site, tool) => ["mode_on_load", "leave", ...(tool === "desertfox" ? ["frame_leave", "frame_hints", "frame_activate"] : []), ...site.extra, ...NORMAL_ACTIONS];
+export const FRAME_ROWS = ["frame_leave", "frame_hints", "frame_activate"];
+export const check_names_of = (site, tool) => ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...site.extra, ...NORMAL_ACTIONS];
 
 // Each tool's own default keys, read from its default keymap. Null means the default keymap binds no key for it, which blocks the action.
 // Every tool documents Escape as the key that leaves insert mode and a field, so the frame script sends Escape for step 2.
@@ -53,6 +54,8 @@ export const TOOL_KEYS = {
 
 const pass = (reason) => ({ status: "pass", reason });
 const fail = (reason) => ({ status: "fail", reason });
+// The key did act, on another element than the labelled one. That is not the tool failing to act, so it has its own status. The label-to-target guess of the rig can be the cause as well.
+const wrong_target = (reason) => ({ status: "wrong_target", reason });
 
 // A normal-mode action of step 3 is pass or blocked: a judge's fail means the action did not happen.
 export const as_action = (result) => (result.status === "fail" ? { ...result, status: "blocked" } : result);
@@ -157,9 +160,10 @@ export function judge_activation({ event, relation, tag, navigated, expected_hre
   if (event && relation !== "other") return pass(`${event} on the labelled ${tag}${relation === "inside" ? " (an element inside it)" : ""}`);
   if (navigated || (url_after && url_after !== url_before)) {
     if (expected_href && url_after && same_address(url_after, expected_href)) return pass(`navigated to the link's address`);
-    return fail(`navigated to ${String(url_after).slice(0, 80)}, ${expected_href ? `not the link's address ${expected_href.slice(0, 80)}` : "but the target is not a link"}`);
+    if (expected_href) return wrong_target(`navigated to ${String(url_after).slice(0, 80)}, not the link's address ${expected_href.slice(0, 80)}`);
+    return fail(`navigated to ${String(url_after).slice(0, 80)}, but the target is not a link`);
   }
-  if (event) return fail(`${event} on ${tag}, not the labelled target or inside it`);
+  if (event) return wrong_target(`${event} on ${tag}, not the labelled target or inside it`);
   return fail("typing the label did nothing the page saw");
 }
 
@@ -201,8 +205,9 @@ export function judge_frame_hints({ frame_labels, top_labels }) {
 }
 
 // A control reacted when the frame saw a click or focus on an element, or when the frame is gone, as after a dismissed popup.
-// reply: { event: "click" | "focus" | null, tag } from the frame, or null when it could not be read. context_gone: the frame's browsing context left the page. Only that counts as a dismissal: a badge that stops reading FRAME can mean the typed label did something else.
-export function judge_frame_activation({ reply, context_gone }) {
+// reply: { event: "click" | "focus" | null, tag } from the frame, or null when it could not be read. context_gone: the frame's browsing context left the page. Only that counts as a dismissal, and only while the top page keeps its address: a badge that stops reading FRAME can mean the typed label did something else, and a top-level navigation removes every frame.
+export function judge_frame_activation({ reply, context_gone, url_before, url_after }) {
+  if (context_gone && !same_address(url_before, url_after)) return fail(`the top page navigated to ${String(url_after).slice(0, 80)}, which is no dismissal`);
   if (context_gone) return pass("the frame went away (dismissed)");
   if (reply?.event) return pass(`${reply.event} on a ${reply.tag} inside the frame`);
   return fail("typing a label in the frame did nothing the frame saw");
