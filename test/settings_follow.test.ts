@@ -317,6 +317,11 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     assert.equal(second_slot!.textContent, "198.51.100.9, Sweden");
     assert.equal((store["newtab_net_cache_ip"] as { value: { ip: string } }).value.ip, "198.51.100.9", "the stopped run wrote no cache");
     assert.deepEqual(removed.filter((key) => key === "newtab_net_cache_ip"), ["newtab_net_cache_ip"], "the setting on never forgets");
+    const weather_on = effective_settings({ newtab_clock: true, newtab_weather: true, newtab_ip_info: true } as never);
+    const removed_before = removed.length;
+    await render_new_tab(body_node, weather_on, readers);
+    await settled();
+    assert.equal(removed.slice(removed_before).includes("newtab_net_cache_weather"), false, "the weather setting on never forgets its answer");
   } finally {
     globalThis.fetch = real_fetch;
     mock.timers.reset();

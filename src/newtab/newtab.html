@@ -69,10 +69,10 @@
   .desertfox-newtab .weather-detail { box-sizing: border-box; max-width: min(22rem, calc(100vw - 2.5rem)); max-height: 60vh; overflow: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--desertfox-bg-mantle); border: 1px solid var(--desertfox-border); border-radius: 8px; }
   .desertfox-newtab .weather-detail[hidden] { display: none; }
   .desertfox-newtab .weather-facts { display: flex; gap: 1rem; }
-  .desertfox-newtab .weather-hours { display: flex; gap: 0.75rem; max-width: 100%; overflow-x: auto; padding-bottom: 0.25rem; }
+  .desertfox-newtab .weather-hours { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem 0.75rem; }
   .desertfox-newtab .weather-hour { flex: none; display: flex; flex-direction: column; align-items: center; }
-  /* After the `.weather` rule, which has the same specificity. On a narrow window the card takes its own row above the clock, so it never overlaps it. */
-  @media (max-width: 32rem) { .desertfox-newtab .weather { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }
+  /* After the `.weather` rule, which has the same specificity. The open panel is 22rem wide and the clock is centered, so below 61rem the card takes its own row above the clock instead of overlapping it. */
+  @media (max-width: 61rem) { .desertfox-newtab .weather { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }
   .desertfox-newtab .command-hint { flex: none; align-self: center; margin: 0.75rem 0 0; padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
   .desertfox-newtab .command-hint:hover, .desertfox-newtab .command-hint:focus-visible { border-color: var(--desertfox-border); outline: none; }
   .desertfox-newtab .command-hint kbd { padding: 0 0.4em; border: 1px solid var(--desertfox-border); border-radius: 4px; background: var(--desertfox-bg-mantle); font: inherit; }
