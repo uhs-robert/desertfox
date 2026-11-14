@@ -38,7 +38,7 @@ export const SITES = [
   // A local page on 127.0.0.1 with the live YouTube player in an iframe, so the player is cross-site to the page the keys go to.
   { name: "youtube_embed", path: "yt_embed", extra: ["embed_play_pause", "embed_volume"], note: "the hint checks match labels to targets of the top document, so they cover the link beside the player and not the player's own buttons. Labels inside the player frame count only for Escape out of hints" },
   // A local page with a frame of another origin that focuses itself on load, the Google sign-in frame of Reddit and X without the network. `cross_frame` adds the CROSS_FRAME_ROWS.
-  { name: "cross_site_frame", path: "cross_site_frame", extra: [], cross_frame: true, note: "the frame is served on localhost and the page on 127.0.0.1, so they are different origins. Its picker holds the focus from load, a close button and a link. The rows xframe_* run last, on a fresh load: f labels the frame, a label picked in the frame, then Escape (and gF for DesertFox) and the tool's j on the top page" },
+  { name: "cross_site_frame", path: "cross_site_frame", extra: [], cross_frame: true, note: "the frame is served on localhost and the page on 127.0.0.1, so they are different origins. Its picker holds the focus from load, a close button and a link. The rows xframe_* run last, on a fresh load: f labels the frame, a label picked in the frame, then Escape, the tool's leave key (gF, which Tridactyl lacks) and the tool's j on the top page" },
 ];
 
 export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
@@ -47,6 +47,14 @@ export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
 export const FRAME_ROWS = ["frame_leave", "frame_hints", "frame_activate"];
 // The checks of a site with `cross_frame`, run for every tool after step 3 on a fresh load: hints reach the frame, a hint picked in the frame, and the page's keys after leaving it.
 export const CROSS_FRAME_ROWS = ["xframe_hints", "xframe_enter", "xframe_leave"];
+// The rows that start from the load focus of the frame. Without that focus they run on an ordinary page.
+export const LOAD_FOCUS_ROWS = ["scroll", "passthrough"];
+
+// reports: the focus events the fixture frame sent, as a comma list. The frame took the focus on load when it reported a focus.
+export const judge_load_focus = (reports) => ({ took_focus: /(^|,)frame_focus(,|$)/.test(reports), reports });
+
+// A row that depends on the load focus is unknown when the frame never took it, so a missed load cannot pass or fail a tool.
+export const needs_load_focus = (result, load_focus) => (load_focus.took_focus ? result : { status: "unknown", reason: `the frame never took the focus on load (reports: ${load_focus.reports || "none"}), so this row did not test the frame` });
 // Step 3 in run order. passthrough, the site's own ArrowDown with the tool active, follows scroll at once, before the hint checks change the focus.
 export const step3_names = (site) => {
   const [scroll, ...rest] = NORMAL_ACTIONS;
@@ -79,10 +87,11 @@ export const control_of = (site) => site.control ?? { keys: PASSTHROUGH_KEYS };
 // Every tool documents Escape as the key that leaves insert mode and a field, so the frame script sends Escape for step 2.
 // Vimium 2.4.2, Vimium C 2.12.3 and Tridactyl 1.25.1 bind no key that plays, pauses or sets the volume of a video (read from the pinned builds; Tridactyl's `playpause` is for text to speech).
 export const TOOL_KEYS = {
-  desertfox: { scroll_down: "j", hint: "f", play_pause: "ap", volume_down: "aV" },
-  vimium: { scroll_down: "j", hint: "f", play_pause: null, volume_down: null },
-  vimiumc: { scroll_down: "j", hint: "f", play_pause: null, volume_down: null },
-  tridactyl: { scroll_down: "j", hint: "f", play_pause: null, volume_down: null },
+// frame_leave is the key that moves the focus from a frame to the top page. Tridactyl's gF opens background-tab hints, so it has none.
+  desertfox: { scroll_down: "j", hint: "f", play_pause: "ap", volume_down: "aV", frame_leave: "gF" },
+  vimium: { scroll_down: "j", hint: "f", play_pause: null, volume_down: null, frame_leave: "gF" },
+  vimiumc: { scroll_down: "j", hint: "f", play_pause: null, volume_down: null, frame_leave: "gF" },
+  tridactyl: { scroll_down: "j", hint: "f", play_pause: null, volume_down: null, frame_leave: null },
 };
 
 const pass = (reason) => ({ status: "pass", reason });
@@ -253,10 +262,10 @@ export function describe_mode_after_leave({ focus, badge_label }) {
   return { status: "info", reason: `focus ${focus.path}; mode ${badge_label ? badge_label.toLowerCase() : "unknown"} (read from the mode badge)${is_frame_mode(badge_label) ? ": frame mode, the site focused a frame and DesertFox works inside it" : ""}` };
 }
 
-// frame_labels: labels visible inside the frames after the hint key. The top page's labels do not count, because the branch asks whether hints reach the focused frame.
+// frame_labels and top_labels: counts of the labels visible inside the frames and on the top page after the hint key. The top page's labels do not count, because the branch asks whether hints reach the frame.
 export function judge_frame_hints({ frame_labels, top_labels }) {
-  if (frame_labels > 0) return pass(`${frame_labels} labels inside the focused frame${top_labels > 0 ? `, ${top_labels} on the top page` : ""}`);
-  return fail(`no labels inside the focused frame (${top_labels} on the top page)`);
+  if (frame_labels > 0) return pass(`${frame_labels} labels inside the frame${top_labels > 0 ? `, ${top_labels} on the top page` : ""}`);
+  return fail(`no labels inside the frame (${top_labels} on the top page)`);
 }
 
 // A control reacted when the frame saw a click or focus on an element, or when the frame is gone, as after a dismissed popup.

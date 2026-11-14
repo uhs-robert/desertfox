@@ -53,16 +53,18 @@ function onYouTubeIframeAPIReady() {
 </script><script src="https://www.youtube.com/iframe_api"></script></body>`;
 }
 
-// The key test's load-focus fixture (test/key/hybrid_pages.mjs): the top page holds a frame served on `localhost`, another origin than the top page's 127.0.0.1, and that frame focuses a non-field container on load. The key test's reporter is not here, so `send` does nothing. The spacer gives the scroll check room to move, and the second link stays in view after the scroll rows, so the hint rows have a top-page target.
+// The key test's load-focus fixture (test/key/hybrid_pages.mjs): the top page holds a frame served on `localhost`, another origin than the top page's 127.0.0.1, and that frame focuses a non-field container on load. The key test's reporter is not here, so `send` does nothing. The spacer gives the scroll check room to move. The second link is pinned to the viewport, so it stays a top-page target for the hint rows however far a tool's own scroll key moved the page (Vimium C scrolls 100 px a key and would pass the frame and a link below it).
 const CROSS_SITE_PAGE_ID = "rig_load_focus";
 const quiet_send = "<script>function send() {}</script>";
+// The frame keeps the names of its reports on its document element, where the rig reads them to see whether it took the focus on load.
+const keep_reports = `<script>function send(name) { const root = document.documentElement; root.dataset.reports = (root.dataset.reports ?? "") + name + ","; }</script>`;
 function cross_site_frame_body(port) {
   const { body } = hybrid_frames_page(CROSS_SITE_PAGE_ID, port);
-  return `<!doctype html><title>cross_site_frame</title><body>${quiet_send}${body}<p><a href="/p?below_frame">a link below the frame</a></p><div style="height:3000px"></div></body>`;
+  return `<!doctype html><title>cross_site_frame</title><body>${quiet_send}${body}<a href="/p?pinned_link" style="position:fixed;bottom:8px;left:8px">a pinned link</a><div style="height:3000px"></div></body>`;
 }
 function cross_site_frame_inner_body() {
   const { body } = hybrid_frame_page("load_focus");
-  return `<!doctype html><title>cross_site_frame_inner</title><body>${quiet_send}${body}</body>`;
+  return `<!doctype html><title>cross_site_frame_inner</title><body>${keep_reports}${body}</body>`;
 }
 
 const links = (count, tag) => Array.from({ length: count }, (_, i) => `<a href="/p?${tag}=${i}">link ${tag} ${i}</a> text <span>x</span>`).join("<br>");
