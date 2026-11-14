@@ -205,6 +205,12 @@ test("with newtab_command_hint off the page has no hint button, and a closed tab
     card!.listeners["click"]![0]!({ preventDefault: () => void prevented++ });
     assert.deepEqual(restored, ["7"]);
     assert.equal(prevented, 1);
+    // A session that is gone falls back to opening the address.
+    const opened: string[] = [];
+    Object.assign((globalThis as unknown as { browser: object }).browser, { sessions: { restore: async () => Promise.reject(new Error("gone")) }, tabs: { create: async (details: { url: string }) => void opened.push(details.url) } });
+    card!.listeners["click"]![0]!({ preventDefault() {} });
+    await settled();
+    assert.deepEqual(opened, ["https://gone.example/"]);
   } finally {
     mock.timers.reset();
   }

@@ -60,21 +60,34 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     await in_background(`(async () => { for (const [title, host] of [["Firefox source docs", "firefox-source-docs.mozilla.org"], ["A long bookmark title that cannot fit on one line of a card", "example.net"], ["Arch wiki", "wiki.archlinux.org"], ["Hacker News", "news.ycombinator.com"], ["Rust reference", "doc.rust-lang.org"]]) await browser.bookmarks.create({ title, url: "https://" + host + "/" }); await browser.storage.local.set({ favicon_cache: [{ host: "doc.rust-lang.org", icon: ${JSON.stringify(dot)}, source: "seed" }] }); })()`);
 
     await run_case("recent tabs, bookmarks and links are cards with one anchor each, and f labels one per card", async () => {
+      // The lists need a closed web tab and a visit, which no earlier piece is guaranteed to leave. It is not on localhost, so the favicon case below is not throttled.
+      const seed_url = url_of("iconed_card", "cards_seed");
+      await in_background(`(async () => { const tab = await browser.tabs.create({ url: ${JSON.stringify(seed_url)}, active: false }); await new Promise((done) => setTimeout(done, 1500)); await browser.tabs.remove(tab.id); })()`);
       expect(await open_new_tab(".tiles .tile"), "no card rendered");
       await poll_until("the cards to render", async () => (await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`)) >= 8);
       const shape = await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const cards = [...page.querySelectorAll(".tiles .tile")]; return { cards: cards.length, nested_anchors: cards.filter((card) => card.querySelector("a")).length, letters: page.querySelectorAll(".tile-letter").length, images: page.querySelectorAll("img.tile-icon").length, sites: cards.every((card) => card.querySelector(".tile-site")?.textContent) }; })()`);
       expect(shape.nested_anchors === 0 && shape.sites, `a card holds a nested anchor or has no site: ${JSON.stringify(shape)}`);
       expect(shape.images >= 1 && shape.letters >= 1, `expected an icon and letter tiles: ${JSON.stringify(shape)}`);
       if (shot_dir) await take_shot(`${shot_dir}/newtab-cards.png`);
-      // The content script starts after the cards render, so wait for it to read the tree before the key.
-      await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
       // Closed tabs and top sites read history and sessions, so their lists arrive after the first cards: label only once both headings show.
       await poll_until("the closed and top lists to render", async () => { const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".lists h4")].map((heading) => heading.textContent)`); return shown.includes("Recently closed") && shown.includes("Top sites"); }, { timeout_ms: 10000 });
-      await press_keys("f");
+      // The content script starts after the cards render, so wait for it to read the tree before the key.
+      await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
+      const cards_now = await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`);
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
-      await poll_until("the hint labels to show", async () => (await labels()) > 0);
+      // The lists land after the content script read the page, and f pressed before it scans them draws no label. Press again until labels show.
+      for (let attempt = 1; ; attempt++) {
+        await press_keys("f");
+        try {
+          await poll_until("the hint labels to show", async () => (await labels()) > 0, { timeout_ms: 1500 });
+          break;
+        } catch (error) {
+          if (attempt >= 5) throw error;
+          await press_keys("-k", "Escape");
+        }
+      }
       // One label per card, plus the three built-in links and the command line hint.
-      expect((await labels()) === shape.cards + 4, `expected ${shape.cards + 4} labels, found ${await labels()}`);
+      expect((await labels()) === cards_now + 4, `expected ${cards_now + 4} labels, found ${await labels()}`);
       await press_keys("-k", "Escape");
     });
 

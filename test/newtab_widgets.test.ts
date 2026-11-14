@@ -148,6 +148,11 @@ test("closed tabs: newest first, web addresses only, capped, none on a private p
   assert.deepEqual(closed_rows(sessions, 0, false), []);
 });
 
+test("closed tabs: a closed private tab is dropped before the row limit", () => {
+  const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/", incognito: false } }];
+  assert.deepEqual(closed_rows(sessions, 1, false).map((row) => row.session_id), ["2"]);
+});
+
 test("top sites: visits add up per host, the best page stands for the site, most visited first", () => {
   const visits = [
     { url: "https://a.example/x", title: "A x", visitCount: 3 },
