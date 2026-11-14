@@ -119,20 +119,30 @@ const innermost = (targets) => targets.filter((target, index) => !targets.some((
 // How much nearer one target must be than the next for the last fallback of pick_activation. Under half the 25 px reach, so a label between two targets never counts.
 const CLEAR_MARGIN = 8;
 
+// The label to type for the activation check on a site with an activate_selector, so every tool is scored on a story-like element, not on a neighbour. Returns { pick } or { reason }, and never falls back to the generic picker: a stale selector must read as a rig problem, not pass on another element.
+// A label counts only when its center is inside a chosen target and no other target, one that does not hold the chosen one, lies within CLEAR_MARGIN of the center. The reasons name the cause: the selector matched nothing, the tool labelled no chosen target, or every label on one sat too close to a neighbour.
+export function pick_chosen_activation(labels, targets) {
+  const chosen = targets.filter((target) => target.chosen);
+  if (chosen.length === 0) return { reason: "the activate selector matched no visible target (stale selector or changed page)" };
+  const typable = labels.filter((label) => label.text.trim());
+  let inside_any = false;
+  for (const target of chosen) {
+    const inside = typable.filter((label) => distance_to(label_center(label), target.rect) === 0);
+    if (inside.length > 0) inside_any = true;
+    const rivals = targets.filter((other) => other !== target && !rect_contains(other.rect, target.rect));
+    const clear = inside.find((label) => rivals.every((other) => distance_to(label_center(label), other.rect) > CLEAR_MARGIN));
+    if (clear) return { pick: pick_of(clear, target, "chosen") };
+  }
+  return { reason: inside_any ? `every label on a chosen target is within ${CLEAR_MARGIN} px of another target (ambiguous)` : "the tool shows no label on any chosen target" };
+}
+
+const pick_of = (label, target, via) => ({ keys: label.text.trim().toLowerCase(), target: target.name, via, at: label_center(label), label_rect: label.rect, target_rect: target.rect });
+
 // The label to type for the activation check, so the check knows which element should react. A label belongs to the target whose box holds its center, and a label that only sits near a target can belong to an element the target list lacks.
 // So the first choice is a label whose center lies inside exactly one target. Only when no label does, the fallbacks run: a label with exactly one target near it, then a label clearly nearer one target than any other (a toolbar of touching buttons). `via` records which choice made the pick.
-// When some targets are `chosen` (the site's activate_selector), only those can be picked, so every tool is scored on the same element. A label counts only when its center is inside the chosen target and no other target, one that is not around the chosen one, lies within CLEAR_MARGIN of the center. Else the next label and the next chosen target are tried, and none qualifying returns null.
 export function pick_activation(labels, targets) {
   const typable = labels.filter((label) => label.text.trim());
-  const pick = (label, target, via) => ({ keys: label.text.trim().toLowerCase(), target: target.name, via, at: label_center(label), label_rect: label.rect, target_rect: target.rect });
-  if (targets.some((target) => target.chosen)) {
-    for (const target of targets.filter((candidate) => candidate.chosen)) {
-      const rivals = targets.filter((other) => other !== target && !rect_contains(other.rect, target.rect));
-      const unambiguous = typable.find((label) => distance_to(label_center(label), target.rect) === 0 && rivals.every((other) => distance_to(label_center(label), other.rect) > CLEAR_MARGIN));
-      if (unambiguous) return pick(unambiguous, target, "chosen");
-    }
-    return null;
-  }
+  const pick = pick_of;
   // A toolbar or a list item can be a target itself and hold targets, so only the innermost of nested targets near a label count.
   const targets_within = (label, limit) => innermost(targets.filter((target) => distance_to(label_center(label), target.rect) <= limit));
   for (const label of typable) {

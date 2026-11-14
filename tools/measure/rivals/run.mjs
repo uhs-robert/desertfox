@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, pick_chosen_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -531,8 +531,8 @@ async function check_site(site) {
     },
     activate: async () => {
       const again = await show_hints();
-      const pick = pick_activation(again.labels, again.targets);
-      if (!pick) return { status: "fail", reason: site.activate_selector ? "no unambiguous label" : "no label on a visible target to type" };
+      const { pick, reason } = site.activate_selector ? pick_chosen_activation(again.labels, again.targets) : { pick: pick_activation(again.labels, again.targets), reason: "no label on a visible target to type" };
+      if (!pick) return { status: "fail", reason };
       const armed = await ask_page("arm_activation", { target: pick.target }, 5000);
       const url_before = await current_url();
       await press_keys(pick.keys);

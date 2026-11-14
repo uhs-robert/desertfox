@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -301,20 +301,19 @@ const hn_row = () => [
 
 test("on a site with a chosen target, a label over the neighbouring vote link is not picked", () => {
   const hn = hn_row();
-  const over_vote = label("A", 38, 98);
   const on_story = label("SD", 150, 99);
-  const picked = pick_activation([over_vote, on_story], hn);
-  assert.equal(picked?.target, "story");
-  assert.equal(picked?.keys, "sd");
-  assert.equal(picked?.via, "chosen");
-  assert.deepEqual(picked?.target_rect, hn[1]!.rect);
-  assert.deepEqual(picked?.label_rect, on_story.rect);
+  const { pick } = pick_chosen_activation([label("A", 38, 98), on_story], hn);
+  assert.equal(pick?.target, "story");
+  assert.equal(pick?.keys, "sd");
+  assert.equal(pick?.via, "chosen");
+  assert.deepEqual(pick?.target_rect, hn[1]!.rect);
+  assert.deepEqual(pick?.label_rect, on_story.rect);
 });
 
-test("the chosen target beats a nearer neighbour: only a chosen target is ever picked", () => {
+test("only a chosen target is ever picked, and a label on a neighbour reads as no label on a chosen target", () => {
   const hn = hn_row();
-  assert.equal(pick_activation([label("A", 40, 100)], hn), null);
-  assert.equal(pick_activation([label("B", 372, 100)], hn), null);
+  assert.match(pick_chosen_activation([label("A", 40, 100)], hn).reason, /no label on any chosen target/);
+  assert.match(pick_chosen_activation([label("B", 372, 100)], hn).reason, /no label on any chosen target/);
 });
 
 test("a label inside the chosen target but within the margin of a neighbour is ambiguous, and the next target is tried", () => {
@@ -324,6 +323,17 @@ test("a label inside the chosen target but within the margin of a neighbour is a
     { name: "story_2", rect: rect(60, 138, 300, 16), chosen: true },
   ];
   // The label center (60, 106) is inside the story link and 6 px from the vote arrow, under the margin.
-  assert.equal(pick_activation([label("A", 54, 98)], two_rows), null);
-  assert.equal(pick_activation([label("A", 54, 98), label("B", 150, 139)], two_rows)?.target, "story_2");
+  assert.match(pick_chosen_activation([label("A", 54, 98)], two_rows).reason, /ambiguous/);
+  assert.equal(pick_chosen_activation([label("A", 54, 98), label("B", 150, 139)], two_rows).pick?.target, "story_2");
+});
+
+test("a selector that matches nothing fails with its own reason and never falls back to the generic picker", () => {
+  // A label sits inside another visible target: the generic picker would take it.
+  const no_match = [{ name: "vote", rect: rect(40, 100, 60, 16) }];
+  const labels = [label("A", 50, 100)];
+  assert.equal(pick_activation(labels, no_match)?.target, "vote");
+  const result = pick_chosen_activation(labels, no_match);
+  assert.equal(result.pick, undefined);
+  assert.match(result.reason, /matched no visible target/);
+  assert.match(pick_chosen_activation([], []).reason, /matched no visible target/);
 });
