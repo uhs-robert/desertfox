@@ -48,7 +48,7 @@ Extension process RSS after load, in MB, the same on every page: none 36.4, Dese
 Caveats:
 
 - One machine and one Firefox build.
-- Each tool ran in its own Firefox process, and that process stays up across the pages of a pass. The rig samples the extension process after every page load, so each page cell is the median of 16 samples of the same process. The medians match across pages for that reason. Across all samples the range was 52.5 to 55.0 for DesertFox, 36.7 to 38.3 for Vimium, 51.2 to 54.7 for Vimium C, 45.0 to 46.1 for Tridactyl and 36.3 to 38.2 for none.
+- Each tool ran in its own Firefox process, and that process stays up across the pages of a pass. The rig samples the extension process after every page load, so each page cell is the median of 16 samples, 8 from each of two processes (one per pass). The medians match across pages for that reason. Across all samples the range was 52.5 to 55.0 for DesertFox, 36.7 to 38.3 for Vimium, 51.2 to 54.7 for Vimium C, 45.0 to 46.0 for Tridactyl and 36.3 to 38.2 for none.
 
 Page-load cost on the article page (a saved article of 2.0 MB) against no extension:
 
