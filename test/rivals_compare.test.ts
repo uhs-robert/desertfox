@@ -143,15 +143,17 @@ const tools_of = (windows: { tool: string }[]) => windows.map((w) => w.tool);
 test("open drops windows closed by hand, with their profiles, and keeps the running ones", () => {
   const dir = mkdtempSync(join(tmpdir(), "compare-prune-"));
   try {
-    const windows = [window_of(dir, "desertfox", 100, 5000), window_of(dir, "vimium", 101, 5001), window_of(dir, "vimiumc", 102, 5002), window_of(dir, "tridactyl", 0, 0)];
+    const desertfox_window = window_of(dir, "desertfox", 100, 5000);
+    const vimium_window = window_of(dir, "vimium", 101, 5001);
+    const windows = [desertfox_window, vimium_window, window_of(dir, "vimiumc", 102, 5002), window_of(dir, "tridactyl", 0, 0)];
     for (const w of windows) mkdirSync(w.profile, { recursive: true });
     write_state(dir, windows);
     const { running, dropped } = prune_dead_windows(dir, liveness_of({ 100: 5000, 102: 7777 }));
     assert.deepEqual(tools_of(running), ["desertfox"]);
     assert.deepEqual(tools_of(dropped), ["vimium", "vimiumc", "tridactyl"]);
     assert.deepEqual(tools_of(read_state(dir)), ["desertfox"]);
-    assert.equal(existsSync(windows[0].profile), true);
-    assert.equal(existsSync(windows[1].profile), false);
+    assert.equal(existsSync(desertfox_window.profile), true);
+    assert.equal(existsSync(vimium_window.profile), false);
     assert.deepEqual(tools_to_open(COMPARE_TOOLS, running), ["vimium", "vimiumc", "tridactyl"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
