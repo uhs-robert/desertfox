@@ -10,7 +10,9 @@ import { is_same_process, parse_debug_port, parse_start_ticks, read_start_ticks 
 import { seed_user_js } from "../tools/owner_test/profile.ts";
 import { read_state, write_state, type WindowState } from "../tools/owner_test/state.ts";
 import { stamp_manifest, tail_lines, web_ext_args } from "../tools/owner_test/web_ext.ts";
-import { LockBusy, with_lock } from "../tools/owner_test/lock.ts";
+import { flock_argv, LOCK_BUSY_EXIT } from "../tools/owner_test/lock.ts";
+import { Refusal } from "../tools/owner_test/refusal.ts";
+import { spawn } from "node:child_process";
 import { probe_window, reload_window } from "../tools/owner_test/rdp_probe.ts";
 import net from "node:net";
 import { symlinkSync } from "node:fs";
@@ -284,45 +286,53 @@ test("a symlinked worktree maps to the same window as its real path", (t) => {
   assert.equal(worktree_key(canonical_worktree(join(base, "link"))), worktree_key(canonical_worktree(join(base, "real"))));
 });
 
-test("lock: a live holder blocks a second call, a release frees it", async (t) => {
-  const lock_file = join(make_tmp_dir("desertfox-owner-test-lock-", t), "w.lock");
-  let second_ran = false;
-  await with_lock(lock_file, async () => {
-    await assert.rejects(with_lock(lock_file, async () => void (second_ran = true), { timeout_ms: 300 }), LockBusy);
-  });
-  assert.equal(second_ran, false);
-  assert.equal(existsSync(lock_file), false);
-  await with_lock(lock_file, async () => void (second_ran = true), { timeout_ms: 300 });
-  assert.equal(second_ran, true);
+// Runs a short script under flock(1) with the cli's own arguments. The script logs start and end with a pause between, so overlap shows in the log.
+function run_locked(lock_file: string, log_file: string, name: string, wait_seconds = 10) {
+  const script = `const fs = require("node:fs"); fs.appendFileSync(process.argv[1], process.argv[2] + " start\\n"); setTimeout(() => { fs.appendFileSync(process.argv[1], process.argv[2] + " end\\n"); }, 400);`;
+  return spawn("flock", flock_argv(lock_file, [process.execPath, "-e", script, log_file, name], wait_seconds), { stdio: "ignore" });
+}
+const exit_of = (child: ReturnType<typeof spawn>) => new Promise<number | null>((done) => child.on("exit", done));
+
+test("lock: two calls on one worktree run one after the other", async (t) => {
+  const dir = make_tmp_dir("desertfox-owner-test-lock-", t);
+  const log_file = join(dir, "log");
+  const children = [run_locked(join(dir, "w.lock"), log_file, "a"), run_locked(join(dir, "w.lock"), log_file, "b")];
+  await Promise.all(children.map(exit_of));
+  const events = readFileSync(log_file, "utf8").trim().split("\n").map((line) => line.split(" ")[1]);
+  assert.deepEqual(events, ["start", "end", "start", "end"]);
 });
 
-test("lock: calls on one worktree run one after the other", async (t) => {
-  const lock_file = join(make_tmp_dir("desertfox-owner-test-lock-", t), "w.lock");
-  const events: string[] = [];
-  const run = (name: string) => with_lock(lock_file, async () => {
-    events.push(`${name} start`);
-    await new Promise((done) => setTimeout(done, 80));
-    events.push(`${name} end`);
-  }, { timeout_ms: 5000 });
-  await Promise.all([run("a"), run("b")]);
-  assert.deepEqual(events.map((event) => event.split(" ")[1]), ["start", "end", "start", "end"]);
+test("lock: two worktrees do not block each other", async (t) => {
+  const dir = make_tmp_dir("desertfox-owner-test-lock-", t);
+  const log_file = join(dir, "log");
+  const children = [run_locked(join(dir, "a.lock"), log_file, "a"), run_locked(join(dir, "b.lock"), log_file, "b")];
+  await Promise.all(children.map(exit_of));
+  const events = readFileSync(log_file, "utf8").trim().split("\n").map((line) => line.split(" ")[1]);
+  assert.deepEqual(events.slice(0, 2), ["start", "start"]);
 });
 
-test("lock: a holder that is gone or recycled is taken over, and a live one's lock is not removed", async (t) => {
-  const lock_file = join(make_tmp_dir("desertfox-owner-test-lock-", t), "w.lock");
-  const own_ticks = read_start_ticks(process.pid) ?? 0;
-  for (const stale of [{ pid: 999_999_999, start_ticks: 5 }, { pid: process.pid, start_ticks: own_ticks + 1 }]) {
-    writeFileSync(lock_file, JSON.stringify(stale));
-    let ran = false;
-    await with_lock(lock_file, async () => void (ran = true), { timeout_ms: 1000 });
-    assert.equal(ran, true);
-  }
-  writeFileSync(lock_file, "garbage");
-  await with_lock(lock_file, async () => {}, { timeout_ms: 1000 });
-  // A holder that is alive keeps its file when the action of another call ends.
-  const other = JSON.stringify({ pid: process.pid, start_ticks: own_ticks });
-  await with_lock(lock_file, async () => writeFileSync(lock_file, other + " "), { timeout_ms: 1000 });
-  assert.equal(existsSync(lock_file), true);
+test("lock: a call that waits too long exits with the busy code, and a dead holder leaves no stale lock", async (t) => {
+  const dir = make_tmp_dir("desertfox-owner-test-lock-", t);
+  const lock_file = join(dir, "w.lock");
+  const holder = spawn("flock", flock_argv(lock_file, ["sleep", "30"]), { stdio: "ignore" });
+  await new Promise((done) => setTimeout(done, 300));
+  const waiter = spawn("flock", flock_argv(lock_file, ["true"], 1), { stdio: "ignore" });
+  assert.equal(await exit_of(waiter), LOCK_BUSY_EXIT);
+  // The holder is our own child. Killing it stands in for a crashed call: the kernel frees the lock.
+  holder.kill("SIGKILL");
+  await exit_of(holder);
+  assert.equal(await exit_of(spawn("flock", flock_argv(lock_file, ["true"], 5), { stdio: "ignore" })), 0);
+});
+
+test("lock: the command does not inherit the lock fd, so a child it starts does not hold the lock", async (t) => {
+  const dir = make_tmp_dir("desertfox-owner-test-lock-", t);
+  const lock_file = join(dir, "w.lock");
+  // The command starts a long-lived child and exits at once, like open does with the window.
+  const starter = spawn("flock", flock_argv(lock_file, ["sh", "-c", "sleep 30 & echo $! > " + join(dir, "pid")]), { stdio: "ignore" });
+  await exit_of(starter);
+  const later = spawn("flock", flock_argv(lock_file, ["true"], 3), { stdio: "ignore" });
+  assert.equal(await exit_of(later), 0);
+  process.kill(Number(readFileSync(join(dir, "pid"), "utf8")), "SIGKILL");
 });
 
 // A debugger that takes the connection and never says anything.
@@ -374,4 +384,63 @@ test("reload sends the reload request to the add-on's actor", async (t) => {
 
 test("tail_lines keeps the last lines", () => {
   assert.equal(tail_lines("a\nb\nc\n", 2), "b\nc");
+});
+
+test("close waits for the process to be gone after SIGKILL, and keeps the profile and state if it stays", async (t) => {
+  const roots = make_roots(t);
+  const { paths } = make_window("/w/a", roots);
+  // Stubborn: SIGKILL takes effect only after three polls.
+  const ticks = new Map([[4001, 111], [4002, 222]]);
+  const system = fake_system(ticks, new Set([4002]));
+  let polls_after_kill = 0;
+  const kill_signal = system.deps.signal;
+  let killed = false;
+  system.deps.signal = (pid, signal) => {
+    system.signals.push(`${signal} ${pid}`);
+    if (pid === 4001) ticks.delete(pid);
+    if (signal === "SIGKILL" && pid === 4002) killed = true;
+    void kill_signal;
+  };
+  system.deps.sleep = async () => {
+    if (killed && ++polls_after_kill >= 3) ticks.delete(4002);
+  };
+  const slow = await close_window(paths, system.deps);
+  assert.equal(slow.closed, true);
+
+  const { paths: other } = make_window("/w/b", roots, { web_ext_pid: 5001, firefox_pid: 5002 });
+  const immortal = new Map([[5001, 111], [5002, 222]]);
+  const stuck = fake_system(immortal);
+  stuck.deps.signal = (pid, signal) => void stuck.signals.push(`${signal} ${pid}`);
+  stuck.deps.kill_wait_ms = 300;
+  const result = await close_window(other, stuck.deps);
+  assert.equal(result.closed, false);
+  assert.match(result.lines.join("\n"), /still running after SIGKILL/);
+  assert.deepEqual(stuck.removed, []);
+  assert.equal(existsSync(other.state_file), true);
+  assert.equal(existsSync(other.profile_dir), true);
+});
+
+test("probe exits on its own when the TCP connect never completes", async (t) => {
+  // A listener whose event loop is blocked never accepts, so once its backlog is full further connects hang.
+  const listener_script = `const net = require("node:net"); const server = net.createServer(); server.listen({ port: 0, host: "127.0.0.1", backlog: 1 }, () => { console.log(server.address().port); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000); });`;
+  const listener = spawn(process.execPath, ["-e", listener_script], { stdio: ["ignore", "pipe", "ignore"] });
+  t.after(() => void listener.kill("SIGKILL"));
+  const port = Number(await new Promise<string>((done) => listener.stdout.once("data", (chunk) => done(String(chunk).trim()))));
+  const fillers = Array.from({ length: 6 }, () => net.connect(port, "127.0.0.1").on("error", () => {}));
+  t.after(() => fillers.forEach((socket) => socket.destroy()));
+  await new Promise((done) => setTimeout(done, 300));
+  const probe_script = `import { probe_window } from ${JSON.stringify(join(import.meta.dirname, "..", "tools", "owner_test", "rdp_probe.ts"))}; probe_window(${port}, "stamp", 600).then(() => console.log("passed"), (error) => console.log("rejected " + error.constructor.name));`;
+  const started = Date.now();
+  const child = spawn(process.execPath, ["--no-warnings", "--input-type=module", "-e", probe_script], { stdio: ["ignore", "pipe", "inherit"] });
+  let output = "";
+  child.stdout.on("data", (chunk) => (output += chunk));
+  const code = await exit_of(child);
+  assert.equal(code, 0);
+  assert.equal(output.trim(), "rejected Refusal");
+  assert.ok(Date.now() - started < 5000, "the child lingered");
+});
+
+test("a reload that the debugger does not answer is a Refusal, not a stack trace", async (t) => {
+  const port = await silent_debugger(t);
+  await assert.rejects(reload_window(port, 400), Refusal);
 });

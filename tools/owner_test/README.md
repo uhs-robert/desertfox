@@ -13,7 +13,7 @@ The agent workflow is in `.claude/skills/owner-test/SKILL.md`.
 
 ## How it works
 
-- `cli.ts`: the four actions, each under a per-worktree lock (`lock.ts`) except status. It builds, stamps `dist/manifest.json` with a `version_name`, starts `web-ext run` in a systemd user unit (plain detached spawn when systemd is missing), and checks the loaded build over the debugger.
+- `cli.ts`: the four actions, each under a per-worktree lock (`lock.ts`, `flock`) except status. It builds, stamps `dist/manifest.json` with a `version_name`, starts `web-ext run` in a systemd user unit (plain detached spawn when systemd is missing), and checks the loaded build over the debugger.
 - `paths.ts`: the state file (`$XDG_STATE_HOME/desertfox/owner-test/<key>.json`) and the profile and log folder (`$XDG_CACHE_HOME/desertfox/owner-test/<key>/`) for a worktree.
 - `state.ts`: the state file, written atomically with mode 0600 before any process starts.
 - `process_guard.ts`: a recorded pid counts only while its start ticks (field 22 of `/proc/<pid>/stat`) still match, so a recycled pid is never signalled.
