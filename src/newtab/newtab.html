@@ -51,7 +51,7 @@
   .desertfox-newtab .tile-text { display: flex; flex-direction: column; min-width: 0; }
   .desertfox-newtab .tile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .desertfox-newtab .tile-site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
-  /* The top-right corner of the page, right-aligned and out of the centered column. The settings link sits at the bottom, so nothing is covered. */
+  /* The top-right corner of the page, right-aligned and out of the centered column. The settings gear sits in the opposite corner, so nothing is covered. */
   .desertfox-newtab .weather { position: absolute; top: 1rem; right: 1.25rem; z-index: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; text-align: right; }
   .desertfox-newtab .weather-reading { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
   .desertfox-newtab .weather-main { display: flex; align-items: center; gap: 0.5rem; color: var(--desertfox-fg-core); font-size: 2rem; line-height: 1; }
@@ -60,13 +60,16 @@
   .desertfox-newtab .weather-value { font-weight: 600; color: var(--desertfox-primary); }
   .desertfox-newtab .weather-label { font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
   .desertfox-newtab .weather-ask { padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
-  .desertfox-newtab .ip-info { display: flex; align-items: baseline; justify-content: center; gap: 0.5rem; margin-top: 0.25rem; min-height: 1.25rem; font-size: var(--desertfox-text-small); }
-  .desertfox-newtab .ip-address { color: var(--desertfox-primary); }
-  .desertfox-newtab .ip-country { color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
+  /* Directly under the date, small and muted. */
+  .desertfox-newtab .ip-info { margin-top: 0.5rem; text-align: center; min-height: 1.25rem; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
   .desertfox-newtab .weather-ask:hover, .desertfox-newtab .weather-ask:focus-visible { border-color: var(--desertfox-border); outline: none; }
   .desertfox-newtab .command-hint { flex: none; align-self: center; margin: 0.75rem 0 0; padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
   .desertfox-newtab .command-hint:hover, .desertfox-newtab .command-hint:focus-visible { border-color: var(--desertfox-border); outline: none; }
   .desertfox-newtab .command-hint kbd { padding: 0 0.4em; border: 1px solid var(--desertfox-border); border-radius: 4px; background: var(--desertfox-bg-mantle); font: inherit; }
+  /* The top-left corner, mirroring the weather card. Fixed, so it stays out of the column and the page redraw never touches it. */
+  .settings-gear { position: fixed; top: 1rem; left: 1.25rem; z-index: 2; display: flex; padding: 0.25rem; border-radius: 6px; color: var(--desertfox-primary); }
+  .settings-gear svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .settings-gear:hover, .settings-gear:focus-visible { outline: 1px solid var(--desertfox-border); }
   /* After the script-drawn page in the body column, so it has its own background. */
   .builtin-links { flex: none; padding: 0.75rem 0 1.5rem; background: var(--desertfox-bg-core); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
   .builtin-links a { color: var(--desertfox-primary); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }
@@ -78,8 +81,11 @@
 <nav class="builtin-links">
   <a href="home.html#/quick-start">Getting Started</a>
   <a href="home.html">Help</a>
-  <a href="home.html#/settings">Settings</a>
 </nav>
+<!-- The Settings page of the Home document, as the Settings text link was. A plain anchor, so a hint reaches it. -->
+<a class="settings-gear" href="home.html#/settings" aria-label="Settings" title="Settings">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+</a>
 <!-- The page script comes first so a redirect starts before the key scripts load. -->
 <script src="newtab.js"></script>
 <!-- moz-extension:// pages do not match <all_urls>, so content.js loads by tag. Every other bundle loads on first use: the background asks newtab.js to add its tag (src/shared/page_bundle_tag.ts). -->

@@ -313,8 +313,8 @@ test("the IP info card adds a slot only while its setting is on, forgets its ans
     assert.notEqual(second_slot, first_slot);
     release_first();
     await settled();
-    assert.deepEqual(first_slot.children, [], "the stopped run drew nothing");
-    assert.equal(second_slot!.children[0]?.textContent, "198.51.100.9");
+    assert.equal(first_slot.textContent, "", "the stopped run drew nothing");
+    assert.equal(second_slot!.textContent, "198.51.100.9, Sweden");
     assert.equal((store["newtab_net_cache_ip"] as { value: { ip: string } }).value.ip, "198.51.100.9", "the stopped run wrote no cache");
     assert.equal(removed.length, 1, "the setting on never forgets");
   } finally {

@@ -69,14 +69,9 @@ const country_name = (code: string): string => {
   }
 };
 
+// One muted line, such as `203.0.113.7, Norway`, for the centered column under the date.
 export function draw_ip_info(slot: HTMLElement, info: IpInfo): void {
-  const address = document.createElement("span");
-  address.className = "ip-address";
-  address.textContent = info.ip;
-  const country = document.createElement("span");
-  country.className = "ip-country";
-  country.textContent = country_name(info.country);
-  slot.replaceChildren(address, country);
+  slot.textContent = `${info.ip}, ${country_name(info.country)}`;
 }
 
 export const browser_ip_info_deps = (): IpInfoDeps => ({ page_is_private: async () => (await browser.windows.getCurrent()).incognito, net: browser_net_env() });
