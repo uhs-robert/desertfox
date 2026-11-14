@@ -89,6 +89,15 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await type_field("desertfox-settings", "newtab_links address", "https://mail.p38.test/");
     await in_page(`view.document.querySelector('.desertfox-settings [aria-label="newtab_links address"]').dispatchEvent(new view.Event("change"));`);
     await poll_until("the link to be saved", async () => (await stored("desertfox_saved_settings")).newtab_links?.[0]?.label === "P38 mail");
+    await in_page(`${button_in("desertfox-settings", "Add link")}.click();`);
+    await in_page(`const label = [...view.document.querySelectorAll('.desertfox-settings [aria-label="newtab_links label"]')][1]; label.value = "P38 two"; label.dispatchEvent(new view.Event("input"));`);
+    await in_page(`const address = [...view.document.querySelectorAll('.desertfox-settings [aria-label="newtab_links address"]')][1]; address.value = "https://two.p38.test/"; address.dispatchEvent(new view.Event("change"));`);
+    const saved_labels = async () => ((await stored("desertfox_saved_settings")).newtab_links ?? []).map((link) => link.label).join(",");
+    await poll_until("the second link to be saved", async () => (await saved_labels()) === "P38 mail,P38 two");
+    await in_page(`view.document.querySelector('[aria-label="Move up P38 two"]').click();`);
+    await poll_until("Up to save the new order", async () => (await saved_labels()) === "P38 two,P38 mail");
+    await in_page(`view.document.querySelector('[aria-label="Move down P38 two"]').click();`);
+    await poll_until("Down to save the old order", async () => (await saved_labels()) === "P38 mail,P38 two");
     const exported = await in_page(`return view.browser.runtime.sendMessage({ type: "export_config" }).then((answer) => ({ ok: answer.ok, aliases: answer.config_files?.["command_aliases.d/zz-saved-edits.toml"], quickmarks: answer.config_files?.["quickmarks.d/zz-saved-edits.toml"], saved: answer.config_files?.["settings.d/zz-saved-edits.toml"] }));`);
     expect(exported.ok && /p38dup/.test(exported.aliases ?? "") && /y\s*=/.test(exported.quickmarks ?? "") && /P38 mail/.test(exported.saved ?? ""), `the export held ${JSON.stringify(exported)}`);
     await close_extension_tabs();
