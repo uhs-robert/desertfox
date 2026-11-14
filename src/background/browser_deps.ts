@@ -1,12 +1,14 @@
 // The Firefox side of the router and the startup: each function wraps one browser call.
 
 import { title_for_address } from "./bookmark_title.ts";
+import type { CommandDef } from "../shared/command.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import { engine_of_page } from "../shared/engines/index.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import type { AddBundleScriptAnswer, BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
+import { is_dynamic_values } from "../shared/registry/params.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
@@ -74,14 +76,54 @@ export async function read_disabled(): Promise<boolean> {
   return (await browser.storage.local.get(DISABLED_STORAGE_KEY))[DISABLED_STORAGE_KEY] === true;
 }
 
+type DisabledStorage = Pick<typeof browser.storage.local, "get">;
+type ChangeEvent = Pick<typeof browser.storage.onChanged, "addListener">;
+
+// The off flag in memory for the router, which reads it on every run. It refills from storage and follows `storage.onChanged` (the pattern of `keymap_source.ts`), so a restart of the background starts empty.
+// A read before the first fill reads storage itself and waits for that fill, so the flag is never guessed. A change that lands during a fill wins over the stale read.
+export function create_disabled_source(storage: DisabledStorage, changed: ChangeEvent): () => Promise<boolean> {
+  let copy: boolean | undefined;
+  let filling: Promise<boolean> | undefined;
+  let generation = 0;
+  const fill = (): Promise<boolean> => {
+    const started = generation;
+    const reading: Promise<boolean> = storage
+      .get(DISABLED_STORAGE_KEY)
+      .then((stored) => {
+        // A change during the read has set the copy already.
+        if (started === generation) copy = stored[DISABLED_STORAGE_KEY] === true;
+        return copy ?? stored[DISABLED_STORAGE_KEY] === true;
+      })
+      .finally(() => {
+        if (filling === reading) filling = undefined;
+      });
+    filling = reading;
+    return reading;
+  };
+  changed.addListener((changes, area) => {
+    if (area !== "local" || !(DISABLED_STORAGE_KEY in changes)) return;
+    generation++;
+    copy = changes[DISABLED_STORAGE_KEY]?.newValue === true;
+  });
+  return async () => copy ?? (await (filling ?? fill()));
+}
+
+const browser_disabled_source: (() => Promise<boolean>) | undefined = typeof browser === "undefined" || browser.storage?.onChanged === undefined ? undefined : create_disabled_source(browser.storage.local, browser.storage.onChanged);
+
+// Containers are asked of the browser only for a command with a param that lists them: the query is a round trip to the parent process.
+export function create_enum_sources(search_engines: () => Promise<string[]>, containers: () => Promise<string[]>): (command?: CommandDef) => Promise<EnumSources> {
+  const reads_containers = (command: CommandDef) => (command.params ?? []).some((param) => is_dynamic_values(param.values) && param.values.from === "containers");
+  return async (command) => ({
+    search_engines: await search_engines(),
+    ...(command === undefined || reads_containers(command) ? { containers: await containers() } : {}),
+  });
+}
+
 export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat_memory: RepeatMemory): RouterDeps {
   const channels = { send_to_tab, notify };
   return {
     get_command: (command_id) => registry.get(command_id),
-    get_enum_sources: async (): Promise<EnumSources> => ({
-      search_engines: Object.keys((await get_config()).search_engines),
-      containers: await container_names(),
-    }),
+    get_enum_sources: create_enum_sources(async () => Object.keys((await get_config()).search_engines), container_names),
     active_tab: async () => {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
@@ -105,7 +147,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     send_to_tab,
     open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id),
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
-    is_disabled: read_disabled,
+    is_disabled: browser_disabled_source ?? read_disabled,
     repeat_memory,
     record_timing: (command_id, ms) => void browser_timing_log.record(command_id, ms),
   };
