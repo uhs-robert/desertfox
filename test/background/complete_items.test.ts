@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, bookmark_rows, bookmark_view, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, OPEN_TAB_BOOST, read_container_identities, read_containers, site_items, usage_boost, usage_by_url } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, OPEN_TAB_BOOST, read_container_identities, read_containers, site_items, usage_boost, usage_by_url } from "../../src/background/complete_items.ts";
 import { MAX_BOOST } from "../../src/shared/score.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { AnythingItems, SessionItem } from "../../src/shared/messages.ts";
@@ -35,7 +35,6 @@ const WINDOWS = [window_of(10, false, "Mail"), window_of(20, true, "Secret"), wi
 
 function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNode[], fail = false, page = undefined as { url: string } | undefined, frame_url = undefined as string | undefined, history = [] as HistoryNode[], open = { sources: ["bookmarks", "history"], history_max: 10 } as OpenSettings, read_tab = (async () => undefined) as (id: number) => Promise<TabLike | undefined>, discard = {} as DiscardDeps, tab_actions = NO_ACTIONS as TabActions, sessions = [] as SessionItem[], folders = [] as FolderNode[], registers = { normal: [], private: [] } as { normal: SessionItem[]; private: SessionItem[] }, containers = new Map() as ContainerMarks, on_containers = () => {}, list_max = 20, closed = [] as { session_id: string; title: string; url: string }[], quickmark_urls = {} as Record<string, string> } = {}) {
   const view_privacy: boolean[] = [];
-  const closed_asks: boolean[] = [];
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
@@ -93,10 +92,10 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     },
     open_settings: async () => open,
     history_list_max: async () => list_max,
-    closed_tabs: async (is_private: boolean) => (closed_asks.push(is_private), closed),
+    closed_tabs: async () => closed,
     quickmark_table: async () => quickmark_urls,
   });
-  return { service, asked, opened, history_reads, view_privacy, closed_asks };
+  return { service, asked, opened, history_reads, view_privacy };
 }
 
 const titles = (answer: Awaited<ReturnType<ReturnType<typeof make>["service"]["answer"]>>) => (answer?.items as { title: string }[]).map((item) => item.title);
@@ -865,7 +864,7 @@ test("the finder list holds quickmarks, bookmarks, history, closed tabs and the 
     { id: 1, index: 0, windowId: 10, incognito: false, lastAccessed: 500 },
     { id: 2, index: 0, windowId: 20, incognito: true, lastAccessed: 700 },
   ];
-  const { service, closed_asks } = make({
+  const { service } = make({
     tabs: used_tabs,
     closed,
     quickmark_urls: { b: "https://b.test/", a: "https://a.test/" },
@@ -882,9 +881,7 @@ test("the finder list holds quickmarks, bookmarks, history, closed tabs and the 
   const private_items = (await service.answer("anything", { ...NORMAL_LINE, incognito: true }))?.items as AnythingItems;
   assert.equal(private_items.quickmarks.length, 2);
   assert.equal(private_items.bookmarks.length, 1);
-  assert.deepEqual(private_items.history, []);
-  // The closed tab reader gets the line's privacy and does the filtering.
-  assert.deepEqual(closed_asks, [false, true]);
+  assert.deepEqual([private_items.history, private_items.closed], [[], []]);
   assert.deepEqual(private_items.tab_used, { 2: 700 });
 });
 
@@ -1020,4 +1017,9 @@ test("the quality_levels kind asks for the tab of the line, and nothing for a st
   const { service } = make({});
   assert.deepEqual(await service.answer("quality_levels", NORMAL_LINE), { items: [{ name: "max", description: "The highest level" }] });
   assert.equal(await make({ openers: [] }).service.answer("quality_levels", NORMAL_LINE), undefined);
+});
+
+test("closed_tab_rows never lists a private tab, which getRecentlyClosed returns while its window is open", () => {
+  const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/" } }];
+  assert.deepEqual(closed_tab_rows(sessions).map((row) => row.session_id), ["2"]);
 });

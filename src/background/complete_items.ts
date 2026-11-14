@@ -249,11 +249,11 @@ export function site_items(nodes: readonly HistoryNode[], listed: ReadonlySet<st
     .sort((left, right) => right.boost - left.boost);
 }
 
-// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows and tabs with no session id drop out. `getRecentlyClosed` returns a private tab while its window is open, so a private caller sees only private tabs and a normal caller none.
+// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows, private tabs (which `getRecentlyClosed` returns while their window is open) and tabs with no session id drop out.
 export type ClosedSession = { tab?: { sessionId?: string | undefined; title?: string | undefined; url?: string | undefined; incognito?: boolean | undefined } | undefined };
 
-export function closed_tab_rows(sessions: readonly ClosedSession[], caller_private: boolean): ClosedTabRow[] {
-  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !!tab.incognito === caller_private && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
+export function closed_tab_rows(sessions: readonly ClosedSession[]): ClosedTabRow[] {
+  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !tab.incognito && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
 }
 
 // Each tab of the privacy asked for, with the time it was last active.
@@ -321,7 +321,7 @@ export const browser_complete_items_deps = {
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
   sessions: (): Promise<SessionItem[]> => make_session_store(browser_session_storage).items(),
   registers: (is_private: boolean): Promise<RegisterItem[]> => browser_register_store.items(is_private),
-  closed_tabs: async (is_private: boolean): Promise<ClosedTabRow[]> => closed_tab_rows(await browser.sessions.getRecentlyClosed(), is_private),
+  closed_tabs: async (): Promise<ClosedTabRow[]> => closed_tab_rows(await browser.sessions.getRecentlyClosed()),
 };
 
 export type CompleteItemsDeps = typeof browser_complete_items_deps & {
@@ -375,13 +375,13 @@ export function create_complete_items(deps: CompleteItemsDeps) {
   });
 
   // Everything the finder lists but the open tabs, which the page takes from the tab model. Each source that fails leaves the others.
-  // A private line gets quickmarks and bookmarks only: Firefox records no private visit, and the sessions are hidden there as in `session`. Closed tabs show only the private ones.
+  // A private line gets quickmarks and bookmarks only: Firefox records no private visit, and the closed tabs and sessions are hidden there as in `session`.
   const anything_items = async (asker: Asker): Promise<AnythingItems> => {
     const [quickmarks, bookmarks, visits, closed, tabs, history_max] = await Promise.all([
       refused_as(deps.quickmark_table(asker.incognito), {} as Record<string, string>),
       refused_as(deps.all_bookmarks(), []).then(bookmark_items),
       asker.incognito ? [] : refused_as(deps.search_history(), []),
-      refused_as(deps.closed_tabs(asker.incognito), [] as ClosedTabRow[]),
+      asker.incognito ? [] : refused_as(deps.closed_tabs(), [] as ClosedTabRow[]),
       refused_as(deps.query_tabs(undefined), [] as TabLike[]),
       refused_as(deps.open_settings(), undefined).then((settings) => (settings ? settings.history_max : 0)),
     ]);
