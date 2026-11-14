@@ -130,12 +130,12 @@ export const SETTINGS_TABLE = {
   newtab_bookmarks_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_recent_tabs: { kind: "boolean", default: false },
   newtab_recent_tabs_max: { kind: "number", whole: true, min: 0, default: 8 },
-  // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
   newtab_closed_tabs: { kind: "boolean", default: true },
   newtab_closed_tabs_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_top_sites: { kind: "boolean", default: true },
   newtab_top_sites_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_command_hint: { kind: "boolean", default: true },
+  // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
   newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [] },
 } as const satisfies Record<string, SettingRow>;
 

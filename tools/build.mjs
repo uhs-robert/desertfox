@@ -30,7 +30,7 @@ const MAX_BYTES = {
   "site_actions.js": 4 * 1024,
   // 6.5 KB: the thumb press point, the per-drag step keys (`[` and `]`), the swipe fling (`snap_scroll`, `start_fling`) and the start step read from `grab_step_px`.
   "grab.js": 6.5 * 1024,
-  // 57 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_top_sites and newtab_command_hint settings. 58.5 KB: the 57.5 KB limit plus the 1 KB the newtab settings needed on the older 57 KB limit.
+  // 58.5 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings.
   "cmdline_page.js": 58.5 * 1024,
   "find_worker.js": 2 * 1024,
   "devtools.js": 2 * 1024,

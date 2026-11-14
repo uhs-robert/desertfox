@@ -47,7 +47,10 @@ class FakeNode {
     node.parent = parent;
     this.parent = null;
   }
-  addEventListener() {}
+  listeners: Record<string, ((event: { preventDefault(): void }) => void)[]> = {};
+  addEventListener(type: string, listener: (event: { preventDefault(): void }) => void) {
+    (this.listeners[type] ??= []).push(listener);
+  }
   getBoundingClientRect() {}
   focus() {
     this.focused++;
@@ -179,6 +182,29 @@ test("redrawing the new tab page swaps the page and keeps one clock timer and on
     Object.defineProperty(date, "textContent", { get: () => text, set: (value: string) => ((text = value), writes++) });
     mock.timers.tick(1000);
     assert.equal(writes, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("with newtab_command_hint off the page has no hint button, and a closed tab card restores its session", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const { body } = install_fakes();
+    const restored: string[] = [];
+    Object.assign((globalThis as unknown as { browser: object }).browser, { sessions: { restore: async (id: string) => void restored.push(id) } });
+    // A fresh copy of the module, because it remembers the page of the earlier tests.
+    const fresh_module = "../src/newtab/render.ts?hint_off";
+    const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
+    const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [{ tab: { sessionId: "7", title: "Gone", url: "https://gone.example/" } }], visits: async () => [], cached_icons: async () => new Map() };
+    const find_all = (node: FakeNode, class_name: string): FakeNode[] => [...(node.className.split(" ").includes(class_name) ? [node] : []), ...node.children.flatMap((child) => find_all(child, class_name))];
+    await render_new_tab(body as unknown as HTMLElement, effective_settings({ newtab_command_hint: false } as never), readers);
+    assert.equal(find_all(body, "command-hint").length, 0);
+    const [card] = find_all(body, "tile");
+    let prevented = 0;
+    card!.listeners["click"]![0]!({ preventDefault: () => void prevented++ });
+    assert.deepEqual(restored, ["7"]);
+    assert.equal(prevented, 1);
   } finally {
     mock.timers.reset();
   }

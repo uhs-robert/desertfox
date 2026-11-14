@@ -18,6 +18,9 @@ export function site_host(url: string): string {
   }
 }
 
+// A row gets `icon_url` only when the cache holds the site.
+export const icon_field = (icon_url: string | undefined): { icon_url?: string } => (icon_url ? { icon_url } : {});
+
 export function cacheable_icon(icon: string | undefined): icon is string {
   return !!icon && /^data:image\//i.test(icon) && icon.length <= FAVICON_ENTRY_MAX_CHARS;
 }

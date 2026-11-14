@@ -68,8 +68,8 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       if (shot_dir) await take_shot(`${shot_dir}/newtab-cards.png`);
       // The content script starts after the cards render, so wait for it to read the tree before the key.
       await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
-      // Closed tabs and top sites read history and sessions, so their cards arrive after the first ones: label only once the lists stopped growing.
-      await poll_until("the card count to settle", async () => { const before = await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`); await new Promise((done) => setTimeout(done, 400)); return before === (await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`)); });
+      // Closed tabs and top sites read history and sessions, so their lists arrive after the first cards: label only once both headings show.
+      await poll_until("the closed and top lists to render", async () => { const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".lists h4")].map((heading) => heading.textContent)`); return shown.includes("Recently closed") && shown.includes("Top sites"); }, { timeout_ms: 10000 });
       await press_keys("f");
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
       await poll_until("the hint labels to show", async () => (await labels()) > 0);
