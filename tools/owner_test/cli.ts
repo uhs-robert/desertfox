@@ -14,7 +14,7 @@ import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "./lock.ts";
 import { Refusal } from "./refusal.ts";
 import { probe_window, reload_window, type ProbeOutcome } from "./rdp_probe.ts";
 import { seed_user_js } from "./profile.ts";
-import { real_close_deps } from "./system_deps.ts";
+import { real_close_deps } from "./system.ts";
 import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "./state.ts";
 import { stamp_label, stamp_manifest, tail_lines, web_ext_args } from "./web_ext.ts";
 
