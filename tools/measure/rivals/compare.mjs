@@ -13,6 +13,7 @@ import { connect_rdp, evaluate_in_chrome, install_temporary_addon } from "../../
 import { stop_process } from "../../owner_test/close.ts";
 import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "../../owner_test/lock.ts";
 import { read_start_ticks } from "../../owner_test/process_guard.ts";
+import { tail_lines } from "../../owner_test/web_ext.ts";
 import { seed_user_js } from "../../owner_test/profile.ts";
 import { check_environment, firefox_pid_for, real_close_deps, sleep, start_unit } from "../../owner_test/system.ts";
 import { remove_policy_addon } from "./policy_addon.mjs";
@@ -145,7 +146,23 @@ export function judge_window(tool, addon, active) {
   return null;
 }
 
+const log_file_of = (dir, tool) => join(dir, tool, "firefox.log");
+
+// The log is the one diagnostic of a start that failed, and close deletes it, so the error carries its end.
+export function start_failure_message(tool, cause, log_file) {
+  const log_tail = existsSync(log_file) ? tail_lines(readFileSync(log_file, "utf8"), 20) : "";
+  return `${tool}: ${cause}\nlast lines of ${log_file}:\n${log_tail || "(no log)"}`;
+}
+
 async function start_window(dir, tool, urls, windows, addon) {
+  try {
+    await start_window_unchecked(dir, tool, urls, windows, addon);
+  } catch (error) {
+    throw new Error(start_failure_message(tool, error.message, log_file_of(dir, tool)));
+  }
+}
+
+async function start_window_unchecked(dir, tool, urls, windows, addon) {
   const profile = profile_dir_of(dir, tool);
   rmSync(profile, { recursive: true, force: true });
   mkdirSync(profile, { recursive: true, mode: 0o700 });
@@ -155,7 +172,7 @@ async function start_window(dir, tool, urls, windows, addon) {
   windows.push(record);
   write_state(dir, windows);
   const started = start_unit({
-    unit: unit_of(tool), command: "firefox", cwd: dir, log_file: join(dir, tool, "firefox.log"), who: "compare",
+    unit: unit_of(tool), command: "firefox", cwd: dir, log_file: log_file_of(dir, tool), who: "compare",
     args: ["-no-remote", "-profile", profile, "-start-debugger-server", String(port), name_page(tool), ...urls],
   });
   record.pid = started.pid;
@@ -163,7 +180,7 @@ async function start_window(dir, tool, urls, windows, addon) {
   write_state(dir, windows);
   let rdp;
   for (let i = 0; i < 160 && !rdp; i++) { try { rdp = await connect_rdp(port); } catch { await sleep(250); } }
-  if (!rdp) throw new Error(`${tool}: no debugger connection`);
+  if (!rdp) throw new Error("no debugger connection");
   // The unit may run a wrapper first, so the pid is read again from the profile.
   record.pid = firefox_pid_for(profile) ?? record.pid;
   record.start_ticks = read_start_ticks(record.pid) ?? 0;

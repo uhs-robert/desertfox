@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { close_window, close_windows, COMPARE_TOOLS, judge_window, owns_profile, parse_open_args, pick_close_targets, profile_dir_of, prune_dead_windows, read_state, state_file_of, tools_to_open, unit_of, write_state } from "../tools/measure/rivals/compare.mjs";
+import { close_window, close_windows, COMPARE_TOOLS, judge_window, owns_profile, parse_open_args, pick_close_targets, profile_dir_of, start_failure_message, prune_dead_windows, read_state, state_file_of, tools_to_open, unit_of, write_state } from "../tools/measure/rivals/compare.mjs";
 
 const window_of = (dir: string, tool: string, pid: number, start_ticks: number) => ({ tool, pid, start_ticks, port: 40000 + pid, profile: profile_dir_of(dir, tool) });
 
@@ -185,4 +185,20 @@ test("--tool picks one window, no flag picks all, and an unknown tool is refused
   assert.deepEqual(parse_open_args(["https://a.test"]), { urls: ["https://a.test"], wanted: COMPARE_TOOLS });
   assert.throws(() => parse_open_args(["--tool", "firefox"]), /--tool takes one of/);
   assert.deepEqual(tools_to_open(["vimium"], [window_of("/c", "vimium", 1, 1)]), []);
+});
+
+test("a failed start names the tool and carries the last 20 lines of its log", () => {
+  const dir = mkdtempSync(join(tmpdir(), "compare-log-"));
+  try {
+    const log = join(dir, "firefox.log");
+    writeFileSync(log, Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n") + "\n");
+    const message = start_failure_message("tridactyl", "no debugger connection", log);
+    assert.match(message, /^tridactyl: no debugger connection/);
+    assert.match(message, /line 30$/);
+    assert.match(message, /line 11\n/);
+    assert.doesNotMatch(message, /line 10\n/);
+    assert.match(start_failure_message("vimium", "x", join(dir, "missing.log")), /\(no log\)/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
