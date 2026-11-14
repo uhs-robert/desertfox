@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, cell_of, describe_mode_on_load, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, cell_of, describe_mode_after_leave, describe_mode_on_load, FRAME_CHECKS, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -111,7 +111,7 @@ test("a text field, a select and an editable take typing, and a button, a checkb
 
 test("the focus is judged by the innermost document, so a frame whose own focus left its field does not take typing", () => {
   const frame_field = focus_of([{ tag: "iframe", id: "comments" }, { tag: "div", id: "editor", editable: true }]);
-  assert.deepEqual(frame_field, { readable: true, path: "iframe#comments > div#editor", takes_typing: true });
+  assert.deepEqual(frame_field, { readable: true, path: "iframe#comments > div#editor", takes_typing: true, depth: 2 });
   // A tool that blurs the field inside the frame leaves the focus on the frame's body.
   assert.equal(focus_of([{ tag: "iframe", id: "comments" }, { tag: "body" }]).takes_typing, false);
   // An ad frame with no field is not a field.
@@ -212,4 +212,37 @@ test("every site has a unique name and one address, and every tool binds the gen
   assert.equal(new Set(names).size, names.length);
   for (const site of SITES) assert.ok(Boolean(site.url) !== Boolean(site.path), site.name);
   for (const keys of Object.values(TOOL_KEYS) as { scroll_down: string; hint: string }[]) assert.ok(keys.scroll_down && keys.hint);
+});
+
+test("frame mode is read from the badge, and recorded as information after the leave step", () => {
+  assert.equal(is_frame_mode("FRAME"), true);
+  assert.equal(is_frame_mode("NORMAL"), false);
+  assert.equal(is_frame_mode(null), false);
+  const read = describe_mode_after_leave({ focus: in_frame_body, badge_label: "FRAME" });
+  assert.equal(read.status, "info");
+  assert.match(read.reason, /mode frame .*frame mode, the site focused a frame/);
+  assert.doesNotMatch(describe_mode_after_leave({ focus: on_page, badge_label: "NORMAL" }).reason, /frame mode/);
+  assert.deepEqual(FRAME_CHECKS, ["frame_hints", "frame_activate", "frame_leave"]);
+});
+
+test("frame hints pass only for labels inside the frame, not on the top page", () => {
+  assert.equal(judge_frame_hints({ frame_labels: 3, top_labels: 0 }).status, "pass");
+  const top_only = judge_frame_hints({ frame_labels: 0, top_labels: 12 });
+  assert.equal(top_only.status, "fail");
+  assert.match(top_only.reason, /12 on the top page/);
+});
+
+test("a frame control reacted when the frame saw a click or focus, or the frame went away", () => {
+  assert.equal(judge_frame_activation({ reply: { event: "click", tag: "button" }, frame_gone: false }).status, "pass");
+  assert.equal(judge_frame_activation({ reply: null, frame_gone: true }).status, "pass");
+  assert.equal(judge_frame_activation({ reply: { event: null, tag: null }, frame_gone: false }).status, "fail");
+  assert.equal(judge_frame_activation({ reply: null, frame_gone: false }).status, "fail");
+});
+
+test("gF leaves the frame when the badge stops reading FRAME and the focus is on the top page", () => {
+  assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: on_page }).status, "pass");
+  assert.equal(judge_frame_leave({ mode_after: "FRAME", focus_after: in_frame_body }).status, "fail");
+  // The badge alone is not enough: the focus must also be out of the frame.
+  assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: in_frame_body }).status, "fail");
+  assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: focus_of(null) }).status, "unknown");
 });
