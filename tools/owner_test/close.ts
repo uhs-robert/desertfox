@@ -11,29 +11,38 @@ export type CloseDeps = {
   remove_profile: (profile: string) => void;
   remove_window_files: (log: string, window_dir: string) => void;
   grace_ms?: number;
+  // How long to wait for the process to be gone after SIGKILL.
+  kill_wait_ms?: number;
 };
 
 export type CloseResult = { lines: string[]; closed: boolean };
 
 const POLL_MS = 100;
 
-// SIGTERM, wait, SIGKILL, and re-read the start ticks before each signal, so a pid recycled in between is never hit.
-async function stop_process(label: string, pid: number, start_ticks: number, deps: CloseDeps, lines: string[]): Promise<void> {
+// SIGTERM, wait, SIGKILL, and re-read the start ticks before each signal, so a pid recycled in between is never hit. Returns false when the process still runs after SIGKILL and a bounded wait: the caller then keeps the profile and state.
+async function stop_process(label: string, pid: number, start_ticks: number, deps: CloseDeps, lines: string[]): Promise<boolean> {
   const still_ours = () => start_ticks > 0 && deps.read_start_ticks(pid) === start_ticks;
-  if (pid <= 1 || start_ticks <= 0) return void lines.push(`${label}: never started`);
+  const wait_until_gone = async (limit_ms: number) => {
+    for (let waited = 0; waited < limit_ms && still_ours(); waited += POLL_MS) await deps.sleep(POLL_MS);
+  };
+  if (pid <= 1 || start_ticks <= 0) {
+    lines.push(`${label}: never started`);
+    return true;
+  }
   if (!still_ours()) {
     lines.push(deps.read_start_ticks(pid) === null ? `${label}: already gone` : `${label}: pid ${pid} now belongs to another process, left alone`);
-    return;
+    return true;
   }
   deps.signal(pid, "SIGTERM");
-  const grace_ms = deps.grace_ms ?? 5000;
-  for (let waited = 0; waited < grace_ms && still_ours(); waited += POLL_MS) await deps.sleep(POLL_MS);
-  if (still_ours()) {
-    deps.signal(pid, "SIGKILL");
-    lines.push(`${label}: killed`);
-  } else {
+  await wait_until_gone(deps.grace_ms ?? 5000);
+  if (!still_ours()) {
     lines.push(`${label}: stopped`);
+    return true;
   }
+  deps.signal(pid, "SIGKILL");
+  await wait_until_gone(deps.kill_wait_ms ?? 3000);
+  lines.push(still_ours() ? `${label}: still running after SIGKILL` : `${label}: killed`);
+  return !still_ours();
 }
 
 // The profile a state may name is the one the caller's worktree maps to, below the owner-test cache root. A bad or foreign state file therefore deletes nothing. The worktree and unit come from the caller's paths, never from the file.
@@ -53,8 +62,12 @@ export async function close_window(paths: WindowPaths, deps: CloseDeps): Promise
     return { lines: [`state file was unreadable (${read.reason}) and is removed; no process was signalled and no folder was deleted`], closed: false };
   }
   const state = read.state;
-  await stop_process("web-ext", state.web_ext_pid, state.web_ext_start_ticks, deps, lines);
-  await stop_process("firefox", state.firefox_pid, state.firefox_start_ticks, deps, lines);
+  const web_ext_gone = await stop_process("web-ext", state.web_ext_pid, state.web_ext_start_ticks, deps, lines);
+  const firefox_gone = await stop_process("firefox", state.firefox_pid, state.firefox_start_ticks, deps, lines);
+  if (!web_ext_gone || !firefox_gone) {
+    lines.push("close is incomplete: a process still runs, so the profile and state are kept. Run close again.");
+    return { lines, closed: false };
+  }
   const profile = own_profile(state, paths);
   if (profile === null) {
     lines.push(`profile: ${state.profile} is not this worktree's profile under the owner-test cache, left alone`);

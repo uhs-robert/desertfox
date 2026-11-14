@@ -10,7 +10,8 @@ import { close_window, type CloseDeps } from "./close.ts";
 import { check_hint } from "./hints.ts";
 import { canonical_worktree, default_roots, unit_name, window_paths, type WindowPaths } from "./paths.ts";
 import { is_same_process, parse_debug_port, read_start_ticks } from "./process_guard.ts";
-import { LockBusy, with_lock } from "./lock.ts";
+import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "./lock.ts";
+import { Refusal } from "./refusal.ts";
 import { probe_window, reload_window, type ProbeOutcome } from "./rdp_probe.ts";
 import { seed_user_js } from "./profile.ts";
 import { read_state, write_state, type WindowState } from "./state.ts";
@@ -19,8 +20,6 @@ import { stamp_label, stamp_manifest, tail_lines, web_ext_args } from "./web_ext
 const MIN_FREE_BYTES = 2 * 1024 ** 3;
 const START_TIMEOUT_MS = 90_000;
 const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
-
-class Refusal extends Error {}
 
 function fail(message: string): never {
   throw new Refusal(message);
@@ -236,16 +235,31 @@ const [action = "open", worktree_arg = ".", ...raw_hints] = positionals;
 const hints = raw_hints.filter((hint) => hint.trim() !== "");
 const roots = default_roots(process.env, homedir());
 
+// open, reload and close run one at a time per worktree: the cli runs itself again under flock(1), which the kernel releases when that run ends.
+function rerun_under_lock(lock_file: string): never {
+  const run = spawnSync("flock", flock_argv(lock_file, [process.execPath, ...process.execArgv, ...process.argv.slice(1)]), {
+    stdio: "inherit",
+    env: { ...process.env, [LOCK_HELD_ENV]: "1" },
+  });
+  if (run.status === LOCK_BUSY_EXIT) fail("another owner-test call on this worktree is still running");
+  if (run.error) fail(`could not run flock: ${run.error.message}`);
+  process.exit(run.status ?? 1);
+}
+
 try {
   const worktree = existsSync(worktree_arg) ? canonical_worktree(worktree_arg) : fail(`${worktree_arg} does not exist`);
   const paths = window_paths(worktree, roots);
-  if (action === "open") await with_lock(paths.lock_file, () => open(worktree, paths, hints));
-  else if (action === "reload") await with_lock(paths.lock_file, () => reload(worktree, paths));
+  const locked = action === "open" || action === "reload" || action === "close";
+  if (locked && process.env[LOCK_HELD_ENV] !== "1") rerun_under_lock(paths.lock_file);
+  if (action === "open") await open(worktree, paths, hints);
+  else if (action === "reload") await reload(worktree, paths);
   else if (action === "status") await status(paths);
-  else if (action === "close") await with_lock(paths.lock_file, () => close(paths));
+  else if (action === "close") await close(paths);
   else fail(`unknown action ${action}. Use open, reload, status or close.`);
 } catch (error) {
-  if (!(error instanceof Refusal) && !(error instanceof LockBusy)) throw error;
-  console.error(`owner-test: ${(error as Error).message}`);
+  if (!(error instanceof Refusal)) throw error;
+  console.error(`owner-test: ${error.message}`);
   process.exit(1);
 }
+// A debugger socket that never connected must not keep the process alive.
+process.exit(process.exitCode ?? 0);
