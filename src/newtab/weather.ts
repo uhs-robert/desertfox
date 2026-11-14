@@ -1,6 +1,7 @@
 // The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off unless `newtab_weather` is true. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
+import { draw_weather_icon } from "./weather_icon.ts";
 import { browser_net_env, fetch_text, load_cached, peek_cached, type NetEnv } from "./net_widget.ts";
 
 export type WeatherSettings = Pick<Settings, "newtab_weather" | "newtab_weather_city" | "newtab_weather_units">;
@@ -11,7 +12,8 @@ export const WEATHER_TTL_MS = 30 * 60_000;
 export const WEATHER_MAX_AGE_MS = 6 * 3_600_000;
 export const GEOLOCATION_TIMEOUT_MS = 5000;
 
-export type Weather = { temperature: number; code: number; place: string; units: "metric" | "imperial" };
+// `rain_chance` is the percent for the current hour, and absent when Open-Meteo gives none.
+export type Weather = { temperature: number; feels_like: number; humidity: number; rain_chance?: number; code: number; place: string; units: "metric" | "imperial" };
 export type WeatherView = { kind: "weather"; weather: Weather } | { kind: "ask_location" } | { kind: "clear_reading" };
 
 export type WeatherDeps = {
@@ -27,7 +29,7 @@ export type WeatherDeps = {
 export const round_coordinate = (degrees: number): number => Math.round(degrees * 100) / 100;
 
 export function forecast_url(latitude: number, longitude: number, units: "metric" | "imperial"): string {
-  const query = new URLSearchParams({ latitude: String(round_coordinate(latitude)), longitude: String(round_coordinate(longitude)), current: "temperature_2m,weather_code", temperature_unit: units === "imperial" ? "fahrenheit" : "celsius" });
+  const query = new URLSearchParams({ latitude: String(round_coordinate(latitude)), longitude: String(round_coordinate(longitude)), current: "temperature_2m,weather_code,apparent_temperature,relative_humidity_2m", hourly: "precipitation_probability", forecast_hours: "1", temperature_unit: units === "imperial" ? "fahrenheit" : "celsius" });
   return `https://api.open-meteo.com/v1/forecast?${query}`;
 }
 
@@ -43,10 +45,13 @@ const parse_json = (text: string): unknown => {
   }
 };
 
-export function parse_forecast(text: string): { temperature: number; code: number } | undefined {
-  const current = (parse_json(text) as { current?: { temperature_2m?: unknown; weather_code?: unknown } } | undefined)?.current;
-  if (typeof current?.temperature_2m !== "number" || typeof current.weather_code !== "number") return undefined;
-  return { temperature: current.temperature_2m, code: current.weather_code };
+export function parse_forecast(text: string): Pick<Weather, "temperature" | "feels_like" | "humidity" | "rain_chance" | "code"> | undefined {
+  const parsed = parse_json(text) as { current?: Record<string, unknown>; hourly?: { precipitation_probability?: unknown } } | undefined;
+  const { temperature_2m, apparent_temperature, relative_humidity_2m, weather_code } = parsed?.current ?? {};
+  if (typeof temperature_2m !== "number" || typeof apparent_temperature !== "number" || typeof relative_humidity_2m !== "number" || typeof weather_code !== "number") return undefined;
+  const hours = parsed?.hourly?.precipitation_probability;
+  const chance = Array.isArray(hours) ? (hours as unknown[])[0] : undefined;
+  return { temperature: temperature_2m, feels_like: apparent_temperature, humidity: relative_humidity_2m, ...(typeof chance === "number" ? { rain_chance: chance } : {}), code: weather_code };
 }
 
 export function parse_geocode(text: string): { latitude: number; longitude: number; place: string } | undefined {
@@ -72,7 +77,7 @@ export function describe_code(code: number): string {
 
 const is_weather = (stored: unknown): stored is Weather => {
   const value = stored as Partial<Weather> | undefined;
-  return typeof value?.temperature === "number" && typeof value.code === "number" && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
+  return typeof value?.temperature === "number" && typeof value.feels_like === "number" && typeof value.humidity === "number" && (value.rain_chance === undefined || typeof value.rain_chance === "number") && typeof value.code === "number" && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
 };
 
 type Where = { latitude: number; longitude: number; place: string };
@@ -158,18 +163,34 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
     slot.append(ask);
     return;
   }
-  const { temperature, code, place, units } = view.weather;
+  const { temperature, feels_like, humidity, rain_chance, code, place } = view.weather;
+  const main = document.createElement("div");
+  main.className = "weather-main";
   const degrees = document.createElement("span");
   degrees.className = "weather-temp";
-  degrees.textContent = `${Math.round(temperature)}°${units === "imperial" ? "F" : "C"}`;
-  const text = document.createElement("span");
-  text.className = "weather-text";
-  text.textContent = place ? `${describe_code(code)}, ${place}` : describe_code(code);
-  const reading = document.createElement("span");
+  degrees.textContent = `${Math.round(temperature)}\u00b0`;
+  main.append(draw_weather_icon(code), degrees);
+  const reading = document.createElement("div");
   reading.className = "weather-reading";
-  reading.append(degrees, text);
+  reading.title = place ? `${describe_code(code)}, ${place}` : describe_code(code);
+  reading.append(main, stat(`${Math.round(feels_like)}\u00b0`, "Feels like"), stat(`${Math.round(humidity)}%`, "Humidity"));
+  if (rain_chance !== undefined) reading.append(stat(`${Math.round(rain_chance)}%`, "Rain chance"));
   slot.querySelector(".weather-reading")?.remove();
   slot.prepend(reading);
+}
+
+// A value over its small label.
+function stat(value: string, label: string): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "weather-stat";
+  const big = document.createElement("span");
+  big.className = "weather-value";
+  big.textContent = value;
+  const small = document.createElement("span");
+  small.className = "weather-label";
+  small.textContent = label;
+  box.append(big, small);
+  return box;
 }
 
 export const browser_weather_deps = (): WeatherDeps => ({

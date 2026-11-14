@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NetEnv } from "../src/newtab/net_widget.ts";
+import { icon_kind } from "../src/newtab/weather_icon.ts";
 import { describe_code, forecast_url, geocode_url, parse_forecast, parse_geocode, round_coordinate, run_weather, start_weather, type WeatherDeps, type WeatherSettings, type WeatherView } from "../src/newtab/weather.ts";
 
-const FORECAST = JSON.stringify({ current: { temperature_2m: 12.4, weather_code: 3 } });
+const FORECAST = JSON.stringify({ current: { temperature_2m: 12.4, apparent_temperature: 10.1, relative_humidity_2m: 44, weather_code: 3 }, hourly: { precipitation_probability: [30] } });
 const GEOCODE = JSON.stringify({ results: [{ name: "Oslo", latitude: 59.91273, longitude: 10.74609 }] });
 
 function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; is_private?: boolean; fail_fetch?: boolean } = {}) {
@@ -65,7 +66,7 @@ test("a granted permission sends rounded coordinates and no city", async () => {
   assert.equal(urls.length, 1);
   assert.match(urls[0]!, /latitude=59\.91&longitude=10\.75/);
   assert.doesNotMatch(urls[0]!, /59\.912|Oslo/);
-  assert.deepEqual(views, [{ kind: "weather", weather: { temperature: 12.4, code: 3, place: "", units: "metric" } }]);
+  assert.deepEqual(views, [{ kind: "weather", weather: { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, code: 3, place: "", units: "metric" } }]);
 });
 
 test("the city is the fallback: it is geocoded, then the rounded coordinates are sent", async () => {
@@ -75,7 +76,7 @@ test("the city is the fallback: it is geocoded, then the rounded coordinates are
   assert.match(urls[0]!, /^https:\/\/geocoding-api\.open-meteo\.com\/.*name=Oslo&/);
   assert.match(urls[1]!, /^https:\/\/api\.open-meteo\.com\/.*latitude=59\.91&longitude=10\.75.*temperature_unit=fahrenheit/);
   assert.equal(calls.position_reads, 0);
-  assert.deepEqual(views, [{ kind: "ask_location" }, { kind: "weather", weather: { temperature: 12.4, code: 3, place: "Oslo", units: "imperial" } }]);
+  assert.deepEqual(views, [{ kind: "ask_location" }, { kind: "weather", weather: { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, code: 3, place: "Oslo", units: "imperial" } }]);
 });
 
 test("a failed fetch draws nothing and does not throw", async () => {
@@ -132,6 +133,12 @@ test("the helpers: rounding, urls, parsing and descriptions", () => {
   assert.equal(parse_geocode("{}"), undefined);
   assert.equal(parse_geocode("not json"), undefined);
   assert.equal(parse_forecast('{"current":{"temperature_2m":"hot"}}'), undefined);
+  assert.equal(parse_forecast('{"current":{"temperature_2m":1,"weather_code":0}}'), undefined, "feels-like and humidity are required");
+  assert.match(forecast_url(1, 2, "metric"), /current=temperature_2m%2Cweather_code%2Capparent_temperature%2Crelative_humidity_2m&hourly=precipitation_probability&forecast_hours=1/);
+  assert.equal(icon_kind(0), "clear");
+  assert.equal(icon_kind(61), "rain");
+  assert.equal(icon_kind(73), "snow");
+  assert.equal(icon_kind(95), "storm");
   assert.equal(describe_code(0), "Clear");
   assert.equal(describe_code(63), "Rain");
   assert.equal(describe_code(96), "Thunderstorm");
@@ -232,4 +239,19 @@ test("a stopped run sends no forecast request after its geocoding answer arrives
     if (had_document) Object.assign(globalThis, { document: earlier_document });
     else delete (globalThis as { document?: unknown }).document;
   }
+});
+
+test("the rain chance is the first hour, and a missing or odd value leaves it out", () => {
+  const base = { current: { temperature_2m: 1, apparent_temperature: 0, relative_humidity_2m: 50, weather_code: 0 } };
+  assert.equal(parse_forecast(JSON.stringify({ ...base, hourly: { precipitation_probability: [70, 10] } }))?.rain_chance, 70);
+  assert.equal("rain_chance" in parse_forecast(JSON.stringify(base))!, false);
+  assert.equal("rain_chance" in parse_forecast(JSON.stringify({ ...base, hourly: { precipitation_probability: [null] } }))!, false);
+});
+
+test("a stored reading from before feels-like and humidity is not used", async () => {
+  const { deps, urls } = fake_deps({ allowed: true });
+  await deps.net.storage.set({ newtab_net_cache_weather: { key: "geo:59.91,10.75|metric", at: 5_000_000, value: { temperature: 1, code: 0, place: "", units: "metric" } } });
+  const views = await collect(on(), deps);
+  assert.equal(urls.length, 1, "the old shape forced a fresh request");
+  assert.deepEqual(views.map((view) => view.kind), ["weather"]);
 });
