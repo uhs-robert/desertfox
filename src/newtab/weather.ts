@@ -12,7 +12,7 @@ export const WEATHER_MAX_AGE_MS = 6 * 3_600_000;
 export const GEOLOCATION_TIMEOUT_MS = 5000;
 
 export type Weather = { temperature: number; code: number; place: string; units: "metric" | "imperial" };
-export type WeatherView = { kind: "weather"; weather: Weather } | { kind: "ask_location" };
+export type WeatherView = { kind: "weather"; weather: Weather } | { kind: "ask_location" } | { kind: "clear_reading" };
 
 export type WeatherDeps = {
   page_is_private: () => Promise<boolean>;
@@ -123,7 +123,11 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
     if (position) {
       const [latitude, longitude] = [round_coordinate(position.latitude), round_coordinate(position.longitude)];
       // The rounded coordinates are in the key, so after travel the old place never counts as current.
-      return load_cached<Weather>({ name: "weather", key: `${GEO_KEY_PREFIX}${latitude},${longitude}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce: () => forecast_at({ latitude, longitude, place: "" }, units, deps.net) }, deps.net, show_weather);
+      const spec = { name: "weather", key: `${GEO_KEY_PREFIX}${latitude},${longitude}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce: () => forecast_at({ latitude, longitude, place: "" }, units, deps.net) };
+      const known = await load_cached<Weather>(spec, deps.net, show_weather);
+      // The preview was made for other coordinates and the new place has no reading, so the card must not show the old place as local weather.
+      if (earlier && !known) show({ kind: "clear_reading" });
+      return;
     }
   }
   if (city) {
@@ -132,13 +136,18 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
       return where && forecast_at(where, units, deps.net);
     };
     const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce };
-    return load_cached<Weather>(spec, deps.net, show_weather);
+    await load_cached<Weather>(spec, deps.net, show_weather);
+    return;
   }
   // A granted permission with no position and no city is a dead end: the card stays empty and offers nothing to click.
 }
 
 // The reading and the permission button are separate children, so a city reading and the button show together and a new reading never removes the button.
 export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () => void): void {
+  if (view.kind === "clear_reading") {
+    slot.querySelector(".weather-reading")?.remove();
+    return;
+  }
   if (view.kind === "ask_location") {
     if (slot.querySelector(".weather-ask")) return;
     const ask = document.createElement("button");
@@ -171,11 +180,37 @@ export const browser_weather_deps = (): WeatherDeps => ({
   net: browser_net_env(),
 });
 
-// Fills `slot` and keeps the page free: nothing here is awaited by the draw, and a failure leaves the slot empty. A click on the permission button asks first, then runs the card again.
-export function start_weather(slot: HTMLElement, settings: WeatherSettings, deps: WeatherDeps = browser_weather_deps()): Promise<void> {
-  const show = (view: WeatherView) =>
-    draw_weather(slot, view, () => {
-      void refused_as(deps.request_geolocation_permission(), false).then((granted) => (granted ? (slot.replaceChildren(), start_weather(slot, settings, deps)) : undefined));
+// What a stopped run must not do: fetch, write the cache or draw. A page redraw stops its run, and so does a grant that starts a new one, so a late answer never overwrites a newer card or sends a request the owner has turned off.
+function guarded_by(is_live: () => boolean, deps: WeatherDeps): WeatherDeps {
+  const { net } = deps;
+  const stopped_answer = () => new Response(null, { status: 503 });
+  return {
+    ...deps,
+    net: { ...net, fetch: (input, init) => (is_live() ? net.fetch(input, init) : Promise.resolve(stopped_answer())), storage: { get: (key) => net.storage.get(key), set: async (items) => (is_live() ? net.storage.set(items) : undefined) } },
+  };
+}
+
+// Fills `slot` and keeps the page free: nothing here is awaited by the draw, and a failure leaves the slot empty. A click on the permission button asks first, then stops this run and runs the card again. `stop` ends the run, and a run the click started.
+export function start_weather(slot: HTMLElement, settings: WeatherSettings, deps: WeatherDeps = browser_weather_deps()): { finished: Promise<void>; stop: () => void } {
+  let live = true;
+  let restarted: { stop: () => void } | undefined;
+  const ask_for_location = () => {
+    void refused_as(deps.request_geolocation_permission(), false).then((granted) => {
+      if (!granted || !live) return;
+      live = false;
+      slot.replaceChildren();
+      restarted = start_weather(slot, settings, deps);
     });
-  return refused_as(run_weather(settings, deps, show), undefined) as Promise<void>;
+  };
+  const show = (view: WeatherView) => {
+    if (live) draw_weather(slot, view, ask_for_location);
+  };
+  const finished = refused_as(run_weather(settings, guarded_by(() => live, deps), show), undefined) as Promise<void>;
+  return {
+    finished,
+    stop: () => {
+      live = false;
+      restarted?.stop();
+    },
+  };
 }

@@ -150,7 +150,13 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
     const slot = document.createElement("div");
     slot.className = "weather";
     (next.page.querySelector(".time") ?? next.page).append(slot);
-    void start_weather(slot, settings);
+    const weather = start_weather(slot, settings);
+    const stop_ticker = next.stop_ticker;
+    // A redraw stops the weather run with the clock, so a pending request never outlives its page.
+    next.stop_ticker = () => {
+      stop_ticker();
+      weather.stop();
+    };
   }
   if (previous) {
     previous.stop_ticker();
