@@ -13,6 +13,8 @@
 
 <p align="center"><i>Desert the mouse, navigate the web with only your keyboard</i></p>
 
+<p align="center"><img src="./docs/images/demo.gif" width="800" alt="DesertFox in use: link hints, the which-key popup, the command line with completion, the tab finder and caret mode"/></p>
+
 ## 🦊 What it is
 
 DesertFox lets you use Firefox from the keyboard. Press `f` and a short label appears next to every link and button. Type a label to click it. Press `j` and `k` to scroll, and `:` to run any command by name, with completion.
