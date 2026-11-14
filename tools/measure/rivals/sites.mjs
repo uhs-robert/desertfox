@@ -54,6 +54,9 @@ export const step3_names = (site) => {
 // The no-extension tool runs only the control: its `scroll` row is the site's own movement input (see control_of). `passthrough` is information about the site's ArrowDown with the tool in normal mode.
 export const check_names_of = (site, tool) => (tool === "none" ? ["scroll"] : ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...step3_names(site)]);
 
+// focus: from focus_of, taken after the click into the work area. A tool row sends its leave key only when the click put the focus in a typing field, where the tool is in insert mode. A map or a canvas takes no leave key, so the tool is in normal mode already and keeps the focus the click gave.
+export const leave_key_after_click = (focus) => focus.takes_typing === true;
+
 // What the control pass sends: the site's own movement input, a wheel scroll where the site has no movement key.
 export const control_of = (site) => site.control ?? { keys: PASSTHROUGH_KEYS };
 
