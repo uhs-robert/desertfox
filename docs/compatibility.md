@@ -42,7 +42,7 @@ Sites behind a login are `pending H`: the rig cannot log in, so these sites are 
 | Wikipedia | ✅ R | No | ✅ R | ✅ R | ✅ R | |
 | GitHub | ✅ R | No | ✅ R | ✅ R | ✅ R | |
 | Hacker News | ✅ R | No | ✅ R | ✅ R | ✅ R | The rig does not score activation here: it lands on a link next to the story link. |
-| Reddit (logged out) | ✅ H, pending R | No | ✅ R H | ⚠️ R H | ✅ R | DesertFox dismisses the Google sign-in popup by keyboard, and its R part is being retested. Vimium C: no key reaches the popup, so it cannot be dismissed without the mouse. |
+| Reddit (logged out) | ✅ H, pending R | No | ✅ R H | ⚠️ R H | ⚠️ R H S | DesertFox dismisses the Google sign-in popup by keyboard, and its R part is being retested. Vimium C: no key reaches the popup, so it cannot be dismissed without the mouse. Tridactyl: while focus is in the sign-in popup, no Tridactyl key works, because it runs only in the top page. `Escape`, the popup's own key, closes it. Signing in needs the mouse. |
 | X (logged out) | pending R | No | ✅ R | ✅ R | ✅ R | Being retested. |
 | Google Maps | ✅ R | No | ✅ R | ✅ R | ⚠️ R | Tridactyl activation hit the wrong target. Scroll is not scored. |
 | Excalidraw | ✅ R | No | ✅ R | ✅ R | ✅ R | Scroll is not scored. |
@@ -69,3 +69,4 @@ These are code reads, not runs. The full text is in "Table rows from source" in 
 - Vimium has hint rules for Google Drive and the Docs file list and no per-site key rules. DesertFox ships one key integration, Google Sheets.
 - Vimium C has no per-site rule table.
 - Tridactyl treats `role=application` elements, which Google Sheets uses, as handling their own keys and stops capturing there. The rule is generic, with no `hjkl` and no clipboard keys.
+- Tridactyl 1.25.1's manifest sets no `all_frames`, so its script loads in the top page only and no key works while focus is in a frame.
