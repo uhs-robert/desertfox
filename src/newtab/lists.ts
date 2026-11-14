@@ -2,7 +2,7 @@
 import { is_web_url, type NewTabLink, type Settings } from "../shared/config.ts";
 import { bookmark_items, type ClosedSession, flatten_bookmarks, listed_tabs, type BookmarkNode, type TabLike } from "../background/complete_items.ts";
 import { refused_as } from "../shared/swallow.ts";
-import { make_favicon_cache, site_host } from "./icon_cache.ts";
+import { icon_field, make_favicon_cache, site_host } from "./icon_cache.ts";
 import { closed_rows, TOP_SITE_DAYS, top_site_rows, type Visit } from "./widgets.ts";
 
 // `icon_url` is a data: URL from the favicon cache, set only when the cache holds the site. Without it the card shows a letter tile. The page never takes an icon from a tab, so it loads no remote image.
@@ -10,7 +10,6 @@ export type ListRow = { label: string; url: string; host: string; icon_url?: str
 
 export type CachedIcons = ReadonlyMap<string, string>;
 
-const icon_field = (icon_url: string | undefined): { icon_url?: string } => (icon_url ? { icon_url } : {});
 export type ListSection = { title: string; rows: ListRow[] };
 
 export type ListSettings = Pick<Settings, "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_links">;

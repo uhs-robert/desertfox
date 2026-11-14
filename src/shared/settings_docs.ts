@@ -68,7 +68,7 @@ export const SETTING_DOCS: Record<SettingName, string> = {
   newtab_recent_tabs_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists your open tabs (newtab_recent_tabs).",
   newtab_closed_tabs: "On by default. The tab you closed last shows first. Clicking one brings it back. Tabs from private windows never show. Set how many show with newtab_closed_tabs_max.",
   newtab_closed_tabs_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists closed tabs (newtab_closed_tabs).",
-  newtab_top_sites: "On by default. Sites are ranked by visits in the last 90 days, one card per site. The page reads your history and sends nothing. Set how many show with newtab_top_sites_max.",
+  newtab_top_sites: "On by default. Sites are ranked by total visits to the pages you opened in the last 90 days, one card per site. The page reads your history and sends nothing. Set how many show with newtab_top_sites_max.",
   newtab_top_sites_max: "A whole number, `0` or more. The default is `8`. It applies only while the new tab page lists top sites (newtab_top_sites).",
   newtab_command_hint: "On by default. Shows \"press : for the command line\" on the new tab page. Click it to open the command line.",
   newtab_links: "Each link has a label, a web address that starts with http:// or https://, and an optional group. Links with the same group show together in one list. In a settings file, write each link as its own [[newtab_links]] table.",
