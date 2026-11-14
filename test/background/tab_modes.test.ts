@@ -468,3 +468,14 @@ test("the hand-back tells the top page only while the frame is still free: a cli
   await hand_back_parked_frame(() => Promise.reject(new Error("no receiver")), async () => void told.push("top for a gone frame"));
   assert.deepEqual(told, ["top"], "a frame that is gone is left alone");
 });
+
+test("a second report of the same focus, as a mode change sends before the blur, does not end the park", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, mode: "insert" });
+  assert.equal(await modes.parked_frame(4), CHILD, "the hand-back is still on its way");
+  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false, activated: false, in_field: false, cross_origin: true });
+  assert.equal(await modes.parked_frame(4), CHILD, "the blur alone ends nothing");
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal(await modes.parked_frame(4), undefined, "a focus after the blur does");
+});

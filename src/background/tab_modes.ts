@@ -15,7 +15,7 @@ const TOP_FRAME = 0;
 // `awaiting_commit` is set from the start of a load until its new page replaces the old one. See `forget_on_navigation`.
 // `parked` is the cross-origin child frame that took the focus on load and was handed back to the top page. `focused_once` holds every child frame that has had its first focus, parked or not: a frame is parked at that first focus only, so a frame that takes the focus back after a park, or a user's Tab into it, enters frame mode. A frame keeps its id through its own navigations, so a reloaded frame stays in `focused_once` until the top page navigates and the record goes.
 // `entering` marks a focus the extension is about to move into a frame (`;f`, a hint pick), so that frame's first focus is the user's own and is not parked. `frame_id` names the frame when the frame itself asked, and is absent when the top page asked, because it cannot read the id of a frame of another site. Only a first focus spends the mark.
-export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; focused_once?: number[]; entering?: { ms: number; frame_id?: number } };
+export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; parked_blurred?: true; focused_once?: number[]; entering?: { ms: number; frame_id?: number } };
 
 // `ModeChanged` in src/shared/messages.ts, with the frame that sent it. `cross_origin` is the background's own reading of the frame's address against the tab's.
 export type ModeReport = { frame_id: number; mode: Mode; focus: boolean; activated?: boolean; in_field?: boolean; cross_origin?: boolean; now?: number };
@@ -68,11 +68,15 @@ export function apply_mode_report(record: TabModeRecord, report: ModeReport): Ta
     // Only a frame's first focus spends the mark: a later report of a frame already focused says nothing about the entry.
     if (!record.focused_once?.includes(frame_id) && entry_covers(record, report)) delete next.entering;
     next.focused_once = [...new Set([...(record.focused_once ?? []), frame_id])];
-    // Any focus of the parked frame ends the park: the user clicked in, a hint moved the focus in, or Firefox handed it back.
-    if (record.parked === frame_id) delete next.parked;
-  }
+    // A focus of the parked frame ends the park when the user is in it (a click or key) or the frame was blurred since the park: a hint moved the focus in, or Firefox handed it back. A report of the same focus that comes before the blur (a mode change) ends nothing.
+    if (record.parked === frame_id && (report.activated === true || record.parked_blurred)) {
+      delete next.parked;
+      delete next.parked_blurred;
+    }
+  } else if (frame_id !== TOP_FRAME && record.parked === frame_id) next.parked_blurred = true;
   if (parked_now) {
     next.parked = frame_id;
+    delete next.parked_blurred;
     return next;
   }
   if (frame_id === TOP_FRAME) {
@@ -127,7 +131,7 @@ export function create_tab_modes(storage: ModeStorage) {
     // The parked frame is gone or refused a script. Resolves with the mode the top page shows for a child, or undefined when the record no longer named the frame and the top page needs no word.
     unpark: (tab_id: number, frame_id: number): Promise<{ child_mode: Mode | undefined } | undefined> =>
       in_turn(async () => {
-        const { parked, ...rest } = await read(tab_id);
+        const { parked, parked_blurred, ...rest } = await read(tab_id);
         if (parked !== frame_id) return undefined;
         await storage.set({ [key_of(tab_id)]: rest });
         return { child_mode: shown_child_mode(rest) };
