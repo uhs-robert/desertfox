@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_tab_modes, shortcut_allowed, read_insert_hold, write_insert_hold } from "../../src/background/tab_modes.ts";
+import { apply_mode_report, create_tab_modes, ENTRY_WINDOW_MS, is_cross_origin, shortcut_allowed, read_insert_hold, write_insert_hold } from "../../src/background/tab_modes.ts";
 
 function fake_storage() {
   const data: Record<string, unknown> = {};
@@ -108,12 +108,12 @@ test("a focused child frame that reports without the focus gives the tab back to
 test("ignore mode in the top frame beats a focused child frame, until the top frame leaves it", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
-  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), { child_mode: undefined, tell_top: false });
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), { child_mode: undefined, tell_top: false, park: false, parked: false });
   assert.equal(await modes.recall(4), "ignore", "a field in a child frame hid ignore mode");
   // Leaving ignore mode hands the tab to the frame that still holds the focus.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true, park: false, parked: false });
   assert.equal(await modes.recall(4), "insert");
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), { child_mode: undefined, tell_top: true });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), { child_mode: undefined, tell_top: true, park: false, parked: false });
   assert.equal(await modes.recall(4), "ignore");
 });
 
@@ -172,7 +172,7 @@ test("a report that changes nothing writes nothing, and the top frame hears the 
   storage.set = (items) => (writes++, set(items));
   const modes = create_tab_modes(storage);
   // A top frame shown again from the back-forward cache still draws the child mode it had, so it hears that no child frame holds the focus.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: true }), { child_mode: undefined, tell_top: true });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: true }), { child_mode: undefined, tell_top: true, park: false, parked: false });
   assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).tell_top, true);
   assert.equal(writes, 2);
   // The same reports again, as each focus and pageshow sends them.
@@ -180,9 +180,9 @@ test("a report that changes nothing writes nothing, and the top frame hears the 
   assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, mode: "normal", focus: false })).tell_top, false);
   assert.equal(writes, 2);
   // A top frame that just started has not heard of the focused child frame.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true, park: false, parked: false });
   assert.equal(writes, 2);
-  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), { child_mode: undefined, tell_top: true });
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), { child_mode: undefined, tell_top: true, park: false, parked: false });
 });
 
 // Navigation clearing the stored mode
@@ -287,7 +287,7 @@ test("a focused child frame that claims during a load keeps its claim through th
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
   await modes.forget_on_navigation(4, { status: "complete" });
   assert.equal(await modes.recall(4), "insert", "the end of the load dropped the focused child frame");
-  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "normal", focused_child: { frame_id: CHILD, mode: "insert" } } });
+  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "normal", focused_once: [CHILD], focused_child: { frame_id: CHILD, mode: "insert" } } });
 });
 
 // Known gap, not a fix: this pins what the record does if Firefox sends the load start of a restore after the pageshow reports. Whether it does is unmeasured (see #414). The record forgets the child, and the top frame hears nothing until its own next report.
@@ -300,5 +300,146 @@ test("a load start after the pageshow reports forgets the child claim, and only 
   await modes.forget_on_navigation(4, { status: "loading" });
   assert.equal(await modes.recall(4), "normal", "the record kept the child claim past the load start");
   // The top frame still draws the child mode it had, so a top report must reach it even though the record changes nothing.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: undefined, tell_top: true });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: undefined, tell_top: true, park: false, parked: false });
+});
+
+// The report of a cross-origin child frame that took the focus on load: no click or key, and not on a field.
+const LOAD_FOCUS = { mode: "normal", focus: true, activated: false, in_field: false, cross_origin: true } as const;
+
+test("a cross-origin frame whose first focus is not activated and not on a field is parked, and shows no frame mode", async () => {
+  const modes = create_tab_modes(fake_storage());
+  const answer = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal(answer.park, true);
+  assert.equal(answer.parked, true);
+  assert.equal(answer.child_mode, undefined);
+  assert.equal(answer.tell_top, true, "the top page learns of the park, which its hints need");
+  assert.equal(await modes.recall(4), "normal");
+  assert.equal(await modes.parked_frame(4), CHILD);
+});
+
+test("a frame is not parked when it is activated, on a field, same-origin, or the top frame", async () => {
+  for (const change of [{ activated: true }, { in_field: true }, { cross_origin: false }]) {
+    const modes = create_tab_modes(fake_storage());
+    const answer = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, ...change });
+    assert.equal(answer.park, false, JSON.stringify(change));
+    assert.equal(await modes.parked_frame(4), undefined);
+    assert.equal(answer.child_mode, "normal", "the frame keeps the keys as before");
+  }
+  const modes = create_tab_modes(fake_storage());
+  assert.equal((await modes.report(4, { frame_id: TOP, ...LOAD_FOCUS })).park, false);
+});
+
+test("a report without a focus claim never parks", async () => {
+  const modes = create_tab_modes(fake_storage());
+  assert.equal((await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, focus: false })).park, false);
+  assert.equal(await modes.parked_frame(4), undefined);
+});
+
+test("a frame is parked once: a second focus of the same frame, as Gecko's hand-back or a Tab, is not parked and enters frame mode", async () => {
+  const modes = create_tab_modes(fake_storage());
+  assert.equal((await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS })).park, true);
+  // The blur after the park.
+  await modes.report(4, { frame_id: CHILD, mode: "normal", focus: false, activated: false, in_field: false, cross_origin: true });
+  const back = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal(back.park, false, "no loop");
+  assert.equal(back.child_mode, "normal");
+  assert.equal(await modes.parked_frame(4), undefined, "the focus ends the park");
+  assert.equal((await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS })).park, false);
+});
+
+test("the park is per frame: another frame of the tab is parked at its own first focus", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, ...LOAD_FOCUS })).park, true);
+  assert.equal(await modes.parked_frame(4), OTHER_CHILD);
+});
+
+test("a user click that lands during the park ends it: the clicked frame holds the keys and is not parked again", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  const click = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, activated: true });
+  assert.equal(click.park, false);
+  assert.equal(click.child_mode, "normal");
+  assert.equal(await modes.parked_frame(4), undefined);
+  assert.equal(await modes.recall(4), "normal");
+});
+
+test("a frame that holds a field mode keeps its mode when it is not parked, and a parked frame's blur claims nothing", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true, activated: false, in_field: true, cross_origin: true });
+  assert.equal(await modes.recall(4), "insert");
+});
+
+test("the park and the focus record go with the page: a top page navigation drops them, so a new page parks its frame again", async () => {
+  const storage = fake_storage();
+  const modes = create_tab_modes(storage);
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  await modes.forget_on_navigation(4, { status: "loading" });
+  await modes.forget_on_navigation(4, { url: "http://example.test/next" });
+  assert.deepEqual(storage.data, {});
+  assert.equal(await modes.parked_frame(4), undefined);
+  assert.equal((await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS })).park, true);
+});
+
+test("closing the tab removes the park record, and a record of one tab never parks another", async () => {
+  const storage = fake_storage();
+  const modes = create_tab_modes(storage);
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal(await modes.parked_frame(5), undefined);
+  assert.equal((await modes.report(5, { frame_id: CHILD, ...LOAD_FOCUS })).park, true);
+  await modes.forget(4);
+  assert.equal(await modes.parked_frame(4), undefined);
+  assert.deepEqual(Object.keys(storage.data), ["desertfox_tab_mode_5"]);
+});
+
+test("unpark ends the record of a gone frame once, hands the top page its child mode, and ignores a frame the record does not name", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal(await modes.unpark(4, OTHER_CHILD), undefined);
+  assert.equal(await modes.parked_frame(4), CHILD);
+  assert.deepEqual(await modes.unpark(4, CHILD), { child_mode: undefined });
+  assert.equal(await modes.unpark(4, CHILD), undefined);
+  assert.equal(await modes.parked_frame(4), undefined);
+  // The frame was seen: a frame that comes back with the same id is not parked again.
+  assert.equal((await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS })).park, false);
+});
+
+test("a park and the frame's own report race in one turn: the reports apply in order and the record stays whole", async () => {
+  const modes = create_tab_modes(fake_storage());
+  const [first, second, top] = await Promise.all([
+    modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS }),
+    modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS, activated: true }),
+    modes.report(4, { frame_id: TOP, mode: "normal", focus: true }),
+  ]);
+  assert.equal(first.park, true);
+  assert.equal(second.park, false);
+  assert.equal(top.park, false);
+  assert.equal(await modes.parked_frame(4), undefined);
+});
+
+test("is_cross_origin compares http and https origins only", () => {
+  assert.equal(is_cross_origin("https://accounts.google.test/gsi", "https://www.reddit.test/"), true);
+  assert.equal(is_cross_origin("https://www.reddit.test/frame", "https://www.reddit.test/"), false);
+  assert.equal(is_cross_origin("http://localhost:1/x", "http://127.0.0.1:1/"), true);
+  assert.equal(is_cross_origin("about:blank", "https://www.reddit.test/"), false);
+  assert.equal(is_cross_origin(undefined, "https://www.reddit.test/"), false);
+  assert.equal(is_cross_origin("https://a.test/", undefined), false);
+});
+
+test("a frame the user is about to enter by a hint pick or ;f is not parked at that first focus, and the mark is used up by it", async () => {
+  const modes = create_tab_modes(fake_storage());
+  await modes.expect_entry(4);
+  const first = await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
+  assert.equal(first.park, false);
+  assert.equal(first.child_mode, "normal", "the frame keeps the keys");
+  // The mark is gone: a frame that loads and focuses itself later is parked.
+  assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, ...LOAD_FOCUS })).park, true);
+});
+
+test("an entry mark expires, so a load focus long after a pick is parked", () => {
+  const marked = { entered_ms: 1000 };
+  const report = { frame_id: CHILD, ...LOAD_FOCUS };
+  assert.equal(apply_mode_report(marked, { ...report, now: 1500 }).parked, undefined);
+  assert.equal(apply_mode_report(marked, { ...report, now: 1000 + ENTRY_WINDOW_MS + 1 }).parked, CHILD);
 });

@@ -33,6 +33,8 @@ import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 // Set in the top frame only, from the background, while a child frame holds focus.
 let focused_frame_mode: Mode | undefined;
+// A frame of another site was handed back to this page, so the hints label its targets too.
+let frame_parked = false;
 let recording: string | undefined;
 // A macro replay holds this page's keys. Escape then stops the replay.
 let replaying = false;
@@ -321,7 +323,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, frame_parked_: () => frame_parked });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);
@@ -340,9 +342,16 @@ function start(): void {
   // Every report says whether this frame holds the focus, so a focus event the frame missed heals on its next report.
   // A hidden input frame in normal mode then hands the focus to its parent. Every change into normal mode passes here, and so does a frame that gains the focus while in normal mode.
   // The hand-off waits a tick, because a report often runs inside a focus move that is not done. A focusout comes before the focus lands in a field of the parent, and blurring the frame there cancels the move. A window focus comes before a field focused from outside holds the focus.
+  // A frame with no click or key yet reports a task late, with the claim it had when the report was asked for: its window focus comes before the focus of its element, and the background parks a frame that is not on a field.
+  // One late report covers the several that one focus event starts, because the background reads a second claim as the frame taking the focus back from its park. The claim is not read late: the focus can slip away in that task, and a frame that held it at its focus event must still claim it.
+  let late_claim = false;
+  let late_pending = false;
   const report_mode = () => {
     setTimeout(hand_focus_to_parent);
-    void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus: holds_own_focus(document), step: media_by_step });
+    const send = (focus: boolean) => void send_to_background({ type: "mode_changed", mode: page_mode.get_mode_(), focus, step: media_by_step, activated: navigator.userActivation.hasBeenActive, in_field: is_editable_element(deepest_focused_element()) });
+    if (window === window.top || navigator.userActivation.hasBeenActive) return send(holds_own_focus(document));
+    late_claim = holds_own_focus(document);
+    if (!late_pending) (late_pending = true), setTimeout(() => ((late_pending = false), send(late_claim)));
   };
 
   wire_mode_reports(page_mode, (mode) => {
@@ -411,6 +420,7 @@ function start(): void {
       sync_mode_to_focus();
     } else if (message.type === "frame_mode") {
       focused_frame_mode = message.mode;
+      frame_parked = message.parked === true;
       // Only the top frame hears `frame_mode`. Its watch on the focused child frame lives in the ui bundle, loaded when a child first takes the focus.
       if (message.mode || bundles.has_handler_("ui.frame_watch")) void bundles.run_command_("ui.frame_watch", "ui", { on: !!message.mode }, "", false);
       refresh_mode_indicator();

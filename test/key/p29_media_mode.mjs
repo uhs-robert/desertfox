@@ -4,7 +4,7 @@
 
 export const areas = ["media", "keys", "hints"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
+export async function run_cases({ sleep, run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
   const indicator = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const media = (page_id, type, video, check = () => true) => (event) => event.page_id === page_id && event.type === `media_${type}` && event.video === video && check(event);
   const read_toast = () =>
@@ -41,6 +41,14 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     const mark = events.length;
     await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
     await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === page_id, `${page_id} to take the focus`);
+    // A first script focus into a frame of another site parks it (src/background/tab_modes.ts), so the focus is given a second time.
+    await sleep(300);
+    const parked = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => (await browser.storage.local.get("desertfox_tab_mode_" + tab.id))["desertfox_tab_mode_" + tab.id]?.parked ?? null)`);
+    if (parked !== null) {
+      const again = events.length;
+      await in_active_tab(`document.getElementById("${element_id}").contentWindow.focus(); 0`);
+      await wait_event(again, (event) => event.type === "window_focus" && event.page_id === page_id, `${page_id} to take the focus again`);
+    }
     await wait_takes_keys(page_id);
   };
   const focus_top = async (host_id) => {

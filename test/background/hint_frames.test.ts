@@ -9,14 +9,15 @@ const KEY = HINT_FRAMES_STORAGE_PREFIX + TAB;
 const LETTERS = "asdfghjkl";
 
 // A fake frame. `count` is what it reports to a collect, `silent` never reports, `gone` rejects every message (removed or navigated with no script), and `pick` answers a pick.
-type FakeFrame = { count: number; texts?: string[]; silent?: boolean; gone?: boolean; pick?: (label: string, keys?: string[]) => unknown };
+type FakeFrame = { late?: boolean; count: number; texts?: string[]; silent?: boolean; gone?: boolean; pick?: (label: string, keys?: string[]) => unknown };
 type StartRequest = { letters: string; args: Record<string, unknown>; count?: number; texts?: string[] };
 type Sent = { frame_id: number | undefined; message: HintFramesMessage & { session_id?: string } };
 
 const flush = () => new Promise((resume) => setImmediate(resume));
 
 // One storage object stands for `storage.session`, so a second `create_hint_frames` on it is a restarted background.
-function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Promise<number> } = {}) {
+// `parked` is the frame the tab's record names as parked. `unparked` lists the frames the code ended the record of.
+function harness(frames: Record<number, FakeFrame>, options: { inject?: (frame_id?: number) => Promise<number>; parked?: number } = {}) {
   const data: Record<string, unknown> = {};
   const timers = new Map<number, () => void>();
   let next_timer = 1;
@@ -26,6 +27,10 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
   // Every send from then on stays unanswered, as one to a navigating frame can.
   let sends_hang = false;
   const sent: Sent[] = [];
+  const unparked: number[] = [];
+  const entries: number[] = [];
+  const injected: (number | undefined)[] = [];
+  let parked = options.parked;
   let current: HintFrames;
   const deps: HintFramesDeps = {
     storage: {
@@ -33,14 +38,22 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
       set: async (items: Record<string, unknown>) => void Object.assign(data, structuredClone(items)),
       remove: async (key: string) => void delete data[key],
     } as never,
-    inject_all: options.inject ?? (async () => Object.keys(frames).length),
+    inject_all: async (_tab_id, frame_id) => {
+      injected.push(frame_id);
+      if (options.inject) return options.inject(frame_id);
+      if (frame_id !== undefined && (frames[frame_id] === undefined || frames[frame_id]!.gone)) throw new Error("No matching message handler");
+      return frame_id === undefined ? Object.keys(frames).length : 1;
+    },
+    parked_frame: async () => parked,
+    expect_entry: async () => void entries.push(1),
+    unpark: async (_tab_id, frame_id) => void (parked === frame_id && ((parked = undefined), unparked.push(frame_id))),
     send: async (tab_id, message, frame_id) => {
       assert.equal(tab_id, TAB);
       sent.push({ frame_id, message });
       if (sends_hang) return new Promise(() => {});
       if (frame_id !== undefined && frames[frame_id]?.gone) throw new Error("Could not establish connection. Receiving end does not exist.");
       if (message.type === "hint_frames_collect") {
-        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void current.report(TAB, Number(id), message.session_id, frame.count, frame.texts ?? Array.from({ length: frame.count }, (_, index) => `${id}:${index}`));
+        for (const [id, frame] of Object.entries(frames)) if (!frame.silent && !frame.gone && Number(id) !== keyboard_frame) void (frame.late ? flush() : Promise.resolve()).then(() => current.report(TAB, Number(id), message.session_id, frame.count, frame.texts ?? Array.from({ length: frame.count }, (_, index) => `${id}:${index}`)));
       }
       if (message.type === "hint_frames_pick") return frames[frame_id!]?.pick?.(message.label, message.keys);
       return undefined;
@@ -56,6 +69,9 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
     data,
     sent,
     timers,
+    unparked,
+    injected,
+    entries,
     get hints() {
       return {
         ...current,
@@ -76,7 +92,7 @@ function harness(frames: Record<number, FakeFrame>, options: { inject?: () => Pr
 const texts_of = (frame_id: number, count: number) => Array.from({ length: count }, (_, index) => `${frame_id}:${index}`);
 
 // The harness adds the keyboard frame's own count.
-const START: StartRequest = { letters: LETTERS, args: { action: "here", filter: "clickable" } };
+const START: StartRequest = { letters: LETTERS, args: { action: "here", filter: "clickable", frames: "all_frames" } };
 
 test("one prefix-free label set covers every frame, the top frame first, and the wait ends once all reported", async () => {
   const fake = harness({ 0: { count: 5 }, 3: { count: 4 }, 9: { count: 2 } });
@@ -430,4 +446,60 @@ test("an unhover goes to every frame of the tab and needs no session", async () 
   const fake = harness({ 0: { count: 1 }, 2: { count: 1 } });
   await fake.hints.unhover(TAB, "s1");
   assert.deepEqual(fake.of_type("hint_frames_unhover"), [{ frame_id: undefined, message: { type: "hint_frames_unhover", session_id: "s1" } }]);
+});
+
+// A tab with a parked frame: a hint with the default frames setting labels the top page and that frame only.
+const PARKED_START: StartRequest = { letters: LETTERS, args: { action: "here", filter: "clickable", frames: "same_origin" } };
+
+test("a parked frame is injected and asked alone, and its targets join the top page's labels", async () => {
+  const fake = harness({ 0: { count: 2 }, 3: { count: 2 }, 5: { count: 9 } }, { parked: 3 });
+  const answer = await fake.hints.start(TAB, 0, PARKED_START);
+  assert.deepEqual(fake.injected, [3]);
+  assert.deepEqual(fake.of_type("hint_frames_collect").map((entry) => entry.frame_id), [3]);
+  assert.ok(answer.ok);
+  assert.equal(answer.ok && answer.labels.length, 4);
+  assert.deepEqual(fake.unparked, []);
+});
+
+test("a parked frame that reports after the keyboard frame still gets its labels: the wait covers it", async () => {
+  const fake = harness({ 0: { count: 2 }, 3: { count: 2, late: true } }, { parked: 3 });
+  const answer = await fake.hints.start(TAB, 0, PARKED_START);
+  assert.equal(answer.ok && answer.labels.length, 4);
+});
+
+test("with no parked frame and the default frames setting no other frame is injected or asked, and the labels come out at once", async () => {
+  const fake = harness({ 0: { count: 2 }, 5: { count: 9 } });
+  const answer = await fake.hints.start(TAB, 0, PARKED_START);
+  assert.deepEqual(fake.injected, []);
+  assert.deepEqual(fake.of_type("hint_frames_collect"), []);
+  assert.equal(answer.ok && answer.labels.length, 2);
+  assert.equal(fake.timers.size, 0);
+});
+
+test("a parked frame that is gone ends the wait at once, is dropped from the record and adds no label", async () => {
+  const fake = harness({ 0: { count: 2 }, 3: { count: 2, gone: true } }, { parked: 3 });
+  const answer = await fake.hints.start(TAB, 0, PARKED_START);
+  assert.equal(answer.ok && answer.labels.length, 2);
+  assert.deepEqual(fake.unparked, [3]);
+  assert.equal(fake.timers.size, 0, "the 500 ms wait must not run for a frame that is gone");
+  const again = await fake.hints.start(TAB, 0, PARKED_START);
+  assert.equal(again.ok && again.labels.length, 2);
+  assert.deepEqual(fake.injected, [3], "the second run asks nobody");
+});
+
+test("all_frames ignores the park and asks every frame", async () => {
+  const fake = harness({ 0: { count: 1 }, 3: { count: 1 }, 5: { count: 1 } }, { parked: 3 });
+  await fake.hints.start(TAB, 0, START);
+  assert.deepEqual(fake.injected, [undefined]);
+});
+
+test("a pick into another frame tells the background first, so the frame's first focus is not parked, and a pick in the keyboard frame does not", async () => {
+  const fake = harness({ 0: { count: 1, pick: () => ({ ok: true }) }, 3: { count: 1, pick: () => ({ ok: true }) } });
+  const answer = await fake.hints.start(TAB, 0, START);
+  assert.ok(answer.ok);
+  const [own_label, frame_label] = [answer.labels[0]!, answer.labels[1]!];
+  await fake.hints.pick(TAB, 0, "s1", own_label);
+  assert.deepEqual(fake.entries, [], "the keyboard frame's own label picks nothing in another frame");
+  await fake.hints.pick(TAB, 0, "s1", frame_label);
+  assert.deepEqual(fake.entries, [1]);
 });

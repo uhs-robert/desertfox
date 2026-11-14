@@ -4,7 +4,7 @@
 import type { HintFramesMessage } from "../../background/hint_frames.ts";
 import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
-import type { BundleHostApi } from "../bundle_host.ts";
+import type { PageHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
 import { has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";
 import type { ModeAction, HintAction, Place } from "./actions.ts";
@@ -41,7 +41,7 @@ import { arm_leave_watch } from "../page/leave_watch.ts";
 import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
 
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
-type HintsWindow = { desertfox_host: BundleHostApi; desertfox_hints_ready?: true; desertfox_pick_target?: Element; desertfox_content_loaded?: true | (() => void) };
+type HintsWindow = { desertfox_host: PageHostApi; desertfox_hints_ready?: true; desertfox_pick_target?: Element; desertfox_content_loaded?: true | (() => void) };
 const page = window as unknown as HintsWindow;
 
 const done: Outcome = { ok: true };
@@ -295,7 +295,7 @@ const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_co
 
 const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_mode_, inspect_ };
 
-function register(host: BundleHostApi): void {
+function register(host: PageHostApi): void {
   let session: Session | undefined;
   // Also reports where the page stood when a hint follow leaves it, which may have no `page` bundle. A same-document change the page makes ends hint mode as Escape does, so hints opened from media mode return to it.
   arm_leave_watch(host).listen_(() => session && !picking && host.escape_());
@@ -555,11 +555,11 @@ function register(host: BundleHostApi): void {
     // With nothing to label the mode never changes, so keys held during the load run as normal keys. A page with candidates only out of view still flips it, as before the view cut.
     const text = (args.text as string | undefined) || undefined;
     // Across frames the other frames can still have hints, and the build gives the notice when no frame has one.
-    if (candidates.length === 0 && args.frames !== "all_frames" && find_candidates(filter, custom_selector_, action, site_selectors_, false).length === 0) return { ok: false, message: none_message(text) };
+    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, false).length === 0) return { ok: false, message: none_message(text) };
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames", filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true, started_ms);
