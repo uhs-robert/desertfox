@@ -67,6 +67,8 @@ export const SETTINGS_TABLE = {
   hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
+  // A CSS selector. In the window of `blur_on_load`, the first match takes the focus in place of the blur, and the window opens for it alone too. A selector that does not parse and no match leave the plain blur.
+  focus_on_load: { kind: "custom", schema: { type: "string" }, default: "", per_site: true },
   // CSS selectors for what counts as a text field in a frame, so insert mode follows focus there. `editable_add` makes matches count, `editable_remove` makes them not count and wins. With `editable_remove_unsized` the removal holds only while the element has no width.
   editable_add: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   editable_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
