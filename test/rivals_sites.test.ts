@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, cell_of, describe_mode_after_leave, describe_mode_on_load, FRAME_CHECKS, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -222,7 +222,6 @@ test("frame mode is read from the badge, and recorded as information after the l
   assert.equal(read.status, "info");
   assert.match(read.reason, /mode frame .*frame mode, the site focused a frame/);
   assert.doesNotMatch(describe_mode_after_leave({ focus: on_page, badge_label: "NORMAL" }).reason, /frame mode/);
-  assert.deepEqual(FRAME_CHECKS, ["frame_hints", "frame_activate", "frame_leave"]);
 });
 
 test("frame hints pass only for labels inside the frame, not on the top page", () => {
@@ -233,10 +232,12 @@ test("frame hints pass only for labels inside the frame, not on the top page", (
 });
 
 test("a frame control reacted when the frame saw a click or focus, or the frame went away", () => {
-  assert.equal(judge_frame_activation({ reply: { event: "click", tag: "button" }, frame_gone: false }).status, "pass");
-  assert.equal(judge_frame_activation({ reply: null, frame_gone: true }).status, "pass");
-  assert.equal(judge_frame_activation({ reply: { event: null, tag: null }, frame_gone: false }).status, "fail");
-  assert.equal(judge_frame_activation({ reply: null, frame_gone: false }).status, "fail");
+  assert.equal(judge_frame_activation({ reply: { event: "click", tag: "button" }, context_gone: false }).status, "pass");
+  assert.equal(judge_frame_activation({ reply: null, context_gone: true }).status, "pass");
+  assert.equal(judge_frame_activation({ reply: { event: null, tag: null }, context_gone: false }).status, "fail");
+  assert.equal(judge_frame_activation({ reply: null, context_gone: false }).status, "fail");
+  // The frame stays and nothing reacted: a changed badge is no dismissal.
+  assert.match(judge_frame_activation({ reply: { event: null, tag: null }, context_gone: false }).reason, /did nothing/);
 });
 
 test("gF leaves the frame when the badge stops reading FRAME and the focus is on the top page", () => {
@@ -245,4 +246,10 @@ test("gF leaves the frame when the badge stops reading FRAME and the focus is on
   // The badge alone is not enough: the focus must also be out of the frame.
   assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: in_frame_body }).status, "fail");
   assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: focus_of(null) }).status, "unknown");
+});
+
+test("check names hold the frame checks for DesertFox only, so an error or wall record fills every row", () => {
+  const site = { extra: ["jk_clash"] };
+  assert.deepEqual(check_names_of(site, "desertfox"), ["mode_on_load", "leave", "frame_leave", "frame_hints", "frame_activate", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
+  assert.deepEqual(check_names_of(site, "vimium"), ["mode_on_load", "leave", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
 });
