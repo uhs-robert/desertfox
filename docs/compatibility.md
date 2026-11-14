@@ -10,7 +10,7 @@ Each result cell is a mark and an evidence tag, such as `✅ R`.
 | --- | --- |
 | ✅ | The site's main tasks work by keyboard alone. |
 | ⚠️ | The main tasks work by keyboard, but a step needs one click first, for example into a pane, or movement works only with some keys. The note says which. |
-| ❌ | A main task cannot be done by keyboard at all, even after a click. Keys may stay trapped, or an action such as selecting items has no key path. The note says which. |
+| ❌ | A main task has no lasting key path. Keys stay trapped, or every step needs a click again, or an action such as selecting items has no key. The note says which. |
 | n/a | The check does not apply. |
 | pending | The check is not done yet. |
 
@@ -23,7 +23,7 @@ Each result cell is a mark and an evidence tag, such as `✅ R`.
 
 All R cells: 2026-11-14, Firefox 160.0 (headless, fresh profile per tool, default keys and settings), DesertFox 0.1.24, Vimium 2.4.2, Vimium C 2.12.3, Tridactyl 1.25.1, three passes per site and tool. A cell shows the result most passes gave. Run 7b covers every site (rig commit `88b037dc`, extension build `eb5086b1`). Run 8b (build `c77c6e05`) reran Reddit and X. The rival Reddit and X cells come from run 8b. A later rerun of Reddit and X on main `0f4b1821` (3 passes, same rival versions) supplies DesertFox's cells on those two rows. The run 7b build predates #656, which affects only the embed `play` result. The H cells come from hand checks. Hand checks on 2026-11-14 covered the three rivals on Sheets (view), and all four tools on Sheets (editing), Docs (view), Docs (editing), Reddit, Google Drive, Gmail, Discord, ChatGPT and Claude web. DesertFox on Docs (view) was also checked on 2026-11-13. The rivals ran the same pinned versions as the R cells. A rig run is a dated snapshot, not a test, because sites change.
 
-A site is scored by whether a keyboard user can get around it with the tool. The three core tasks are: move around the site, open links and controls by hint, and leave a text field. Any keys count, with default settings: the tool's own keys or the site's own keys, with the tool active. A key path counts only if a user can find it without reading the extension's docs. If a main task cannot be done by keyboard at all, even after a click, the mark is ❌. If the main tasks work but a step needs one click first, or movement works only with some keys, the mark is ⚠️. If the main tasks work by keyboard alone, the mark is ✅.
+A site is scored by whether a keyboard user can get around it with the tool. The three core tasks are: move around the site, open links and controls by hint, and leave a text field. Any keys count, with default settings: the tool's own keys or the site's own keys, with the tool active. A key path counts only if a user can find it without reading the extension's docs. If a main task has no lasting key path, because keys stay trapped or every step needs a click again, the mark is ❌. If the main tasks work but a step needs one click first, or movement works only with some keys, the mark is ⚠️. If the main tasks work by keyboard alone, the mark is ✅.
 
 DesertFox lets a user override key bindings for one site. A `site_rules` row in the user's config matches a site by address pattern and binds keys for it, for example `h` to `page send_key ArrowLeft`. A user can fix a site this way on their own machine. The rows DesertFox ships live in `src/background/default_site_rows.ts`. A pull request that adds a row shares a fix with every user. How to set a row is in [Site table](design.md#site-table).
 
