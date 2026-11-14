@@ -190,6 +190,9 @@ export function focus_of(chain) {
   return { readable: true, path: chain.map(describe_facts).join(" > "), takes_typing: takes_typing(chain.at(-1)), depth: chain.length };
 }
 
+// The focused subframe of a focus chain (top page first), or null when the focus sits on the top page or outside the page or has no content process. A top-page context is no evidence for the frame.
+export const subframe_of = (chain) => (chain.length > 1 && chain.at(-1).pid ? chain.at(-1) : null);
+
 // DesertFox's badge reads FRAME while a subframe holds the focus in normal mode.
 export const is_frame_mode = (badge_label) => /^frame$/i.test(badge_label ?? "");
 

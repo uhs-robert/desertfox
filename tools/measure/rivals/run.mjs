@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -442,8 +442,7 @@ async function check_site(site) {
       await press_keys(keys.hint);
       await sleep(1500);
       // Only a subframe counts. When the hint key moved the focus to the top page, its labels are no evidence for the frame.
-      const focused = (await focus_contexts()).at(-1);
-      frame_context = focused && !focused.top && focused.pid ? focused : null;
+      frame_context = subframe_of(await focus_contexts());
       frame_texts = frame_context ? await in_context(frame_context, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
       const top_labels = await ask_page("top_labels", {}, 5000);
       return judge_frame_hints({ frame_labels: frame_texts.length, top_labels });
