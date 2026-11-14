@@ -249,7 +249,23 @@ let load_blur_ends_ms = 0;
 // Whether a click or key has reached this window.
 const activated = (): boolean => navigator.userActivation.hasBeenActive;
 
-const blur_load_focus = (target: EventTarget | null) => Date.now() < load_blur_ends_ms && !navigator.userActivation.isActive && is_editable_element(target) && !((target as HTMLElement).blur() as unknown);
+// `focus_on_load`: the element that takes the focus in place of the blur. A selector that does not parse finds nothing, and so does the empty default.
+let load_focus_selector = "";
+const load_focus_target = (): HTMLElement | null => {
+  try {
+    return document.querySelector(load_focus_selector);
+  } catch {
+    return null;
+  }
+};
+
+// Body stands for no focus, so the target can take the focus before the page focuses anything.
+const blur_load_focus = (target: EventTarget | null) => {
+  if (Date.now() >= load_blur_ends_ms || navigator.userActivation.isActive || !(target === document.body || is_editable_element(target))) return false;
+  const wanted = load_focus_target();
+  wanted ? wanted.focus() : (target as HTMLElement).blur();
+  return true;
+};
 
 let matcher_installed = false;
 // Whether the last install matched an all-off rule. An install enters ignore mode only on the change into all-off, so a manual `,i` or `<S-Escape>` survives an unrelated edit.
@@ -279,7 +295,8 @@ function install_matcher(reply: PageKeymap | undefined): void {
   const first_install = !matcher_installed;
   matcher_installed = true;
   // A field the page focused before the reply came already put the frame in insert mode, and the blur's focusout takes it back.
-  if (first_install && reply?.site_values?.blur_on_load) {
+  if (first_install && (reply?.site_values?.blur_on_load || reply?.site_values?.focus_on_load)) {
+    load_focus_selector = reply.site_values.focus_on_load ?? "";
     load_blur_ends_ms = Date.now() + 1e3;
     blur_load_focus(deepest_focused_element());
   }

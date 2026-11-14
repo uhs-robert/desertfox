@@ -15,6 +15,7 @@ export const DEFAULT_HINT_KEY_LINE: Settings["hint_key_line"] = true;
 export const DEFAULT_HINT_ADD: Settings["hint_add"] = [];
 export const DEFAULT_HINT_REMOVE: Settings["hint_remove"] = [];
 export const DEFAULT_BLUR_ON_LOAD: Settings["blur_on_load"] = false;
+export const DEFAULT_FOCUS_ON_LOAD: Settings["focus_on_load"] = "";
 export const DEFAULT_EDITABLE_ADD: Settings["editable_add"] = [];
 export const DEFAULT_EDITABLE_REMOVE: Settings["editable_remove"] = [];
 export const DEFAULT_EDITABLE_REMOVE_UNSIZED: Settings["editable_remove_unsized"] = false;
@@ -75,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hint_add: DEFAULT_HINT_ADD,
   hint_remove: DEFAULT_HINT_REMOVE,
   blur_on_load: DEFAULT_BLUR_ON_LOAD,
+  focus_on_load: DEFAULT_FOCUS_ON_LOAD,
   editable_add: DEFAULT_EDITABLE_ADD,
   editable_remove: DEFAULT_EDITABLE_REMOVE,
   editable_remove_unsized: DEFAULT_EDITABLE_REMOVE_UNSIZED,

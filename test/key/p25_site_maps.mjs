@@ -8,7 +8,7 @@ export const areas = ["keys", "config", "scroll", "bundles"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ config_copy, load_config_dir, setup, on_teardown, run_case, open_page, press_keys, in_active_tab, in_background, wait_event, events, url_of, poll_until, expect, sleep }) {
   await setup("load the shipped Maps binds as a row for the maps_ pages", async () => {
     const shipped = DEFAULT_SITE_ROWS.find(({ name }) => name === "maps")?.row;
     if (!shipped) throw new Error("no shipped site row named maps");
@@ -63,6 +63,34 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("j");
     await expect_pans("ArrowDown,");
     expect((await in_active_tab('document.getElementById("field").value')) === "", "j typed into the field");
+  });
+
+  await run_case("on a page that builds its map early and focuses its search field late in the load, the map ends up with the focus and j pans", async () => {
+    // A script registered for this page adds the map as the document starts, and focuses the field 300 ms after the DOM is read, as Maps does.
+    const late_focus = `
+      document.addEventListener("DOMContentLoaded", () => {
+        const map = document.createElement("div");
+        map.setAttribute("role", "application");
+        map.tabIndex = 0;
+        map.style.cssText = "width:300px;height:100px";
+        document.documentElement.dataset.pan = "";
+        map.addEventListener("keydown", (event) => { document.documentElement.dataset.pan += event.key + ","; });
+        document.body.prepend(map);
+        setTimeout(() => document.getElementById("first").focus(), 300);
+      });`;
+    on_teardown(() => in_background(`globalThis.p25_late_focus?.unregister()`));
+    await in_background(`browser.contentScripts.register({ matches: ["*://127.0.0.1/controls?id=maps_late*"], runAt: "document_start", js: [{ code: ${JSON.stringify(late_focus)} }] }).then((registered) => { globalThis.p25_late_focus = registered; })`);
+    // No key probe: a key gives the page user activation, which ends the load window.
+    const mark = events.length;
+    await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("controls", "maps_late"))}, active: true }).then((tab) => tab.id)`);
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "maps_late", "content script ready on maps_late", 6000);
+    const map_focused = 'document.activeElement === document.querySelector(\'div[role="application"]\')';
+    await poll_until("the map holds the focus after the load", async () => (await in_active_tab(map_focused)) === true, { timeout_ms: 3000, expected_timeout: true }).catch(async () => expect(false, `focus is on ${await in_active_tab('document.activeElement?.id || document.activeElement?.localName')}`));
+    await sleep(500);
+    expect((await in_active_tab(map_focused)) === true, "the map lost the focus again");
+    await press_keys("j");
+    await expect_pans("ArrowDown,");
+    expect((await in_active_tab('document.getElementById("first").value')) === "", "j typed into the field");
   });
 
   await run_case("with the map focused, j pans the map", async () => {

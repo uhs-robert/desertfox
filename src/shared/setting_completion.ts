@@ -131,6 +131,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "focus_on_load",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a CSS selector, or empty for none",
+    "values": []
+  },
+  {
     "name": "editable_add",
     "settable": true,
     "is_toggle": false,
