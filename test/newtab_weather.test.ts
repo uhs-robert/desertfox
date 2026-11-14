@@ -75,14 +75,14 @@ test("the city is the fallback: it is geocoded, then the rounded coordinates are
   assert.match(urls[0]!, /^https:\/\/geocoding-api\.open-meteo\.com\/.*name=Oslo&/);
   assert.match(urls[1]!, /^https:\/\/api\.open-meteo\.com\/.*latitude=59\.91&longitude=10\.75.*temperature_unit=fahrenheit/);
   assert.equal(calls.position_reads, 0);
-  assert.deepEqual(views[0], { kind: "weather", weather: { temperature: 12.4, code: 3, place: "Oslo", units: "imperial" } });
+  assert.deepEqual(views, [{ kind: "ask_location" }, { kind: "weather", weather: { temperature: 12.4, code: 3, place: "Oslo", units: "imperial" } }]);
 });
 
 test("a failed fetch draws nothing and does not throw", async () => {
   const { deps } = fake_deps({ allowed: true, fail_fetch: true });
   assert.deepEqual(await collect(on(), deps), []);
   const city = fake_deps({ fail_fetch: true });
-  assert.deepEqual(await collect(on({ newtab_weather_city: "Oslo" }), city.deps), []);
+  assert.deepEqual(await collect(on({ newtab_weather_city: "Oslo" }), city.deps), [{ kind: "ask_location" }], "the button shows, no reading");
 });
 
 test("a second run inside the TTL draws from the stored value and makes no request", async () => {
@@ -110,10 +110,12 @@ test("the permission request runs inside the click handler, before any await", (
     document: { createElement: () => ({ listeners: {} as Record<string, () => void>, addEventListener(name: string, handler: () => void) { this.listeners[name] = handler; } }) },
   });
   return start_weather(slot as unknown as HTMLElement, on(), deps)
-    .then(() => {
+    .finished.then(async () => {
       assert.equal(calls.permission_requests, 0, "drawing the button asks for nothing");
       buttons[0]!.listeners["click"]!();
       assert.equal(calls.permission_requests, 1, "the click asks at once");
+      // The grant restarts the card, which draws with the stubbed document, so let it finish before the stub goes.
+      await new Promise((done) => setImmediate(done));
     })
     .finally(() => {
       if (had_document) Object.assign(globalThis, { document: earlier_document });
@@ -139,7 +141,7 @@ test("a position that never arrives falls back to the city after the timeout", a
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const { deps, urls } = fake_deps({ allowed: true, current_position: () => new Promise(() => {}) });
   const pending = collect(on({ newtab_weather_city: "Oslo" }), deps);
-  for (let turn = 0; turn < 5; turn++) await Promise.resolve();
+  await new Promise((done) => setImmediate(done));
   context.mock.timers.tick(5000);
   const views = await pending;
   assert.match(urls[0]!, /geocoding/);
@@ -192,4 +194,42 @@ test("once the permission is granted the position wins over the city and no butt
   const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
   assert.ok(views.every((view) => view.kind === "weather"));
   assert.doesNotMatch(urls.join(" "), /geocoding/);
+});
+
+test("a failed forecast at new coordinates takes down the reading of the old place", async () => {
+  const first = fake_deps({ allowed: true });
+  await collect(on(), first.deps);
+  const shown: WeatherView[] = [];
+  const moved = { ...first.deps, current_position: async () => ({ latitude: 48.85, longitude: 2.35 }), net: { ...first.deps.net, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
+  await run_weather(on(), moved, (view) => shown.push(view));
+  assert.deepEqual(shown.map((view) => view.kind), ["weather", "clear_reading"]);
+});
+
+test("a stopped run sends no forecast request after its geocoding answer arrives", async () => {
+  const urls: string[] = [];
+  let release_geocode: (() => void) | undefined;
+  const base = fake_deps();
+  const slow_net = {
+    ...base.deps.net,
+    fetch: (async (input: string) => {
+      urls.push(String(input));
+      if (String(input).includes("geocoding")) await new Promise<void>((done) => (release_geocode = done));
+      return new Response(String(input).includes("geocoding") ? GEOCODE : FORECAST);
+    }) as typeof fetch,
+  };
+  const slot = { querySelector: () => null, prepend() {}, append() {}, replaceChildren() {} };
+  const had_document = "document" in globalThis;
+  const earlier_document = (globalThis as { document?: unknown }).document;
+  Object.assign(globalThis, { document: { createElement: () => ({ addEventListener() {}, append() {} }) } });
+  try {
+    const run = start_weather(slot as unknown as HTMLElement, on({ newtab_weather_city: "Oslo" }), { ...base.deps, net: slow_net });
+    await new Promise((done) => setImmediate(done));
+    run.stop();
+    release_geocode!();
+    await run.finished;
+    assert.equal(urls.length, 1, "only the geocoding request went out");
+  } finally {
+    if (had_document) Object.assign(globalThis, { document: earlier_document });
+    else delete (globalThis as { document?: unknown }).document;
+  }
 });

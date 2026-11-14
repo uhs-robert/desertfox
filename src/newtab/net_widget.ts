@@ -58,16 +58,17 @@ export type CachedFetch<T> = {
   is_value: (stored: unknown) => stored is T;
 };
 
-// Shows a stored value of the same key at once, whatever its age. Fetches only when that value is missing or older than the TTL, and shows the new value when it lands. A failed fetch keeps what is on screen and draws nothing new.
-export async function load_cached<T>(spec: CachedFetch<T>, env: NetEnv, show: (value: T) => void): Promise<void> {
+// Shows a stored value of the same key at once, within `max_age_ms`. Fetches only when that value is missing or older than the TTL, and shows the new value when it lands. A failed fetch keeps what is on screen and draws nothing new. Resolves true when a value for this key is on screen at the end, so a caller that drew a value for another key knows to take it down.
+export async function load_cached<T>(spec: CachedFetch<T>, env: NetEnv, show: (value: T) => void): Promise<boolean> {
   const stored = await read_entry(spec.name, env);
   const usable = stored?.key === spec.key && env.now() - stored.at < spec.max_age_ms && spec.is_value(stored.value) ? stored : undefined;
   if (usable) show(usable.value as T);
-  if (usable && env.now() - usable.at < spec.ttl_ms) return;
+  if (usable && env.now() - usable.at < spec.ttl_ms) return true;
   const value = await spec.produce();
-  if (value === undefined) return;
+  if (value === undefined) return usable !== undefined;
   await write_entry(spec.name, { key: spec.key, at: env.now(), value }, env);
   show(value);
+  return true;
 }
 
 // The stored value of a slot whose key starts with `key_prefix` and is younger than `max_age_ms`, or undefined. It lets a card draw before it knows its full key, such as before a position arrives. The caller must then run `load_cached`, which refreshes or replaces the value.
