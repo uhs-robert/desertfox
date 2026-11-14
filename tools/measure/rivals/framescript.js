@@ -132,9 +132,9 @@ answer("scroll_baseline", async () => {
 });
 answer("scroll_now", async () => ({ window_y: content.scrollY, tops: scrollables.map((el) => el.scrollTop) }));
 
-answer("hint_targets", async () => {
+answer("hint_targets", async ({ activate_selector }) => {
   last_targets = visible_targets();
-  return last_targets.map((el, i) => ({ name: String(i), rect: plain_rect(el.getBoundingClientRect()) }));
+  return last_targets.map((el, i) => ({ name: String(i), rect: plain_rect(el.getBoundingClientRect()), chosen: !!activate_selector && el.matches(activate_selector) }));
 });
 answer("top_labels", async () => visible_labels());
 

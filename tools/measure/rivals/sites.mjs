@@ -10,6 +10,7 @@
 // The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 
+// `activate_selector` names the element every tool must activate on that site, for pages where a label hangs off the corner of a link and lands on a neighbour (Hacker News: the vote arrow and the from?site= link sit beside the story link). Without it the activation check takes any target.
 // `extra` names the per-site actions of step 3, run before the generic ones. `path` instead of `url` is a page that pages.mjs serves.
 // Picked for stable public URLs: Google's own API sample doc and sheet, the first YouTube video, Notion's official public page.
 export const SITES = [
@@ -18,7 +19,7 @@ export const SITES = [
   { name: "google_docs", url: "https://docs.google.com/document/d/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE/edit", extra: [] },
   { name: "wikipedia", url: "https://en.wikipedia.org/wiki/Firefox", extra: [] },
   { name: "github", url: "https://github.com/mozilla-firefox/firefox", extra: [] },
-  { name: "hacker_news", url: "https://news.ycombinator.com/", extra: [] },
+  { name: "hacker_news", url: "https://news.ycombinator.com/", extra: [], activate_selector: ".titleline > a" },
   { name: "reddit", url: "https://www.reddit.com/r/firefox/", extra: [] },
   { name: "google_maps", url: "https://www.google.com/maps/@48.8584,2.2945,15z", extra: [] },
   { name: "excalidraw", url: "https://excalidraw.com/", extra: [] },
@@ -120,9 +121,18 @@ const CLEAR_MARGIN = 8;
 
 // The label to type for the activation check, so the check knows which element should react. A label belongs to the target whose box holds its center, and a label that only sits near a target can belong to an element the target list lacks.
 // So the first choice is a label whose center lies inside exactly one target. Only when no label does, the fallbacks run: a label with exactly one target near it, then a label clearly nearer one target than any other (a toolbar of touching buttons). `via` records which choice made the pick.
+// When some targets are `chosen` (the site's activate_selector), only those can be picked, so every tool is scored on the same element. A label counts only when its center is inside the chosen target and no other target, one that is not around the chosen one, lies within CLEAR_MARGIN of the center. Else the next label and the next chosen target are tried, and none qualifying returns null.
 export function pick_activation(labels, targets) {
   const typable = labels.filter((label) => label.text.trim());
-  const pick = (label, target, via) => ({ keys: label.text.trim().toLowerCase(), target: target.name, via, at: label_center(label) });
+  const pick = (label, target, via) => ({ keys: label.text.trim().toLowerCase(), target: target.name, via, at: label_center(label), label_rect: label.rect, target_rect: target.rect });
+  if (targets.some((target) => target.chosen)) {
+    for (const target of targets.filter((candidate) => candidate.chosen)) {
+      const rivals = targets.filter((other) => other !== target && !rect_contains(other.rect, target.rect));
+      const unambiguous = typable.find((label) => distance_to(label_center(label), target.rect) === 0 && rivals.every((other) => distance_to(label_center(label), other.rect) > CLEAR_MARGIN));
+      if (unambiguous) return pick(unambiguous, target, "chosen");
+    }
+    return null;
+  }
   // A toolbar or a list item can be a target itself and hold targets, so only the innermost of nested targets near a label count.
   const targets_within = (label, limit) => innermost(targets.filter((target) => distance_to(label_center(label), target.rect) <= limit));
   for (const label of typable) {

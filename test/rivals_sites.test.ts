@@ -47,7 +47,7 @@ test("hints pass when a label sits on a visible target and fail with no label or
 
 test("the activation label is the first inside exactly one target, typed in lower case, with the label's center", () => {
   const crowded = [target("0", 100), target("1", 135), target("2", 300)];
-  assert.deepEqual(pick_activation([label("AB", 20, 125), label("CD", 20, 300)], crowded), { keys: "cd", target: "2", via: "inside", at: { x: 26, y: 308 } });
+  assert.deepEqual(pick_activation([label("AB", 20, 125), label("CD", 20, 300)], crowded), { keys: "cd", target: "2", via: "inside", at: { x: 26, y: 308 }, label_rect: rect(20, 300, 12, 16), target_rect: rect(20, 300) });
   assert.equal(pick_activation([label("AB", 600, 600)], crowded), null);
 });
 
@@ -290,4 +290,40 @@ test("only a subframe at the end of the focus chain counts as frame evidence", (
   assert.equal(subframe_of([top]), null);
   assert.equal(subframe_of([]), null);
   assert.equal(subframe_of([top, { context_id: 2, pid: null }]), null);
+});
+
+// Hacker News row geometry: the vote arrow sits left of the story link, the from?site= link right of it, and a label hangs off the link's corner.
+const hn_row = () => [
+  { name: "vote", rect: rect(40, 100, 10, 10) },
+  { name: "story", rect: rect(60, 98, 300, 16), chosen: true },
+  { name: "site", rect: rect(370, 100, 90, 14) },
+];
+
+test("on a site with a chosen target, a label over the neighbouring vote link is not picked", () => {
+  const hn = hn_row();
+  const over_vote = label("A", 38, 98);
+  const on_story = label("SD", 150, 99);
+  const picked = pick_activation([over_vote, on_story], hn);
+  assert.equal(picked?.target, "story");
+  assert.equal(picked?.keys, "sd");
+  assert.equal(picked?.via, "chosen");
+  assert.deepEqual(picked?.target_rect, hn[1]!.rect);
+  assert.deepEqual(picked?.label_rect, on_story.rect);
+});
+
+test("the chosen target beats a nearer neighbour: only a chosen target is ever picked", () => {
+  const hn = hn_row();
+  assert.equal(pick_activation([label("A", 40, 100)], hn), null);
+  assert.equal(pick_activation([label("B", 372, 100)], hn), null);
+});
+
+test("a label inside the chosen target but within the margin of a neighbour is ambiguous, and the next target is tried", () => {
+  const two_rows = [
+    { name: "vote", rect: rect(40, 100, 14, 10) },
+    { name: "story", rect: rect(52, 98, 300, 16), chosen: true },
+    { name: "story_2", rect: rect(60, 138, 300, 16), chosen: true },
+  ];
+  // The label center (60, 106) is inside the story link and 6 px from the vote arrow, under the margin.
+  assert.equal(pick_activation([label("A", 54, 98)], two_rows), null);
+  assert.equal(pick_activation([label("A", 54, 98), label("B", 150, 139)], two_rows)?.target, "story_2");
 });
