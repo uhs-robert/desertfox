@@ -4,13 +4,13 @@ How DesertFox compares with Vimium, Vimium C, Tridactyl and qutebrowser on hint 
 
 ## Hint speed
 
-Median time from the `f` key to the first hint label, cold (first press on a fresh page), in ms. Headless Firefox 160, 16 runs per cell, quiet machine, November 2026.
+Median time from the `f` key to the first hint label, cold (first press on a fresh page), in ms. Headless Firefox 160.0, 16 runs per cell, 14 November 2026, DesertFox at commit f7652c1f. The 1-minute load average stayed under 1.9 for the whole run.
 
 | Page | DesertFox | Vimium C | Tridactyl | Vimium |
 | --- | --- | --- | --- | --- |
-| 20,000 elements | 59 | 36 | 66 | 96 |
-| Article | 77 | 20 | 68 | 86 |
-| 100 iframes | 57 | 65 | 93 | 235 |
+| 20,000 elements | 56 | 36 | 57 | 92 |
+| Article | 73 | 19 | 61 | 79 |
+| 100 iframes | 50 | 57 | 89 | 194 |
 
 DesertFox's median stays under a tenth of a second on every page. It looks inside off-screen sections, because CSS can place visible content there, such as an open dropdown or a modal. Vimium C skips them on very large pages and misses targets there (next section).
 
@@ -29,6 +29,38 @@ qutebrowser was checked from source (a2a9c9d) and not run. Its hint code tests e
 ## Keyboard drag
 
 Only DesertFox has built-in keyboard drag of elements (`;g`, `;G`). Checked from source: Vimium, Vimium C (2.12.3, the newest build), Tridactyl, qutebrowser, Surfingkeys, Vieb and cVim have none. Tridactyl `hint -h` selects text and moves nothing. Surfingkeys can do it with a user script. Other tools were not checked.
+
+## Page memory and load
+
+Measured on 14 November 2026 at DesertFox commit f7652c1f, headless Firefox 160.0, on one machine. Each tool ran alone in a fresh profile, 16 runs per cell (8 runs x 2 passes). The 1-minute load average started at 0.41 and peaked at 1.86, with a mean of 0.49. Memory is resident set size (RSS, the memory the process holds in RAM). It varies with the machine and the Firefox version, so read the gaps and not the absolute figures.
+
+Page content process RSS after load, in MB. The delta is the cost over the `none` column, which has no extension.
+
+| Page | none | DesertFox | Vimium C | Vimium | Tridactyl |
+| --- | --- | --- | --- | --- | --- |
+| 20,000 elements | 49.5 | 55.9 (+6.4) | 54.3 (+4.8) | 55.6 (+6.1) | 63.8 (+14.3) |
+| Article | 79.0 | 87.2 (+8.1) | 83.7 (+4.7) | 87.5 (+8.5) | 90.6 (+11.6) |
+| 100 iframes | 59.9 | 81.1 (+21.3) | 112 (+52.3) | 131 (+71.1) | 83.9 (+24.0) |
+| 100 iframes page, top page alone | 19.9 | 24.5 (+4.5) | 24.1 (+4.1) | 25.9 (+5.9) | 31.8 (+11.9) |
+
+Extension process RSS after load, in MB, the same on every page: none 36.4, DesertFox 53.7, Vimium C 51.3, Vimium 37.3, Tridactyl 45.5. Each tool has one such process, so this cost is paid once and not per tab. Vimium C reads 54.0 on the 100 iframes page.
+
+Caveats:
+
+- One machine and one Firefox build.
+- Each tool ran in its own Firefox process, so the extension process figure is a reading per pass and not a per-page measurement.
+
+Page-load cost on the article page (a saved 2 MB article) against no extension:
+
+- DesertFox adds about 15 ms to the load event and about 15 ms to DOMContentLoaded.
+- Over three rounds the load-event cost was +17.8, +7.8 and +15.5 ms, so the spread between rounds is wider than the gap to 15 ms.
+- The rivals run on the same page (16 runs) gave +17 ms for DesertFox, +21 for Vimium, +19 for Vimium C and +80 for Tridactyl.
+
+Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). Each round started only when the load average was under 3.
+
+```
+MEASURE_DIR=<dir outside /tmp> RUNS=8 PASSES=2 just measure-rivals
+```
 
 ## Tab switch
 
