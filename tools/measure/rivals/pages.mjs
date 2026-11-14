@@ -1,5 +1,6 @@
-// The pages run.mjs serves. `yt_embed` is the one page of the live-site check (PAGES=sites) served here. `large` has 20,000 elements (10,000 links and 10,000 divs), the size where hint collection cost shows. `wiki` is a saved long article with many links. `frames` has 100 same-origin iframes of 20 links each, and `frames0` is its top page alone, so (frames minus frames0) / 100 is the cost of one frame.
+// The pages run.mjs serves. `yt_embed` and `cross_site_frame` (with its inner page `hybrid_frame`) are the pages of the live-site check (PAGES=sites) served here. `large` has 20,000 elements (10,000 links and 10,000 divs), the size where hint collection cost shows. `wiki` is a saved long article with many links. `frames` has 100 same-origin iframes of 20 links each, and `frames0` is its top page alone, so (frames minus frames0) / 100 is the cost of one frame.
 import { readFileSync } from "node:fs";
+import { hybrid_frame_page, hybrid_frames_page } from "../../../test/key/hybrid_pages.mjs";
 
 const pages_dir = `${process.env.RIVALS_DIR}/pages`;
 
@@ -52,9 +53,21 @@ function onYouTubeIframeAPIReady() {
 </script><script src="https://www.youtube.com/iframe_api"></script></body>`;
 }
 
+// The key test's load-focus fixture (test/key/hybrid_pages.mjs): the top page holds a frame served on `localhost`, another origin than the top page's 127.0.0.1, and that frame focuses a non-field container on load. The key test's reporter is not here, so `send` does nothing. The spacer gives the scroll check room to move, and the second link stays in view after the scroll rows, so the hint rows have a top-page target.
+const CROSS_SITE_PAGE_ID = "rig_load_focus";
+const quiet_send = "<script>function send() {}</script>";
+function cross_site_frame_body(port) {
+  const { body } = hybrid_frames_page(CROSS_SITE_PAGE_ID, port);
+  return `<!doctype html><title>cross_site_frame</title><body>${quiet_send}${body}<p><a href="/p?below_frame">a link below the frame</a></p><div style="height:3000px"></div></body>`;
+}
+function cross_site_frame_inner_body() {
+  const { body } = hybrid_frame_page("load_focus");
+  return `<!doctype html><title>cross_site_frame_inner</title><body>${quiet_send}${body}</body>`;
+}
+
 const links = (count, tag) => Array.from({ length: count }, (_, i) => `<a href="/p?${tag}=${i}">link ${tag} ${i}</a> text <span>x</span>`).join("<br>");
 
-export function page_body(name) {
+export function page_body(name, port) {
   if (name === "large") {
     const parts = [];
     for (let i = 0; i < 10000; i++) parts.push(`<a href="/page?id=big_${i}">link ${i}</a><div>plain ${i}</div>`);
@@ -70,6 +83,8 @@ export function page_body(name) {
   if (name === "tab") return `<!doctype html><title>tab</title><body><p>tab</p></body>`;
   if (name === "coverage") return coverage_body();
   if (name === "yt_embed") return yt_embed_body();
+  if (name === "cross_site_frame") return cross_site_frame_body(port);
+  if (name === "hybrid_frame") return cross_site_frame_inner_body();
   if (name === "frame") return `<!doctype html><title>f</title><body>${links(20, "f")}</body>`;
   return null;
 }

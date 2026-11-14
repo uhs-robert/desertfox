@@ -25,7 +25,7 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 | `rivals.mjs` | Downloads each pinned xpi into its own empty directory and checks its sha256, version and id, saves the article page, runs every tool, then calls `analyze.mjs` |
 | `run.mjs` | One tool in one fresh profile over the pages: load times, time from the hint key to the first label, memory of the page and extension processes |
 | `framescript.js` | Runs in the page's content process: sends a trusted key and watches for hint labels, also inside closed shadow roots |
-| `pages.mjs` | The pages: 20,000 elements, the saved article, 100 iframes, and the same page with none |
+| `pages.mjs` | The pages: 20,000 elements, the saved article, 100 iframes, and the same page with none, plus the local pages of the live-site check (the YouTube embed, the cross-site focus frame) |
 | `analyze.mjs` | Medians and ranges into `$MEASURE_DIR/rivals/out/tables.md`, for the pages that ran, and for a live-site run the dated `sites-<date>.json` |
 | `sites.mjs` | The live-site check (`PAGES=sites`): the site list, each tool's default keys, and the judges that turn what the page did into a status with a reason |
 | `hand_checks.md` | The checklist for the login sites the rig cannot reach, filled in by hand |

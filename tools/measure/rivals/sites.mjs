@@ -7,7 +7,7 @@
 // 2b. Frame branch, DesertFox only and only when its badge reads FRAME after the leave step. The site dictates focus and DesertFox does not override it, so a site that focuses a frame (Reddit and X focus a Google sign-in frame) leaves DesertFox working inside that frame until the user dismisses it or leaves with gF. The rivals keep keys on the page and show no badge, so they have no frame mode to score. The branch has two parts. `gF` (`frame_leave`) runs right after the leave step, so step 3 meets the same page, popup included, for every tool. The checks inside the frame run last, after a reload that brings the frame back: hints in the frame (`frame_hints`) and a hint that activates a control in it (`frame_activate`), which dismisses the popup. A pass that never reaches frame mode records the three frame rows as n/a.
 // 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked, or wrong_target when the hint acted on another element than its label's target.
 // A site with `scroll_probe` (a canvas or grid that draws its own view) reads movement instead of an element's scroll offset: see judge_movement. The no-extension tool runs a control there, the site's own movement input, and a control that moves nothing adds a note to every tool's cell. Two rows score movement, both from the keyboard alone: `scroll` sends the tool's own j, and `passthrough` sends the site's ArrowDown with the tool active, so a tool that lets the site's keys through gets credit.
-// Steps 1 to 3 run on one page load. Only the frame checks at the end of the DesertFox frame branch load it again. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
+// Steps 1 to 3 run on one page load. Only the frame checks at the end of the DesertFox frame branch load it again, and so do the CROSS_FRAME_ROWS of a `cross_frame` site. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
 // The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
 import { distance_to, MAX_DISTANCE } from "./match_labels.mjs";
 
@@ -37,19 +37,23 @@ export const SITES = [
   { name: "pdf_viewer", url: "https://arxiv.org/pdf/1706.03762", extra: [], note: "Firefox runs no extension content script in its PDF viewer, and the viewer scrolls on its own j" },
   // A local page on 127.0.0.1 with the live YouTube player in an iframe, so the player is cross-site to the page the keys go to.
   { name: "youtube_embed", path: "yt_embed", extra: ["embed_play_pause", "embed_volume"], note: "the hint checks match labels to targets of the top document, so they cover the link beside the player and not the player's own buttons. Labels inside the player frame count only for Escape out of hints" },
+  // A local page with a frame of another origin that focuses itself on load, the Google sign-in frame of Reddit and X without the network. `cross_frame` adds the CROSS_FRAME_ROWS.
+  { name: "cross_site_frame", path: "cross_site_frame", extra: [], cross_frame: true, note: "the frame is served on localhost and the page on 127.0.0.1, so they are different origins. Its picker holds the focus from load, a close button and a link. The rows xframe_* run last, on a fresh load: f labels the frame, a label picked in the frame, then Escape (and gF for DesertFox) and the tool's j on the top page" },
 ];
 
 export const NORMAL_ACTIONS = ["scroll", "hints", "hints_escape", "activate"];
 
 // Every check a site record can hold for one tool. Wall and error records fill all of them, so a new check name goes here once. Only DesertFox has the frame checks.
 export const FRAME_ROWS = ["frame_leave", "frame_hints", "frame_activate"];
+// The checks of a site with `cross_frame`, run for every tool after step 3 on a fresh load: hints reach the frame, a hint picked in the frame, and the page's keys after leaving it.
+export const CROSS_FRAME_ROWS = ["xframe_hints", "xframe_enter", "xframe_leave"];
 // Step 3 in run order. passthrough, the site's own ArrowDown with the tool active, follows scroll at once, before the hint checks change the focus.
 export const step3_names = (site) => {
   const [scroll, ...rest] = NORMAL_ACTIONS;
   return [...site.extra, scroll, "passthrough", ...rest];
 };
 // The no-extension tool runs only the control: its `scroll` row is the site's own movement input (see control_of).
-export const check_names_of = (site, tool) => (tool === "none" ? ["scroll"] : ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...step3_names(site)]);
+export const check_names_of = (site, tool) => (tool === "none" ? ["scroll"] : ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...step3_names(site), ...(site.cross_frame ? CROSS_FRAME_ROWS : [])]);
 
 // The scored movement rows (scroll with the tool's own key, passthrough with the site's ArrowDown) use the keyboard only and start from the page as loaded. focus: from focus_of. The tool's leave key goes first only when the focus is a typing field, where the tool is in insert mode. A site may name a `work_area` selector: Tab is then pressed until the focus is inside it, the same for every tool, and the count goes in the row's note. A click never counts. Only the control, which is not scored, clicks.
 export const needs_leave_key = (focus) => focus.takes_typing === true;
@@ -262,6 +266,14 @@ export function judge_frame_activation({ reply, context_gone, url_before, url_af
   if (context_gone) return pass("the frame went away (dismissed)");
   if (reply?.event) return pass(`${reply.event} on a ${reply.tag} inside the frame`);
   return fail("typing a label in the frame did nothing the frame saw");
+}
+
+// A label typed in the frame must make the frame react (judge_frame_activation). Only DesertFox has a mode badge, and it must read FRAME afterwards: the pick moved the keys into the frame. The rivals keep their mode, so their pick counts on the reaction alone.
+// reply, context_gone, url_before and url_after as in judge_frame_activation. mode_after: DesertFox's badge after the pick, or null.
+export function judge_frame_entry({ reply, context_gone, url_before, url_after, mode_after, has_badge }) {
+  const reacted = judge_frame_activation({ reply, context_gone, url_before, url_after });
+  if (reacted.status !== "pass" || !has_badge || context_gone) return reacted;
+  return is_frame_mode(mode_after) ? { status: "pass", reason: `${reacted.reason}; the badge reads FRAME` } : fail(`${reacted.reason}, but the badge reads ${String(mode_after).toLowerCase()}, not FRAME`);
 }
 
 // mode_after and focus_after follow gF. The leave works when the badge no longer reads FRAME and the focus sits in the top page: a chain of one document. A focus in the browser window (an empty chain) or in a frame is no leave.
