@@ -57,7 +57,7 @@ Page-load cost on the article page (a saved article of 2.0 MB) against no extens
 - A page load gap under 100 ms reads as instant to a user, so these figures are far below what a user notices.
 - The rivals run on the same page (16 runs) gave +17 ms for DesertFox, +21 for Vimium, +19 for Vimium C and +80 for Tridactyl.
 
-Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). The script checked that the 1-minute load average was under 3 before each variant's 13 runs, not before every run. The highest load sampled during a variant was 1.44.
+Method: `run.mjs` on the `wiki` page, with no extension and DesertFox interleaved over three rounds of 13 runs each (39 per variant). The helper script checked that the 1-minute load average was under 3 before each variant's 13 runs, not before every run. The highest load sampled during a variant was 1.44.
 
 This command covers the memory and hint-speed run only:
 
@@ -65,14 +65,14 @@ This command covers the memory and hint-speed run only:
 MEASURE_DIR=<dir outside /tmp> RUNS=8 PASSES=2 just measure-rivals
 ```
 
-The article comparison used `run.mjs` directly. A helper script that lives outside the repo ran it, so the steps are given here with the in-repo commands. First run the command above once, so that `$MEASURE_DIR/rivals` holds the saved article. Then run each variant on its own, with `RIVALS_DIR` set to that folder:
+The article comparison used `run.mjs` directly. A helper script that lives outside the repo ran it, so the steps are given here with the in-repo commands. Run them from the repo root. First run the command above once, so that `$MEASURE_DIR/rivals` holds the saved article. Then run each variant on its own, with `RIVALS_DIR` set to that folder:
 
 ```
 RIVALS_DIR=$MEASURE_DIR/rivals PAGES=wiki PASS=1 node tools/measure/rivals/run.mjs none 12
 RIVALS_DIR=$MEASURE_DIR/rivals PAGES=wiki PASS=1 node tools/measure/rivals/run.mjs desertfox 12
 ```
 
-Each call makes 13 runs (12 timed and the warm-up run) and writes `$RIVALS_DIR/out/<tool>.p1.json`, which the next call overwrites, so copy it away. Alternate the order over three rounds: none then DesertFox, DesertFox then none, none then DesertFox. Before each call, wait until the 1-minute load average is under 3.
+Each call makes 13 runs (12 timed and the warm-up run) and writes `$RIVALS_DIR/out/<tool>.p1.json`, which the next call overwrites, so copy it away. Alternate the order over three rounds: none then DesertFox, DesertFox then none, none then DesertFox. Before each call, wait until the 1-minute load average is under 3. The cost is the median load event of DesertFox over its 39 runs minus the median of none over its 39 runs.
 
 ## Tab switch
 
