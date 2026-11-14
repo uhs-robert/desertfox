@@ -10,7 +10,7 @@ const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) =>
 
 export const areas = ["newtab", "config"];
 
-export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, open_page, rdp, extension_id }) {
+export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, open_page, rdp, extension_id, press_keys, wait_view_takes_keys }) {
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
   // One new tab at a time: NEWTAB_VIEW takes the first matching view, which must be the one on screen for the shots.
   const open_new_tab = async (selector) => {
@@ -87,19 +87,37 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect((await weather_requests()) === 0, "opening the detail sent a request");
     });
 
-    await run_case("on a 360 px window the card has its own row and does not overlap the clock", async () => {
-      expect(await open_new_tab(".weather-reading"), "the stored reading never drew");
-      await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const frame = page.createElement("iframe"); frame.id = "narrow"; frame.src = "newtab.html?builtin"; frame.style.cssText = "position:fixed;top:0;left:0;width:360px;height:720px;border:1px solid red;z-index:10;background:black"; page.body.append(frame); })()`);
-      await poll_until("the narrow page to draw the card", async () => (await in_background(`!!${NEWTAB_VIEW}.document.querySelector("#narrow")?.contentDocument?.querySelector(".weather-reading")`)).valueOf());
-      const narrow = await in_background(`(() => { const inner = ${NEWTAB_VIEW}.document.querySelector("#narrow").contentDocument; const card = inner.querySelector(".weather").getBoundingClientRect(); const clock = inner.querySelector(".time").getBoundingClientRect(); const view = inner.defaultView.innerWidth; return { view, position: inner.defaultView.getComputedStyle(inner.querySelector(".weather")).position, card_bottom: card.bottom, clock_top: clock.top, card_right: card.right, card_left: card.left }; })()`);
-      expect(narrow.view === 358 || narrow.view === 360, `the frame was ${narrow.view} wide`);
-      expect(narrow.position === "static" && narrow.card_bottom <= narrow.clock_top && narrow.card_left >= 0 && narrow.card_right <= narrow.view, `the card overlaps or leaves the window: ${JSON.stringify(narrow)}`);
-      if (shot_dir) {
-        await take_both_shots("newtab-weather-narrow");
+    // Below 61rem the open 22rem panel would reach the centered clock, so the card must sit in its own row. Each width is a same-origin frame, since a key test cannot resize the window.
+    for (const width of [360, 800]) {
+      await run_case(`in a ${width} px window the card, open or closed, has its own row and does not overlap the clock`, async () => {
+        expect(await open_new_tab(".weather-reading"), "the stored reading never drew");
+        await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const frame = page.createElement("iframe"); frame.id = "narrow"; frame.src = "newtab.html?builtin"; frame.style.cssText = "position:fixed;top:0;left:0;width:${width}px;height:720px;border:1px solid red;z-index:10;background:black"; page.body.append(frame); })()`);
+        await poll_until("the narrow page to draw the card", async () => (await in_background(`!!${NEWTAB_VIEW}.document.querySelector("#narrow")?.contentDocument?.querySelector(".weather-more")`)).valueOf());
+        const measure = () => in_background(`(() => { const inner = ${NEWTAB_VIEW}.document.querySelector("#narrow").contentDocument; const card = inner.querySelector(".weather").getBoundingClientRect(); const clock = inner.querySelector(".time").getBoundingClientRect(); return { view: inner.defaultView.innerWidth, position: inner.defaultView.getComputedStyle(inner.querySelector(".weather")).position, panel_shown: inner.querySelector(".weather-detail").getClientRects().length > 0, card_bottom: card.bottom, clock_top: clock.top, card_right: card.right, card_left: card.left }; })()`);
+        const closed = await measure();
+        expect(closed.view >= width - 2 && closed.view <= width, `the frame was ${closed.view} wide`);
+        expect(closed.position === "static" && closed.card_bottom <= closed.clock_top && closed.card_left >= 0 && closed.card_right <= closed.view, `the closed card overlaps or leaves the window: ${JSON.stringify(closed)}`);
+        if (shot_dir) await take_both_shots(`newtab-weather-${width}`);
         await in_background(`${NEWTAB_VIEW}.document.querySelector("#narrow").contentDocument.querySelector(".weather-more").click()`);
-        await take_both_shots("newtab-weather-narrow-open");
-      }
-      await in_background(`${NEWTAB_VIEW}.document.querySelector("#narrow").remove()`);
+        const open = await measure();
+        expect(open.panel_shown && open.card_bottom <= open.clock_top && open.card_left >= 0 && open.card_right <= open.view, `the open card overlaps the clock or leaves the window: ${JSON.stringify(open)}`);
+        if (shot_dir) await take_both_shots(`newtab-weather-${width}-open`);
+        await in_background(`${NEWTAB_VIEW}.document.querySelector("#narrow").remove()`);
+      });
+    }
+
+    await run_case("f labels the More button, and the open panel at full width clears the clock with every hour shown", async () => {
+      expect(await open_new_tab(".weather-more"), "the More button never drew");
+      await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
+      await wait_view_takes_keys("newtab.html");
+      await press_keys("f");
+      const labels_near_more = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; const more = doc.querySelector(".weather-more").getBoundingClientRect(); return [...doc.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])]).filter((label) => { const box = label.getBoundingClientRect(); return box.right > more.left - 30 && box.left < more.right + 30 && box.bottom > more.top - 30 && box.top < more.bottom + 30; }).length; })()`);
+      await poll_until("a hint label on the More button", async () => (await labels_near_more()) > 0);
+      await press_keys("-k", "Escape");
+      await in_background(`${NEWTAB_VIEW}.document.querySelector(".weather-more").click()`);
+      const wide = await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const panel = page.querySelector(".weather-detail").getBoundingClientRect(); const clock = page.querySelector(".clock").getBoundingClientRect(); const hours = [...page.querySelectorAll(".weather-hour")].map((hour) => hour.getBoundingClientRect()); const inside = hours.filter((box) => box.left >= panel.left && box.right <= panel.right && box.bottom <= panel.bottom + 1).length; return { overlap: panel.left < clock.right && panel.right > clock.left && panel.top < clock.bottom && panel.bottom > clock.top, hours: hours.length, inside }; })()`);
+      expect(!wide.overlap, `the open panel covers the clock: ${JSON.stringify(wide)}`);
+      expect(wide.hours === wide.inside && wide.hours > 0, `an hour is clipped or hidden: ${JSON.stringify(wide)}`);
     });
 
     await use_settings("weather_forget", "newtab_weather = false\n");
