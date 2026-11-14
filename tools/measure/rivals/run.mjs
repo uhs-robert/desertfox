@@ -542,7 +542,14 @@ async function check_site(site) {
     },
   };
   for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
-  if (frame_mode_seen) await check_inside_frame();
+  if (frame_mode_seen) {
+    // The reload can fail on its own. Steps 1 to 3 are done by now and must survive it.
+    try { await check_inside_frame(); }
+    catch (error) {
+      if (connection_lost(error)) throw error;
+      for (const name of ["frame_hints", "frame_activate"]) record.checks[name] ??= { status: "unknown", reason: `the frame checks did not run: ${String(error.message ?? error).slice(0, 150)}` };
+    }
+  }
   return record;
 }
 

@@ -59,7 +59,7 @@ test("a label inside a target beats an earlier label that only sits near another
   assert.equal(picked?.via, "inside");
 });
 
-test("with no label inside a target, one lone near target wins, then a label clearly nearer one target, and the pick records the fallback", () => {
+test("a label inside one target records via inside, and with none inside a lone near target wins, then a label clearly nearer one target", () => {
   const crowded = [target("0", 100), target("1", 135)];
   assert.equal(pick_activation([label("AB", 20, 136)], crowded)?.target, "1");
   assert.equal(pick_activation([label("AB", 20, 136)], crowded)?.via, "inside");
