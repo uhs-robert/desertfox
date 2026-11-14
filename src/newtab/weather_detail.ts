@@ -19,9 +19,9 @@ export function clock_text(hhmm: string, format: ClockFormat): string {
 }
 
 // The hours after the place's current hour, in the place's own time. A stored answer can be hours old, and the draw drops the hours that have passed.
-export function later_hours(detail: WeatherDetail, now_ms: number): WeatherHour[] {
-  const place_hour = new Date(now_ms + detail.utc_offset_seconds * 1000).toISOString().slice(0, 13);
-  return detail.hours.filter((hour) => hour.time.slice(0, 13) > place_hour).slice(0, MAX_STRIP_HOURS);
+export function later_hours(hours: WeatherHour[], utc_offset_seconds: number, now_ms: number): WeatherHour[] {
+  const place_hour = new Date(now_ms + utc_offset_seconds * 1000).toISOString().slice(0, 13);
+  return hours.filter((hour) => hour.time.slice(0, 13) > place_hour).slice(0, MAX_STRIP_HOURS);
 }
 
 // A value over its small label.
@@ -60,20 +60,25 @@ function draw_hour(hour: WeatherHour, format: ClockFormat): HTMLElement {
   return column;
 }
 
+// The strip of later hours, or undefined under `MIN_STRIP_HOURS`. The More button draws it again on each open, so a panel left closed for hours never shows hours that have passed.
+export function draw_hours_strip(hours: WeatherHour[], utc_offset_seconds: number, format: ClockFormat, now_ms: number): HTMLElement | undefined {
+  const later = later_hours(hours, utc_offset_seconds, now_ms);
+  if (later.length < MIN_STRIP_HOURS) return undefined;
+  const strip = document.createElement("div");
+  strip.className = "weather-hours";
+  strip.append(...later.map((hour) => draw_hour(hour, format)));
+  return strip;
+}
+
 // The panel, drawn closed. Its text is plain, so hints and Tab reach only the More button.
-export function draw_weather_detail(detail: WeatherDetail, format: ClockFormat, now_ms: number): HTMLElement {
+export function draw_weather_detail(detail: WeatherDetail, utc_offset_seconds: number, format: ClockFormat, now_ms: number): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "weather-detail";
   const facts = document.createElement("div");
   facts.className = "weather-facts";
   facts.append(stat(String(Math.round(detail.uv_index)), "UV index"), stat(clock_text(detail.sunrise, format), "Sunrise"), stat(clock_text(detail.sunset, format), "Sunset"));
   panel.append(facts);
-  const hours = later_hours(detail, now_ms);
-  if (hours.length >= MIN_STRIP_HOURS) {
-    const strip = document.createElement("div");
-    strip.className = "weather-hours";
-    strip.append(...hours.map((hour) => draw_hour(hour, format)));
-    panel.append(strip);
-  }
+  const strip = draw_hours_strip(detail.hours, utc_offset_seconds, format, now_ms);
+  if (strip) panel.append(strip);
   return panel;
 }

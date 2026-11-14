@@ -2,7 +2,7 @@
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { draw_weather_icon } from "./weather_icon.ts";
-import { compass_point, draw_weather_detail, stat } from "./weather_detail.ts";
+import { compass_point, draw_hours_strip, draw_weather_detail, stat } from "./weather_detail.ts";
 import type { ClockFormat } from "./digital_clock.ts";
 import { browser_net_env, fetch_text, load_cached, net_cache_key, peek_cached, stoppable_net, type NetEnv } from "./net_widget.ts";
 
@@ -17,9 +17,9 @@ export const GEOLOCATION_TIMEOUT_MS = 5000;
 // `time` is the place's own local hour, `2026-11-14T15:00`, as Open-Meteo gives it with `timezone=auto`. `rain_chance` is a percent and absent when Open-Meteo gives none.
 export type WeatherHour = { time: string; temperature: number; rain_chance?: number };
 // The group behind the More button. `sunrise` and `sunset` are local `HH:MM`. A card whose answer lacks any of it draws with no button.
-export type WeatherDetail = { uv_index: number; sunrise: string; sunset: string; utc_offset_seconds: number; hours: WeatherHour[] };
-// `rain_chance` is the percent for the current hour. `wind_direction` is the degrees the wind comes from. Wind speed is km/h for metric and mph for imperial, `high` and `low` are today's.
-export type Weather = { temperature: number; feels_like: number; humidity: number; rain_chance?: number; high: number; low: number; wind_speed: number; wind_direction: number; detail?: WeatherDetail; code: number; place: string; units: "metric" | "imperial" };
+export type WeatherDetail = { uv_index: number; sunrise: string; sunset: string; hours: WeatherHour[] };
+// `date` is the place's local date of the forecast (`2026-11-14`) and `utc_offset_seconds` its offset, so a stored answer is stale once the place's date moves on. `rain_chance` is the percent for the current hour. `wind_direction` is the degrees the wind comes from. Wind speed is km/h for metric and mph for imperial, `high` and `low` are today's.
+export type Weather = { temperature: number; feels_like: number; humidity: number; rain_chance?: number; high: number; low: number; date: string; utc_offset_seconds: number; wind_speed: number; wind_direction: number; detail?: WeatherDetail; code: number; place: string; units: "metric" | "imperial" };
 export type WeatherView = { kind: "weather"; weather: Weather } | { kind: "ask_location" } | { kind: "clear_reading" };
 
 export type WeatherDeps = {
@@ -63,34 +63,36 @@ const parse_json = (text: string): unknown => {
   }
 };
 
+const LOCAL_DATE = /^\d{4}-\d\d-\d\d$/;
 const is_number = (value: unknown): value is number => typeof value === "number";
 const local_clock = (iso: unknown): string | undefined => (typeof iso === "string" ? /^\d{4}-\d\d-\d\dT(\d\d:\d\d)/.exec(iso)?.[1] : undefined);
 
-function parse_detail(parsed: { hourly?: Record<string, unknown[] | undefined>; daily?: Record<string, unknown[] | undefined>; utc_offset_seconds?: unknown }): WeatherDetail | undefined {
+function parse_detail(parsed: { hourly?: Record<string, unknown[] | undefined>; daily?: Record<string, unknown[] | undefined> }): WeatherDetail | undefined {
   const { daily, hourly } = parsed;
   const uv_index = daily?.["uv_index_max"]?.[0];
   const sunrise = local_clock(daily?.["sunrise"]?.[0]);
   const sunset = local_clock(daily?.["sunset"]?.[0]);
-  if (!is_number(uv_index) || sunrise === undefined || sunset === undefined || !is_number(parsed.utc_offset_seconds)) return undefined;
+  if (!is_number(uv_index) || sunrise === undefined || sunset === undefined) return undefined;
   const hours: WeatherHour[] = [];
   (Array.isArray(hourly?.["time"]) ? hourly["time"] : []).forEach((time, index) => {
     const temperature = hourly?.["temperature_2m"]?.[index];
     const chance = hourly?.["precipitation_probability"]?.[index];
     if (local_clock(time) !== undefined && is_number(temperature)) hours.push({ time: time as string, temperature, ...(is_number(chance) ? { rain_chance: chance } : {}) });
   });
-  return { uv_index, sunrise, sunset, utc_offset_seconds: parsed.utc_offset_seconds, hours };
+  return { uv_index, sunrise, sunset, hours };
 }
 
-// Undefined when the current reading, today's high and low or the wind is missing. A missing detail group only leaves out the More button.
+// Undefined when the current reading, today's high and low, the date, the offset or the wind is missing. A missing detail group only leaves out the More button.
 export function parse_forecast(text: string): Omit<Weather, "place" | "units"> | undefined {
   const parsed = parse_json(text) as { current?: Record<string, unknown>; hourly?: Record<string, unknown[] | undefined>; daily?: Record<string, unknown[] | undefined>; utc_offset_seconds?: unknown } | undefined;
   const { temperature_2m, apparent_temperature, relative_humidity_2m, weather_code, wind_speed_10m, wind_direction_10m } = parsed?.current ?? {};
   const high = parsed?.daily?.["temperature_2m_max"]?.[0];
   const low = parsed?.daily?.["temperature_2m_min"]?.[0];
-  if (!is_number(temperature_2m) || !is_number(apparent_temperature) || !is_number(relative_humidity_2m) || !is_number(weather_code) || !is_number(wind_speed_10m) || !is_number(wind_direction_10m) || !is_number(high) || !is_number(low)) return undefined;
+  const date = parsed?.daily?.["time"]?.[0];
+  if (!is_number(parsed?.utc_offset_seconds) || typeof date !== "string" || !LOCAL_DATE.test(date) || !is_number(temperature_2m) || !is_number(apparent_temperature) || !is_number(relative_humidity_2m) || !is_number(weather_code) || !is_number(wind_speed_10m) || !is_number(wind_direction_10m) || !is_number(high) || !is_number(low)) return undefined;
   const chance = parsed?.hourly?.["precipitation_probability"]?.[0];
   const detail = parse_detail(parsed ?? {});
-  return { temperature: temperature_2m, feels_like: apparent_temperature, humidity: relative_humidity_2m, ...(is_number(chance) ? { rain_chance: chance } : {}), high, low, wind_speed: wind_speed_10m, wind_direction: wind_direction_10m, ...(detail ? { detail } : {}), code: weather_code };
+  return { temperature: temperature_2m, feels_like: apparent_temperature, humidity: relative_humidity_2m, ...(is_number(chance) ? { rain_chance: chance } : {}), high, low, date, utc_offset_seconds: parsed.utc_offset_seconds, wind_speed: wind_speed_10m, wind_direction: wind_direction_10m, ...(detail ? { detail } : {}), code: weather_code };
 }
 
 export function parse_geocode(text: string): { latitude: number; longitude: number; place: string } | undefined {
@@ -121,13 +123,13 @@ const is_hour = (stored: unknown): stored is WeatherHour => {
 
 const is_detail = (stored: unknown): stored is WeatherDetail => {
   const value = stored as Partial<WeatherDetail> | undefined;
-  return is_number(value?.uv_index) && typeof value.sunrise === "string" && typeof value.sunset === "string" && is_number(value.utc_offset_seconds) && Array.isArray(value.hours) && value.hours.every(is_hour);
+  return is_number(value?.uv_index) && typeof value.sunrise === "string" && typeof value.sunset === "string" && Array.isArray(value.hours) && value.hours.every(is_hour);
 };
 
 // A stored entry from an older build lacks the newer fields and fails here, so it is fetched again once.
 const is_weather = (stored: unknown): stored is Weather => {
   const value = stored as Partial<Weather> | undefined;
-  return is_number(value?.temperature) && is_number(value.feels_like) && is_number(value.humidity) && (value.rain_chance === undefined || is_number(value.rain_chance)) && is_number(value.high) && is_number(value.low) && is_number(value.wind_speed) && is_number(value.wind_direction) && (value.detail === undefined || is_detail(value.detail)) && is_number(value.code) && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
+  return is_number(value?.temperature) && is_number(value.feels_like) && is_number(value.humidity) && (value.rain_chance === undefined || is_number(value.rain_chance)) && is_number(value.high) && is_number(value.low) && typeof value.date === "string" && is_number(value.utc_offset_seconds) && is_number(value.wind_speed) && is_number(value.wind_direction) && (value.detail === undefined || is_detail(value.detail)) && is_number(value.code) && typeof value.place === "string" && (value.units === "metric" || value.units === "imperial");
 };
 
 type Where = { latitude: number; longitude: number; place: string };
@@ -159,7 +161,10 @@ async function forecast_at(where: Where, units: "metric" | "imperial", net: NetE
 const GEO_KEY_PREFIX = "geo:";
 
 // A stored reading in the units asked for. Before the position arrives, the card draws a stored reading made for any coordinates (`GEO_KEY_PREFIX`), because the read can take seconds. The refresh after it replaces it when the coordinates differ.
-const is_weather_in = (units: "metric" | "imperial") => (stored: unknown): stored is Weather => is_weather(stored) && stored.units === units;
+const is_weather_in = (units: "metric" | "imperial", now: () => number) => (stored: unknown): stored is Weather => is_weather(stored) && stored.units === units && !is_past_date(stored, now());
+
+// The forecast is for one local date. After midnight at the place its high, low, UV and sun times belong to yesterday, so the stored answer is fetched again instead of shown.
+const is_past_date = (weather: Pick<Weather, "date" | "utc_offset_seconds">, now_ms: number): boolean => new Date(now_ms + weather.utc_offset_seconds * 1000).toISOString().slice(0, 10) !== weather.date;
 
 // Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Geolocation comes first when its permission is already granted, and a stored reading draws before the position arrives. A city is the fallback, and with neither the card offers the permission button and sends no request.
 export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, show: (view: WeatherView) => void): Promise<void> {
@@ -173,13 +178,13 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   if (!has_permission) show({ kind: "ask_location" });
   let earlier: Weather | undefined;
   if (has_permission) {
-    earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units), deps.net);
+    earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units, deps.net.now), deps.net);
     if (earlier) show_weather(earlier);
     const position = await granted_position(deps);
     if (position) {
       const [latitude, longitude] = [round_coordinate(position.latitude), round_coordinate(position.longitude)];
       // The rounded coordinates are in the key, so after travel the old place never counts as current.
-      const spec = { name: "weather", key: `${GEO_KEY_PREFIX}${latitude},${longitude}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce: () => forecast_at({ latitude, longitude, place: "" }, units, deps.net) };
+      const spec = { name: "weather", key: `${GEO_KEY_PREFIX}${latitude},${longitude}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units, deps.net.now), produce: () => forecast_at({ latitude, longitude, place: "" }, units, deps.net) };
       const known = await load_cached<Weather>(spec, deps.net, show_weather);
       // The preview was made for other coordinates and the new place has no reading, so the card must not show the old place as local weather.
       if (earlier && !known) show({ kind: "clear_reading" });
@@ -193,7 +198,7 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
       const where = await geocode_city(city, deps.net);
       return where && forecast_at(where, units, deps.net);
     };
-    const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units), produce };
+    const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units, deps.net.now), produce };
     const known = await load_cached<Weather>(spec, deps.net, show_weather);
     if (earlier && !known) show({ kind: "clear_reading" });
     return;
@@ -204,7 +209,7 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
 // The More button of an earlier draw says whether the reader had the detail open. A redraw rebuilds the reading (a stored value, then a fresh one), so the state is read back from the old button.
 const detail_was_open = (slot: HTMLElement): boolean => slot.querySelector(".weather-more")?.getAttribute("aria-expanded") === "true";
 
-function draw_more_button(panel: HTMLElement, open: boolean): HTMLButtonElement {
+function draw_more_button(panel: HTMLElement, open: boolean, on_open: () => void): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "weather-more";
@@ -213,14 +218,15 @@ function draw_more_button(panel: HTMLElement, open: boolean): HTMLButtonElement 
     button.setAttribute("aria-expanded", String(now_open));
     button.textContent = now_open ? "Less" : "More";
     panel.hidden = !now_open;
+    if (now_open) on_open();
   };
   set_open(open);
   button.addEventListener("click", () => set_open(button.getAttribute("aria-expanded") !== "true"));
   return button;
 }
 
-// The reading and the permission button are separate children, so a city reading and the button show together and a new reading never removes the button. `format` and `now_ms` only shape the hours in the detail.
-export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () => void, format: ClockFormat = 12, now_ms: number = Date.now()): void {
+// The reading and the permission button are separate children, so a city reading and the button show together and a new reading never removes the button. `format` and `now` only shape the hours in the detail.
+export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () => void, format: ClockFormat = 12, now: () => number = Date.now): void {
   if (view.kind === "clear_reading") {
     slot.querySelector(".weather-reading")?.remove();
     return;
@@ -235,7 +241,7 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
     slot.append(ask);
     return;
   }
-  const { temperature, feels_like, humidity, rain_chance, high, low, wind_speed, wind_direction, detail, code, place, units } = view.weather;
+  const { temperature, feels_like, humidity, rain_chance, high, low, utc_offset_seconds, wind_speed, wind_direction, detail, code, place, units } = view.weather;
   const main = document.createElement("div");
   main.className = "weather-main";
   const degrees = document.createElement("span");
@@ -249,9 +255,15 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
   if (rain_chance !== undefined) reading.append(stat(`${Math.round(rain_chance)}%`, "Rain chance"));
   reading.append(stat(`${Math.round(wind_speed)} ${units === "imperial" ? "mph" : "km/h"} ${compass_point(wind_direction)}`, "Wind"));
   if (detail) {
-    const panel = draw_weather_detail(detail, format, now_ms);
+    const panel = draw_weather_detail(detail, utc_offset_seconds, format, now());
     panel.id = "weather-detail";
-    reading.append(draw_more_button(panel, detail_was_open(slot)), panel);
+    // Hours pass while the panel stays closed, so each open draws the strip again from the stored hours. It sends nothing.
+    const redraw_strip = () => {
+      panel.querySelector(".weather-hours")?.remove();
+      const strip = draw_hours_strip(detail.hours, utc_offset_seconds, format, now());
+      if (strip) panel.append(strip);
+    };
+    reading.append(draw_more_button(panel, detail_was_open(slot), redraw_strip), panel);
   }
   slot.querySelector(".weather-reading")?.remove();
   slot.prepend(reading);

@@ -6,17 +6,18 @@ import { clock_text, compass_point, later_hours } from "../src/newtab/weather_de
 import { net_cache_key } from "../src/newtab/net_widget.ts";
 import { describe_code, draw_weather, forecast_url, forget_weather, geocode_url, parse_forecast, parse_geocode, round_coordinate, run_weather, start_weather, type WeatherDeps, type WeatherSettings, type WeatherView } from "../src/newtab/weather.ts";
 
+const NOW_MS = Date.parse("2026-11-14T14:30:00Z");
 const HOUR_TIMES = Array.from({ length: 12 }, (_, index) => new Date(Date.UTC(2026, 10, 14, 15 + index)).toISOString().slice(0, 16));
 const forecast_body = (over: Record<string, unknown> = {}) => ({
   utc_offset_seconds: 3600,
   current: { temperature_2m: 12.4, apparent_temperature: 10.1, relative_humidity_2m: 44, weather_code: 3, wind_speed_10m: 11.6, wind_direction_10m: 320 },
   hourly: { time: HOUR_TIMES, temperature_2m: HOUR_TIMES.map((_, index) => 12 - index), precipitation_probability: HOUR_TIMES.map((_, index) => 30 + index) },
-  daily: { temperature_2m_max: [14.2], temperature_2m_min: [5.8], uv_index_max: [2.4], sunrise: ["2026-11-14T07:42"], sunset: ["2026-11-14T15:31"] },
+  daily: { time: ["2026-11-14"], temperature_2m_max: [14.2], temperature_2m_min: [5.8], uv_index_max: [2.4], sunrise: ["2026-11-14T07:42"], sunset: ["2026-11-14T15:31"] },
   ...over,
 });
 const FORECAST = JSON.stringify(forecast_body());
-const WEATHER_CARD = { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, wind_speed: 11.6, wind_direction: 320, code: 3 };
-const WEATHER_DETAIL = { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", utc_offset_seconds: 3600, hours: HOUR_TIMES.map((time, index) => ({ time, temperature: 12 - index, rain_chance: 30 + index })) };
+const WEATHER_CARD = { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: "2026-11-14", utc_offset_seconds: 3600, wind_speed: 11.6, wind_direction: 320, code: 3 };
+const WEATHER_DETAIL = { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: HOUR_TIMES.map((time, index) => ({ time, temperature: 12 - index, rain_chance: 30 + index })) };
 const GEOCODE = JSON.stringify({ results: [{ name: "Oslo", latitude: 59.91273, longitude: 10.74609 }] });
 
 function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; is_private?: boolean; fail_fetch?: boolean } = {}) {
@@ -28,7 +29,7 @@ function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; is_private?
       if (over.fail_fetch) throw new Error("offline");
       return new Response(String(input).includes("geocoding") ? GEOCODE : FORECAST);
     }) as typeof fetch,
-    now: () => 5_000_000,
+    now: () => NOW_MS,
     storage: { get: async (key) => ({ [key]: store[key] }), set: async (items) => void Object.assign(store, items) },
   };
   const calls = { permission_checks: 0, position_reads: 0, permission_requests: 0 };
@@ -196,7 +197,7 @@ test("after travel the stored place is replaced: other rounded coordinates fetch
 test("a stored reading older than the age limit is not drawn when the refresh fails", async () => {
   const first = fake_deps({ allowed: true });
   await collect(on(), first.deps);
-  const later = { ...first.deps, net: { ...first.deps.net, now: () => 5_000_000 + 7 * 3_600_000, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
+  const later = { ...first.deps, net: { ...first.deps.net, now: () => NOW_MS + 7 * 3_600_000, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
   assert.deepEqual(await collect(on(), later), []);
 });
 
@@ -253,7 +254,7 @@ test("a stopped run sends no forecast request after its geocoding answer arrives
 });
 
 test("the rain chance is the first hour, and a missing or odd value leaves it out", () => {
-  const base = { current: { temperature_2m: 1, apparent_temperature: 0, relative_humidity_2m: 50, weather_code: 0, wind_speed_10m: 3, wind_direction_10m: 90 }, daily: { temperature_2m_max: [2], temperature_2m_min: [0] } };
+  const base = { current: { temperature_2m: 1, apparent_temperature: 0, relative_humidity_2m: 50, weather_code: 0, wind_speed_10m: 3, wind_direction_10m: 90 }, utc_offset_seconds: 0, daily: { time: ["2026-11-14"], temperature_2m_max: [2], temperature_2m_min: [0] } };
   assert.equal(parse_forecast(JSON.stringify({ ...base, hourly: { precipitation_probability: [70, 10] } }))?.rain_chance, 70);
   assert.equal("rain_chance" in parse_forecast(JSON.stringify(base))!, false);
   assert.equal("rain_chance" in parse_forecast(JSON.stringify({ ...base, hourly: { precipitation_probability: [null] } }))!, false);
@@ -261,7 +262,7 @@ test("the rain chance is the first hour, and a missing or odd value leaves it ou
 
 test("a stored reading from before feels-like and humidity is not used", async () => {
   const { deps, urls } = fake_deps({ allowed: true });
-  await deps.net.storage.set({ newtab_net_cache_weather: { key: "geo:59.91,10.75|metric", at: 5_000_000, value: { temperature: 1, code: 0, place: "", units: "metric" } } });
+  await deps.net.storage.set({ newtab_net_cache_weather: { key: "geo:59.91,10.75|metric", at: NOW_MS, value: { temperature: 1, code: 0, place: "", units: "metric" } } });
   const views = await collect(on(), deps);
   assert.equal(urls.length, 1, "the old shape forced a fresh request");
   assert.deepEqual(views.map((view) => view.kind), ["weather"]);
@@ -323,7 +324,6 @@ function with_fake_document<T>(body: () => Promise<T> | T): Promise<T> {
 }
 
 const weather_view = (over: Record<string, unknown> = {}): WeatherView => ({ kind: "weather", weather: { ...WEATHER_CARD, detail: WEATHER_DETAIL, place: "Oslo", units: "metric", ...over } as never });
-const NOW_MS = Date.parse("2026-11-14T14:30:00Z");
 
 test("the forecast url asks for the card, the daily set and 12 hours in one request, with mph only for imperial", () => {
   const metric = new URL(forecast_url(59.91273, 10.74609, "metric"));
@@ -350,7 +350,7 @@ test("parse_forecast reads the card, the daily set and the hours, and slices loc
 });
 
 test("a missing daily block or odd hours leave the card, and only the detail group goes", () => {
-  const no_daily = parse_forecast(JSON.stringify(forecast_body({ daily: { temperature_2m_max: [1], temperature_2m_min: [0] } })))!;
+  const no_daily = parse_forecast(JSON.stringify(forecast_body({ daily: { time: ["2026-11-14"], temperature_2m_max: [1], temperature_2m_min: [0] } })))!;
   assert.equal(no_daily.high, 1);
   assert.equal("detail" in no_daily, false);
   assert.equal(parse_forecast(JSON.stringify(forecast_body({ daily: {} }))), undefined, "high and low are card fields");
@@ -361,7 +361,7 @@ test("a missing daily block or odd hours leave the card, and only the detail gro
 
 test("a stored entry of the previous shape is fetched again once instead of throwing", async () => {
   const { deps, urls } = fake_deps({ allowed: true });
-  await deps.net.storage.set({ newtab_net_cache_weather: { key: "geo:59.91,10.75|metric", at: 5_000_000, value: { temperature: 1, feels_like: 0, humidity: 5, rain_chance: 3, code: 0, place: "", units: "metric" } } });
+  await deps.net.storage.set({ newtab_net_cache_weather: { key: "geo:59.91,10.75|metric", at: NOW_MS, value: { temperature: 1, feels_like: 0, humidity: 5, rain_chance: 3, code: 0, place: "", units: "metric" } } });
   const views = await collect(on(), deps);
   assert.equal(urls.length, 1);
   assert.deepEqual(views.map((view) => view.kind), ["weather"]);
@@ -384,16 +384,16 @@ test("clock text follows the 12 or 24 hour format", () => {
 });
 
 test("the strip keeps only hours after the place's current hour, in the place's time", () => {
-  assert.equal(later_hours(WEATHER_DETAIL, NOW_MS)[0]!.time, "2026-11-14T16:00", "14:30 UTC with +1 h is 15:30 there, so 15:00 has gone");
-  assert.equal(later_hours(WEATHER_DETAIL, NOW_MS).length, 11);
-  assert.equal(later_hours(WEATHER_DETAIL, NOW_MS + 3 * 3_600_000).length, 8);
-  assert.equal(later_hours({ ...WEATHER_DETAIL, utc_offset_seconds: 0 }, NOW_MS)[0]!.time, "2026-11-14T15:00");
+  assert.equal(later_hours(WEATHER_DETAIL.hours, 3600, NOW_MS)[0]!.time, "2026-11-14T16:00", "14:30 UTC with +1 h is 15:30 there, so 15:00 has gone");
+  assert.equal(later_hours(WEATHER_DETAIL.hours, 3600, NOW_MS).length, 11);
+  assert.equal(later_hours(WEATHER_DETAIL.hours, 3600, NOW_MS + 3 * 3_600_000).length, 8);
+  assert.equal(later_hours(WEATHER_DETAIL.hours, 0, NOW_MS)[0]!.time, "2026-11-14T15:00");
 });
 
 test("the card shows high and low, wind in the unit and the icon with a label, and hides the strip under 3 hours", () =>
   with_fake_document(() => {
     const slot = new FakeNode("div");
-    draw_weather(slot as never, weather_view(), () => {}, 24, NOW_MS);
+    draw_weather(slot as never, weather_view(), () => {}, 24, () => NOW_MS);
     const values = slot.querySelectorAll(".weather-value").map((node) => node.textContent);
     assert.ok(values.includes("14\u00b0 / 6\u00b0") && values.includes("12 km/h NW"), values.join("|"));
     assert.equal(slot.querySelectorAll(".weather-hour").length, 11);
@@ -403,22 +403,22 @@ test("the card shows high and low, wind in the unit and the icon with a label, a
     assert.equal(icon.getAttribute("aria-label"), "Overcast");
     assert.equal(icon.getAttribute("aria-hidden"), null);
     const imperial = new FakeNode("div");
-    draw_weather(imperial as never, weather_view({ units: "imperial" }), () => {}, 12, NOW_MS);
+    draw_weather(imperial as never, weather_view({ units: "imperial" }), () => {}, 12, () => NOW_MS);
     assert.ok(imperial.querySelectorAll(".weather-value").some((node) => node.textContent === "12 mph NW"));
     assert.equal(imperial.querySelectorAll(".weather-hour")[0]!.textContent, "4 PM11\u00b031%");
     const late = new FakeNode("div");
-    draw_weather(late as never, weather_view(), () => {}, 12, Date.parse("2026-11-15T00:00:00Z") + 5 * 3_600_000);
+    draw_weather(late as never, weather_view(), () => {}, 12, () => Date.parse("2026-11-15T00:00:00Z") + 5 * 3_600_000);
     assert.equal(late.querySelector(".weather-hours"), null, "too few hours left for a strip");
     assert.ok(late.querySelector(".weather-more"), "the facts remain");
     const none = new FakeNode("div");
-    draw_weather(none as never, weather_view({ detail: undefined }), () => {}, 12, NOW_MS);
+    draw_weather(none as never, weather_view({ detail: undefined }), () => {}, 12, () => NOW_MS);
     assert.equal(none.querySelector(".weather-more"), null);
   }));
 
 test("the More button toggles the panel with aria-expanded, and the open state survives the second show", () =>
   with_fake_document(() => {
     const slot = new FakeNode("div");
-    draw_weather(slot as never, weather_view(), () => {}, 12, NOW_MS);
+    draw_weather(slot as never, weather_view(), () => {}, 12, () => NOW_MS);
     const button = () => slot.querySelector(".weather-more")!;
     const panel = () => slot.querySelector(".weather-detail")!;
     assert.equal(button().getAttribute("aria-expanded"), "false");
@@ -430,12 +430,12 @@ test("the More button toggles the panel with aria-expanded, and the open state s
     assert.equal(button().textContent, "Less");
     assert.equal(panel().hidden, false);
     const first_panel = panel();
-    draw_weather(slot as never, weather_view({ temperature: 20 }), () => {}, 12, NOW_MS);
+    draw_weather(slot as never, weather_view({ temperature: 20 }), () => {}, 12, () => NOW_MS);
     assert.notEqual(panel(), first_panel, "the reading was rebuilt");
     assert.equal(button().getAttribute("aria-expanded"), "true");
     assert.equal(panel().hidden, false);
     button().listeners["click"]!();
-    draw_weather(slot as never, weather_view(), () => {}, 12, NOW_MS);
+    draw_weather(slot as never, weather_view(), () => {}, 12, () => NOW_MS);
     assert.equal(button().getAttribute("aria-expanded"), "false");
     assert.equal(slot.querySelectorAll(".weather-reading").length, 1);
   }));
@@ -508,4 +508,43 @@ test("the weather icon carries role img and its label instead of aria-hidden", (
   with_fake_document(() => {
     const icon = draw_weather_icon(0, "Clear") as unknown as FakeNode;
     assert.deepEqual([icon.getAttribute("role"), icon.getAttribute("aria-label"), icon.getAttribute("aria-hidden")], ["img", "Clear", null]);
+  }));
+
+test("a stored answer is used until the place's date moves on, then fetched again", async () => {
+  const at = (iso: string) => () => Date.parse(iso);
+  const run_at = async (later_iso: string) => {
+    const { deps, urls } = fake_deps({ allowed: true });
+    await collect(on(), { ...deps, net: { ...deps.net, now: at("2026-11-14T22:40:00Z") } });
+    const views = await collect(on(), { ...deps, net: { ...deps.net, now: at(later_iso) } });
+    return { urls: urls.length, views };
+  };
+  const same_day = await run_at("2026-11-14T22:50:00Z");
+  assert.equal(same_day.urls, 1, "23:50 at the place is still the forecast's date");
+  assert.ok(same_day.views.length >= 1 && same_day.views.every((view) => view.kind === "weather"));
+  const next_day = await run_at("2026-11-14T23:10:00Z");
+  assert.equal(next_day.urls, 2, "00:10 at the place is a new date, so the answer within the TTL is fetched again");
+  assert.deepEqual(next_day.views.map((view) => view.kind), ["weather"], "only the fresh answer was drawn, not the stored one");
+});
+
+test("a forecast with no local date or offset is not a card", () => {
+  assert.equal(parse_forecast(JSON.stringify(forecast_body({ daily: { temperature_2m_max: [1], temperature_2m_min: [0] } }))), undefined);
+  assert.equal(parse_forecast(JSON.stringify(forecast_body({ utc_offset_seconds: undefined }))), undefined);
+  assert.equal(parse_forecast(JSON.stringify(forecast_body({ daily: { ...forecast_body().daily, time: ["14.11.2026"] } }))), undefined);
+});
+
+test("opening More draws the strip again, so hours that passed while it was closed are gone", () =>
+  with_fake_document(() => {
+    let now_ms = NOW_MS;
+    const slot = new FakeNode("div");
+    draw_weather(slot as never, weather_view(), () => {}, 12, () => now_ms);
+    const strip_hours = () => slot.querySelectorAll(".weather-hour").length;
+    assert.equal(strip_hours(), 11);
+    now_ms = NOW_MS + 4 * 3_600_000;
+    slot.querySelector(".weather-more")!.listeners["click"]!();
+    assert.equal(strip_hours(), 7, "four hours later, four fewer");
+    slot.querySelector(".weather-more")!.listeners["click"]!();
+    now_ms = NOW_MS + 9 * 3_600_000;
+    slot.querySelector(".weather-more")!.listeners["click"]!();
+    assert.equal(slot.querySelector(".weather-hours"), null, "under the minimum the strip goes");
+    assert.equal(slot.querySelectorAll(".weather-detail").length, 1);
   }));
