@@ -58,6 +58,14 @@ function text_widget(name: string, control: Control, hooks: Hooks): Widget {
   return { node: suggestions.length > 0 ? el("span", undefined, labelled(input, name), list) : labelled(input, name), read, write: (value) => { input.value = text_of_value(control, value); } };
 }
 
+// The Up and Down button of a list row. The caller sets `disabled` and the click handler.
+function move_button(label: "Up" | "Down", item: string): HTMLButtonElement {
+  const button = el("button", "desertfox-settings-move", label) as HTMLButtonElement;
+  button.type = "button";
+  button.setAttribute("aria-label", `${label === "Up" ? "Move up" : "Move down"} ${item}`);
+  return button;
+}
+
 function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widget {
   const box = el("div", "desertfox-settings-order");
   box.setAttribute("role", "group");
@@ -78,10 +86,8 @@ function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widge
           else checked.delete(item);
           hooks.commit(read());
         });
-        const move = (label: string, by: number) => {
-          const button = el("button", "desertfox-settings-move", label) as HTMLButtonElement;
-          button.type = "button";
-          button.setAttribute("aria-label", `${label === "Up" ? "Move up" : "Move down"} ${item}`);
+        const move = (label: "Up" | "Down", by: number) => {
+          const button = move_button(label, item);
           button.disabled = index + by < 0 || index + by >= order.length;
           button.addEventListener("click", () => {
             const other = order[index + by]!;
@@ -115,13 +121,13 @@ function ordered_list_widget(name: string, items: string[], hooks: Hooks): Widge
 
 type Link = { label: string; url: string; group?: string };
 
-// One row per link: label, address and group, with a button to drop it. A row with nothing typed is no link, so Add link never puts an empty table in the value.
-function link_list_widget(name: string, hooks: Hooks): Widget {
+// One row per link: label, address and group, with Up and Down buttons and one to drop it. A row with nothing typed is no link, so Add link never puts an empty table in the value.
+export function link_list_widget(name: string, hooks: Hooks): Widget {
   const box = el("div", "desertfox-settings-links");
   box.setAttribute("role", "group");
   box.setAttribute("aria-label", name);
   const rows = el("div", undefined);
-  const row_nodes: { node: HTMLElement; read: () => Link & { group: string } }[] = [];
+  const row_nodes: { node: HTMLElement; up: HTMLButtonElement; down: HTMLButtonElement; read: () => Link & { group: string } }[] = [];
   const read = (): Link[] =>
     row_nodes
       .map((row) => row.read())
@@ -143,18 +149,41 @@ function link_list_widget(name: string, hooks: Hooks): Widget {
     const label = input("label", "Label", link.label);
     const url = input("address", "https://example.com/", link.url);
     const group = input("group", "Group (optional)", link.group ?? "");
+    const up = move_button("Up", link.label);
+    const down = move_button("Down", link.label);
     const remove = el("button", "desertfox-settings-move", "Remove") as HTMLButtonElement;
     remove.type = "button";
     remove.setAttribute("aria-label", `Remove the link ${link.label}`);
-    const node = el("div", "desertfox-settings-order-row", label, url, group, remove);
-    const row = { node, read: () => ({ label: label.value, url: url.value, group: group.value }) };
+    const node = el("div", "desertfox-settings-order-row", label, url, group, up, down, remove);
+    const row = { node, up, down, read: () => ({ label: label.value, url: url.value, group: group.value }) };
+    const move = (button: HTMLButtonElement, by: number) =>
+      button.addEventListener("click", () => {
+        const at = row_nodes.indexOf(row);
+        [row_nodes[at], row_nodes[at + by]] = [row_nodes[at + by]!, row_nodes[at]!];
+        rows.replaceChildren(...row_nodes.map((entry) => entry.node));
+        refresh_moves();
+        // The redraw detaches the pressed button, so focus goes to the same direction on the moved row, or to the other one at the end of the list.
+        (button.disabled ? (button === up ? down : up) : button).focus();
+        hooks.commit(read());
+      });
+    move(up, -1);
+    move(down, 1);
     remove.addEventListener("click", () => {
       row_nodes.splice(row_nodes.indexOf(row), 1);
       node.remove();
+      refresh_moves();
       hooks.commit(read());
     });
     row_nodes.push(row);
     rows.append(node);
+    refresh_moves();
+  }
+
+  function refresh_moves(): void {
+    row_nodes.forEach((row, index) => {
+      row.up.disabled = index === 0;
+      row.down.disabled = index === row_nodes.length - 1;
+    });
   }
 
   const add = el("button", "desertfox-settings-move", "Add link") as HTMLButtonElement;
