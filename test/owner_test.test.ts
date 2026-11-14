@@ -490,12 +490,12 @@ test("a plain spawn with no pid leaves no state file, and a unit or a real pid k
   assert.equal(existsSync(paths.state_file), false);
 });
 
-test("close without systemctl on PATH treats the unit as stopped and does not throw", (t) => {
+test("close without systemctl on PATH reports the unit as not confirmed stopped and does not throw", (t) => {
   const empty_dir = make_tmp_dir("desertfox-owner-test-path-", t);
   const saved = process.env.PATH;
   process.env.PATH = empty_dir;
   try {
-    assert.equal(real_close_deps().stop_unit("desertfox-owner-test-x"), true);
+    assert.equal(real_close_deps().stop_unit("desertfox-owner-test-x"), false);
   } finally {
     process.env.PATH = saved;
   }

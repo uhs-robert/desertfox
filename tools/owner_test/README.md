@@ -15,12 +15,13 @@ The agent workflow is in `.claude/skills/owner-test/SKILL.md`.
 
 - `cli.ts`: the four actions, each under a per-worktree lock (`lock.ts`, `flock`) except status. It builds, stamps `dist/manifest.json` with a `version_name`, starts `web-ext run` in a systemd user unit (plain detached spawn when systemd is missing), and checks the loaded build over the debugger.
 - `paths.ts`: the state file (`$XDG_STATE_HOME/desertfox/owner-test/<key>.json`) and the profile and log folder (`$XDG_CACHE_HOME/desertfox/owner-test/<key>/`) for a worktree.
-- `state.ts`: the state file, written atomically with mode 0600 before any process starts.
+- `state.ts`: the state file, written atomically with mode 0600 before any process starts. A plain spawn that returns pid 0 started nothing, so open removes its state file and fails at once.
+- `system.ts`: the real system calls close uses (`real_close_deps`). When `systemctl` cannot run, the unit counts as not confirmed stopped, so close keeps the profile and state and says to run it again.
 - `process_guard.ts`: a recorded pid counts only while its start ticks (field 22 of `/proc/<pid>/stat`) still match, so a recycled pid is never signalled.
 - `close.ts`: stops the processes, then deletes the profile only when the state names the exact profile folder its own worktree maps to under the owner-test cache root.
 - `profile.ts`: the profile `user.js`, seeded from `test/key/user.js` with the new tab, start page and notification lines dropped.
 - `hints.ts`: checks each `:set` hint against the settings table, so a typo fails at open time.
-- `web_ext.ts`: the web-ext arguments and the manifest stamp.
+- `web_ext.ts`: the web-ext arguments and the manifest stamp. `--verbose` makes the web-ext log say why Firefox closed.
 - `probe.ts`: judges the debugger's answer. The system policy pins a signed beta under the same add-on id, so only a temporary install with this build's stamp counts.
 
 Reload asks the debugger to reload the add-on (`rdp_probe.ts`), after the build ends. web-ext runs with `--no-reload`, because its own watcher fires many times per build and ignores dotfiles. Every debugger call has a deadline, and `status` re-probes the loaded build.
