@@ -71,7 +71,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 | Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
 | --- | --- | --- | --- | --- | --- |
-| Hints with modifiers | ✅ | 🟡 hint rules only, see the link | ✅ | ✅ | ✅ |
+| Hints with modifiers | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | 🟡 | ❌ | ❌ | ❌ |
