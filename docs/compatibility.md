@@ -15,7 +15,7 @@ Each result cell is a mark and an evidence tag, such as `✅ R`.
 
 | Tag | Meaning |
 | --- | --- |
-| R | Rig run on the live site. `PAGES=sites PASSES=3 just measure-rivals`, see [`tools/measure/rivals/README.md`](../tools/measure/rivals/README.md). |
+| R | Rig run on the live site, or on a local test page where the row says so. `PAGES=sites PASSES=3 just measure-rivals`, see [`tools/measure/rivals/README.md`](../tools/measure/rivals/README.md). |
 | H | Hand check in a real browser session. Steps in [`tools/measure/rivals/hand_checks.md`](../tools/measure/rivals/hand_checks.md). |
 | A | Automated test on a local stand-in page, never the live site. |
 | S | Source check: the project's code was read, nothing was run. |
@@ -47,7 +47,7 @@ The rig cannot log in, so sites behind a login are checked by hand.
 | Google Maps | ✅ H | No | ❌ H | ⚠️ H | ⚠️ H | DesertFox: `h`, `j`, `k` and `l` pan the map from load and after `Escape`. Vimium: runs no commands on the page. Vimium C: `j` does not move the map, and the arrow keys pan it only until `Escape`. Hints work. Tridactyl: `j` does not move the map. Its activation hit the wrong target. |
 | Excalidraw | ❌ R H | No | ❌ H | ❌ R H | ❌ R | Movement is pointer-only for every tool: the canvas has no pan key, and the rig finds no tool key that moves it. Hints select tools and items for DesertFox and Vimium C. Vimium runs no commands on the page. No hand check covers Tridactyl. |
 | StackBlitz | ✅ H | No | ❌ H | ⚠️ R H | ⚠️ R H | Checked on the lodash project page. DesertFox focuses the editor and moves in it. Vimium runs no commands on the page. Vimium C: its scroll key moves the editor view, but a keyboard user cannot select the editor. Tridactyl: focuses the editor only with hint flags. The rig reads its movement blocked. Tridactyl activation hit the wrong target. |
-| Local page with a frame from another site | ✅ R | Yes: the frame park, see [Frames from other sites](#frames-from-other-sites). A: `test/key/p6_frame_hybrid.mjs` | ⚠️ R | ✅ R | ❌ R | The page has a frame on another origin that takes the focus on load. DesertFox rig run 2026-11-14 on main `97b99348`, the rivals on the pinned versions above. DesertFox: `j` scrolls the page from load, `f` labels the frame's button, a hint into it enters frame mode, and `Escape` then `gF` leaves it. Vimium: `j` does nothing until `gF` returns focus to the page, and the other steps pass. Vimium C: every step passes. Tridactyl: `j` does nothing, no hint reaches the frame, and no default key leaves it. |
+| Local page with a frame from another site | ✅ R | No: generic code, see [Frames from other sites](#frames-from-other-sites). A: `test/key/p6_frame_hybrid.mjs` | ⚠️ R | ✅ R | ❌ R | The page has a frame on another origin that takes the focus on load. DesertFox rig run 2026-11-14 on main `97b99348`, the rivals on the pinned versions above. DesertFox: `j` scrolls the page from load, `f` labels the frame's button, a hint into it enters frame mode, and `Escape` then `gF` leaves it. Vimium: `j` does nothing until `gF` returns focus to the page, and the other steps pass. Vimium C: every step passes. Tridactyl: `j` does nothing, no hint reaches the frame, and no default key leaves it. |
 | Google Search | ✅ R | No | ✅ R | ✅ R | ✅ R | |
 | Amazon | ✅ H | No | ✅ H | ✅ H | ✅ H | The rig often got Amazon's interstitial page, so the marks come from the hand check. |
 | Stack Overflow | ✅ R | No | ✅ R | ✅ R | ✅ R | |
@@ -64,7 +64,7 @@ The rig cannot log in, so sites behind a login are checked by hand.
 
 A frame from another site that takes the focus on its own, such as a sign-in popup or an embed, is parked: DesertFox hands the focus back to the page, so page keys such as `j` work at once. The frame is parked once, and only when no click or key reached it and its focus is not on a text field. A frame from the same site, or one that focuses a field, keeps the keys as before.
 
-Hints reach into the parked frame, so `f` labels the page and that frame. A click or a hint into the frame enters frame mode, and the badge reads FRAME. `Escape` or `gF` returns to the page. The design is in [`design.md`](design.md).
+Hints reach into the parked frame, so `f` labels the page and that frame. A click or a hint into the frame enters frame mode, and the badge reads FRAME. `gF` returns to the page. The design is in [`design.md`](design.md).
 
 ## Source checks of the rivals
 
