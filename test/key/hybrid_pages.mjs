@@ -20,8 +20,8 @@ export function hybrid_frames_page(id, port) {
 
 export function hybrid_frame_page(kind) {
   const focus_on_load = kind === "field" ? `document.getElementById("name").focus()` : kind === "idle" ? "" : kind === "lost_focus" ? `document.getElementById("picker").focus(); parent.postMessage("took_focus", "*")` : `document.getElementById("picker").focus()`;
-  // Capture listeners on the window run before the content script's own blur listener, so this one hides every blur from it.
-  const hide_blur = kind === "lost_focus" ? `addEventListener("blur", (event) => event.stopImmediatePropagation(), true);` : "";
+  // Capture listeners on the window run before the content script's own blur listener, so this one hides every blur from it. It also hides the frame_blur report below, so it reports each blur it hid.
+  const hide_blur = kind === "lost_focus" ? `addEventListener("blur", (event) => (event.stopImmediatePropagation(), read("frame_blur_hidden")), true);` : "";
   const body = `<div id="picker" tabindex="-1"><button id="close">close</button> <a id="learn" href="#more">learn more</a></div><input id="name" type="text">
 <script>
 ${hide_blur}

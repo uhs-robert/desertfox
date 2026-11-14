@@ -104,8 +104,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await wait_event(mark, badge_is(id, "FRAME"), "the badge to show FRAME");
     await wait_takes_keys(frame_id);
     await j_scrolls(frame_id, id);
-    const tab_id = await in_background(`(async () => (await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0].id)()`);
-    expect((await read_local(`desertfox_tab_mode_${tab_id}`)).parked === undefined, "the click left the park record in place");
+    expect((await tab_mode_record()).parked === undefined, "the click left the park record in place");
   });
 
   await run_case("a hint that focuses a field in the parked frame ends the park and enters frame mode", async () => {
@@ -119,14 +118,14 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await wait_event(mark, on_page(frame_id, "frame_focus"), "the picked field's frame to take the focus");
     // The field puts the frame in insert mode, which the badge shows for the focused frame.
     await wait_event(mark, badge_is(id, "INSERT"), "the badge to show the frame's insert mode");
-    const tab_id = await in_background(`(async () => (await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0].id)()`);
-    expect((await read_local(`desertfox_tab_mode_${tab_id}`)).parked === undefined, "the pick left the park record in place");
+    expect((await tab_mode_record()).parked === undefined, "the pick left the park record in place");
   });
 
   await run_case("a frame that loses its load focus with no blur is parked, and a hint into its field still ends the park", async () => {
     const { id, frame_id } = await open_load_focus("lost", "lost_focus");
     await sleep(400);
-    expect(frame_events(frame_id, "frame_blur").length === 0, "the frame saw a blur, so the case drove the usual order");
+    // The page reports a hidden blur over the network, so the report can come after the park.
+    await poll_until("the frame to hide the blur of the top page's focus, which proves the order this case drives", async () => frame_events(frame_id, "frame_blur_hidden").length >= 1);
     await run_line("hint --inputs");
     let labels;
     await poll_until("the label of the frame's field", async () => (labels = await labels_by_frame()).frame.length >= 1);
