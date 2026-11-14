@@ -103,6 +103,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, sleep,
       await press_keys("br");
       await wait_cmdline((line) => line.open && line.value === "bookmark.rename P9e Old title", "the line to open with the bookmark title");
       await press_keys(...CTRL("u"));
+      await wait_cmdline((line) => line.value === "", "Ctrl-u to clear the line");
       await type_in_line("bookmark.rename P9e New title");
       await press_keys("-k", "Return");
       await poll_until("the bookmark to take the new title", async () => (await background(`browser.bookmarks.search({ url: ${JSON.stringify(url)} })`))[0]?.title === "P9e New title");
