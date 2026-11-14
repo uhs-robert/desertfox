@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -308,6 +308,43 @@ function count_visible_labels(frame_window, selectors) {
   if (frame_window.document.documentElement) visit(frame_window.document.documentElement);
   return count;
 }
+// The texts of the visible labels in one frame, in document order, so the frame branch can type one.
+function frame_label_texts(frame_window, selectors) {
+  const texts = [];
+  const visit = (node) => {
+    if (node.nodeType !== 1) return;
+    if (selectors.some((selector) => node.matches(selector))) {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < frame_window.innerHeight && rect.left < frame_window.innerWidth && node.checkVisibility({ opacityProperty: true, visibilityProperty: true })) texts.push(node.textContent.trim());
+    }
+    const root = node.openOrClosedShadowRoot;
+    if (root) for (const child of root.children) visit(child);
+    for (const child of node.children) visit(child);
+  };
+  if (frame_window.document.documentElement) visit(frame_window.document.documentElement);
+  return texts;
+}
+// A click or a focus on an element of the frame, seen before the page's own handlers. The label's own element is DesertFox's or a rival's, so it is not a reaction.
+function arm_frame_reaction(frame_window, selectors) {
+  const seen = { event: null, tag: null };
+  const on_event = (event) => {
+    const element = event.target;
+    if (!element?.localName || selectors.some((selector) => element.matches?.(selector) || element.closest?.(selector))) return;
+    if (!seen.event) { seen.event = event.type; seen.tag = element.localName; }
+  };
+  frame_window.addEventListener("click", on_event, true);
+  frame_window.addEventListener("focusin", on_event, true);
+  globalThis.__rivals_reaction = { frame_window, on_event, seen };
+  return 1;
+}
+function read_frame_reaction() {
+  const armed = globalThis.__rivals_reaction;
+  if (!armed) return null;
+  armed.frame_window.removeEventListener("click", armed.on_event, true);
+  armed.frame_window.removeEventListener("focusin", armed.on_event, true);
+  delete globalThis.__rivals_reaction;
+  return armed.seen;
+}
 // The same label classes as framescript.js.
 const HINT_SELECTORS = [".desertfox-hint", ".vimiumHintMarker", ".LH", ".TridactylHint"];
 
@@ -388,10 +425,47 @@ async function check_site(site) {
   const record = { url, loaded: page.loaded, landed_url: page.info.url, title: page.info.title, checks: {} };
   const wall = page_wall(page.info);
   if (wall) { for (const name of check_names) record.checks[name] = wall; return record; }
+  let shown = null;
   const run_check = async (name, check) => {
     try { record.checks[name] = await check(); }
     catch (error) { record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) }; }
   };
+
+  let frame_shown_texts = [];
+  async function run_frame_branch() {
+    await run_check("frame_hints", async () => {
+      await press_keys(keys.hint);
+      await sleep(1500);
+      const focused = (await focus_contexts()).at(-1);
+      frame_shown_texts = focused?.pid ? await in_context(focused, frame_label_texts, HINT_SELECTORS).catch(() => []) : [];
+      const top_labels = await ask_page("top_labels", {}, 5000);
+      const in_frames = await count_labels({ frames_only: true });
+      return judge_frame_hints({ frame_labels: in_frames.labels, top_labels });
+    });
+    await run_check("frame_activate", async () => {
+      const focused = (await focus_contexts()).at(-1);
+      const typed = frame_shown_texts.find((text) => text)?.toLowerCase();
+      if (!typed || !focused?.pid) return { status: "fail", reason: "no label in the frame to type" };
+      await in_context(focused, arm_frame_reaction, HINT_SELECTORS);
+      await press_keys(typed);
+      await sleep(2500);
+      const reply = await in_context(focused, read_frame_reaction).catch(() => null);
+      const still_there = (await page_contexts()).some((context) => context.context_id === focused.context_id);
+      const frame_gone = !still_there || !is_frame_mode(await frame_mode_now());
+      return { ...judge_frame_activation({ reply: reply?.error ? null : reply, frame_gone }), typed };
+    });
+    // A dismissed popup leaves no frame to leave, so the page loads again and Escape runs as in step 2.
+    if (!is_frame_mode(await frame_mode_now())) await load_live(url);
+    await press_keys(["Escape"]);
+    await sleep(600);
+    await run_check("frame_leave", async () => {
+      if (!is_frame_mode(await frame_mode_now())) return { status: "unknown", reason: "the frame was gone after the dismiss and did not come back on reload, so gF had no frame to leave" };
+      await press_keys("gF");
+      await sleep(800);
+      return judge_frame_leave({ mode_after: await frame_mode_now(), focus_after: await focus_now() });
+    });
+    shown = null;
+  }
 
   // Step 1. Every tool gets the same probe key, DesertFox too, so all four meet the same page in step 2.
   await run_check("mode_on_load", async () => {
@@ -409,6 +483,13 @@ async function check_site(site) {
     const after = await focus_now();
     return { ...judge_leave({ before, after }), before, after };
   });
+
+  // Step 2b, DesertFox only: it reports frame mode after the leave step when the site focused a frame.
+  const frame_mode_now = async () => (tool === "desertfox" ? ask_page("desertfox_mode", {}, 5000) : null);
+  if (tool === "desertfox") {
+    await run_check("mode_after_leave", async () => describe_mode_after_leave({ focus: await focus_now(), badge_label: await frame_mode_now() }));
+    if (is_frame_mode(await frame_mode_now())) await run_frame_branch();
+  }
 
   // Step 3.
   const no_key = { status: "fail", reason: "no default key" };
@@ -431,7 +512,6 @@ async function check_site(site) {
     const in_frames = await count_labels({ frames_only: true });
     return { labels, targets, frame_labels: in_frames.labels };
   };
-  let shown = null;
   const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
     volume: () => press_and_compare(keys.volume_down, "video_state", judge_volume, 1000),

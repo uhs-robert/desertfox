@@ -3,6 +3,7 @@
 // Each site runs in three steps, the way a user meets it:
 // 1. Mode on load (`mode_on_load`), information only: where the focus is, through frames, and the tool's mode. A tool that starts in insert mode where the site focused a field is right.
 // 2. Leave (`leave`), scored: the tool's own leave key, and whether the focused element, in whatever frame holds it, still takes typing.
+// 2b. Frame branch, DesertFox only and only when its badge reads FRAME after the leave step. The site dictates focus and DesertFox does not override it, so a site that focuses a frame (Reddit and X focus a Google sign-in frame) leaves DesertFox working inside that frame until the user dismisses it or leaves with gF. The rivals keep keys on the page and show no badge, so they have no frame mode to score. The branch scores hints in the frame (`frame_hints`), a hint that activates a control in it (`frame_activate`) and `gF` (`frame_leave`), and the normal checks of step 3 follow for every tool.
 // 3. Normal mode actions, scored: the per-site checks, then scroll, hints, a hint that activates its target, and Escape out of hints. Each is pass or blocked.
 // All three run on one page load. Every key goes in through the parent process, so Firefox routes it to the focused frame as it routes a user's key, also into a frame of another origin.
 // The rig reads the page with the same rule for every tool. Only facts come from the page, and the functions here judge them, so the tests cover the rules.
@@ -178,7 +179,37 @@ const describe_facts = (facts) => (facts ? facts.tag + (facts.id ? `#${facts.id}
 export function focus_of(chain) {
   if (!chain) return { readable: false, path: "unreadable", takes_typing: null };
   if (chain.length === 0) return { readable: true, path: "(browser window, not the page)", takes_typing: false };
-  return { readable: true, path: chain.map(describe_facts).join(" > "), takes_typing: takes_typing(chain.at(-1)) };
+  return { readable: true, path: chain.map(describe_facts).join(" > "), takes_typing: takes_typing(chain.at(-1)), depth: chain.length };
+}
+
+// DesertFox's badge reads FRAME while a subframe holds the focus in normal mode.
+export const is_frame_mode = (badge_label) => /^frame$/i.test(badge_label ?? "");
+export const FRAME_CHECKS = ["frame_hints", "frame_activate", "frame_leave"];
+
+// Information, recorded after the leave step like the mode on load. badge_label: DesertFox's badge, or null.
+export function describe_mode_after_leave({ focus, badge_label }) {
+  return { status: "info", reason: `focus ${focus.path}; mode ${badge_label ? badge_label.toLowerCase() : "unknown"} (read from the mode badge)${is_frame_mode(badge_label) ? ": frame mode, the site focused a frame and DesertFox works inside it" : ""}` };
+}
+
+// frame_labels: labels visible inside the frames after the hint key. The top page's labels do not count, because the branch asks whether hints reach the focused frame.
+export function judge_frame_hints({ frame_labels, top_labels }) {
+  if (frame_labels > 0) return pass(`${frame_labels} labels inside the focused frame${top_labels > 0 ? `, ${top_labels} on the top page` : ""}`);
+  return fail(`no labels inside the focused frame (${top_labels} on the top page)`);
+}
+
+// A control reacted when the frame saw a click or focus on an element, or when the frame is gone, as after a dismissed popup.
+// reply: { event: "click" | "focus" | null, tag } from the frame, or null when it could not be read. frame_gone: the frame left the page.
+export function judge_frame_activation({ reply, frame_gone }) {
+  if (frame_gone) return pass("the frame went away (dismissed)");
+  if (reply?.event) return pass(`${reply.event} on a ${reply.tag} inside the frame`);
+  return fail("typing a label in the frame did nothing the frame saw");
+}
+
+// mode_after and focus_after follow gF. The leave works when the badge no longer reads FRAME and the focus sits in the top page.
+export function judge_frame_leave({ mode_after, focus_after }) {
+  if (!focus_after.readable) return { status: "unknown", reason: `the focus could not be read (${focus_after.path})` };
+  if (is_frame_mode(mode_after) || focus_after.depth > 1) return fail(`still in the frame: mode ${String(mode_after).toLowerCase()}, focus ${focus_after.path}`);
+  return pass(`left the frame, mode ${String(mode_after).toLowerCase()}, focus ${focus_after.path}`);
 }
 
 // focus: from focus_of. probe: what the tool's scroll key did, { reached, prevented }, read in the focused document after the tool had its turn, or null. desertfox_mode: the label DesertFox's mode badge shows, read from its `data-desertfox-mode` attribute. The rivals have no such badge, so their mode is inferred and is weaker evidence.
