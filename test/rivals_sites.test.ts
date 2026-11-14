@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -12,6 +12,7 @@ test("a consent redirect, a bot check and a login redirect are walls, a normal p
   assert.equal(page_wall({ url: "https://www.google.com/sorry/index?q=1", title: "", text: "" })?.status, "wall");
   assert.equal(page_wall({ url: "https://stackoverflow.com/q/1", title: "Just a moment...", text: "" })?.status, "wall");
   assert.equal(page_wall({ url: "https://www.amazon.com/", title: "Amazon", text: "Enter the characters you see below" })?.status, "wall");
+  assert.equal(page_wall({ url: "https://www.amazon.com/", title: "Amazon.com", text: "Click the button below to continue shopping\nContinue shopping\nConditions of Use" })?.status, "wall");
   assert.equal(page_wall({ url: "https://old.reddit.com/login/?dest=x", title: "", text: "" })?.status, "login");
   assert.equal(page_wall({ url: "https://x.com/i/flow/login", title: "", text: "" })?.status, "login");
   assert.equal(page_wall({ url: "https://en.wikipedia.org/wiki/Firefox", title: "Firefox - Wikipedia", text: "Firefox is a web browser" }), null);
@@ -476,6 +477,32 @@ test("the control note also covers the passthrough row of a probe site, and no o
   assert.doesNotMatch(sites_table(other, ["desertfox", "none"]), /control did not move/);
 });
 
-test("a site may name Tab presses that reach its scrolling area, the same for every tool", () => {
-  for (const site of SITES) assert.ok(site.tab_count === undefined || (Number.isInteger(site.tab_count) && site.tab_count > 0), site.name);
+test("a site may name a work area that Tab moves the focus into, the same for every tool", () => {
+  for (const site of SITES) assert.ok(site.work_area === undefined || (typeof site.work_area === "string" && site.work_area.length > 0), site.name);
+});
+
+test("Tab presses stop at the first focus inside the work area", async () => {
+  let presses = 0;
+  const result = await tab_into_work_area({ press_tab: async () => { presses++; }, is_inside: async () => presses >= 3 });
+  assert.deepEqual(result, { tabs: 3, reached: true });
+});
+
+test("no Tab press is sent when the focus is already inside the work area", async () => {
+  let presses = 0;
+  const result = await tab_into_work_area({ press_tab: async () => { presses++; }, is_inside: async () => true });
+  assert.deepEqual(result, { tabs: 0, reached: true });
+  assert.equal(presses, 0);
+});
+
+test("Tab presses stop at the limit when the focus never gets inside", async () => {
+  let presses = 0;
+  const result = await tab_into_work_area({ press_tab: async () => { presses++; }, is_inside: async () => false });
+  assert.deepEqual(result, { tabs: MAX_TAB_PRESSES, reached: false });
+  assert.equal(presses, MAX_TAB_PRESSES);
+  assert.equal(MAX_TAB_PRESSES, 30);
+});
+
+test("the note names the Tab count, and whether the work area was reached", () => {
+  assert.equal(tab_note({ tabs: 4, reached: true }), "Tab presses to reach the work area: 4");
+  assert.equal(tab_note({ tabs: 30, reached: false }), "Tab did not reach the work area in 30 presses");
 });

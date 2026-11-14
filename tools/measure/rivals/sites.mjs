@@ -20,15 +20,15 @@ export const PASSTHROUGH_KEYS = ["ArrowDown"];
 // Picked for stable public URLs: Google's own API sample doc and sheet, the first YouTube video, Notion's official public page.
 export const SITES = [
   { name: "youtube", url: "https://www.youtube.com/watch?v=jNQXAC9IVRw", extra: ["play_pause", "volume"] },
-  { name: "google_sheets", url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit", extra: ["cell_move"], scroll_probe: "sheets" },
+  { name: "google_sheets", url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit", extra: ["cell_move"], scroll_probe: "sheets", work_area: "#waffle-rich-text-editor" },
   { name: "google_docs", url: "https://docs.google.com/document/d/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE/edit", extra: [] },
   { name: "wikipedia", url: "https://en.wikipedia.org/wiki/Firefox", extra: [] },
   { name: "github", url: "https://github.com/mozilla-firefox/firefox", extra: [] },
   { name: "hacker_news", url: "https://news.ycombinator.com/", extra: [], activate_selector: ".titleline > a" },
   { name: "reddit", url: "https://www.reddit.com/r/firefox/", extra: [] },
   { name: "google_maps", url: "https://www.google.com/maps/@48.8584,2.2945,15z", extra: [], scroll_probe: "maps" },
-  { name: "excalidraw", url: "https://excalidraw.com/", extra: [], scroll_probe: "excalidraw", control: { wheel_dy: 120 } },
-  { name: "stackblitz", url: "https://stackblitz.com/github/lodash/lodash?file=lodash.js", extra: [], scroll_probe: "stackblitz" },
+  { name: "excalidraw", url: "https://excalidraw.com/", extra: [], scroll_probe: "excalidraw", work_area: ".excalidraw", control: { wheel_dy: 120 } },
+  { name: "stackblitz", url: "https://stackblitz.com/github/lodash/lodash?file=lodash.js", extra: [], scroll_probe: "stackblitz", work_area: ".monaco-editor textarea" },
   { name: "notion_public", url: "https://notion.notion.site/Notion-Official-83715d7703ee4b8699b5e659a4712dd8", extra: [] },
   { name: "google_search", url: "https://www.google.com/search?q=firefox", extra: [] },
   { name: "amazon", url: "https://www.amazon.com/", extra: [] },
@@ -54,8 +54,19 @@ export const step3_names = (site) => {
 // The no-extension tool runs only the control: its `scroll` row is the site's own movement input (see control_of).
 export const check_names_of = (site, tool) => (tool === "none" ? ["scroll"] : ["mode_on_load", "leave", ...(tool === "desertfox" ? FRAME_ROWS : []), ...step3_names(site)]);
 
-// The scored movement rows (scroll with the tool's own key, passthrough with the site's ArrowDown) use the keyboard only and start from the page as loaded. focus: from focus_of. The tool's leave key goes first only when the focus is a typing field, where the tool is in insert mode. A site may name `tab_count` Tab presses that reach its scrolling area, the same for every tool. A click never counts. Only the control, which is not scored, clicks.
+// The scored movement rows (scroll with the tool's own key, passthrough with the site's ArrowDown) use the keyboard only and start from the page as loaded. focus: from focus_of. The tool's leave key goes first only when the focus is a typing field, where the tool is in insert mode. A site may name a `work_area` selector: Tab is then pressed until the focus is inside it, the same for every tool, and the count goes in the row's note. A click never counts. Only the control, which is not scored, clicks.
 export const needs_leave_key = (focus) => focus.takes_typing === true;
+
+// A page can change which Tab stop leads to its work area, so the rig counts presses instead of fixing a number per site.
+export const MAX_TAB_PRESSES = 30;
+export async function tab_into_work_area({ press_tab, is_inside, max = MAX_TAB_PRESSES }) {
+  for (let tabs = 0; ; tabs++) {
+    if (await is_inside()) return { tabs, reached: true };
+    if (tabs === max) return { tabs, reached: false };
+    await press_tab();
+  }
+}
+export const tab_note = ({ tabs, reached }) => (reached ? `Tab presses to reach the work area: ${tabs}` : `Tab did not reach the work area in ${tabs} presses`);
 
 // What the control pass sends: the site's own movement input, a wheel scroll where the site has no movement key.
 export const control_of = (site) => site.control ?? { keys: PASSTHROUGH_KEYS };
@@ -81,7 +92,7 @@ export const as_action = (result) => (result.status === "fail" ? { ...result, st
 // The page a site shows a fresh headless profile instead of the real one. A wall is not a fail of any tool, so every check of the site takes its status, `wall` or `login`.
 const LOGIN_URL = /\/(login|signin|sign_in|i\/flow\/login)\b|accounts\.google\.com\/|ServiceLogin/i;
 const BLOCKED_URL = /^https:\/\/consent\.|\/sorry\/|captcha/i;
-const BLOCKED_TEXT = [/unusual traffic/i, /verify (that )?you are (a )?human/i, /are you a robot/i, /enter the characters you see/i, /blocked by network security/i, /sign in to confirm you.re not a bot/i, /before you continue to/i, /access denied/i];
+const BLOCKED_TEXT = [/unusual traffic/i, /verify (that )?you are (a )?human/i, /are you a robot/i, /enter the characters you see/i, /blocked by network security/i, /sign in to confirm you.re not a bot/i, /before you continue to/i, /click the button below to continue shopping/i, /access denied/i];
 const BLOCKED_TITLE = /^just a moment|^attention required|^access denied/i;
 
 export function page_wall({ url, title, text }) {
