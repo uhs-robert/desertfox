@@ -21,7 +21,7 @@ Each result cell is a mark and an evidence tag, such as `✅ R`.
 | A | Automated test on a local stand-in page, never the live site. |
 | S | Source check: the project's code was read, nothing was run. |
 
-All R cells: 2026-11-14, Firefox 160.0 (headless, fresh profile per tool, default keys and settings), DesertFox 0.1.24, Vimium 2.4.2, Vimium C 2.12.3, Tridactyl 1.25.1, three passes per site and tool. A cell shows the result most passes gave. Run 7b covers every site (rig commit `88b037dc`, extension build `eb5086b1`). Run 8b (build `c77c6e05`) reran Reddit and X. The run 7b build predates #656, which affects only the embed `play` result. The H cells come from hand checks: DesertFox on Docs on 2026-11-13, and all four tools on Sheets, Docs (view) and Docs (editing) on 2026-11-14 with the same pinned versions as run 7b. A rig run is a dated snapshot, not a test, because sites change.
+All R cells: 2026-11-14, Firefox 160.0 (headless, fresh profile per tool, default keys and settings), DesertFox 0.1.24, Vimium 2.4.2, Vimium C 2.12.3, Tridactyl 1.25.1, three passes per site and tool. A cell shows the result most passes gave. Run 7b covers every site (rig commit `88b037dc`, extension build `eb5086b1`). Run 8b (build `c77c6e05`) reran Reddit and X. The run 7b build predates #656, which affects only the embed `play` result. The H cells come from hand checks: DesertFox on Docs on 2026-11-13, and all four tools on Sheets, Docs (view), Docs (editing) and Reddit on 2026-11-14 with the same pinned versions as run 7b. A rig run is a dated snapshot, not a test, because sites change.
 
 A site is scored by whether a keyboard user can get around it with the tool. The three core tasks are: move around the site, open links and controls by hint, and leave a text field. Movement passes when any keys move it with the tool active, the tool's own keys or the site's own keys. If movement fails, the mark is ❌ whatever else works. If movement works but another core task fails, the mark is ⚠️.
 
@@ -42,7 +42,7 @@ Sites behind a login are `pending H`: the rig cannot log in, so these sites are 
 | Wikipedia | ✅ R | No | ✅ R | ✅ R | ✅ R | |
 | GitHub | ✅ R | No | ✅ R | ✅ R | ✅ R | |
 | Hacker News | ✅ R | No | ✅ R | ✅ R | ✅ R | The rig does not score activation here: it lands on a link next to the story link. |
-| Reddit (logged out) | pending R | No | ✅ R | ✅ R | ✅ R | Being retested. |
+| Reddit (logged out) | ✅ H, pending R | No | ✅ R H | ⚠️ R H | ✅ R | DesertFox dismisses the Google sign-in popup by keyboard, and its R part is being retested. Vimium C: no key reaches the popup, so it cannot be dismissed without the mouse. |
 | X (logged out) | pending R | No | ✅ R | ✅ R | ✅ R | Being retested. |
 | Google Maps | ✅ R | No | ✅ R | ✅ R | ⚠️ R | Tridactyl activation hit the wrong target. Scroll is not scored. |
 | Excalidraw | ✅ R | No | ✅ R | ✅ R | ✅ R | Scroll is not scored. |
