@@ -478,6 +478,10 @@ test("the control note also covers the passthrough row of a probe site, and no o
   assert.doesNotMatch(sites_table(other, ["desertfox", "none"]), /control did not move/);
 });
 
+test("only Sheets and Excalidraw get the Tab step, because every tool reads blocked as loaded there", () => {
+  assert.deepEqual(SITES.filter((site: { work_area?: string }) => site.work_area).map((site: { name: string }) => site.name), ["google_sheets", "excalidraw"]);
+});
+
 test("a site may name a work area that Tab moves the focus into, the same for every tool", () => {
   for (const site of SITES) assert.ok(site.work_area === undefined || (typeof site.work_area === "string" && site.work_area.length > 0), site.name);
 });

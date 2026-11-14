@@ -25,7 +25,7 @@ export const SITES = [
   { name: "reddit", url: "https://www.reddit.com/r/firefox/", extra: [] },
   { name: "google_maps", url: "https://www.google.com/maps/@48.8584,2.2945,15z", extra: [], scroll_probe: "maps" },
   { name: "excalidraw", url: "https://excalidraw.com/", extra: [], scroll_probe: "excalidraw", work_area: ".excalidraw", control: { wheel_dy: 120 } },
-  { name: "stackblitz", url: "https://stackblitz.com/github/lodash/lodash?file=lodash.js", extra: [], scroll_probe: "stackblitz", work_area: ".monaco-editor textarea" },
+  { name: "stackblitz", url: "https://stackblitz.com/github/lodash/lodash?file=lodash.js", extra: [], scroll_probe: "stackblitz" },
   { name: "notion_public", url: "https://notion.notion.site/Notion-Official-83715d7703ee4b8699b5e659a4712dd8", extra: [] },
   { name: "google_search", url: "https://www.google.com/search?q=firefox", extra: [] },
   { name: "amazon", url: "https://www.amazon.com/", extra: [] },
