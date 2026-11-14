@@ -65,6 +65,7 @@ test("a non-normal state before load draws at once", async () => {
     { ...NORMAL, mode: "insert" },
     { ...NORMAL, pass_next: true },
     { ...NORMAL, site_label: "SHEETS" },
+    { ...NORMAL, recording: "a" },
   ];
   for (const state of states) show_mode_label(state);
   assert.deepEqual(drawn, states);
