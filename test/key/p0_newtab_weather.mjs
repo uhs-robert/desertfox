@@ -17,6 +17,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     return poll_until(`the new tab page to render ${selector}`, () => in_background(`!!${NEWTAB_VIEW}?.document.querySelector(${JSON.stringify(selector)})`).catch(() => false), { timeout_ms: 10000 }).then(() => true, () => false);
   };
   const close_new_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
+  // A backstop only: timing entries appear when a request completes. The unit tests count request starts with a fake fetch.
   const weather_requests = () => in_background(`${NEWTAB_VIEW}.performance.getEntriesByType("resource").filter((entry) => entry.name.includes("open-meteo.com")).length`);
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const use_settings = async (name, text) => {
