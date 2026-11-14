@@ -13,13 +13,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     const shipped = DEFAULT_SITE_ROWS.find(({ name }) => name === "maps")?.row;
     if (!shipped) throw new Error("no shipped site row named maps");
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=maps_*"', `bind = ${toml(shipped.bind)}`, ""].join("\n"));
+    const { site: _site, bind, ...columns } = shipped;
+    const column_lines = Object.entries(columns).map(([name, value]) => `${name} = ${toml(value)}`);
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=maps_*"', `bind = ${toml(bind)}`, ...column_lines, ""].join("\n"));
     await load_config_dir(dir);
   });
 
-  // The controls page brings a field (#first) and enough filler to scroll the page.
-  const open_map = async (id) => {
-    await open_page("controls", `maps_${id}`, { new_tab: true });
+  // The controls page brings a field (#first) and enough filler to scroll the page. The field page focuses its field as it loads, as Maps focuses its search box.
+  const open_map = async (id, kind = "controls") => {
+    await open_page(kind, `maps_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const map = document.createElement("div");
       map.setAttribute("role", "application");
@@ -53,6 +55,14 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_pans("ArrowDown,");
     await press_keys("hkl");
     await expect_pans("ArrowDown,ArrowLeft,ArrowUp,ArrowRight,");
+  });
+
+  await run_case("on a page that focuses its search field as it loads, j pans the map", async () => {
+    await open_map("load", "field");
+    await poll_until("the field lost the load-time focus", async () => (await in_active_tab('document.activeElement?.id ?? ""')) !== "field");
+    await press_keys("j");
+    await expect_pans("ArrowDown,");
+    expect((await in_active_tab('document.getElementById("field").value')) === "", "j typed into the field");
   });
 
   await run_case("with the map focused, j pans the map", async () => {
