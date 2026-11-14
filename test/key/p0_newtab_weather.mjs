@@ -21,7 +21,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
   const close_new_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/newtab.html")) await browser.tabs.remove(tab.id); })()`);
   // A backstop only: timing entries appear when a request completes. The unit tests count request starts with a fake fetch.
   const weather_requests = () => in_background(`${NEWTAB_VIEW}.performance.getEntriesByType("resource").filter((entry) => entry.name.includes("open-meteo.com")).length`);
-  const WEATHER_SEED = `(() => { const hours = Array.from({ length: 12 }, (_, index) => new Date(Math.floor(Date.now() / 3600000) * 3600000 + index * 3600000).toISOString().slice(0, 16)); return browser.storage.local.set({ newtab_net_cache_weather: { key: "city:Oslo|metric", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, wind_speed: 11.6, wind_direction: 320, detail: { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", utc_offset_seconds: 0, hours: hours.map((time, index) => ({ time, temperature: 10 - index, rain_chance: 30 + index })) }, code: 0, place: "Oslo", units: "metric" } } }); })()`;
+  const WEATHER_SEED = `(() => { const hours = Array.from({ length: 12 }, (_, index) => new Date(Math.floor(Date.now() / 3600000) * 3600000 + index * 3600000).toISOString().slice(0, 16)); return browser.storage.local.set({ newtab_net_cache_weather: { key: "city:Oslo|metric", at: Date.now(), value: { temperature: 10.4, feels_like: 8.2, humidity: 44, rain_chance: 30, high: 14.2, low: 5.8, date: new Date().toISOString().slice(0, 10), utc_offset_seconds: 0, wind_speed: 11.6, wind_direction: 320, detail: { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: hours.map((time, index) => ({ time, temperature: 10 - index, rain_chance: 30 + index })) }, code: 0, place: "Oslo", units: "metric" } } }); })()`;
   // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots rewrite that rule on the page and its narrow frame, never the machine's scheme.
   const take_both_shots = async (name) => {
     for (const [scheme, target] of [["dark", "@media not all"], ["light", "@media all"]]) {
@@ -76,11 +76,14 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       const state = () => in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const button = page.querySelector(".weather-more"); const panel = page.querySelector(".weather-detail"); return { tag: button.tagName, text: button.textContent, expanded: button.getAttribute("aria-expanded"), controls: button.getAttribute("aria-controls") === panel.id, shown: panel.getClientRects().length > 0, facts: [...panel.querySelectorAll(".weather-facts .weather-stat")].map((node) => node.textContent), hours: panel.querySelectorAll(".weather-hour").length }; })()`);
       const closed = await state();
       expect(closed.tag === "BUTTON" && closed.text === "More" && closed.expanded === "false" && closed.controls && !closed.shown, `the closed state was wrong: ${JSON.stringify(closed)}`);
+      const expected_before = await in_background(`browser.storage.local.get("newtab_net_cache_weather").then((found) => { const hour = new Date().toISOString().slice(0, 13); return Math.min(11, found.newtab_net_cache_weather.value.detail.hours.filter((entry) => entry.time.slice(0, 13) > hour).length); })`);
       await in_background(`${NEWTAB_VIEW}.document.querySelector(".weather-more").click()`);
       const open = await state();
       expect(open.text === "Less" && open.expanded === "true" && open.shown, `the open state was wrong: ${JSON.stringify(open)}`);
       expect(JSON.stringify(open.facts) === JSON.stringify(["2UV index", "7:42 AMSunrise", "3:31 PMSunset"]), `the facts were wrong: ${JSON.stringify(open)}`);
-      expect(open.hours === 11, `the strip had ${open.hours} hours`);
+      // The seed starts at the hour it was made, so a render across an hour boundary drops one. The expected count comes from the seeded hours and the clock before and after the read.
+      const expected_hours = () => in_background(`browser.storage.local.get("newtab_net_cache_weather").then((found) => { const hour = new Date().toISOString().slice(0, 13); return Math.min(11, found.newtab_net_cache_weather.value.detail.hours.filter((entry) => entry.time.slice(0, 13) > hour).length); })`);
+      expect(open.hours === expected_before || open.hours === (await expected_hours()), `the strip had ${open.hours} hours, expected ${expected_before} or ${await expected_hours()}`);
       if (shot_dir) await take_both_shots("newtab-weather-open");
       await in_background(`${NEWTAB_VIEW}.document.querySelector(".weather-more").click()`);
       const again = await state();
