@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { advance_hands, clock_angles, time_label, unwrap_angle } from "../src/newtab/clock.ts";
 import { digital_parts } from "../src/newtab/digital_clock.ts";
 import { date_text, enabled_widgets } from "../src/newtab/render.ts";
+import { closed_rows, top_site_rows } from "../src/newtab/widgets.ts";
 import { effective_settings } from "../src/shared/config.ts";
 
 test("clock angles: the hour hand turns once per 12 hours", () => {
@@ -136,4 +137,33 @@ test("only the new tab page declares the digital clock font", () => {
   const sources = readdirSync("src", { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile() && /\.(ts|html|css|json)$/.test(entry.name));
   const naming = sources.filter((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8").includes("DSEG7"));
   assert.deepEqual(naming.map((entry) => entry.name), ["newtab.html"]);
+});
+
+test("closed tabs: newest first, web addresses only, capped, none on a private page", () => {
+  const sessions = [{ tab: { sessionId: "1", title: "One", url: "https://one.example/a" } }, { tab: { url: "https://nosession.example/" } }, { tab: { sessionId: "3", title: "Three", url: "about:preferences" } }, { tab: { sessionId: "4", title: "Four", url: "https://four.example/" } }];
+  const rows = closed_rows(sessions, 8, false);
+  assert.deepEqual(rows.map((row) => [row.label, row.session_id, row.host]), [["One", "1", "one.example"], ["Four", "4", "four.example"]]);
+  assert.equal(closed_rows(sessions, 1, false).length, 1);
+  assert.deepEqual(closed_rows(sessions, 8, true), []);
+  assert.deepEqual(closed_rows(sessions, 0, false), []);
+});
+
+test("top sites: visits add up per host, the best page stands for the site, most visited first", () => {
+  const visits = [
+    { url: "https://a.example/x", title: "A x", visitCount: 3 },
+    { url: "https://www.b.example/", title: "B", visitCount: 5 },
+    { url: "https://a.example/y", title: "A y", visitCount: 4 },
+    { url: "https://c.example/", title: "C", visitCount: 1 },
+    { url: "ftp://d.example/", visitCount: 99 },
+  ];
+  const rows = top_site_rows(visits, 8, false);
+  assert.deepEqual(rows.map((row) => [row.host, row.url, row.label]), [["a.example", "https://a.example/y", "A y"], ["b.example", "https://www.b.example/", "B"], ["c.example", "https://c.example/", "C"]]);
+  assert.equal(top_site_rows(visits, 2, false).length, 2);
+  assert.deepEqual(top_site_rows(visits, 8, true), []);
+});
+
+test("top sites and closed tabs take a cached icon by host", () => {
+  const cached = new Map([["a.example", "data:image/png;base64,AA=="]]);
+  assert.equal(top_site_rows([{ url: "https://a.example/", visitCount: 1 }], 8, false, cached)[0]?.icon_url, "data:image/png;base64,AA==");
+  assert.equal(closed_rows([{ tab: { sessionId: "1", url: "https://z.example/" } }], 8, false, cached)[0]?.icon_url, undefined);
 });

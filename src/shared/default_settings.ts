@@ -52,6 +52,11 @@ export const DEFAULT_NEWTAB_BOOKMARKS: Settings["newtab_bookmarks"] = false;
 export const DEFAULT_NEWTAB_BOOKMARKS_MAX: Settings["newtab_bookmarks_max"] = 8;
 export const DEFAULT_NEWTAB_RECENT_TABS: Settings["newtab_recent_tabs"] = false;
 export const DEFAULT_NEWTAB_RECENT_TABS_MAX: Settings["newtab_recent_tabs_max"] = 8;
+export const DEFAULT_NEWTAB_CLOSED_TABS: Settings["newtab_closed_tabs"] = true;
+export const DEFAULT_NEWTAB_CLOSED_TABS_MAX: Settings["newtab_closed_tabs_max"] = 8;
+export const DEFAULT_NEWTAB_TOP_SITES: Settings["newtab_top_sites"] = true;
+export const DEFAULT_NEWTAB_TOP_SITES_MAX: Settings["newtab_top_sites_max"] = 8;
+export const DEFAULT_NEWTAB_COMMAND_HINT: Settings["newtab_command_hint"] = true;
 export const DEFAULT_NEWTAB_LINKS: Settings["newtab_links"] = [];
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -104,5 +109,10 @@ export const DEFAULT_SETTINGS: Settings = {
   newtab_bookmarks_max: DEFAULT_NEWTAB_BOOKMARKS_MAX,
   newtab_recent_tabs: DEFAULT_NEWTAB_RECENT_TABS,
   newtab_recent_tabs_max: DEFAULT_NEWTAB_RECENT_TABS_MAX,
+  newtab_closed_tabs: DEFAULT_NEWTAB_CLOSED_TABS,
+  newtab_closed_tabs_max: DEFAULT_NEWTAB_CLOSED_TABS_MAX,
+  newtab_top_sites: DEFAULT_NEWTAB_TOP_SITES,
+  newtab_top_sites_max: DEFAULT_NEWTAB_TOP_SITES_MAX,
+  newtab_command_hint: DEFAULT_NEWTAB_COMMAND_HINT,
   newtab_links: DEFAULT_NEWTAB_LINKS,
 };

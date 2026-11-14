@@ -540,6 +540,55 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "values": []
   },
   {
+    "name": "newtab_closed_tabs",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "newtab_closed_tabs_max",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number, 0 or more",
+    "values": []
+  },
+  {
+    "name": "newtab_top_sites",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "newtab_top_sites_max",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number, 0 or more",
+    "values": []
+  },
+  {
+    "name": "newtab_command_hint",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "newtab_links",
     "settable": true,
     "is_toggle": false,

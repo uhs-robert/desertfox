@@ -14,7 +14,7 @@ const tab = (id: number, url: string, last: number, extra: Partial<TabWithUse> =
 const TABS = [tab(1, "https://a.example/", 10), tab(2, "https://b.example/", 30), tab(3, "https://c.example/", 20), tab(4, "https://p.example/", 99, { incognito: true }), tab(5, "about:newtab", 50)];
 const TREE = [{ type: "folder", children: [{ type: "bookmark", title: "Old", url: "https://old.example/", dateAdded: 1 }, { type: "bookmark", title: "New", url: "https://new.example/", dateAdded: 9 }, { type: "bookmark", title: "Js", url: "javascript:1", dateAdded: 20 }, { type: "bookmark", title: "Mid", url: "https://mid.example/", dateAdded: 5 }] }];
 
-const readers = (over: Partial<PageReaders> = {}): PageReaders => ({ query_tabs: async () => TABS, bookmark_tree: async () => TREE, page_is_private: async () => false, cached_icons: async () => new Map(), ...over });
+const readers = (over: Partial<PageReaders> = {}): PageReaders => ({ query_tabs: async () => TABS, bookmark_tree: async () => TREE, page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map(), ...over });
 
 test("recent tabs: last used first, private and non-web tabs left out", () => {
   assert.deepEqual(recent_tab_rows(TABS, 8, false).map((row) => row.url), ["https://b.example/", "https://c.example/", "https://a.example/"]);
@@ -33,9 +33,10 @@ test("bookmarks: newest added first, web addresses only, capped", () => {
 
 test("lists are empty when the flags are off, and the readers never run", async () => {
   let reads = 0;
-  const counting = readers({ query_tabs: async () => (reads++, TABS), bookmark_tree: async () => (reads++, TREE) });
-  assert.deepEqual(await read_sections(effective_settings({}), counting), []);
-  assert.deepEqual(await read_sections(effective_settings({ newtab_bookmarks: false, newtab_recent_tabs: false }), counting), []);
+  const counting = readers({ query_tabs: async () => (reads++, TABS), bookmark_tree: async () => (reads++, TREE), closed_sessions: async () => (reads++, []), visits: async () => (reads++, []) });
+  const off = { newtab_closed_tabs: false, newtab_top_sites: false };
+  assert.deepEqual(await read_sections(effective_settings(off), counting), []);
+  assert.deepEqual(await read_sections(effective_settings({ ...off, newtab_bookmarks: false, newtab_recent_tabs: false }), counting), []);
   assert.equal(reads, 0);
 });
 

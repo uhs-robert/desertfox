@@ -11,7 +11,7 @@ const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) =>
 
 export const areas = ["newtab", "config"];
 
-export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, open_page, url_of, rdp, extension_id }) {
+export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, press_keys, wait_cmdline, close_cmdline, open_page, url_of, rdp, extension_id }) {
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
 
@@ -71,8 +71,8 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await press_keys("f");
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
       await poll_until("the hint labels to show", async () => (await labels()) > 0);
-      // One label per card, plus the three built-in links.
-      expect((await labels()) === shape.cards + 3, `expected ${shape.cards + 3} labels, found ${await labels()}`);
+      // One label per card, plus the three built-in links and the command line hint.
+      expect((await labels()) === shape.cards + 4, `expected ${shape.cards + 4} labels, found ${await labels()}`);
       await press_keys("-k", "Escape");
     });
 
@@ -90,6 +90,34 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect(await open_new_tab(".tiles .tile"), "no card rendered");
       const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile")].filter((card) => card.querySelector(".tile-site")?.textContent === "localhost").map((card) => card.querySelector("img.tile-icon")?.getAttribute("src"))`);
       expect(shown.includes(saved.icon), `no card for localhost showed the saved icon: ${JSON.stringify(shown)}`);
+    });
+
+    // Closed tabs and top sites are on by default. A page is visited then closed, so both lists hold its host. The hint button is one more hint target.
+    await run_case("closed tabs and top sites show as cards, and the command line hint opens the line", async () => {
+      await close_new_tabs();
+      const page_url = url_of("iconed_card", "cards_closed").replace("127.0.0.1", "localhost");
+      await in_background(`(async () => { const tab = await browser.tabs.create({ url: ${JSON.stringify(page_url)}, active: false }); await new Promise((done) => setTimeout(done, 1500)); await browser.tabs.remove(tab.id); })()`);
+      expect(await open_new_tab(".tiles .tile"), "no card rendered");
+      const headings = () => in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".lists h4")].map((heading) => heading.textContent)`);
+      await poll_until("the closed and top lists to render", async () => { const shown = await headings(); return shown.includes("Recently closed") && shown.includes("Top sites"); }, { timeout_ms: 10000 });
+      const hosts = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".lists section")].filter((section) => ["Recently closed", "Top sites"].includes(section.querySelector("h4")?.textContent)).map((section) => [...section.querySelectorAll(".tile .tile-site")].map((site) => site.textContent))`);
+      expect(hosts.every((list) => list.includes("localhost")), `localhost missing from the closed or top list: ${JSON.stringify(hosts)}`);
+      const hint = await in_background(`(() => { const hint = ${NEWTAB_VIEW}.document.querySelector("button.command-hint"); return hint ? hint.textContent : null; })()`);
+      expect(hint === "press : for the command line", `the hint text was ${hint}`);
+      // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots rewrite that rule on this page, never the machine's scheme: never true for dark, always true for light.
+      const settle_paint = () => new Promise((done) => setTimeout(done, 700));
+      const set_light_rule = (from, to) => in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll("style")].filter((sheet) => sheet.textContent.includes(${JSON.stringify(from)})).map((sheet) => (sheet.textContent = sheet.textContent.replaceAll(${JSON.stringify(from)}, ${JSON.stringify(to)}))).length`);
+      if (shot_dir) {
+        expect((await set_light_rule("@media (prefers-color-scheme: light)", "@media not all")) > 0, "no style sheet held the light rule");
+        await settle_paint();
+        await take_shot(`${shot_dir}/newtab-closed-top-dark.png`);
+        await set_light_rule("@media not all", "@media all");
+        await settle_paint();
+        await take_shot(`${shot_dir}/newtab-closed-top-light.png`);
+      }
+      await in_background(`${NEWTAB_VIEW}.document.querySelector("button.command-hint").click()`);
+      await wait_cmdline((line) => line.ready, "the command line to open from the hint");
+      await close_cmdline();
     });
   } finally {
     await close_new_tabs().catch(() => undefined);
