@@ -501,7 +501,7 @@ async function check_site(site) {
     for (let waited = 0; waited < 20000; waited += 500) { if (await ask_page("embed_state", {}, 5000)) return; await sleep(500); }
   };
   const show_hints = async () => {
-    const targets = await ask_page("hint_targets", {}, 10000);
+    const targets = await ask_page("hint_targets", { activate_selector: site.activate_selector ?? null }, 10000);
     await press_keys(keys.hint);
     await sleep(1500);
     const labels = await ask_page("top_labels", {}, 5000);
@@ -532,7 +532,7 @@ async function check_site(site) {
     activate: async () => {
       const again = await show_hints();
       const pick = pick_activation(again.labels, again.targets);
-      if (!pick) return { status: "fail", reason: "no label on a visible target to type" };
+      if (!pick) return { status: "fail", reason: site.activate_selector ? "no unambiguous label" : "no label on a visible target to type" };
       const armed = await ask_page("arm_activation", { target: pick.target }, 5000);
       const url_before = await current_url();
       await press_keys(pick.keys);
@@ -540,7 +540,7 @@ async function check_site(site) {
       // A navigation into another content process takes the frame script's state with it, and then only the address can tell.
       const seen = await ask_page("activation_result", {}, 5000).catch(() => null);
       const url_after = await current_url();
-      return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via };
+      return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via, at: pick.at, label_rect: pick.label_rect, target_rect: pick.target_rect };
     },
   };
   for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
