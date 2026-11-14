@@ -153,7 +153,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     has_param: (command_id, name) => lookup.find(command_id)?.params?.some((param) => param.name === name) === true,
     tabs: () => model?.items(true),
     containers: opened.container_stores,
-    complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live),
+    complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live, opened.theme_names),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);

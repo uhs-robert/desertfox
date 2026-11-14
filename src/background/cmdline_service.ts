@@ -17,7 +17,7 @@ export type CmdlineServiceDeps = {
   // What a tab list can reopen tabs in. Not asked of a private line.
   container_stores: () => Promise<CmdlineOpened["container_stores"]>;
   // Read on every open, after the config has loaded.
-  page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "prompt" | "all_windows" | "statusbar_widgets">>;
+  page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "theme_names" | "prompt" | "all_windows" | "statusbar_widgets">>;
   tab_count: (window_id: number) => Promise<number>;
   // False once the frame is gone from the tab.
   frame_exists: (tab_id: number, frame_id: number) => Promise<boolean>;
