@@ -51,6 +51,11 @@
   .desertfox-newtab .tile-text { display: flex; flex-direction: column; min-width: 0; }
   .desertfox-newtab .tile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .desertfox-newtab .tile-site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
+  .desertfox-newtab .weather { display: flex; align-items: baseline; justify-content: center; gap: 0.5rem; margin-top: 0.5rem; min-height: 1.5rem; }
+  .desertfox-newtab .weather-temp { font-size: var(--desertfox-text-large); color: var(--desertfox-primary); }
+  .desertfox-newtab .weather-text { font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
+  .desertfox-newtab .weather-ask { padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
+  .desertfox-newtab .weather-ask:hover, .desertfox-newtab .weather-ask:focus-visible { border-color: var(--desertfox-border); outline: none; }
   .desertfox-newtab .command-hint { flex: none; align-self: center; margin: 0.75rem 0 0; padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
   .desertfox-newtab .command-hint:hover, .desertfox-newtab .command-hint:focus-visible { border-color: var(--desertfox-border); outline: none; }
   .desertfox-newtab .command-hint kbd { padding: 0 0.4em; border: 1px solid var(--desertfox-border); border-radius: 4px; background: var(--desertfox-bg-mantle); font: inherit; }
