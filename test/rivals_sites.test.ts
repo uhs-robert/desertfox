@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -413,6 +413,8 @@ test("Sheets passes when the selection or the grid offset moves, names which one
   assert.match(judge(view("A2", 0), view("A2", 120)).reason, /grid offset 0 to 120/);
   assert.equal(judge(view("A2", 0), view("A3", 120)).status, "pass");
   assert.equal(judge(view("A2", 0), view("A2", 0)).status, "fail");
+  assert.notEqual(judge(view("A2", null), view("A2", 0)).status, "pass");
+  assert.notEqual(judge(view("A2", 0), view("A2", null)).status, "pass");
   assert.equal(judge(view("A2", null), view("A3", null)).status, "pass");
   assert.equal(judge(view(null, 0), view("A2", 0)).status, "unknown");
 });
@@ -428,16 +430,24 @@ test("every probe site names a known probe, and the four canvas and grid sites h
 
 test("the passthrough row and the control run exist only for probe sites", () => {
   const probe_site = { extra: [], scroll_probe: "maps" };
-  assert.deepEqual(check_names_of(probe_site, "vimium").slice(-2), ["activate", "passthrough"]);
+  const names = check_names_of(probe_site, "tridactyl");
+  assert.equal(names.indexOf("passthrough"), names.indexOf("scroll") + 1);
+  assert.ok(names.indexOf("passthrough") < names.indexOf("hints"));
   assert.deepEqual(check_names_of(probe_site, "none"), ["scroll"]);
   assert.equal(check_names_of({ extra: [] }, "vimium").includes("passthrough"), false);
   assert.deepEqual(PASSTHROUGH_KEYS, ["ArrowDown"]);
 });
 
-test("a control that moved nothing makes every tool's scroll cell not scored, and a control that moved leaves the cells", () => {
+test("the control sends ArrowDown, except on Excalidraw, which has no pan key and gets a wheel scroll", () => {
+  const control = (name: string) => control_of(SITES.find((site: { name: string }) => site.name === name));
+  assert.deepEqual(control("excalidraw"), { wheel_dy: 120 });
+  for (const name of ["google_sheets", "google_maps", "stackblitz"]) assert.deepEqual(control(name), { keys: ["ArrowDown"] });
+});
+
+test("a control that moved nothing keeps each tool's own result and adds a note, and a control that moved adds none", () => {
   const run = (site: string, status: string, reason = "r") => ({ site, checks: { scroll: { status, reason } } });
   const stuck = { desertfox: [run("excalidraw", "blocked", "j")], none: [run("excalidraw", "fail", "scroll offset stayed 0,0")] };
-  assert.match(sites_table(stuck, ["desertfox", "none"]), /\| excalidraw \| scroll \| not scored: probe saw no movement \(control, no extension: scroll offset stayed 0,0\) \| fail: scroll offset stayed 0,0 \|/);
+  assert.match(sites_table(stuck, ["desertfox", "none"]), /\| excalidraw \| scroll \| blocked: j \(the control did not move: scroll offset stayed 0,0\) \| fail: scroll offset stayed 0,0 \|/);
   const moving = { desertfox: [run("excalidraw", "blocked", "j")], none: [run("excalidraw", "pass", "moved")] };
   assert.match(sites_table(moving, ["desertfox", "none"]), /\| blocked: j \| pass: moved \|/);
   assert.equal(control_verdict(undefined, "excalidraw"), null);
