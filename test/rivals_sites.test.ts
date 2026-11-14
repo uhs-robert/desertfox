@@ -181,6 +181,8 @@ test("a cell move needs the name box to change", () => {
   assert.equal(judge_cell_move("A1", "A2").status, "pass");
   assert.equal(judge_cell_move("A1", "A1").status, "fail");
   assert.equal(judge_cell_move(null, null).status, "fail");
+  // A name box that vanished after the key shows no destination cell.
+  assert.equal(judge_cell_move("A1", null).status, "fail");
 });
 
 test("the X j check passes only when the tool scrolled and X's own j did not run", () => {
@@ -206,15 +208,15 @@ test("a site is retried when a check timed out, and not for a plain fail", () =>
 test("the table has a row per site and check, with the reason when the runs agree, and the site notes below", () => {
   const runs_of = {
     desertfox: [{ site: "pdf_viewer", checks: { hints: { status: "fail", reason: "no labels | none" } } }],
-    vimium: [
+    rival: [
       { site: "pdf_viewer", checks: { hints: { status: "fail", reason: "no labels" } } },
       { site: "pdf_viewer", checks: { hints: { status: "error", reason: "long job timeout" } }, retried: true },
       { site: "pdf_viewer", checks: { hints: { status: "pass", reason: "2 labels" } } },
       { site: "pdf_viewer", checks: { hints: { status: "pass", reason: "3 labels" } } },
     ],
   };
-  const markdown = sites_table(runs_of, ["desertfox", "vimium"]);
-  // The retried run takes no part, so vimium has 2 passes of 3.
+  const markdown = sites_table(runs_of, ["desertfox", "rival"]);
+  // The retried run takes no part, so the rival has 2 passes of 3.
   assert.match(markdown, /\| pdf_viewer \| hints \| fail: no labels \\\| none \| pass 2\/3: 2 labels \|/);
   assert.match(markdown, /- pdf_viewer: Firefox runs no extension content script/);
 });
@@ -264,12 +266,14 @@ test("gF leaves the frame when the badge stops reading FRAME and the focus is on
   // The badge alone is not enough: the focus must also be out of the frame.
   assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: in_frame_body }).status, "fail");
   assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: focus_of(null) }).status, "unknown");
+  // Focus in the browser window is no leave: the page holds nothing.
+  assert.equal(judge_frame_leave({ mode_after: "NORMAL", focus_after: focus_of([]) }).status, "fail");
 });
 
 test("check names hold the frame checks for DesertFox only, so an error or wall record fills every row", () => {
   const site = { extra: ["jk_clash"] };
   assert.deepEqual(check_names_of(site, "desertfox"), ["mode_on_load", "leave", "frame_leave", "frame_hints", "frame_activate", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
-  assert.deepEqual(check_names_of(site, "vimium"), ["mode_on_load", "leave", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
+  assert.deepEqual(check_names_of(site, "rival"), ["mode_on_load", "leave", "jk_clash", "scroll", "hints", "hints_escape", "activate"]);
 });
 
 test("a wrong-target status and an n/a frame row show in the cell, and an n/a majority names itself", () => {

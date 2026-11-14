@@ -437,18 +437,21 @@ async function check_site(site) {
       return;
     }
     let frame_texts = [];
+    let frame_context = null;
     await run_check("frame_hints", async () => {
       await press_keys(keys.hint);
       await sleep(1500);
+      // Only a subframe counts. When the hint key moved the focus to the top page, its labels are no evidence for the frame.
       const focused = (await focus_contexts()).at(-1);
-      frame_texts = focused?.pid ? await in_context(focused, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
+      frame_context = focused && !focused.top && focused.pid ? focused : null;
+      frame_texts = frame_context ? await in_context(frame_context, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
       const top_labels = await ask_page("top_labels", {}, 5000);
       return judge_frame_hints({ frame_labels: frame_texts.length, top_labels });
     });
     await run_check("frame_activate", async () => {
-      const focused = (await focus_contexts()).at(-1);
+      const focused = frame_context;
       const typed = frame_texts.find((text) => text)?.toLowerCase();
-      if (!typed || !focused?.pid) return { status: "fail", reason: "no label in the frame to type" };
+      if (!typed || !focused) return { status: "fail", reason: "no label in the frame to type" };
       await in_context(focused, arm_frame_reaction, HINT_SELECTORS);
       const url_before = await current_url();
       await press_keys(typed);
