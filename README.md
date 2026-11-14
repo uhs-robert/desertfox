@@ -75,6 +75,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| [Works in frames from other sites (sign-in popups, embeds)](docs/compatibility.md) | ✅ | 🟡 | ✅ | ❌ | not checked |
 | Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
 | Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
