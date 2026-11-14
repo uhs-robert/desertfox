@@ -4,6 +4,7 @@ import "../../../src/background/command_modules.ts";
 import { create_completer, is_listed } from "../../../src/cmdline/completion/sources.ts";
 import { build_commands_file, create_registry, DefineError, parse_command_line } from "../../../src/shared/registry/index.ts";
 import { registry } from "../../../src/shared/registry/builtin.ts";
+import { MEDIA_ACTIONS } from "../../../src/shared/media.ts";
 import type { CommandInput } from "../../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
 
@@ -61,4 +62,9 @@ test("define accepts hidden and a mode list and rejects an unknown mode or an em
   for (const completion of [["nope"], []] as unknown as NonNullable<CommandInput["completion"]>[]) {
     assert.throws(() => create_registry().define("a.bad", { ...base, completion }), DefineError);
   }
+});
+
+test("media lists every media action on its first word", () => {
+  const complete = create_completer(lookup, commands, {}, { search_engines: [], containers: [] });
+  assert.deepEqual(complete("media ", 6).rows.map((row) => row.name).sort(), [...MEDIA_ACTIONS].sort());
 });
