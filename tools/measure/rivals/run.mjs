@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { createServer as create_port_probe } from "node:net";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -400,6 +400,9 @@ async function load_live(url) {
   return { loaded, info };
 }
 
+// A closed debugger connection fails every later check and site too. Rethrowing ends the run with a failure, and rivals.mjs runs the tool once more.
+const connection_lost = (error) => /connection to Firefox lost/.test(String(error.message ?? error));
+
 async function check_site(site) {
   const keys = TOOL_KEYS[tool];
   const url = site.url ?? `${base_url}/${site.path}`;
@@ -413,46 +416,47 @@ async function check_site(site) {
   let shown = null;
   const run_check = async (name, check) => {
     try { record.checks[name] = await check(); }
-    catch (error) { record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) }; }
+    catch (error) {
+      if (connection_lost(error)) throw error;
+      record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) };
+    }
   };
 
-  let frame_shown_texts = [];
-  async function run_frame_branch() {
-    // gF goes first, on the load the leave step used, as a user presses it. Later steps dismiss the popup, and a reload for gF would test a page the user never meets.
+  // The frame branch has two parts. gF runs right after the leave step, on the load the rivals also see, so the page checks of step 3 meet the same page for every tool. The checks inside the frame run last, on a fresh load, because they dismiss the popup.
+  async function leave_frame() {
     await run_check("frame_leave", async () => {
       await press_keys("gF");
       await sleep(800);
       return judge_frame_leave({ mode_after: await frame_mode_now(), focus_after: await focus_now() });
     });
-    // gF left the frame. Loading the page again brings the frame back for the checks inside it.
+  }
+  async function check_inside_frame() {
     await load_live(url);
     if (!is_frame_mode(await frame_mode_now())) {
-      for (const name of ["frame_hints", "frame_activate"]) record.checks[name] = { status: "unknown", reason: "the frame did not come back after gF and a reload" };
+      for (const name of ["frame_hints", "frame_activate"]) record.checks[name] = { status: "unknown", reason: "the frame did not come back after a reload" };
       return;
     }
+    let frame_texts = [];
     await run_check("frame_hints", async () => {
       await press_keys(keys.hint);
       await sleep(1500);
       const focused = (await focus_contexts()).at(-1);
-      frame_shown_texts = focused?.pid ? await in_context(focused, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
+      frame_texts = focused?.pid ? await in_context(focused, visible_label_texts, HINT_SELECTORS).catch(() => []) : [];
       const top_labels = await ask_page("top_labels", {}, 5000);
-      const in_frames = await count_labels({ frames_only: true });
-      return judge_frame_hints({ frame_labels: in_frames.labels, top_labels });
+      return judge_frame_hints({ frame_labels: frame_texts.length, top_labels });
     });
     await run_check("frame_activate", async () => {
       const focused = (await focus_contexts()).at(-1);
-      const typed = frame_shown_texts.find((text) => text)?.toLowerCase();
+      const typed = frame_texts.find((text) => text)?.toLowerCase();
       if (!typed || !focused?.pid) return { status: "fail", reason: "no label in the frame to type" };
       await in_context(focused, arm_frame_reaction, HINT_SELECTORS);
+      const url_before = await current_url();
       await press_keys(typed);
       await sleep(2500);
       const reply = await in_context(focused, read_frame_reaction).catch(() => null);
       const context_gone = !(await page_contexts()).some((context) => context.context_id === focused.context_id);
-      return { ...judge_frame_activation({ reply: reply?.error ? null : reply, context_gone }), typed };
+      return { ...judge_frame_activation({ reply: reply?.error ? null : reply, context_gone, url_before, url_after: await current_url() }), typed };
     });
-    // A dismissed popup leaves no frame, so the page loads again for step 3.
-    if (!is_frame_mode(await frame_mode_now())) await load_live(url);
-    shown = null;
   }
 
   // Step 1. Every tool gets the same probe key, DesertFox too, so all four meet the same page in step 2.
@@ -473,10 +477,12 @@ async function check_site(site) {
   });
 
   // Step 2b, DesertFox only: it reports frame mode after the leave step when the site focused a frame.
+  let frame_mode_seen = false;
   const frame_mode_now = async () => (tool === "desertfox" ? ask_page("desertfox_mode", {}, 5000) : null);
   if (tool === "desertfox") {
     await run_check("mode_after_leave", async () => describe_mode_after_leave({ focus: await focus_now(), badge_label: await frame_mode_now() }));
-    if (is_frame_mode(await frame_mode_now())) await run_frame_branch();
+    if (is_frame_mode(await frame_mode_now())) { frame_mode_seen = true; await leave_frame(); }
+    else for (const name of FRAME_ROWS) record.checks[name] = { status: "n/a", reason: "no frame mode after the leave step" };
   }
 
   // Step 3.
@@ -536,6 +542,7 @@ async function check_site(site) {
     },
   };
   for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
+  if (frame_mode_seen) await check_inside_frame();
   return record;
 }
 
@@ -574,7 +581,10 @@ try {
       const only_sites = process.env.SITES?.split(",");
       for (const site of SITES.filter((entry) => !only_sites || only_sites.includes(entry.name))) {
         // One site that hangs the debugger must not cost the other sites their results.
-        const run_site = () => check_site(site).catch((error) => ({ url: site.url ?? site.path, checks: Object.fromEntries(check_names_of(site, tool).map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) }));
+        const run_site = () => check_site(site).catch((error) => {
+          if (connection_lost(error)) throw error;
+          return { url: site.url ?? site.path, checks: Object.fromEntries(check_names_of(site, tool).map((name) => [name, { status: "error", reason: String(error.message ?? error).slice(0, 200) }])) };
+        });
         let record = await run_site();
         // A timeout says nothing about the tool, so the site runs once more. The first record stays in the data, marked, and the table scores the retry.
         if (timed_out(record)) {
