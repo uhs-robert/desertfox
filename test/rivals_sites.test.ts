@@ -45,18 +45,30 @@ test("hints pass when a label sits on a visible target and fail with no label or
   assert.match(frames_only.reason, /4 more inside frames/);
 });
 
-test("the activation label is the first with exactly one target near it, typed in lower case, with the label's center", () => {
+test("the activation label is the first inside exactly one target, typed in lower case, with the label's center", () => {
   const crowded = [target("0", 100), target("1", 135), target("2", 300)];
-  assert.deepEqual(pick_activation([label("AB", 20, 125), label("CD", 20, 300)], crowded), { keys: "cd", target: "2", at: { x: 26, y: 308 } });
+  assert.deepEqual(pick_activation([label("AB", 20, 125), label("CD", 20, 300)], crowded), { keys: "cd", target: "2", via: "inside", at: { x: 26, y: 308 } });
   assert.equal(pick_activation([label("AB", 600, 600)], crowded), null);
 });
 
-test("with no lone near target, the label inside exactly one target wins, then a label clearly nearer one target", () => {
+test("a label inside a target beats an earlier label that only sits near another target", () => {
+  // A label 10 px above the target belongs to an element the list lacks: the label on the target wins, as on a breadcrumb under a header link.
+  const breadcrumb = [{ name: "crumb", rect: rect(16, 28, 75, 32) }];
+  const picked = pick_activation([{ text: "k", rect: rect(16, 0, 17, 18) }, { text: "aa", rect: rect(16, 28, 24, 18) }], breadcrumb);
+  assert.equal(picked?.keys, "aa");
+  assert.equal(picked?.via, "inside");
+});
+
+test("with no label inside a target, one lone near target wins, then a label clearly nearer one target, and the pick records the fallback", () => {
   const crowded = [target("0", 100), target("1", 135)];
   assert.equal(pick_activation([label("AB", 20, 136)], crowded)?.target, "1");
+  assert.equal(pick_activation([label("AB", 20, 136)], crowded)?.via, "inside");
+  assert.equal(pick_activation([{ text: "k", rect: rect(16, 0, 17, 18) }], [{ name: "crumb", rect: rect(16, 28, 75, 32) }])?.via, "near");
   // Touching toolbar buttons side by side: the label sits just outside both, 2 px from one and 14 px from the other.
   const toolbar = [{ name: "left", rect: rect(0, 50, 30, 30) }, { name: "right", rect: rect(30, 50, 30, 30) }];
   assert.equal(pick_activation([{ text: "x", rect: rect(10, 20, 12, 16) }], toolbar)?.target, "left");
+  // Both buttons are near, one clearly nearer: the last fallback.
+  assert.equal(pick_activation([{ text: "x", rect: rect(4, 30, 12, 16) }], toolbar)?.via, "nearest");
   // A toolbar that is a target itself and holds the button: the button, the innermost, wins.
   const nested = [{ name: "bar", rect: rect(0, 0, 1000, 60) }, { name: "button", rect: rect(8, 7, 48, 48) }];
   assert.equal(pick_activation([{ text: "d", rect: rect(3, 1, 12, 16) }], nested)?.target, "button");
