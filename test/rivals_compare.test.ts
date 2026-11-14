@@ -76,6 +76,7 @@ test("close stops a recorded window and its unit", async () => {
   const deps = fake_deps({ 101: 5001 });
   const result = await close_window("/c", w, deps);
   assert.equal(result.gone, true);
+  assert.deepEqual(result.lines, ["Vimium: closed"]);
   assert.deepEqual(deps.signals, ["SIGTERM 101"]);
   assert.deepEqual(deps.stopped_units, [unit_of("vimium")]);
 });
@@ -121,4 +122,12 @@ test("a window is judged by its own add-on alone, and DesertFox must be the temp
   assert.match(judge_window("vimium", { id: "v", version: "2" }, [{ id: "v", version: "2", temporary: true }, own]) ?? "", /another add-on is active/);
   assert.match(judge_window("vimium", { id: "v", version: "2" }, []) ?? "", /not active/);
   assert.match(judge_window("vimium", { id: "v", version: "2" }, [{ id: "v", version: "3", temporary: true }]) ?? "", /expected 2/);
+});
+
+test("a window the unit stop already ended counts as closed, and one gone before close as already gone", async () => {
+  const alive: Record<number, number> = { 101: 5001 };
+  const deps = { ...fake_deps(alive), stop_unit: () => { delete alive[101]; return true; } };
+  assert.deepEqual((await close_window("/c", window_of("/c", "vimium", 101, 5001), deps)).lines, ["Vimium: closed"]);
+  const gone = await close_window("/c", window_of("/c", "vimium", 101, 5001), fake_deps({}));
+  assert.deepEqual(gone.lines, ["Vimium: already gone"]);
 });

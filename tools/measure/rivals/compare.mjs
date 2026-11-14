@@ -64,15 +64,17 @@ export const owns_profile = (dir, w) => w.profile === profile_dir_of(dir, w.tool
 
 // Stops one window and says whether nothing of it runs any more. The unit name is ours by construction. A record with no pid (a start that stopped before the pid was known) is found by its profile path, which lives only under the compare folder.
 export async function close_window(dir, w, deps) {
-  const lines = [];
-  const unit_gone = deps.stop_unit(unit_of(w.tool));
   let { pid, start_ticks } = w;
   if ((pid <= 1 || start_ticks <= 0) && owns_profile(dir, w)) {
     pid = deps.find_pid(w.profile) ?? 0;
     start_ticks = pid > 1 ? (deps.read_start_ticks(pid) ?? 0) : 0;
   }
+  // Read before the unit stops: stopping the unit usually ends the process, and that still counts as closed by this call.
+  const was_running = pid > 1 && start_ticks > 0 && deps.read_start_ticks(pid) === start_ticks;
+  const unit_gone = deps.stop_unit(unit_of(w.tool));
+  const lines = [];
   const process_gone = await stop_process(LABELS[w.tool], pid, start_ticks, deps, lines);
-  return { lines, gone: unit_gone && process_gone };
+  return { lines: was_running && process_gone ? [`${LABELS[w.tool]}: closed`] : lines, gone: unit_gone && process_gone };
 }
 
 export async function close_windows(dir, deps = { ...real_close_deps(), find_pid: firefox_pid_for }) {
