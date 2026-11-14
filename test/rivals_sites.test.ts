@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, FRAME_ROWS, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -281,4 +281,13 @@ test("a wrong-target status and an n/a frame row show in the cell, and an n/a ma
   assert.deepEqual(cell_of([{ status: "pass" }, { status: "n/a" }, { status: "n/a" }]), { text: "n/a 2/3", majority: "n/a" });
   assert.deepEqual(cell_of([{ status: "wrong_target" }, { status: "wrong_target" }, { status: "wrong_target" }]), { text: "wrong_target", majority: "wrong_target" });
   assert.deepEqual(FRAME_ROWS, ["frame_leave", "frame_hints", "frame_activate"]);
+});
+
+test("only a subframe at the end of the focus chain counts as frame evidence", () => {
+  const top = { context_id: 1, pid: 10 };
+  const frame = { context_id: 2, pid: 11 };
+  assert.deepEqual(subframe_of([top, frame]), frame);
+  assert.equal(subframe_of([top]), null);
+  assert.equal(subframe_of([]), null);
+  assert.equal(subframe_of([top, { context_id: 2, pid: null }]), null);
 });
