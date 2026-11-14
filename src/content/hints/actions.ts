@@ -249,9 +249,9 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") {
-    focus_target(target);
-    // Only `;f` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see.
+    // Only `;f` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see. The message goes first: it tells the background that the frame's focus is the user's, so it parks nothing.
     if (is_frame_element(target)) void best_effort(browser.runtime.sendMessage({ type: "frame_cue" } satisfies FrameCue));
+    focus_target(target);
     return;
   }
   if (action === "hover") return hover(target);

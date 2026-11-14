@@ -19,8 +19,14 @@ export type HintFramesMessage = HintFramesCollect | HintFramesLabels | HintFrame
 
 export type HintFramesDeps = {
   storage: SessionStorage;
-  // Runs the hints bundle in every frame of the tab that takes scripts, and resolves with how many ran it. Rejects when one frame refuses, while the others still run it. May never settle.
-  inject_all: (tab_id: number) => Promise<number>;
+  // Runs the hints bundle in every frame of the tab that takes scripts, or only in `frame_id`, and resolves with how many ran it. Rejects when one frame refuses, while the others still run it. A frame that is gone is a refusal. May never settle.
+  inject_all: (tab_id: number, frame_id?: number) => Promise<number>;
+  // The cross-origin frame that took the focus on load and was handed back to the top page, if one is still recorded. See `tab_modes.ts`.
+  parked_frame: (tab_id: number) => Promise<number | undefined>;
+  // A pick is about to move the focus into another frame, which must not park it.
+  expect_entry: (tab_id: number) => Promise<void>;
+  // The parked frame is gone: end its record and tell the top page.
+  unpark: (tab_id: number, frame_id: number) => Promise<void>;
   // To one frame, or with no frame to every frame of the tab.
   send: (tab_id: number, message: HintFramesMessage, frame_id?: number) => Promise<unknown>;
   new_session_id: () => string;
@@ -38,6 +44,9 @@ export type HintFramesSession = {
   reports?: Record<string, number>;
   labels?: Record<string, string[]>;
 };
+
+// Which frames a run asks. Every frame for `frames=all_frames`. Otherwise only the parked frame, or none when no frame is parked, so the keyboard frame's own labels come out at once.
+type Targets = { parked: number | undefined; every: boolean };
 
 // The in-memory side of a wait: how many frames ran the bundle, the call that ends the wait, and the candidate texts of the frames that reported. The texts stay out of storage.session: they can be hundreds of KB, and a restart ends the wait anyway.
 type Wait = { expected?: number; wake: () => void; texts: Record<string, string[]> };
@@ -88,20 +97,28 @@ export function create_hint_frames(deps: HintFramesDeps) {
   const send_quietly = (tab_id: number, message: HintFramesMessage, frame_id?: number) => best_effort(deps.send(tab_id, message, frame_id));
 
   // The keyboard frame's own count is in already, so only the other frames race the deadline.
-  async function collect(tab_id: number, session_id: string, args: Record<string, unknown>, own: Wait["texts"]): Promise<Wait["texts"]> {
+  async function collect(tab_id: number, session_id: string, args: Record<string, unknown>, own: Wait["texts"], targets: Targets): Promise<Wait["texts"]> {
     let wake!: () => void;
     const woken = new Promise<void>((resolve) => (wake = resolve));
     const wait: Wait = { wake, texts: own };
     waits.set(session_id, wait);
     const timer = deps.set_timer(wake, deps.wait_ms);
     // The bundle must run before the ask, or a frame that loads it now misses the ask. A frame that refuses scripts rejects the count, and the deadline ends the wait.
-    void deps.inject_all(tab_id).then(
-      (expected) => {
-        wait.expected = expected;
-        return ask_frames(tab_id, session_id, args);
-      },
-      () => ask_frames(tab_id, session_id, args),
-    );
+    if (!targets.every && targets.parked === undefined) wake();
+    else
+      void deps.inject_all(tab_id, targets.every ? undefined : targets.parked).then(
+        (injected) => {
+          // The keyboard frame's own count is in the reports already, and its frame is not among the injected ones unless every frame was.
+          wait.expected = targets.every ? injected : injected + 1;
+          return ask_frames(tab_id, session_id, args, targets);
+        },
+        // A parked frame that refuses is gone: nothing else is coming, so the wait ends and the record goes with it.
+        () => {
+          if (targets.every) return ask_frames(tab_id, session_id, args, targets);
+          wake();
+          return deps.unpark(tab_id, targets.parked!);
+        },
+      );
     try {
       await woken;
     } finally {
@@ -112,10 +129,10 @@ export function create_hint_frames(deps: HintFramesDeps) {
   }
 
   // A newer run can start while this one's injection runs. Its frames keep the latest ask only, so an ask for a session that has ended must not go out after the newer one. An injection that answers after the deadline asks nobody, because the labels are out.
-  async function ask_frames(tab_id: number, session_id: string, args: Record<string, unknown>): Promise<void> {
+  async function ask_frames(tab_id: number, session_id: string, args: Record<string, unknown>, targets: Targets): Promise<void> {
     const session = await in_turn(() => read(tab_id));
     if (!waits.has(session_id) || session?.session_id !== session_id) return;
-    void send_quietly(tab_id, { type: "hint_frames_collect", session_id, args });
+    void send_quietly(tab_id, { type: "hint_frames_collect", session_id, args }, targets.every ? undefined : targets.parked);
     wake_when_all_reported(session);
   }
 
@@ -130,7 +147,9 @@ export function create_hint_frames(deps: HintFramesDeps) {
         return old;
       });
       if (replaced) void send_quietly(tab_id, { type: "hint_frames_end", session_id: replaced.session_id });
-      const texts = await collect(tab_id, session_id, request.args, whole_count(request.count) ? { [frame_id]: texts_for(request.count, request.texts) } : {});
+      const every = request.args.frames === "all_frames";
+      const targets = { every, parked: every ? undefined : await deps.parked_frame(tab_id) };
+      const texts = await collect(tab_id, session_id, request.args, whole_count(request.count) ? { [frame_id]: texts_for(request.count, request.texts) } : {}, targets);
       const labeled = await in_turn(async () => {
         const session = await read(tab_id);
         if (session?.session_id !== session_id) return undefined;
@@ -172,6 +191,8 @@ export function create_hint_frames(deps: HintFramesDeps) {
       if (!session?.labels) return NO_SESSION;
       const owner = Object.entries(session.labels).find(([, labels]) => labels.includes(label))?.[0];
       if (owner === undefined) return { ok: false, message: `No hint has the label ${label}` };
+      // Not awaited: the owner must get the pick before the end that follows it. The mark still queues ahead of any report of the frame, which the focus produces later.
+      if (Number(owner) !== frame_id) void best_effort(deps.expect_entry(tab_id));
       let timer: unknown;
       const deadline = new Promise<undefined>((resolve) => (timer = deps.set_timer(() => resolve(undefined), deps.pick_ms)));
       const reply = refused_as(deps.send(tab_id, { type: "hint_frames_pick", session_id, label, ...(keys && { keys }) }, Number(owner)), undefined);
@@ -216,12 +237,12 @@ export function create_hint_frames(deps: HintFramesDeps) {
 
 export type HintFrames = ReturnType<typeof create_hint_frames>;
 
-export function browser_hint_frames_deps(): HintFramesDeps {
+export function browser_hint_frames_deps(): Omit<HintFramesDeps, "parked_frame" | "unpark" | "expect_entry"> {
   return {
     storage: browser.storage.session,
     // Document start runs the bundle at once, so a frame that still loads reports instead of holding the labels until it is idle. The bundle registers once per page, so a frame that has it already only counts.
     // This skips the bundle host's load map. In a frame the user never entered, the bundle starts the waiting content script first, so the frame answers too.
-    inject_all: async (tab_id) => (await browser.tabs.executeScript(tab_id, { file: "hints.js", allFrames: true, matchAboutBlank: true, runAt: "document_start" })).length,
+    inject_all: async (tab_id, frame_id) => (await browser.tabs.executeScript(tab_id, { file: "hints.js", runAt: "document_start", ...(frame_id === undefined ? { allFrames: true, matchAboutBlank: true } : { frameId: frame_id }) })).length,
     send: (tab_id, message, frame_id) => browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id }),
     new_session_id: () => crypto.randomUUID(),
     set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),

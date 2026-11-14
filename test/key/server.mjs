@@ -2,6 +2,7 @@
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { DRAG_PAGES } from "./drag_pages.mjs";
+import { hybrid_frame_page, hybrid_frames_page } from "./hybrid_pages.mjs";
 import { popup_frame_page, popup_frames_page } from "./popup_pages.mjs";
 
 const REPORTER = `
@@ -210,6 +211,10 @@ export function start_server() {
     if (url.pathname === "/popup_frames" || url.pathname === "/popup_frame") {
       const { body, head } = url.pathname === "/popup_frames" ? popup_frames_page(id, request.socket.localPort) : popup_frame_page();
       return response.end(page(`${url.pathname.slice(1)} ${id}`, body, head));
+    }
+    if (url.pathname === "/hybrid_frames" || url.pathname === "/hybrid_frame") {
+      const { body, head } = url.pathname === "/hybrid_frames" ? hybrid_frames_page(id, request.socket.localPort) : hybrid_frame_page(url.searchParams.get("kind"));
+      return response.end(page(`${url.pathname.slice(1)} ${id}`, body + tall_filler, head));
     }
     if (url.pathname === "/field") {
       return response.end(page(`field ${id}`, '<input id="field" autofocus>', "<script>addEventListener('load', () => document.getElementById('field').focus())</script>"));

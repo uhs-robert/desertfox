@@ -45,7 +45,7 @@ export type BundleHostApi = {
 };
 
 // What main.ts adds to the host a bundle sees: the frame's own answer to `is_editable_element`, which holds the per-site rules (a bundle's copy of editable.ts has none), and the `grab_step_px` the compiled keymap carries.
-export type PageHostApi = BundleHostApi & { is_editable_: (element: Element | null) => boolean; grab_step_px_: () => number };
+export type PageHostApi = BundleHostApi & { is_editable_: (element: Element | null) => boolean; grab_step_px_: () => number; frame_parked_: () => boolean };
 
 export type BundleHostDeps = {
   // Never rejects: a failure answers false.

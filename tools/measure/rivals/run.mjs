@@ -403,6 +403,10 @@ async function load_live(url) {
 // A closed debugger connection fails every later check and site too. Rethrowing ends the run with a failure, and rivals.mjs runs the tool once more.
 const connection_lost = (error) => /connection to Firefox lost/.test(String(error.message ?? error));
 
+// Sites whose Google sign-in frame DesertFox parks. The popup sites show it on every load, Stack Overflow in some passes only.
+const POPUP_SITES = new Set(["reddit", "x_twitter"]);
+const PARK_SITES = new Set([...POPUP_SITES, "stack_overflow"]);
+
 async function check_site(site) {
   const keys = TOOL_KEYS[tool];
   const url = site.url ?? `${base_url}/${site.path}`;
@@ -447,18 +451,43 @@ async function check_site(site) {
       const top_labels = await ask_page("top_labels", {}, 5000);
       return judge_frame_hints({ frame_labels: frame_texts.length, top_labels });
     });
-    await run_check("frame_activate", async () => {
-      const focused = frame_context;
-      const typed = frame_texts.find((text) => text)?.toLowerCase();
-      if (!typed || !focused) return { status: "fail", reason: "no label in the frame to type" };
-      await in_context(focused, arm_frame_reaction, HINT_SELECTORS);
-      const url_before = await current_url();
-      await press_keys(typed);
-      await sleep(2500);
-      const reply = await in_context(focused, read_frame_reaction).catch(() => null);
-      const context_gone = !(await page_contexts()).some((context) => context.context_id === focused.context_id);
-      return { ...judge_frame_activation({ reply: reply?.error ? null : reply, context_gone, url_before, url_after: await current_url() }), typed };
-    });
+    await run_check("frame_activate", () => activate_in_frame(frame_context, frame_texts));
+  }
+
+  // Types the first label of the frame and reads what the frame saw. A dismissed popup (the frame gone) passes.
+  async function activate_in_frame(focused, frame_texts) {
+    const typed = frame_texts.find((text) => text)?.toLowerCase();
+    if (!typed || !focused) return { status: "fail", reason: "no label in the frame to type" };
+    await in_context(focused, arm_frame_reaction, HINT_SELECTORS);
+    const url_before = await current_url();
+    await press_keys(typed);
+    await sleep(2500);
+    const reply = await in_context(focused, read_frame_reaction).catch(() => null);
+    const context_gone = !(await page_contexts()).some((context) => context.context_id === focused.context_id);
+    return { ...judge_frame_activation({ reply: reply?.error ? null : reply, context_gone, url_before, url_after: await current_url() }), typed };
+  }
+
+  // DesertFox parks a cross-origin frame that takes the focus on load with no click or key and not on a field: the page keeps the keys and f also labels that frame's targets. Runs last, on a fresh load, because the activate step dismisses the popup.
+  // A popup site must show the park: page focus on load and labels in a frame. Other sites that may show a frame (Stack Overflow, some passes) are n/a when no frame has a label.
+  async function check_parked_frame() {
+    await load_live(url);
+    const mode_after = await frame_mode_now();
+    const focus_after = await focus_now();
+    await press_keys(keys.hint);
+    await sleep(1500);
+    let frame_context = null;
+    let frame_texts = [];
+    for (const context of (await page_contexts()).filter((candidate) => !candidate.top && candidate.pid)) {
+      const texts = await in_context(context, visible_label_texts, HINT_SELECTORS).catch(() => []);
+      if (texts.length > 0) { frame_context = context; frame_texts = texts; break; }
+    }
+    if (!frame_context && !POPUP_SITES.has(site.name)) {
+      for (const name of FRAME_ROWS) record.checks[name] = { status: "n/a", reason: "no frame had a label after the hint key, so no frame was parked" };
+      return;
+    }
+    record.checks.frame_leave = judge_frame_leave({ mode_after, focus_after });
+    await run_check("frame_hints", async () => judge_frame_hints({ frame_labels: frame_texts.length, top_labels: await ask_page("top_labels", {}, 5000) }));
+    await run_check("frame_activate", () => activate_in_frame(frame_context, frame_texts));
   }
 
   // Step 1. Every tool gets the same probe key, DesertFox too, so all four meet the same page in step 2.
@@ -483,7 +512,7 @@ async function check_site(site) {
   const frame_mode_now = async () => (tool === "desertfox" ? ask_page("desertfox_mode", {}, 5000) : null);
   if (tool === "desertfox") {
     await run_check("mode_after_leave", async () => describe_mode_after_leave({ focus: await focus_now(), badge_label: await frame_mode_now() }));
-    if (is_frame_mode(await frame_mode_now())) { frame_mode_seen = true; await leave_frame(); }
+    if (is_frame_mode(await frame_mode_now())) { frame_mode_seen = true; await leave_frame(); if (POPUP_SITES.has(site.name)) record.checks.frame_leave = { status: "fail", reason: `frame mode on load, so the park did not happen (gF then: ${record.checks.frame_leave?.status})` }; }
     else for (const name of FRAME_ROWS) record.checks[name] = { status: "n/a", reason: "no frame mode after the leave step" };
   }
 
@@ -544,9 +573,9 @@ async function check_site(site) {
     },
   };
   for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
-  if (frame_mode_seen) {
+  if (frame_mode_seen || (tool === "desertfox" && PARK_SITES.has(site.name))) {
     // The reload can fail on its own. Steps 1 to 3 are done by now and must survive it.
-    try { await check_inside_frame(); }
+    try { await (frame_mode_seen ? check_inside_frame() : check_parked_frame()); }
     catch (error) {
       if (connection_lost(error)) throw error;
       for (const name of ["frame_hints", "frame_activate"]) record.checks[name] ??= { status: "unknown", reason: `the frame checks did not run: ${String(error.message ?? error).slice(0, 150)}` };

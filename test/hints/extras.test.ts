@@ -98,6 +98,7 @@ let import_count = 0;
 // `in_readable_frame` is a frame its parent can read (same origin or about:blank), whose `frameElement` is not null.
 async function page_with(texts: string[], settings: Record<string, unknown> = {}, { unfocused = false, in_readable_frame = false } = {}) {
   let window_focuses = 0;
+  let parked_frame = false;
   const document_root = new FakeNode();
   const links: Link[] = [];
   const active_listeners = new Set<string>();
@@ -169,6 +170,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
         return { ok: true };
       },
       show_toast_: (message: string) => void toasts.push(message),
+      frame_parked_: () => parked_frame,
       // As the real host: keys typed during a hold wait, and replay in the mode of the moment once no hold is left. An empty batch hands nothing back.
       hold_keys_until_: (handed_back: Promise<string[]>) => {
         holds++;
@@ -283,6 +285,8 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
     // The next opened link answers when this promise settles.
     refuse_clipboard: () => Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => Promise.reject(new Error("denied")) } }, configurable: true }),
     hold_sends: (held: (message: unknown) => Promise<unknown>) => void (sends_held = held),
+    // The top frame has heard that a frame of another site was parked.
+    park_frame: () => void (parked_frame = true),
     mode: () => mode,
     active_listeners,
     // What the handler answers: an Outcome now, or a promise that stays pending while hints wait for the user.
@@ -1241,6 +1245,23 @@ test("across frames the keyboard frame sends its count, draws its own share and 
   assert.deepEqual(opened(page), ["https://example.com/two"]);
   assert.deepEqual(types_sent(page), ["hint_frames_start", "hint_frames_typed", "hint_frames_end", "run"]);
   assert.equal(page.mode(), "normal");
+});
+
+test("a parked frame makes the default frames setting hint across frames, and a page with no link of its own still starts", async () => {
+  const page = await page_with([]);
+  page.park_frame();
+  page.answer_start(across_answer(["a", "s"], []));
+  void page.run({ action: "here" });
+  await settle();
+  assert.deepEqual(types_sent(page).slice(0, 1), ["hint_frames_start"], "the start goes to the background");
+  assert.equal((page.sent[0] as { count: number }).count, 0);
+});
+
+test("without a parked frame the default frames setting stays in this frame", async () => {
+  const page = await page_with(["one"]);
+  void page.run({ action: "here" });
+  await settle();
+  assert.equal(types_sent(page).includes("hint_frames_start"), false);
 });
 
 test("across frames a label of another frame goes to the background before hint mode ends, and its answer is the pick's", async () => {

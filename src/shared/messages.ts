@@ -33,11 +33,14 @@ export type RunRequest = {
 
 // `focus` says whether the frame's own document holds the keyboard focus. The tab shows the mode of the frame that does.
 // `step` says that a media step or a join reply put the frame in the media mode, so the report must not start a hold (`tab_media.ts`).
+// `activated` says the frame's window has had a click or key, and `in_field` that its focused element takes typing. A frame of another site with neither, at its first focus, is parked (`tab_modes.ts`).
 export type ModeChanged = {
   type: "mode_changed";
   mode: Mode;
   focus: boolean;
   step: boolean;
+  activated: boolean;
+  in_field: boolean;
 };
 
 // Escape in a frame that holds insert mode from `i`: the background returns the tab's switched frames to normal.
@@ -94,7 +97,7 @@ export type Relay = {
   args: Record<string, unknown>;
 };
 
-// The `;f` pick focused a frame: the background shows the one-time toast in the top frame.
+// The `;f` pick is about to focus a frame: the background shows the one-time toast in the top frame, and that frame is not parked.
 export type FrameCue = {
   type: "frame_cue";
 };
@@ -632,10 +635,12 @@ export type MediaStep = {
 };
 
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
+// `parked` says a frame of another site was handed back to the top page, so the top page's hints label that frame too.
 // The type string is short because content.js holds it.
 export type FocusedFrameMode = {
   type: "frame_mode";
   mode?: Mode;
+  parked?: true;
 };
 
 // The compiled keymap in `storage.local` changed: read it again.

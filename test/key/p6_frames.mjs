@@ -85,7 +85,8 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
   });
 
   // Tab walks the frames in page order: the same-origin one, the cross-origin one, then the 10 px one, which nothing has focused yet.
-  await run_case("Tab into a cross-origin frame starts its script", async () => {
+  // A frame is parked at its first focus when nothing in it was clicked or typed, so the Tab into the 10 px frame hands the focus back to the top page. The next Tab would enter it.
+  await run_case("Tab into a cross-origin frame starts its script, and the frame is parked", async () => {
     const mark = events.length;
     for (let presses = 0; presses < 4 && !find_event(mark, on_page(`${page_id}_tiny`, "window_focus")); presses++) {
       const press_mark = events.length;
@@ -93,7 +94,8 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
       await wait_event(press_mark, (event) => event.type === "window_focus" && event.page_id.startsWith(`${page_id}_`), "a frame to take the focus after Tab");
     }
     await wait_event(mark, on_page(`${page_id}_tiny`, "tree_read"), "the 10 px frame to start on its Tab focus");
-    await press_gF();
+    const tiny_focus_at = events.findIndex(on_page(`${page_id}_tiny`, "window_focus"));
+    await wait_event(tiny_focus_at, on_page(page_id, "window_focus"), "the top page to take the focus back from the parked 10 px frame");
   });
 
   await run_case("a focused cross-origin frame that navigates keeps the keys, and once removed the top page takes them", async () => {
