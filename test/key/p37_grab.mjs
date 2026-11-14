@@ -420,6 +420,8 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     await sleep(300);
     expect((await read("document.body.dataset.rawdown")) === (await read("document.body.dataset.rawup")), "a raw press was left down");
     expect((await attr_of("car", "index")) === "0" && (await attr_of("car", "downs")) === "0", "a strict page took the synthetic swipe");
+  });
+
   const nudge_once = async (page_id) => {
     await open_page("drag", page_id, { new_tab: true });
     const mark = events.length;
