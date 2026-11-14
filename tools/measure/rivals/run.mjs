@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, pick_chosen_activation, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, check_names_of, FRAME_ROWS, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, NORMAL_ACTIONS, page_wall, pick_activation, pick_chosen_activation, PASSTHROUGH_KEYS, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -216,7 +216,7 @@ async function tab_switch_run(next_key) {
 // The live-site check (PAGES=sites), in the three steps of sites.mjs, on one page load, except for the DesertFox frame branch, which loads the page again.
 // A user's key reaches the focused frame because the parent process routes it there. A key made inside the top page's process never reaches a frame of another origin. So every key of this check goes in through the parent process, into the browser window.
 // Key names longer than one character are named keys. Uppercase goes out with Shift held, as a typed capital would.
-const NAMED_KEY_CODES = { Escape: 27 };
+const NAMED_KEY_CODES = { Escape: 27, ArrowDown: 40 };
 const press_keys = (keys, gap_ms = 80) => chrome_long(`{
   const win = Services.wm.getMostRecentWindow("navigator:browser");
   const browser = win.gBrowser.selectedBrowser;
@@ -374,6 +374,26 @@ async function scroll_check(keys) {
   return { window_dy: after.window_y - baseline.window_y, main_dy: main ? after.tops[main.index] - main.top : 0, main: main?.name ?? null, active: focus.path };
 }
 
+// A probe site draws its own view after the load event (Monaco comes late), so the baseline waits until the rig can read it.
+async function wait_for_view(probe_name) {
+  for (let waited = 0; waited < 20000; waited += 1000) {
+    const facts = await ask_page("move_state", { probe: probe_name }, 5000);
+    if (judge_movement({ probe: probe_name, before: facts, after: facts }).status !== "unknown") return;
+    await sleep(1000);
+  }
+}
+
+// Reads the site's view, sends the key, waits for the debounced saves, and reads again. The baseline is just before the key, as in scroll_check. focus_first is the control pass: no extension, so the page needs the focus a click would give.
+async function movement_check(keys, probe_name, { focus_first = false } = {}) {
+  await wait_for_view(probe_name);
+  const focus = focus_first ? await ask_page("focus_view", { probe: probe_name }, 5000) : await focus_now();
+  const before = await ask_page("move_state", { probe: probe_name }, 5000);
+  await press_keys(keys);
+  await sleep(1500);
+  const after = await ask_page("move_state", { probe: probe_name }, 5000);
+  return { before, after, focus: focus.path ?? focus.focused };
+}
+
 // A wall (consent, bot check, login) is not a fail of the tool, so every check of the site takes the wall's status. A check that throws is an error, not a fail.
 // open_page polls every 100 ms, so a live page gets about 30 s to load.
 const LIVE_LOAD_ATTEMPTS = 300;
@@ -415,6 +435,15 @@ async function check_site(site) {
       record.checks[name] = { status: "error", reason: String(error.message ?? error).slice(0, 200) };
     }
   };
+
+  // The control pass: no extension, so only the site's own movement key can move the view. When it moves nothing, no tool can pass and the table reads the site as not scored.
+  if (tool === "none") {
+    await run_check("scroll", async () => {
+      const { before, after, focus } = await movement_check(PASSTHROUGH_KEYS, site.scroll_probe, { focus_first: true });
+      return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, before, after };
+    });
+    return record;
+  }
 
   // The frame branch has two parts. gF runs right after the leave step, on the load the rivals also see, so the page checks of step 3 meet the same page for every tool. The checks inside the frame run last, on a fresh load, because they dismiss the popup.
   async function leave_frame() {
@@ -529,6 +558,10 @@ async function check_site(site) {
     const in_frames = await count_labels({ frames_only: true });
     return { labels, targets, frame_labels: in_frames.labels };
   };
+  const judged_movement = async (movement_keys) => {
+    const { before, after, focus } = await movement_check(movement_keys, site.scroll_probe);
+    return { ...judge_movement({ probe: site.scroll_probe, before, after }), focus, before, after };
+  };
   const actions = {
     play_pause: () => press_and_compare(keys.play_pause, "video_state", judge_play_pause, 1500),
     volume: () => press_and_compare(keys.volume_down, "video_state", judge_volume, 1000),
@@ -541,7 +574,8 @@ async function check_site(site) {
     },
     embed_play_pause: async () => { await wait_for_embed(); return press_and_compare(keys.play_pause, "embed_state", judge_play_pause, 2500); },
     embed_volume: () => press_and_compare(keys.volume_down, "embed_state", judge_volume, 1500),
-    scroll: async () => judge_scroll(await scroll_check(keys.scroll_down)),
+    scroll: async () => (site.scroll_probe ? judged_movement(keys.scroll_down) : judge_scroll(await scroll_check(keys.scroll_down))),
+    passthrough: async () => ({ ...(await judged_movement(PASSTHROUGH_KEYS)), status: "info" }),
     hints: async () => { shown = await show_hints(); return judge_hints(shown.labels, shown.targets, shown.frame_labels); },
     hints_escape: async () => {
       if (!shown?.labels.length && !shown?.frame_labels) return { status: "fail", reason: "no labels to leave" };
@@ -564,7 +598,7 @@ async function check_site(site) {
       return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via, at: pick.at, label_rect: pick.label_rect, target_rect: pick.target_rect };
     },
   };
-  for (const name of [...site.extra, ...NORMAL_ACTIONS]) await run_check(name, async () => as_action(await actions[name]()));
+  for (const name of [...site.extra, ...NORMAL_ACTIONS, ...(site.scroll_probe ? ["passthrough"] : [])]) await run_check(name, async () => as_action(await actions[name]()));
   if (frame_mode_seen || (tool === "desertfox" && PARK_SITES.has(site.name))) {
     // The reload can fail on its own. Steps 1 to 3 are done by now and must survive it.
     try { await (frame_mode_seen ? check_inside_frame() : check_parked_frame()); }
@@ -606,10 +640,9 @@ try {
   log_row(result.meta);
   for (const page of page_names) {
     if (page === "sites") {
-      if (!addon) continue;
-      result.meta.sites = { keys: TOOL_KEYS[tool], settings: "extension defaults" };
+      result.meta.sites = tool === "none" ? { keys: { control: PASSTHROUGH_KEYS }, settings: "no extension, the control pass of the movement probe sites only" } : { keys: TOOL_KEYS[tool], settings: "extension defaults" };
       const only_sites = process.env.SITES?.split(",");
-      for (const site of SITES.filter((entry) => !only_sites || only_sites.includes(entry.name))) {
+      for (const site of SITES.filter((entry) => (!only_sites || only_sites.includes(entry.name)) && (addon || entry.scroll_probe))) {
         // One site that hangs the debugger must not cost the other sites their results.
         const run_site = () => check_site(site).catch((error) => {
           if (connection_lost(error)) throw error;
