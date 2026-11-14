@@ -27,7 +27,7 @@ const CASE_CAP_MS = 30000;
 // The test pages report a scroll this long after it ends (the debounce in the reporter of server.mjs).
 const SCROLL_REPORT_DELAY_MS = 150;
 // A tab hidden or shown within 150 ms of its opening lost the visibility report of its next switch in 6 of 6 tries, and 200 ms kept it in 6 of 6.
-// Only wait_tab_quiet keeps this age, for the extension and about: pages that report no keys. A test page takes the key probe instead.
+// Only wait_tab_quiet keeps this age, for the pages that take no key probe, the help and about: pages among them. A test page takes the web key probe, and the new tab page the view probe (wait_view_takes_keys).
 const NEW_PAGE_QUIET_MS = 300;
 const BARRIER_KEY = "F8";
 // The probe has its own key, so no barrier check can match a late probe report. F4 has no binding in src/ and no default action in Firefox.
@@ -662,13 +662,19 @@ export async function create_session({ name: session_name, timings, sweep = true
   // A late probe report matches no barrier, which waits for BARRIER_KEY. A case that counts the page's keydown reports skips PROBE_KEY, because a probe press can land after the case's mark.
   const wait_takes_keys = (page_id) => timings.time("waits", () => wait_takes_keys_untimed(page_id));
   async function wait_takes_keys_untimed(page_id) {
+    const seen_since = (mark) => server.wait_for_event(mark, (event) => event.type === "keydown" && event.key === PROBE_KEY && event.page_id === page_id, KEY_PROBE_TRY_MS);
+    await press_probe_until_seen(page_id, () => events.length, seen_since);
+  }
+
+  // Presses PROBE_KEY until `seen_since(mark)` says the page got that press, where `mark` is what `take_mark` read just before it.
+  async function press_probe_until_seen(page_name, take_mark, seen_since) {
     const deadline = Date.now() + KEY_PROBE_TIMEOUT_MS;
     for (let presses = 1; ; presses++) {
-      waiting_for = `${page_id} to take the probe key ${PROBE_KEY}`;
-      const mark = events.length;
+      waiting_for = `${page_name} to take the probe key ${PROBE_KEY}`;
+      const mark = await take_mark();
       await press_keys("-k", PROBE_KEY);
-      if (await server.wait_for_event(mark, (event) => event.type === "keydown" && event.key === PROBE_KEY && event.page_id === page_id, KEY_PROBE_TRY_MS)) return;
-      if (Date.now() > deadline) throw wait_timeout_error(`${page_id} to take the probe key ${PROBE_KEY} (${presses} presses)`);
+      if (await seen_since(mark)) return;
+      if (Date.now() > deadline) throw wait_timeout_error(`${page_name} to take the probe key ${PROBE_KEY} (${presses} presses)`);
       measurements.key_probe_retries = (measurements.key_probe_retries ?? 0) + 1;
     }
   }
@@ -679,7 +685,7 @@ export async function create_session({ name: session_name, timings, sweep = true
   async function wait_view_takes_keys_untimed(view_name) {
     const view = extension_view(view_name);
     // A page that went away reads -1, so its probe times out.
-    const read_probe_count = `(${view}?.desertfox_probe_count ?? -1)`;
+    const probe_count_expr = `(${view}?.desertfox_probe_count ?? -1)`;
     await poll_until_untimed(`${view_name} to take the probe listener`, () => background_call(`(() => {
       const view = ${view};
       if (!view) return false;
@@ -689,15 +695,17 @@ export async function create_session({ name: session_name, timings, sweep = true
       }
       return true;
     })()`));
-    const deadline = Date.now() + KEY_PROBE_TIMEOUT_MS;
-    for (let presses = 1; ; presses++) {
-      const before = await background_call(read_probe_count);
-      await press_keys("-k", PROBE_KEY);
-      const seen = await poll_until_untimed(`${view_name} to take the probe key ${PROBE_KEY}`, async () => (await background_call(read_probe_count)) > before, { timeout_ms: KEY_PROBE_TRY_MS, step_ms: 20, expected_timeout: true }).then(() => true, () => false);
-      if (seen) return;
-      if (Date.now() > deadline) throw wait_timeout_error(`${view_name} to take the probe key ${PROBE_KEY} (${presses} presses)`);
-      measurements.key_probe_retries = (measurements.key_probe_retries ?? 0) + 1;
-    }
+    const read_count = () => background_call(probe_count_expr);
+    // A failed background call throws here, so it names its own cause and never reads as a lost key.
+    const seen_since = async (count_before) => {
+      const try_ends = Date.now() + KEY_PROBE_TRY_MS;
+      do {
+        if ((await read_count()) > count_before) return true;
+        await raw_sleep(20);
+      } while (Date.now() < try_ends);
+      return false;
+    };
+    await press_probe_until_seen(view_name, read_count, seen_since);
   }
 
   // A bulk tabs.remove of 30 or more tabs outlasts one debugger call, so the close is started and then polled.
