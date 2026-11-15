@@ -18,4 +18,10 @@ The source archive for the submit comes from `just source_archive`. Its `BUILD.m
 2. Publish the GitHub release with the hosts before the submit: `just release_stamp <version>` then `just release_publish <version>`. The release has no xpi, because a listed submit downloads none. The add-on's install command points at this release, so it must exist before AMO approves. The tag targets HEAD, so the push comes first.
 3. Run `just sign_listed`. It stamps and builds again, which writes the same host bytes, and uploads the build, the metadata and the source archive.
 4. Set the privacy policy, upload `amo/icon.png` as the listing icon and add the previews on the listing page.
+   Captions for the previews:
+   - `docs/images/hints.png`: Press f. Every link and button gets a label. Type it to click.
+   - `docs/images/which-key.png`: Forgot a key? The which-key popup lists every key and what it does.
+   - `docs/images/command-line.png`: Press : to run any command by name, with completion as you type.
+   - `docs/images/theme-switch.png`: 29 built-in themes. One command switches, and a message confirms it.
+   - `docs/images/drag.png` (not made yet, it comes from another branch): Drag and drop without the mouse: grab a card, then type the label on its target.
 5. After approval, add the signed xpi to the release with `gh release upload v<version> <file>` if you want it there.

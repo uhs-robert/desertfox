@@ -91,7 +91,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Script loaded on every page and frame | 18.5 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
+| Script loaded on every page and frame | 20.4 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
 
@@ -143,7 +143,7 @@ You gain:
 
 - A which-key popup for the keys you forget.
 - Macros and caret mode, which Tridactyl lacks, and settings per site, where Vimium has keys only.
-- A script of 18.5 KB on each page.
+- A script of 20.4 KB on each page.
 
 You lose:
 
@@ -168,7 +168,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - Click anything: press `f`, then type the short label next to a link, button, input or image. `F` opens a link in a background tab.
 - Narrow the labels by link text: press `/` in hint mode and type part of the text.
-- Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, or focus a frame.
+- Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, double-click, focus, inspect in DevTools, or focus a frame.
 - Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
 - Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`.
 
