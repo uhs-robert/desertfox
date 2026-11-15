@@ -12,6 +12,7 @@ import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
+import { keeps_narrowing, drop_targets_of } from "./drop_targets.ts";
 import { collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
 import { clean_letters, make_labels, narrow } from "./labels.ts";
@@ -113,9 +114,6 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
-
-// Fewer targets than this and the guess of the `drop` filter is dropped for every element.
-const MIN_DROP_TARGETS = 2;
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
 
@@ -409,7 +407,7 @@ function register(host: PageHostApi): void {
     if (current.cancelled) return;
     // A narrowed set that shows fewer than two places is no narrowing: label every element, as before the filter.
     let shown = first_shown;
-    if (current.filter === "drop" && shown.length < MIN_DROP_TARGETS) {
+    if (current.filter === "drop" && !keeps_narrowing(shown.length)) {
       current.filter = "every";
       shown = await shown_of(current, find_candidates("every", undefined, current.action, current.site_selectors_, undefined));
       if (current.cancelled) return;
@@ -567,15 +565,19 @@ function register(host: PageHostApi): void {
     const started_ms = performance.now();
     const run = ++latest_run;
     const action = args.action as HintAction;
+    // The source element stays in this frame: `label_across` sends the args to other frames, and an element does not clone.
+    const { drop_source_, ...plain_args } = args as { drop_source_?: Element } & Record<string, unknown>;
+    args = plain_args;
     let filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
-    const drop_source_ = args.drop_source_ as Element | undefined;
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
     try {
+      // A source with no structure to read gets every element at once, so the key line does not offer Tab.
+      if (filter === "drop" && !(drop_source_ && drop_targets_of(drop_source_))) filter = "every";
       candidates = find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_);
-      if (filter === "drop" && candidates.length < MIN_DROP_TARGETS) {
+      if (filter === "drop" && !keeps_narrowing(candidates.length)) {
         filter = "every";
         candidates = find_candidates(filter, custom_selector_, action, site_selectors_, undefined);
       }

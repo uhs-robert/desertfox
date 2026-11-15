@@ -380,7 +380,7 @@ Which-key group names:
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
 | `/` | `hint.key slash` | Type link text |
-| `<Tab>` | `hint.key tab` | Next match, or every drop target |
+| `<Tab>` | `hint.key tab` | Next match, or label every element |
 | `<S-Tab>` | `hint.key shift_tab` | Previous match |
 | `<Enter>` | `hint.key enter` | Pick the active match |
 | `<Space>` | `hint.key space` | Turn overlapping labels |

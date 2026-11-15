@@ -608,6 +608,12 @@ test("hint_add labels its matches for all, clickable and every, once each, and n
   for (const filter of ["links", "images", "inputs", "buttons", "custom"] as const) assert.deepEqual(names(with_site_selectors(root, filter, base, selectors)), ["link in nav"], filter);
 });
 
+test("hint_add labels its matches in the drop pass, so a user can add a drop zone the guess missed", () => {
+  const { root, element } = classed_page([{ name: "zone", classes: ["zone"] }, { name: "card", classes: ["card"] }]);
+  const base: Found[] = [strong(element("card"))];
+  assert.deepEqual(names(with_site_selectors(root, "drop", base, { add: [".zone"], remove: [] })), ["card", "zone"]);
+});
+
 test("hint_remove drops a candidate inside a match for every filter but custom, an added one too", () => {
   const nav = { name: "nav", classes: ["nav"] };
   const { root, element } = classed_page([nav, { name: "tile", classes: ["tile"] }, { name: "link in nav", classes: ["tile"], parent: nav }]);
