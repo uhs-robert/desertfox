@@ -33,10 +33,11 @@ function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; consented?:
     now: () => NOW_MS,
     storage: { get: async (key) => ({ [key]: store[key] }), set: async (items) => void Object.assign(store, items) },
   };
-  const calls = { permission_checks: 0, position_reads: 0, permission_requests: 0 };
+  const calls = { permission_checks: 0, position_reads: 0, permission_requests: 0, forgotten: 0 };
   const deps: WeatherDeps = {
     page_is_private: async () => over.is_private ?? false,
     has_location_consent: async () => over.consented ?? true,
+    forget_stored: async () => void (calls.forgotten++),
     has_geolocation_permission: async () => (calls.permission_checks++, over.allowed ?? false),
     current_position: async () => (calls.position_reads++, { latitude: 59.91273, longitude: 10.74609 }),
     request_location_access: async () => (calls.permission_requests++, true),
@@ -58,7 +59,7 @@ test("with newtab_weather off nothing is read, asked or fetched", async () => {
   assert.deepEqual(await collect(on({ newtab_weather: false, newtab_weather_city: "Oslo" }), deps), []);
   assert.deepEqual(await collect({ newtab_weather_units: "metric" } as WeatherSettings, deps), []);
   assert.deepEqual(urls, []);
-  assert.deepEqual(calls, { permission_checks: 0, position_reads: 0, permission_requests: 0 });
+  assert.deepEqual(calls, { permission_checks: 0, position_reads: 0, permission_requests: 0, forgotten: 0 });
 });
 
 test("a private page makes no request and reads no position", async () => {
@@ -80,6 +81,15 @@ test("without the location data consent the card offers the button and sends not
   assert.deepEqual(await collect(on({ newtab_weather_city: "Oslo" }), deps), [{ kind: "ask_location" }]);
   assert.deepEqual(urls, []);
   assert.equal(calls.position_reads, 0, "no position is read before the consent");
+});
+
+test("without the consent the stored answers are forgotten, and with it they are kept", async () => {
+  const without = fake_deps({ consented: false });
+  await collect(on({ newtab_weather_city: "Oslo" }), without.deps);
+  assert.equal(without.calls.forgotten, 1);
+  const with_consent = fake_deps();
+  await collect(on({ newtab_weather_city: "Oslo" }), with_consent.deps);
+  assert.equal(with_consent.calls.forgotten, 0);
 });
 
 test("a click that the user denies leaves the button and starts no request", () =>
@@ -244,7 +254,7 @@ test("with a city set the card draws the city reading, shows no button and never
   const { deps, calls } = fake_deps();
   const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
   assert.deepEqual(views.map((view) => view.kind), ["weather"]);
-  assert.deepEqual(calls, { permission_checks: 0, position_reads: 0, permission_requests: 0 });
+  assert.deepEqual(calls, { permission_checks: 0, position_reads: 0, permission_requests: 0, forgotten: 0 });
 });
 
 test("a granted geolocation permission does not override a city", async () => {

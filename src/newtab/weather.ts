@@ -29,6 +29,8 @@ export type WeatherDeps = {
   page_is_private: () => Promise<boolean>;
   // The optional `locationInfo` data collection permission. Without it the card sends nothing, whatever place it has.
   has_location_consent: () => Promise<boolean>;
+  // Deletes the stored forecast, coordinates, place and air quality answer. Runs when the consent is missing, so a withdrawal leaves nothing behind.
+  forget_stored: () => Promise<void>;
   has_geolocation_permission: () => Promise<boolean>;
   // Resolves with the position, rejects when the browser or the user refuses.
   current_position: () => Promise<{ latitude: number; longitude: number }>;
@@ -203,6 +205,7 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
   const show_weather = (weather: Weather) => show({ kind: "weather", weather });
   if (!(await refused_as(deps.has_location_consent(), false))) {
     show({ kind: "ask_location" });
+    await refused_as(deps.forget_stored(), undefined);
     return;
   }
   // A city is the place the user chose, so it wins and geolocation is neither read nor asked for.
@@ -223,16 +226,15 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
       return;
     }
   }
-  // No position: the preview, if any, was made for a place this page cannot confirm, so only a reading the city lookup establishes may stay.
-  if (earlier && !city) show({ kind: "clear_reading" });
+  // No position: the preview, if any, was made for a place this page cannot confirm.
+  if (earlier) show({ kind: "clear_reading" });
   if (city) {
     const produce = async () => {
       const where = await geocode_city(city, deps.net);
       return where && forecast_at(where, units, deps.net);
     };
     const spec = { name: "weather", key: `city:${city}|${units}`, ttl_ms: WEATHER_TTL_MS, max_age_ms: WEATHER_MAX_AGE_MS, is_value: is_weather_in(units, deps.net.now), produce };
-    const known = await load_cached<Weather>(spec, deps.net, show_weather);
-    if (earlier && !known) show({ kind: "clear_reading" });
+    await load_cached<Weather>(spec, deps.net, show_weather);
     return;
   }
   // A granted permission with no position and no city is a dead end: the card stays empty and offers nothing to click.
@@ -321,6 +323,7 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
 export const browser_weather_deps = (): WeatherDeps => ({
   page_is_private: async () => (await browser.windows.getCurrent()).incognito,
   has_location_consent: () => browser.permissions.contains({ data_collection: ["locationInfo"] }),
+  forget_stored: () => forget_weather(),
   has_geolocation_permission: () => browser.permissions.contains({ permissions: ["geolocation"] }),
   current_position: () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition((found) => resolve(found.coords), reject, { timeout: GEOLOCATION_TIMEOUT_MS, maximumAge: WEATHER_TTL_MS })),
   request_location_access: (with_geolocation) => browser.permissions.request({ permissions: with_geolocation ? ["geolocation"] : [], data_collection: ["locationInfo"] }),
