@@ -19,7 +19,7 @@
 
 DesertFox lets you use Firefox from the keyboard. Press `f` and a short label appears next to every link and button. Type a label to click it. Press `j` and `k` to scroll, and `:` to run any command by name, with completion.
 
-You do not have to memorize keys. After any key, a short pause opens a which-key popup (a popup that lists the keys that can follow and what each does). Press `g?` to open the help page, which lists every key. Type `:help.whichkey` to show the top-level keys of the current mode in the popup.
+You do not have to memorize keys. A short pause after a key that starts a longer sequence, such as `g`, opens a which-key popup (a popup that lists the keys that can follow and what each does). `<A-?>` opens it at any time. Press `g?` to open the help page, which lists every key. Type `:help.whichkey` to show the top-level keys of the current mode in the popup.
 
 The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, counts, registers and macros. You do not need to know Vim. If you come from another keyboard tool for the browser, see [Switching](#switching-from-tridactyl-vimium-or-vim).
 
@@ -63,7 +63,7 @@ See [AGENTS.md](AGENTS.md) for the build and install commands.
 
 After you install DesertFox, the Quick Start page opens. It teaches scrolling, hints, the command line, page search, caret and visual mode, with the keys read from your keymap. It also sits in the help sidebar.
 
-The first day needs five keys: `j` and `k` to scroll, `f` to click, `:` for the command line and `g?` for help. Press `g?`, `,h` or `<F1>` on a normal page to open the help page. A short pause after any key shows the keys that can follow.
+The first day needs five keys: `j` and `k` to scroll, `f` to click, `:` for the command line and `g?` for help. Press `g?`, `,h` or `<F1>` on a normal page to open the help page. A short pause after a key that starts a longer sequence, such as `g`, shows the keys that can follow. `<A-?>` shows them at any time.
 
 On a page where keys never reach DesertFox, such as an `about:` page or the PDF viewer, press `<A-j>` or `<A-k>` to switch to the next or previous tab.
 
