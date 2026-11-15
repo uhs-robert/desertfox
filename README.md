@@ -73,7 +73,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | --- | --- | --- | --- | --- | --- |
 | Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
-| Built-in keyboard drag (`;g`, `;G`) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Built-in keyboard drag (`;Gg`, `;gg`) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | [Works in frames from other sites (sign-in popups, embeds)](docs/compatibility.md) | ✅ | 🟡 | 🟡 | ❌ | not checked |
 | Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
@@ -92,6 +92,12 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Script loaded on every page and frame | 18.5 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
+
+Keyboard drag keys. `;` starts the hint keys, and `;g` and `;G` are modifiers that turn the hint into a grab. The letter after the modifier picks which elements get hints.
+- `;Gg` grabs a draggable element and moves it with keys (grab and move). In grab mode, `h` `j` `k` `l` move it, `[` and `]` halve and double the step, `Enter` drops it and `Escape` cancels.
+- `;gg` grabs a draggable element, then hints the page again so you pick the target to drop it on (grab and choose a target).
+- The trailing `g` is the draggable filter: elements that declare drag, sliders, scrollbars and sortable handles. Another letter picks another filter, so `;ga` grabs any element and `;Ga` moves any element.
+- `;w` swipes a carousel or slider with the same `h` `j` `k` `l` keys.
 
 Hints typically appear in under a tenth of a second, within the blink of an eye.
 
