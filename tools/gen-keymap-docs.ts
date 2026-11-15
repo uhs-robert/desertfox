@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
-import { read_planned } from "./keymap_docs/planned.ts";
 import { render } from "./keymap_docs/render.ts";
 import { splice } from "./keymap_docs/splice.ts";
 
@@ -21,9 +20,8 @@ if (write === check) {
   process.exit(2);
 }
 
-const planned = read_planned(readFileSync(new URL("docs/keymap_planned.toml", root), "utf8"), DEFAULT_KEYMAP);
 const current = readFileSync(doc_path, "utf8");
-const next = splice(current, render(DEFAULT_KEYMAP, registry, planned));
+const next = splice(current, render(DEFAULT_KEYMAP, registry));
 
 if (next === current) process.exit(0);
 if (write) {

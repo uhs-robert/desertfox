@@ -6,7 +6,6 @@ import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import type { CommandDef } from "../../src/shared/command.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
-import { read_planned } from "../../tools/keymap_docs/planned.ts";
 import { render } from "../../tools/keymap_docs/render.ts";
 import { BEGIN_MARKER, cell, code, END_MARKER, splice } from "../../tools/keymap_docs/splice.ts";
 
@@ -46,41 +45,20 @@ test("render covers a bound, chained, labeled, prompting and array binding, and 
       gone: null,
     },
   };
-  const text = render(keymap, fake_registry, [{ mode: "normal", key: "m", status: "later", command: "mark.add", note: "phase 3" }]);
-  assert.match(text, /^bound: 4 \(normal 4\) \| later: 1 \| dropped: 0$/m);
-  assert.match(text, /\| `J` \| bound \| `tab\.next` \| Next tab \|  \|/);
-  assert.match(text, /\| `j` \| bound \| `scroll --count=10` \| Scroll down \|  \|/);
-  assert.match(text, /\| `x` \| bound \| `tab\.next ; tab\.prev` \| Next tab \|  \|/);
-  assert.match(text, /\| `p` \| bound \| `scroll` \(prompts\) \| Scroll \|  \|/);
-  assert.match(text, /\| `m` \| later \| `mark\.add` \|  \| phase 3 \|/);
+  const text = render(keymap, fake_registry);
+  assert.match(text, /^bound: 4 \(normal 4\)$/m);
+  assert.match(text, /\| `J` \| `tab\.next` \| Next tab \|/);
+  assert.match(text, /\| `j` \| `scroll --count=10` \| Scroll down \|/);
+  assert.match(text, /\| `x` \| `tab\.next ; tab\.prev` \| Next tab \|/);
+  assert.match(text, /\| `p` \| `scroll` \(prompts\) \| Scroll \|/);
   assert.ok(!text.includes("gone"));
 });
 
-test("the count line matches the rendered rows of the default keymap", () => {
-  const planned = read_planned(read("docs/keymap_planned.toml"), DEFAULT_KEYMAP);
-  const text = render(DEFAULT_KEYMAP, registry, planned);
-  const rows = (status: string) => text.split("\n").filter((line) => line.startsWith("| ") && line.includes(` | ${status} | `)).length;
-  const [, bound, later, dropped] = text.match(/^bound: (\d+) .* \| later: (\d+) \| dropped: (\d+)$/m)!.map(Number) as [number, number, number, number];
-  assert.deepEqual({ bound, later, dropped }, { bound: rows("bound"), later: rows("later"), dropped: rows("dropped") });
-});
-
 test("render fails when the keymap has a mode it has no place for", () => {
-  assert.throws(() => render({ normal: {}, newmode: {} } as KeymapConfig, fake_registry, []), /lacks the mode newmode/);
-});
-
-test("planned rows fail with a named message", () => {
-  const keymap: KeymapConfig = { normal: { J: { id: "tab.next" } } };
-  const row = (fields: string) => `[[row]]\nmode = "normal"\nkey = "m"\nstatus = "later"\n${fields}`;
-  assert.doesNotThrow(() => read_planned(row(""), keymap));
-  assert.throws(() => read_planned(row("").replace('"later"', '"v1"'), keymap), /status must be/);
-  assert.throws(() => read_planned(row("").replace('"normal"', '"nope"'), keymap), /unknown mode/);
-  assert.throws(() => read_planned(row("").replace('"m"', '"a b"'), keymap), /unparsable key/);
-  assert.throws(() => read_planned(row("").replace('"m"', '"J"'), keymap), /already binds/);
-  assert.throws(() => read_planned(`${row("")}\n${row("")}`, keymap), /duplicate row/);
+  assert.throws(() => render({ normal: {}, newmode: {} } as KeymapConfig, fake_registry), /lacks the mode newmode/);
 });
 
 test("docs/keymap.md is current", () => {
-  const planned = read_planned(read("docs/keymap_planned.toml"), DEFAULT_KEYMAP);
   const doc = read("docs/keymap.md");
-  assert.equal(splice(doc, render(DEFAULT_KEYMAP, registry, planned)), doc, "run `just docs-gen`");
+  assert.equal(splice(doc, render(DEFAULT_KEYMAP, registry)), doc, "run `just docs-gen`");
 });

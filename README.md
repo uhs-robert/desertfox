@@ -237,7 +237,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 ## 🧭 Docs
 
 - [docs/design.md](docs/design.md): architecture, scope and roadmap.
-- [docs/keymap.md](docs/keymap.md): every default key, and the keys that are planned or dropped.
+- [docs/keymap.md](docs/keymap.md): every default key.
 - [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
 - [src/README.md](src/README.md): a code map for contributors.
 
