@@ -90,7 +90,13 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await wait_view_takes_keys("newtab.html");
       await press_keys("f");
       // One label per card, plus the four built-in links and the command line hint.
-      await poll_until(`${cards_now + 5} hint labels, one per card`, async () => (await labels()) === (await tile_count()) + 5);
+      let last_labels;
+      let last_tiles;
+      try {
+        await poll_until(`${cards_now + 5} hint labels, one per card`, async () => ((last_labels = await labels()), (last_tiles = await tile_count()), last_labels === last_tiles + 5));
+      } catch (error) {
+        throw new Error(`${error.message}: the last read found ${last_labels} labels and ${last_tiles} tiles, so ${last_tiles + 5} labels were expected`);
+      }
       await press_keys("-k", "Escape");
     });
 
