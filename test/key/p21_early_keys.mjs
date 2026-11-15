@@ -4,8 +4,9 @@
 export const areas = ["keys"];
 
 const KEYMAP_DELAY_MS = 2500;
+const FOCUS_SETTLE_MS = 300;
 
-export async function run_cases({ run_case, in_background, url_of, wait_event, events, expect, sleep, press_keys, in_active_tab }) {
+export async function run_cases({ run_case, in_background, url_of, wait_event, poll_until, events, expect, sleep, press_keys, in_active_tab }) {
   // The background keeps the keymap in memory (keymap_source.ts) and drops it on a change to the key, so turning the delay on rewrites the key to force the next read through the wrapped `get`.
   const delay_keymap_reads = (on) => in_background(`(async () => {
     const local = browser.storage.local;
@@ -17,12 +18,20 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, e
     return 1;
   })()`);
 
+  // The key probe (settle_focus) cannot serve here: its F4 is unbound, so the page holds and replays it like any key, which would change what these cases measure. The wait is the page reporting document focus instead. A page that still loads reports nothing yet, so the wait reads it from the background at document_start, which answers while the page loads.
+  const open_tab = (url) => in_background(`browser.tabs.create({ url: ${JSON.stringify(url)}, active: true }).then((tab) => tab.id)`);
+  const wait_in_front = async (tab_id) => {
+    await poll_until(`tab ${tab_id} to report page focus`, () => in_background(`browser.tabs.executeScript(${tab_id}, { code: "document.hasFocus()", runAt: "document_start" }).then((answers) => answers[0] === true)`).catch(() => false));
+    // A key in the first moments after the focus is lost (docs/firefox-behavior.md), and no signal marks the end of them here: the probe key would be held, and the page reports nothing while it loads. A run with no pause at all lost every key of the slow body cases.
+    await sleep(FOCUS_SETTLE_MS);
+  };
+
   await run_case("Space pressed before the keymap loads reaches the page once the keymap arrives", async () => {
     await delay_keymap_reads(true);
     try {
       const mark = events.length;
-      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "early_space"))}, active: true }).then((tab) => tab.id)`);
-      await sleep(900);
+      await wait_in_front(await open_tab(url_of("page", "early_space")));
+      await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "early_space", "the page to report that it shows");
       await press_keys("-k", "space");
       const seen = await wait_event(mark, (event) => event.type === "keydown" && event.key === " " && event.page_id === "early_space", "the page to see the held Space", KEYMAP_DELAY_MS + 4000);
       const opened = events.slice(mark).find((event) => event.type === "visibility" && event.page_id === "early_space");
@@ -37,8 +46,8 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, e
     await delay_keymap_reads(true);
     try {
       const mark = events.length;
-      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("page", "early_chord"))}, active: true }).then((tab) => tab.id)`);
-      await sleep(900);
+      await wait_in_front(await open_tab(url_of("page", "early_chord")));
+      await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "early_chord", "the page to report that it shows");
       await press_keys("-M", "ctrl", "k", "-m", "ctrl");
       const seen = await wait_event(mark, (event) => event.type === "keydown" && event.key === "k" && event.page_id === "early_chord", "the page to see Ctrl+K", KEYMAP_DELAY_MS + 4000);
       const opened = events.slice(mark).find((event) => event.type === "visibility" && event.page_id === "early_chord");
@@ -53,11 +62,16 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, e
     await delay_keymap_reads(keymap_late);
     try {
       const body_ms = KEYMAP_DELAY_MS + 1500;
-      const opened = Date.now();
-      await in_background(`browser.tabs.create({ url: ${JSON.stringify(url_of("slow_body", id) + `&ms=${body_ms}&tail_ms=${tail_ms}`)}, active: true }).then((tab) => tab.id)`);
-      await sleep(900);
+      await wait_in_front(await open_tab(url_of("slow_body", id) + `&ms=${body_ms}&tail_ms=${tail_ms}`));
       for (const args of keys) await (typeof args === "number" ? sleep(args) : press_keys(...args));
-      await sleep(Math.max(0, opened + body_ms + tail_ms + 1500 - Date.now()));
+      // The script waits for the load, and the held keys run when it ends. The scroll must then stay the same over two reads, so a replay that is still on its way is not read early.
+      let previous = "";
+      await poll_until("the scroll position to settle after the load", async () => {
+        const now = await in_active_tab("document.readyState + JSON.stringify([scrollX, scrollY])");
+        const settled = now.startsWith("complete") && now === previous;
+        previous = now;
+        return settled;
+      }, { timeout_ms: 10000, step_ms: 300 });
       return JSON.parse(await in_active_tab("JSON.stringify({ x: scrollX, y: scrollY, half: innerHeight / 2 })"));
     } finally {
       await delay_keymap_reads(false);

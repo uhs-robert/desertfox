@@ -89,6 +89,9 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the check to finish and allow the save", () => in_page(`const text = view.document.querySelector(".desertfox-keys-check")?.textContent ?? "Checking..."; return text !== "Checking..." && ![...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").disabled;`).catch(() => false));
     await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Save").click();`);
     await poll_until("the edit to be stored", async () => (await layer()).normal?.J === "scroll.pixels --dy=300");
+    // The edit layer is stored before the publish compiles the keymap and tells the tabs, so a press after the layer alone can still meet the old J (#708). Both waits are for the publish. The tab asks for its keymap one hop after, which no wait here covers.
+    await poll_until("the compiled keymap to hold the new J", () => in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => JSON.stringify(got.desertfox_compiled_keymap?.modes?.normal?.children?.J ?? null).includes("scroll.pixels"))`));
+    await poll_until("the saved row to show its origin", () => in_page(`return ${row_of("normal", "J")}?.closest("tr").textContent.includes("changed");`).catch(() => false));
 
     await in_background(`browser.tabs.update(${test_tab}, { active: true }).then(() => true)`);
     await wait_active_tab("p36_j");
@@ -97,7 +100,6 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await in_background(`browser.tabs.query({ url: "*://*/*" }).then(() => true)`);
     const settings_tab = await in_background(`browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("/home.html")).id)`);
     await in_background(`browser.tabs.update(${settings_tab}, { active: true }).then(() => true)`);
-    await poll_until("the saved row to show its origin", () => in_page(`return ${row_of("normal", "J")}?.closest("tr").textContent.includes("changed");`).catch(() => false));
     await in_page(`${row_of("normal", "J")}.click();`);
     await poll_until("Reset to be offered", () => in_page(`const reset = [...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset"); return !!reset && !reset.hidden && !reset.disabled;`).catch(() => false));
     await in_page(`[...view.document.querySelectorAll(".desertfox-keys-editor button")].find((button) => button.textContent === "Reset").click();`);
