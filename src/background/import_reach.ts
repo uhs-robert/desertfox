@@ -7,6 +7,7 @@ import { BUILT_IN_PAGE } from "../shared/config.ts";
 import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
 import type { ImportReach, KeyGroup, KeyRow, ReachRow, ReachList } from "../shared/messages.ts";
 import { bind_tables_of } from "../shared/match_pattern.ts";
+import { CLIPBOARD_REGISTER } from "../shared/register_names.ts";
 import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 
@@ -22,6 +23,11 @@ const GROUP_IDS: Record<KeyGroup, readonly string[]> = {
   settings: ["settings.set", "settings.toggle", "settings.unset"],
   host: ["native.install", "native.update", "permissions.grant", "text.edit_external", "browser.open_firefox_page", "config.reload", "debug.restart"],
 };
+// Commands the bridge never runs (`never_listed`) that reach nothing off the device, read no clipboard and need no listing. `register.paste` reads the clipboard only for the `+` register, which its argument decides. A test forces every such command into a group or into this list.
+export const LOCAL_ONLY_IDS: readonly string[] = [
+  "session.save", "session.open", "session.delete", "session.rename", "register.list", "register.paste", "macro.play", "command.repeat",
+  "page.reload", "page.save_pdf", "copy.url", "copy.links", "copy.tabs", "hint.run", "hint.key", "visual.act", "debug.perf",
+];
 export const CLASSIFIED_IDS: readonly string[] = Object.values(GROUP_IDS).flat();
 export const CLASSIFIED_PREFIXES: readonly string[] = GROUP_PREFIXES.map(([, prefix]) => prefix);
 
@@ -40,45 +46,66 @@ function addresses_in(command: CommandMeta | undefined, args: Record<string, unk
   });
 }
 
-const caps = <T>(): ReachList<T> => ({ rows: [], more: 0 });
-function add<T>(list: ReachList<T>, row: T): void {
-  if (list.rows.length < ROW_CAP) list.rows.push(row);
-  else list.more += 1;
+// Rows are ranked before the cap, because the config decides the order it lists them in and could push a risky row past the cap behind harmless ones. A lower rank shows first.
+type Ranked<T> = { row: T; rank: number }[];
+const RISKY = 0;
+const NOTABLE = 1;
+const PLAIN = 2;
+
+function capped<T>(ranked: Ranked<T>): ReachList<T> {
+  const ordered = ranked.map((entry, index) => ({ ...entry, index })).sort((a, b) => a.rank - b.rank || a.index - b.index);
+  return { rows: ordered.slice(0, ROW_CAP).map(({ row }) => row), more: Math.max(0, ordered.length - ROW_CAP) };
 }
+
+// The names a clipboard register goes by in a register argument. Reading it types the system clipboard into the page.
+const CLIPBOARD_REGISTER_NAMES: readonly unknown[] = [CLIPBOARD_REGISTER, "*"];
 
 // A step that is not an object cannot come out of the build, but the walk skips it instead of trusting that.
 const steps_of = (binding: unknown): BoundInvocation[] => [binding].flat().filter((step): step is BoundInvocation => typeof step === "object" && step !== null && typeof (step as BoundInvocation).id === "string");
 
 // The reach of a build that failed: the problems show instead, and the commit refuses.
-export const no_reach = (): ImportReach => ({ addresses: caps(), keys: { clipboard_or_page: caps(), settings: caps(), host: caps() }, site_rows: 0 });
+export const no_reach = (): ImportReach => ({ addresses: { rows: [], more: 0 }, keys: { clipboard_or_page: { rows: [], more: 0 }, settings: { rows: [], more: 0 }, host: { rows: [], more: 0 } }, site_rows: 0 });
+
+// What a set of args reaches, for a key step and for a modifier, which overrides a step's args.
+function args_reach(args: Record<string, unknown>, prefill?: ContextSource) {
+  const values = Object.values(args);
+  return {
+    clipboard: values.some(reads_clipboard) || (prefill !== undefined && is_clipboard(prefill)) || ["register", "name"].some((name) => CLIPBOARD_REGISTER_NAMES.includes(args[name])),
+    consent: values.some((value) => CONSENT_SETTINGS.some((setting) => setting === value)),
+  };
+}
+
+const address_rank = (what: string): number => (what === "New tab page" || what === "Home page" ? RISKY : what.endsWith("(default)") || what.startsWith("Key ") || what.startsWith("Modifier ") ? NOTABLE : PLAIN);
 
 export function import_reach(config: MergedConfig, commands: CommandMeta[]): ImportReach {
   const meta = new Map(commands.map((command) => [command.id, command]));
-  const addresses: ReachList<ReachRow> = caps();
-  const keys: Record<KeyGroup, ReachList<KeyRow>> = { clipboard_or_page: caps(), settings: caps(), host: caps() };
+  const addresses: Ranked<ReachRow> = [];
+  const keys: Record<KeyGroup, Ranked<KeyRow>> = { clipboard_or_page: [], settings: [], host: [] };
   const default_engine = config.settings.default_engine;
+  const add_address = (row: ReachRow) => addresses.push({ row, rank: address_rank(row.what) });
+  const add_key = (group: KeyGroup, row: KeyRow, address: boolean) => keys[group].push({ row, rank: row.names_consent || group === "host" ? RISKY : group === "clipboard_or_page" ? NOTABLE : address ? NOTABLE : PLAIN });
 
-  for (const [name, engine] of Object.entries(config.search_engines)) add(addresses, { what: `Search engine ${name}${name === default_engine ? " (default)" : ""}`, url: engine.url });
+  for (const [name, engine] of Object.entries(config.search_engines)) add_address({ what: `Search engine ${name}${name === default_engine ? " (default)" : ""}`, url: engine.url });
   for (const key of ["new_tab_page", "home_page"] as const) {
     const url = config.settings[key];
-    if (url !== undefined && url !== BUILT_IN_PAGE) add(addresses, { what: key === "new_tab_page" ? "New tab page" : "Home page", url });
+    if (url !== undefined && url !== BUILT_IN_PAGE) add_address({ what: key === "new_tab_page" ? "New tab page" : "Home page", url });
   }
-  for (const link of config.settings.newtab_links ?? []) add(addresses, { what: `New tab link ${link.label}`, url: link.url });
-  for (const [key, url] of Object.entries(config.quickmarks)) add(addresses, { what: `Quickmark ${key}`, url });
+  for (const link of config.settings.newtab_links ?? []) add_address({ what: `New tab link ${link.label}`, url: link.url });
+  for (const [key, url] of Object.entries(config.quickmarks)) add_address({ what: `Quickmark ${key}`, url });
 
   const walk_binding = (sequence: string, where: string, binding: unknown) => {
     for (const step of steps_of(binding)) {
       const command = meta.get(step.id);
       const args = step.args ?? {};
       const prefill = step.prompt?.prefill;
-      const clipboard = Object.values(args).some(reads_clipboard) || (prefill !== undefined && is_clipboard(prefill));
+      const { clipboard, consent } = args_reach(args, prefill);
+      const urls = addresses_in(command, args);
+      for (const url of urls) add_address({ what: `Key ${sequence} in ${where} opens`, url });
       const group = group_of_id(step.id) ?? (clipboard ? "clipboard_or_page" : undefined);
-      for (const url of addresses_in(command, args)) add(addresses, { what: `Key ${sequence} in ${where} opens`, url });
       if (group === undefined) continue;
       const printed_args = step.prompt && prefill !== undefined ? { ...args, [step.prompt.param]: prefill } : args;
       const run = print_command(command ?? { id: step.id }, printed_args, { flags: "long" });
-      const names_consent = Object.values(args).some((value) => CONSENT_SETTINGS.some((setting) => setting === value));
-      add(keys[group], { where, keys: sequence, run, ...(names_consent ? { names_consent: true as const } : {}) });
+      add_key(group, { where, keys: sequence, run, ...(consent ? { names_consent: true as const } : {}) }, urls.length > 0);
     }
   };
 
@@ -86,9 +113,13 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
     if (mode === "search_keys" || mode === "container_keys" || mode === "site_keys" || mode === "modifiers" || mode === "group_names") continue;
     for (const [sequence, binding] of Object.entries(table as Record<string, KeyBinding | null>)) walk_binding(sequence, mode === "browser" ? "Firefox shortcuts" : `${mode} mode`, binding);
   }
-  // A modifier adds its args to every key of its group. The build accepts only plain values there, so an address is the one thing it can bring.
+  // A modifier adds its args to every key of its group and its values win over the key's own, so it can bring an address, the clipboard register or a consent setting name.
   for (const [sequence, { label: _label, ...args }] of Object.entries(config.keymap.modifiers ?? {})) {
-    for (const url of addresses_in(undefined, args)) add(addresses, { what: `Modifier ${sequence} adds to its keys`, url });
+    for (const url of addresses_in(undefined, args)) add_address({ what: `Modifier ${sequence} adds to its keys`, url });
+    const { clipboard, consent } = args_reach(args);
+    const adds = `adds ${Object.entries(args).map(([name, value]) => `${name}=${String(value)}`).join(" ")} to every key of its group`;
+    if (consent) add_key("settings", { where: "normal mode", keys: sequence, run: adds, names_consent: true }, false);
+    if (clipboard) add_key("clipboard_or_page", { where: "normal mode", keys: sequence, run: adds }, false);
   }
 
   let site_rows = 0;
@@ -103,8 +134,8 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
   // An alias runs its command with no args, so only a command that is risky on its own counts.
   for (const [name, id] of Object.entries(config.command_aliases)) {
     const group = group_of_id(id);
-    if (group !== undefined) add(keys[group], { where: "command line", keys: `:${name}`, run: id });
+    if (group !== undefined) add_key(group, { where: "command line", keys: `:${name}`, run: print_command(meta.get(id) ?? { id }, {}, { flags: "long" }) }, false);
   }
 
-  return { addresses, keys, site_rows };
+  return { addresses: capped(addresses), keys: { clipboard_or_page: capped(keys.clipboard_or_page), settings: capped(keys.settings), host: capped(keys.host) }, site_rows };
 }

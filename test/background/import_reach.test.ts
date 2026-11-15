@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { drop_consent_settings, preview_import } from "../../src/background/config_import.ts";
-import { CLASSIFIED_IDS, CLASSIFIED_PREFIXES, CONSENT_SETTINGS, import_reach, ROW_CAP } from "../../src/background/import_reach.ts";
+import { never_listed } from "../../src/background/bridge_run.ts";
+import { CLASSIFIED_IDS, CLASSIFIED_PREFIXES, CONSENT_SETTINGS, import_reach, LOCAL_ONLY_IDS, ROW_CAP } from "../../src/background/import_reach.ts";
 import { build_config, commands_of_registry } from "../../src/shared/config_build/build_config.ts";
 import type { ConfigFiles } from "../../src/shared/config_build/source_files.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
@@ -137,12 +138,51 @@ test("a list stops at the cap and counts the rest", () => {
   assert.equal(reach.keys.clipboard_or_page.more, 30 - ROW_CAP);
 });
 
-test("every classified id is a registered command, and every settings, native and permissions command is classified", () => {
+test("every classified id is a registered command, and every command the bridge never runs is classified or named local only", () => {
   const ids = new Set(commands.map((command) => command.id));
-  for (const id of CLASSIFIED_IDS) assert.ok(ids.has(id), `${id} is not a registered command`);
+  for (const id of [...CLASSIFIED_IDS, ...LOCAL_ONLY_IDS]) assert.ok(ids.has(id), `${id} is not a registered command`);
   for (const id of ids) {
     if (CLASSIFIED_PREFIXES.some((prefix) => id.startsWith(prefix))) assert.ok(CLASSIFIED_IDS.includes(id), `${id} is not classified`);
+    if (never_listed(id)) assert.ok(CLASSIFIED_IDS.includes(id) || LOCAL_ONLY_IDS.includes(id), `${id} is never run through the bridge: classify it in import_reach.ts or add it to LOCAL_ONLY_IDS`);
   }
+  assert.deepEqual(LOCAL_ONLY_IDS.filter((id) => CLASSIFIED_IDS.includes(id)), []);
+});
+
+test("twelve harmless engines before new_tab_page still show the new tab page", () => {
+  const engines = Array.from({ length: 12 }, (_, index) => `[e${index}]\nurl = "https://e${index}.test/?q={query}"\nlabel = "E${index}"\n`).join("\n");
+  const reach = reach_of({ "search_engines.toml": engines, "settings.toml": 'new_tab_page = "https://evil.test/"\n' });
+  assert.equal(reach.addresses.rows.length, ROW_CAP);
+  assert.equal(reach.addresses.rows[0]!.what, "New tab page");
+  assert.equal(reach.addresses.more, 1);
+});
+
+test("twelve harmless setting keys before a consent key still show the consent key first", () => {
+  const toggles = Array.from({ length: 12 }, (_, index) => `"z${index.toString(36)}" = "settings.toggle strip_tracking"`).join("\n");
+  const reach = reach_of({ "keymap.toml": `[normal]\n${toggles}\nzzb = "settings.set bridge true"\n` });
+  assert.equal(reach.keys.settings.rows.length, ROW_CAP);
+  assert.equal(reach.keys.settings.rows[0]!.keys, "zzb");
+  assert.equal(reach.keys.settings.rows[0]!.names_consent, true);
+});
+
+test("twelve plain key rows before a host key show the host key, and clipboard keys come before address keys", () => {
+  const pastes = Array.from({ length: 12 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard paste"`).join("\n");
+  const reach = reach_of({ "keymap.toml": `[normal]\n${pastes}\nzzn = "native.install"\n` });
+  assert.equal(reach.keys.host.rows[0]!.keys, "zzn");
+  const opens = Array.from({ length: 12 }, (_, index) => `"o${index.toString(36)}" = "open https://o${index}.test/"`).join("\n");
+  const mixed = reach_of({ "keymap.toml": `[normal]\n${opens}\nzzp = "page.clipboard paste"\n`, "settings.toml": 'home_page = "https://home.test/"\n' });
+  assert.equal(mixed.addresses.rows[0]!.what, "Home page");
+  assert.equal(mixed.keys.clipboard_or_page.rows[0]!.keys, "zzp");
+});
+
+test("register.paste of the system clipboard register is a clipboard key, and a named register is not", () => {
+  const reach = reach_of({ "keymap.toml": '[insert]\n"<C-v>" = "register.paste +"\n"<C-b>" = "register.paste a"\n' });
+  assert.deepEqual(reach.keys.clipboard_or_page.rows.map((row) => row.keys), ["<C-v>"]);
+});
+
+test("a modifier whose args name a consent setting or the clipboard register is listed", () => {
+  const reach = reach_of({ "keymap.toml": '[modifiers]\n",z" = { name = "bridge" }\n",c" = { register = "+" }\n' });
+  assert.deepEqual(reach.keys.settings.rows.map((row) => [row.keys, row.names_consent]), [[",z", true]]);
+  assert.deepEqual(reach.keys.clipboard_or_page.rows.map((row) => row.keys), [",c"]);
 });
 
 test("preview_import returns the reach, and the consent settings, newtab_ip_info too, are still dropped", () => {
