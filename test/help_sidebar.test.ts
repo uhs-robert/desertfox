@@ -82,7 +82,7 @@ const QUICK_START: Block[] = [
   { kind: "heading", level: 2, text: "Which key" },
 ];
 
-const PRACTICE = Object.fromEntries(["scroll", "hints", "cmdline", "whichkey", "find", "caret", "insert", "tabs"].map((area) => [area, [{ kind: "text", text: area }]]));
+const PRACTICE = Object.fromEntries(["scroll", "hints", "cmdline", "whichkey", "find", "caret", "insert", "slider", "dropdown", "radio", "details", "tabs"].map((area) => [area, [{ kind: "text", text: area }]]));
 const GROUPS = [{ name: "scroll", commands: [] }, { name: "tab", commands: [] }];
 
 const GUIDE: Block[] = [

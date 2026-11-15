@@ -64,9 +64,10 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     const found = await in_page(`return ["practice-link-1", "practice-link-5", "practice-button-1", "practice-button-2", "practice-checkbox", "practice-log", "practice-prose-1", "practice-prose-3", "practice-paste", "practice-input", "practice-textarea", "practice-open-settings", "practice-open-commands", "practice-scroll", "practice-end"].filter((id) => !${"view.document.getElementById(id)"});`);
     expect(found.length === 0, `missing ids: ${found.join(", ")}`);
     const prompts = await in_page(`return [...view.document.querySelectorAll(".desertfox-help-tip")].map((tip) => tip.textContent);`);
-    expect(prompts.length === 8 && prompts.every((text) => text.length > 20 && !text.includes("(no key bound)")), `prompts: ${JSON.stringify(prompts)}`);
+    expect(prompts.length === 12 && prompts.every((text) => text.length > 20 && !text.includes("(no key bound)")), `prompts: ${JSON.stringify(prompts)}`);
     await shot("practice-default-top");
     await shot("practice-default-middle", "practice-textarea");
+    await shot("practice-default-controls", "practice-radio");
   });
 
   await run_case("f and the text of a button or checkbox clicks it and the log line says so", async () => {
@@ -143,6 +144,27 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_badge(["NORMAL"]);
   });
 
+  await run_case("hints reach the slider, the dropdown, the radio buttons and the summary, and each echoes in the log line", async () => {
+    await in_page(`${by_id("practice-range")}.scrollIntoView({ block: "center" });`);
+    await hint_by_text("f", "rang", "practice-range");
+    await poll_until("the hint to focus the slider", async () => (await in_page(`return view.document.activeElement.id;`)) === "practice-range");
+    await press_keys("-k", "Right");
+    await poll_until("the slider to echo", async () => /^The slider is at \d+\.$/.test(await log_text()));
+    await hint_by_text("f", "bra", "practice-radio-2");
+    await wait_log("Bravo is chosen.");
+    expect(await in_page(`return ${by_id("practice-radio-2")}.checked && !${by_id("practice-radio-1")}.checked;`), "the second radio button is not the only one chosen");
+    await hint_by_text("f", "rev", "practice-details");
+    await wait_log("The section is open.");
+    await hint_by_text("f", "rev", "practice-details");
+    await wait_log("The section is closed.");
+    await hint_by_text("f", "choi", "practice-select");
+    await poll_until("the hint to focus the dropdown", async () => (await in_page(`return view.document.activeElement.id;`)) === "practice-select");
+    await press_keys("-k", "Down");
+    await wait_log("The dropdown shows Dune.");
+    await in_page(`view.document.activeElement.blur();`);
+    await leave_to_normal();
+  });
+
   await run_case("a prefix key shows the which-key panel on the page", async () => {
     await press_keys("g");
     // The panel is a top-layer popover in a host that carries its layer number (LAYERS.which_key in src/shared/layers.ts).
@@ -162,6 +184,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     expect(kept.value === "keep me" && kept.kept === "yes" && kept.start === 2 && kept.end === 6, `the input after the theme change: ${JSON.stringify(kept)}`);
     await shot("practice-catppuccin-top");
     await shot("practice-catppuccin-middle", "practice-textarea");
+    await shot("practice-catppuccin-controls", "practice-radio");
   });
 
   await run_case("the tab finder lists the Settings and Commands tabs opened by the page links and jumps to one", async () => {
