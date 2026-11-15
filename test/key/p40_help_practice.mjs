@@ -64,6 +64,9 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     const found = await in_page(`return ["practice-link-1", "practice-link-5", "practice-button-1", "practice-button-2", "practice-checkbox", "practice-log", "practice-prose-1", "practice-prose-3", "practice-paste", "practice-input", "practice-textarea", "practice-range", "practice-slider-log", "practice-select", "practice-dropdown-log", "practice-radio", "practice-radio-1", "practice-radio-2", "practice-radio-3", "practice-radio-log", "practice-details", "practice-details-log", "practice-open-settings", "practice-open-commands", "practice-scroll", "practice-end"].filter((id) => !${"view.document.getElementById(id)"});`);
     expect(found.length === 0, `missing ids: ${found.join(", ")}`);
     const prompts = await in_page(`return [...view.document.querySelectorAll(".desertfox-help-tip")].map((tip) => tip.textContent);`);
+    // The hint helper types "/" itself, so only the prompt text proves a visitor is told to.
+    const name_prompts = prompts.filter((text) => /type (Slider|Dropdown|Alpha|Show more)/.test(text));
+    expect(name_prompts.length === 4 && name_prompts.every((text) => text.includes("then /, then type")), `the name prompts skip the / step: ${JSON.stringify(name_prompts)}`);
     expect(prompts.length === 12 && prompts.every((text) => text.length > 20 && !text.includes("(no key bound)")), `prompts: ${JSON.stringify(prompts)}`);
     await shot("practice-default-top");
     await shot("practice-default-middle", "practice-textarea");
