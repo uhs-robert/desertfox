@@ -158,6 +158,11 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
   assert.ok(keys("tabs").indexOf("T") < keys("tabs").indexOf(",,"));
   const rebound = practice_lessons(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "gi" && key !== "I")), "<A-i>": { id: "page.focus_input" } } } as never), all_commands);
   assert.ok(rebound.find((lesson) => lesson.slug === "form")!.steps.flat().some((inline) => inline.kind === "keys" && inline.text === "<A-i>"));
+  // The which-key step names the first key of the zoom keys in use, not a fixed z.
+  const zoom_step = (keymap: unknown) => practice_lessons(compile(keymap as never), all_commands).find((lesson) => lesson.slug === "which-key")!.steps[1]![1];
+  assert.deepEqual(zoom_step(DEFAULT_KEYMAP), { kind: "keys", text: "z" });
+  const zoom_on_q = { ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, bound]) => (bound as { id?: string }).id !== "zoom.by")), Qi: { id: "zoom.by", args: { delta: 0.1 } } } };
+  assert.deepEqual(zoom_step(zoom_on_q), { kind: "keys", text: "Q" });
   const links = quick_start_blocks(compiled, all_commands).flatMap((block) => (block.kind === "paragraph" ? block.inlines : [])).filter((inline) => inline.kind === "link");
   assert.deepEqual(links, [{ kind: "link", text: "Practice page", href: "#/practice" }]);
 });

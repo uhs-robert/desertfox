@@ -136,7 +136,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     expect(!shape.names_caret_key, "the page names the ^ key");
     expect(!shape.has_temp_flag, "a command example carries the temp flag");
     expect(!shape.unsets, "the page teaches unset, which also drops a theme the visitor chose in Settings");
-    expect(shape.theme_step.includes("set theme catppuccin"), `the theme step is ${JSON.stringify(shape.theme_step)}`);
+    expect(shape.theme_step.includes("set theme catppuccin") && shape.theme_step.includes("set theme dracula"), `the theme step is ${JSON.stringify(shape.theme_step)}`);
     // A step that leaves the page names the way back before the key that leaves.
     const ways_back = ["H goes back one page, so it brings you back here.", "dd closes the tab you are on, and that brings you back here.", "H goes back one page, so it brings you back here from the video."];
     shape.leaving_steps.forEach((step, index) => expect(step.startsWith(ways_back[index]), `a step that leaves the page does not start with the way back: ${JSON.stringify(step)}`));
