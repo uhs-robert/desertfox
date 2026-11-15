@@ -607,12 +607,14 @@ class ReleaseStepTest(InstallCase):
         self.assertFalse(os.path.exists(self.gh_log))
 
     def release_work_dir(self, version):
-        """A throwaway repo with the justfile, the host scripts and package.json at `version`."""
+        """A throwaway repo with the justfile, the stamp script, the host scripts and package.json at `version`."""
         repo_root = os.path.dirname(HOST_DIR)
         work = os.path.join(self.tmp.name, "work-" + version)
         os.makedirs(os.path.join(work, "host"))
         os.makedirs(os.path.join(work, "src"))
+        os.makedirs(os.path.join(work, "tools"))
         shutil.copy(os.path.join(repo_root, "justfile"), work)
+        shutil.copy(os.path.join(repo_root, "tools", "release_stamp.mjs"), os.path.join(work, "tools"))
         for name in ("desertfox-host", "desertfox-bridge", "desertfox", "install.sh"):
             shutil.copy(os.path.join(HOST_DIR, name), os.path.join(work, "host"))
         subprocess.run(["git", "init", "-q"], cwd=work, check=True)

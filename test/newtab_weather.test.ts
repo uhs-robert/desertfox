@@ -21,7 +21,7 @@ const WEATHER_CARD = { temperature: 12.4, feels_like: 10.1, humidity: 44, rain_c
 const WEATHER_DETAIL = { uv_index: 2.4, sunrise: "07:42", sunset: "15:31", hours: HOUR_TIMES.map((time, index) => ({ time, temperature: 12 - index, rain_chance: 30 + index, code: index % 2 ? 61 : 3 })) };
 const GEOCODE = JSON.stringify({ results: [{ name: "Oslo", latitude: 59.91273, longitude: 10.74609 }] });
 
-function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; is_private?: boolean; fail_fetch?: boolean } = {}) {
+function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; consented?: boolean; is_private?: boolean; fail_fetch?: boolean } = {}) {
   const urls: string[] = [];
   const store: Record<string, unknown> = {};
   const net: NetEnv = {
@@ -36,9 +36,10 @@ function fake_deps(over: Partial<WeatherDeps> & { allowed?: boolean; is_private?
   const calls = { permission_checks: 0, position_reads: 0, permission_requests: 0 };
   const deps: WeatherDeps = {
     page_is_private: async () => over.is_private ?? false,
+    has_location_consent: async () => over.consented ?? true,
     has_geolocation_permission: async () => (calls.permission_checks++, over.allowed ?? false),
     current_position: async () => (calls.position_reads++, { latitude: 59.91273, longitude: 10.74609 }),
-    request_geolocation_permission: async () => (calls.permission_requests++, true),
+    request_location_access: async () => (calls.permission_requests++, true),
     net,
     ...over,
   };
@@ -73,6 +74,43 @@ test("with no permission and no city the card offers the button and makes no req
   assert.deepEqual(urls, []);
   assert.equal(calls.position_reads, 0, "a page without the permission never calls geolocation");
 });
+
+test("without the location data consent the card offers the button and sends nothing, whatever place it has or stored", async () => {
+  const { deps, urls, calls } = fake_deps({ allowed: true, consented: false });
+  assert.deepEqual(await collect(on({ newtab_weather_city: "Oslo" }), deps), [{ kind: "ask_location" }]);
+  assert.deepEqual(urls, []);
+  assert.equal(calls.position_reads, 0, "no position is read before the consent");
+});
+
+test("a click that the user denies leaves the button and starts no request", () =>
+  with_fake_document(async () => {
+    const { deps, urls, calls } = fake_deps({ consented: false });
+    let asked = 0;
+    const slot = new FakeNode("div");
+    const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo" }), { ...deps, request_location_access: async () => (asked++, false) });
+    await run.finished;
+    slot.querySelector(".weather-ask")!.listeners["click"]!();
+    await new Promise((done) => setImmediate(done));
+    assert.equal(asked, 1);
+    assert.ok(slot.querySelector(".weather-ask"), "the button stays after a denial");
+    assert.deepEqual(urls, []);
+    assert.equal(calls.position_reads, 0);
+    run.stop();
+  }));
+
+test("a click that the user grants runs the card again and it then sends the request", () =>
+  with_fake_document(async () => {
+    const { deps, urls } = fake_deps({ consented: false });
+    let consented = false;
+    const slot = new FakeNode("div");
+    const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo" }), { ...deps, has_location_consent: async () => consented, request_location_access: async () => ((consented = true), true) });
+    await run.finished;
+    assert.deepEqual(urls, []);
+    slot.querySelector(".weather-ask")!.listeners["click"]!();
+    for (let turn = 0; turn < 10 && urls.length < 2; turn++) await new Promise((done) => setImmediate(done));
+    assert.equal(urls.length, 2, "the geocoder and the forecast were asked after the grant");
+    run.stop();
+  }));
 
 test("a granted permission sends rounded coordinates and no city", async () => {
   const { deps, urls } = fake_deps({ allowed: true });
@@ -486,7 +524,7 @@ test("a location grant while the forecast is out stops the old run and only the 
       storage: { get: async (key) => ({ [key]: store[key] }), set: async (items) => void Object.assign(store, items) },
     };
     const slot = new FakeNode("div");
-    const deps = { ...base.deps, has_geolocation_permission: async () => allowed, request_geolocation_permission: async () => ((allowed = true), true), net };
+    const deps = { ...base.deps, has_geolocation_permission: async () => allowed, request_location_access: async () => ((allowed = true), true), net };
     const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo" }), deps);
     // The city run: geocoding is request 1 and holds.
     await new Promise((done) => setImmediate(done));
