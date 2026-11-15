@@ -182,10 +182,10 @@ export function practice_prompts(compiled: CompiledKeymap | undefined, commands:
     find: say("Press {find}, type [fox] and press Enter. {next} jumps to the next match and {previous} to the one before."),
     caret: say("Press {caret_at_text}, then type the label of a paragraph below. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}. Press {visual} to select, then {yank} to copy. {escape} steps back."),
     insert: say("Press {insert} or click a box, then type. {escape} leaves insert mode. In the paste box, press Ctrl+V to paste what you copied."),
-    slider: say("Press {hint} and type [Slider] to focus the slider. Then move it with the arrow keys. The line under it shows its value."),
-    dropdown: say("Press {hint} and type [Dropdown] to focus the dropdown. Press the arrow keys to change the choice. The line under it shows it."),
-    radio: say("Press {hint} and type [Alpha], [Bravo] or [Charlie] to choose that radio button. Only one in the group stays chosen. The line under them shows which."),
-    details: say("Press {hint} and type [Show more] to open or close the section. The line under it shows which."),
+    slider: say("Press {hint}, then [/], then type [Slider] to focus the slider. Then move it with the arrow keys. The line under it shows its value."),
+    dropdown: say("Press {hint}, then [/], then type [Dropdown] to focus the dropdown. Press the arrow keys to change the choice. The line under it shows it."),
+    radio: say("Press {hint}, then [/], then type [Alpha], [Bravo] or [Charlie] to choose that radio button. Only one in the group stays chosen. The line under them shows which."),
+    details: say("Press {hint}, then [/], then type [Show more] to open or close the section. The line under it shows which."),
     tabs: say("Open both links below in new tabs, then press {find_anything} and type part of a tab title to jump to it."),
   };
 }
