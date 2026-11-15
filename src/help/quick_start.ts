@@ -189,8 +189,9 @@ function wait_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[],
   const [name, modifier] = part.slice(1, -1).split(":");
   if (name === "prefix") return prefix_key(compiled, commands);
   if (modifier !== "wait") return undefined;
-  const first = key_paths(compiled, commands, BINDINGS[name as BindingName])[0]?.[0];
-  return first !== undefined && opens_panel(compiled, first) ? first : undefined;
+  const path = key_paths(compiled, commands, BINDINGS[name as BindingName])[0];
+  // A one-key binding runs at once, so no prefix is pending and no panel opens.
+  return path !== undefined && path.length > 1 && opens_panel(compiled, path[0]!) ? path[0] : undefined;
 }
 
 const is_wait_part = (part: string): boolean => part === "{prefix}" || part.endsWith(":wait}");

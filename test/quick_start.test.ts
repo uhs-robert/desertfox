@@ -120,6 +120,13 @@ test("practice: a note that promises the panel after a wait is dropped when the 
   for (const slug of ["inputs", "which-key"]) assert.ok(notes({ which_key_delay_ms: 0 }, slug).every((note) => !note.includes("and wait")));
 });
 
+test("practice: a hint key bound to one key promises no panel after a wait", async () => {
+  const { practice_lessons } = await import("../src/help/practice_lessons.ts");
+  const normal = Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, bound]) => (bound as { args?: { filter?: string; rapid?: boolean } }).args?.filter !== "inputs"));
+  const single = compile({ ...DEFAULT_KEYMAP, normal: { ...normal, x: { id: "hint.run", args: { filter: "inputs" } } } } as never);
+  assert.deepEqual(practice_lessons(single, all_commands).find((lesson) => lesson.slug === "inputs")!.notes, []);
+});
+
 test("practice: the grab lesson names no key letter apart from the bound keys", async () => {
   const { practice_lessons } = await import("../src/help/practice_lessons.ts");
   const normal = Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, bound]) => (bound as { args?: { action?: string } }).args?.action !== "grab_move"));
