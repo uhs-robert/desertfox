@@ -1,7 +1,8 @@
 // The README demo: plays the scenes of demo_scenes.mjs in a key-test session, burns the key overlay into the film and turns it into a looping GIF.
 // Run through `just readme-demo`. The stills and the GIF land in docs/images, or in DEMO_OUT_DIR, and only after the whole run worked.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { create_session } from "./harness.mjs";
@@ -55,7 +56,15 @@ function check_still_size(path) {
   if (size !== STILL_SIZE) throw new Error(`${path} is ${size}, not ${STILL_SIZE}`);
 }
 
+// The film is cut at film_seconds, so a film that is shorter than that is a recorder that stopped early.
+const FILM_LENGTH_SLACK_S = 2;
+function check_film_length(film_path, film_seconds) {
+  const length_s = Number(run_tool("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", film_path]).trim());
+  if (!(length_s >= film_seconds - FILM_LENGTH_SLACK_S)) throw new Error(`the film is ${length_s} s long, short of the ${film_seconds.toFixed(1)} s played`);
+}
+
 async function main() {
+  scenes.set_stage_dir(mkdtempSync(join(tmpdir(), "desertfox-demo-")));
   const session = await create_session({ name: `demo${process.pid.toString(36)}`, timings: create_timings(), print_summary: false });
   try {
     try {
@@ -63,8 +72,12 @@ async function main() {
     } finally {
       await session.close();
     }
-    if (session.results.some((result) => !result.pass)) process.exit(1);
+    if (session.results.some((result) => !result.pass)) {
+      process.exitCode = 1;
+      return;
+    }
     const { film_seconds, key_presses } = JSON.parse(readFileSync(join(scenes.stage_dir, "film.json"), "utf8"));
+    check_film_length(join(scenes.stage_dir, "film.mkv"), film_seconds);
     const burned_path = join(scenes.stage_dir, "film_with_keys.mkv");
     run_tool("ffmpeg", ["-y", "-v", "error", "-t", String(film_seconds), "-i", join(scenes.stage_dir, "film.mkv"), "-vf", overlay_filter(key_presses, scenes.stage_dir), "-c:v", "libx264", "-crf", "14", "-preset", "ultrafast", burned_path]);
     make_gif(burned_path, join(scenes.stage_dir, "demo.gif"));
