@@ -281,7 +281,7 @@ function settings_group_section(page_section: Section, group: (typeof GROUPS)[nu
   box.setAttribute("data-group", group.title);
   const intro = el("p", "desertfox-help-muted", group.intro, ...(group.title === "Appearance" ? [" For full control with CSS, see ", page_link("Styling", "styling"), "."] : []));
   // `main.ts` fills `.desertfox-themes`.
-  const importer = group.title === "Appearance" ? [el("h4", undefined, "Import a theme"), el("p", "desertfox-help-muted", "Bring in a base16 or base24 color scheme. Paste its text or choose its file, check the preview, then save it. Use it with the theme setting above, or with :set theme and its name."), el("div", "desertfox-themes")] : [];
+  const importer = group.title === "Appearance" ? [el("h4", undefined, "Import a theme"), el("p", "desertfox-help-muted", "Bring in a base16 or base24 color scheme. Paste its text or choose its file, check the preview, then save it. Use it with the theme setting above, or with :set theme and its name."), el("p", "desertfox-help-muted", "Find schemes in the ", new_tab_link("base16", "https://github.com/tinted-theming/schemes/tree/spec-0.11/base16"), " and ", new_tab_link("base24", "https://github.com/tinted-theming/schemes/tree/spec-0.11/base24"), " collections, or browse them in the ", new_tab_link("gallery", "https://tinted-theming.github.io/tinted-gallery/"), ". Open a scheme file, copy its text and paste it here."), el("div", "desertfox-themes")] : [];
   return el("div", "desertfox-settings-section", section_heading("settings", page_section), intro, box, ...importer);
 }
 
@@ -372,6 +372,15 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
 
 function support_link(title: string, url: string): HTMLElement {
   const link = el("a", "desertfox-help-support-link", title);
+  link.setAttribute("href", url);
+  link.setAttribute("target", "_blank");
+  link.setAttribute("rel", "noopener noreferrer");
+  return link;
+}
+
+// An external link that opens in a new tab.
+function new_tab_link(title: string, url: string): HTMLElement {
+  const link = el("a", undefined, title);
   link.setAttribute("href", url);
   link.setAttribute("target", "_blank");
   link.setAttribute("rel", "noopener noreferrer");
