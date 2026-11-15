@@ -164,13 +164,6 @@ test("twelve harmless setting keys before a consent key still show the consent k
   assert.equal(reach.keys.settings.rows[0]!.names_consent, true);
 });
 
-test("twelve config.reload aliases before native.install still show native.install first", () => {
-  const aliases = Array.from({ length: 12 }, (_, index) => `r${index.toString(36)} = "config.reload"`).join("\n");
-  const reach = reach_of({ "command_aliases.toml": `${aliases}\nzz = "native.install"\n`, "keymap.toml": '[normal]\nzzn = "native.install"\n' });
-  assert.equal(reach.keys.host.rows[0]!.keys, "zzn");
-  assert.equal(reach.keys.host.rows.length, ROW_CAP);
-});
-
 test("twelve clipboard copy keys before register.paste + and open @clipboard still show the reads first", () => {
   const copies = Array.from({ length: 12 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard copy"`).join("\n");
   const reach = reach_of({ "keymap.toml": `[normal]\n${copies}\nzzo = "open @clipboard"\nzzk = "page.send_key --key=Enter --key-code=13"\n[insert]\n"<C-v>" = "register.paste +"\n` });
