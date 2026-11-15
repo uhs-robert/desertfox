@@ -174,7 +174,7 @@ export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, only
 export type SiteSelectors = { add: string[]; remove: string[] };
 
 // Only the filters that mean "anything to click" take added elements: a `links` or `images` label promises an address.
-const TAKES_ADDED = new Set<HintFilter>(["all", "clickable", "every", "draggable"]);
+const TAKES_ADDED = new Set<HintFilter>(["all", "clickable", "every", "draggable", "drop"]);
 
 // Added elements count as strong and skip the filter's test. A removed element is one inside a `hint_remove` match in its own tree: `closest` stops at a shadow root.
 export function with_site_selectors(root: ParentNode, filter: HintFilter, found: Found[], { add, remove }: SiteSelectors, only_in_view = false): Found[] {

@@ -75,7 +75,7 @@ document.addEventListener("pointerup", (e) => {
   dragged = null;
 });
 </script>`,
-  // The board with a marked html5 drop zone far from it, in a subtree that no sibling of the cards' ancestors reaches into.
+  // The board with a marked html5 drop zone far from it, in the padding-top of an aside that is a sibling of the board, so the aside label does not sit on the zone.
   dropmarks: `
 <style>.card{height:30px;width:100px;margin:4px;background:#9cf}#aside{height:100px;padding-top:300px;background:#ddd}#zone{height:50px;width:150px;background:#fc9}</style>
 <div id="board"><div id="a"><div id="c1" class="card" draggable="true">card1</div><div id="c2" class="card" draggable="true">card2</div></div></div>

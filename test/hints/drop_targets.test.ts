@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drop_targets_of } from "../../src/content/hints/drop_targets.ts";
+import { drop_targets_of, keeps_narrowing, MARKERS } from "../../src/content/hints/drop_targets.ts";
 import { query_for } from "../../src/content/hints/candidates.ts";
 
-type Spec = { name: string; tag?: string; classes?: string[]; attrs?: Record<string, string>; marked?: boolean; slider?: boolean; hidden?: boolean; children?: Spec[] };
-type Node = { name: string; localName: string; parentElement: Node | null; children: Node[]; classList: { contains: (name: string) => boolean; [Symbol.iterator]: () => Iterator<string> }; spec: Spec };
+type Spec = { name: string; tag?: string; classes?: string[]; attrs?: Record<string, string>; marked?: string; shadow?: boolean; slider?: boolean; hidden?: boolean; children?: Spec[] };
+type Node = { name: string; localName: string; parentElement: Node | null; parentNode: unknown; children: Node[]; classList: { contains: (name: string) => boolean; [Symbol.iterator]: () => Iterator<string> }; spec: Spec };
 
-const MARKER_SELECTOR_START = "[ondrop]";
+const MARKERS_LISTED = MARKERS.split(", ");
 const SLIDER_SELECTOR_START = "input[type=range]";
 
 // A fake page: a body of nodes with a flat `querySelectorAll` by tag or by the marker selector, as the real functions call it.
 function page_of(specs: Spec[]): { nodes: Map<string, Node>; body: Node } {
   const all: Node[] = [];
   const nodes = new Map<string, Node>();
-  const body: Node = { name: "body", localName: "body", parentElement: null, children: [], classList: { contains: () => false, *[Symbol.iterator]() {} }, spec: { name: "body" } };
+  const body: Node = { name: "body", localName: "body", parentElement: null, parentNode: null, children: [], classList: { contains: () => false, *[Symbol.iterator]() {} }, spec: { name: "body" } };
   const root = {
-    querySelectorAll: (selector: string) => (selector.startsWith(MARKER_SELECTOR_START) ? all.filter((node) => node.spec.marked) : all.filter((node) => node.localName === selector)),
+    querySelectorAll: (selector: string) => (selector === MARKERS ? all.filter((node) => node.spec.marked !== undefined && MARKERS_LISTED.includes(node.spec.marked)) : all.filter((node) => node.localName === selector)),
   };
   const doc = { documentElement: { name: "html" }, body };
   const make = (spec: Spec, parent: Node): Node => {
@@ -24,7 +24,8 @@ function page_of(specs: Spec[]): { nodes: Map<string, Node>; body: Node } {
     const node = {
       name: spec.name,
       localName: spec.tag ?? "div",
-      parentElement: parent,
+      parentElement: parent.spec.shadow ? null : parent,
+      parentNode: parent.spec.shadow ? { children: parent.children, host: parent } : parent,
       children: [] as Node[],
       classList: { contains: (name: string) => classes.includes(name), [Symbol.iterator]: () => classes[Symbol.iterator]() },
       spec,
@@ -42,7 +43,7 @@ function page_of(specs: Spec[]): { nodes: Map<string, Node>; body: Node } {
     return node;
   };
   for (const spec of specs) make(spec, body);
-  body.children.forEach((child) => ((child as unknown as { parentElement: Node }).parentElement = body));
+  Object.assign(body, { parentNode: { children: [body] } });
   Object.assign(body, { getBoundingClientRect: () => ({ width: 100, height: 100 }) });
   return { nodes, body };
 }
@@ -64,7 +65,7 @@ test("an empty column nested under a wrapper still shows through the peers of an
 });
 
 test("a drop marker far from the source is a target, an unmarked far box is not", () => {
-  const { nodes } = page_of([board([{ name: "todo", children: [card("a"), card("b")] }]), { name: "side", children: [{ name: "far_zone", marked: true }, { name: "far_plain" }] }]);
+  const { nodes } = page_of([board([{ name: "todo", children: [card("a"), card("b")] }]), { name: "side", children: [{ name: "far_zone", marked: "[ondrop]" }, { name: "far_plain" }] }]);
   const found = names(drop_targets_of(nodes.get("a") as unknown as Element));
   assert.ok(found.includes("far_zone"));
   assert.ok(!found.includes("far_plain"));
@@ -105,4 +106,36 @@ test("the drop filter keeps only the found targets", () => {
   const query = query_for("drop", undefined, nodes.get("a") as unknown as Element);
   assert.equal(query.test?.(nodes.get("empty") as unknown as Element), true);
   assert.equal(query.test?.(nodes.get("board") as unknown as Element), false);
+});
+
+test("every listed marker marks a drop place", () => {
+  const markers = MARKERS.split(", ").map((marker, index) => ({ name: `zone${index}`, marked: marker }));
+  const { nodes } = page_of([board([{ name: "todo", children: [card("a"), card("b")] }]), { name: "side", children: markers }]);
+  const found = names(drop_targets_of(nodes.get("a") as unknown as Element));
+  for (const { name } of markers) assert.ok(found.includes(name), name);
+});
+
+test("an element that matches no listed marker is not a drop place", () => {
+  const { nodes } = page_of([board([{ name: "todo", children: [card("a"), card("b")] }]), { name: "side", children: [{ name: "odd", marked: "[data-other]" }] }]);
+  assert.ok(!names(drop_targets_of(nodes.get("a") as unknown as Element)).includes("odd"));
+});
+
+test("columns in a shadow root still give the empty column beside the source's column", () => {
+  const { nodes } = page_of([{ name: "host", shadow: true, children: [{ name: "todo", children: [card("a"), card("b")] }, { name: "empty" }] }]);
+  const found = names(drop_targets_of(nodes.get("a") as unknown as Element));
+  assert.ok(found.includes("empty"));
+  assert.ok(found.includes("todo"));
+});
+
+test("the narrowing is kept from two places and dropped below", () => {
+  assert.equal(keeps_narrowing(0), false);
+  assert.equal(keeps_narrowing(1), false);
+  assert.equal(keeps_narrowing(2), true);
+});
+
+test("two cards directly under the body give one place, which is too few, so the pass falls back", () => {
+  const { nodes } = page_of([card("a"), card("b")]);
+  const targets = drop_targets_of(nodes.get("a") as unknown as Element)!;
+  assert.deepEqual(names(targets), ["b"]);
+  assert.equal(keeps_narrowing(targets.size), false);
 });
