@@ -63,8 +63,8 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
     await wait_toast("Volume 95%");
     mark = events.length;
     await press_keys("a", "l");
-    await wait_event(mark, report(top, "seeked", (event) => Math.round(event.time) === 10), "the top video at 10 s");
-    await wait_toast("0:10 of 0:30");
+    await wait_event(mark, report(top, "seeked", (event) => Math.round(event.time) === 5), "the top video at 5 s");
+    await wait_toast("0:05 of 0:30");
     await expect_absent(mark, top, (event) => event.page_id === inner && event.type.startsWith("media_"), "the framed video changed");
   });
 

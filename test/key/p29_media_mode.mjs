@@ -73,7 +73,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await shown(start, id);
     let mark = events.length;
     await press_keys("l");
-    await wait_event(mark, media(id, "seeked", "big", (event) => Math.round(event.time) === 10), "the large video at 10 s");
+    await wait_event(mark, media(id, "seeked", "big", (event) => Math.round(event.time) === 5), "the large video at 5 s");
     mark = events.length;
     await press_keys("3", "j");
     await wait_event(mark, media(id, "volumechange", "big", (event) => Math.abs(event.volume - 0.85) < 0.001), "three steps down, 85 percent");
