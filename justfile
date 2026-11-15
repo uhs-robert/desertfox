@@ -551,6 +551,7 @@ sign_listed:
     load_amo_key
     just release_stamp "$version"
     just build
+    # The stamp hashes the local hosts, not the published ones: a host change after the release is published needs a new version.
     # Check before submitting: AMO signs a version once, so a build without the hashes must never reach it.
     if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
         echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json. Nothing was submitted." >&2
