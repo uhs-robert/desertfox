@@ -243,17 +243,16 @@ const BUILDERS: Record<LessonSlug, Builder> = {
   "command-line": (mark) => {
     const background = () => getComputedStyle(document.documentElement).getPropertyValue("--desertfox-bg-core");
     let start: string | undefined;
-    let changed_to: string | undefined;
+    let themed = false;
     return {
       targets: [],
       watch: () => {
         start ??= background();
-        if (changed_to === undefined && background() !== start) {
-          changed_to = background();
+        if (background() !== start) {
+          themed = true;
           mark("themed");
         }
-        // Compared with the changed color, not the first one: `unset` also drops a theme the visitor chose in the browser earlier, so the first color may never return.
-        if (changed_to !== undefined && background() !== changed_to) mark("restored");
+        if (themed && background() === start) mark("restored");
       },
     };
   },
@@ -267,10 +266,16 @@ const BUILDERS: Record<LessonSlug, Builder> = {
     let opened = false;
     let hidden_since_open = false;
     let ticks = 0;
+    // The Settings tabs this watch has seen. Each is judged once, when it first shows, so a tab the visitor drags away is not moved back.
+    const seen_settings_tabs = new Set<number>();
     // The close key moves to the tab after the closed one, so the Settings tab goes just before this tab. Closing it then lands here, whatever other tabs are open.
-    const put_settings_before_this_tab = async (tabs: browser.tabs.Tab[]): Promise<void> => {
+    // Only a tab that first shows while this lesson is in view is moved. One opened from another lesson, such as from the sidebar, stays where it is.
+    const put_new_settings_tab_before_this_one = async (tabs: browser.tabs.Tab[]): Promise<void> => {
+      const new_tabs = tabs.filter((tab) => tab.id !== undefined && !seen_settings_tabs.has(tab.id) && tab.url?.endsWith(`#/${pages[0]}`));
+      for (const tab of new_tabs) seen_settings_tabs.add(tab.id!);
+      if (new_tabs.length === 0 || !in_lesson("tabs")) return;
       const own = await browser.tabs.getCurrent();
-      const settings = tabs.find((tab) => tab.openerTabId === own?.id && tab.url?.endsWith(`#/${pages[0]}`));
+      const settings = new_tabs.find((tab) => tab.openerTabId === own?.id);
       if (own?.id === undefined || settings?.id === undefined || settings.index === own.index - 1) return;
       await browser.tabs.move(settings.id, { index: settings.index < own.index ? own.index - 1 : own.index });
     };
@@ -283,7 +288,7 @@ const BUILDERS: Record<LessonSlug, Builder> = {
         if (ticks++ % 5 !== 0) return;
         void browser.tabs.query({ currentWindow: true }).then((tabs) => {
           // The tab can close while the move is on its way.
-          void ignore_refusal(put_settings_before_this_tab(tabs));
+          void ignore_refusal(put_new_settings_tab_before_this_one(tabs));
           const open_count = pages.filter((page) => tabs.some((tab) => tab.url?.endsWith(`#/${page}`))).length;
           if (open_count === pages.length) {
             opened = true;

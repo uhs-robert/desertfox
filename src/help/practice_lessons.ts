@@ -131,12 +131,13 @@ const LESSONS = [
     title: "10. The command line",
     goal: "Run any command by name, and look up every key.",
     steps: [
-      "Press {cmdline}. Type [set theme catppuccin] and press Enter. Tab completes each word. The page changes colors.",
-      "Press {cmdline}, type [unset theme] and press Enter to drop that change.",
+      "Press {cmdline}. Type [set theme] and press Enter. A note shows the theme you have now. Remember its name.",
+      "Press {cmdline}, type [set theme catppuccin] and press Enter. Tab completes each word. The page changes colors.",
+      "Set your theme back. Press {cmdline}, type [set theme] and the name from the first step, and press Enter.",
       "{back} goes back one page, so it brings you back here. Press {cmdline}, type [help commands] and press Enter. The Commands page lists every command and its keys. Then press {back}.",
     ],
     notes: ["{help} opens the help from any page.", "On the command line, Ctrl+H opens the help for the command you are typing."],
-    checks: { themed: "changed the theme", restored: "dropped the change", returned: "came back from the Commands page" },
+    checks: { themed: "changed the theme", restored: "set your theme back", returned: "came back from the Commands page" },
   },
   {
     slug: "tabs",

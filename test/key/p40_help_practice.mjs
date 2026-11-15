@@ -123,8 +123,9 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
         says_click: /click/i.test(page_text),
         names_caret_key: page_text.includes("^"),
         has_temp_flag: / -t | --temp/.test(page_text),
-        theme_step: step_of("practice-command-line", 0),
-        leaving_steps: [step_of("practice-command-line", 2), step_of("practice-tabs", 1), step_of("practice-video", 0)],
+        theme_step: step_of("practice-command-line", 1),
+        unsets: /unset/.test(page_text),
+        leaving_steps: [step_of("practice-command-line", 3), step_of("practice-tabs", 1), step_of("practice-video", 0)],
         hash: view.location.hash,
       };`);
     expect(shape.lessons.length === 14 && shape.lessons[0] === "practice-scroll" && shape.lessons[13] === "practice-ignore", `the lessons are ${JSON.stringify(shape.lessons)}`);
@@ -134,6 +135,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     expect(!shape.says_click, `the page says "click"`);
     expect(!shape.names_caret_key, "the page names the ^ key");
     expect(!shape.has_temp_flag, "a command example carries the temp flag");
+    expect(!shape.unsets, "the page teaches unset, which also drops a theme the visitor chose in Settings");
     expect(shape.theme_step.includes("set theme catppuccin"), `the theme step is ${JSON.stringify(shape.theme_step)}`);
     // A step that leaves the page names the way back before the key that leaves.
     const ways_back = ["H goes back one page, so it brings you back here.", "dd closes the tab you are on, and that brings you back here.", "H goes back one page, so it brings you back here from the video."];
@@ -329,17 +331,28 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await leave_to_normal();
   });
 
-  await run_case("lesson 10: the command line changes the theme and keeps the page state, and :help commands with H returns to the lesson", async () => {
+  await run_case("lesson 10: the command line shows the theme, changes it and sets it back, keeps the page state, and :help commands with H returns to the lesson", async () => {
     await to_lesson("command-line");
     await in_page(`const input = ${by_id("practice-name")}; input.value = "keep me"; input.dataset.kept = "yes"; input.setSelectionRange(2, 6);`);
+    // The toast text sits in a closed shadow root. The extension's own world reads it with openOrClosedShadowRoot.
+    const shown_theme = () => in_page(`return [...view.document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent.match(/^theme = "(.+)"$/)?.[1]).find(Boolean) ?? null;`);
+    const background = () => in_page(`return view.getComputedStyle(view.document.documentElement).getPropertyValue("--desertfox-bg-core");`);
+    const first_background = await background();
+    await type_line_and_run(":", "set theme");
+    let first_theme;
+    await poll_until("set theme to show the theme in use", async () => (first_theme = await shown_theme()) !== null);
+    expect(first_theme !== "catppuccin", "the test theme is catppuccin already, so the lesson changes nothing");
     await type_line_and_run(":", "set theme catppuccin");
     await wait_done("command-line", "themed");
     const kept = await in_page(`const input = ${by_id("practice-name")}; return { value: input.value, kept: input.dataset.kept, start: input.selectionStart, end: input.selectionEnd };`);
     expect(kept.value === "keep me" && kept.kept === "yes" && kept.start === 2 && kept.end === 6, `the input after the theme change: ${JSON.stringify(kept)}`);
     await shots("catppuccin");
     await to_lesson("command-line");
-    await type_line_and_run(":", "unset theme");
+    await sleep(700);
+    expect(!(await is_done("command-line", "restored")), "the theme check turned done before the theme was set back");
+    await type_line_and_run(":", `set theme ${first_theme}`);
     await wait_done("command-line", "restored");
+    expect((await background()) === first_background, `the page background is ${await background()}, not the ${first_background} it started with`);
     await poll_until("the page to remember the lesson in its address", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line");
     // A move to another help page and back is not the Commands trip.
     await type_line_and_run(":", "help settings");
@@ -366,6 +379,24 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await poll_until("the reload to land on lesson 10", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line" && Math.abs(await heading_top("command-line")) < 12);
     expect((await is_done("command-line", "returned")) && (await is_done("form", "sent")), "the done checks were lost in the reload");
     await wait_view_takes_keys("home.html");
+  });
+
+  await run_case("a Settings tab opened from the sidebar in another lesson stays where it opened", async () => {
+    const tab_indexes = () => evaluate(`browser.tabs.query({ currentWindow: true }).then((tabs) => ({ settings: tabs.find((tab) => tab.url.endsWith("#/settings"))?.index ?? null, practice: tabs.find((tab) => /home\\.html#.*practice/.test(tab.url)).index }))`);
+    await to_lesson("hints");
+    await hint("F", '.desertfox-help-sidebar a[href="#/settings"]');
+    await poll_until("the Settings tab to open", async () => (await tab_indexes()).settings !== null);
+    // Longer than the 1.5 s between two reads of the tab list.
+    await sleep(2000);
+    const at = await tab_indexes();
+    expect(at.settings === at.practice + 1, `the Settings tab is at ${at.settings} and Practice at ${at.practice}, so the tab was moved`);
+    // Entering the tab lesson later does not move it either.
+    await to_lesson("tabs");
+    await sleep(2000);
+    const later = await tab_indexes();
+    expect(later.settings === later.practice + 1, `the Settings tab moved to ${later.settings} when the tab lesson came into view`);
+    await close_tabs_with("#/settings");
+    await poll_until("the Settings tab to close", async () => (await tab_indexes()).settings === null);
   });
 
   await run_case("lesson 11: F opens two tabs in the background, T jumps to one, dd closes it and lands back here, and Alt+X closes the other from the list", async () => {
@@ -425,7 +456,20 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_done("video", "returned");
   });
 
-  await run_case("lesson 13: a mark and Ctrl+O both return to the lesson", async () => {
+  await run_case("lesson 13: a mark and Ctrl+O both return to the lesson, and scrolling back does not count", async () => {
+    await to_lesson("marks");
+    await press_keys("G");
+    await poll_until("G to leave the lesson", async () => (await heading_top("marks")) < 0);
+    await sleep(700);
+    for (let step = 0; step < 8 && (await heading_top("marks")) < 0; step++) {
+      const before = await scroll_y();
+      await press_keys(...CTRL("u"));
+      await poll_until("Ctrl+U to scroll up", async () => (await scroll_y()) < before);
+      // More than one watch tick, so the page sees each place on the way.
+      await sleep(700);
+    }
+    expect((await heading_top("marks")) >= 0, "Ctrl+U did not scroll back to the lesson");
+    expect(!(await is_done("marks", "marked")), "the mark check turned done after scrolling back, with no mark jump");
     await to_lesson("marks");
     await press_keys("m", "a");
     await press_keys("G");
