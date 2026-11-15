@@ -9,7 +9,7 @@ Example: `copy.tabs`, commit `c6c5ec6b`.
 1. Add or extend a module in `src/commands/`. Call `define` with the id, label, intent and params. Recipe: [`src/commands/README.md`](../src/commands/README.md).
 2. Import a new module in `src/background/command_modules.ts`.
 3. Bind a default key in `src/background/default_keymap.ts`, if the command has one.
-4. Run `just docs-gen`. It rewrites [`keymap.md`](keymap.md). Delete the command's entry from [`keymap_planned.toml`](keymap_planned.toml) if it is listed there.
+4. Run `just docs-gen`. It rewrites [`keymap.md`](keymap.md).
 5. Add a test in `test/commands/`, and the command's id and command line name to the list in `test/commands/flags.test.ts`.
 6. Put each new `src/` file in a glob of `test/key/areas.mjs`. `test/key/areas.test.ts` fails on a file no glob covers.
 7. Add a key-test piece only when the command changes what a key does in Firefox. See [`test/key/README.md`](../test/key/README.md).
