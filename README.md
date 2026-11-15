@@ -11,23 +11,31 @@
   <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
 </p>
 
-<p align="center"><i>Desert the mouse, navigate the web with only your keyboard</i></p>
+<p align="center"><i>Desert the mouse. The keys teach themselves.</i></p>
+<p align="center">Vim keys for Firefox: link hints, a command line, keyboard drag and drop, and a popup that shows what every key does.</p>
 
 <p align="center"><img src="./docs/images/demo.gif" width="800" alt="A demo of DesertFox on its Practice page. It shows link hints, the which-key panel, a form filled with gi and ]i, a radio button and a slider picked by hint, a card dragged to another column of a board, a sentence copied in caret mode, the tab finder and the switch to Catppuccin."/></p>
 
 ## 🦊 What it is
 
-DesertFox lets you use Firefox from the keyboard. Press `f` and a short label appears next to every link and button. Type a label to click it. Press `j` and `k` to scroll, and `:` to run any command by name, with completion.
+DesertFox puts Vim keys in Firefox. Press `f` and a short label appears next to every link and button. Type the label to click it. Press `j` and `k` to scroll, `/` to search the page, and `:` to run any command by name, with completion.
 
-You do not have to memorize keys. A short pause after a key that starts a longer sequence, such as `g`, opens a which-key popup (a popup that lists the keys that can follow and what each does). `<A-?>` opens it at any time. Press `g?` to open the help page, which lists every key. Type `:help.whichkey` to show the top-level keys of the current mode in the popup.
+If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, counts, registers, marks, macros and `.` work as you expect. If you do not know Vim, the first day needs five keys. If you come from another keyboard tool for the browser, see [Switching](#switching-from-tridactyl-vimium-or-vim).
 
-The keys follow Vim habits: modes, `hjkl` to scroll, `gg` and `G` to jump, `yy` to copy, `/` to search, counts, registers and macros. You do not need to know Vim. If you come from another keyboard tool for the browser, see [Switching](#switching-from-tridactyl-vimium-or-vim).
+**The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `<A-?>` to open it at any time with the top-level keys of the current mode. A Quick Start page opens when you install DesertFox, and a Practice page has 14 short lessons that you do on the page. Press `g?` to open the help page, which lists every key.
+
+<p align="center"><img src="./docs/images/which-key.png" width="800" alt="The Practice page with the which-key popup open after the t key. The popup lists the tab keys, such as d for duplicate tab and T for switch tab."/></p>
+
+**Drag and drop from the keyboard.** Press `;Gg`, type the label on a slider or a card, and move it with `h` `j` `k` `l`. Press `;gg` to pick an element and then pick the place to drop it. Keyboard drag is built in and needs no script.
+
+<p align="center"><img src="./docs/images/drag.gif" width="800" alt="A card on the Practice page work board is grabbed with ;Gg and moved with h j k l, then grabbed with ;gg and dropped on a target picked by hint."/></p>
 
 You can edit any text box in Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)).
 
 ## 🏆 Why DesertFox
 
-- **You learn it as you go.** A popup shows the keys that can follow each key you press. [Details](docs/design.md#which-key).
+- **You learn it as you go.** A popup shows the keys that can follow a key that starts a sequence. A Quick Start page and a Practice page teach the rest. [Details](docs/design.md#which-key).
+- **You drag and drop without the mouse.** Grab a slider, a card or a list item with a hint and move it with keys. [Details](#-how-it-compares).
 - **It checks what you give it.** A typo is an error with a message, never a silent no-op. [Details](docs/design.md#registry).
 - **It stays light on every page.** The script on each page is small, and the heavy parts load on first use. [Details](docs/design.md#content-script-size).
 - **It is always ready.** A page gets its keys within milliseconds of starting to load. [Details](docs/design.md#constraints-from-firefox).
@@ -61,15 +69,17 @@ See [AGENTS.md](AGENTS.md) for the build and install commands.
 
 ## 🚀 Try it
 
-After you install DesertFox, the Quick Start page opens. It teaches scrolling, hints, the command line, page search, caret and visual mode, with the keys read from your keymap. It also sits in the help sidebar.
+After you install DesertFox, the Quick Start page opens. It teaches scrolling, hints, the command line, the which-key popup, modes, page search, caret and visual mode, and help, with the keys read from your keymap. It also sits in the help sidebar.
 
-The first day needs five keys: `j` and `k` to scroll, `f` to click, `:` for the command line and `g?` for help. Press `g?`, `,h` or `<F1>` on a normal page to open the help page. A short pause after a key that starts a longer sequence, such as `g`, shows the keys that can follow. `<A-?>` shows them at any time.
+Then open the Practice page from the help sidebar or the new tab page. It has 14 short lessons, from scrolling to keyboard drag and video. You do each task on the page, and the page ticks it off.
+
+The first day needs five keys: `j` and `k` to scroll, `f` to click, `:` for the command line and `g?` for help. Press `g?`, `,h` or `<F1>` on a normal page to open the help page. Press `g` and wait: a short pause after a key that starts a sequence shows the keys that can follow. Press `<A-?>` to see every top-level key.
 
 On a page where keys never reach DesertFox, such as an `about:` page or the PDF viewer, press `<A-j>` or `<A-k>` to switch to the next or previous tab.
 
 ## 🔍 How it compares
 
-Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up.
+Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up. Keyboard drag is built in and is DesertFox's alone among the extensions.
 
 | Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
 | --- | --- | --- | --- | --- | --- |
@@ -100,6 +110,7 @@ Keyboard drag keys. `;` starts the hint keys, and `;g` and `;G` are modifiers th
 - `;gg` grabs a draggable element, then hints the page again so you pick the target to drop it on (grab and choose a target).
 - The trailing `g` is the draggable filter: elements that declare drag, sliders, scrollbars and sortable handles. Another letter picks another filter, so `;ga` grabs any element and `;Ga` moves any element.
 - `;w` swipes a carousel or slider with the same `h` `j` `k` `l` keys.
+- A drag stays inside one frame, and a page that accepts only real mouse input ignores it.
 
 Hints typically appear in under a tenth of a second, within the blink of an eye.
 
@@ -141,7 +152,8 @@ Two keys differ from Vim: `v` puts a caret in the page and `V` starts a selectio
 
 You gain:
 
-- A which-key popup for the keys you forget.
+- A which-key popup for the keys you forget, and a Practice page for the ones you never learned.
+- Keyboard drag and drop, which neither Vimium nor Tridactyl has built in.
 - Macros and caret mode, which Tridactyl lacks, and settings per site, where Vimium has keys only.
 - A script of 20.4 KB on each page.
 
@@ -154,7 +166,7 @@ You lose:
 
 ## ✨ Features
 
-- Click anything with `f`, and scroll, search and select text without the mouse.
+- Click anything with `f`, and scroll, search, select text and drag without the mouse.
 - Run any command by name with `:`, with completion for every flag and value.
 - Manage tabs, bookmarks, history, containers and tab sessions.
 - Repeat yourself with `.`, macros, registers and marks.
@@ -169,6 +181,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Click anything: press `f`, then type the short label next to a link, button, input or image. `F` opens a link in a background tab.
 - Narrow the labels by link text: press `/` in hint mode and type part of the text.
 - Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, double-click, focus, inspect in DevTools, or focus a frame.
+- Drag and drop: `;Gg` grabs an element and moves it with `h` `j` `k` `l`, `;gg` grabs one and drops it on a target you pick, and `;w` swipes a carousel.
 - Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
 - Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`.
 
@@ -242,6 +255,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org. The `df` keyword in the address bar and the `Alt` chords still work there.
 - A plain key such as `J` is lost when it lands on a tab that has not started loading. [docs/firefox-behavior.md](docs/firefox-behavior.md#working-around-the-limits) has the PDF viewer setup and the tab switch detail.
+- Keyboard drag sends synthetic input. A page that accepts only real mouse input ignores it, and a drag cannot leave its frame, tab or window.
 
 ## 🧭 Docs
 
