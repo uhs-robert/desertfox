@@ -582,6 +582,15 @@ class ReleaseStepTest(InstallCase):
         with open(HOST_PATH, "rb") as file:
             self.assertIn(b'\nRELEASE_VERSION = "dev"\n', file.read(), "the repo copy keeps the placeholder")
 
+    def test_publish_with_no_xpi_uploads_the_hosts_only(self):
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
+        done = self.just("release_publish", self.package_version())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(self.gh_log) as file:
+            logged = file.read()
+        self.assertIn("install.sh", logged)
+        self.assertNotIn(".xpi", logged)
+
     def test_publish_refuses_without_a_stamp_of_this_version(self):
         done = self.just("release_publish", self.package_version(), self.xpi)
         self.assertNotEqual(done.returncode, 0)

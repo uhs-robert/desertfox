@@ -439,10 +439,12 @@ release_publish version xpi="":
         # The release asset name is the file name, and updates.json links to exactly this one.
         if [ "$(realpath "$xpi")" != "$(realpath -m "$xpi_asset")" ]; then cp -f "$xpi" "$xpi_asset"; fi
         xpi_args=("$xpi_asset")
+    elif [ -z "$xpi" ]; then
+        echo "no xpi given: the release carries the hosts only."
     elif [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
         echo "dry run: $xpi does not exist, so $xpi_asset is not written."
         xpi_args=("$xpi_asset")
-    elif [ -n "$xpi" ]; then
+    else
         echo "release_publish: the xpi $xpi does not exist. Run 'just sign' first." >&2
         exit 1
     fi

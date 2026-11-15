@@ -18,16 +18,17 @@ The card is the setting `newtab_weather`. It sends nothing until you allow it. I
 
 After you accept, the card asks Open-Meteo (`api.open-meteo.com`) for the forecast. With a city it first sends the city text to Open-Meteo's geocoder (`geocoding-api.open-meteo.com`), then the rounded coordinates of the answer. With no city it sends your position, with the coordinates rounded to two decimals, about one kilometre. When you open the More panel, it asks Open-Meteo's air quality host (`air-quality-api.open-meteo.com`) with the same rounded coordinates.
 
-The requests carry no cookies and no referrer. Open-Meteo sees your IP address as any server does, and Firefox adds an `Origin` header that holds a random address of your DesertFox install, the same for every request from that install. DesertFox checks the consent again before every request, so withdrawing it stops later requests at once. The answer stays in local storage for 30 minutes at most. Turning the card off deletes the stored answer. You can withdraw both permissions in `about:addons`, on the Permissions tab of DesertFox.
+The requests carry no cookies and no referrer. Open-Meteo sees your IP address as any server does, and Firefox adds an `Origin` header that holds a random address of your DesertFox install, the same for every request from that install. DesertFox checks the consent again before every request, so withdrawing it stops later requests at once. The answers stay in local storage until a newer one replaces them. DesertFox refetches after 30 minutes and shows a stored answer for up to 6 hours. The stored answers hold the rounded coordinates, the place name and the forecast. Turning the card off, or finding the consent withdrawn, deletes them. You can withdraw the permissions in `about:addons`, on the Permissions tab of DesertFox. A user with a city set holds the consent only.
 
 ### IP info line (Cloudflare)
 
-The line is the setting `newtab_ip_info`. It is off by default. When you turn it on, each new tab asks Cloudflare (`https://1.1.1.1/cdn-cgi/trace`) for your public IP address and country code, and shows those two values. Cloudflare sees your IP address, as any server does. The request carries no cookies and no referrer. The answer stays in local storage for one hour at most. Turning the line off deletes the stored answer. DesertFox declares no data collection category for this line, because it sends no data of its own beyond the request.
+The line is the setting `newtab_ip_info`. It is off by default. When you turn it on, each new tab asks Cloudflare (`https://1.1.1.1/cdn-cgi/trace`) for your public IP address and country code, and shows those two values. Cloudflare sees your IP address, as any server does. The request carries no cookies and no referrer. The answer stays in local storage until a newer one replaces it, and DesertFox shows it for up to one hour. Turning the line off deletes the stored answer. DesertFox declares no data collection category for this line, because it sends no data of its own beyond the request.
 
 ## Requests you cause
 
 - A search command sends the text you typed to the search engine you set. The default is DuckDuckGo.
 - A command that copies or saves an image fetches that image from the page it came from.
+- The command line shows the icon of each open tab. For a tab whose icon has an http or https address, the add-on page loads that icon from the address the page gave, which can be any site you have open.
 - Opening a link or a page loads it, as in any browser.
 
 ## The optional native host (Linux)

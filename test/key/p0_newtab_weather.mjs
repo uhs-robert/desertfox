@@ -146,13 +146,15 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     await use_settings("weather_consent", "newtab_weather = true\nnewtab_weather_city = \"Oslo\"\n");
     await in_background(WEATHER_SEED);
     await location_consent("remove");
-    await run_case("without the locationInfo consent a stored reading and a city draw only the permission button and send nothing", async () => {
+    await run_case("without the locationInfo consent a stored reading is deleted and a city draws only the permission button and sends nothing", async () => {
       expect(await open_new_tab(".weather-ask"), "the permission button never showed");
       await new Promise((done) => setTimeout(done, 1000));
       expect(await in_background(`!${NEWTAB_VIEW}.document.querySelector(".weather-reading")`), "a reading drew without the consent");
       expect((await weather_requests()) === 0, "the page requested open-meteo without the consent");
+      await poll_until("the stored reading to be forgotten", async () => await in_background(`browser.storage.local.get("newtab_net_cache_weather").then((found) => !("newtab_net_cache_weather" in found))`));
     });
     await location_consent("grant");
+    await in_background(WEATHER_SEED);
     await run_case("after the locationInfo consent is granted the stored reading draws", async () => {
       expect(await open_new_tab(".weather-reading"), "the reading never drew after the grant");
     });
