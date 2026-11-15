@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { read_folder_files, read_zip_file, accepted_code, create_transfer_session } from "../src/help/transfer_model.ts";
-import type { PickedFile } from "../src/help/transfer_model.ts";
+import { read_folder_files, read_zip_file, accepted_code, can_commit, create_transfer_session, reach_block } from "../src/help/transfer_model.ts";
+import type { PickedFile, ReachSegment } from "../src/help/transfer_model.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../src/shared/messages.ts";
+import { no_reach } from "../src/background/import_reach.ts";
 import { DEFAULT_ZIP_LIMITS, read_zip } from "../src/shared/zip.ts";
 
 // A file whose content must not be read: reading it fails the test.
@@ -26,7 +27,8 @@ test("the page checks File.size against the zip limits before it reads any file"
 });
 
 const snippet = (path: string, code: string, extra: Partial<SnippetPreview> = {}): SnippetPreview => ({ path, code, replaces: false, problems: [], id: path, matches: ["https://a.test/*"], requires: [], ...extra });
-const preview_of = (snippets: SnippetPreview[], extra: Partial<Extract<ConfigImportPreview, { ok: true }>> = {}): ConfigImportPreview => ({ ok: true, replaces_config: true, config_files: ["settings.toml"], snippets, problems: [], warnings: [], ...extra });
+const NO_REACH = no_reach();
+const preview_of = (snippets: SnippetPreview[], extra: Partial<Extract<ConfigImportPreview, { ok: true }>> = {}): ConfigImportPreview => ({ ok: true, replaces_config: true, config_files: ["settings.toml"], snippets, problems: [], warnings: [], reach: NO_REACH, ...extra });
 
 function session_with(answers: Record<string, unknown>) {
   const sent: { type: string; [key: string]: unknown }[] = [];
@@ -154,4 +156,51 @@ test("the sessions import checks File.size first, then sends the text and shows 
   await session.import_sessions(text_file("desertfox-sessions.json", "{}"));
   assert.deepEqual(sent, [{ type: "import_sessions", text: "{}" }]);
   assert.deepEqual(session.state.message, { ok: true, text: "Imported 1 session" });
+});
+
+const text_of = (row: ReachSegment[]) => row.map((segment) => (typeof segment === "string" ? segment : segment.code)).join("");
+
+test("the reach block says nothing when the import reaches nothing", () => {
+  assert.equal(reach_block(no_reach()), undefined);
+});
+
+test("the reach block holds the exact warning, each group with its intro, the overflow and the consent note", () => {
+  const reach = no_reach();
+  reach.addresses.rows.push({ what: "Search engine duck (default)", url: "https://duck.test/?q={query}" });
+  reach.keys.clipboard_or_page.rows.push({ where: "normal mode", keys: "zp", run: "page.clipboard paste" });
+  reach.keys.settings.rows.push({ where: "site a.test", keys: "zb", run: "set bridge true", names_consent: true }, { where: "normal mode", keys: "zn", run: "set new_tab_page https://evil.test/" });
+  reach.keys.settings.more = 3;
+  reach.keys.host.rows.push({ where: "command line", keys: ":inst", run: "native.install" });
+  reach.site_rows = 2;
+  const block = reach_block(reach)!;
+  assert.equal(block.heading, "What this import can reach");
+  assert.equal(block.warning, "Settings, search engines and keys can send what you search and type to another address, read your clipboard and press keys on a page. Check the list below. Import only configs you trust.");
+  assert.deepEqual(block.sections.map((section) => section.intro), [
+    "These addresses are added:",
+    "These keys read your clipboard or act on a page:",
+    "These keys change settings when you press them:",
+    "These keys use the native host or ask for permissions:",
+  ]);
+  assert.deepEqual(block.sections.map((section) => section.rows.map(text_of)), [
+    ["Search engine duck (default): https://duck.test/?q={query}"],
+    ["zp in normal mode: page.clipboard paste"],
+    ["zb in site a.test: set bridge true (an import cannot switch this on, but this key does)", "zn in normal mode: set new_tab_page https://evil.test/"],
+    [":inst in command line: native.install"],
+  ]);
+  assert.equal(block.sections[2]!.more, "and 3 more");
+  assert.equal(block.sections[1]!.more, undefined);
+  assert.equal(block.site_rows, "2 site rows add their own keys on the sites they name.");
+  reach.site_rows = 1;
+  assert.equal(reach_block(reach)!.site_rows, "1 site row adds its own keys on the site it names.");
+});
+
+test("a site row with keys alone is enough to show the block, and the review still commits as before", async () => {
+  const reach = no_reach();
+  reach.site_rows = 1;
+  assert.deepEqual(reach_block(reach)!.sections, []);
+  const { session, sent } = session_with({ preview_config_import: preview_of([], { reach }), commit_config_import: { ok: true, message: "Imported" }, list_snippets: { ok: true, snippets: [] } });
+  await session.choose(source_reader);
+  assert.equal(can_commit(session.state.review!), true);
+  await session.commit();
+  assert.ok(sent.some((message) => message.type === "commit_config_import"));
 });

@@ -1,7 +1,7 @@
 // No DOM: the state of the settings page's transfer section. It picks the files to import, holds the preview and the user's consent per snippet, and builds the export zips.
 // Nothing is sent to be stored until `commit`, and `commit` sends only the snippets the user ticked, with the code the preview showed.
 
-import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions, ImportSource, InstalledSnippet, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, RemoveSnippet } from "../shared/messages.ts";
+import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions, ImportReach, ImportSource, InstalledSnippet, KeyGroup, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, ReachList, RemoveSnippet } from "../shared/messages.ts";
 import { DEFAULT_ZIP_LIMITS, write_zip, ZipError, type ZipLimits } from "../shared/zip.ts";
 
 export const CONFIG_ZIP_NAME = "desertfox-config.zip";
@@ -13,6 +13,47 @@ export const MAX_SESSIONS_FILE_BYTES = 16 * 1024 * 1024;
 
 // Said before the warning, because the reader meets the word only on this consent view.
 export const SNIPPET_GLOSS = "A snippet is a small script that changes how a site works.";
+
+export const REACH_HEADING = "What this import can reach";
+
+export const REACH_WARNING = "Settings, search engines and keys can send what you search and type to another address, read your clipboard and press keys on a page. Check the list below. Import only configs you trust.";
+
+export const REACH_ADDRESSES_INTRO = "These addresses are added:";
+
+export const REACH_KEY_INTROS: Record<KeyGroup, string> = {
+  clipboard_or_page: "These keys read your clipboard or act on a page:",
+  settings: "These keys change settings when you press them:",
+  host: "These keys use the native host or ask for permissions:",
+};
+
+export const REACH_CONSENT_NOTE = " (an import cannot switch this on, but this key does)";
+
+const reach_more = (count: number): string => `and ${count} more`;
+
+const reach_site_rows = (count: number): string => (count === 1 ? "1 site row adds its own keys on the site it names." : `${count} site rows add their own keys on the sites they name.`);
+
+// A row is text and code, so the page draws the code in `<code>`.
+export type ReachSegment = string | { code: string };
+export type ReachSection = { intro: string; rows: ReachSegment[][]; more?: string };
+export type ReachBlock = { heading: string; warning: string; sections: ReachSection[]; site_rows?: string };
+
+const KEY_GROUPS: readonly KeyGroup[] = ["clipboard_or_page", "settings", "host"];
+
+function section_of<T>(intro: string, list: ReachList<T>, row: (item: T) => ReachSegment[]): ReachSection[] {
+  return list.rows.length === 0 ? [] : [{ intro, rows: list.rows.map(row), ...(list.more > 0 && { more: reach_more(list.more) }) }];
+}
+
+// What the consent screen lists above the snippets, or undefined when the import reaches nothing to list.
+export function reach_block(reach: ImportReach): ReachBlock | undefined {
+  const sections = [
+    ...section_of(REACH_ADDRESSES_INTRO, reach.addresses, ({ what, url }) => [`${what}: `, { code: url }]),
+    ...KEY_GROUPS.flatMap((group) =>
+      section_of(REACH_KEY_INTROS[group], reach.keys[group], ({ keys, where, run, names_consent }) => [{ code: keys }, ` in ${where}: `, { code: run }, ...(names_consent ? [REACH_CONSENT_NOTE] : [])]),
+    ),
+  ];
+  if (sections.length === 0 && reach.site_rows === 0) return undefined;
+  return { heading: REACH_HEADING, warning: REACH_WARNING, sections, ...(reach.site_rows > 0 && { site_rows: reach_site_rows(reach.site_rows) }) };
+}
 
 export const SNIPPET_WARNING = "A snippet is code that runs in the pages it matches and can use every DesertFox permission: it can read and change any page it matches, open and close tabs, and read your bookmarks and history. Accept only snippets you have read and trust.";
 
