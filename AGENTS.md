@@ -14,7 +14,7 @@ Read the design for an area before you change it. Read a folder's README before 
 
 | Topic                                | File                                                   |
 | ------------------------------------ | ------------------------------------------------------ |
-| Architecture, config, scope, roadmap | [`docs/design.md`](docs/design.md)                     |
+| Architecture, config, scope, not yet built | [`docs/design.md`](docs/design.md)                     |
 | The default keys, generated          | [`docs/keymap.md`](docs/keymap.md)                     |
 | Measured Firefox behavior            | [`docs/firefox-behavior.md`](docs/firefox-behavior.md) |
 | Code map, one line per source folder | [`src/README.md`](src/README.md)                       |
