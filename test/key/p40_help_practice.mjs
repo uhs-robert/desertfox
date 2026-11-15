@@ -1,7 +1,7 @@
 // Key cases of the Practice page (#/practice in the help document): each area works with real keys on an extension page, including the tab finder and page search.
 // Set DESERTFOX_SHOT_DIR to also save stills of the page in the default theme and in catppuccin.
 import { SHIFT_ESCAPE } from "./harness.mjs";
-import { evaluate_in_background } from "./rdp.mjs";
+import { evaluate_in_background, evaluate_in_chrome } from "./rdp.mjs";
 
 export const areas = ["help"];
 
@@ -38,6 +38,12 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await press_keys(key);
     await poll_until("hint mode", async () => (await mode()) === "hint");
     await press_keys("/", text);
+  }
+
+  // The test Firefox reports light mode. A shot run forces dark, as the maintainer runs it, and puts the pref back.
+  if (shot_dir) {
+    on_teardown(() => evaluate_in_chrome(rdp, `Services.prefs.clearUserPref("layout.css.prefers-color-scheme.content-override")`));
+    await evaluate_in_chrome(rdp, `Services.prefs.setIntPref("layout.css.prefers-color-scheme.content-override", 0)`);
   }
 
   on_teardown(async () => {
