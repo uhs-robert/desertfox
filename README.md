@@ -233,6 +233,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Keep your keys, search engines and settings in TOML files. Edit them on the settings page or import a zip. With the native host, you can also keep them in `~/.config/desertfox/` and apply an edit with `config.reload`. DesertFox checks them and applies an edit with no restart.
 - Add your own commands as snippets (JavaScript files from your own config folder, or an import you accept).
 - Pick one of the built-in color themes, write your own, or restyle every surface with CSS.
+- The Oasis themes for Firefox live in [oasis.nvim](https://github.com/uhs-robert/oasis.nvim). For deeper desktop integration, see [oasis-dots](https://github.com/uhs-robert/oasis-dots), the setup for an Arch Linux Hyprland workstation.
 - Use the new tab page for a clock, links, recent tabs and bookmarks.
 
 </details>
