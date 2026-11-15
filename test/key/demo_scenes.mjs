@@ -40,7 +40,8 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   // The default settings and keys, so the clip shows what a first install shows.
   const demo_config = config_copy();
   for (const name of ["keymap.toml", "keymap.d", "snippets", "search_engines.toml"]) rmSync(join(demo_config, name), { recursive: true, force: true });
-  writeFileSync(join(demo_config, "settings.toml"), "");
+  // The new tab defaults of a new user: no top sites and no recently closed tabs. The harness page the config loads from would otherwise show up as a top-site tile.
+  writeFileSync(join(demo_config, "settings.toml"), "newtab_top_sites = false\nnewtab_closed_tabs = false\n");
   await open_page("page", "demo_config", {});
   await load_config_dir(demo_config);
 
