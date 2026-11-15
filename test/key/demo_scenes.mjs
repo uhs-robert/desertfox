@@ -166,7 +166,7 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await poll_until("the which-key panel to close", async () => !(await in_practice(panel_open)));
   await sleep(300);
 
-  console.log("shot 4: gi and ]i fill a form, ;i picks a radio, ;Gg grabs a slider");
+  console.log("shot 4: gi and ]i fill a form, ;i picks a radio, ;Gg grabs a slider, ;gg drops a card in another column");
   await to_lesson("form", "fill in");
   await press("gi");
   await wait_focus("practice-name");
@@ -190,6 +190,13 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await sleep(500);
   await press("-k", "Return");
   await sleep(900);
+  // The board below the slider: ;gg grabs the card, the second pass labels every place it can go.
+  await hint(";gg", "#practice-card-review-the-pr", 600);
+  await sleep(500);
+  await still("drag");
+  await pick("#practice-column-done", 900);
+  await poll_until("the card to land in Done", async () => (await in_practice(`return view.document.getElementById("practice-card-review-the-pr").parentElement.id;`)) === "practice-column-done");
+  await sleep(1200);
 
   console.log("shot 5: caret mode selects a sentence, y copies");
   await to_lesson("copy", "copy");

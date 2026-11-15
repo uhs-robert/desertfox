@@ -11,7 +11,7 @@ import { create_timings } from "./timings.mjs";
 
 const repo_dir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const output_dir = process.env.DEMO_OUT_DIR ?? join(repo_dir, "docs", "images");
-const STILL_NAMES = ["hints", "which-key", "command-line", "theme-switch"];
+const STILL_NAMES = ["hints", "drag", "which-key", "command-line", "theme-switch"];
 const STILL_SIZE = "1280x800";
 
 const GIF_MAX_BYTES = 5 * 1024 * 1024;

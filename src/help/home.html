@@ -129,6 +129,11 @@
   /* Wider than the page, so the sideways scroll keys have something to move. */
   .desertfox-practice-strip { overflow-x: auto; max-width: 80ch; }
   .desertfox-practice-strip p { max-width: none; white-space: nowrap; }
+  .desertfox-practice-board { display: flex; gap: var(--desertfox-space-2); max-width: none; margin: 0 0 1rem; }
+  .desertfox-practice-column { flex: 1; display: flex; flex-direction: column; gap: var(--desertfox-space-2); padding: var(--desertfox-space-2); border: 2px solid transparent; border-radius: var(--desertfox-radius); background: var(--desertfox-bg-mantle); }
+  .desertfox-practice-column > strong { color: var(--desertfox-primary); }
+  .desertfox-practice-card { padding: var(--desertfox-space-2); border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); cursor: grab; }
+  .desertfox-practice-over { border-color: var(--desertfox-primary); }
   .desertfox-help-shadowed { opacity: .5; }
   .desertfox-help-current { outline: 2px solid var(--desertfox-primary); }
   .desertfox-help-tip {
