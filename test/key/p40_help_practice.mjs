@@ -57,6 +57,8 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     if (one_letter) expect(label.length === 1, `the label on ${selector} is "${label}", so the lesson no longer keeps its targets to one letter`);
     await press_keys(label);
   }
+  // The first pass of ;gg labels only the draggable cards. Its labels stay up until the second pass replaces them, and one sits near a column corner, so a column pick waits for the labels of every place.
+  const wait_target_labels = () => poll_until("the labels of the drop targets", async () => (await in_page(`return [...view.document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])]).filter((label) => label.style.display !== "none" && label.style.visibility !== "hidden" && label.textContent.length > 1).length;`)) > 0);
   async function hint(keys, selector, options) {
     await press_keys(keys);
     await wait_mode("hint");
@@ -274,7 +276,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_done("inputs", "done");
   });
 
-  await run_case("lesson 7: ;Gg grabs the slider, l moves it, Enter keeps it, and ;gg drops the card in the box", async () => {
+  await run_case("lesson 7: ;Gg grabs the slider, l moves it, Enter keeps it, and ;gg drops the card in the Done column", async () => {
     await to_lesson("slider");
     await hint(";Gg", "#practice-range", { one_letter: true });
     await wait_mode("grab");
@@ -283,9 +285,17 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await press_keys("-k", "Return");
     await wait_done("slider", "seven");
     await wait_mode("normal");
-    await hint(";gg", "#practice-card");
-    await pick("#practice-den");
-    await wait_done("slider", "den");
+    // A wrong drop first: another card in Done leaves the check unticked.
+    await hint(";gg", "#practice-card-fix-the-bug");
+    await wait_target_labels();
+    await pick("#practice-column-done");
+    await poll_until("Fix the bug to land in Done", async () => await in_page(`return ${by_id("practice-card-fix-the-bug")}.parentElement.id === "practice-column-done";`));
+    await wait_mode("normal");
+    expect(!(await is_done("slider", "moved")), "a wrong card in Done ticked the check");
+    await hint(";gg", "#practice-card-review-the-pr");
+    await wait_target_labels();
+    await pick("#practice-column-done");
+    await wait_done("slider", "moved");
     await leave_to_normal();
   });
 

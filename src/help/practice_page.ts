@@ -91,6 +91,59 @@ const end_in_view = (): boolean => {
 
 const j_count_text = (count: number): string => `The page received j ${count} time${count === 1 ? "" : "s"}.`;
 
+const BOARD_COLUMNS: { id: string; title: string; cards: string[] }[] = [
+  { id: "todo", title: "To do", cards: ["Write the post", "Fix the bug"] },
+  { id: "doing", title: "Doing", cards: ["Review the PR"] },
+  { id: "done", title: "Done", cards: ["Ship it"] },
+];
+
+// The lesson passes only when the card named here lands in the column named here.
+const BOARD_GOAL = { card: "Review the PR", column: "done" };
+
+// Three columns of native draggable cards. A drop can land on a card inside a column, so the handlers sit on the column and read `currentTarget`.
+function work_board(mark: (name: string) => void): HTMLElement {
+  let dragged: HTMLElement | undefined;
+  const board = el("div", "desertfox-practice-board");
+  board.id = "practice-board";
+  board.addEventListener("dragend", () => {
+    dragged = undefined;
+    board.querySelectorAll(".desertfox-practice-column").forEach((column) => column.classList.remove("desertfox-practice-over"));
+  });
+  for (const spec of BOARD_COLUMNS) {
+    const column = el("div", "desertfox-practice-column", el("strong", undefined, spec.title));
+    column.id = `practice-column-${spec.id}`;
+    // dragenter and dragleave fire in pairs as the pointer crosses the cards, so a counter keeps the highlight steady.
+    let inside = 0;
+    column.addEventListener("dragenter", () => { inside++; column.classList.add("desertfox-practice-over"); });
+    column.addEventListener("dragleave", () => {
+      inside = Math.max(0, inside - 1);
+      if (inside === 0) column.classList.remove("desertfox-practice-over");
+    });
+    column.addEventListener("dragover", (event) => event.preventDefault());
+    column.addEventListener("drop", (event) => {
+      event.preventDefault();
+      inside = 0;
+      column.classList.remove("desertfox-practice-over");
+      const card = dragged;
+      if (card === undefined) return;
+      (event.currentTarget as HTMLElement).append(card);
+      if (card.textContent === BOARD_GOAL.card && spec.id === BOARD_GOAL.column) mark("moved");
+    });
+    for (const text of spec.cards) {
+      const card = el("div", "desertfox-practice-card", text);
+      card.id = `practice-card-${text.toLowerCase().replace(/[^a-z]+/g, "-")}`;
+      card.setAttribute("draggable", "true");
+      card.addEventListener("dragstart", (event) => {
+        dragged = card;
+        event.dataTransfer?.setData("text/plain", text);
+      });
+      column.append(card);
+    }
+    board.append(column);
+  }
+  return board;
+}
+
 // The targets of each lesson. A builder returns the elements under the steps and, where an event cannot tell, a watch.
 type Built = { targets: HTMLElement[]; watch?: Watch };
 type Builder = (mark: (name: string) => void) => Built;
@@ -203,19 +256,7 @@ const BUILDERS: Record<LessonSlug, Builder> = {
     range.addEventListener("input", () => { reading.textContent = reading_text(); });
     // A drop or a blur sends `change`, so a value passed on the way does not count.
     range.addEventListener("change", () => { if (range.value === SLIDER_GOAL) mark("seven"); });
-    const card = el("span", "desertfox-pill", "Fox");
-    card.id = "practice-card";
-    card.setAttribute("draggable", "true");
-    card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("text/plain", "Fox"));
-    const den = el("div", "desertfox-help-tip", "Den: ");
-    den.id = "practice-den";
-    den.addEventListener("dragover", (event) => event.preventDefault());
-    den.addEventListener("drop", (event) => {
-      event.preventDefault();
-      den.append(card);
-      mark("den");
-    });
-    return { targets: [el("p", undefined, range, " ", reading), el("p", undefined, card), den] };
+    return { targets: [el("p", undefined, range, " ", reading), work_board(mark)] };
   },
   find: (mark) => {
     let first: string | undefined;

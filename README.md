@@ -13,7 +13,7 @@
 
 <p align="center"><i>Desert the mouse, navigate the web with only your keyboard</i></p>
 
-<p align="center"><img src="./docs/images/demo.gif" width="800" alt="A demo of DesertFox on its Practice page. It shows link hints, the which-key panel, a form filled with gi and ]i, a radio button and a slider picked by hint, a sentence copied in caret mode, the tab finder and the switch to Catppuccin."/></p>
+<p align="center"><img src="./docs/images/demo.gif" width="800" alt="A demo of DesertFox on its Practice page. It shows link hints, the which-key panel, a form filled with gi and ]i, a radio button and a slider picked by hint, a card dragged to another column of a board, a sentence copied in caret mode, the tab finder and the switch to Catppuccin."/></p>
 
 ## 🦊 What it is
 
