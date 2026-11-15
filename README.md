@@ -28,7 +28,7 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 **Drag and drop from the keyboard.** Press `;Gg`, type the label on a slider or a card, and move it with `h` `j` `k` `l`. Press `;gg` to pick an element and then pick the place to drop it. Keyboard drag is built in and needs no script.
 
-<p align="center"><img src="./docs/images/drag.gif" width="800" alt="A card on the Practice page work board is grabbed with ;Gg and moved with h j k l, then grabbed with ;gg and dropped on a target picked by hint."/></p>
+<p align="center"><img src="./docs/images/drag.gif" width="800" alt="Two cards on the Practice page work board are grabbed with ;gg and dropped on a column picked by hint."/></p>
 
 You can edit any text box in Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)).
 
@@ -79,7 +79,7 @@ On a page where keys never reach DesertFox, such as an `about:` page or the PDF 
 
 ## 🔍 How it compares
 
-Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up. Keyboard drag is built in and is DesertFox's alone among the extensions.
+Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up. Keyboard drag is built in and is DesertFox's alone among the extensions compared.
 
 | Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
 | --- | --- | --- | --- | --- | --- |
