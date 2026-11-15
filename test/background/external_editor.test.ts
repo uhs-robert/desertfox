@@ -33,7 +33,7 @@ function make(collect: (job: string) => Promise<EditorCollectReply>, options: Op
     now: options.now ?? (() => 0),
     pause: options.pause ?? (async () => {}),
   });
-  const open = (tab_id: number, frame_id: number, token = "t1", ext?: string, insert = false) => editor.open(tab_id, frame_id, { ...request(token), insert }, ext, false, editor.navigation_stamp(tab_id));
+  const open = (tab_id: number, frame_id: number, token = "t1", ext?: string, insert = false, is_private = false) => editor.open(tab_id, frame_id, { ...request(token), insert }, ext, is_private, editor.navigation_stamp(tab_id));
   return { editor, open, log, store };
 }
 
@@ -47,6 +47,25 @@ test("a start sends text, ext and insert, then the loop keeps polling while pend
   assert.deepEqual(log.done, [{ tab_id: 1, frame_id: 4, message: { type: "editor_done", token: "t1", text: "final" } }]);
   assert.deepEqual(log.saved, []);
   assert.deepEqual(Object.values(store)[0], {});
+});
+
+test("a private window sends private: true and a normal one does not", async () => {
+  const { open, log } = make(async () => ({ done: true, changed: false }));
+  await open(1, 0, "t1", undefined, false, true);
+  await open(2, 0, "t2");
+  await settle();
+  assert.deepEqual(log.starts, [{ text: "hello", private: true }, { text: "hello" }]);
+});
+
+test("a host that predates the private field refuses a private edit and the answer says to update it", async () => {
+  const old_host = () => Promise.reject(new NativeHostError("host_failed", "The DesertFox native host refused: editor_start takes only ext, insert, text, not private"));
+  const { open, log, store } = make(forever, { start: old_host });
+  const answer = await open(1, 0, "t1", undefined, false, true);
+  assert.deepEqual(answer, { ok: false, message: "The native host is too old to edit text from a private window in an external editor. Update it with :native.update." });
+  assert.equal(log.collects, 0);
+  assert.deepEqual(store, {});
+  const normal = await make(forever, { start: old_host }).open(1, 0);
+  assert.match((normal as { message: string }).message, /takes only/);
 });
 
 test("a quit without a save answers done with no text", async () => {
@@ -279,7 +298,7 @@ test("three failed collects in a row give up and the toast names the folder that
   await open(1, 0);
   await settle();
   assert.equal(log.collects, 3);
-  assert.match(log.toasts[0] ?? "", /spawn failed.*~\/\.cache\/desertfox\/editor/);
+  assert.match(log.toasts[0] ?? "", /spawn failed.*editor folder of the DesertFox host/);
   assert.deepEqual(store.desertfox_editor_jobs, {});
 });
 
@@ -288,7 +307,7 @@ test("the host's unknown-job refusal gives up at once, with no retry and no fold
   await open(1, 0);
   await settle();
   assert.equal(log.collects, 1);
-  assert.doesNotMatch(log.toasts[0] ?? "", /\.cache/);
+  assert.doesNotMatch(log.toasts[0] ?? "", /editor folder/);
 });
 
 test("an empty ext from the page means not given, so the site's extension applies", async () => {
