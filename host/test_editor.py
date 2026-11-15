@@ -275,6 +275,7 @@ class CollectTest(EditorCase):
         claimed = host.claim_job(job_path)
         long_ago = time.time() - 2 * host.STALE_JOB_S
         os.utime(claimed, (long_ago, long_ago))
+        os.utime(scratch, (long_ago, long_ago))
         self.start()
         self.assertFalse(os.path.exists(claimed))
         self.assertFalse(os.path.exists(scratch))
@@ -381,6 +382,7 @@ class CollectTest(EditorCase):
         time.sleep(0.2)
         long_ago = time.time() - 2 * host.STALE_JOB_S
         os.utime(os.path.join(directory, f"job-{old}.json"), (long_ago, long_ago))
+        os.utime(os.path.join(directory, self.job_record(old)["scratch"]), (long_ago, long_ago))
         fresh = self.start()
         names = self.editor_files()
         self.assertNotIn(f"job-{old}.json", names)
@@ -547,6 +549,7 @@ class SweepTest(EditorCase):
         scratch = self.job_record(job)["scratch"]
         swap = self.plant(directory, f".{scratch}.swp")
         self.age(os.path.join(directory, f"job-{job}.json"))
+        self.age(os.path.join(directory, scratch))
         self.start()
         self.assertFalse(os.path.exists(swap))
         self.assertFalse(os.path.exists(os.path.join(directory, scratch)))
@@ -593,6 +596,18 @@ class SweepTest(EditorCase):
         with open(scratch) as file:
             self.assertEqual(file.read(), "SAVED")
         self.assertEqual([n for n in os.listdir(directory) if n.endswith(".done")], [f"job-{job}.json.{os.getpid()}.done"])
+
+    def test_a_dead_job_whose_scratch_was_saved_since_is_left_for_the_collector(self):
+        self.configure(self.stub("pass\n"))
+        job = self.start()
+        time.sleep(0.3)
+        directory = host.editor_dirs()[0]
+        job_path, record, scratch = host.read_job(directory, job)
+        self.age(job_path)
+        with open(scratch, "w") as file:
+            file.write("SAVED")
+        host.sweep_editor_dir(directory)
+        self.assertEqual(self.collect(job), {"done": True, "changed": True, "text": "SAVED"})
 
     def test_a_claimed_job_of_a_long_run_is_not_swept_while_it_is_collected(self):
         self.configure(self.stub("pass\n"))
