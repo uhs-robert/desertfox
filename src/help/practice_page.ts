@@ -63,6 +63,14 @@ function field(tag: "input" | "textarea", id: string, label: string): HTMLElemen
   return el("p", undefined, el("label", undefined, label, el("br", undefined), box));
 }
 
+// Each new section echoes into its own line right under its controls, so the echo is in view with them.
+function echo_line(id: string): HTMLElement {
+  const line = el("p", "desertfox-help-muted", "Nothing changed yet.");
+  line.id = id;
+  line.setAttribute("aria-live", "polite");
+  return line;
+}
+
 function slider(log: HTMLElement): HTMLElement {
   const range = el("input", undefined) as HTMLInputElement;
   range.type = "range";
@@ -70,7 +78,7 @@ function slider(log: HTMLElement): HTMLElement {
   range.min = "0";
   range.max = "10";
   range.value = "2";
-  range.setAttribute("aria-label", "Range input");
+  range.setAttribute("aria-label", "Slider");
   range.addEventListener("input", () => { log.textContent = `The slider is at ${range.value}.`; });
   return el("p", undefined, range);
 }
@@ -80,7 +88,7 @@ const DROPDOWN_CHOICES = ["Sand", "Dune", "Oasis"];
 function dropdown(log: HTMLElement): HTMLElement {
   const select = el("select", "desertfox-settings-input", ...DROPDOWN_CHOICES.map((choice) => el("option", undefined, choice))) as HTMLSelectElement;
   select.id = "practice-select";
-  select.setAttribute("aria-label", "Choices list");
+  select.setAttribute("aria-label", "Dropdown");
   select.addEventListener("input", () => { log.textContent = `The dropdown shows ${select.value}.`; });
   return el("p", undefined, select);
 }
@@ -101,7 +109,7 @@ function radio_group(log: HTMLElement): HTMLElement {
 }
 
 function details_section(log: HTMLElement): HTMLElement {
-  const details = el("details", undefined, el("summary", undefined, "Reveal more"), el("p", undefined, "This text shows while the section is open.")) as HTMLDetailsElement;
+  const details = el("details", undefined, el("summary", undefined, "Show more"), el("p", undefined, "This text shows while the section is open.")) as HTMLDetailsElement;
   details.id = "practice-details";
   details.addEventListener("toggle", () => { log.textContent = `The section is ${details.open ? "open" : "closed"}.`; });
   return details;
@@ -134,6 +142,10 @@ export function practice_page(prompts: Record<PracticeArea, Inline[]>): HTMLElem
   const log = el("p", "desertfox-help-muted", "Nothing clicked yet.");
   log.id = PRACTICE_LOG_ID;
   log.setAttribute("aria-live", "polite");
+  const slider_log = echo_line("practice-slider-log");
+  const dropdown_log = echo_line("practice-dropdown-log");
+  const radio_log = echo_line("practice-radio-log");
+  const details_log = echo_line("practice-details-log");
   const paragraphs = PROSE.map((text, index) => {
     const paragraph = el("p", undefined, text);
     paragraph.id = `practice-prose-${index + 1}`;
@@ -154,13 +166,17 @@ export function practice_page(prompts: Record<PracticeArea, Inline[]>): HTMLElem
     field("input", "practice-input", "Text box"),
     field("textarea", "practice-textarea", "Text area"),
     ...head("slider"),
-    slider(log),
+    slider(slider_log),
+    slider_log,
     ...head("dropdown"),
-    dropdown(log),
+    dropdown(dropdown_log),
+    dropdown_log,
     ...head("radio"),
-    radio_group(log),
+    radio_group(radio_log),
+    radio_log,
     ...head("details"),
-    details_section(log),
+    details_section(details_log),
+    details_log,
     ...head("whichkey"),
     ...head("cmdline"),
     ...head("tabs"),
