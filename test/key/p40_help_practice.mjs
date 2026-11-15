@@ -61,7 +61,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   await wait_view_takes_keys("home.html");
 
   await run_case("the page holds every target by its id", async () => {
-    const found = await in_page(`return ["practice-link-1", "practice-link-5", "practice-button-1", "practice-button-2", "practice-checkbox", "practice-log", "practice-prose-1", "practice-prose-3", "practice-paste", "practice-input", "practice-textarea", "practice-open-settings", "practice-open-commands", "practice-scroll", "practice-end"].filter((id) => !${"view.document.getElementById(id)"});`);
+    const found = await in_page(`return ["practice-link-1", "practice-link-5", "practice-button-1", "practice-button-2", "practice-checkbox", "practice-log", "practice-prose-1", "practice-prose-3", "practice-paste", "practice-input", "practice-textarea", "practice-range", "practice-slider-log", "practice-select", "practice-dropdown-log", "practice-radio", "practice-radio-1", "practice-radio-2", "practice-radio-3", "practice-radio-log", "practice-details", "practice-details-log", "practice-open-settings", "practice-open-commands", "practice-scroll", "practice-end"].filter((id) => !${"view.document.getElementById(id)"});`);
     expect(found.length === 0, `missing ids: ${found.join(", ")}`);
     const prompts = await in_page(`return [...view.document.querySelectorAll(".desertfox-help-tip")].map((tip) => tip.textContent);`);
     expect(prompts.length === 12 && prompts.every((text) => text.length > 20 && !text.includes("(no key bound)")), `prompts: ${JSON.stringify(prompts)}`);
@@ -144,25 +144,31 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_badge(["NORMAL"]);
   });
 
-  await run_case("hints reach the slider, the dropdown, the radio buttons and the summary, and each echoes in the log line", async () => {
-    await in_page(`${by_id("practice-range")}.scrollIntoView({ block: "center" });`);
-    await hint_by_text("f", "rang", "practice-range");
-    await poll_until("the hint to focus the slider", async () => (await in_page(`return view.document.activeElement.id;`)) === "practice-range");
-    await press_keys("-k", "Right");
-    await poll_until("the slider to echo", async () => /^The slider is at \d+\.$/.test(await log_text()));
-    await hint_by_text("f", "bra", "practice-radio-2");
-    await wait_log("Bravo is chosen.");
-    expect(await in_page(`return ${by_id("practice-radio-2")}.checked && !${by_id("practice-radio-1")}.checked;`), "the second radio button is not the only one chosen");
-    await hint_by_text("f", "rev", "practice-details");
-    await wait_log("The section is open.");
-    await hint_by_text("f", "rev", "practice-details");
-    await wait_log("The section is closed.");
-    await hint_by_text("f", "choi", "practice-select");
-    await poll_until("the hint to focus the dropdown", async () => (await in_page(`return view.document.activeElement.id;`)) === "practice-select");
-    await press_keys("-k", "Down");
-    await wait_log("The dropdown shows Dune.");
-    await in_page(`view.document.activeElement.blur();`);
-    await leave_to_normal();
+  await run_case("hints reach the slider, the dropdown, the radio buttons and the summary, and each echoes in its own line", async () => {
+    const echo = (id) => in_page(`return ${by_id(id)}.textContent;`);
+    const wait_echo = (id, text) => poll_until(`${id} to read "${text}"`, async () => (await echo(id)) === text).catch(async (error) => { throw new Error(`${error.message} (it reads "${await echo(id)}")`); });
+    try {
+      await hint_by_text("f", "slider", "practice-range");
+      await poll_until("the hint to focus the slider", async () => (await in_page(`return view.document.activeElement.id;`)) === "practice-range");
+      await press_keys("-k", "Right");
+      await poll_until("the slider to echo", async () => /^The slider is at \d+\.$/.test(await echo("practice-slider-log")));
+      await hint_by_text("f", "alp", "practice-radio-1");
+      await wait_echo("practice-radio-log", "Alpha is chosen.");
+      await hint_by_text("f", "bra", "practice-radio-2");
+      await wait_echo("practice-radio-log", "Bravo is chosen.");
+      expect(await in_page(`return ${by_id("practice-radio-2")}.checked && !${by_id("practice-radio-1")}.checked;`), "choosing the second radio button did not clear the first");
+      await hint_by_text("f", "show", "practice-details");
+      await wait_echo("practice-details-log", "The section is open.");
+      await hint_by_text("f", "show", "practice-details");
+      await wait_echo("practice-details-log", "The section is closed.");
+      await hint_by_text("f", "drop", "practice-select");
+      await poll_until("the hint to focus the dropdown", async () => (await in_page(`return view.document.activeElement.id;`)) === "practice-select");
+      await press_keys("-k", "Down");
+      await wait_echo("practice-dropdown-log", "The dropdown shows Dune.");
+    } finally {
+      await in_page(`view.document.activeElement.blur(); const details = ${by_id("practice-details")}; details.open = false;`);
+      await leave_to_normal();
+    }
   });
 
   await run_case("a prefix key shows the which-key panel on the page", async () => {
