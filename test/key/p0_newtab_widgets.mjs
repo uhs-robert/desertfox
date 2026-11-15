@@ -73,14 +73,24 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await poll_until("the closed and top lists to render", async () => { const shown = await in_background(`[...${NEWTAB_VIEW}.document.querySelectorAll(".lists h4")].map((heading) => heading.textContent)`); return shown.includes("Recently closed") && shown.includes("Top sites"); }, { timeout_ms: 10000 });
       // The content script starts after the cards render, so wait for it to read the tree before the key.
       await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
-      const cards_now = await in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`);
+      const tile_count = () => in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`);
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
+      // A settings write redraws the page and swaps its whole tree, and the labels of a page that is still settling can miss cards. So `f` waits for the same tiles node and count on two reads in a row.
+      // The first read of a tiles node answers "new", so a swapped-in page starts the count again.
+      const tiles_state = () => in_background(`(() => { const tiles = ${NEWTAB_VIEW}.document.querySelector(".tiles"); if (!tiles) return "none"; const fresh = !tiles.read_by_test; tiles.read_by_test = true; return fresh ? "new" : String(tiles.querySelectorAll(".tile").length); })()`);
+      let previous = "";
+      await poll_until("the tiles node and count to stop changing", async () => {
+        const now = await tiles_state();
+        const same = now === previous && now !== "new" && now !== "none";
+        previous = now;
+        return same;
+      }, { timeout_ms: 10000, step_ms: 150 });
+      const cards_now = await tile_count();
       // The page renders in about 100 ms, when it can still drop a key.
       await wait_view_takes_keys("newtab.html");
       await press_keys("f");
-      await poll_until("the hint labels to show", async () => (await labels()) > 0);
       // One label per card, plus the four built-in links and the command line hint.
-      expect((await labels()) === cards_now + 5, `expected ${cards_now + 5} labels, found ${await labels()}`);
+      await poll_until(`${cards_now + 5} hint labels, one per card`, async () => (await labels()) === (await tile_count()) + 5);
       await press_keys("-k", "Escape");
     });
 
