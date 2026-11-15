@@ -152,7 +152,7 @@ export function tip_block(compiled: CompiledKeymap | undefined, commands: Comman
   return { kind: "tip", inlines: sentence(compiled, commands, "Press {cmdline} to open the command line, a box at the bottom of the page where you type commands. Type [help] and a page name, such as [help settings], to open that page.") };
 }
 
-export type PracticeArea = "scroll" | "hints" | "cmdline" | "whichkey" | "find" | "caret" | "insert" | "tabs";
+export type PracticeArea = "scroll" | "hints" | "cmdline" | "whichkey" | "find" | "caret" | "insert" | "slider" | "dropdown" | "radio" | "details" | "tabs";
 
 // The Practice page sections, in page order. The tall scroll area comes last so the targets above it stay in view.
 export const PRACTICE_AREAS: { area: PracticeArea; title: string }[] = [
@@ -160,6 +160,10 @@ export const PRACTICE_AREAS: { area: PracticeArea; title: string }[] = [
   { area: "find", title: "Search the page" },
   { area: "caret", title: "Caret and visual mode" },
   { area: "insert", title: "Type in a box" },
+  { area: "slider", title: "Slider" },
+  { area: "dropdown", title: "Dropdown" },
+  { area: "radio", title: "Radio buttons" },
+  { area: "details", title: "Collapsible section" },
   { area: "whichkey", title: "Which-key" },
   { area: "cmdline", title: "The command line" },
   { area: "tabs", title: "Find a tab" },
@@ -178,6 +182,10 @@ export function practice_prompts(compiled: CompiledKeymap | undefined, commands:
     find: say("Press {find}, type [fox] and press Enter. {next} jumps to the next match and {previous} to the one before."),
     caret: say("Press {caret_at_text}, then type the label of a paragraph below. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}. Press {visual} to select, then {yank} to copy. {escape} steps back."),
     insert: say("Press {insert} or click a box, then type. {escape} leaves insert mode. In the paste box, press Ctrl+V to paste what you copied."),
+    slider: say("Press {hint} and type the name of the slider to focus it. Then move it with the arrow keys. The log line shows its value."),
+    dropdown: say("Press {hint} and type the name of the dropdown to focus it. Press the arrow keys to change the choice. The log line shows it."),
+    radio: say("Press {hint} and type the name of a radio button to choose it. Only one in the group stays chosen."),
+    details: say("Press {hint} and type the name of the heading below to open or close the section."),
     tabs: say("Open both links below in new tabs, then press {find_anything} and type part of a tab title to jump to it."),
   };
 }
