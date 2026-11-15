@@ -1,15 +1,15 @@
 // Key cases of the Practice page (#/practice in the help document). Each case does one lesson with the keys its steps name, on the extension page, and waits for the check lines the page turns done.
-// Set DESERTFOX_SHOT_DIR to also save stills of the first screen of lessons 1, 2, 5, 7 and 10, in the default theme and in catppuccin.
+// Set DESERTFOX_SHOT_DIR to also save stills of the first screen of the page and of lessons 3, 7, 10 and 11, in the default theme and in catppuccin.
 import { SHIFT_ESCAPE } from "./harness.mjs";
 import { evaluate_in_background, evaluate_in_chrome } from "./rdp.mjs";
 
-export const areas = ["help"];
+export const areas = ["help", "hints", "scroll", "whichkey", "find", "caret", "cmdline", "tabs"];
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
 // <A-?> is Alt+Shift+/ on the test layout.
 const WHICH_KEY = ["-M", "alt", "-M", "shift", "/", "-m", "shift", "-m", "alt"];
-const SHOT_LESSONS = ["scroll", "which-key", "form", "slider", "command-line"];
+const SHOT_LESSONS = ["headings", "slider", "command-line", "tabs"];
 
 export async function run_cases({ run_case, expect, press_keys, poll_until, wait_view_takes_keys, rdp, extension_id, extension_view, close_tabs_with, on_teardown, take_shot, sleep, wait_cmdline, type_in_line, close_cmdline }) {
   const evaluate = (code) => evaluate_in_background(rdp, extension_id, code);
@@ -73,7 +73,16 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   const shot_dir = process.env.DESERTFOX_SHOT_DIR;
   async function shots(theme) {
     if (!shot_dir) return;
+    // Each shot starts from the top at rest, so no jump here starts inside a lesson that watches for jumps.
+    const to_top = async () => {
+      await leave_to_normal();
+      await in_page(`view.scrollTo(0, 0);`);
+      await sleep(700);
+    };
+    await to_top();
+    await take_shot(`${shot_dir}/practice-${theme}-first-screen.png`);
     for (const slug of SHOT_LESSONS) {
+      await to_top();
       await to_lesson(slug);
       await take_shot(`${shot_dir}/practice-${theme}-${slug}.png`);
     }
@@ -98,30 +107,53 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   await poll_until("the Practice page to render and take focus", async () => await in_page(`return !!view && !!${by_id("practice-end")} && view.document.hasFocus();`).catch(() => false), { timeout_ms: 10000 });
   await wait_view_takes_keys("home.html");
 
-  await run_case("the page opens on the scroll prompt, with fourteen lessons, no jump links and no section list", async () => {
+  await run_case("the page opens on one welcome line with lesson 1 right below it, fourteen lessons, no jump links and no section list", async () => {
     const shape = await in_page(`
       const doc = view.document;
+      const intro = doc.querySelector(".desertfox-practice-intro");
+      const page_text = doc.querySelector(".desertfox-help-page").textContent;
+      const step_of = (lesson, index) => doc.getElementById(lesson).closest("section").querySelectorAll("ol > li")[index].textContent;
       return {
         lessons: [...doc.querySelectorAll(".desertfox-practice-lesson h2")].map((heading) => heading.id),
-        first_lesson_top: doc.getElementById("practice-scroll").getBoundingClientRect().top,
-        height: view.innerHeight,
+        intro: intro.textContent,
+        gap: doc.getElementById("practice-scroll").getBoundingClientRect().top - intro.getBoundingClientRect().bottom,
+        end: doc.getElementById("practice-end").textContent,
         jump_links: doc.querySelectorAll('[id^="practice-link-"]').length,
         sidebar_sections: doc.querySelectorAll('.desertfox-help-sidebar a[href^="#section=practice"]').length,
-        clicks: doc.querySelector(".desertfox-help-page").textContent.match(/click/gi)?.length ?? 0,
+        says_click: /click/i.test(page_text),
+        names_caret_key: page_text.includes("^"),
+        has_temp_flag: / -t | --temp/.test(page_text),
+        theme_step: step_of("practice-command-line", 0),
+        leaving_steps: [step_of("practice-command-line", 2), step_of("practice-tabs", 1), step_of("practice-video", 0)],
+        hash: view.location.hash,
       };`);
     expect(shape.lessons.length === 14 && shape.lessons[0] === "practice-scroll" && shape.lessons[13] === "practice-ignore", `the lessons are ${JSON.stringify(shape.lessons)}`);
-    expect(shape.first_lesson_top > shape.height * 0.6, `lesson 1 starts at ${shape.first_lesson_top} px of ${shape.height}, so the first screen is not the scroll prompt alone`);
+    expect(shape.intro === "Welcome! These lessons will teach you the basic keys needed for web browsing.", `the welcome line is ${JSON.stringify(shape.intro)}`);
+    expect(shape.gap >= 0 && shape.gap < 60, `lesson 1 starts ${shape.gap} px under the welcome line, so a gap sits between them`);
     expect(shape.jump_links === 0 && shape.sidebar_sections === 0, `jump links ${shape.jump_links}, sidebar sections ${shape.sidebar_sections}`);
-    expect(shape.clicks === 0, `the page says "click" ${shape.clicks} times`);
+    expect(!shape.says_click, `the page says "click"`);
+    expect(!shape.names_caret_key, "the page names the ^ key");
+    expect(!shape.has_temp_flag, "a command example carries the temp flag");
+    expect(shape.theme_step.includes("set theme catppuccin"), `the theme step is ${JSON.stringify(shape.theme_step)}`);
+    // A step that leaves the page names the way back before the key that leaves.
+    const ways_back = ["H goes back one page, so it brings you back here.", "dd closes the tab you are on, and that brings you back here.", "H goes back one page, so it brings you back here from the video."];
+    shape.leaving_steps.forEach((step, index) => expect(step.startsWith(ways_back[index]), `a step that leaves the page does not start with the way back: ${JSON.stringify(step)}`));
+    expect(shape.end.includes("<A-?>") && /:.* opens the command line/.test(shape.end) && shape.end.includes("Tab"), `the end does not name which-key and the command line: ${JSON.stringify(shape.end)}`);
+    // A first visit stays at the top, with no lesson in the address.
+    await sleep(700);
+    expect((await in_page(`return view.location.hash;`)) === "#/practice" && shape.hash === "#/practice", "a first visit put a lesson in the address");
   });
 
   await shots("oasis-moonlight");
 
-  await run_case("lesson 1: j, Ctrl+D, Ctrl+U, G, gg scroll the page and l moves the wide strip", async () => {
+  await run_case("lesson 1: j, k, Ctrl+D, Ctrl+U, G, gg scroll the page and l and h move the wide strip", async () => {
     await in_page(`view.scrollTo(0, 0);`);
     await poll_until("the page to be at the top", async () => (await scroll_y()) === 0);
     await press_keys("j", "j", "j");
     await wait_done("scroll", "down");
+    const lowest = await scroll_y();
+    await press_keys("k");
+    await poll_until("k to scroll up", async () => (await scroll_y()) < lowest);
     const before = await scroll_y();
     await press_keys(...CTRL("d"));
     await poll_until("Ctrl+D to scroll down", async () => (await scroll_y()) > before);
@@ -135,6 +167,10 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await to_lesson("scroll");
     await press_keys("l", "l", "l");
     await wait_done("scroll", "strip");
+    const strip_left = () => in_page(`return ${by_id("practice-strip")}.scrollLeft;`);
+    const moved_right = await strip_left();
+    await press_keys("h");
+    await poll_until("h to move the strip back", async () => (await strip_left()) < moved_right);
     expect((await in_page(`return view.scrollX;`)) === 0, "l moved the page sideways, not the strip");
     const at = await scroll_y();
     await press_keys("5", "j");
@@ -159,14 +195,20 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await poll_until("the which-key panel to close", async () => !(await in_page(panel_open)));
   });
 
-  await run_case("lesson 3: ]h and [h step by lesson and sh picks a lesson from the heading list", async () => {
+  await run_case("lesson 3: ]h and [h step by heading and sh picks a heading from the list", async () => {
     await to_lesson("headings");
+    // The jump that brought the lesson into view started in another lesson, so it does not count.
+    await sleep(700);
+    expect(!(await is_done("headings", "heading")), "the heading check turned done before ]h was pressed");
     await press_keys("]", "h");
     await poll_until("]h to put lesson 4 at the top", async () => Math.abs(await heading_top("hints")) < 12);
     await wait_done("headings", "heading");
     await press_keys("[", "h");
     await poll_until("[h to put lesson 3 at the top", async () => Math.abs(await heading_top("headings")) < 12);
-    await type_line_and_run("sh", "slider");
+    await sleep(700);
+    expect(!(await is_done("headings", "listed")), "the list check turned done before sh was pressed");
+    await type_line_and_run("sh", "grab");
+    await poll_until("sh grab to put lesson 7 at the top", async () => Math.abs(await heading_top("slider")) < 12);
     await wait_done("headings", "listed");
     await type_line_and_run("sh", "jump");
     await poll_until("sh jump to return to lesson 3", async () => Math.abs(await heading_top("headings")) < 12);
@@ -245,16 +287,21 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await leave_to_normal();
   });
 
-  await run_case("lesson 8: / finds a word and n moves to the next match", async () => {
+  await run_case("lesson 8: / finds a word, n moves to the next match and N to the one before", async () => {
     await to_lesson("find");
-    await press_keys("/", "fox", "-k", "Return");
+    await type_line_and_run("/", "fox");
     await wait_done("find", "found");
+    const current_match = () => in_page(`const [range] = view.CSS.highlights.get("oasis-find-current") ?? []; return range ? range.startContainer.parentElement.id + ":" + range.startOffset : null;`);
+    const first = await current_match();
     await press_keys("n");
     await wait_done("find", "stepped");
+    await poll_until("n to move to the next match", async () => (await current_match()) !== first);
+    await press_keys("N");
+    await poll_until("N to move back to the first match", async () => (await current_match()) === first);
     await leave_to_normal();
   });
 
-  await run_case("lesson 9: ;yt copies a paragraph, ;V as y copies one sentence, and gi with Ctrl+V pastes each", async () => {
+  await run_case("lesson 9: ;yt copies a paragraph, ;V as y copies one sentence, and Escape, gi and Ctrl+V paste it", async () => {
     await to_lesson("copy");
     await hint(";yt", "#practice-copy-2");
     await wait_mode("normal");
@@ -269,8 +316,10 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await press_keys("a", "s");
     await sleep(300);
     await press_keys("y");
-    await wait_badge(["NORMAL", "CARET"]);
-    await leave_to_normal();
+    // The yank leaves caret mode on, where gi is not a key, so the lesson has Escape first.
+    await wait_badge(["CARET"]);
+    await press_keys("-k", "Escape");
+    await wait_badge(["NORMAL"]);
     await press_keys("g", "i");
     await wait_focus("practice-paste");
     await press_keys(...CTRL("v"));
@@ -283,15 +332,26 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   await run_case("lesson 10: the command line changes the theme and keeps the page state, and :help commands with H returns to the lesson", async () => {
     await to_lesson("command-line");
     await in_page(`const input = ${by_id("practice-name")}; input.value = "keep me"; input.dataset.kept = "yes"; input.setSelectionRange(2, 6);`);
-    await type_line_and_run(":", "set -t theme catppuccin");
+    await type_line_and_run(":", "set theme catppuccin");
     await wait_done("command-line", "themed");
     const kept = await in_page(`const input = ${by_id("practice-name")}; return { value: input.value, kept: input.dataset.kept, start: input.selectionStart, end: input.selectionEnd };`);
     expect(kept.value === "keep me" && kept.kept === "yes" && kept.start === 2 && kept.end === 6, `the input after the theme change: ${JSON.stringify(kept)}`);
     await shots("catppuccin");
     await to_lesson("command-line");
-    await type_line_and_run(":", "unset -t theme");
+    await type_line_and_run(":", "unset theme");
     await wait_done("command-line", "restored");
     await poll_until("the page to remember the lesson in its address", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line");
+    // A move to another help page and back is not the Commands trip.
+    await type_line_and_run(":", "help settings");
+    await poll_until("the Settings page to show", async () => (await in_page(`return view.location.hash;`)) === "#/settings");
+    await wait_view_takes_keys("home.html");
+    await press_keys("H");
+    await poll_until("H to return from Settings", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line" && Math.abs(await heading_top("command-line")) < 12);
+    await sleep(700);
+    expect(!(await is_done("command-line", "returned")), "the return check turned done after a trip to Settings");
+    // The trip rebuilt the page, and the checks that were done stay done.
+    expect((await is_done("command-line", "themed")) && (await is_done("scroll", "down")), "the done checks were lost when the page was built again");
+    await wait_view_takes_keys("home.html");
     await type_line_and_run(":", "help commands");
     await poll_until("the Commands page to show", async () => (await in_page(`return view.location.hash;`)) === "#/commands");
     await wait_view_takes_keys("home.html");
@@ -300,7 +360,15 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_done("command-line", "returned");
   });
 
-  await run_case("lesson 11: F opens two tabs in the background, T jumps to one and back, and Alt+X closes each from the list", async () => {
+  await run_case("a reload lands on the lesson in the address and keeps the done checks", async () => {
+    await in_page(`view.document.documentElement.dataset.before_reload = "yes"; view.location.reload();`);
+    await poll_until("the page to load again", async () => await in_page(`return !!view && view.document.documentElement.dataset.before_reload === undefined && !!${by_id("practice-end")} && view.document.hasFocus();`).catch(() => false), { timeout_ms: 10000 });
+    await poll_until("the reload to land on lesson 10", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line" && Math.abs(await heading_top("command-line")) < 12);
+    expect((await is_done("command-line", "returned")) && (await is_done("form", "sent")), "the done checks were lost in the reload");
+    await wait_view_takes_keys("home.html");
+  });
+
+  await run_case("lesson 11: F opens two tabs in the background, T jumps to one, dd closes it and lands back here, and Alt+X closes the other from the list", async () => {
     const open_pages = () => evaluate(`browser.tabs.query({}).then((tabs) => ["#/settings", "#/commands"].filter((hash) => tabs.some((tab) => tab.url.endsWith(hash))).length)`);
     await to_lesson("tabs");
     await hint("F", "#practice-open-settings");
@@ -323,36 +391,37 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
       }
       expect((line.row_texts[line.selected] ?? "").includes(hash), `the Down arrow did not reach the ${hash} row: ${JSON.stringify(line.row_texts)}`);
     }
+    await poll_until("the Settings tab to sit just before the Practice tab", async () => await evaluate(`browser.tabs.query({ currentWindow: true }).then((tabs) => tabs.find((tab) => tab.url.endsWith("#/settings")).index === tabs.find((tab) => /home\\.html#.*practice/.test(tab.url)).index - 1)`));
+    // Typed text narrows the list loosely, so the Down arrow steps to the wanted row, as the lesson says.
     await list_tabs("settings", "#/settings");
+    await highlight("#/settings");
     await press_keys("-k", "Return");
     await poll_until("the Settings tab to be active", async () => await evaluate(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.url.endsWith("#/settings"))`));
     // The probe of wait_view_takes_keys goes to the first help view, which is the Practice tab, so the Settings tab gets a pause instead.
     await sleep(500);
-    // Typed text narrows the list loosely (the harness tab and the random extension address also match), so the Down arrow steps to the wanted row, as the lesson says.
-    await list_tabs("prac", "section=practice");
-    await highlight("section=practice");
-    await press_keys("-k", "Return");
-    await poll_until("the Practice tab to be active and focused", async () => (await practice_tab_active()) && (await in_page(`return view.document.hasFocus();`)));
+    await press_keys("dd");
+    await poll_until("dd to close the Settings tab", async () => (await open_pages()) === 1);
+    await poll_until("dd to land on the Practice tab", async () => (await practice_tab_active()) && (await in_page(`return view.document.hasFocus();`)));
     await sleep(500);
     await wait_done("tabs", "returned");
-    for (const [text, hash] of [["comm", "#/commands"], ["settings", "#/settings"]]) {
-      const before = await open_pages();
-      await list_tabs(text, hash);
-      await highlight(hash);
-      await press_keys(...ALT("x"));
-      await poll_until(`Alt+X to close the ${hash} tab`, async () => (await open_pages()) === before - 1);
-      await close_cmdline();
-    }
+    await list_tabs("comm", "#/commands");
+    await highlight("#/commands");
+    await press_keys(...ALT("x"));
+    await poll_until("Alt+X to close the Commands tab", async () => (await open_pages()) === 0);
+    await close_cmdline();
     expect(await practice_tab_active(), "closing a tab from the list left the Practice tab");
     await wait_done("tabs", "closed");
   });
 
-  await run_case("lesson 12: the video link opens the watch page in this tab, and the return turns its check done", async () => {
+  await run_case("lesson 12: f on the video link leaves for the watch page in this tab, and the return turns its check done", async () => {
     await to_lesson("video");
     const link = await in_page(`const link = ${by_id("practice-video-link")}; return { href: link.href, target: link.target };`);
     expect(link.href === "https://www.youtube.com/watch?v=dQw4w9WgXcQ" && link.target === "", `the video link is ${JSON.stringify(link)}`);
-    // The test session has no network, so the trip is stood in for: the click that leaves, held back from navigating, then the show event of the way back.
-    await in_page(`const link = ${by_id("practice-video-link")}; link.addEventListener("click", (event) => event.preventDefault(), { once: true }); link.click(); view.dispatchEvent(new view.PageTransitionEvent("pageshow", { persisted: true }));`);
+    // The test session has no network, so the trip is stood in for: the pick that leaves, held back from navigating, then the show event of the way back.
+    await in_page(`${by_id("practice-video-link")}.addEventListener("click", (event) => { event.preventDefault(); view.document.documentElement.dataset.video_picked = "yes"; }, { once: true });`);
+    await hint("f", "#practice-video-link");
+    await poll_until("f to pick the video link", async () => await in_page(`return view.document.documentElement.dataset.video_picked === "yes";`));
+    await in_page(`view.dispatchEvent(new view.PageTransitionEvent("pageshow", { persisted: true }));`);
     await wait_done("video", "returned");
   });
 
