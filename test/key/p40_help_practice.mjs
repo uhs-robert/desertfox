@@ -3,7 +3,7 @@
 import { SHIFT_ESCAPE } from "./harness.mjs";
 import { evaluate_in_background, evaluate_in_chrome } from "./rdp.mjs";
 
-export const areas = ["help", "hints", "scroll", "whichkey", "find", "caret", "cmdline", "tabs"];
+export const areas = ["help", "hints", "scroll", "whichkey", "find", "caret", "cmdline", "tabs", "config", "ui"];
 
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
