@@ -159,11 +159,18 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await press(...WHICH_KEY);
   await poll_until("the which-key panel to open", async () => await in_practice(panel_open));
   await sleep(1500);
-  await still("which-key");
   await press("z");
   await sleep(800);
   await press("-k", "Escape");
   await poll_until("the which-key panel to close", async () => !(await in_practice(panel_open)));
+  await sleep(300);
+  // The still shows the panel of the t prefix, the tab actions with their keys, which opens after the key delay.
+  await press("t");
+  await poll_until("the t panel to open", async () => await in_practice(panel_open));
+  await sleep(1500);
+  await still("which-key");
+  await press("-k", "Escape");
+  await poll_until("the t panel to close", async () => !(await in_practice(panel_open)));
   await sleep(300);
 
   console.log("shot 4: gi and ]i fill a form, ;i picks a radio, ;Gg grabs a slider, ;gg moves a card across the board");
