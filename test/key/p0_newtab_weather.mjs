@@ -10,7 +10,7 @@ const NEWTAB_VIEW = `(browser.extension.getViews({ type: "tab" }).find((view) =>
 
 export const areas = ["newtab", "config"];
 
-export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, open_page, rdp, extension_id, press_keys, wait_view_takes_keys }) {
+export async function run_cases({ config_dir, load_config_dir, take_shot, run_case, expect, poll_until, open_page, rdp, extension_id, press_keys, wait_view_takes_keys, set_optional_permissions }) {
   const in_background = (script) => evaluate_in_background(rdp, extension_id, script);
   // One new tab at a time: NEWTAB_VIEW takes the first matching view, which must be the one on screen for the shots.
   const open_new_tab = async (selector) => {
@@ -43,7 +43,9 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     await load_config_dir(dir);
   };
 
+  const location_consent = (action) => set_optional_permissions(action, [], ["locationInfo"]);
   try {
+    await location_consent("grant");
     await use_settings("weather_off", "newtab_weather = false\nnewtab_weather_city = \"Oslo\"\n");
     await run_case("with newtab_weather off the page has no weather card and makes no weather request", async () => {
       expect(await open_new_tab(".date"), "the page never rendered");
@@ -141,6 +143,20 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect(wide.hours === wide.inside && wide.hours >= 6, `an hour is clipped or hidden: ${JSON.stringify(wide)}`);
     });
 
+    await use_settings("weather_consent", "newtab_weather = true\nnewtab_weather_city = \"Oslo\"\n");
+    await in_background(WEATHER_SEED);
+    await location_consent("remove");
+    await run_case("without the locationInfo consent a stored reading and a city draw only the permission button and send nothing", async () => {
+      expect(await open_new_tab(".weather-ask"), "the permission button never showed");
+      await new Promise((done) => setTimeout(done, 1000));
+      expect(await in_background(`!${NEWTAB_VIEW}.document.querySelector(".weather-reading")`), "a reading drew without the consent");
+      expect((await weather_requests()) === 0, "the page requested open-meteo without the consent");
+    });
+    await location_consent("grant");
+    await run_case("after the locationInfo consent is granted the stored reading draws", async () => {
+      expect(await open_new_tab(".weather-reading"), "the reading never drew after the grant");
+    });
+
     await use_settings("weather_forget", "newtab_weather = false\n");
     await in_background(WEATHER_SEED);
     await in_background(AIR_SEED);
@@ -150,6 +166,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect((await weather_requests()) === 0, "the page requested open-meteo while the setting is off");
     });
   } finally {
+    await location_consent("grant").catch(() => undefined);
     await close_new_tabs().catch(() => undefined);
     await open_page("page", "weather_restore", { new_tab: true });
     await load_config_dir(config_dir);

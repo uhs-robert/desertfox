@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Renders assets/promo/*.png from docs/images/desertfox-keycap.svg.
+# Renders assets/promo/*.png from docs/images/desertfox-keycap.svg, and amo/icon.png from src/icons/desertfox.svg.
 # Needs rsvg-convert (librsvg) and the DejaVu Sans Bold font; another font changes the text width and so the layout.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -34,3 +34,6 @@ SVG
 }
 
 stacked 1280 800 360 amo-listing
+
+# The listing icon: AMO takes a square PNG or JPEG for it and resizes to 128 px, and the manifest icon is an SVG.
+rsvg-convert -w 128 -h 128 src/icons/desertfox.svg -o amo/icon.png

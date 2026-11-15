@@ -282,9 +282,9 @@ key-test-changed base="origin/main" head="":
 sign: build
     just sign_only
 
-# The signing alone: it builds nothing and installs nothing, so the AMO key reaches no other command. CI runs it in its own job with only the key. It needs dist/ and the locked web-ext already in place.
+# The signing alone: it builds nothing and installs nothing, so the AMO key reaches no other command. CI runs it in its own job with only the key. It needs dist/ and the locked web-ext already in place. With no arguments it signs unlisted and downloads the xpi. The channel `listed` also takes the listing metadata file and the source archive, and downloads nothing: Mozilla reviews the version first.
 [private]
-sign_only:
+sign_only channel="unlisted" metadata="" source="":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -z "${WEB_EXT_API_KEY:-}" ] || [ -z "${WEB_EXT_API_SECRET:-}" ]; then
@@ -306,8 +306,23 @@ sign_only:
     # web-ext 10.7.0 does not create the folder before it downloads the xpi.
     mkdir -p web-ext-artifacts
     # The four page bundles build with source maps for local debugging. The store xpi leaves them out.
-    node_modules/.bin/web-ext sign --channel=unlisted --source-dir dist --artifacts-dir web-ext-artifacts --ignore-files "**/*.map"
-    ls web-ext-artifacts/*.xpi
+    channel={{quote(channel)}}
+    metadata={{quote(metadata)}}
+    source={{quote(source)}}
+    listing_args=()
+    if [ "$channel" = "listed" ]; then
+        if [ ! -f "$metadata" ] || [ ! -f "$source" ]; then
+            echo "A listed sign needs the metadata file and the source archive, found '$metadata' and '$source'." >&2
+            exit 1
+        fi
+        # 0 skips the wait for approval: a listed version waits for Mozilla's review, days or weeks.
+        listing_args=(--amo-metadata "$metadata" --upload-source-code "$source" --approval-timeout 0)
+    elif [ "$channel" != "unlisted" ]; then
+        echo "sign_only takes the channel listed or unlisted, not '$channel'." >&2
+        exit 1
+    fi
+    node_modules/.bin/web-ext sign --channel="$channel" --source-dir dist --artifacts-dir web-ext-artifacts --ignore-files "**/*.map" "${listing_args[@]}"
+    if [ "$channel" = "unlisted" ]; then ls web-ext-artifacts/*.xpi; fi
 
 # Copy the signed add-on into a Firefox profile. Firefox loads it at the next start. No sudo.
 install-profile profile_dir:
@@ -383,36 +398,11 @@ release_commit_push:
 # Folder of the stamped release files, kept between the recipes of one release so publish uploads the bytes the build hashed.
 export RELEASE_ASSETS_DIR := env("RELEASE_ASSETS_DIR", "release-assets")
 
-# Copy the hosts, the command line and install.sh into RELEASE_ASSETS_DIR and write the given version into both hosts as release_version. Then hash the stamped files: a .sha256 per script for the GitHub release, and host_sha256.json (the three scripts under sha256, install.sh as install_sh), which the extension build copies into dist/ so the signed build carries the hashes. Stamping comes first, so the hashes match the shipped bytes.
+# Stamp the hosts with the given version and hash them into RELEASE_ASSETS_DIR (tools/release_stamp.mjs). The extension build copies host_sha256.json into dist/, so the signed build carries the hashes.
 [private]
 release_stamp version:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Callers pass the version from src/manifest.json, not package.json: npm refuses x.y.z.N, so a beta lives in the manifest only and package.json keeps the last stable version.
-    version={{quote(version)}}
-    # The same pattern as VERSION_PATTERN in host/desertfox-host, which refuses to update to any other version.
-    if ! [[ "$version" =~ ^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(\.[1-9][0-9]{0,5})?$ ]]; then
-        echo "release_stamp: '$version' is not x.y.z or x.y.z.N, so no host could update to it." >&2
-        exit 1
-    fi
-    mkdir -p "$RELEASE_ASSETS_DIR"
-    cp host/desertfox-host host/desertfox-bridge host/desertfox host/install.sh "$RELEASE_ASSETS_DIR/"
-    for script in desertfox-host desertfox-bridge; do
-        if [ "$(grep -cx 'RELEASE_VERSION = "dev"' "host/$script")" != 1 ]; then
-            echo "release_stamp: host/$script must hold the line RELEASE_VERSION = \"dev\" exactly once." >&2
-            exit 1
-        fi
-        sed -i "s/^RELEASE_VERSION = \"dev\"\$/RELEASE_VERSION = \"$version\"/" "$RELEASE_ASSETS_DIR/$script"
-    done
-    cd "$RELEASE_ASSETS_DIR"
-    for script in desertfox-host desertfox-bridge desertfox; do
-        sha256sum "$script" > "$script.sha256"
-    done
-    digest() { cut -d ' ' -f 1 "$1.sha256"; }
-    # install_sh sits beside sha256, not in it: self_update refuses a sha256 that names anything but the three scripts.
-    jq -n --arg version "$version" --arg host "$(digest desertfox-host)" --arg bridge "$(digest desertfox-bridge)" --arg cli "$(digest desertfox)" --arg install "$(sha256sum install.sh | cut -d ' ' -f 1)" \
-        '{version: $version, sha256: {"desertfox-host": $host, "desertfox-bridge": $bridge, "desertfox": $cli}, install_sh: $install}' > host_sha256.json
-    echo "stamped the hosts as $version in $RELEASE_ASSETS_DIR"
+    # Callers pass the version from src/manifest.json, not package.json: npm refuses x.y.z.N, so a beta lives in the manifest only and package.json keeps the last stable version. A script, not recipe code, so BUILD.md can give a reviewer the same step without just.
+    node tools/release_stamp.mjs {{quote(version)}}
 
 # Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
 [private]
@@ -498,24 +488,8 @@ release:
     # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
     command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
     gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
-    if [ -z "$amo_key" ] || [ -z "$amo_secret" ]; then
-        for tool in rbw jq; do
-            command -v "$tool" >/dev/null || { echo "release needs $tool to read the AMO key from rbw. Install it, or set WEB_EXT_API_KEY and WEB_EXT_API_SECRET." >&2; exit 1; }
-        done
-        rbw unlocked >/dev/null 2>&1 || { echo "release needs an unlocked rbw vault. Run 'rbw unlock', then retry." >&2; exit 1; }
-        entry_json=$(rbw get --raw "$AMO_RBW_ENTRY") || { echo "release could not read the rbw entry '$AMO_RBW_ENTRY'." >&2; exit 1; }
-        amo_key=$(jq -r '.notes // ""' <<<"$entry_json" | grep -o -m1 'user:[0-9]*:[0-9]*' || true)
-        if [ -z "$amo_key" ]; then
-            echo "The notes of rbw entry '$AMO_RBW_ENTRY' hold no issuer (user:N:N)." >&2
-            exit 1
-        fi
-        amo_secret=$(jq -r '.data.password // ""' <<<"$entry_json")
-        unset entry_json
-        if [ -z "$amo_secret" ]; then
-            echo "The password of rbw entry '$AMO_RBW_ENTRY' is empty." >&2
-            exit 1
-        fi
-    fi
+    source tools/amo_key.sh
+    load_amo_key
     just release_bump
     version=$(jq -r .version src/manifest.json)
     just release_stamp "$version"
@@ -531,6 +505,57 @@ release:
     xpi=$(ls web-ext-artifacts/*.xpi)
     just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
+
+# Write the source archive Mozilla reviewers rebuild from, to RELEASE_ASSETS_DIR/desertfox-<version>-source.zip: every tracked file of HEAD, with BUILD.md at the top. It holds no stamped hosts, since BUILD.md has the reviewer stamp them. Needs a clean tree, so the archive is the commit that gets signed.
+source_archive:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+        echo "source_archive refuses to run with uncommitted changes: the archive is HEAD, so it would not match the build." >&2
+        exit 1
+    fi
+    version=$(jq -r .version src/manifest.json)
+    mkdir -p "$RELEASE_ASSETS_DIR"
+    archive="$RELEASE_ASSETS_DIR/desertfox-$version-source.zip"
+    git archive --format=zip -o "$archive" HEAD
+    echo "$archive"
+
+# Submit dist/ to the listed channel on addons.mozilla.org with the listing text in amo/metadata.json and the source archive. PUBLIC and one-way: AMO signs a version number once, and the listing page exists afterwards. It stamps and builds the version in src/manifest.json itself so the build, the archive and the hosts agree, and refuses a beta version or an update_url, which only unlisted builds carry. Mozilla then reviews it. After approval, publish the GitHub release for the same version with `just release_publish`. Needs a clean release branch. CI never runs it.
+sign_listed:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "${CI:-}" ]; then
+        echo "sign_listed never runs in CI: a listed submission is public and one-way." >&2
+        exit 1
+    fi
+    # Same rule as release: the key stays in unexported shell variables and no build step can read it.
+    amo_key="${WEB_EXT_API_KEY:-}"
+    amo_secret="${WEB_EXT_API_SECRET:-}"
+    unset WEB_EXT_API_KEY WEB_EXT_API_SECRET
+    just release_guard
+    just install_deps
+    version=$(jq -r .version src/manifest.json)
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "sign_listed needs a three-number version, found '$version'. Four numbers are betas." >&2
+        exit 1
+    fi
+    if [ -n "$(jq -r '.browser_specific_settings.gecko.update_url // empty' src/manifest.json)" ]; then
+        echo "sign_listed refuses a manifest with an update_url: AMO updates a listed add-on itself." >&2
+        exit 1
+    fi
+    jq -e '.version.license and (.summary["en-US"] | length <= 250)' amo/metadata.json >/dev/null || { echo "amo/metadata.json needs version.license and a summary of at most 250 characters." >&2; exit 1; }
+    just release_stamp "$version"
+    just build
+    # Check before submitting: AMO signs a version once, so a build without the hashes must never reach it.
+    if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
+        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json. Nothing was submitted." >&2
+        exit 1
+    fi
+    archive=$(just source_archive)
+    source tools/amo_key.sh
+    load_amo_key
+    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just sign_only listed amo/metadata.json "$archive"
+    echo "Submitted $version for review. Paste docs/privacy.md into the privacy policy field and add the previews on the listing page (see amo/README.md)."
 
 # Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
 [private]

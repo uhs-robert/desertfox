@@ -1,0 +1,33 @@
+{
+  "name": {
+    "en-US": "DesertFox"
+  },
+  "summary": {
+    "en-US": "Use Firefox from the keyboard. Link hints, a command line with completion, a which-key popup, modes, macros and per-site rules, all built on one command registry."
+  },
+  "description": {
+    "en-US": "DesertFox lets you use Firefox from the keyboard. Press f and a short label appears next to every link and button. Type a label to click it. Press j and k to scroll, and : to run any command by name, with completion.\n\nYou do not have to memorize keys. After any key, a short pause opens a which-key popup that lists the keys that can follow and what each does. Press g? to open the help page, which lists every key. After you install it, a Quick Start page teaches the first keys.\n\nThe keys follow Vim habits: modes, hjkl to scroll, gg and G to jump, yy to copy, / to search, counts, registers and macros. You do not need to know Vim.\n\nFeatures\n- Link hints with modifiers and filters, and keyboard drag.\n- A command line with completion over tabs, history, bookmarks, commands and settings.\n- Caret and visual mode for selecting and copying text.\n- Macros, registers, quickmarks and custom search engines.\n- Per-site rules, and built-in key integrations for specific sites.\n- A built-in new tab page with a clock, your links, and optional weather and IP cards.\n- A settings page, themes, and a config you can export and import as a zip.\n- A Practice page that teaches the keys by doing.\n\nIt checks what you give it. A typo in a key, command or config line is an error with a message, never a silent no-op. DesertFox never runs the keys, commands or config lines you type as code. The only exception is a snippet you write in your own config or import with your consent, which runs in the page you name.\n\nOptional native host (Linux only)\nFirefox does not let extensions read files or start programs. A small helper program adds editing a text field in your own editor, keys that open Firefox pages, and config files in ~/.config/desertfox/. You do not need it. You install it yourself with a command that DesertFox shows and you paste into a terminal, then grant the nativeMessaging permission with a button. The helper takes a fixed set of requests and has no shell. Its source is in the repository.\n\nPrivacy\nDesertFox has no account, no telemetry and no analytics. Settings and state stay in Firefox storage on your device. Two optional new tab cards contact a server: the weather card (Open-Meteo, after you allow location information from its button) and the IP info line (Cloudflare, off by default). The privacy policy lists exactly what each sends.\n\nSource code, issues and docs: https://github.com/uhs-robert/desertfox"
+  },
+  "categories": {
+    "firefox": [
+      "tabs",
+      "appearance"
+    ]
+  },
+  "homepage": {
+    "en-US": "https://github.com/uhs-robert/desertfox"
+  },
+  "support_url": {
+    "en-US": "https://github.com/uhs-robert/desertfox/issues"
+  },
+  "default_locale": "en-US",
+  "is_experimental": false,
+  "requires_payment": false,
+  "version": {
+    "license": "MPL-2.0",
+    "release_notes": {
+      "en-US": "First release on addons.mozilla.org."
+    },
+    "approval_notes": "Build: the source archive builds the submitted files. BUILD.md at its root lists the steps: Node 24, npm ci, node tools/release_stamp.mjs <version>, npm run build. The output is dist/. The xpi is dist/ without the *.map files. The stamp step writes dist/host_sha256.json, the SHA-256 of the native host scripts of this release.\n\nRemote code: the add-on loads no remote code and does not use the userScripts API. Every script and page is in the package. Every network request goes to a fixed host: api.open-meteo.com, geocoding-api.open-meteo.com and air-quality-api.open-meteo.com (optional weather card, after the user allows the optional locationInfo data collection permission from a button) and 1.1.1.1/cdn-cgi/trace (optional IP info line, off by default). Both send no cookies and no referrer. Commands that copy or save an image fetch it from its own page.\n\nSnippets: tabs.executeScript with a code string runs only a snippet that the user wrote in their own config folder or imported. Every import shows the code of each snippet and asks for consent per snippet before it is stored. The add-on ships no snippet, and nothing fetches one from a developer server. Content script keys never evaluate strings.\n\nNative host: nativeMessaging is an optional permission, requested from a button on the :native.install page. The host is a Linux-only Python script with a fixed set of verbs and no shell or eval verb (host/README.md). Its install command and its optional self update (off by default, setting host_auto_update) download scripts from this repository's GitHub releases over HTTPS. The install command or the update checks each script against SHA-256 hashes that ship inside this signed add-on (host_sha256.json), and a script that does not match is refused. The host is not part of the add-on package.\n\nPermissions:\n- tabs, webNavigation, sessions, tabGroups, contextualIdentities: tab, window, container and tab group commands, closed-tab undo, and page load state for the stop and media commands.\n- bookmarks, history: command line completion and the bookmark commands.\n- downloads: the download and save commands. notifications: toasts that report a command result.\n- clipboardWrite: copy commands. clipboardRead: the paste commands and registers, read only when the user runs such a command.\n- cookies, optional browsingData: the hard reload with cache clear and the site data clear commands.\n- storage: settings, keymap and state.\n- <all_urls>: the content script runs at document_start in every frame, handles keys and draws hints. This is the product.\n- optional nativeMessaging: the native host above. optional geolocation: the weather card, from its button.\n\nData collection: required is none. optional is locationInfo, requested with permissions.request from the weather card's button. The card sends only rounded coordinates or the city name the user typed."
+  }
+}

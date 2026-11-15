@@ -582,11 +582,11 @@ export async function create_session({ name: session_name, timings, sweep = true
   // Firefox shows a notice in a window of its own (user.js), which holds the keyboard focus until it closes.
   const clear_notices = () => in_background(`(async () => { for (const id of Object.keys(await browser.notifications.getAll())) await browser.notifications.clear(id); })()`);
   // Grants or removes optional permissions from chrome code, as Firefox does after the user answers its prompt. The third argument tells the running background at once, so no reload follows.
-  const set_optional_permissions = async (action, permissions) => {
+  const set_optional_permissions = async (action, permissions, data_collection = []) => {
     const result = await evaluate_in_chrome(rdp, `(async () => {
       const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
       const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
-      await ExtensionPermissions.${action === "grant" ? "add" : "remove"}("${EXTENSION_ID}", { permissions: ${JSON.stringify(permissions)}, origins: [] }, extension);
+      await ExtensionPermissions.${action === "grant" ? "add" : "remove"}("${EXTENSION_ID}", { permissions: ${JSON.stringify(permissions)}, origins: [], data_collection: ${JSON.stringify(data_collection)} }, extension);
     })()`);
     if (result?.error) throw new Error(`${action} of ${permissions} failed: ${result.error}`);
   };

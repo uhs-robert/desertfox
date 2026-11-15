@@ -1,4 +1,4 @@
-// The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off when `newtab_weather` is false, and sends nothing until a position is granted or a city is set. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
+// The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off when `newtab_weather` is false, and sends nothing until the user grants the optional `locationInfo` data collection permission and a position is granted or a city is set. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { draw_weather_icon } from "./weather_icon.ts";
@@ -27,11 +27,13 @@ export type WeatherView = { kind: "weather"; weather: Weather } | { kind: "ask_l
 
 export type WeatherDeps = {
   page_is_private: () => Promise<boolean>;
+  // The optional `locationInfo` data collection permission. Without it the card sends nothing, whatever place it has.
+  has_location_consent: () => Promise<boolean>;
   has_geolocation_permission: () => Promise<boolean>;
   // Resolves with the position, rejects when the browser or the user refuses.
   current_position: () => Promise<{ latitude: number; longitude: number }>;
-  // Must be called from the click handler with no await before it, or Firefox refuses it.
-  request_geolocation_permission: () => Promise<boolean>;
+  // Asks for the data consent and the geolocation permission in one prompt. Must be called from the click handler with no await before it, or Firefox refuses it.
+  request_location_access: () => Promise<boolean>;
   net: NetEnv;
 };
 
@@ -192,13 +194,17 @@ const is_weather_in = (setting: UnitsSetting, now: () => number) => (stored: unk
 // The forecast is for one local date. After midnight at the place its high, low, UV and sun times belong to yesterday, so the stored answer is fetched again instead of shown.
 const is_past_date = (weather: Pick<Weather, "date" | "utc_offset_seconds">, now_ms: number): boolean => new Date(now_ms + weather.utc_offset_seconds * 1000).toISOString().slice(0, 10) !== weather.date;
 
-// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Geolocation comes first when its permission is already granted, and a stored reading draws before the position arrives. A city is the fallback, and with neither the card offers the permission button and sends no request.
+// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Without the data consent the card only offers the button. Geolocation comes first when its permission is already granted, and a stored reading draws before the position arrives. A city is the fallback, and with neither the card offers the permission button and sends no request.
 export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, show: (view: WeatherView) => void): Promise<void> {
   if (settings.newtab_weather !== true) return;
   if (await refused_as(deps.page_is_private(), true)) return;
   const city = (settings.newtab_weather_city ?? "").trim();
   const units: UnitsSetting = settings.newtab_weather_units === "imperial" || settings.newtab_weather_units === "metric" ? settings.newtab_weather_units : "auto";
   const show_weather = (weather: Weather) => show({ kind: "weather", weather });
+  if (!(await refused_as(deps.has_location_consent(), false))) {
+    show({ kind: "ask_location" });
+    return;
+  }
   const has_permission = await refused_as(deps.has_geolocation_permission(), false);
   // Offered until the permission is granted, even with a city set. Once granted, the position wins over the city.
   if (!has_permission) show({ kind: "ask_location" });
@@ -314,9 +320,10 @@ export function draw_weather(slot: HTMLElement, view: WeatherView, on_ask: () =>
 
 export const browser_weather_deps = (): WeatherDeps => ({
   page_is_private: async () => (await browser.windows.getCurrent()).incognito,
+  has_location_consent: () => browser.permissions.contains({ data_collection: ["locationInfo"] }),
   has_geolocation_permission: () => browser.permissions.contains({ permissions: ["geolocation"] }),
   current_position: () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition((found) => resolve(found.coords), reject, { timeout: GEOLOCATION_TIMEOUT_MS, maximumAge: WEATHER_TTL_MS })),
-  request_geolocation_permission: () => browser.permissions.request({ permissions: ["geolocation"] }),
+  request_location_access: () => browser.permissions.request({ permissions: ["geolocation"], data_collection: ["locationInfo"] }),
   net: browser_net_env(),
 });
 
@@ -333,7 +340,7 @@ export function start_weather(slot: HTMLElement, settings: WeatherSettings, deps
   const net = stoppable_net(deps.net, () => live);
   const air = make_air_loader(net, () => live);
   const ask_for_location = () => {
-    void refused_as(deps.request_geolocation_permission(), false).then((granted) => {
+    void refused_as(deps.request_location_access(), false).then((granted) => {
       if (!granted || !live) return;
       live = false;
       slot.replaceChildren();
