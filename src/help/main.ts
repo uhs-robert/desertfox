@@ -27,6 +27,7 @@ import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../bac
 import { create_host_start_session } from "./host_start_model.ts";
 import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "./route.ts";
+import type { PageId } from "./route.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
@@ -199,10 +200,13 @@ async function load_inputs(): Promise<Inputs> {
 }
 
 // The Settings page follows storage by itself and keeps what the user is typing, so a full redraw there would only clobber it. It still takes the new inputs, for the next page.
+// The Practice page is left alone for the same reason: a theme change must keep the typed text, the selection and the caret. Its prompts follow a rebind when the page opens again.
+const REDRAW_FREE_PAGES: PageId[] = ["settings", "practice"];
+
 async function draw(first: boolean): Promise<void> {
   current = await load_inputs();
   if (first) show_route(current.model_, current.guide, current.engines, "first");
-  else if (parse_route(location.hash).page !== "settings") show_route(current.model_, current.guide, current.engines, "refresh");
+  else if (!REDRAW_FREE_PAGES.includes(parse_route(location.hash).page)) show_route(current.model_, current.guide, current.engines, "refresh");
   else update_config_source(current.model_);
 }
 

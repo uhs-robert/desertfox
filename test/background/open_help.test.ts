@@ -58,7 +58,7 @@ test("help_name_url hands the Site Rules page the address, encoded as one value,
 });
 
 test("help_name_choices lists the pages, then the commands, and no Quick Start section", () => {
-  assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "settings", "quick_start", "commands", "search_engines", "styling", "site_rules", "scroll.top"]);
+  assert.deepEqual(help_name_choices(["scroll.top"]), ["home", "settings", "quick_start", "practice", "commands", "search_engines", "styling", "site_rules", "scroll.top"]);
 });
 
 const HELP = "moz-extension://x/home.html";

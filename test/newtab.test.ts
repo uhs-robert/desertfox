@@ -102,7 +102,7 @@ test("the built-in text links are Getting Started and Help, and Settings is one 
   const html = readFileSync(new URL("../src/newtab/newtab.html", import.meta.url), "utf8");
   const nav = /<nav class="builtin-links">([\s\S]*?)<\/nav>/.exec(html)![1]!;
   const anchors = [...nav.matchAll(/<a href="([^"]*)">([^<]*)<\/a>/g)].map((match) => [match[2], match[1]]);
-  assert.deepEqual(anchors, [["Getting Started", "home.html#/quick-start"], ["Help", "home.html"]]);
+  assert.deepEqual(anchors, [["Getting Started", "home.html#/quick-start"], ["Practice", "home.html#/practice"], ["Help", "home.html"]]);
   assert.match(html, /<a class="settings-gear" href="home\.html#\/settings" aria-label="Settings"[^>]*>\s*<svg[^>]*aria-hidden="true">/);
   assert.equal(html.match(/home\.html#\/settings/g)?.length, 1, "one Settings link");
 });
