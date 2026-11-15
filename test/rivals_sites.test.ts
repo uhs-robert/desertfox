@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, CROSS_FRAME_ROWS, judge_frame_entry, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, judge_load_focus, needs_load_focus, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, interstitial_click, MAX_INTERSTITIAL_TRIES, CROSS_FRAME_ROWS, judge_frame_entry, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, judge_load_focus, needs_load_focus, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -541,4 +541,13 @@ test("Tab presses stop at the limit when the focus never gets inside", async () 
 test("the note names the Tab count, and whether the work area was reached", () => {
   assert.equal(tab_note({ tabs: 4, reached: true }), "Tab presses to reach the work area: 4");
   assert.equal(tab_note({ tabs: 30, reached: false }), "Tab did not reach the work area in 30 presses");
+});
+
+test("a known interstitial gives a click selector, the real page and other walls give none", () => {
+  const amazon = "https://www.amazon.com/";
+  assert.match(interstitial_click({ url: amazon, text: "Click the button below to continue shopping\nContinue shopping" }), /validateCaptcha/);
+  assert.equal(interstitial_click({ url: amazon, text: "Amazon.com. Spend less. Smile more." }), null);
+  assert.equal(interstitial_click({ url: amazon, text: "Enter the characters you see below" }), null);
+  assert.equal(interstitial_click({ url: "https://example.com/", text: "Click the button below to continue shopping" }), null);
+  assert.equal(MAX_INTERSTITIAL_TRIES, 3);
 });

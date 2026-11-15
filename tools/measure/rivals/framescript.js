@@ -120,6 +120,14 @@ const answer = (name, job) => addMessageListener("rivals:" + name, ({ data }) =>
 
 answer("page_info", async () => ({ url: String(content.location), title: content.document.title, text: (content.document.body?.innerText ?? "").slice(0, 3000), content_type: content.document.contentType }));
 
+// Clicks the first element matching the selector. The click may navigate and end this script, so run.mjs loads it again afterwards.
+answer("click", async ({ selector }) => {
+  const el = content.document.querySelector(selector);
+  if (!el) return { clicked: false };
+  el.click();
+  return { clicked: true };
+});
+
 // The baseline of the scroll check, taken just before the key: the window's offset and each element that can scroll vertically, with the area of it inside the viewport. sites.mjs picks the main scroller from them.
 answer("scroll_baseline", async () => {
   const can_scroll = (el) => el.scrollHeight > el.clientHeight + 1 && ["auto", "scroll", "overlay"].includes(content.getComputedStyle(el).overflowY);

@@ -105,7 +105,9 @@ export const as_action = (result) => (result.status === "fail" ? { ...result, st
 // The page a site shows a fresh headless profile instead of the real one. A wall is not a fail of any tool, so every check of the site takes its status, `wall` or `login`.
 const LOGIN_URL = /\/(login|signin|sign_in|i\/flow\/login)\b|accounts\.google\.com\/|ServiceLogin/i;
 const BLOCKED_URL = /^https:\/\/consent\.|\/sorry\/|captcha/i;
-const BLOCKED_TEXT = [/unusual traffic/i, /verify (that )?you are (a )?human/i, /are you a robot/i, /enter the characters you see/i, /blocked by network security/i, /sign in to confirm you.re not a bot/i, /before you continue to/i, /click the button below to continue shopping/i, /access denied/i];
+// Shared by the wall list and the interstitial table.
+const AMAZON_CONTINUE_TEXT = /click the button below to continue shopping/i;
+const BLOCKED_TEXT = [/unusual traffic/i, /verify (that )?you are (a )?human/i, /are you a robot/i, /enter the characters you see/i, /blocked by network security/i, /sign in to confirm you.re not a bot/i, /before you continue to/i, AMAZON_CONTINUE_TEXT, /access denied/i];
 const BLOCKED_TITLE = /^just a moment|^attention required|^access denied/i;
 
 export function page_wall({ url, title, text }) {
@@ -115,6 +117,15 @@ export function page_wall({ url, title, text }) {
   const hit = BLOCKED_TEXT.find((pattern) => pattern.test(text));
   if (hit) return { status: "wall", reason: `wall text: ${text.match(hit)[0]}` };
   return null;
+}
+
+// Interstitials that a click gets past, for sites that show one before the real page. Anything not listed stays a wall.
+const INTERSTITIALS = [{ url: /^https:\/\/www\.amazon\.com\//, text: AMAZON_CONTINUE_TEXT, click: "form[action*=validateCaptcha] button" }];
+export const MAX_INTERSTITIAL_TRIES = 3;
+
+// The selector to click when the page is a known interstitial, else null.
+export function interstitial_click({ url, text }) {
+  return INTERSTITIALS.find((entry) => entry.url.test(url) && entry.text.test(text))?.click ?? null;
 }
 
 // The page's main scroller, when the window itself does not scroll: the scrollable element with the largest visible area, if it covers at least a quarter of the viewport. A carousel, a chat list or a code line is never the main scroller, so its own movement cannot pass a scroll check.

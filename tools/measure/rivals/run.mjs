@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, check_names_of, CROSS_FRAME_ROWS, FRAME_ROWS, judge_frame_entry, judge_load_focus, LOAD_FOCUS_ROWS, needs_load_focus, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, interstitial_click, MAX_INTERSTITIAL_TRIES, check_names_of, CROSS_FRAME_ROWS, FRAME_ROWS, judge_frame_entry, judge_load_focus, LOAD_FOCUS_ROWS, needs_load_focus, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -424,6 +424,10 @@ async function movement_check(input, probe_name, { start = null } = {}) {
 // open_page polls every 100 ms, so a live page gets about 30 s to load.
 const LIVE_LOAD_ATTEMPTS = 300;
 const RENDER_MS = 5000;
+const INTERSTITIAL_WAIT_MS = 6000;
+
+// A click that navigates ends the frame script before it replies, so ask_page times out. That timeout is expected. Any other error is rethrown.
+const click_ended_script = (error) => { if (!/long job timeout/.test(String(error.message ?? error))) throw error; };
 
 // Loads the url, lets an app render after the load event, and returns what the page shows. A page that never completes still gets its checks.
 async function load_live(url) {
@@ -432,7 +436,16 @@ async function load_live(url) {
   await sleep(RENDER_MS);
   await chrome(`(async () => { ${selected_browser}.focus(); return 1; })()`);
   // A page that swapped its content process has lost the frame script, so a first miss loads it again.
-  const info = await ask_page("page_info", {}, 5000).catch(async () => { await load_frame_script(); return ask_page("page_info", {}, 5000); });
+  const read_info = () => ask_page("page_info", {}, 5000).catch(async () => { await load_frame_script(); return ask_page("page_info", {}, 5000); });
+  let info = await read_info();
+  // The click navigates, which ends the frame script, so each try reads through read_info again. After the last try the page_wall check still reports a page that stays blocked.
+  for (let attempt = 0; attempt < MAX_INTERSTITIAL_TRIES; attempt++) {
+    const selector = interstitial_click(info);
+    if (!selector) break;
+    await ask_page("click", { selector }, 5000).catch(click_ended_script);
+    await sleep(INTERSTITIAL_WAIT_MS);
+    info = await read_info();
+  }
   return { loaded, info };
 }
 
