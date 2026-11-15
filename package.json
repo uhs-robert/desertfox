@@ -2,7 +2,7 @@
   "name": "desertfox",
   "version": "0.1.24",
   "private": true,
-  "description": "Keyboard-first Firefox extension built around one command registry.",
+  "description": "Vim keys for Firefox. Desert the mouse. The keys teach themselves.",
   "license": "MPL-2.0",
   "type": "module",
   "scripts": {

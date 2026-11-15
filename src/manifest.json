@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "DesertFox: Vim keys for Firefox",
   "version": "0.1.24",
-  "description": "Keyboard-first Firefox extension built around one command registry.",
+  "description": "Vim keys for Firefox. Desert the mouse. The keys teach themselves.",
   "browser_specific_settings": {
     "gecko": {
       "id": "desertfox@uhs-robert",
