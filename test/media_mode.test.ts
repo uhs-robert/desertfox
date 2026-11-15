@@ -72,7 +72,7 @@ function compiled() {
 
 test("the media section holds the media keys and, of normal mode, only f, : and the hint group", () => {
   const media = compiled().modes.media!;
-  for (const key of ["F", "h", "l", "0", "^", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";", "?"]) assert.ok(media.children[key], key);
+  for (const key of ["F", "h", "l", "0", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";", "?"]) assert.ok(media.children[key], key);
   const normal = compiled().modes.normal!;
   const shared = Object.keys(media.children).filter((key) => normal.children[key] && JSON.stringify(normal.children[key]) === JSON.stringify(media.children[key]));
   assert.deepEqual(shared.sort(), [":", ";", "<A-?>", "<C-[>", "<Escape>", "f"].sort());

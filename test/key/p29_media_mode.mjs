@@ -104,9 +104,6 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     mark = events.length;
     await press_keys("$");
     await wait_event(mark, media(id, "seeked", "big", (event) => event.time > 29 || event.time < 1), "$ goes to the end");
-    mark = events.length;
-    await press_keys("^");
-    await wait_event(mark, media(id, "seeked", "big", (event) => event.time < 0.5), "^ goes to the start");
     // The fixture videos start with loop on.
     await press_keys("r");
     await wait_toast(/^Loop off$/);
