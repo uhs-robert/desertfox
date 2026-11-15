@@ -96,6 +96,55 @@ const BINDINGS = {
   edit_external: { mode: "insert", id: "text.edit_external", args: {} },
   reload: { mode: "normal", id: "config.reload", args: {} },
   find_anything: { mode: "normal", id: "open.anything", args: {} },
+  // The Practice lessons. Each names the fastest key for its task.
+  left: { mode: "normal", id: "scroll.pixels", args: { dx: -50 } },
+  right: { mode: "normal", id: "scroll.pixels", args: { dx: 50 } },
+  half_page_up: { mode: "normal", id: "scroll.pages", args: { fraction: -0.5 } },
+  // `,?` is shorter in keymap notation, but the chord works in every mode.
+  whichkey: { mode: "normal", id: "help.whichkey", args: {}, prefer: "<A-?>" },
+  zoom_in: { mode: "normal", id: "zoom.by", args: { delta: 0.1 }, prefer: "zi" },
+  zoom_reset: { mode: "normal", id: "zoom.set", args: { level: 1 } },
+  next_heading: { mode: "normal", id: "page.heading", args: { direction: "next" } },
+  previous_heading: { mode: "normal", id: "page.heading", args: { direction: "prev" } },
+  headings: { mode: "normal", id: "cmdline.open", args: { text: "heading " } },
+  hint_text: { mode: "hint", id: "hint.key", args: { key: "slash" } },
+  hint_background: { mode: "normal", id: "hint.run", args: { action: "background" } },
+  hint_inputs: { mode: "normal", id: "hint.run", args: { filter: "inputs" } },
+  hint_inputs_rapid: { mode: "normal", id: "hint.run", args: { filter: "inputs", rapid: true } },
+  hint_buttons: { mode: "normal", id: "hint.run", args: { filter: "buttons" } },
+  hint_copy_text: { mode: "normal", id: "hint.run", args: { action: "copy_text", filter: "all" } },
+  grab_move: { mode: "normal", id: "hint.run", args: { action: "grab_move", filter: "draggable" } },
+  grab_drop_on: { mode: "normal", id: "hint.run", args: { action: "grab", filter: "draggable" } },
+  grab_left: { mode: "grab", id: "grab.move", args: { direction: "left" } },
+  grab_right: { mode: "grab", id: "grab.move", args: { direction: "right" } },
+  grab_drop: { mode: "grab", id: "grab.drop", args: {} },
+  grab_keys: { mode: "grab", id: "help.whichkey", args: {}, prefer: "?" },
+  focus_input: { mode: "normal", id: "page.focus_input", args: {}, prefer: "gi" },
+  next_field: { mode: "normal", id: "page.focus_field", args: { direction: "next" } },
+  previous_field: { mode: "normal", id: "page.focus_field", args: { direction: "prev" } },
+  sentence_object: { mode: "visual", id: "visual.object", args: { object: "sentence" } },
+  back: { mode: "normal", id: "page.back", args: {} },
+  tab_switch: { mode: "normal", id: "tab.switch", args: {}, prefer: "T" },
+  tab_alternate: { mode: "normal", id: "tab.alternate", args: {}, prefer: "gl" },
+  tab_next: { mode: "normal", id: "tab.next", args: {}, prefer: "J" },
+  tab_previous: { mode: "normal", id: "tab.prev", args: {}, prefer: "K" },
+  list_close: { mode: "cmdline", id: "list.act", args: { action: "close" } },
+  media_enter: { mode: "normal", id: "media.act", args: { action: "enter" } },
+  media_play: { mode: "media", id: "media.act", args: { action: "play_pause" }, prefer: "<Space>" },
+  media_forward: { mode: "media", id: "media.act", args: { action: "seek", value: "up" } },
+  media_backward: { mode: "media", id: "media.act", args: { action: "seek", value: "down" } },
+  media_louder: { mode: "media", id: "media.act", args: { action: "volume", value: "up" } },
+  media_quieter: { mode: "media", id: "media.act", args: { action: "volume", value: "down" } },
+  media_faster: { mode: "media", id: "media.act", args: { action: "speed", value: "up" } },
+  media_speed_reset: { mode: "media", id: "media.act", args: { action: "speed", value: "reset" } },
+  media_mute: { mode: "media", id: "media.act", args: { action: "mute" } },
+  media_fullscreen: { mode: "media", id: "media.act", args: { action: "fullscreen" } },
+  media_keys: { mode: "media", id: "help.whichkey", args: {}, prefer: "?" },
+  mark: { mode: "normal", id: "mark.add", args: {} },
+  mark_jump: { mode: "normal", id: "mark.jump", args: {}, prefer: "'" },
+  jump_back: { mode: "normal", id: "page.jump", args: { direction: "older" } },
+  ignore: { mode: "normal", id: "mode.set", args: { mode: "ignore" }, prefer: "<S-Escape>" },
+  pass_next: { mode: "normal", id: "mode.pass_next", args: {} },
   firefox_settings: { mode: "normal", id: "browser.open_firefox_page", args: { page: "settings" } },
 } satisfies Record<string, Binding>;
 
@@ -124,7 +173,7 @@ export function key_text(compiled: CompiledKeymap | undefined, commands: Command
 }
 
 // Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name.
-function sentence(compiled: CompiledKeymap | undefined, commands: CommandMeta[], template: string): Inline[] {
+export function sentence(compiled: CompiledKeymap | undefined, commands: CommandMeta[], template: string): Inline[] {
   return template
     .split(/(\{[a-z_]+\}|\[[^\]]+\])/)
     .filter((part) => part !== "")
@@ -152,52 +201,15 @@ export function tip_block(compiled: CompiledKeymap | undefined, commands: Comman
   return { kind: "tip", inlines: sentence(compiled, commands, "Press {cmdline} to open the command line, a box at the bottom of the page where you type commands. Type [help] and a page name, such as [help settings], to open that page.") };
 }
 
-export type PracticeArea = "scroll" | "hints" | "cmdline" | "whichkey" | "find" | "caret" | "insert" | "slider" | "dropdown" | "radio" | "details" | "tabs";
-
-// The Practice page sections, in page order. The tall scroll area comes last so the targets above it stay in view.
-export const PRACTICE_AREAS: { area: PracticeArea; title: string }[] = [
-  { area: "hints", title: "Click with hints" },
-  { area: "find", title: "Search the page" },
-  { area: "caret", title: "Caret and visual mode" },
-  { area: "insert", title: "Type in a box" },
-  { area: "slider", title: "Range control" },
-  { area: "dropdown", title: "Choice list" },
-  { area: "radio", title: "Radio buttons" },
-  { area: "details", title: "Collapsible section" },
-  { area: "whichkey", title: "Which-key" },
-  { area: "cmdline", title: "The command line" },
-  { area: "tabs", title: "Find a tab" },
-  { area: "scroll", title: "Scroll" },
-];
-
-// One short prompt for each area of the Practice page, built from the same keymap as the Quick Start text.
-export function practice_prompts(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Record<PracticeArea, Inline[]> {
-  const say = (template: string) => sentence(compiled, commands, template);
-  const prefix = prefix_key(compiled, commands);
-  return {
-    scroll: say("Press {down} and {up} to scroll. {bottom} jumps to the end of the page and {top} back to the start."),
-    hints: say("Press {hint}, then type the letters of a label to click a link or button. The log line below shows what you clicked. {escape} cancels."),
-    cmdline: say("Press {cmdline}, type [set -t theme catppuccin] and press Enter. The page changes colors at once, until the browser restarts. Type [unset -t theme] to get your own theme back."),
-    whichkey: prefix === undefined ? say("No key starts a longer sequence now, so there is no which-key panel to show.") : say(`Press [${prefix}] and wait. The which-key panel lists the keys that can come next. {escape} closes it.`),
-    find: say("Press {find}, type [fox] and press Enter. {next} jumps to the next match and {previous} to the one before."),
-    caret: say("Press {caret_at_text}, then type the label of a paragraph below. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}. Press {visual} to select, then {yank} to copy. {escape} steps back."),
-    insert: say("Press {insert} or click a box, then type. {escape} leaves insert mode. In the paste box, press Ctrl+V to paste what you copied."),
-    slider: say("Press {hint}, then [/], then type [Slider] to focus the slider. Then move it with the arrow keys. The line under it shows its value."),
-    dropdown: say("Press {hint}, then [/], then type [Dropdown] to focus the dropdown. Press the arrow keys to change the choice. The line under it shows it."),
-    radio: say("Press {hint}, then [/], then type [Alpha], [Bravo] or [Charlie] to choose that radio button. Only one in the group stays chosen. The line under them shows which."),
-    details: say("Press {hint}, then [/], then type [Show more] to open or close the section. The line under it shows which."),
-    tabs: say("Open both links below in new tabs, then press {find_anything} and type part of a tab title to jump to it."),
-  };
-}
-
 export function quick_start_blocks(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block[] {
   const say = (template: string): Block => ({ kind: "paragraph", inlines: sentence(compiled, commands, template) });
   const bullets = (templates: string[]): Block => ({ kind: "list", items: templates.map((template) => sentence(compiled, commands, template)) });
   const prefix = prefix_key(compiled, commands);
   const heading = (text: string): Block => ({ kind: "heading", level: 2, text });
   return [
+    // The first line a new install shows: the way to the lessons, by the key they start with.
+    { kind: "paragraph", inlines: [...sentence(compiled, commands, "New here? Press {hint}. Letters appear on every link. Type the letters on the "), { kind: "link", text: "Practice page", href: "#/practice" }, { kind: "text", text: " to learn the keys in short lessons." }] },
     say("DesertFox puts the browser on the keyboard. The keys on this page work as they do on any page, so try each one as you read. The keys shown are the ones set up for you."),
-    { kind: "paragraph", inlines: [{ kind: "text", text: "For a page made to try each key on, open the " }, { kind: "link", text: "Practice page", href: "#/practice" }, { kind: "text", text: "." }] },
     heading("Scroll"),
     say("Press {down} to scroll down and {up} to scroll up. {top} jumps to the top of the page and {bottom} to the bottom. {half_page} moves half a page."),
     heading("Click with hints"),

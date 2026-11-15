@@ -124,6 +124,12 @@
   .desertfox-help kbd { color: var(--desertfox-primary); }
   .desertfox-help-mode { padding: 0 .55rem; border-radius: 999px; background: color-mix(in srgb, var(--desertfox-primary) 18%, transparent); font-size: .8em; line-height: 1.5; }
   .desertfox-help-muted { opacity: .6; }
+  /* A lesson fills the view, so a jump to its heading leaves only its own targets on screen and their hint labels stay one letter. */
+  .desertfox-practice-lesson { min-height: 100vh; }
+  .desertfox-practice-intro { min-height: 85vh; }
+  /* Wider than the page, so the sideways scroll keys have something to move. */
+  .desertfox-practice-strip { overflow-x: auto; max-width: 80ch; }
+  .desertfox-practice-strip p { max-width: none; white-space: nowrap; }
   .desertfox-help-shadowed { opacity: .5; }
   .desertfox-help-current { outline: 2px solid var(--desertfox-primary); }
   .desertfox-help-tip {

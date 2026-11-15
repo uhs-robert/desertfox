@@ -1,187 +1,405 @@
-// The Practice page: one small target for each kind of key, so a reader can try them with nothing at stake.
-// The element ids are fixed because the key test and the demo script address the targets by id.
+// The Practice page: a sequence of short lessons, each with a goal, the keys, a target to try them on and check lines that turn to "Done" when the page sees the step.
+// The element ids are fixed, because the key test and the demo script address the targets and the check lines by id.
 
-import { el, inline_node, new_tab_link, page_sections, section_hash, section_heading } from "./render.ts";
-import { PRACTICE_AREAS } from "./quick_start.ts";
-import type { PracticeArea } from "./quick_start.ts";
+import { el, inline_node, new_tab_link, section_hash, section_heading } from "./render.ts";
+import { practice_check_id, PRACTICE_VIDEO_URL } from "./practice_lessons.ts";
+import type { LessonSlug, PracticeLesson } from "./practice_lessons.ts";
 import type { Inline } from "./blocks.ts";
 
-export const PRACTICE_LOG_ID = "practice-log";
+export type PracticeText = { intro: Inline[]; outro: Inline[]; lessons: PracticeLesson[] };
 
-const PROSE = [
+const FIND_PROSE = [
   "The desert fox keeps cool by being awake at night. Its large ears let heat leave the body, and its pale coat turns the sun away during the day.",
   "A fox listens before it moves. It can hear a beetle under the sand, and it tilts its head to place the sound before it pounces.",
-  "Foxes dig dens deep into the dunes, where the sand stays cool at noon. At dusk the family comes out into the open and the day begins again.",
+  "Foxes dig dens deep into the dunes, where the sand stays cool at noon. At dusk the fox family comes out into the open and the day begins again.",
 ];
+const COPY_FIRST_SENTENCE = "Rain is rare in the desert.";
+const COPY_PROSE = [`${COPY_FIRST_SENTENCE} When it comes, seeds that waited for years bloom within days.`, "A dune moves a few steps each year. The wind lifts sand from one side and drops it on the other."];
+const CHOICES = ["Sand", "Dune", "Oasis"];
+const SLIDER_GOAL = "7";
+const STRIP_WORDS = 60;
 
-// Each link jumps to a section of this page, so following one shows a visible move. The page keeps its state across the jump (KEEPS_STATE_PAGES in main.ts).
-const LINKS: { text: string; area: PracticeArea }[] = [
-  { text: "Jump to search", area: "find" },
-  { text: "Jump to caret mode", area: "caret" },
-  { text: "Jump to typing", area: "insert" },
-  { text: "Jump to the command line section near the end of this page", area: "cmdline" },
-  { text: "Jump to scrolling", area: "scroll" },
-];
-const SCROLL_LINES = 40;
+// The highlight the page search paints on its current match (`SEARCH_NAMES.current` in `src/content/caret/find_paint.ts`). The help page does not import the content bundle, so the name is repeated here.
+const FIND_CURRENT_HIGHLIGHT = "oasis-find-current";
+// What the visitor left the page for, kept across the rebuild that the way back causes, so its check can turn done.
+const LEFT_FOR_KEY = "desertfox_practice_left";
+const WATCH_MS = 300;
+// A heading this close to the top of the view was put there by a heading jump.
+const HEADING_AT_TOP_PX = 12;
 
-function target_link(text: string, href: string, index: number): HTMLElement {
-  const link = el("a", undefined, text);
-  link.id = `practice-link-${index + 1}`;
-  link.setAttribute("href", href);
-  return link;
+type Mark = (slug: LessonSlug, name: string) => void;
+// A check the page cannot hear as an event. It runs on every watch tick and marks its own lines.
+type Watch = () => void;
+
+function labeled<T extends HTMLElement>(control: T, id: string, label: string): T {
+  control.id = id;
+  control.setAttribute("aria-label", label);
+  return control;
 }
 
-function echo_button(label: string, id: string, log: HTMLElement): HTMLElement {
+function text_box(tag: "input" | "textarea", id: string, label: string): HTMLInputElement | HTMLTextAreaElement {
+  const box = labeled(el(tag, "desertfox-settings-input") as HTMLInputElement | HTMLTextAreaElement, id, label);
+  if (tag === "textarea") (box as HTMLTextAreaElement).rows = 3;
+  else (box as HTMLInputElement).type = "text";
+  return box;
+}
+
+function tick_box(type: "checkbox" | "radio", id: string, label: string): HTMLInputElement {
+  const box = labeled(el("input", undefined) as HTMLInputElement, id, label);
+  box.type = type;
+  return box;
+}
+
+const with_label = (control: HTMLElement, label: string): HTMLElement => el("label", undefined, control, ` ${label}  `);
+const stacked = (label: string, control: HTMLElement): HTMLElement => el("p", undefined, el("label", undefined, label, el("br", undefined), control));
+
+function dropdown(id: string, label: string): HTMLSelectElement {
+  return labeled(el("select", "desertfox-settings-input", ...CHOICES.map((choice) => el("option", undefined, choice))) as HTMLSelectElement, id, label);
+}
+
+function push_button(id: string, label: string): HTMLButtonElement {
   const button = el("button", undefined, label) as HTMLButtonElement;
   button.type = "button";
   button.id = id;
-  let count = 0;
-  button.addEventListener("click", () => {
-    count += 1;
-    log.textContent = `Clicked ${label}, ${count} time${count === 1 ? "" : "s"}.`;
-  });
   return button;
 }
 
-function checkbox(log: HTMLElement): HTMLElement {
-  const box = el("input", undefined) as HTMLInputElement;
-  box.type = "checkbox";
-  box.id = "practice-checkbox";
-  // A hint names a box with no text of its own by this label, so a typed name finds it.
-  box.setAttribute("aria-label", "A checkbox");
-  box.addEventListener("change", () => { log.textContent = `The checkbox is ${box.checked ? "on" : "off"}.`; });
-  return el("label", undefined, box, " A checkbox");
-}
-
-// A box with a visible label and an id, so a hint or a click reaches it and a script can read it.
-function field(tag: "input" | "textarea", id: string, label: string): HTMLElement {
-  const box = el(tag, "desertfox-settings-input") as HTMLInputElement | HTMLTextAreaElement;
-  box.id = id;
-  box.setAttribute("aria-label", label);
-  if (tag === "textarea") (box as HTMLTextAreaElement).rows = 3;
-  else (box as HTMLInputElement).type = "text";
-  return el("p", undefined, el("label", undefined, label, el("br", undefined), box));
-}
-
-// Each new section echoes into its own line right under its controls, so the echo is in view with them.
-function echo_line(id: string): HTMLElement {
-  const line = el("p", "desertfox-help-muted", "Nothing changed yet.");
-  line.id = id;
-  line.setAttribute("aria-live", "polite");
-  return line;
-}
-
-function slider(log: HTMLElement): HTMLElement {
-  const range = el("input", undefined) as HTMLInputElement;
-  range.type = "range";
-  range.id = "practice-range";
-  range.min = "0";
-  range.max = "10";
-  range.value = "2";
-  range.setAttribute("aria-label", "Slider");
-  range.addEventListener("input", () => { log.textContent = `The slider is at ${range.value}.`; });
-  return el("p", undefined, range);
-}
-
-const DROPDOWN_CHOICES = ["Sand", "Dune", "Oasis"];
-
-function dropdown(log: HTMLElement): HTMLElement {
-  const select = el("select", "desertfox-settings-input", ...DROPDOWN_CHOICES.map((choice) => el("option", undefined, choice))) as HTMLSelectElement;
-  select.id = "practice-select";
-  select.setAttribute("aria-label", "Dropdown");
-  select.addEventListener("input", () => { log.textContent = `The dropdown shows ${select.value}.`; });
-  return el("p", undefined, select);
-}
-
-function radio_group(log: HTMLElement): HTMLElement {
-  const choices = ["Alpha", "Bravo", "Charlie"].map((text, index) => {
-    const radio = el("input", undefined) as HTMLInputElement;
-    radio.type = "radio";
-    radio.name = "practice-radio-group";
-    radio.id = `practice-radio-${index + 1}`;
-    radio.setAttribute("aria-label", text);
-    radio.addEventListener("change", () => { log.textContent = `${text} is chosen.`; });
-    return el("label", undefined, radio, ` ${text}  `);
-  });
-  const group = el("fieldset", undefined, el("legend", undefined, "Pick one"), ...choices);
-  group.id = "practice-radio";
-  return group;
-}
-
-function details_section(log: HTMLElement): HTMLElement {
-  const details = el("details", undefined, el("summary", undefined, "Show more"), el("p", undefined, "This text shows while the section is open.")) as HTMLDetailsElement;
-  details.id = "practice-details";
-  details.addEventListener("toggle", () => { log.textContent = `The section is ${details.open ? "open" : "closed"}.`; });
-  return details;
-}
-
-function prompt(inlines: Inline[]): HTMLElement {
-  return el("div", "desertfox-help-tip", ...inlines.map(inline_node));
-}
-
-function practice_tab_link(text: string, page: string, id: string, log: HTMLElement): HTMLElement {
-  const link = new_tab_link(text, `home.html#/${page}`);
-  link.id = id;
-  link.addEventListener("click", () => { log.textContent = `Opened ${text}.`; });
-  return link;
-}
-
-function scroll_area(): HTMLElement {
-  const lines = Array.from({ length: SCROLL_LINES }, (_, index) => el("p", "desertfox-help-muted", `Line ${index + 1} of ${SCROLL_LINES}`));
-  const end = el("p", undefined, "That is the end of the practice page.");
-  end.id = "practice-end";
-  const area = el("div", undefined, ...lines, end);
-  area.id = "practice-scroll";
-  return area;
-}
-
-export function practice_page(prompts: Record<PracticeArea, Inline[]>): HTMLElement[] {
-  const sections = page_sections("practice", []);
-  const section_of = (area: PracticeArea) => sections[PRACTICE_AREAS.findIndex((entry) => entry.area === area)]!;
-  const head = (area: PracticeArea) => [section_heading("practice", section_of(area)), prompt(prompts[area])];
-  const log = el("p", "desertfox-help-muted", "Nothing clicked yet.");
-  log.id = PRACTICE_LOG_ID;
-  log.setAttribute("aria-live", "polite");
-  const slider_log = echo_line("practice-slider-log");
-  const dropdown_log = echo_line("practice-dropdown-log");
-  const radio_log = echo_line("practice-radio-log");
-  const details_log = echo_line("practice-details-log");
-  const paragraphs = PROSE.map((text, index) => {
+function prose(id_start: string, texts: string[]): HTMLElement[] {
+  return texts.map((text, index) => {
     const paragraph = el("p", undefined, text);
-    paragraph.id = `practice-prose-${index + 1}`;
+    paragraph.id = `${id_start}-${index + 1}`;
     return paragraph;
   });
-  return [
-    el("p", undefined, "Every target on this page is safe to click, type in and select. Nothing here changes your settings except the one command line example."),
-    ...head("hints"),
-    el("p", undefined, ...LINKS.flatMap(({ text, area }, index) => [target_link(text, section_hash("practice", section_of(area).slug), index), "  "])),
-    el("p", undefined, echo_button("Button one", "practice-button-1", log), " ", echo_button("Button two", "practice-button-2", log), "  ", checkbox(log)),
-    log,
-    ...head("find"),
-    ...head("caret"),
-    ...paragraphs,
-    el("p", undefined, "Paste target. Copy a selection, then paste it here."),
-    field("textarea", "practice-paste", "Paste box"),
-    ...head("insert"),
-    field("input", "practice-input", "Text box"),
-    field("textarea", "practice-textarea", "Text area"),
-    ...head("slider"),
-    slider(slider_log),
-    slider_log,
-    ...head("dropdown"),
-    dropdown(dropdown_log),
-    dropdown_log,
-    ...head("radio"),
-    radio_group(radio_log),
-    radio_log,
-    ...head("details"),
-    details_section(details_log),
-    details_log,
-    ...head("whichkey"),
-    ...head("cmdline"),
-    ...head("tabs"),
-    el("p", undefined, practice_tab_link("Settings", "settings", "practice-open-settings", log), "  ", practice_tab_link("Commands", "commands", "practice-open-commands", log)),
-    ...head("scroll"),
-    scroll_area(),
-  ];
+}
+
+const heading_top = (slug: LessonSlug): number => document.getElementById(`practice-${slug}`)?.getBoundingClientRect().top ?? Number.NaN;
+const at_page_top = (): boolean => window.scrollY === 0;
+const end_in_view = (): boolean => {
+  const box = document.getElementById("practice-end")?.getBoundingClientRect();
+  return box !== undefined && box.top >= 0 && box.bottom <= window.innerHeight + 2;
+};
+
+const j_count_text = (count: number): string => `The page received j ${count} time${count === 1 ? "" : "s"}.`;
+
+// The targets of each lesson. A builder returns the elements under the steps and, where an event cannot tell, a watch.
+type Built = { targets: HTMLElement[]; watch?: Watch };
+type Builder = (mark: (name: string) => void) => Built;
+
+const BUILDERS: Record<LessonSlug, Builder> = {
+  scroll: (mark) => {
+    const strip = el("div", "desertfox-practice-strip", el("p", undefined, Array.from({ length: STRIP_WORDS }, (_, index) => `dune ${index + 1}`).join("  ~  ")));
+    strip.id = "practice-strip";
+    let reached_end = false;
+    return {
+      targets: [strip],
+      watch: () => {
+        if (!at_page_top()) mark("down");
+        if (end_in_view()) {
+          reached_end = true;
+          mark("end");
+        }
+        if (reached_end && at_page_top()) mark("top");
+        if (strip.scrollLeft > 0) mark("strip");
+      },
+    };
+  },
+  "which-key": (mark) => {
+    let start: number | undefined;
+    let zoomed = false;
+    return {
+      targets: [],
+      watch: () => {
+        start ??= window.devicePixelRatio;
+        if (window.devicePixelRatio > start * 1.05) {
+          zoomed = true;
+          mark("zoomed");
+        }
+        if (zoomed && window.devicePixelRatio <= start * 1.01) mark("reset");
+      },
+    };
+  },
+  headings: (mark) => {
+    let last_scroll: number | undefined;
+    return {
+      targets: [],
+      watch: () => {
+        const moved = last_scroll !== undefined && last_scroll !== window.scrollY;
+        last_scroll = window.scrollY;
+        if (!moved) return;
+        const at_top = (heading: Element) => Math.abs(heading.getBoundingClientRect().top) < HEADING_AT_TOP_PX;
+        if (Array.from(document.querySelectorAll(".desertfox-practice-lesson h2")).some(at_top)) mark("heading");
+        if (Math.abs(heading_top("slider")) < HEADING_AT_TOP_PX) mark("listed");
+      },
+    };
+  },
+  hints: (mark) => {
+    const bell = push_button("practice-bell", "Ring the bell");
+    bell.addEventListener("click", () => mark("bell"));
+    const details = el("details", undefined, el("summary", undefined, "Show more"), el("p", undefined, "This text shows while the section is open.")) as HTMLDetailsElement;
+    details.id = "practice-details";
+    details.addEventListener("toggle", () => { if (details.open) mark("section"); });
+    const lights = tick_box("checkbox", "practice-lights", "Lights on");
+    lights.addEventListener("change", () => { if (lights.checked) mark("lights"); });
+    return { targets: [el("p", undefined, bell), details, el("p", undefined, with_label(lights, "Lights on"))] };
+  },
+  form: (mark) => {
+    const boxes = [text_box("input", "practice-name", "Name"), text_box("input", "practice-email", "Email"), text_box("textarea", "practice-note", "Note")];
+    for (const box of boxes) box.addEventListener("input", () => { if (boxes.every((each) => each.value.trim() !== "")) mark("typed"); });
+    const subscribe = tick_box("checkbox", "practice-subscribe", "Send me news");
+    subscribe.addEventListener("change", () => { if (subscribe.checked) mark("ticked"); });
+    const topic = dropdown("practice-topic", "Topic");
+    topic.addEventListener("input", () => { if (topic.value !== CHOICES[0]) mark("chosen"); });
+    const send = push_button("practice-send", "Send");
+    send.addEventListener("click", () => mark("sent"));
+    return { targets: [stacked("Name", boxes[0]!), stacked("Email", boxes[1]!), stacked("Note", boxes[2]!), el("p", undefined, with_label(subscribe, "Send me news")), stacked("Topic", topic), el("p", undefined, send)] };
+  },
+  inputs: (mark) => {
+    const radios = ["Alpha", "Bravo", "Charlie"].map((text, index) => {
+      const radio = tick_box("radio", `practice-radio-${index + 1}`, text);
+      radio.name = "practice-radio-group";
+      return radio;
+    });
+    let chose_bravo = false;
+    radios[1]!.addEventListener("change", () => {
+      chose_bravo = true;
+      mark("bravo");
+    });
+    radios[2]!.addEventListener("change", () => { if (chose_bravo) mark("charlie"); });
+    const group = el("fieldset", undefined, el("legend", undefined, "Pick one"), ...radios.map((radio) => with_label(radio, radio.getAttribute("aria-label")!)));
+    group.id = "practice-radio";
+    const select = dropdown("practice-select", "Dropdown");
+    select.addEventListener("input", () => { if (select.value === CHOICES[2]) mark("oasis"); });
+    const boxes = ["Sun", "Moon", "Stars"].map((text, index) => tick_box("checkbox", `practice-box-${index + 1}`, text));
+    for (const box of boxes) box.addEventListener("change", () => { if (boxes.every((each) => each.checked)) mark("rapid"); });
+    const done = push_button("practice-done", "Done");
+    done.addEventListener("click", () => mark("done"));
+    return { targets: [group, el("p", undefined, select), el("p", undefined, ...boxes.map((box) => with_label(box, box.getAttribute("aria-label")!))), el("p", undefined, done)] };
+  },
+  slider: (mark) => {
+    const range = labeled(el("input", undefined) as HTMLInputElement, "practice-range", "Slider");
+    range.type = "range";
+    range.min = "0";
+    range.max = "10";
+    range.value = "2";
+    const reading_text = () => `The slider reads ${range.value}. Set it to ${SLIDER_GOAL}.`;
+    const reading = el("span", undefined, reading_text());
+    reading.id = "practice-range-reading";
+    range.addEventListener("input", () => { reading.textContent = reading_text(); });
+    // A drop or a blur sends `change`, so a value passed on the way does not count.
+    range.addEventListener("change", () => { if (range.value === SLIDER_GOAL) mark("seven"); });
+    const card = el("span", "desertfox-pill", "Fox");
+    card.id = "practice-card";
+    card.setAttribute("draggable", "true");
+    card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("text/plain", "Fox"));
+    const den = el("div", "desertfox-help-tip", "Den: ");
+    den.id = "practice-den";
+    den.addEventListener("dragover", (event) => event.preventDefault());
+    den.addEventListener("drop", (event) => {
+      event.preventDefault();
+      den.append(card);
+      mark("den");
+    });
+    return { targets: [el("p", undefined, range, " ", reading), el("p", undefined, card), den] };
+  },
+  find: (mark) => {
+    let first: string | undefined;
+    return {
+      targets: prose("practice-prose", FIND_PROSE),
+      watch: () => {
+        const highlights = (CSS as unknown as { highlights?: Map<string, Iterable<Range>> }).highlights;
+        const [range] = highlights?.get(FIND_CURRENT_HIGHLIGHT) ?? [];
+        if (range === undefined) return;
+        const place = `${range.startContainer.parentElement?.id}:${range.startOffset}`;
+        first ??= place;
+        mark("found");
+        if (place !== first) mark("stepped");
+      },
+    };
+  },
+  copy: (mark) => {
+    const paste = text_box("textarea", "practice-paste", "Paste box");
+    paste.addEventListener("input", () => {
+      if (paste.value.includes(COPY_PROSE[1]!)) mark("paragraph");
+      if (paste.value.includes(COPY_FIRST_SENTENCE) && !paste.value.includes(COPY_PROSE[0]!)) mark("sentence");
+    });
+    return { targets: [...prose("practice-copy", COPY_PROSE), stacked("Paste box", paste)] };
+  },
+  "command-line": (mark) => {
+    const background = () => getComputedStyle(document.documentElement).getPropertyValue("--desertfox-bg-core");
+    let start: string | undefined;
+    let themed = false;
+    return {
+      targets: [],
+      watch: () => {
+        start ??= background();
+        if (background() !== start) {
+          themed = true;
+          mark("themed");
+        }
+        if (themed && background() === start) mark("restored");
+      },
+    };
+  },
+  tabs: (mark) => {
+    const pages = ["settings", "commands"];
+    const links = pages.map((page) => {
+      const link = new_tab_link(page === "settings" ? "Settings" : "Commands", `home.html#/${page}`);
+      link.id = `practice-open-${page}`;
+      return link;
+    });
+    let opened = false;
+    let hidden_since_open = false;
+    let ticks = 0;
+    return {
+      targets: [el("p", undefined, links[0]!, "  ", links[1]!)],
+      watch: () => {
+        if (opened && document.hidden) hidden_since_open = true;
+        if (hidden_since_open && !document.hidden) mark("returned");
+        // The tab list is read every fifth tick, because the answer comes from the browser and changes slowly.
+        if (ticks++ % 5 !== 0) return;
+        void browser.tabs.query({ currentWindow: true }).then((tabs) => {
+          const open_count = pages.filter((page) => tabs.some((tab) => tab.url?.endsWith(`#/${page}`))).length;
+          if (open_count === pages.length) {
+            opened = true;
+            mark("opened");
+          }
+          if (opened && open_count === 0) mark("closed");
+        });
+      },
+    };
+  },
+  video: () => {
+    const link = el("a", undefined, "Never Gonna Give You Up, on YouTube");
+    link.id = "practice-video-link";
+    link.setAttribute("href", PRACTICE_VIDEO_URL);
+    link.addEventListener("click", () => sessionStorage.setItem(LEFT_FOR_KEY, "video"));
+    return { targets: [el("p", undefined, link)] };
+  },
+  marks: (mark) => {
+    // Set while the visitor is away at the end or the start. Only a trip that started with this lesson on screen counts.
+    let went: "end" | "top" | undefined;
+    let was_here = false;
+    return {
+      targets: [],
+      watch: () => {
+        const top = heading_top("marks");
+        const here = top >= 0 && top < window.innerHeight;
+        if (here && went !== undefined) mark(went === "end" ? "marked" : "jumped");
+        if (here) {
+          was_here = true;
+          went = undefined;
+        } else if (was_here && end_in_view()) went = "end";
+        else if (was_here && at_page_top()) went = "top";
+      },
+    };
+  },
+  ignore: () => {
+    const count_line = el("p", "desertfox-help-tip", j_count_text(0));
+    count_line.id = "practice-j-count";
+    return { targets: [count_line] };
+  },
+};
+
+function check_lines(lesson: PracticeLesson): HTMLElement {
+  return el("ul", undefined, ...lesson.checks.map(({ name, text }) => {
+    const line = el("li", "desertfox-help-muted", `To do: ${text}`);
+    line.id = practice_check_id(lesson.slug, name);
+    line.setAttribute("data-done", "false");
+    line.setAttribute("data-text", text);
+    return line;
+  }));
+}
+
+const mark_done: Mark = (slug, name) => {
+  const line = document.getElementById(practice_check_id(slug, name));
+  if (!line || line.getAttribute("data-done") === "true") return;
+  line.setAttribute("data-done", "true");
+  line.className = "";
+  line.textContent = `Done: ${line.getAttribute("data-text") ?? ""}`;
+};
+
+// Counts the `j` presses that reach the page itself. A key DesertFox takes never gets here, and one typed into a field is text, not a shortcut.
+function count_page_keys(): (event: KeyboardEvent) => void {
+  let count = 0;
+  return (event) => {
+    if (event.key !== "j" || event.ctrlKey || event.altKey || event.metaKey || (event.target as Element | null)?.closest?.("input, textarea, select")) return;
+    count += 1;
+    const line = document.getElementById("practice-j-count");
+    if (line) line.textContent = j_count_text(count);
+    mark_done("ignore", "passed");
+    if (count >= 4) mark_done("ignore", "ignored");
+  };
+}
+
+// Leaving for the Commands page or the video rebuilds this page on the way back, so the leave is noted in the session and read here.
+function mark_return(): void {
+  const left_for = sessionStorage.getItem(LEFT_FOR_KEY);
+  if (left_for === null) return;
+  sessionStorage.removeItem(LEFT_FOR_KEY);
+  mark_done(left_for === "video" ? "video" : "command-line", "returned");
+}
+
+// Keeps the lesson the visitor is in as the address of the page, so the way back from another page lands on it. No history entry is added.
+function remember_lesson(lessons: PracticeLesson[]): Watch {
+  let remembered: string | undefined;
+  return () => {
+    const current = lessons.filter((lesson) => heading_top(lesson.slug) < window.innerHeight / 2).at(-1);
+    const hash = current ? section_hash("practice", current.slug) : "#/practice";
+    if (hash === remembered) return;
+    remembered = hash;
+    if (location.hash !== hash) history.replaceState(history.state, "", hash);
+  };
+}
+
+// Runs the watches while the page is shown. `anchor` leaves the document when another help page replaces this one, which ends the run and removes the listeners.
+function start_watching(anchor: HTMLElement, lessons: PracticeLesson[], watches: Watch[]): void {
+  const on_key = count_page_keys();
+  // A move to another help page changes the hash. The key that runs `:help` gives no other sign.
+  const on_hash = () => { if (!location.hash.includes("practice")) sessionStorage.setItem(LEFT_FOR_KEY, "help"); };
+  const keep_place = remember_lesson(lessons);
+  let started = false;
+  const timer = setInterval(() => {
+    if (!anchor.isConnected) {
+      clearInterval(timer);
+      if (!started) return;
+      document.removeEventListener("keydown", on_key);
+      window.removeEventListener("pageshow", mark_return);
+      window.removeEventListener("hashchange", on_hash);
+      return;
+    }
+    if (!started) {
+      started = true;
+      document.addEventListener("keydown", on_key);
+      // A page restored from the back-forward cache is not rebuilt, so the return is read here too.
+      window.addEventListener("pageshow", mark_return);
+      window.addEventListener("hashchange", on_hash);
+      mark_return();
+    }
+    for (const watch of watches) watch();
+    keep_place();
+  }, WATCH_MS);
+  // A unit test renders the page in Node, where a live timer would hold the process open.
+  (timer as unknown as { unref?: () => void }).unref?.();
+}
+
+function lesson_section(lesson: PracticeLesson, built: Built): HTMLElement {
+  return el(
+    "section",
+    "desertfox-practice-lesson",
+    section_heading("practice", { title: lesson.title, slug: lesson.slug }),
+    el("p", undefined, ...lesson.goal.map(inline_node)),
+    el("ol", undefined, ...lesson.steps.map((step) => el("li", undefined, ...step.map(inline_node)))),
+    ...built.targets,
+    ...lesson.notes.map((note) => el("p", "desertfox-help-muted", ...note.map(inline_node))),
+    check_lines(lesson),
+  );
+}
+
+export function practice_page(text: PracticeText): HTMLElement[] {
+  const intro = el("div", "desertfox-practice-intro", el("div", "desertfox-help-tip", ...text.intro.map(inline_node)));
+  const built = text.lessons.map((lesson) => BUILDERS[lesson.slug]((name) => mark_done(lesson.slug, name)));
+  const end = el("p", undefined, ...text.outro.map(inline_node));
+  end.id = "practice-end";
+  start_watching(intro, text.lessons, built.flatMap(({ watch }) => (watch ? [watch] : [])));
+  return [intro, ...text.lessons.map((lesson, index) => lesson_section(lesson, built[index]!)), end];
 }
