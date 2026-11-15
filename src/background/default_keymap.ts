@@ -3,7 +3,7 @@ import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
 // Hint, cmdline, caret and visual commands load their bundle on first use and refuse if it registers no handler.
-// The caret and visual motions. `0` and `$` are line ends, `^` the first non-blank, `gg` and `G` the ends of the text.
+// The caret and visual motions. `0` and `$` are line ends, `gg` and `G` the ends of the text.
 const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label?: string; intent?: string }> = {
   h: { id: "caret.move", args: { unit: "char", direction: "back" } },
   l: { id: "caret.move", args: { unit: "char" } },
@@ -20,7 +20,6 @@ const MOTIONS: Record<string, { id: string; args: Record<string, unknown>; label
   B: { id: "caret.move", args: { unit: "word", direction: "back", big: true }, label: "Move caret by WORD backward", intent: "Move the caret to the start of the previous WORD, a run of characters between spaces." },
   E: { id: "caret.move", args: { unit: "word_end", big: true }, label: "Move caret to WORD end", intent: "Move the caret to the end of the current WORD, a run of characters between spaces." },
   "0": { id: "caret.move", args: { unit: "line_start" } },
-  "^": { id: "caret.move", args: { unit: "line_first" } },
   $: { id: "caret.move", args: { unit: "line_end" } },
   gg: { id: "caret.move", args: { unit: "start" } },
   G: { id: "caret.move", args: { unit: "end" } },
@@ -113,7 +112,6 @@ const BASE_SECTIONS: KeymapConfig = {
     gg: { id: "scroll.to", args: { percent: 0 }, label: "Scroll to top" },
     G: { id: "scroll.to", args: { percent: 100 }, label: "Scroll to bottom" },
     $: { id: "scroll.to", args: { percent: 100, axis: "x" }, label: "Scroll to right edge" },
-    "^": { id: "scroll.to", args: { percent: 0, axis: "x" }, label: "Scroll to left edge" },
     "<C-d>": { id: "scroll.pages", args: { fraction: 0.5 }, label: "Scroll half page down" },
     "<C-u>": { id: "scroll.pages", args: { fraction: -0.5 }, label: "Scroll half page up" },
     "<C-f>": { id: "scroll.pages", args: { fraction: 1 }, label: "Scroll page down" },
@@ -457,7 +455,6 @@ const MEDIA_KEYS: ModeBindings = {
   h: media_action("seek", "down", "Seek back"),
   l: media_action("seek", "up", "Seek forward"),
   "0": media_action("seek", "reset", "Seek to the start"),
-  "^": media_action("seek", "reset", "Seek to the start"),
   $: media_action("seek", "end", "Seek to the end"),
   "%": media_action("seek", "percent", "Seek to a percent, as 50%"),
   H: media_action("skip", "previous", "Previous video"),

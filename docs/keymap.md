@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 468 (normal 241, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
+bound: 463 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 35, visual 43, visual_line 44, insert 5, ignore 1, browser 3)
 
 ### normal
 
@@ -31,7 +31,6 @@ bound: 468 (normal 241, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `gg` | `scroll.to 0` | Scroll to top |
 | `G` | `scroll.to 100` | Scroll to bottom |
 | `$` | `scroll.to --x 100` | Scroll to right edge |
-| `^` | `scroll.to --x 0` | Scroll to left edge |
 | `<C-d>` | `scroll.pages --fraction=0.5` | Scroll half page down |
 | `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
 | `<C-f>` | `scroll.pages` | Scroll page down |
@@ -339,7 +338,6 @@ Which-key group names:
 | `F` | `media fullscreen` | Toggle fullscreen |
 | `h` | `media seek down` | Seek back |
 | `l` | `media seek up` | Seek forward |
-| `^` | `media seek reset` | Seek to the start |
 | `$` | `media seek end` | Seek to the end |
 | `%` | `media seek percent` | Seek to a percent, as 50% |
 | `H` | `media skip previous` | Previous video |
@@ -442,7 +440,6 @@ Which-key group names:
 | `W` | `caret.move --word --big` | Move caret by WORD |
 | `B` | `caret.move --word --back --big` | Move caret by WORD backward |
 | `E` | `caret.move --word-end --big` | Move caret to WORD end |
-| `^` | `caret.move --line-first` | Move caret |
 | `$` | `caret.move --line-end` | Move caret |
 | `gg` | `caret.move --start` | Move caret |
 | `G` | `caret.move --end` | Move caret |
@@ -472,7 +469,6 @@ Which-key group names:
 | `W` | `caret.move --word --big` | Move caret by WORD |
 | `B` | `caret.move --word --back --big` | Move caret by WORD backward |
 | `E` | `caret.move --word-end --big` | Move caret to WORD end |
-| `^` | `caret.move --line-first` | Move caret |
 | `$` | `caret.move --line-end` | Move caret |
 | `gg` | `caret.move --start` | Move caret |
 | `G` | `caret.move --end` | Move caret |
@@ -521,7 +517,6 @@ Which-key group names:
 | `W` | `caret.move --word --big` | Move caret by WORD |
 | `B` | `caret.move --word --back --big` | Move caret by WORD backward |
 | `E` | `caret.move --word-end --big` | Move caret to WORD end |
-| `^` | `caret.move --line-first` | Move caret |
 | `$` | `caret.move --line-end` | Move caret |
 | `gg` | `caret.move --start` | Move caret |
 | `G` | `caret.move --end` | Move caret |

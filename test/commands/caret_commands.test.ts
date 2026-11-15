@@ -24,7 +24,7 @@ test("caret and visual commands read as one-line command strings", () => {
 });
 
 test("every default caret, visual and cmdline binding is the same command as its command string", () => {
-  const strings: Record<string, string> = { h: "caret.move --char --back", l: "caret.move --char", j: "caret.move --line", k: "caret.move --line --back", w: "caret.move --word", b: "caret.move --word --back", e: "caret.move --word-end", W: "caret.move --word --big", B: "caret.move --word --back --big", E: "caret.move --word-end --big", "0": "caret.move --line-start", "^": "caret.move --line-first", $: "caret.move --line-end", gg: "caret.move --start", G: "caret.move --end", f: "caret.find", t: "caret.find --till", F: "caret.find --back", T: "caret.find --back --till", ";": "caret.move --find-repeat", ",": "caret.move --find-repeat --back" };
+  const strings: Record<string, string> = { h: "caret.move --char --back", l: "caret.move --char", j: "caret.move --line", k: "caret.move --line --back", w: "caret.move --word", b: "caret.move --word --back", e: "caret.move --word-end", W: "caret.move --word --big", B: "caret.move --word --back --big", E: "caret.move --word-end --big", "0": "caret.move --line-start", $: "caret.move --line-end", gg: "caret.move --start", G: "caret.move --end", f: "caret.find", t: "caret.find --till", F: "caret.find --back", T: "caret.find --back --till", ";": "caret.move --find-repeat", ",": "caret.move --find-repeat --back" };
   for (const mode of ["caret", "visual"] as const) {
     for (const [key, text] of Object.entries(strings)) {
       const bound = DEFAULT_KEYMAP[mode]?.[key] as { id: string; args?: Record<string, unknown> };
