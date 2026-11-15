@@ -47,11 +47,11 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       const parts = await parts_of_page();
       expect(!parts.clock, "the clock showed with newtab_clock = false");
     });
-    // Cards: links, recent tabs and bookmarks. The cache is seeded for one site, so the shot shows an icon tile beside letter tiles.
+    // Cards: links, recent tabs, bookmarks, closed tabs and top sites, all turned on here because the defaults show none of them. The cache is seeded for one site, so the shot shows an icon tile beside letter tiles.
     const cards_config = mkdtempSync(join(tmpdir(), "desertfox-cards-"));
     cpSync(test_config_dir, cards_config, { recursive: true });
     const links = ["Docs", "Mail", "News"].map((name) => `[[newtab_links]]\nlabel = "${name}"\nurl = "https://${name.toLowerCase()}.example.org/"\ngroup = "Pinned"\n`).join("\n");
-    writeFileSync(join(cards_config, "settings.toml"), `newtab_weather = false\nnewtab_recent_tabs = true\nnewtab_bookmarks = true\nnewtab_bookmarks_max = 4\n\n${links}`);
+    writeFileSync(join(cards_config, "settings.toml"), `newtab_weather = false\nnewtab_recent_tabs = true\nnewtab_bookmarks = true\nnewtab_bookmarks_max = 4\nnewtab_closed_tabs = true\nnewtab_top_sites = true\n\n${links}`);
     await close_new_tabs();
     await open_page("page", "cards_a", { new_tab: true });
     await open_page("page", "cards_b", { new_tab: true });
@@ -100,7 +100,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect(shown.includes(saved.icon), `no card for localhost showed the saved icon: ${JSON.stringify(shown)}`);
     });
 
-    // Closed tabs and top sites are on by default. A page is visited then closed, so both lists hold its host. The hint button is one more hint target.
+    // Closed tabs and top sites are on in the cards config above. A page is visited then closed, so both lists hold its host. The hint button is one more hint target.
     await run_case("closed tabs and top sites show as cards, and the command line hint opens the line", async () => {
       await close_new_tabs();
       const page_url = url_of("iconed_card", "cards_closed").replace("127.0.0.1", "localhost");

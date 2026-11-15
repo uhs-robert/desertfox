@@ -205,7 +205,7 @@ test("with newtab_command_hint off the page has no hint button, and a closed tab
     const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
     const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [{ tab: { sessionId: "7", title: "Gone", url: "https://gone.example/" } }], visits: async () => [], cached_icons: async () => new Map() };
     const find_all = (node: FakeNode, class_name: string): FakeNode[] => [...(node.className.split(" ").includes(class_name) ? [node] : []), ...node.children.flatMap((child) => find_all(child, class_name))];
-    await render_new_tab(body as unknown as HTMLElement, effective_settings({ newtab_command_hint: false } as never), readers);
+    await render_new_tab(body as unknown as HTMLElement, effective_settings({ newtab_command_hint: false, newtab_closed_tabs: true } as never), readers);
     assert.equal(find_all(body, "command-hint").length, 0);
     const [card] = find_all(body, "tile");
     let prevented = 0;

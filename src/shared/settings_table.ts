@@ -132,9 +132,9 @@ export const SETTINGS_TABLE = {
   newtab_bookmarks_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_recent_tabs: { kind: "boolean", default: false },
   newtab_recent_tabs_max: { kind: "number", whole: true, min: 0, default: 8 },
-  newtab_closed_tabs: { kind: "boolean", default: true },
+  newtab_closed_tabs: { kind: "boolean", default: false },
   newtab_closed_tabs_max: { kind: "number", whole: true, min: 0, default: 8 },
-  newtab_top_sites: { kind: "boolean", default: true },
+  newtab_top_sites: { kind: "boolean", default: false },
   newtab_top_sites_max: { kind: "number", whole: true, min: 0, default: 8 },
   newtab_command_hint: { kind: "boolean", default: true },
   // On by default, but the card sends no request until a location is granted or a city is set.
