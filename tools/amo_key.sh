@@ -14,7 +14,7 @@ load_amo_key() {
     done
     rbw unlocked >/dev/null 2>&1 || { echo "signing needs an unlocked rbw vault. Run 'rbw unlock', then retry." >&2; return 1; }
     entry_json=$(rbw get --raw "$AMO_RBW_ENTRY") || { echo "signing could not read the rbw entry '$AMO_RBW_ENTRY'." >&2; return 1; }
-    amo_key=$(jq -r '.notes // ""' <<<"$entry_json" | grep -o -m1 'user:[0-9]*:[0-9]*' || true)
+    amo_key=$(jq -r '.notes // ""' <<<"$entry_json" | grep -o -E -m1 'user:[0-9]+:[0-9]+' | head -n 1 || true)
     if [ -z "$amo_key" ]; then
         echo "The notes of rbw entry '$AMO_RBW_ENTRY' hold no issuer (user:N:N)." >&2
         return 1

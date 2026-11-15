@@ -64,13 +64,13 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
     await use_settings("weather_card", "newtab_weather = true\nnewtab_weather_city = \"Oslo\"\n");
     await in_background(WEATHER_SEED);
     await in_background(AIR_SEED);
-    await run_case("a stored reading draws in the top-right corner with the stats and the icon label, and the button beside it", async () => {
+    await run_case("a stored reading draws in the top-right corner with the stats and the icon label, and no button beside it", async () => {
       expect(await open_new_tab(".weather-reading"), "the stored reading never drew");
       const shape = await in_background(`(() => { const page = ${NEWTAB_VIEW}.document; const box = page.querySelector(".weather").getBoundingClientRect(); const main = page.querySelector(".desertfox-newtab").getBoundingClientRect(); const icon = page.querySelector("svg.weather-icon"); return { temp: page.querySelector(".weather-temp").textContent, labels: [...page.querySelectorAll(".weather-reading > .weather-stat .weather-label")].map((node) => node.textContent), values: [...page.querySelectorAll(".weather-reading > .weather-stat .weather-value")].map((node) => node.textContent), icon: !!icon?.querySelector("path"), icon_role: icon?.getAttribute("role"), icon_label: icon?.getAttribute("aria-label"), icon_hidden: icon?.getAttribute("aria-hidden"), ask: !!page.querySelector(".weather-ask"), right_gap: main.right - box.right, top_gap: box.top - main.top, in_right_half: box.left > main.width / 2 }; })()`);
       expect(shape.temp === "10\u00b0" && shape.icon, `the main row was wrong: ${JSON.stringify(shape)}`);
       expect(shape.icon_role === "img" && shape.icon_label === "Clear" && shape.icon_hidden === null, `the icon was not labeled: ${JSON.stringify(shape)}`);
       expect(JSON.stringify(shape.labels) === JSON.stringify(["Feels like", "High / low", "Humidity", "Rain chance", "Wind"]) && JSON.stringify(shape.values) === JSON.stringify(["8\u00b0", "14\u00b0 / 6\u00b0", "44%", "30%", "12 km/h NW"]), `the stats were wrong: ${JSON.stringify(shape)}`);
-      expect(shape.ask, "the location button is missing beside a city reading");
+      expect(!shape.ask, "the location button shows beside a city reading that has its consent");
       expect(shape.in_right_half && shape.right_gap < 40 && shape.top_gap < 40, `the card is not in the top-right corner: ${JSON.stringify(shape)}`);
       expect((await weather_requests()) === 0, "a stored reading sent a request");
       if (shot_dir) await take_both_shots("newtab-weather");

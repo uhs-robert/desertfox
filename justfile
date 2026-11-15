@@ -404,9 +404,9 @@ release_stamp version:
     # Callers pass the version from src/manifest.json, not package.json: npm refuses x.y.z.N, so a beta lives in the manifest only and package.json keeps the last stable version. A script, not recipe code, so BUILD.md can give a reviewer the same step without just.
     node tools/release_stamp.mjs {{quote(version)}}
 
-# Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
+# Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. With no xpi argument the release carries the hosts only, for a listed version whose xpi AMO signs later (add it with `gh release upload`). A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
 [private]
-release_publish version xpi:
+release_publish version xpi="":
     #!/usr/bin/env bash
     set -euo pipefail
     version={{quote(version)}}
@@ -442,7 +442,7 @@ release_publish version xpi:
     elif [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
         echo "dry run: $xpi does not exist, so $xpi_asset is not written."
         xpi_args=("$xpi_asset")
-    else
+    elif [ -n "$xpi" ]; then
         echo "release_publish: the xpi $xpi does not exist. Run 'just sign' first." >&2
         exit 1
     fi
@@ -520,7 +520,7 @@ source_archive:
     git archive --format=zip -o "$archive" HEAD
     echo "$archive"
 
-# Submit dist/ to the listed channel on addons.mozilla.org with the listing text in amo/metadata.json and the source archive. PUBLIC and one-way: AMO signs a version number once, and the listing page exists afterwards. It stamps and builds the version in src/manifest.json itself so the build, the archive and the hosts agree, and refuses a beta version or an update_url, which only unlisted builds carry. Mozilla then reviews it. After approval, publish the GitHub release for the same version with `just release_publish`. Needs a clean release branch. CI never runs it.
+# Submit dist/ to the listed channel on addons.mozilla.org with the listing text in amo/metadata.json and the source archive. PUBLIC and one-way: AMO signs a version number once, and the listing page exists afterwards. It stamps and builds the version in src/manifest.json itself so the build, the archive and the hosts agree, and refuses a beta version or an update_url, which only unlisted builds carry. Mozilla then reviews it. Publish the GitHub release with the hosts first (`just release_publish <version>`), because the install command of the add-on points at it. Needs a clean release branch with the version bump committed. CI never runs it.
 sign_listed:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -544,6 +544,9 @@ sign_listed:
         exit 1
     fi
     jq -e '.version.license and (.summary["en-US"] | length <= 250)' amo/metadata.json >/dev/null || { echo "amo/metadata.json needs version.license and a summary of at most 250 characters." >&2; exit 1; }
+    # Before the build, so a locked rbw vault fails at once and not after the build.
+    source tools/amo_key.sh
+    load_amo_key
     just release_stamp "$version"
     just build
     # Check before submitting: AMO signs a version once, so a build without the hashes must never reach it.
@@ -552,10 +555,8 @@ sign_listed:
         exit 1
     fi
     archive=$(just source_archive)
-    source tools/amo_key.sh
-    load_amo_key
     WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just sign_only listed amo/metadata.json "$archive"
-    echo "Submitted $version for review. Paste docs/privacy.md into the privacy policy field and add the previews on the listing page (see amo/README.md)."
+    echo "Submitted $version for review. Publish the GitHub release with the hosts now if you have not: 'just release_publish $version' (push the commit first, since the tag targets HEAD). Paste docs/privacy.md into the privacy policy field and add the previews on the listing page (see amo/README.md)."
 
 # Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
 [private]

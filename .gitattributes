@@ -1,0 +1,3 @@
+# Not part of the source archive for Mozilla's reviewers.
+/.claude export-ignore
+/.coderabbit.yaml export-ignore

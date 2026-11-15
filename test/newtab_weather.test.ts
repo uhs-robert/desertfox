@@ -112,30 +112,30 @@ test("a click that the user grants runs the card again and it then sends the req
     run.stop();
   }));
 
-test("a granted permission sends rounded coordinates and no city", async () => {
+test("a granted permission with no city sends rounded coordinates", async () => {
   const { deps, urls } = fake_deps({ allowed: true });
-  const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
+  const views = await collect(on(), deps);
   assert.equal(urls.length, 1);
   assert.match(urls[0]!, /latitude=59\.91&longitude=10\.75/);
-  assert.doesNotMatch(urls[0]!, /59\.912|Oslo/);
+  assert.doesNotMatch(urls[0]!, /59\.912/);
   assert.deepEqual(views, [{ kind: "weather", weather: { ...WEATHER_CARD, detail: WEATHER_DETAIL, place: "", units: "metric" } }]);
 });
 
-test("the city is the fallback: it is geocoded, then the rounded coordinates are sent", async () => {
+test("a city is geocoded, then the rounded coordinates are sent, with no button", async () => {
   const { deps, urls, calls } = fake_deps();
   const views = await collect(on({ newtab_weather_city: " Oslo ", newtab_weather_units: "imperial" }), deps);
   assert.equal(urls.length, 2);
   assert.match(urls[0]!, /^https:\/\/geocoding-api\.open-meteo\.com\/.*name=Oslo&/);
   assert.match(urls[1]!, /^https:\/\/api\.open-meteo\.com\/.*latitude=59\.91&longitude=10\.75.*temperature_unit=fahrenheit/);
   assert.equal(calls.position_reads, 0);
-  assert.deepEqual(views, [{ kind: "ask_location" }, { kind: "weather", weather: { ...WEATHER_CARD, detail: WEATHER_DETAIL, place: "Oslo", units: "imperial" } }]);
+  assert.deepEqual(views, [{ kind: "weather", weather: { ...WEATHER_CARD, detail: WEATHER_DETAIL, place: "Oslo", units: "imperial" } }]);
 });
 
 test("a failed fetch draws nothing and does not throw", async () => {
   const { deps } = fake_deps({ allowed: true, fail_fetch: true });
   assert.deepEqual(await collect(on(), deps), []);
   const city = fake_deps({ fail_fetch: true });
-  assert.deepEqual(await collect(on({ newtab_weather_city: "Oslo" }), city.deps), [{ kind: "ask_location" }], "the button shows, no reading");
+  assert.deepEqual(await collect(on({ newtab_weather_city: "Oslo" }), city.deps), [], "no reading and no button");
 });
 
 test("a second run inside the TTL draws from the stored value and makes no request", async () => {
@@ -240,18 +240,19 @@ test("a stored reading older than the age limit is not drawn when the refresh fa
   assert.deepEqual(await collect(on(), later), []);
 });
 
-test("with a city set and no permission the card offers the button and still draws the city reading", async () => {
-  const { deps } = fake_deps();
+test("with a city set the card draws the city reading, shows no button and never touches geolocation", async () => {
+  const { deps, calls } = fake_deps();
   const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
-  assert.equal(views[0]!.kind, "ask_location");
-  assert.deepEqual(views.map((view) => view.kind), ["ask_location", "weather"]);
+  assert.deepEqual(views.map((view) => view.kind), ["weather"]);
+  assert.deepEqual(calls, { permission_checks: 0, position_reads: 0, permission_requests: 0 });
 });
 
-test("once the permission is granted the position wins over the city and no button shows", async () => {
-  const { deps, urls } = fake_deps({ allowed: true });
+test("a granted geolocation permission does not override a city", async () => {
+  const { deps, urls, calls } = fake_deps({ allowed: true });
   const views = await collect(on({ newtab_weather_city: "Oslo" }), deps);
   assert.ok(views.every((view) => view.kind === "weather"));
-  assert.doesNotMatch(urls.join(" "), /geocoding/);
+  assert.match(urls.join(" "), /geocoding/);
+  assert.equal(calls.position_reads, 0);
 });
 
 test("a failed forecast at new coordinates takes down the reading of the old place", async () => {
@@ -307,17 +308,13 @@ test("a stored reading from before feels-like and humidity is not used", async (
   assert.deepEqual(views.map((view) => view.kind), ["weather"]);
 });
 
-test("a failed position takes down the preview of the old place, with or without a city", async () => {
+test("a failed position takes down the preview of the old place", async () => {
   const first = fake_deps({ allowed: true });
   await collect(on(), first.deps);
   const lost = { ...first.deps, current_position: async () => Promise.reject(new Error("denied")) };
   const without_city: WeatherView[] = [];
   await run_weather(on(), lost, (view) => without_city.push(view));
   assert.deepEqual(without_city.map((view) => view.kind), ["weather", "clear_reading"]);
-  const offline = { ...lost, net: { ...first.deps.net, fetch: (async () => Promise.reject(new Error("offline"))) as typeof fetch } };
-  const failed_city: WeatherView[] = [];
-  await run_weather(on({ newtab_weather_city: "Paris" }), offline, (view) => failed_city.push(view));
-  assert.deepEqual(failed_city.map((view) => view.kind), ["weather", "clear_reading"]);
 });
 
 // A small stand-in for the parts of the DOM the card uses, so a redraw can be driven without a browser.
@@ -507,39 +504,37 @@ test("a redraw that stops the run while the forecast is out draws nothing late a
     assert.deepEqual(store, {}, "no late answer was stored");
   }));
 
-test("a location grant while the forecast is out stops the old run and only the new run draws", () =>
+test("a location grant clears the button and the new run draws from the position", () =>
   with_fake_document(async () => {
     const base = fake_deps();
     let allowed = false;
-    const releases: (() => void)[] = [];
+    const asked: boolean[] = [];
     const store: Record<string, unknown> = {};
-    let fetches = 0;
-    const net: NetEnv = {
-      ...base.deps.net,
-      fetch: (async () => {
-        fetches++;
-        await new Promise<void>((done) => releases.push(done));
-        return new Response(String(fetches) === "1" ? JSON.stringify(forecast_body({ current: { ...forecast_body().current, temperature_2m: 99 } })) : FORECAST);
-      }) as typeof fetch,
-      storage: { get: async (key) => ({ [key]: store[key] }), set: async (items) => void Object.assign(store, items) },
-    };
+    const net: NetEnv = { ...base.deps.net, storage: { get: async (key) => ({ [key]: store[key] }), set: async (items) => void Object.assign(store, items) } };
     const slot = new FakeNode("div");
-    const deps = { ...base.deps, has_geolocation_permission: async () => allowed, request_location_access: async () => ((allowed = true), true), net };
-    const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo" }), deps);
-    // The city run: geocoding is request 1 and holds.
-    await new Promise((done) => setImmediate(done));
+    const deps = { ...base.deps, has_geolocation_permission: async () => allowed, request_location_access: async (with_geolocation: boolean) => (asked.push(with_geolocation), (allowed = true), true), net };
+    const run = start_weather(slot as never, on(), deps);
+    await run.finished;
+    slot.querySelector(".weather-ask")!.listeners["click"]!();
+    for (let turn = 0; turn < 8; turn++) await new Promise((done) => setImmediate(done));
+    assert.equal(slot.querySelector(".weather-ask"), null, "the grant cleared the card");
+    run.stop();
+    assert.deepEqual(asked, [true], "with no city the click asks for geolocation too");
+    assert.deepEqual(slot.querySelectorAll(".weather-temp").map((node) => node.textContent), ["12\u00b0"]);
+    assert.equal((store["newtab_net_cache_weather"] as { key: string }).key.startsWith("geo:"), true);
+  }));
+
+test("with a city the click asks for the data consent only", () =>
+  with_fake_document(async () => {
+    const asked: boolean[] = [];
+    const { deps } = fake_deps({ consented: false });
+    const slot = new FakeNode("div");
+    const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo" }), { ...deps, request_location_access: async (with_geolocation: boolean) => (asked.push(with_geolocation), false) });
+    await run.finished;
     slot.querySelector(".weather-ask")!.listeners["click"]!();
     await new Promise((done) => setImmediate(done));
-    assert.equal(slot.querySelector(".weather-ask"), null, "the grant cleared the card");
-    for (let turn = 0; turn < 5; turn++) {
-      for (const release of releases.splice(0)) release();
-      await new Promise((done) => setImmediate(done));
-    }
+    assert.deepEqual(asked, [false]);
     run.stop();
-    await run.finished;
-    const temps = slot.querySelectorAll(".weather-temp").map((node) => node.textContent);
-    assert.deepEqual(temps, ["12\u00b0"], "only the run the grant started drew");
-    assert.equal((store["newtab_net_cache_weather"] as { key: string }).key.startsWith("geo:"), true);
   }));
 
 test("forget_weather removes the forecast and the air quality keys and nothing else", async () => {
@@ -595,7 +590,7 @@ test("opening More draws the strip again, so hours that passed while it was clos
 
 // The air quality row. A stored forecast keeps the weather fetch out of these tests, so every request counted here is an air quality request.
 const AIR_BODY = JSON.stringify({ current: { european_aqi: 34, us_aqi: 61, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 } });
-async function air_card(over: { units?: "metric" | "imperial"; air_response?: () => Promise<Response>; air_seed?: { at: number } } = {}) {
+async function air_card(over: { consented?: () => boolean; units?: "metric" | "imperial"; air_response?: () => Promise<Response>; air_seed?: { at: number } } = {}) {
   const units = over.units ?? "metric";
   const store: Record<string, unknown> = { newtab_net_cache_weather: { key: `city:Oslo|${units}`, at: NOW_MS, value: { ...(weather_view() as { weather: object }).weather, units } } };
   if (over.air_seed) store["newtab_net_cache_air"] = { key: `59.91,10.75|${units}`, at: over.air_seed.at, value: { scale: units === "imperial" ? "us" : "eu", index: 10 } };
@@ -607,7 +602,7 @@ async function air_card(over: { units?: "metric" | "imperial"; air_response?: ()
   };
   const slot = new FakeNode("div");
   slot.is_root = true;
-  const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo", newtab_weather_units: units }), { ...fake_deps().deps, net });
+  const run = start_weather(slot as never, on({ newtab_weather_city: "Oslo", newtab_weather_units: units }), { ...fake_deps().deps, has_location_consent: async () => over.consented?.() ?? true, net });
   await run.finished;
   const click = () => slot.querySelector(".weather-more")!.listeners["click"]!();
   const air_text = () => slot.querySelector(".weather-air")?.textContent ?? null;
@@ -622,6 +617,19 @@ test("the air quality url asks for the US index for imperial and the European in
   assert.equal(imperial.searchParams.get("latitude"), "59.91");
   assert.equal(new URL(air_quality_url({ latitude: 1, longitude: 2, units: "metric" })).searchParams.get("current"), "european_aqi,pm2_5,pm10,ozone");
 });
+
+test("a consent withdrawn while the page is open stops the air quality request behind More", () =>
+  with_fake_document(async () => {
+    let consented = true;
+    const card = await air_card({ consented: () => consented });
+    assert.equal(card.slot.querySelector(".weather-more") !== null, true, "the stored reading drew");
+    consented = false;
+    card.click();
+    await settle();
+    assert.deepEqual(card.requests, [], "no request went out after the withdrawal");
+    assert.equal(card.air_text(), null);
+    card.run.stop();
+  }));
 
 test("air quality parsing takes the scale of the units, keeps what is numeric and refuses an answer with no index", () => {
   assert.deepEqual(parse_air_quality(AIR_BODY, "metric"), { scale: "eu", index: 34, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 });

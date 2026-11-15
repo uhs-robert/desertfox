@@ -1,4 +1,4 @@
-// The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off when `newtab_weather` is false, and sends nothing until the user grants the optional `locationInfo` data collection permission and a position is granted or a city is set. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
+// The weather card. Open-Meteo gives the forecast and, for a city, the coordinates. It is off when `newtab_weather` is false, and sends nothing until the user grants the optional `locationInfo` data collection permission and a city is set or a position is granted. Where it sends coordinates they are rounded to 2 decimals (about 1 km), and the city text goes only to the geocoder.
 import type { Settings } from "../shared/config.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { draw_weather_icon } from "./weather_icon.ts";
@@ -32,8 +32,8 @@ export type WeatherDeps = {
   has_geolocation_permission: () => Promise<boolean>;
   // Resolves with the position, rejects when the browser or the user refuses.
   current_position: () => Promise<{ latitude: number; longitude: number }>;
-  // Asks for the data consent and the geolocation permission in one prompt. Must be called from the click handler with no await before it, or Firefox refuses it.
-  request_location_access: () => Promise<boolean>;
+  // Asks for the data consent, and for geolocation too unless a city is set (the city is then the place). One prompt. Must be called from the click handler with no await before it, or Firefox refuses it.
+  request_location_access: (with_geolocation: boolean) => Promise<boolean>;
   net: NetEnv;
 };
 
@@ -194,7 +194,7 @@ const is_weather_in = (setting: UnitsSetting, now: () => number) => (stored: unk
 // The forecast is for one local date. After midnight at the place its high, low, UV and sun times belong to yesterday, so the stored answer is fetched again instead of shown.
 const is_past_date = (weather: Pick<Weather, "date" | "utc_offset_seconds">, now_ms: number): boolean => new Date(now_ms + weather.utc_offset_seconds * 1000).toISOString().slice(0, 10) !== weather.date;
 
-// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Without the data consent the card only offers the button. Geolocation comes first when its permission is already granted, and a stored reading draws before the position arrives. A city is the fallback, and with neither the card offers the permission button and sends no request.
+// Calls `show` with what the card draws, possibly twice (a stored value, then a fresh one). It draws nothing when the setting is off, the page is private, a place is missing or a fetch fails. Without the data consent the card only offers the button. A city wins and geolocation is not touched. With no city, a granted position is used and a stored reading draws before it arrives, and without one the card offers the permission button and sends no request.
 export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, show: (view: WeatherView) => void): Promise<void> {
   if (settings.newtab_weather !== true) return;
   if (await refused_as(deps.page_is_private(), true)) return;
@@ -205,9 +205,9 @@ export async function run_weather(settings: WeatherSettings, deps: WeatherDeps, 
     show({ kind: "ask_location" });
     return;
   }
-  const has_permission = await refused_as(deps.has_geolocation_permission(), false);
-  // Offered until the permission is granted, even with a city set. Once granted, the position wins over the city.
-  if (!has_permission) show({ kind: "ask_location" });
+  // A city is the place the user chose, so it wins and geolocation is neither read nor asked for.
+  const has_permission = !city && (await refused_as(deps.has_geolocation_permission(), false));
+  if (!city && !has_permission) show({ kind: "ask_location" });
   let earlier: Weather | undefined;
   if (has_permission) {
     earlier = await peek_cached("weather", GEO_KEY_PREFIX, WEATHER_MAX_AGE_MS, is_weather_in(units, deps.net.now), deps.net, `|${units}`);
@@ -323,7 +323,7 @@ export const browser_weather_deps = (): WeatherDeps => ({
   has_location_consent: () => browser.permissions.contains({ data_collection: ["locationInfo"] }),
   has_geolocation_permission: () => browser.permissions.contains({ permissions: ["geolocation"] }),
   current_position: () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition((found) => resolve(found.coords), reject, { timeout: GEOLOCATION_TIMEOUT_MS, maximumAge: WEATHER_TTL_MS })),
-  request_location_access: () => browser.permissions.request({ permissions: ["geolocation"], data_collection: ["locationInfo"] }),
+  request_location_access: (with_geolocation) => browser.permissions.request({ permissions: with_geolocation ? ["geolocation"] : [], data_collection: ["locationInfo"] }),
   net: browser_net_env(),
 });
 
@@ -333,14 +333,19 @@ export async function forget_weather(remove: (key: string) => Promise<void> = (k
   await remove(net_cache_key("air"));
 }
 
+// `net` that checks the consent before every request, so a consent withdrawn while the page stays open stops the later ones (the forecast refresh and the air quality row behind More). A stored answer still draws.
+function consent_net(net: NetEnv, has_consent: () => Promise<boolean>): NetEnv {
+  return { ...net, fetch: async (input, init) => ((await refused_as(has_consent(), false)) ? net.fetch(input, init) : new Response(null, { status: 503 })) };
+}
+
 // Fills `slot` and keeps the page free: nothing here is awaited by the draw, and a failure leaves the slot empty. A click on the permission button asks first, then stops this run and runs the card again. `stop` ends the run, and a run the click started.
 export function start_weather(slot: HTMLElement, settings: WeatherSettings, deps: WeatherDeps = browser_weather_deps()): { finished: Promise<void>; stop: () => void } {
   let live = true;
   let restarted: { stop: () => void } | undefined;
-  const net = stoppable_net(deps.net, () => live);
+  const net = consent_net(stoppable_net(deps.net, () => live), deps.has_location_consent);
   const air = make_air_loader(net, () => live);
   const ask_for_location = () => {
-    void refused_as(deps.request_location_access(), false).then((granted) => {
+    void refused_as(deps.request_location_access(!(settings.newtab_weather_city ?? "").trim()), false).then((granted) => {
       if (!granted || !live) return;
       live = false;
       slot.replaceChildren();

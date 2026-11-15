@@ -11,3 +11,11 @@ Two things stay outside the submit and are set on the listing page:
 - The previews: `docs/images/hints.png`, `which-key.png`, `command-line.png` and `theme-switch.png` (1280x800), and `assets/promo/amo-listing.png`. Not `demo.gif`: previews are static images.
 
 The source archive for the submit comes from `just source_archive`. Its `BUILD.md` is the root `BUILD.md` of this repository.
+
+## Order of a submission
+
+1. Bump the version in `package.json`, `package-lock.json` and `src/manifest.json` to a new three-number version, commit it on a release branch and push. `sign_listed` refuses a dirty tree and signs the version in the manifest, and AMO signs a version number once.
+2. Publish the GitHub release with the hosts before the submit: `just release_stamp <version>` then `just release_publish <version>`. The release has no xpi, because a listed submit downloads none. The add-on's install command points at this release, so it must exist before AMO approves. The tag targets HEAD, so the push comes first.
+3. Run `just sign_listed`. It stamps and builds again, which writes the same host bytes, and uploads the build, the metadata and the source archive.
+4. Set the privacy policy and the previews on the listing page.
+5. After approval, add the signed xpi to the release with `gh release upload v<version> <file>` if you want it there.
