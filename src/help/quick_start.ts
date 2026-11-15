@@ -102,8 +102,6 @@ const BINDINGS = {
   half_page_up: { mode: "normal", id: "scroll.pages", args: { fraction: -0.5 } },
   // `,?` is shorter in keymap notation, but the chord works in every mode.
   whichkey: { mode: "normal", id: "help.whichkey", args: {}, prefer: "<A-?>" },
-  zoom_in: { mode: "normal", id: "zoom.by", args: { delta: 0.1 }, prefer: "zi" },
-  zoom_reset: { mode: "normal", id: "zoom.set", args: { level: 1 } },
   next_heading: { mode: "normal", id: "page.heading", args: { direction: "next" } },
   previous_heading: { mode: "normal", id: "page.heading", args: { direction: "prev" } },
   headings: { mode: "normal", id: "cmdline.open", args: { text: "heading " } },
@@ -125,6 +123,7 @@ const BINDINGS = {
   sentence_object: { mode: "visual", id: "visual.object", args: { object: "sentence" } },
   back: { mode: "normal", id: "page.back", args: {} },
   tab_switch: { mode: "normal", id: "tab.switch", args: {}, prefer: "T" },
+  tab_close: { mode: "normal", id: "tab.close", args: {}, prefer: "dd" },
   tab_alternate: { mode: "normal", id: "tab.alternate", args: {}, prefer: "gl" },
   tab_next: { mode: "normal", id: "tab.next", args: {}, prefer: "J" },
   tab_previous: { mode: "normal", id: "tab.prev", args: {}, prefer: "K" },

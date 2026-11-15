@@ -1,4 +1,5 @@
-// The text of the Practice lessons, in page order. Each lesson teaches the fastest key for one task: a goal, the steps to do on the page, and the checks the page ticks off.
+// The text of the Practice lessons, in page order. Each lesson teaches the fastest key for one task on any website: a goal, the steps to do on the page, and the checks the page ticks off.
+// A step that leaves the page names the way back before the key that leaves.
 // Every key comes from the compiled keymap through `sentence`, so a rebind shows the reader's own key.
 // The key test (`test/key/p40_help_practice.mjs`) drives each lesson with the keys its steps name and waits for these checks.
 
@@ -17,7 +18,7 @@ const LESSONS = [
   {
     slug: "scroll",
     title: "1. Scroll",
-    goal: "Move through the page without the mouse.",
+    goal: "Move through any page without the mouse.",
     steps: [
       "Press {down} a few times to scroll down, and {up} to scroll up.",
       "Press {half_page} to move half a page down, and {half_page_up} to move half a page up.",
@@ -42,15 +43,14 @@ const LESSONS = [
   },
   {
     slug: "headings",
-    title: "3. Jump between lessons",
-    goal: "Move through a long page by its headings.",
+    title: "3. Jump between headings",
+    goal: "Move through a long page, such as an article or a manual, by its headings.",
     steps: [
-      "Press {next_heading} to jump to the next lesson, and {previous_heading} to come back.",
-      "Press {headings}. A list of every heading opens. Type [slider] and press Enter to jump to that lesson.",
-      "Press {headings} again, type [jump] and press Enter to return here.",
+      "Press {next_heading} to jump to the next heading, and {previous_heading} to jump to the one before.",
+      "Press {headings}. A list of every heading on the page opens. Type [grab] to narrow the list, and press Enter to jump to the heading that is left.",
+      "Press {headings} again, type [jump] and press Enter.",
     ],
-    notes: ["From here on, {next_heading} takes you to the next lesson."],
-    checks: { heading: "jumped to a heading", listed: "picked the slider lesson from the list" },
+    checks: { heading: "jumped to the next heading", listed: "picked a heading from the list" },
   },
   {
     slug: "hints",
@@ -94,14 +94,15 @@ const LESSONS = [
   },
   {
     slug: "slider",
-    title: "7. Move a slider and drag a card",
-    goal: "Set a slider and drag an item with the keyboard.",
+    title: "7. Grab and drop",
+    goal: "Drag anything a mouse can drag. There are two ways. Grab and move: you pick a thing, then move it with keys. Grab and drop: you pick a thing, then pick the place it goes to from letters on the page.",
     steps: [
-      "Press {grab_move} and type the letter on the slider. The badge says GRAB.",
-      "Press {grab_right} until the slider reads 7. {grab_left} moves it back. Press {grab_drop} to keep the value.",
-      "Press {grab_drop_on} and type the letter on the card \"Fox\". New letters appear. Type the letters on the box \"Den\".",
+      "Grab and move is {grab_move}. [;] starts a hint key, [G] means grab and move, and [g] puts letters only on the things that can be dragged. Press {grab_move} and type the letter on the slider. The badge says GRAB.",
+      "Press {grab_right} until the slider reads 7. {grab_left} moves it back. Press {grab_drop} to drop it there.",
+      "Grab and drop is {grab_drop_on}. [;] starts a hint key, the first [g] means grab and drop, and the second [g] puts letters only on the things that can be dragged. Press {grab_drop_on} and type the letter on the card \"Fox\".",
+      "New letters appear on every place the card can go. Type the letters on the box \"Den\". The card drops there.",
     ],
-    notes: ["In grab mode, {grab_keys} lists the keys and {escape} puts the slider back.", "{hint_inputs} and a letter only focuses a slider. The arrow keys move it then."],
+    notes: ["In grab mode, {grab_keys} lists the keys and {escape} puts the thing back where it was.", "{hint_inputs} and a letter only focuses a slider. The arrow keys move it then."],
     checks: { seven: "set the slider to 7", den: "dropped the Fox in the Den" },
   },
   {
@@ -120,7 +121,7 @@ const LESSONS = [
       "Press {hint_copy_text} and type the letters on the second paragraph below. Its text is copied.",
       "Press {focus_input} to enter the paste box, and press Ctrl+V. Press {escape} to leave the box.",
       "For one sentence, press {visual_at_text} and type the letters on the first paragraph. Press {sentence_object} to select its first sentence, and {yank} to copy it.",
-      "Press {focus_input} and Ctrl+V again.",
+      "Press {escape} to return to normal mode. Then press {focus_input} and Ctrl+V again.",
     ],
     notes: ["In visual mode, {caret_word} extends the selection by a word and {swap} moves to its other end.", "{caret_at_text} and a letter places a caret without selecting."],
     checks: { paragraph: "pasted the second paragraph", sentence: "pasted one sentence" },
@@ -130,12 +131,12 @@ const LESSONS = [
     title: "10. The command line",
     goal: "Run any command by name, and look up every key.",
     steps: [
-      "Press {cmdline}. Type [set -t theme catppuccin] and press Enter. Tab completes each word. The page changes colors until the browser restarts.",
-      "Press {cmdline}, type [unset -t theme] and press Enter to get your own theme back.",
-      "Press {cmdline}, type [help commands] and press Enter. The Commands page lists every command and its keys. Press {back} to come back to this lesson.",
+      "Press {cmdline}. Type [set theme catppuccin] and press Enter. Tab completes each word. The page changes colors.",
+      "Press {cmdline}, type [unset theme] and press Enter to drop that change.",
+      "{back} goes back one page, so it brings you back here. Press {cmdline}, type [help commands] and press Enter. The Commands page lists every command and its keys. Then press {back}.",
     ],
     notes: ["{help} opens the help from any page.", "On the command line, Ctrl+H opens the help for the command you are typing."],
-    checks: { themed: "changed the theme", restored: "restored the theme", returned: "came back from the Commands page" },
+    checks: { themed: "changed the theme", restored: "dropped the change", returned: "came back from the Commands page" },
   },
   {
     slug: "tabs",
@@ -143,23 +144,22 @@ const LESSONS = [
     goal: "Open pages in the background and jump between tabs.",
     steps: [
       "Press {hint_background} and type the letters on \"Settings\". It opens in a new tab behind this one. Do the same for \"Commands\".",
-      "The next key takes you away from this page. Press {tab_switch}, type [settings] and press Enter. You are on the Settings tab.",
-      "Come back the same way: press {tab_switch}, type [prac] and press Enter. When the list shows more than one row, press the Down arrow until the row you want is highlighted.",
-      "Press {tab_switch} and type [comm]. Press the Down arrow until the Commands row is highlighted, then {list_close} to close that tab from the list, and {escape}. Do the same for the Settings tab.",
+      "{tab_close} closes the tab you are on, and that brings you back here. Press {tab_switch} and type [settings]. A list of your tabs narrows as you type. Press the Down arrow until the Settings row is highlighted, then Enter. You are on the Settings tab. Now press {tab_close}.",
+      "A tab can also close from the list. Press {tab_switch} and type [comm]. Press the Down arrow until the Commands row is highlighted, then {list_close} to close that tab, and {escape}.",
     ],
-    notes: ["{tab_alternate} returns to the tab you used last.", "{tab_next} and {tab_previous} move to the next and previous tab.", "{find_anything} also searches bookmarks and history. {tab_switch} lists tabs only."],
-    checks: { opened: "opened two tabs in the background", returned: "left this tab and came back", closed: "closed both tabs" },
+    notes: ["{tab_alternate} returns to the tab you used last, without closing one.", "{tab_next} and {tab_previous} move to the next and previous tab.", "{find_anything} also searches bookmarks and history. {tab_switch} lists tabs only."],
+    checks: { opened: "opened two tabs in the background", returned: "left this tab and came back", closed: "closed the other tab from the list" },
   },
   {
     slug: "video",
     title: "12. Video",
     goal: "Drive a video player with the keyboard.",
     steps: [
-      "Read all the steps first. The next page is YouTube, where this text is gone.",
+      "{back} goes back one page, so it brings you back here from the video. Read all the steps first, because this text is gone on YouTube.",
       "Press {hint} and type the letters on the video link below.",
       "On YouTube, press {media_enter}. The badge says MEDIA and a panel lists the keys.",
       "Press {media_play} to play or pause. {media_forward} and {media_backward} seek. {media_louder} and {media_quieter} change the volume. {media_faster} speeds up and {media_speed_reset} resets the speed. {media_mute} mutes. {media_fullscreen} fills the screen.",
-      "Press {escape} to leave media mode, then {back} to come back to this lesson.",
+      "Press {escape} to leave media mode, then {back}.",
     ],
     notes: ["If the video does not start, press {hint} and type the letters on its play button.", "In media mode, {media_keys} shows the key list again."],
     checks: { returned: "came back from the video" },
@@ -167,7 +167,7 @@ const LESSONS = [
   {
     slug: "marks",
     title: "13. Come back to a place",
-    goal: "Leave a spot on a page and return to it.",
+    goal: "Leave a spot on a long page and return to it.",
     steps: [
       "Press {mark}, then [a]. This place is now mark a.",
       "Press {bottom} to go to the end of the page. Then press {mark_jump} and [a] to return.",
@@ -191,13 +191,10 @@ const LESSONS = [
 
 export type LessonSlug = (typeof LESSONS)[number]["slug"];
 
-export const PRACTICE_LESSONS: readonly { slug: LessonSlug; title: string }[] = LESSONS.map(({ slug, title }) => ({ slug, title }));
-
 export type PracticeLesson = { slug: LessonSlug; title: string; goal: Inline[]; steps: Inline[][]; notes: Inline[][]; checks: { name: string; text: string }[] };
 
-// The first screen says only how to move, because a visitor who cannot scroll reaches no lesson.
-const INTRO = "Welcome. These lessons teach the keys by having you press them. Press {down} to scroll down. Press it a few times, until lesson 1 shows. If a key does nothing, press {escape} once and try again.";
-const OUTRO = "That is the end of the lessons. {whichkey} shows every key, and {cmdline} [help commands] lists every command. Press {top} to return to the start.";
+const INTRO = "Welcome! These lessons will teach you the basic keys needed for web browsing.";
+const OUTRO = "That is the end of the lessons. Keep learning as you browse. On any page, {whichkey} lists every key. {cmdline} opens the command line with a list of every command. Type to narrow the list, and press Tab to complete a name.";
 
 export const practice_intro = (compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Inline[] => sentence(compiled, commands, INTRO);
 export const practice_outro = (compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Inline[] => sentence(compiled, commands, OUTRO);

@@ -14,7 +14,6 @@ class FakeNode {
   hidden = false;
   id = "";
   children: (FakeNode | string)[] = [];
-
   parent: FakeNode | null = null;
   attributes: Record<string, string> = {};
   listeners: Record<string, FakeListener> = {};

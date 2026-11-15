@@ -1,7 +1,9 @@
 // The Practice page: a sequence of short lessons, each with a goal, the keys, a target to try them on and check lines that turn to "Done" when the page sees the step.
 // The element ids are fixed, because the key test and the demo script address the targets and the check lines by id.
 
-import { el, inline_node, new_tab_link, section_hash, section_heading } from "./render.ts";
+import { el, inline_node, new_tab_link, section_anchor, section_hash, section_heading } from "./render.ts";
+import { parse_route } from "./route.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 import { practice_check_id, PRACTICE_VIDEO_URL } from "./practice_lessons.ts";
 import type { LessonSlug, PracticeLesson } from "./practice_lessons.ts";
 import type { Inline } from "./blocks.ts";
@@ -23,8 +25,10 @@ const STRIP_WORDS = 60;
 const FIND_CURRENT_HIGHLIGHT = "oasis-find-current";
 // What the visitor left the page for, kept across the rebuild that the way back causes, so its check can turn done.
 const LEFT_FOR_KEY = "desertfox_practice_left";
+// The ids of the check lines that are done, kept for the same rebuild. It lasts as long as the tab, so a new tab starts the lessons fresh.
+const DONE_KEY = "desertfox_practice_done";
 const WATCH_MS = 300;
-// A heading this close to the top of the view was put there by a heading jump.
+// A heading jump puts the heading this close to the top of the view.
 const HEADING_AT_TOP_PX = 12;
 
 type Mark = (slug: LessonSlug, name: string) => void;
@@ -72,7 +76,13 @@ function prose(id_start: string, texts: string[]): HTMLElement[] {
   });
 }
 
-const heading_top = (slug: LessonSlug): number => document.getElementById(`practice-${slug}`)?.getBoundingClientRect().top ?? Number.NaN;
+const heading_top = (slug: LessonSlug): number => document.getElementById(section_anchor("practice", slug))?.getBoundingClientRect().top ?? Number.NaN;
+// True while the lesson covers the middle of the view, wherever its heading is.
+const in_lesson = (slug: LessonSlug): boolean => {
+  const box = document.getElementById(section_anchor("practice", slug))?.closest("section")?.getBoundingClientRect();
+  const middle = window.innerHeight / 2;
+  return box !== undefined && box.top <= middle && box.bottom > middle;
+};
 const at_page_top = (): boolean => window.scrollY === 0;
 const end_in_view = (): boolean => {
   const box = document.getElementById("practice-end")?.getBoundingClientRect();
@@ -119,16 +129,22 @@ const BUILDERS: Record<LessonSlug, Builder> = {
     };
   },
   headings: (mark) => {
+    // Where the page last stood still. A scroll key can animate over several ticks, so a move is judged from rest to rest.
+    let rest: { scroll: number; in_this_lesson: boolean } | undefined;
     let last_scroll: number | undefined;
     return {
       targets: [],
       watch: () => {
-        const moved = last_scroll !== undefined && last_scroll !== window.scrollY;
+        const still = last_scroll === window.scrollY;
         last_scroll = window.scrollY;
-        if (!moved) return;
-        const at_top = (heading: Element) => Math.abs(heading.getBoundingClientRect().top) < HEADING_AT_TOP_PX;
-        if (Array.from(document.querySelectorAll(".desertfox-practice-lesson h2")).some(at_top)) mark("heading");
-        if (Math.abs(heading_top("slider")) < HEADING_AT_TOP_PX) mark("listed");
+        if (!still) return;
+        // Only a move that starts in this lesson, crosses more than half a screen and ends with a heading at the top counts. Line scrolling and a jump made in another lesson do not.
+        if (rest?.in_this_lesson && Math.abs(window.scrollY - rest.scroll) > window.innerHeight / 2) {
+          const at_top = (heading: Element) => Math.abs(heading.getBoundingClientRect().top) < HEADING_AT_TOP_PX;
+          if (Array.from(document.querySelectorAll(".desertfox-practice-lesson h2")).some(at_top)) mark("heading");
+          if (Math.abs(heading_top("slider")) < HEADING_AT_TOP_PX) mark("listed");
+        }
+        rest = { scroll: window.scrollY, in_this_lesson: in_lesson("headings") };
       },
     };
   },
@@ -227,16 +243,17 @@ const BUILDERS: Record<LessonSlug, Builder> = {
   "command-line": (mark) => {
     const background = () => getComputedStyle(document.documentElement).getPropertyValue("--desertfox-bg-core");
     let start: string | undefined;
-    let themed = false;
+    let changed_to: string | undefined;
     return {
       targets: [],
       watch: () => {
         start ??= background();
-        if (background() !== start) {
-          themed = true;
+        if (changed_to === undefined && background() !== start) {
+          changed_to = background();
           mark("themed");
         }
-        if (themed && background() === start) mark("restored");
+        // Compared with the changed color, not the first one: `unset` also drops a theme the visitor chose in the browser earlier, so the first color may never return.
+        if (changed_to !== undefined && background() !== changed_to) mark("restored");
       },
     };
   },
@@ -250,6 +267,13 @@ const BUILDERS: Record<LessonSlug, Builder> = {
     let opened = false;
     let hidden_since_open = false;
     let ticks = 0;
+    // The close key moves to the tab after the closed one, so the Settings tab goes just before this tab. Closing it then lands here, whatever other tabs are open.
+    const put_settings_before_this_tab = async (tabs: browser.tabs.Tab[]): Promise<void> => {
+      const own = await browser.tabs.getCurrent();
+      const settings = tabs.find((tab) => tab.openerTabId === own?.id && tab.url?.endsWith(`#/${pages[0]}`));
+      if (own?.id === undefined || settings?.id === undefined || settings.index === own.index - 1) return;
+      await browser.tabs.move(settings.id, { index: settings.index < own.index ? own.index - 1 : own.index });
+    };
     return {
       targets: [el("p", undefined, links[0]!, "  ", links[1]!)],
       watch: () => {
@@ -258,6 +282,8 @@ const BUILDERS: Record<LessonSlug, Builder> = {
         // The tab list is read every fifth tick, because the answer comes from the browser and changes slowly.
         if (ticks++ % 5 !== 0) return;
         void browser.tabs.query({ currentWindow: true }).then((tabs) => {
+          // The tab can close while the move is on its way.
+          void ignore_refusal(put_settings_before_this_tab(tabs));
           const open_count = pages.filter((page) => tabs.some((tab) => tab.url?.endsWith(`#/${page}`))).length;
           if (open_count === pages.length) {
             opened = true;
@@ -276,20 +302,17 @@ const BUILDERS: Record<LessonSlug, Builder> = {
     return { targets: [el("p", undefined, link)] };
   },
   marks: (mark) => {
-    // Set while the visitor is away at the end or the start. Only a trip that started with this lesson on screen counts.
-    let went: "end" | "top" | undefined;
+    // Where the tick before this one saw the page, when that was the end or the start. A mark jump and the jump back are instant, so they bring the lesson back within one tick. Scrolling back passes other places first and does not count.
+    let away_at: "end" | "top" | undefined;
     let was_here = false;
     return {
       targets: [],
       watch: () => {
-        const top = heading_top("marks");
-        const here = top >= 0 && top < window.innerHeight;
-        if (here && went !== undefined) mark(went === "end" ? "marked" : "jumped");
-        if (here) {
-          was_here = true;
-          went = undefined;
-        } else if (was_here && end_in_view()) went = "end";
-        else if (was_here && at_page_top()) went = "top";
+        const here = in_lesson("marks");
+        if (here && away_at !== undefined) mark(away_at === "end" ? "marked" : "jumped");
+        if (here) was_here = true;
+        // Only a trip that started with this lesson on screen counts.
+        away_at = here || !was_here ? undefined : end_in_view() ? "end" : at_page_top() ? "top" : undefined;
       },
     };
   },
@@ -300,12 +323,23 @@ const BUILDERS: Record<LessonSlug, Builder> = {
   },
 };
 
-function check_lines(lesson: PracticeLesson): HTMLElement {
+// A unit test renders the page in Node, which has no session storage.
+const session = (): Storage | undefined => (typeof sessionStorage === "undefined" ? undefined : sessionStorage);
+const done_ids = (): string[] => JSON.parse(session()?.getItem(DONE_KEY) ?? "[]") as string[];
+
+function show_done(line: HTMLElement, text: string): void {
+  line.setAttribute("data-done", "true");
+  line.className = "";
+  line.textContent = `Done: ${text}`;
+}
+
+function check_lines(lesson: PracticeLesson, done: string[]): HTMLElement {
   return el("ul", undefined, ...lesson.checks.map(({ name, text }) => {
     const line = el("li", "desertfox-help-muted", `To do: ${text}`);
     line.id = practice_check_id(lesson.slug, name);
     line.setAttribute("data-done", "false");
     line.setAttribute("data-text", text);
+    if (done.includes(line.id)) show_done(line, text);
     return line;
   }));
 }
@@ -313,9 +347,8 @@ function check_lines(lesson: PracticeLesson): HTMLElement {
 const mark_done: Mark = (slug, name) => {
   const line = document.getElementById(practice_check_id(slug, name));
   if (!line || line.getAttribute("data-done") === "true") return;
-  line.setAttribute("data-done", "true");
-  line.className = "";
-  line.textContent = `Done: ${line.getAttribute("data-text") ?? ""}`;
+  show_done(line, line.getAttribute("data-text") ?? "");
+  session()?.setItem(DONE_KEY, JSON.stringify([...done_ids(), line.id]));
 };
 
 // Counts the `j` presses that reach the page itself. A key DesertFox takes never gets here, and one typed into a field is text, not a shortcut.
@@ -343,7 +376,8 @@ function mark_return(): void {
 function remember_lesson(lessons: PracticeLesson[]): Watch {
   let remembered: string | undefined;
   return () => {
-    const current = lessons.filter((lesson) => heading_top(lesson.slug) < window.innerHeight / 2).at(-1);
+    // The first lesson sits right under the welcome line, so the top of the page is no lesson: a reload there keeps the welcome line in view.
+    const current = at_page_top() ? undefined : lessons.filter((lesson) => heading_top(lesson.slug) < window.innerHeight / 2).at(-1);
     const hash = current ? section_hash("practice", current.slug) : "#/practice";
     if (hash === remembered) return;
     remembered = hash;
@@ -354,8 +388,8 @@ function remember_lesson(lessons: PracticeLesson[]): Watch {
 // Runs the watches while the page is shown. `anchor` leaves the document when another help page replaces this one, which ends the run and removes the listeners.
 function start_watching(anchor: HTMLElement, lessons: PracticeLesson[], watches: Watch[]): void {
   const on_key = count_page_keys();
-  // A move to another help page changes the hash. The key that runs `:help` gives no other sign.
-  const on_hash = () => { if (!location.hash.includes("practice")) sessionStorage.setItem(LEFT_FOR_KEY, "help"); };
+  // A move to the Commands page changes the hash. The key that runs `:help commands` gives no other sign.
+  const on_hash = () => { if (parse_route(location.hash).page === "commands") sessionStorage.setItem(LEFT_FOR_KEY, "help"); };
   const keep_place = remember_lesson(lessons);
   let started = false;
   const timer = setInterval(() => {
@@ -382,7 +416,7 @@ function start_watching(anchor: HTMLElement, lessons: PracticeLesson[], watches:
   (timer as unknown as { unref?: () => void }).unref?.();
 }
 
-function lesson_section(lesson: PracticeLesson, built: Built): HTMLElement {
+function lesson_section(lesson: PracticeLesson, built: Built, done: string[]): HTMLElement {
   return el(
     "section",
     "desertfox-practice-lesson",
@@ -391,7 +425,7 @@ function lesson_section(lesson: PracticeLesson, built: Built): HTMLElement {
     el("ol", undefined, ...lesson.steps.map((step) => el("li", undefined, ...step.map(inline_node)))),
     ...built.targets,
     ...lesson.notes.map((note) => el("p", "desertfox-help-muted", ...note.map(inline_node))),
-    check_lines(lesson),
+    check_lines(lesson, done),
   );
 }
 
@@ -401,5 +435,6 @@ export function practice_page(text: PracticeText): HTMLElement[] {
   const end = el("p", undefined, ...text.outro.map(inline_node));
   end.id = "practice-end";
   start_watching(intro, text.lessons, built.flatMap(({ watch }) => (watch ? [watch] : [])));
-  return [intro, ...text.lessons.map((lesson, index) => lesson_section(lesson, built[index]!)), end];
+  const done = done_ids();
+  return [intro, ...text.lessons.map((lesson, index) => lesson_section(lesson, built[index]!, done)), end];
 }
