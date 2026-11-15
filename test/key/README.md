@@ -28,7 +28,7 @@ A full run takes about 34 s on 8 shards. It needs labwc, Hyprland, dbus-daemon a
 
 ## Demo
 
-`just readme-demo` runs `demo.mjs`: one key-test session that plays the scenes in `demo_scenes.mjs` on the fixture page `demo/docs_page.html` with default settings and keys. The session floats the Firefox window to 1280x800, wf-recorder films that area and grim takes the stills. ffmpeg turns the film into `docs/images/demo.gif`, lowering the frame rate and then the width until the file is under 5 MB. The stills land beside it. Set `DEMO_OUT_DIR` to write elsewhere. It needs wf-recorder, ffmpeg and grim, and it is not a piece of the key test run.
+`just readme-demo` runs `demo.mjs`: one key-test session that plays the seven shots in `demo_scenes.mjs` with default settings and keys. Shot 1 is the new tab page, and the fixture page `demo/docs_page.html` stands in for the help Practice page until that page exists. The session floats the Firefox window to 1280x800, wf-recorder films that area and grim takes the stills. ffmpeg burns a corner overlay of the key presses into the film and makes `docs/images/demo.gif` from it, lowering the frame rate and then the width until the file is under 5 MB. The stills land beside it, copied out only when the whole run worked. Set `DEMO_OUT_DIR` to write elsewhere. It needs wf-recorder, ffmpeg and grim, and it is not a piece of the key test run.
 
 ## Stall capture
 

@@ -18,7 +18,7 @@ const RUNTIME_PREFIX = `dfk-${process.getuid()}-`;
 const MAX_NAME_LENGTH = 107 - `/tmp/${RUNTIME_PREFIX}`.length - "/hypr/".length - 62 - "/.socket2.sock".length;
 const OWNER_FILE = "owner";
 const SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin";
-const OUTPUT = "WAYLAND-1";
+export const OUTPUT = "WAYLAND-1";
 const STOP_WAIT_MS = 2000;
 const KEY_REPLY_TIMEOUT_MS = 5000;
 
