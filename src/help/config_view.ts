@@ -15,12 +15,14 @@ const SOURCE_TEXT: Record<ConfigSource, string> = {
 // A status stored by an older version can name a source this version dropped, such as "managed", until the first publish overwrites it.
 const UNKNOWN_SOURCE_TEXT = "DesertFox does not know yet where your settings come from. This updates when it next loads them";
 
-// The same for every source: `config.reload` reads the files whatever source gave the settings at startup.
-const RELOAD_STEPS = ["Set up the native host once, with the button below or the command native.install.", "Press ,r (the command config.reload) to load your changes."];
+// The same for every source: `config.reload` reads the files whatever source gave the settings at startup. With no key bound the step names the command line.
+function rebuild_steps(reload_key: string | undefined): string[] {
+  return ["Set up the native host once, with the button below or the command native.install.", reload_key === undefined ? "Run the command config.reload to load your changes." : `Press ${reload_key} (the command config.reload) to load your changes.`];
+}
 
-export function build_config_view(status: ConfigStatus | undefined): ConfigView {
+export function build_config_view(status: ConfigStatus | undefined, reload_key: string | undefined): ConfigView {
   return {
     source_text: status ? (SOURCE_TEXT[status.source] ?? UNKNOWN_SOURCE_TEXT) : "DesertFox has not recorded where your settings come from yet",
-    rebuild_steps: RELOAD_STEPS,
+    rebuild_steps: rebuild_steps(reload_key),
   };
 }

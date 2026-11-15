@@ -89,7 +89,43 @@ test("quick start: a command with no command line form says it has no key, and a
   const bare = compile({ ...DEFAULT_KEYMAP, site_keys: {}, normal: { j: { id: "scroll.lines", args: { count: 10 } } } });
   const shown = texts(quick_start_blocks(bare, all_commands));
   assert.ok(shown.includes("(no key bound)"));
-  assert.ok(shown.some((text) => text.includes("No key starts a longer sequence")));
+  assert.ok(shown.some((text) => text.includes("No key opens it by itself")));
+});
+
+const compile_with = (settings: Record<string, unknown>) => compile_keymap(DEFAULT_KEYMAP, settings as never, () => any_command).compiled;
+const inline_texts = (blocks: Block[]) => blocks.flatMap((block) => (block.kind === "paragraph" ? block.inlines.map((inline) => inline.text) : []));
+const which_key_paragraph = (compiled: ReturnType<typeof compile>) => inline_texts(quick_start_blocks(compiled, all_commands)).join("");
+
+test("quick start: the which-key example skips a prefix in which_key_skip", () => {
+  const text = which_key_paragraph(compile_with({ which_key_skip: ["g"] }));
+  assert.ok(!text.includes("Press g and wait"));
+  assert.match(text, /Press . and wait/);
+});
+
+test("quick start: with no wait or every prefix skipped, it promises no panel after a wait", () => {
+  for (const settings of [{ which_key_delay_ms: 0 }, { which_key_delay_ms: 0, which_key_skip: ["g"] }]) {
+    const text = which_key_paragraph(compile_with(settings));
+    assert.ok(!text.includes(" and wait."), JSON.stringify(settings));
+    assert.match(text, /opens it on request/);
+  }
+});
+
+test("practice: a note that promises the panel after a wait is dropped when the panel cannot open", async () => {
+  const { practice_lessons } = await import("../src/help/practice_lessons.ts");
+  const notes = (settings: Record<string, unknown>, slug: string) => practice_lessons(compile_with(settings), all_commands).find((lesson) => lesson.slug === slug)!.notes.map((note) => note.map((inline) => inline.text).join(""));
+  assert.ok(notes({}, "inputs").some((note) => note.includes("and wait")));
+  assert.ok(notes({}, "which-key").some((note) => note.includes("and wait")));
+  assert.deepEqual(notes({ which_key_skip: [";"] }, "inputs"), []);
+  assert.ok(notes({ which_key_skip: ["g"] }, "which-key").every((note) => !note.includes("Press g and wait")));
+  for (const slug of ["inputs", "which-key"]) assert.ok(notes({ which_key_delay_ms: 0 }, slug).every((note) => !note.includes("and wait")));
+});
+
+test("practice: the grab lesson names no key letter apart from the bound keys", async () => {
+  const { practice_lessons } = await import("../src/help/practice_lessons.ts");
+  const normal = Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, bound]) => (bound as { args?: { action?: string } }).args?.action !== "grab_move"));
+  const rebound = compile({ ...DEFAULT_KEYMAP, normal: { ...normal, "<A-g>": { id: "hint.run", args: { action: "grab_move", filter: "draggable" } } } } as never);
+  const codes = practice_lessons(rebound, all_commands).find((lesson) => lesson.slug === "slider")!.steps.flat().filter((inline) => inline.kind === "code");
+  assert.ok(!codes.some((inline) => /^[;Gg]$/.test(inline.text)), JSON.stringify(codes));
 });
 
 test("quick start: every command line it can show resolves in the registry", () => {

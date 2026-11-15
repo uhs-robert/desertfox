@@ -166,20 +166,52 @@ export function quick_start_fallbacks(commands: CommandMeta[]): { id: string; te
   });
 }
 
-// The key text a settings page sentence names, from the same keymap as the Quick Start text.
-export function key_text(compiled: CompiledKeymap | undefined, commands: CommandMeta[], name: "reload" | "find_anything"): string {
-  const [inline] = sentence(compiled, commands, `{${name}}`);
-  return inline!.text === NO_KEY ? "(no key is set for this yet)" : inline!.text;
+// The shortest key for a binding as the reader typed it, or undefined when none is bound.
+export function bound_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[], name: BindingName): string | undefined {
+  return key_paths(compiled, commands, BINDINGS[name])[0]?.join("");
 }
 
-// Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name. `{name:first}` is only the first key of the sequence, the prefix whose group the which-key panel lists.
+// The key text a settings page sentence names, from the same keymap as the Quick Start text.
+export function key_text(compiled: CompiledKeymap | undefined, commands: CommandMeta[], name: "reload" | "find_anything"): string {
+  return bound_key(compiled, commands, name) ?? "(no key is set for this yet)";
+}
+
+// Whether a typed prefix opens the which-key panel after a wait. It follows the gate in `content/whichkey`: a delay of 0 is off, and a prefix that exactly matches a skip entry starts no delayed open. Site rules are not read, as help pages run outside any site.
+function opens_panel(compiled: CompiledKeymap | undefined, prefix: string): boolean {
+  return (compiled?.which_key_delay_ms ?? 0) > 0 && !(compiled?.which_key_skip ?? []).includes(prefix);
+}
+
+// `{name:first}` is the first key of the binding, `{name:wait}` the same but only when a pause on it opens the panel, and `{prefix}` is `prefix_key`.
+const TEMPLATE_NAME = /(\{[a-z_]+(?::first|:wait)?\}|\[[^\]]+\])/;
+
+// The first key a `{...}` part names for the which-key panel, or undefined when a pause on it opens no panel.
+function wait_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[], part: string): string | undefined {
+  const [name, modifier] = part.slice(1, -1).split(":");
+  if (name === "prefix") return prefix_key(compiled, commands);
+  if (modifier !== "wait") return undefined;
+  const first = key_paths(compiled, commands, BINDINGS[name as BindingName])[0]?.[0];
+  return first !== undefined && opens_panel(compiled, first) ? first : undefined;
+}
+
+const is_wait_part = (part: string): boolean => part === "{prefix}" || part.endsWith(":wait}");
+
+// Whether every "and wait" key in the template opens the panel, so a note that promises it can be dropped when it does not.
+export function wait_holds(compiled: CompiledKeymap | undefined, commands: CommandMeta[], template: string): boolean {
+  return template.split(TEMPLATE_NAME).filter(is_wait_part).every((part) => wait_key(compiled, commands, part) !== undefined);
+}
+
+// Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name.
 export function sentence(compiled: CompiledKeymap | undefined, commands: CommandMeta[], template: string): Inline[] {
   return template
-    .split(/(\{[a-z_]+(?::first)?\}|\[[^\]]+\])/)
+    .split(TEMPLATE_NAME)
     .filter((part) => part !== "")
     .map((part): Inline => {
       if (part.startsWith("[")) return { kind: "code", text: part.slice(1, -1) };
       if (!part.startsWith("{")) return { kind: "text", text: part };
+      if (is_wait_part(part)) {
+        const key = wait_key(compiled, commands, part);
+        return key === undefined ? { kind: "text", text: NO_KEY } : { kind: "keys", text: key };
+      }
       const [name, only_first] = part.slice(1, -1).split(":");
       const binding: Binding = BINDINGS[name as BindingName];
       const [shortest] = key_paths(compiled, commands, binding);
@@ -189,12 +221,13 @@ export function sentence(compiled: CompiledKeymap | undefined, commands: Command
     });
 }
 
-// A key that opens a longer sequence, for the which-key example: the help key's own prefix, else the first group in the keymap.
+// A key that opens a longer sequence, for the which-key example: the help key's own prefix, else the first group in the keymap, in either case only one whose pause opens the panel.
 function prefix_key(compiled: CompiledKeymap | undefined, commands: CommandMeta[]): string | undefined {
   const [help_path] = key_paths(compiled, commands, BINDINGS.help);
-  if (help_path && help_path.length > 1) return help_path[0];
+  if (help_path && help_path.length > 1 && opens_panel(compiled, help_path[0]!)) return help_path[0];
   const root = compiled?.modes.normal;
-  return root?.kind === "branch" ? Object.entries(root.children).find(([, child]) => child.kind === "branch")?.[0] : undefined;
+  if (root?.kind !== "branch") return undefined;
+  return Object.entries(root.children).find(([key, child]) => child.kind === "branch" && opens_panel(compiled, key))?.[0];
 }
 
 // The callout at the top of Home and Commands. The command line key follows the keymap like the Quick Start text.
@@ -222,8 +255,8 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
     heading("Which-key"),
     say(
       prefix === undefined
-        ? "The which-key panel lists the keys that can come next after a key that starts a longer sequence. No key starts a longer sequence now. You can change the wait on the Settings page."
-        : `Many keys start with a prefix. Press [${prefix}] and wait. The which-key panel lists the keys that can come next, with a name for each. You can change the wait on the Settings page.`,
+        ? "The which-key panel lists the keys that can come next after a key that starts a longer sequence. No key opens it by itself after a wait now. {whichkey} opens it on request. You can change the wait and the skipped keys on the Settings page."
+        : "Many keys start with a prefix. Press {prefix} and wait. The which-key panel lists the keys that can come next, with a name for each. You can change the wait and the skipped keys on the Settings page.",
     ),
     heading("Modes"),
     say("DesertFox has modes. In normal mode, keys run commands. In insert mode, keys go to the page, so you can type in a text field. A small badge on the page shows the mode. {escape} returns to normal mode."),
