@@ -34,7 +34,7 @@ const LESSONS = [
     goal: "Find any key without leaving the page.",
     steps: [
       "Press {whichkey}. A panel lists the first key of every command.",
-      "Press [z] while the panel is open. It now lists the zoom keys. Find \"Zoom in\" and press its key.",
+      "Press {zoom_in:first} while the panel is open. It now lists the zoom keys. Find \"Zoom in\" and press its key.",
       "Find the key that resets the zoom the same way, and press it.",
       "{escape} closes the panel. It also returns to normal mode from anywhere, so press it when a key does nothing.",
     ],
@@ -132,7 +132,7 @@ const LESSONS = [
     goal: "Run any command by name, and look up every key.",
     steps: [
       "Press {cmdline}. Type [set theme] and press Enter. A note shows the theme you have now. Remember its name.",
-      "Press {cmdline}, type [set theme catppuccin] and press Enter. Tab completes each word. The page changes colors.",
+      "Press {cmdline}, type [set theme catppuccin] and press Enter. Tab completes each word. The page changes colors. If catppuccin is the theme you have, type [set theme dracula] instead.",
       "Set your theme back. Press {cmdline}, type [set theme] and the name from the first step, and press Enter.",
       "{back} goes back one page, so it brings you back here. Press {cmdline}, type [help commands] and press Enter. The Commands page lists every command and its keys. Then press {back}.",
     ],

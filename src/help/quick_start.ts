@@ -102,6 +102,7 @@ const BINDINGS = {
   half_page_up: { mode: "normal", id: "scroll.pages", args: { fraction: -0.5 } },
   // `,?` is shorter in keymap notation, but the chord works in every mode.
   whichkey: { mode: "normal", id: "help.whichkey", args: {}, prefer: "<A-?>" },
+  zoom_in: { mode: "normal", id: "zoom.by", args: { delta: 0.1 }, prefer: "zi" },
   next_heading: { mode: "normal", id: "page.heading", args: { direction: "next" } },
   previous_heading: { mode: "normal", id: "page.heading", args: { direction: "prev" } },
   headings: { mode: "normal", id: "cmdline.open", args: { text: "heading " } },
@@ -171,17 +172,18 @@ export function key_text(compiled: CompiledKeymap | undefined, commands: Command
   return inline!.text === NO_KEY ? "(no key is set for this yet)" : inline!.text;
 }
 
-// Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name.
+// Text, with `{name}` marking where a key goes and `[text]` a literal command or setting name. `{name:first}` is only the first key of the sequence, the prefix whose group the which-key panel lists.
 export function sentence(compiled: CompiledKeymap | undefined, commands: CommandMeta[], template: string): Inline[] {
   return template
-    .split(/(\{[a-z_]+\}|\[[^\]]+\])/)
+    .split(/(\{[a-z_]+(?::first)?\}|\[[^\]]+\])/)
     .filter((part) => part !== "")
     .map((part): Inline => {
       if (part.startsWith("[")) return { kind: "code", text: part.slice(1, -1) };
       if (!part.startsWith("{")) return { kind: "text", text: part };
-      const binding: Binding = BINDINGS[part.slice(1, -1) as BindingName];
+      const [name, only_first] = part.slice(1, -1).split(":");
+      const binding: Binding = BINDINGS[name as BindingName];
       const [shortest] = key_paths(compiled, commands, binding);
-      if (shortest) return { kind: "keys", text: shortest.join("") };
+      if (shortest) return { kind: "keys", text: only_first ? shortest[0]! : shortest.join("") };
       const command_line = command_line_of(commands, binding);
       return command_line === undefined ? { kind: "text", text: NO_KEY } : { kind: "code", text: command_line };
     });
