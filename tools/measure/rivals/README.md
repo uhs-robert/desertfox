@@ -130,6 +130,8 @@ PAGES=coverage just measure-rivals       # coverage alone
 PAGES=sites PASSES=3 just measure-rivals # checks on live public sites
 ```
 
+A known interstitial (Amazon's Continue shopping page, listed in `INTERSTITIALS` in `sites.mjs`) is clicked through, at most 3 tries. A page that stays blocked still scores `wall`.
+
 Login sites are checked by hand with [`hand_checks.md`](hand_checks.md).
 
 Site notes for the live-site checks (the `SITES` list in `sites.mjs`):
