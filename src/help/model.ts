@@ -21,7 +21,7 @@ import { subject_param } from "../shared/registry/params.ts";
 import type { Block, Inline } from "./blocks.ts";
 import { site_rules_view } from "../background/site_rules_view.ts";
 import type { SiteRulesView } from "../background/site_rules_view.ts";
-import { key_text, quick_start_blocks, tip_block } from "./quick_start.ts";
+import { bound_key, key_text, quick_start_blocks, tip_block } from "./quick_start.ts";
 import { practice_intro, practice_lessons, practice_outro } from "./practice_lessons.ts";
 import type { PracticeText } from "./practice_page.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
@@ -198,7 +198,7 @@ function engine_rows(engines: Record<string, SearchEngine>, compiled: CompiledKe
 
 // `sources` are the configured engine names, so a query that starts with one prints with its `--` guard.
 export function build_help_model(commands: CommandMeta[], compiled: CompiledKeymap | undefined, warnings: string[], sources: EnumSources = {}, engines: Record<string, SearchEngine> = {}, status?: ConfigStatus): HelpModel {
-  const config_view = build_config_view(status);
+  const config_view = build_config_view(status, bound_key(compiled, commands, "reload"));
   const keys = keys_by_command(compiled, { commands: new Map(commands.map((command) => [command.id, command])), sources });
   const groups = new Map<string, CommandRow[]>();
   for (const command of commands) {

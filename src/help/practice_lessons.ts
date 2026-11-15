@@ -6,14 +6,15 @@
 import type { CommandMeta } from "../shared/command.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { Inline } from "./blocks.ts";
-import { sentence } from "./quick_start.ts";
+import { sentence, wait_holds } from "./quick_start.ts";
 
 // The watch page the video lesson opens: Rick Astley, Never Gonna Give You Up.
 export const PRACTICE_VIDEO_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
 type LessonSource = { slug: string; title: string; goal: string; steps: string[]; notes?: string[]; checks: Record<string, string> };
 
-// `{name}` is a key and `[text]` is text to type, as in `sentence`.
+// `{name}` is a key and `[text]` is text to type, as in `sentence`. A note with an "and wait" key is dropped when a pause on that key opens no which-key panel.
+// Lesson 14 keeps `[j]` literal because the page counts presses of j itself.
 const LESSONS = [
   {
     slug: "scroll",
@@ -38,7 +39,7 @@ const LESSONS = [
       "Find the key that resets the zoom the same way, and press it.",
       "{escape} closes the panel. It also returns to normal mode from anywhere, so press it when a key does nothing.",
     ],
-    notes: ["A key that starts a longer sequence opens the same panel after a short wait. Press [g] and wait to see it.", "The badge in the corner of the page names the mode."],
+    notes: ["A key that starts a longer sequence opens the same panel after a short wait. Press {prefix} and wait to see it.", "The badge in the corner of the page names the mode."],
     checks: { zoomed: "zoomed in", reset: "reset the zoom" },
   },
   {
@@ -89,7 +90,7 @@ const LESSONS = [
       "Press {hint_inputs_rapid}. The letters stay after each pick. Type the letters on \"Sun\", \"Moon\" and \"Stars\", one after the other, then press {escape}.",
       "Press {hint_buttons}. Only the buttons get letters. Type the letter on \"Done\".",
     ],
-    notes: ["Press [;] and wait. The panel lists every kind of hint."],
+    notes: ["Press {hint_inputs:wait} and wait. The panel lists every kind of hint."],
     checks: { bravo: "chose Bravo", charlie: "moved to Charlie", oasis: "set the dropdown to Oasis", rapid: "ticked all three boxes", done: "pressed Done" },
   },
   {
@@ -97,9 +98,9 @@ const LESSONS = [
     title: "7. Grab and drop",
     goal: "Drag anything a mouse can drag. There are two ways. Grab and move: you pick a thing, then move it with keys. Grab and drop: you pick a thing, then pick the place it goes to from letters on the page.",
     steps: [
-      "Grab and move is {grab_move}. [;] starts a hint key, [G] means grab and move, and [g] puts letters only on the things that can be dragged. Press {grab_move} and type the letter on the slider. The badge says GRAB.",
+      "Grab and move is {grab_move}. It puts letters only on the things that can be dragged. Press {grab_move} and type the letter on the slider. The badge says GRAB.",
       "Press {grab_right} until the slider reads 7. {grab_left} moves it back. Press {grab_drop} to drop it there.",
-      "Grab and drop is {grab_drop_on}. [;] starts a hint key, the first [g] means grab and drop, and the second [g] puts letters only on the things that can be dragged. Press {grab_drop_on} and type the letter on the card \"Fox\".",
+      "Grab and drop is {grab_drop_on}. It also puts letters only on the things that can be dragged. Press {grab_drop_on} and type the letter on the card \"Fox\".",
       "New letters appear on every place the card can go. Type the letters on the box \"Den\". The card drops there.",
     ],
     notes: ["In grab mode, {grab_keys} lists the keys and {escape} puts the thing back where it was.", "{hint_inputs} and a letter only focuses a slider. The arrow keys move it then."],
@@ -207,7 +208,7 @@ export function practice_lessons(compiled: CompiledKeymap | undefined, commands:
     title: lesson.title,
     goal: say(lesson.goal),
     steps: lesson.steps.map(say),
-    notes: (lesson.notes ?? []).map(say),
+    notes: (lesson.notes ?? []).filter((note) => wait_holds(compiled, commands, note)).map(say),
     checks: Object.entries(lesson.checks).map(([name, text]) => ({ name, text })),
   }));
 }
