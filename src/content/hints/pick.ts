@@ -89,6 +89,7 @@ export function create_picker(labels: readonly string[], texts: () => readonly (
 
   return {
     typed: () => typed,
+    in_text_mode_: () => text !== undefined,
     on_token_: (token: string, physical?: string | null): KeyOutcome => {
       if (is_chord(token)) return { kind: "pass" };
       return text === undefined ? on_label_token(token, physical) : on_text_token(token, text);

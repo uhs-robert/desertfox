@@ -68,6 +68,8 @@ type Session = {
   with_background_: boolean;
   custom_selector_: string | undefined;
   site_selectors_: SiteSelectors;
+  // The element a grab holds, for the `drop` filter, which labels where it can likely go.
+  drop_source_: Element | undefined;
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
   text: string | undefined;
   lower_text_: string | undefined;
@@ -104,13 +106,16 @@ function windows_of(found: Found[]): Window[] {
 }
 
 // A double-click skips links. Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
-function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors, only_in_view = true): Found[] {
+function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors, drop_source: Element | undefined, only_in_view = true): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector), weak_test_for(filter), only_in_view), site_selectors, only_in_view);
+  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector, drop_source), weak_test_for(filter), only_in_view), site_selectors, only_in_view);
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
+
+// Fewer targets than this and the guess of the `drop` filter is dropped for every element.
+const MIN_DROP_TARGETS = 2;
 
 const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
 
@@ -400,8 +405,15 @@ function register(host: PageHostApi): void {
   // Finds, labels and shows the hints. Keys typed meanwhile wait and replay. Rapid mode calls it again after each pick.
   // `started_ms` is taken before the candidates are found, so the time covers finding, filtering and labeling.
   async function build(current: Session, candidates: Found[], first_build: boolean, started_ms: number): Promise<void> {
-    const [letters, key_line_setting, shown, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates), read_strip_patterns(window.location.href)]);
+    const [letters, key_line_setting, first_shown, patterns] = await Promise.all([read_letters(), read_setting("hint_key_line"), shown_of(current, candidates), read_strip_patterns(window.location.href)]);
     if (current.cancelled) return;
+    // A narrowed set that shows fewer than two places is no narrowing: label every element, as before the filter.
+    let shown = first_shown;
+    if (current.filter === "drop" && shown.length < MIN_DROP_TARGETS) {
+      current.filter = "every";
+      shown = await shown_of(current, find_candidates("every", undefined, current.action, current.site_selectors_, undefined));
+      if (current.cancelled) return;
+    }
     strip_patterns = patterns;
     const labeled = current.across_frames_ ? await label_across(current, parent_labels_me() ? [] : shown, letters) : single_frame(shown, letters);
     if (current.cancelled) return;
@@ -428,7 +440,7 @@ function register(host: PageHostApi): void {
     }
     const view = create_view();
     view.show(found.map((item, own) => ({ found: item, text: labeled.own_labels[own]! })));
-    if (key_line_setting !== false) view.add_key_line_();
+    if (key_line_setting !== false) view.add_key_line_(current.filter === "drop");
     // Read when text mode first needs the texts, once for this build. Across frames the background already holds every frame's texts.
     let texts: readonly (string | undefined)[] | undefined;
     const text_of_found_ = () => (texts ??= labeled.texts_ ?? labels.map((_label, index) => text_of(found[own_of_(index)!]!.element)));
@@ -470,15 +482,28 @@ function register(host: PageHostApi): void {
     performed(run);
     if (current.cancelled) return;
     const started_ms = performance.now();
-    void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_), false, started_ms);
+    void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_, current.drop_source_), false, started_ms);
   }
 
   // The rest of a typed word still arrives after the key that made the match unique, and it would run as normal keys or as labels of the next round. So that pick waits, with hint mode still open, and the keys are dropped.
   const PICK_GRACE_MS = 300;
 
+  // Tab in a narrowed drop pass labels every element. It is the one guard against a drop place the guess missed. Tab means "next match" in text mode, so it widens in label mode only.
+  function widen_drop(current: Session, ready: NonNullable<Session["ready"]>): void {
+    ready.stop_following_();
+    ready.view.clear_labels_();
+    delete current.ready;
+    current.filter = "every";
+    void build(current, find_candidates("every", undefined, current.action, current.site_selectors_, undefined), false, performance.now());
+  }
+
   function handle_token(current: Session, token: string, physical?: string | null): "handled" | "pass" {
     if (current.settling_) return is_hint_char(token) || is_text_key(token) ? "handled" : "pass";
     const ready = current.ready!;
+    if (token === "<Tab>" && current.filter === "drop" && !ready.picker.in_text_mode_()) {
+      widen_drop(current, ready);
+      return "handled";
+    }
     const outcome = ready.picker.on_token_(token, physical);
     if (outcome.kind === "pass") return "pass";
     if (outcome.kind === "rotate") {
@@ -542,24 +567,29 @@ function register(host: PageHostApi): void {
     const started_ms = performance.now();
     const run = ++latest_run;
     const action = args.action as HintAction;
-    const filter = args.filter as HintFilter;
+    let filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
+    const drop_source_ = args.drop_source_ as Element | undefined;
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
     try {
-      candidates = find_candidates(filter, custom_selector_, action, site_selectors_);
+      candidates = find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_);
+      if (filter === "drop" && candidates.length < MIN_DROP_TARGETS) {
+        filter = "every";
+        candidates = find_candidates(filter, custom_selector_, action, site_selectors_, undefined);
+      }
     } catch {
       return { ok: false, message: `Invalid selector: ${custom_selector_}` };
     }
     // With nothing to label the mode never changes, so keys held during the load run as normal keys. A page with candidates only out of view still flips it, as before the view cut.
     const text = (args.text as string | undefined) || undefined;
     // Across frames the other frames can still have hints, and the build gives the notice when no frame has one.
-    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, false).length === 0) return { ok: false, message: none_message(text) };
+    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_, false).length === 0) return { ok: false, message: none_message(text) };
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, drop_source_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true, started_ms);
@@ -610,7 +640,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     strip_patterns = patterns;
     // A parent labels its readable child only when it is asked itself, which only `all_frames` does. A lone parked frame labels its own targets.
     if (!parent_labels_me() || current.args.frames !== "all_frames") try {
-      const candidates = find_candidates(filter, args.selector as string | undefined, action, site_selectors);
+      const candidates = find_candidates(filter, args.selector as string | undefined, action, site_selectors, undefined);
       found = await shown_of({ filter, action, lower_text_: text?.toLowerCase() }, candidates);
     } catch {
       // A selector that does not parse labels nothing here. The keyboard frame shows the notice.

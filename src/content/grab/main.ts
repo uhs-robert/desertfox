@@ -60,12 +60,12 @@ function register(host: PageHostApi): void {
     return ran;
   }
 
-  // Any element can take a drop, so the target hint is not narrowed by the filter of the first.
-  const TARGET_HINT_ARGS = { action: "grab", filter: "every", frames: "same_origin", rapid: false, nested_: true };
+  // The `drop` filter is internal to this pass: it labels where the source can likely go and falls back to every element. A page declares no drop targets, so Tab in the pass widens to every element.
+  const TARGET_HINT_ARGS = { action: "grab", filter: "drop", frames: "same_origin", rapid: false, nested_: true };
 
   async function pick_target(): Promise<Outcome> {
     // The second hint answers once the target is picked and dropped on, or when the hint ends without one.
-    const outcome = await host.run_command_("hint.run", "hints", TARGET_HINT_ARGS);
+    const outcome = await host.run_command_("hint.run", "hints", { ...TARGET_HINT_ARGS, drop_source_: source });
     source = undefined;
     return outcome;
   }

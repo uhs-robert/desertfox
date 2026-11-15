@@ -46,6 +46,40 @@ vol.addEventListener("pointerdown", (e) => { down = true; set_from(e); });
 document.addEventListener("pointermove", (e) => { if (down) set_from(e); });
 document.addEventListener("pointerup", () => { down = false; });
 </script>`,
+  // A board of three columns, the last one empty. The cards take pointer events, as a pointer library binds them, and a column takes the card the pointer is over when it is released.
+  kanban: `
+<style>.col{display:inline-block;vertical-align:top;width:150px;min-height:150px;margin:10px;background:#eee}.card{height:30px;margin:4px;background:#9cf;touch-action:none}</style>
+<div id="board"><div id="a" class="col"><div id="c1" class="card">card1</div><div id="c2" class="card">card2</div></div><div id="b" class="col"><div id="c3" class="card">card3</div><div id="c4" class="card">card4</div></div><div id="e" class="col"></div></div>
+<script>
+let dragged = null;
+document.addEventListener("pointerdown", (e) => { if (e.target.classList.contains("card")) dragged = e.target; });
+document.addEventListener("pointerup", (e) => {
+  if (!dragged) return;
+  const col = document.elementFromPoint(e.clientX, e.clientY)?.closest(".col");
+  if (col) col.appendChild(dragged);
+  dragged = null;
+});
+</script>`,
+  // The board with a trash box far from it. The trash sits at the top of a tall aside, so the middle of the aside, which is the only label a structural guess gives it, is not on the trash.
+  farzone: `
+<style>.col{display:inline-block;vertical-align:top;width:150px;min-height:100px;margin:10px;background:#eee}.card{height:30px;margin:4px;background:#9cf;touch-action:none}#aside{height:400px;background:#ddd}#trash{height:50px;width:150px;background:#fc9}</style>
+<div id="board"><div id="a" class="col"><div id="c1" class="card">card1</div><div id="c2" class="card">card2</div></div><div id="b" class="col"><div id="c3" class="card">card3</div><div id="c4" class="card">card4</div></div></div>
+<div id="aside"><div><div><div id="trash">trash</div></div></div></div>
+<script>
+let dragged = null;
+document.addEventListener("pointerdown", (e) => { if (e.target.classList.contains("card")) dragged = e.target; });
+document.addEventListener("pointerup", (e) => {
+  if (!dragged) return;
+  const at = document.elementFromPoint(e.clientX, e.clientY);
+  if (at?.closest("#trash")) trash.dataset.got = dragged.id;
+  dragged = null;
+});
+</script>`,
+  // The board with a marked html5 drop zone far from it, in a subtree that no sibling of the cards' ancestors reaches into.
+  dropmarks: `
+<style>.card{height:30px;width:100px;margin:4px;background:#9cf}#aside{height:100px;padding-top:300px;background:#ddd}#zone{height:50px;width:150px;background:#fc9}</style>
+<div id="board"><div id="a"><div id="c1" class="card" draggable="true">card1</div><div id="c2" class="card" draggable="true">card2</div></div></div>
+<div id="aside"><div><div id="zone" ondragover="event.preventDefault()" ondrop="event.preventDefault();this.dataset.got='yes'">zone</div></div></div>`,
   h5: `
 <div id="src" draggable="true" style="width:80px;height:40px;background:#9cf">src</div>
 <div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>

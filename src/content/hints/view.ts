@@ -10,6 +10,7 @@ const MESSAGE_MS = 1500;
 
 // Hard-coded: the hints bundle does not see the keymap, and these keys are read as literals in pick.ts.
 export const KEY_LINE_LABELS = "/: type text \u00b7 Space: turn labels";
+export const KEY_LINE_WIDEN = " \u00b7 Tab: every element";
 export const KEY_LINE_TEXT = "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels";
 
 // A filled label in the brand color. The 1px border keeps the box size of the older outlined label. Typed letters fade to half the text color.
@@ -104,9 +105,11 @@ export function create_view() {
 
   // The key line sits where the mode badge is, which is hidden in hint mode. It outlives text mode, so it is not part of the text box. It goes first in the container so labels paint over it.
   let key_line: HTMLElement | undefined;
+  // A narrowed drop pass adds the key that widens it.
+  let labels_line = KEY_LINE_LABELS;
   function show_key_line(text: string | undefined): void {
     if (key_line === undefined) return;
-    key_line.textContent = text === undefined ? KEY_LINE_LABELS : KEY_LINE_TEXT;
+    key_line.textContent = text === undefined ? labels_line : KEY_LINE_TEXT;
   }
 
   // All reads first, then all writes, so the page lays out once.
@@ -131,7 +134,8 @@ export function create_view() {
       reposition();
     },
     reposition,
-    add_key_line_: (): void => {
+    add_key_line_: (widens = false): void => {
+      labels_line = widens ? KEY_LINE_LABELS + KEY_LINE_WIDEN : KEY_LINE_LABELS;
       key_line = document.createElement("div");
       key_line.className = "desertfox-hint-keys";
       surface.text.prepend(key_line);

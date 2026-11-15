@@ -3,11 +3,13 @@
 import { shadow_root_of } from "../shadow.ts";
 import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 import { is_scroll_box } from "../scroll_box.ts";
+import { drop_targets_of } from "./drop_targets.ts";
 import { element_address, is_image_element, takes_typing } from "./actions.ts";
 import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-export type HintFilter = "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "custom";
+// `drop` is internal: the target pass of a grab asks for it, and no command accepts it.
+export type HintFilter = "drop" | "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -102,7 +104,7 @@ export const is_draggable = (element: Element, swipe = false): boolean => {
 
 export const is_swipeable = (element: Element): boolean => is_draggable(element, true);
 
-const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
+const QUERIES: Record<Exclude<HintFilter, "custom" | "drop">, Query> = {
   all: { selector: ALL },
   every: { selector: "*", test: is_every_target },
   clickable: { selector: CLICKABLE },
@@ -118,8 +120,14 @@ const QUERIES: Record<Exclude<HintFilter, "custom">, Query> = {
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 
-export const query_for = (filter: HintFilter, custom_selector: string | undefined): Query =>
-  filter === "custom" ? { selector: custom_selector ?? "" } : QUERIES[filter];
+// The `drop` filter is the targets of one source. It answers like `every` when the source gives no structure to read.
+function drop_query(source: Element | undefined): Query {
+  const targets = source && drop_targets_of(source);
+  return targets ? { selector: "*", test: (element) => targets.has(element) } : QUERIES.every;
+}
+
+export const query_for = (filter: HintFilter, custom_selector: string | undefined, drop_source?: Element): Query =>
+  filter === "custom" ? { selector: custom_selector ?? "" } : filter === "drop" ? drop_query(drop_source) : QUERIES[filter];
 
 // An element and the iframes that hold it, outermost first. The frames give its place on the top page.
 // `weak` marks an element that only looks clickable (a pointer cursor, a spot in a menu), see `drop_redundant_weak`. `added` marks a match of a `hint_add` selector, which counts as clickable there.

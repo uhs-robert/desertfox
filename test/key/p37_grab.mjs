@@ -82,6 +82,64 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     expect(!!find_event(mark, (event) => event.type === "drag" && event.ev === "capture_error"), "the page's setPointerCapture call did not fail, so the case proves nothing");
   });
 
+  const label_count = () => hint_label_count();
+  await run_case(";gg labels the cards and columns of a board, an empty column too, and a drop into it lands", async () => {
+    await open_page("drag", "kanban", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#c1");
+    await labels_up("labels of the target pass");
+    // The other three cards, the three columns and the heading that the page puts beside the board. Not the source and not the board wrapper.
+    expect((await label_count()) === 7, `the narrowed pass has seven labels, got ${await label_count()}`);
+    await pick("#e");
+    await poll_until("c1 in the empty column", async () => (await order_of("e")) === "c1", { timeout_ms: 5000 });
+  });
+
+  await run_case(";gg labels a marked drop zone that sits far from the board", async () => {
+    await open_page("drag", "dropmarks", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#c1");
+    await pick("#zone");
+    await poll_until("the drop on the zone", async () => (await read('document.getElementById("zone").dataset.got')) === "yes", { timeout_ms: 5000 });
+  });
+
+  await run_case("Tab in the target pass labels every element, and a far zone with no marker is then reachable", async () => {
+    await open_page("drag", "farzone", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#c1");
+    await labels_up("labels of the narrowed target pass");
+    const narrowed = await label_count();
+    // Three cards, two columns, the heading and the aside: the trash has no label of its own.
+    expect(narrowed === 7, `the narrowed pass has seven labels, got ${narrowed}`);
+    await press_keys("-k", "Tab");
+    await poll_until("the labels of every element", async () => (await label_count()) > narrowed);
+    await pick("#trash");
+    await poll_until("the card in the trash", async () => (await read('document.getElementById("trash").dataset.got')) === "c1", { timeout_ms: 5000 });
+  });
+
+  await run_case("Tab widens the narrowed labels on the board, and Escape leaves hint mode", async () => {
+    await open_page("drag", "kanban", { new_tab: true });
+    await press_keys(";gg");
+    await pick("#c1");
+    await labels_up("labels of the narrowed target pass");
+    const narrowed = await label_count();
+    await press_keys("-k", "Tab");
+    await poll_until("the labels of every element", async () => (await label_count()) > narrowed);
+    expect((await label_count()) === 9, `every visible element is nine, got ${await label_count()}`);
+    await press_keys("-k", "Escape");
+    await labels_gone("labels gone after Escape");
+  });
+
+  await run_case(";ga on a slider thumb still labels the canvas, a place no structure names", async () => {
+    await open_page("drag", "range", { new_tab: true });
+    await press_keys(";ga");
+    await pick("#thumb");
+    await labels_up("labels of the target pass");
+    const near_canvas = await label_of("#cv");
+    expect(!!near_canvas, "no label for the canvas");
+    await press_keys(near_canvas);
+    await labels_gone("labels gone after the canvas pick");
+  });
+
   await run_case(";G steps a range input with l, and Enter drops it", async () => {
     const page_id = "range_enter";
     await open_page("drag", "range_enter", { new_tab: true });
