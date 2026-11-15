@@ -6,7 +6,7 @@ This file is the privacy policy of the DesertFox add-on. The same text is the pr
 
 ## What stays on your device
 
-DesertFox keeps its settings, keymap, quickmarks, macros, registers, command history and closed-tab list in Firefox storage on your device. It reads your tabs, history, bookmarks, cookies, downloads and clipboard only to run a command you typed or a key you pressed, and it sends none of that anywhere.
+DesertFox keeps its settings, keymap, quickmarks, macros, registers, command history and closed-tab list in Firefox storage on your device. It reads your tabs, history, bookmarks, cookies, downloads and clipboard only to run a command you typed or a key you pressed. The add-on sends none of that to a server. The one exception is the optional desktop link described below, which hands tab titles and addresses to programs on your own computer.
 
 ## Requests the add-on makes by itself
 
@@ -14,11 +14,11 @@ DesertFox makes two kinds of request on its own, both from the built-in new tab 
 
 ### Weather card (Open-Meteo)
 
-The card is the setting `newtab_weather`. It sends nothing until you allow it. Its button, "Show the weather here", asks Firefox for two permissions: the optional data collection permission "location information" and the optional `geolocation` permission. Setting `newtab_weather_city` does not replace this step. Until you accept, the card draws only the button.
+The card is the setting `newtab_weather`. It sends nothing until you allow it. Its button, "Show the weather here", asks Firefox for the optional data collection permission "location information". When no city is set, the same prompt also asks for the optional `geolocation` permission. Until you accept, the card draws only the button, even with a city set. With a city set, the card uses the city and never reads your position.
 
-After you accept, the card asks Open-Meteo (`api.open-meteo.com`) for the forecast. With a position it sends the coordinates rounded to two decimals, about one kilometre. With a city it first sends the city text to Open-Meteo's geocoder (`geocoding-api.open-meteo.com`), then the rounded coordinates of the answer. When you open the More panel, it asks Open-Meteo's air quality host (`air-quality-api.open-meteo.com`) with the same rounded coordinates.
+After you accept, the card asks Open-Meteo (`api.open-meteo.com`) for the forecast. With a city it first sends the city text to Open-Meteo's geocoder (`geocoding-api.open-meteo.com`), then the rounded coordinates of the answer. With no city it sends your position, with the coordinates rounded to two decimals, about one kilometre. When you open the More panel, it asks Open-Meteo's air quality host (`air-quality-api.open-meteo.com`) with the same rounded coordinates.
 
-The requests carry no cookies and no referrer. Open-Meteo sees your IP address as any server does, and Firefox adds an `Origin` header that holds a random address of your DesertFox install, the same for every request from that install. The answer stays in local storage for 30 minutes at most. Turning the card off deletes the stored answer. You can withdraw both permissions in `about:addons`, on the Permissions tab of DesertFox.
+The requests carry no cookies and no referrer. Open-Meteo sees your IP address as any server does, and Firefox adds an `Origin` header that holds a random address of your DesertFox install, the same for every request from that install. DesertFox checks the consent again before every request, so withdrawing it stops later requests at once. The answer stays in local storage for 30 minutes at most. Turning the card off deletes the stored answer. You can withdraw both permissions in `about:addons`, on the Permissions tab of DesertFox.
 
 ### IP info line (Cloudflare)
 
@@ -32,9 +32,13 @@ The line is the setting `newtab_ip_info`. It is off by default. When you turn it
 
 ## The optional native host (Linux)
 
-The native host is a helper program you install yourself. It talks to DesertFox through Firefox only, and it has no network code of its own. It reads your config folder and writes one file there, `autoconfig.toml`.
+The native host is a helper program you install yourself. It talks to DesertFox through Firefox. Its only network use is the update download described below. It reads your config folder and writes one file there, `autoconfig.toml`.
 
-Two paths download files from GitHub over HTTPS. The `:native.install` command shows an install command that you paste into a terminal yourself. It downloads a script from this project's GitHub releases and checks it against a hash that comes from the signed add-on. The setting `host_auto_update` is off by default. When you turn it on, DesertFox asks the host to replace itself with the host of the same release from GitHub, and the host checks each script against the same hashes. GitHub sees these downloads as it sees any download.
+Two paths download files from GitHub over HTTPS. The `:native.install` command shows an install command that you paste into a terminal yourself. The install script downloads a script from this project's GitHub releases and checks it against a hash that comes from the signed add-on. The setting `host_auto_update` is off by default. When you turn it on, DesertFox asks the host to replace itself, and the host itself downloads the scripts of the same release from GitHub over HTTPS and checks each script against the same hashes. GitHub sees these downloads as it sees any download.
+
+## The optional desktop link
+
+The setting `bridge_share_tabs` is off by default and needs the desktop link (bridge) to be on. When it is on, programs on your own computer that connect to the link's local socket (readable by your user only) can list your open tabs with their titles and addresses, switch to them, close them and capture them. Tabs in private windows never show. The host keeps a screenshot of a captured tab and the icon of a listed tab as files in `~/.cache/desertfox/` (or `$XDG_CACHE_HOME/desertfox/`), outside Firefox storage. These files stay on your computer, and the host deletes the files of tabs that are no longer open after 7 days, and deletes both folders when sharing is turned off. DesertFox sends none of this over the network.
 
 ## Permissions
 
