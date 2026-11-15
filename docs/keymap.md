@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 463 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 35, visual 43, visual_line 44, insert 5, ignore 1, browser 3)
+bound: 465 (normal 239, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
 
 ### normal
 
@@ -31,6 +31,7 @@ bound: 463 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 35, visual 
 | `gg` | `scroll.to 0` | Scroll to top |
 | `G` | `scroll.to 100` | Scroll to bottom |
 | `$` | `scroll.to --x 100` | Scroll to right edge |
+| `^` | `scroll.to --x 0` | Scroll to left edge |
 | `<C-d>` | `scroll.pages --fraction=0.5` | Scroll half page down |
 | `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
 | `<C-f>` | `scroll.pages` | Scroll page down |
@@ -66,7 +67,6 @@ bound: 463 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 35, visual 
 | `gP` | `tab.split_swap` | Swap panes |
 | `gF` | `frame.exit` | Focus top page |
 | `g0` | `tab.goto 1` | First tab |
-| `g^` | `tab.goto 1` | First tab |
 | `g$` | `tab.goto -1` | Last tab |
 | `T` | `tab` (prompts) | Switch tab |
 | `<<` | `tab.move --offset=-1` | Move tab left |
@@ -105,7 +105,6 @@ bound: 463 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 35, visual 
 | `tp` | `tab.prev` | Previous tab |
 | `ta` | `tab.goto_audible` | Go to audible tab |
 | `t0` | `tab.goto 1` | First tab |
-| `t^` | `tab.goto 1` | First tab |
 | `t$` | `tab.goto -1` | Last tab |
 | `tl` | `tab.alternate` | Last used tab |
 | `tL` | `tab.alternate_any_window` | Last used tab, any window |
@@ -440,6 +439,7 @@ Which-key group names:
 | `W` | `caret.move --word --big` | Move caret by WORD |
 | `B` | `caret.move --word --back --big` | Move caret by WORD backward |
 | `E` | `caret.move --word-end --big` | Move caret to WORD end |
+| `^` | `caret.move --line-first` | Move caret |
 | `$` | `caret.move --line-end` | Move caret |
 | `gg` | `caret.move --start` | Move caret |
 | `G` | `caret.move --end` | Move caret |
@@ -469,6 +469,7 @@ Which-key group names:
 | `W` | `caret.move --word --big` | Move caret by WORD |
 | `B` | `caret.move --word --back --big` | Move caret by WORD backward |
 | `E` | `caret.move --word-end --big` | Move caret to WORD end |
+| `^` | `caret.move --line-first` | Move caret |
 | `$` | `caret.move --line-end` | Move caret |
 | `gg` | `caret.move --start` | Move caret |
 | `G` | `caret.move --end` | Move caret |
@@ -517,6 +518,7 @@ Which-key group names:
 | `W` | `caret.move --word --big` | Move caret by WORD |
 | `B` | `caret.move --word --back --big` | Move caret by WORD backward |
 | `E` | `caret.move --word-end --big` | Move caret to WORD end |
+| `^` | `caret.move --line-first` | Move caret |
 | `$` | `caret.move --line-end` | Move caret |
 | `gg` | `caret.move --start` | Move caret |
 | `G` | `caret.move --end` | Move caret |

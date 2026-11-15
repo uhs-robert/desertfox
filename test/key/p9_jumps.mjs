@@ -176,12 +176,13 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(list?.entries.length === 1 && list.entries[0].y === 0, `the place G left: ${JSON.stringify(list)}`);
   });
 
-  await run_case("$ records no place", async () => {
+  await run_case("$ and ^ record no place", async () => {
     await reset_list();
     await open_page("aligned", "p9j_edge", { new_tab: true });
     await press_keys("$");
+    await press_keys("^");
     await sleep(300);
-    expect((await list_of_window()) === null, `$ recorded ${JSON.stringify(await list_of_window())}`);
+    expect((await list_of_window()) === null, `$ and ^ recorded ${JSON.stringify(await list_of_window())}`);
   });
 
   // Runs in the page's own world, as a single-page app's script does, not in the extension's.
