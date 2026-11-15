@@ -298,7 +298,7 @@ test("three failed collects in a row give up and the toast names the folder that
   await open(1, 0);
   await settle();
   assert.equal(log.collects, 3);
-  assert.match(log.toasts[0] ?? "", /spawn failed.*editor folder of the DesertFox host/);
+  assert.match(log.toasts[0] ?? "", /spawn failed.*\$XDG_RUNTIME_DIR\/desertfox\/editor.*~\/\.cache\/desertfox\/editor/);
   assert.deepEqual(store.desertfox_editor_jobs, {});
 });
 
@@ -307,7 +307,7 @@ test("the host's unknown-job refusal gives up at once, with no retry and no fold
   await open(1, 0);
   await settle();
   assert.equal(log.collects, 1);
-  assert.doesNotMatch(log.toasts[0] ?? "", /editor folder/);
+  assert.doesNotMatch(log.toasts[0] ?? "", /desertfox\/editor/);
 });
 
 test("an empty ext from the page means not given, so the site's extension applies", async () => {

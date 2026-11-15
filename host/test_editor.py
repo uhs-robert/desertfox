@@ -14,6 +14,7 @@ from test_bridge import LIVENESS_S
 from test_host import ConfigDirCase
 
 host = load_host()
+REAL_FILESYSTEM_TYPE_OF = host.filesystem_type_of
 
 
 class EditorCase(ConfigDirCase):
@@ -23,6 +24,10 @@ class EditorCase(ConfigDirCase):
         self.runtime = os.path.join(self.tmp.name, "run")
         os.makedirs(self.runtime, mode=0o700)
         patcher = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": self.cache, "XDG_RUNTIME_DIR": self.runtime})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        # The temporary folder may sit on a disk, so the default says the runtime folder is memory-backed.
+        patcher = mock.patch.object(host, "filesystem_type_of", return_value="tmpfs")
         patcher.start()
         self.addCleanup(patcher.stop)
         self.stubs = os.path.join(self.tmp.name, "stubs")
@@ -447,6 +452,50 @@ class RuntimeDirTest(EditorCase):
         self.assertEqual(self.editor_files(), [])
 
 
+MOUNTINFO = r"""22 1 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw
+30 22 0:25 / /run rw,nosuid shared:5 - tmpfs tmpfs rw
+31 30 0:30 / /run/user/1000 rw,nosuid shared:6 - tmpfs tmpfs rw
+32 22 0:31 / /mnt/my\040disk rw shared:7 - ext4 /dev/sdb1 rw
+33 22 0:32 / /srv rw shared:8 - ramfs none rw
+"""
+
+
+class MemoryBackedTest(EditorCase):
+    def test_the_filesystem_type_is_that_of_the_longest_mount_point(self):
+        kind = lambda path: REAL_FILESYSTEM_TYPE_OF(path, MOUNTINFO)
+        self.assertEqual(kind("/run/user/1000/desertfox/editor"), "tmpfs")
+        self.assertEqual(kind("/run/user/1001/x"), "tmpfs")
+        self.assertEqual(kind("/run/user/1000"), "tmpfs")
+        self.assertEqual(kind("/home/me/run"), "ext4")
+        self.assertEqual(kind("/mnt/my disk/run"), "ext4")
+        self.assertEqual(kind("/runner"), "ext4")
+        self.assertEqual(kind("/srv/x"), "ramfs")
+
+    def test_only_tmpfs_and_ramfs_count_as_memory(self):
+        for kind, expected in (("tmpfs", True), ("ramfs", True), ("ext4", False), ("overlay", False), (None, False)):
+            with mock.patch.object(host, "filesystem_type_of", return_value=kind):
+                self.assertEqual(host.is_memory_backed("/x"), expected, kind)
+
+    def test_a_runtime_folder_on_a_disk_serves_normal_edits_and_refuses_private_ones(self):
+        self.configure(self.stub("pass\n"))
+        with mock.patch.object(host, "filesystem_type_of", return_value="ext4"):
+            self.start()
+            self.assertEqual(host.editor_dir(), os.path.join(self.runtime, "desertfox", "editor"))
+            before = self.editor_files()
+            self.assertRefused({"cmd": "editor_start", "text": "x", "private": True}, "private windows")
+            self.assertEqual(self.editor_files(), before)
+            self.assertFalse(os.path.exists(os.path.join(self.cache, "desertfox")))
+
+    def test_a_job_started_on_the_fallback_is_collected_after_the_runtime_folder_works(self):
+        self.configure(self.stub("time.sleep(0.5)\nopen(path, 'w').write('edited')\n"))
+        os.chmod(self.runtime, 0o777)
+        first = self.start()
+        self.assertEqual(os.path.dirname(host.find_job(first)[0]), os.path.join(self.cache, "desertfox", "editor"))
+        os.chmod(self.runtime, 0o700)
+        self.start()
+        self.assertEqual(self.collect(first), {"done": True, "changed": True, "text": "edited"})
+
+
 class SweepTest(EditorCase):
     def test_an_orphan_scratch_swap_and_backup_older_than_a_day_go_and_younger_files_stay(self):
         self.configure(self.stub("pass\n"))
@@ -501,6 +550,37 @@ class SweepTest(EditorCase):
         self.start()
         self.assertFalse(os.path.exists(swap))
         self.assertFalse(os.path.exists(os.path.join(directory, scratch)))
+
+    def test_a_file_saved_after_the_age_listing_is_not_deleted(self):
+        self.configure(self.stub("pass\n"))
+        directory = os.path.join(self.runtime, "desertfox", "editor")
+        os.makedirs(directory, mode=0o700)
+        saved = self.plant(directory, "doc-saved.md")
+        real_stat = os.stat
+        calls = []
+
+        def stat_then_save(path, *args, **kwargs):
+            result = real_stat(path, *args, **kwargs)
+            calls.append(path)
+            if path == "doc-saved.md" and len(calls) == 1:
+                os.utime(saved)
+            return result
+
+        with mock.patch.object(host.os, "stat", stat_then_save):
+            host.sweep_editor_dir(directory)
+        self.assertTrue(os.path.exists(saved))
+
+    def test_a_claimed_job_of_a_long_run_is_not_swept_while_it_is_collected(self):
+        self.configure(self.stub("pass\n"))
+        job = self.start()
+        time.sleep(0.3)
+        directory = host.editor_dir()
+        job_path, record, scratch = host.read_job(directory, job)
+        self.age(job_path)
+        claimed = host.claim_job(job_path)
+        self.start()
+        self.assertTrue(os.path.exists(claimed))
+        self.assertTrue(os.path.exists(scratch))
 
     def test_a_symlink_is_unlinked_never_followed_and_nothing_outside_the_folder_is_touched(self):
         self.configure(self.stub("pass\n"))
