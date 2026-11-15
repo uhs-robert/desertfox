@@ -9,7 +9,7 @@ export const SPEED_RULE: LevelRule = { step: 0.25, min: 0.25, max: 4, reset: 1 }
 export const VOLUME_RULE: LevelRule = { step: 5, min: 0, max: 100, reset: 100 };
 // No API gives the frame rate, so a frame is a thirtieth of a second.
 export const FRAME_RULE: LevelRule = { step: 1 / 30, min: 0, max: Infinity, reset: 0 };
-export const SEEK_RULE: LevelRule = { step: 10, min: 0, max: Infinity, reset: 0 };
+export const SEEK_RULE: LevelRule = { step: 5, min: 0, max: Infinity, reset: 0 };
 
 // Size beats playing: a video that plays (or has sound) only wins when its area is at least this part of the largest visible video's, so a small ad that plays does not outrank the main video that waits to start.
 export const PLAYING_MIN_SHARE = 0.25;
