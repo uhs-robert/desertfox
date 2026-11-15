@@ -561,7 +561,7 @@ def private_subfolder(parent, name, create):
 
 
 def runtime_editor_dir(create=False):
-    """`$XDG_RUNTIME_DIR/desertfox/editor` (memory-backed, gone at logout), or None when that folder cannot be trusted:
+    """`$XDG_RUNTIME_DIR/desertfox/editor` (gone at logout when the folder is memory-backed, see `is_memory_backed`), or None when that folder cannot be trusted:
     the variable is unset or relative, or the folder is a symlink, not ours, or writable by group or others."""
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     if not os.path.isabs(runtime):
@@ -576,8 +576,44 @@ def runtime_editor_dir(create=False):
     return parent and private_subfolder(parent, "editor", create)
 
 
+MEMORY_FILESYSTEMS = {"tmpfs", "ramfs"}
+
+
+def filesystem_type_of(path, mountinfo_text=None):
+    """The filesystem type of the longest mount point that holds `path`, from /proc/self/mountinfo, or None when unknown."""
+    try:
+        if mountinfo_text is None:
+            with open("/proc/self/mountinfo", encoding="utf-8", errors="replace") as file:
+                mountinfo_text = file.read()
+        real = os.path.realpath(path)
+    except OSError:
+        return None
+    best_mount, best_type = "", None
+    for line in mountinfo_text.splitlines():
+        head, separator, tail = line.partition(" - ")
+        fields = head.split()
+        if not separator or len(fields) < 5 or not tail.split():
+            continue
+        # mountinfo writes a space, tab, newline or backslash in a path as a 3-digit octal escape.
+        mount = re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), fields[4])
+        if (real == mount or real.startswith(mount.rstrip("/") + "/")) and len(mount) >= len(best_mount):
+            best_mount, best_type = mount, tail.split()[0]
+    return best_type
+
+
+def is_memory_backed(path):
+    return filesystem_type_of(path) in MEMORY_FILESYSTEMS
+
+
+def editor_dirs():
+    """The folders a job can sit in: the runtime folder when it is trusted, then the cache folder. A job started in one
+    stays collectable after the other becomes the active one."""
+    runtime = runtime_editor_dir()
+    return ([runtime] if runtime else []) + [cache_editor_dir()]
+
+
 def editor_dir():
-    return runtime_editor_dir() or cache_editor_dir()
+    return editor_dirs()[0]
 
 
 def read_toml_strings(text):
@@ -696,6 +732,15 @@ def is_job_file(name):
     return name.startswith("job-") and (name.endswith(".json") or name.endswith(".done"))
 
 
+def is_stale(directory_fd, name):
+    """True for a file (not a folder) of `name` whose own mtime, symlinks not followed, is a day old or more."""
+    try:
+        info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return not stat.S_ISDIR(info.st_mode) and time.time() - info.st_mtime >= STALE_JOB_S
+
+
 def sweep_editor_dir(directory):
     """Removes what no editor needs any more: the job file and scratch file of a job whose editor is gone and which
     nobody collected for a day (a closed browser), a claimed `.done` job file, and any other file in the folder older
@@ -708,16 +753,9 @@ def sweep_editor_dir(directory):
     except OSError:
         return
     try:
-        now = time.time()
         names = os.listdir(directory_fd)
-        doomed = set()
-        for name in names:
-            try:
-                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-            except OSError:
-                continue
-            if not stat.S_ISDIR(info.st_mode) and now - info.st_mtime >= STALE_JOB_S:
-                doomed.add(name)
+        aged = {name for name in names if is_stale(directory_fd, name)}
+        dead_jobs_files = set()
         kept_names = set()
         kept_scratch = set()
         for name in names:
@@ -730,10 +768,14 @@ def sweep_editor_dir(directory):
                 kept_names.add(name)
                 if scratch:
                     kept_scratch.add(scratch)
-            elif name in doomed and scratch:
-                doomed.add(scratch)
-        for name in sorted(doomed):
+            elif name in aged and scratch:
+                dead_jobs_files.add(scratch)
+        for name in sorted(aged | dead_jobs_files):
             if name in kept_names or any(scratch in name for scratch in kept_scratch):
+                continue
+            # An editor may have saved since the listing, and the file is then fresh. A scratch file of a dead, old job
+            # goes whatever its mtime, because that editor is gone.
+            if name not in dead_jobs_files and not is_stale(directory_fd, name):
                 continue
             with contextlib.suppress(OSError):
                 os.unlink(name, dir_fd=directory_fd)
@@ -780,8 +822,8 @@ def editor_start(request):
         raise HostError(f"the text is {len(data)} bytes, over the {MAX_EDITOR_TEXT_BYTES} byte limit for the external editor")
     argv, insert_argv = load_editor_config()
     directory = runtime_editor_dir(create=True)
-    if directory is None and private:
-        raise HostError("the editor is off for private windows: $XDG_RUNTIME_DIR is not a usable folder, so the text would reach the disk")
+    if private and not (directory and is_memory_backed(directory)):
+        raise HostError("the editor is off for private windows: $XDG_RUNTIME_DIR is not a usable memory-backed folder, so the text could reach the disk")
     directory = directory or cache_editor_dir()
     try:
         os.makedirs(directory, mode=0o700, exist_ok=True)
@@ -841,10 +883,21 @@ def read_job(directory, job):
         raise HostError("unknown editor job: it never ran or its text was already taken") from error
 
 
+def find_job(job):
+    """`read_job` in the folder that holds the job."""
+    for directory in editor_dirs()[:-1]:
+        with contextlib.suppress(HostError):
+            return read_job(directory, job)
+    return read_job(editor_dirs()[-1], job)
+
+
 def claim_job(job_path):
     """Claims the job by renaming its file, so of two collectors exactly one gets the text and removes the files."""
     claimed = f"{job_path}.{os.getpid()}.done"
     try:
+        # A rename keeps the mtime, and a job of an editor that ran for a day has an old one. Touching the file first
+        # keeps a concurrent sweep from taking the claimed job, and with it the scratch file, while it is collected.
+        os.utime(job_path)
         os.rename(job_path, claimed)
     except FileNotFoundError as error:
         raise HostError("unknown editor job: its text was already taken") from error
@@ -879,8 +932,7 @@ def editor_collect(request, wait_s=COLLECT_WAIT_S):
     missing or changing file is a save in progress (a rename-and-write save removes the name for a moment), and the
     answer stays pending. A job that exited without saving gives changed false."""
     checked_fields(request, {"job"}, "editor_collect")
-    directory = editor_dir()
-    job_path, record, scratch_path = read_job(directory, request.get("job"))
+    job_path, record, scratch_path = find_job(request.get("job"))
     deadline = time.monotonic() + wait_s
     while editor_is_running(record["pid"], record["start_ticks"]):
         if time.monotonic() >= deadline:
