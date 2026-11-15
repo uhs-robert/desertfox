@@ -48,7 +48,7 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       expect(shape.text === "108.39.124.74, United States", `the line was ${JSON.stringify(shape)}`);
       expect(shape.under_date && shape.centered, `the line is not under the date: ${JSON.stringify(shape)}`);
       expect(shape.gear_href === "home.html#/settings" && shape.gear_label === "Settings" && shape.gear_icon && shape.gear_top_left, `the gear was wrong: ${JSON.stringify(shape)}`);
-      expect(JSON.stringify(shape.links) === JSON.stringify(["Getting Started", "Help"]), `the text links were ${JSON.stringify(shape.links)}`);
+      expect(JSON.stringify(shape.links) === JSON.stringify(["Getting Started", "Practice", "Help"]), `the text links were ${JSON.stringify(shape.links)}`);
       expect((await cloudflare_requests()) === 0, "a stored answer sent a request");
     });
   } finally {

@@ -89,6 +89,7 @@ const BINDINGS = {
   swap: { mode: "visual", id: "visual.act", args: { action: "swap" } },
   // `<C-[>` also escapes, but `<Escape>` is the key a reader knows.
   escape: { mode: "normal", id: "mode.escape", args: {}, test: () => true, prefer: "<Escape>" },
+  insert: { mode: "normal", id: "mode.insert", args: {} },
   help: { mode: "normal", id: "help.open", args: {} },
   settings_page: { mode: "normal", id: "help.open", args: { name: "settings" } },
   // Host features: the keys follow the keymap like the rest, so a rebind never leaves this section wrong.
@@ -151,6 +152,36 @@ export function tip_block(compiled: CompiledKeymap | undefined, commands: Comman
   return { kind: "tip", inlines: sentence(compiled, commands, "Press {cmdline} to open the command line, a box at the bottom of the page where you type commands. Type [help] and a page name, such as [help settings], to open that page.") };
 }
 
+export type PracticeArea = "scroll" | "hints" | "cmdline" | "whichkey" | "find" | "caret" | "insert" | "tabs";
+
+// The Practice page sections, in page order. The tall scroll area comes last so the targets above it stay in view.
+export const PRACTICE_AREAS: { area: PracticeArea; title: string }[] = [
+  { area: "hints", title: "Click with hints" },
+  { area: "find", title: "Search the page" },
+  { area: "caret", title: "Caret and visual mode" },
+  { area: "insert", title: "Type in a box" },
+  { area: "whichkey", title: "Which-key" },
+  { area: "cmdline", title: "The command line" },
+  { area: "tabs", title: "Find a tab" },
+  { area: "scroll", title: "Scroll" },
+];
+
+// One short prompt for each area of the Practice page, built from the same keymap as the Quick Start text.
+export function practice_prompts(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Record<PracticeArea, Inline[]> {
+  const say = (template: string) => sentence(compiled, commands, template);
+  const prefix = prefix_key(compiled, commands);
+  return {
+    scroll: say("Press {down} and {up} to scroll. {bottom} jumps to the end of the page and {top} back to the start."),
+    hints: say("Press {hint}, then type the letters of a label to click a link or button. The log line below shows what you clicked. {escape} cancels."),
+    cmdline: say("Press {cmdline}, type [set theme catppuccin] and press Enter. The page changes colors at once. Type [set theme oasis_moonlight] to go back."),
+    whichkey: prefix === undefined ? say("No key starts a longer sequence now, so there is no which-key panel to show.") : say(`Press [${prefix}] and wait. The which-key panel lists the keys that can come next. {escape} closes it.`),
+    find: say("Press {find}, type [fox] and press Enter. {next} jumps to the next match and {previous} to the one before."),
+    caret: say("Press {caret_at_text}, then type the label of a paragraph below. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}. Press {visual} to select, then {yank} to copy. {escape} steps back."),
+    insert: say("Press {insert} or click a box, then type. {escape} leaves insert mode. In the paste box, press Ctrl+V to paste what you copied."),
+    tabs: say("Open both links below in new tabs, then press {find_anything} and type part of a tab title to jump to it."),
+  };
+}
+
 export function quick_start_blocks(compiled: CompiledKeymap | undefined, commands: CommandMeta[] = []): Block[] {
   const say = (template: string): Block => ({ kind: "paragraph", inlines: sentence(compiled, commands, template) });
   const bullets = (templates: string[]): Block => ({ kind: "list", items: templates.map((template) => sentence(compiled, commands, template)) });
@@ -158,6 +189,7 @@ export function quick_start_blocks(compiled: CompiledKeymap | undefined, command
   const heading = (text: string): Block => ({ kind: "heading", level: 2, text });
   return [
     say("DesertFox puts the browser on the keyboard. The keys on this page work as they do on any page, so try each one as you read. The keys shown are the ones set up for you."),
+    { kind: "paragraph", inlines: [{ kind: "text", text: "For a page made to try each key on, open the " }, { kind: "link", text: "Practice page", href: "#/practice" }, { kind: "text", text: "." }] },
     heading("Scroll"),
     say("Press {down} to scroll down and {up} to scroll up. {top} jumps to the top of the page and {bottom} to the bottom. {half_page} moves half a page."),
     heading("Click with hints"),

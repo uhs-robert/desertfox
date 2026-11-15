@@ -79,8 +79,8 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await wait_view_takes_keys("newtab.html");
       await press_keys("f");
       await poll_until("the hint labels to show", async () => (await labels()) > 0);
-      // One label per card, plus the three built-in links and the command line hint.
-      expect((await labels()) === cards_now + 4, `expected ${cards_now + 4} labels, found ${await labels()}`);
+      // One label per card, plus the four built-in links and the command line hint.
+      expect((await labels()) === cards_now + 5, `expected ${cards_now + 5} labels, found ${await labels()}`);
       await press_keys("-k", "Escape");
     });
 

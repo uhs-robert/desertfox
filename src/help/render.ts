@@ -9,6 +9,8 @@ import { chevron_icon, heart_icon, menu_icon } from "../shared/icons.ts";
 import { key_caps } from "../shared/key_caps.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
+import { practice_page } from "./practice_page.ts";
+import { PRACTICE_AREAS } from "./quick_start.ts";
 import { ADVANCED_SUFFIX, PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
 
@@ -107,7 +109,7 @@ function engine_table(engines: EngineRow[]): HTMLElement {
   return el("div", undefined, el("p", "desertfox-help-muted", `Set by the file ${first_file}`), table);
 }
 
-function inline_node(inline: Inline): Child {
+export function inline_node(inline: Inline): Child {
   switch (inline.kind) {
     case "text": return inline.text;
     case "code": return el("code", "desertfox-help-inline-code", inline.text);
@@ -363,6 +365,7 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
     case "home": return home_page(model);
     case "settings": return settings_page(model);
     case "quick-start": return quick_start_page(model.quick_start);
+    case "practice": return practice_page(model.practice);
     case "search-engines": return search_engines_page(guide, model);
     case "commands": return commands_page(model, route.advanced === true, advanced_total);
     case "styling": return styling_page();
@@ -418,6 +421,7 @@ const ADVANCED_FILES_EDITOR_SECTION = "Advanced: edit files";
 const SETTINGS_SECTION_TITLES = [...GROUPS.map((group) => group.title), KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ADVANCED_FILES_SECTION, ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION];
 const settings_sections = sections_from_titles(SETTINGS_SECTION_TITLES);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
+const PRACTICE_SECTIONS = sections_from_titles(PRACTICE_AREAS.map((entry) => entry.title));
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
 export function page_sections(page: PageId, source: HelpModel | Block[], guide: Block[] = []): Section[] {
@@ -429,12 +433,13 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
     // The slug comes from the id part, so a link to a group keeps working. Only the shown title is plain.
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name)).map((section, index) => ({ ...section, title: group_title(source.groups[index]!.name) }));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);
+    case "practice": return PRACTICE_SECTIONS;
     case "styling": return STYLING_SECTIONS;
     case "site-rules": return [];
   }
 }
 
-function section_heading(page: PageId, section: Section, level = 2): HTMLElement {
+export function section_heading(page: PageId, section: Section, level = 2): HTMLElement {
   const heading = el(`h${level}`, undefined, section.title);
   heading.id = section_anchor(page, section.slug);
   heading.tabIndex = -1;

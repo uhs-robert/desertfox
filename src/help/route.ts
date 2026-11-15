@@ -6,6 +6,7 @@ export const PAGES = [
   { id: "home", title: "Home", hash: "#/" },
   { id: "settings", title: "Settings", hash: "#/settings" },
   { id: "quick-start", title: "Quick Start", hash: "#/quick-start" },
+  { id: "practice", title: "Practice", hash: "#/practice" },
   { id: "commands", title: "Commands", hash: "#/commands" },
   { id: "search-engines", title: "Search Engines", hash: "#/search-engines" },
   { id: "styling", title: "Styling", hash: "#/styling" },

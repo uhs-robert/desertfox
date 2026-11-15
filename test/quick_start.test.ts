@@ -127,3 +127,15 @@ test("quick start: a bound key is a keys inline and a command line or name is a 
   assert.ok(inlines.some((inline) => inline.kind === "code" && inline.text === ":native.install"));
   assert.ok(!inlines.some((inline) => inline.kind === "code" && inline.text === "gg"));
 });
+
+test("practice: one prompt per area, from the keymap, and Quick Start links to the page", async () => {
+  const { practice_prompts, PRACTICE_AREAS } = await import("../src/help/quick_start.ts");
+  const prompts = practice_prompts(compile(DEFAULT_KEYMAP), all_commands);
+  assert.deepEqual(Object.keys(prompts).sort(), PRACTICE_AREAS.map((entry) => entry.area).sort());
+  const keys = (area: keyof typeof prompts) => prompts[area].filter((inline) => inline.kind === "keys").map((inline) => inline.text);
+  assert.ok(keys("hints").includes("f") && keys("insert").includes("i") && keys("tabs").length === 1);
+  const rebound = practice_prompts(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "i")), "<A-i>": { id: "mode.insert" } } } as never), all_commands);
+  assert.ok(rebound.insert.some((inline) => inline.kind === "keys" && inline.text === "<A-i>"));
+  const links = quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands).flatMap((block) => (block.kind === "paragraph" ? block.inlines : [])).filter((inline) => inline.kind === "link");
+  assert.deepEqual(links, [{ kind: "link", text: "Practice page", href: "#/practice" }]);
+});
