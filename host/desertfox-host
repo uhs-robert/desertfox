@@ -947,6 +947,9 @@ def editor_collect(request, wait_s=COLLECT_WAIT_S):
     answer stays pending. A job that exited without saving gives changed false."""
     checked_fields(request, {"job"}, "editor_collect")
     job_path, record, scratch_path = find_job(request.get("job"))
+    # The extension asks again about every 20 s while the editor runs, so a job file a day old means no collector is left.
+    with contextlib.suppress(OSError):
+        os.utime(job_path)
     deadline = time.monotonic() + wait_s
     while editor_is_running(record["pid"], record["start_ticks"]):
         if time.monotonic() >= deadline:

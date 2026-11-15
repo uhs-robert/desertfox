@@ -597,6 +597,36 @@ class SweepTest(EditorCase):
             self.assertEqual(file.read(), "SAVED")
         self.assertEqual([n for n in os.listdir(directory) if n.endswith(".done")], [f"job-{job}.json.{os.getpid()}.done"])
 
+    def test_a_collector_that_claims_during_the_sweep_gets_the_unsaved_scratch_too(self):
+        self.configure(self.stub("pass\n"))
+        job = self.start()
+        time.sleep(0.3)
+        directory = host.editor_dirs()[0]
+        job_path, record, scratch = host.read_job(directory, job)
+        self.age(job_path)
+        self.age(scratch)
+        real_read = host.read_job_file_quietly
+        claimed = []
+
+        def read_then_claim(directory_fd, name):
+            result = real_read(directory_fd, name)
+            if name == f"job-{job}.json":
+                claimed.append(host.claim_job(job_path))
+            return result
+
+        with mock.patch.object(host, "read_job_file_quietly", read_then_claim):
+            host.sweep_editor_dir(directory)
+        self.assertTrue(os.path.exists(scratch))
+        self.assertEqual(host.collect_result(record, scratch, claimed[0]), {"done": True, "changed": True, "text": "hello"})
+
+    def test_each_collect_call_refreshes_the_job_file_so_an_old_one_means_no_collector(self):
+        self.configure(self.stub("time.sleep(30)\n"))
+        job = self.start()
+        job_path = os.path.join(host.editor_dirs()[0], f"job-{job}.json")
+        self.age(job_path)
+        self.assertEqual(self.collect(job, wait_s=0.05), {"pending": True})
+        self.assertLess(time.time() - os.stat(job_path).st_mtime, 60)
+
     def test_a_dead_job_whose_scratch_was_saved_since_is_left_for_the_collector(self):
         self.configure(self.stub("pass\n"))
         job = self.start()
