@@ -98,6 +98,9 @@ test("editor_start sends the text with only the fields given and answers the job
   const { client, sent } = client_with(async () => ({ ok: true, job: "j1" }));
   assert.equal(await client.editor_start({ text: "hi", ext: "md", insert: true }), "j1");
   assert.deepEqual(sent, [{ cmd: "editor_start", text: "hi", ext: "md", insert: true }]);
+  const private_call = client_with(async () => ({ ok: true, job: "j2" }));
+  await private_call.client.editor_start({ text: "hi", private: true });
+  assert.deepEqual(private_call.sent, [{ cmd: "editor_start", text: "hi", private: true }]);
   assert.equal(await failure_of(() => client_with(async () => ({ ok: true })).client.editor_start({ text: "" })), "bad_reply");
 });
 

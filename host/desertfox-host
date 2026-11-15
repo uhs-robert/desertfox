@@ -10,7 +10,7 @@ in the same framing to stdout and exits. It has six verbs and no others:
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "..."}
   {"cmd": "self_update", "version": "0.1.23", "sha256": {"desertfox-host": "<hex>", "desertfox-bridge": "<hex>", "desertfox": "<hex>"}}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "updated": true, "version": "0.1.23", "replaced": ["<path>", ...]}
-  {"cmd": "editor_start", "text": "<text>", "ext": "md", "insert": true}
+  {"cmd": "editor_start", "text": "<text>", "ext": "md", "insert": true, "private": true}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "job": "<32 hex digits>"}
   {"cmd": "editor_collect", "job": "<job from editor_start>"}
       -> {"ok": true, ..., "pending": true}  while the editor runs (after a wait of 20 s at most), or
@@ -525,11 +525,59 @@ STALE_JOB_S = 24 * 60 * 60
 JOB_PATTERN = re.compile(r"[0-9a-f]{32}")
 
 
-def editor_dir():
+def cache_editor_dir():
+    """Where an editor ran before the runtime folder, and where it still runs with no usable runtime folder."""
     cache_home = os.environ.get("XDG_CACHE_HOME", "")
     if not os.path.isabs(cache_home):
         cache_home = os.path.join(os.path.expanduser("~"), ".cache")
     return os.path.join(cache_home, "desertfox", "editor")
+
+
+def private_subfolder(parent, name, create):
+    """`parent/name` when it is a real folder of ours that no one else can enter, else None. A symlink, a folder of another
+    user or a file there is no place for page text. Our own folder with open modes is fixed when `create`."""
+    path = os.path.join(parent, name)
+    if create:
+        try:
+            os.mkdir(path, 0o700)
+        except FileExistsError:
+            pass
+        except OSError:
+            return None
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        return None
+    if info.st_mode & 0o077:
+        if not create:
+            return None
+        try:
+            os.chmod(path, 0o700)
+        except OSError:
+            return None
+    return path
+
+
+def runtime_editor_dir(create=False):
+    """`$XDG_RUNTIME_DIR/desertfox/editor` (memory-backed, gone at logout), or None when that folder cannot be trusted:
+    the variable is unset or relative, or the folder is a symlink, not ours, or writable by group or others."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime):
+        return None
+    try:
+        info = os.lstat(runtime)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022:
+        return None
+    parent = private_subfolder(runtime, "desertfox", create)
+    return parent and private_subfolder(parent, "editor", create)
+
+
+def editor_dir():
+    return runtime_editor_dir() or cache_editor_dir()
 
 
 def read_toml_strings(text):
@@ -626,23 +674,83 @@ def remove_quietly(path):
         pass
 
 
-def sweep_stale_jobs(directory):
-    """Removes the files of a job whose editor is gone and which nobody collected for a day (a closed browser). A claimed
-    `.done` job file, left by a collector that died after claiming, goes the same way."""
-    for name in os.listdir(directory):
-        if not (name.startswith("job-") and (name.endswith(".json") or name.endswith(".done"))):
-            continue
-        path = os.path.join(directory, name)
-        try:
-            if time.time() - os.stat(path).st_mtime < STALE_JOB_S:
+def read_job_file_quietly(directory_fd, name):
+    """The job record in `name`, or None for anything that is not a small regular file holding one. Never follows a
+    symlink and never blocks on a FIFO."""
+    try:
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory_fd)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return None
+        record = json.loads(os.read(descriptor, 64 * 1024).decode("utf-8"))
+        return record if isinstance(record, dict) else None
+    except (OSError, ValueError):
+        return None
+    finally:
+        os.close(descriptor)
+
+
+def is_job_file(name):
+    return name.startswith("job-") and (name.endswith(".json") or name.endswith(".done"))
+
+
+def sweep_editor_dir(directory):
+    """Removes what no editor needs any more: the job file and scratch file of a job whose editor is gone and which
+    nobody collected for a day (a closed browser), a claimed `.done` job file, and any other file in the folder older
+    than a day (a scratch file with no job file because the host died between the two writes, an editor's swap and
+    backup files). Files of a running editor stay, whatever their age: its job file, its scratch file and every file whose
+    name contains the scratch name. Works through a descriptor of the folder, so a symlink as the folder is refused and a
+    symlink inside is unlinked, never followed. Does not enter subfolders."""
+    try:
+        directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        return
+    try:
+        now = time.time()
+        names = os.listdir(directory_fd)
+        doomed = set()
+        for name in names:
+            try:
+                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            except OSError:
                 continue
-            job = json.loads(read_text(path))
-            if editor_is_running(job["pid"], job["start_ticks"]):
+            if not stat.S_ISDIR(info.st_mode) and now - info.st_mtime >= STALE_JOB_S:
+                doomed.add(name)
+        kept_names = set()
+        kept_scratch = set()
+        for name in names:
+            if not is_job_file(name):
                 continue
-            remove_quietly(os.path.join(directory, os.path.basename(job["scratch"])))
-        except (OSError, ValueError, KeyError, TypeError, HostError):
-            pass
-        remove_quietly(path)
+            record = read_job_file_quietly(directory_fd, name)
+            scratch = os.path.basename(record["scratch"]) if record and isinstance(record.get("scratch"), str) else ""
+            running = record is not None and editor_is_running(record.get("pid"), record.get("start_ticks"))
+            if running:
+                kept_names.add(name)
+                if scratch:
+                    kept_scratch.add(scratch)
+            elif name in doomed and scratch:
+                doomed.add(scratch)
+        for name in sorted(doomed):
+            if name in kept_names or any(scratch in name for scratch in kept_scratch):
+                continue
+            with contextlib.suppress(OSError):
+                os.unlink(name, dir_fd=directory_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(directory_fd)
+
+
+def sweep_legacy_dir(active_directory):
+    """Cleans the folder that older hosts used under the cache folder, then removes it once nothing is left. Best effort."""
+    legacy = cache_editor_dir()
+    if legacy == active_directory:
+        return
+    sweep_editor_dir(legacy)
+    with contextlib.suppress(OSError):
+        os.rmdir(legacy)
 
 
 def checked_fields(request, allowed, verb):
@@ -653,14 +761,17 @@ def checked_fields(request, allowed, verb):
 
 def editor_start(request):
     """Writes the text to a private scratch file, runs the configured editor on it and returns the job id."""
-    checked_fields(request, {"text", "ext", "insert"}, "editor_start")
+    checked_fields(request, {"text", "ext", "insert", "private"}, "editor_start")
     text, ext, insert = request.get("text"), request.get("ext"), request.get("insert", False)
+    private = request.get("private", False)
     if not isinstance(text, str):
         raise HostError("editor_start needs a string field text")
     if ext is not None and (not isinstance(ext, str) or EXT_PATTERN.fullmatch(ext) is None):
         raise HostError("the file extension must be 1 to 10 letters or digits")
     if not isinstance(insert, bool):
         raise HostError("editor_start takes a boolean insert")
+    if not isinstance(private, bool):
+        raise HostError("editor_start takes a boolean private")
     try:
         data = text.encode("utf-8")
     except UnicodeEncodeError as error:
@@ -668,11 +779,15 @@ def editor_start(request):
     if len(data) > MAX_EDITOR_TEXT_BYTES:
         raise HostError(f"the text is {len(data)} bytes, over the {MAX_EDITOR_TEXT_BYTES} byte limit for the external editor")
     argv, insert_argv = load_editor_config()
-    directory = editor_dir()
+    directory = runtime_editor_dir(create=True)
+    if directory is None and private:
+        raise HostError("the editor is off for private windows: $XDG_RUNTIME_DIR is not a usable folder, so the text would reach the disk")
+    directory = directory or cache_editor_dir()
     try:
         os.makedirs(directory, mode=0o700, exist_ok=True)
         os.chmod(directory, 0o700)
-        sweep_stale_jobs(directory)
+        sweep_editor_dir(directory)
+        sweep_legacy_dir(directory)
     except OSError as error:
         raise HostError(f"cannot prepare {directory}: {error.strerror or error}") from error
     job = secrets.token_hex(16)

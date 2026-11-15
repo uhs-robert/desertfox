@@ -37,7 +37,8 @@ const MIN_POLL_MS = 1000;
 
 // Failed collects in a row before the loop gives up. The editor may still be open, and one failed host call (a host update in flight) is no reason to lose its text.
 const MAX_COLLECT_FAILURES = 3;
-const SCRATCH_DIR = "~/.cache/desertfox/editor";
+// An old host rejects the `private` field with "editor_start takes only ..., not private". Refusing is the safe outcome, so say why.
+const OLD_HOST_PRIVATE = /\bnot private\b/;
 // The host's refusal for a job it does not hold. Retrying cannot help.
 const UNKNOWN_JOB = /unknown editor job/;
 
@@ -102,7 +103,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
             continue;
           }
           const current = await clear(held.job);
-          const where = unknown_job ? "" : ` The saved text stays in ${SCRATCH_DIR}.`;
+          const where = unknown_job ? "" : " The saved text stays in the editor folder of the DesertFox host (see host/README.md).";
           if (current && !current.orphaned) await best_effort(deps.toast(current.tab_id, current.frame_id, failure_text(error) + where));
           return;
         }
@@ -143,9 +144,10 @@ export function create_external_editor(deps: ExternalEditorDeps) {
         if (live_job_of(jobs, tab_id)) return { ok: false, message: "An editor is already open for this tab" };
         let job: string;
         try {
-          job = await deps.client.editor_start({ text: request.text, ...(ext === undefined ? {} : { ext }), ...(request.insert ? { insert: true } : {}) });
+          job = await deps.client.editor_start({ text: request.text, ...(ext === undefined ? {} : { ext }), ...(request.insert ? { insert: true } : {}), ...(is_private ? { private: true } : {}) });
         } catch (error) {
-          return { ok: false, message: failure_text(error) };
+          const old_host = is_private && OLD_HOST_PRIVATE.test(failure_text(error));
+          return { ok: false, message: old_host ? "The native host is too old to edit text from a private window in an external editor. Update it with :native.update." : failure_text(error) };
         }
         const held: EditorJob = { job, tab_id, token: request.token, frame_id, is_private };
         await write_jobs({ ...jobs, [job]: held });

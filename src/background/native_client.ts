@@ -30,7 +30,8 @@ export type HostWatch = {
 export type SelfUpdateRequest = { version: string; sha256: Record<string, string> };
 export type SelfUpdateReply = { updated: boolean; version: string };
 
-export type EditorStartRequest = { text: string; ext?: string; insert?: boolean };
+// `private` is sent only for a private window, so a host that predates it refuses the request instead of writing the text to the disk.
+export type EditorStartRequest = { text: string; ext?: string; insert?: boolean; private?: boolean };
 // `pending` while the editor runs. `done` with `changed` and, only when changed, the edited `text`.
 export type EditorCollectReply = { pending: true } | { done: true; changed: false } | { done: true; changed: true; text: string };
 

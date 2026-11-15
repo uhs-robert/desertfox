@@ -20,7 +20,9 @@ class EditorCase(ConfigDirCase):
     def setUp(self):
         super().setUp()
         self.cache = os.path.join(self.tmp.name, "cache")
-        patcher = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": self.cache})
+        self.runtime = os.path.join(self.tmp.name, "run")
+        os.makedirs(self.runtime, mode=0o700)
+        patcher = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": self.cache, "XDG_RUNTIME_DIR": self.runtime})
         patcher.start()
         self.addCleanup(patcher.stop)
         self.stubs = os.path.join(self.tmp.name, "stubs")
@@ -86,7 +88,29 @@ class EditorCase(ConfigDirCase):
         return host.editor_collect({"cmd": "editor_collect", "job": job}, wait_s=wait_s)
 
     def editor_files(self):
-        return sorted(os.listdir(os.path.join(self.cache, "desertfox", "editor")))
+        return sorted(os.listdir(host.editor_dir()))
+
+    def without_runtime_dir(self):
+        patcher = mock.patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        del os.environ["XDG_RUNTIME_DIR"]
+
+    def age(self, path, days=2):
+        long_ago = time.time() - days * host.STALE_JOB_S
+        os.utime(path, (long_ago, long_ago), follow_symlinks=False)
+
+    def legacy_dir(self):
+        path = os.path.join(self.cache, "desertfox", "editor")
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        return path
+
+    def plant(self, directory, name, days=2, content="old text"):
+        path = os.path.join(directory, name)
+        with open(path, "w") as file:
+            file.write(content)
+        self.age(path, days)
+        return path
 
     def assertRefused(self, request, fragment):
         with self.assertRaises(host.HostError) as caught:
@@ -153,11 +177,14 @@ class StartTest(EditorCase):
     def test_scratch_file_is_private_and_named_with_the_extension(self):
         self.configure(self.stub("time.sleep(30)\n"))
         job = self.start(ext="md")
-        directory = os.path.join(self.cache, "desertfox", "editor")
+        directory = os.path.join(self.runtime, "desertfox", "editor")
+        self.assertEqual(directory, host.editor_dir())
         scratch = [name for name in self.editor_files() if name.startswith("doc-")]
         self.assertEqual(len(scratch), 1)
         self.assertTrue(scratch[0].endswith(".md"))
         self.assertEqual(stat.S_IMODE(os.stat(directory).st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.dirname(directory)).st_mode), 0o700)
+        self.assertFalse(os.path.exists(os.path.join(self.cache, "desertfox")))
         self.assertEqual(stat.S_IMODE(os.stat(os.path.join(directory, scratch[0])).st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(os.stat(os.path.join(directory, f"job-{job}.json")).st_mode), 0o600)
         with open(os.path.join(directory, scratch[0])) as file:
@@ -354,6 +381,248 @@ class CollectTest(EditorCase):
         self.assertNotIn(f"job-{old}.json", names)
         self.assertIn(f"job-{fresh}.json", names)
         self.assertEqual(len([n for n in names if n.startswith("doc-")]), 1)
+
+
+class RuntimeDirTest(EditorCase):
+    def used_dir(self):
+        self.configure(self.stub("pass\n"))
+        self.start()
+        return host.editor_dir()
+
+    def test_unset_and_relative_runtime_dirs_fall_back_to_the_cache(self):
+        self.without_runtime_dir()
+        self.assertEqual(self.used_dir(), os.path.join(self.cache, "desertfox", "editor"))
+        os.environ["XDG_RUNTIME_DIR"] = "relative/run"
+        self.assertEqual(host.editor_dir(), os.path.join(self.cache, "desertfox", "editor"))
+
+    def test_a_group_or_other_writable_runtime_parent_is_rejected(self):
+        for mode in (0o770, 0o707, 0o777):
+            os.chmod(self.runtime, mode)
+            self.assertIsNone(host.runtime_editor_dir(create=True))
+        self.assertFalse(os.path.exists(os.path.join(self.runtime, "desertfox")))
+        os.chmod(self.runtime, 0o755)
+        self.assertIsNotNone(host.runtime_editor_dir(create=True))
+
+    def test_a_symlinked_runtime_parent_is_rejected(self):
+        real = os.path.join(self.tmp.name, "real")
+        os.makedirs(real, mode=0o700)
+        link = os.path.join(self.tmp.name, "link")
+        os.symlink(real, link)
+        os.environ["XDG_RUNTIME_DIR"] = link
+        self.assertIsNone(host.runtime_editor_dir(create=True))
+        self.assertEqual(os.listdir(real), [])
+
+    def test_a_runtime_parent_of_another_user_is_rejected(self):
+        with mock.patch.object(host.os, "getuid", return_value=os.getuid() + 1):
+            self.assertIsNone(host.runtime_editor_dir(create=True))
+        self.assertEqual(os.listdir(self.runtime), [])
+
+    def test_a_symlinked_or_foreign_subfolder_is_rejected(self):
+        elsewhere = os.path.join(self.tmp.name, "elsewhere")
+        os.makedirs(elsewhere, mode=0o700)
+        os.symlink(elsewhere, os.path.join(self.runtime, "desertfox"))
+        self.assertIsNone(host.runtime_editor_dir(create=True))
+        os.unlink(os.path.join(self.runtime, "desertfox"))
+        os.makedirs(os.path.join(self.runtime, "desertfox"), mode=0o700)
+        os.symlink(elsewhere, os.path.join(self.runtime, "desertfox", "editor"))
+        self.assertIsNone(host.runtime_editor_dir(create=True))
+        self.assertEqual(os.listdir(elsewhere), [])
+
+    def test_subfolders_with_open_modes_are_tightened_to_0700(self):
+        for path in (os.path.join(self.runtime, "desertfox"), os.path.join(self.runtime, "desertfox", "editor")):
+            os.makedirs(path, mode=0o755, exist_ok=True)
+            os.chmod(path, 0o755)
+        self.assertIsNone(host.runtime_editor_dir())
+        directory = host.runtime_editor_dir(create=True)
+        self.assertEqual(stat.S_IMODE(os.stat(directory).st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.dirname(directory)).st_mode), 0o700)
+
+    def test_an_unusable_runtime_dir_runs_the_editor_from_the_cache(self):
+        os.chmod(self.runtime, 0o777)
+        self.assertEqual(self.used_dir(), os.path.join(self.cache, "desertfox", "editor"))
+
+    def test_collect_finds_the_job_in_the_runtime_dir(self):
+        self.configure(self.stub("open(path, 'w').write('edited')\n"))
+        self.assertEqual(self.collect(self.start()), {"done": True, "changed": True, "text": "edited"})
+        self.assertEqual(self.editor_files(), [])
+
+
+class SweepTest(EditorCase):
+    def test_an_orphan_scratch_swap_and_backup_older_than_a_day_go_and_younger_files_stay(self):
+        self.configure(self.stub("pass\n"))
+        directory = os.path.join(self.runtime, "desertfox", "editor")
+        os.makedirs(directory, mode=0o700)
+        for name in ("doc-1.md", ".doc-1.md.swp", "doc-1.md~"):
+            self.plant(directory, name)
+        self.plant(directory, "doc-2.md", days=0.5)
+        self.start()
+        names = self.editor_files()
+        for gone in ("doc-1.md", ".doc-1.md.swp", "doc-1.md~"):
+            self.assertNotIn(gone, names)
+        self.assertIn("doc-2.md", names)
+
+    def test_a_host_that_died_between_the_scratch_and_the_job_write_leaves_nothing_the_sweep_misses(self):
+        self.configure(self.stub("pass\n"))
+        with mock.patch.object(host.subprocess, "Popen", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                host.handle({"cmd": "editor_start", "text": "page text"})
+        orphans = self.editor_files()
+        self.assertEqual(len(orphans), 1)
+        self.age(os.path.join(host.editor_dir(), orphans[0]))
+        self.start()
+        self.assertNotIn(orphans[0], self.editor_files())
+
+    def test_the_files_of_a_live_editor_survive_whatever_their_age(self):
+        self.configure(self.stub("time.sleep(30)\n"))
+        job = self.start(ext="md")
+        directory = host.editor_dir()
+        scratch = self.job_record(job)["scratch"]
+        swap = self.plant(directory, f".{scratch}.swp")
+        backup = self.plant(directory, f"{scratch}~")
+        for name in (scratch, f"job-{job}.json"):
+            self.age(os.path.join(directory, name))
+        stranger = self.plant(directory, "doc-other.md")
+        time.sleep(0.2)
+        self.start()
+        self.assertTrue(os.path.exists(swap))
+        self.assertTrue(os.path.exists(backup))
+        self.assertTrue(os.path.exists(os.path.join(directory, scratch)))
+        self.assertTrue(os.path.exists(os.path.join(directory, f"job-{job}.json")))
+        self.assertFalse(os.path.exists(stranger))
+
+    def test_a_dead_job_with_an_old_job_file_goes_with_its_swap_file(self):
+        self.configure(self.stub("pass\n"))
+        job = self.start()
+        time.sleep(0.3)
+        directory = host.editor_dir()
+        scratch = self.job_record(job)["scratch"]
+        swap = self.plant(directory, f".{scratch}.swp")
+        self.age(os.path.join(directory, f"job-{job}.json"))
+        self.start()
+        self.assertFalse(os.path.exists(swap))
+        self.assertFalse(os.path.exists(os.path.join(directory, scratch)))
+
+    def test_a_symlink_is_unlinked_never_followed_and_nothing_outside_the_folder_is_touched(self):
+        self.configure(self.stub("pass\n"))
+        outside = os.path.join(self.tmp.name, "outside")
+        os.makedirs(outside)
+        victim = self.plant(outside, "victim.txt")
+        victim_dir = os.path.join(outside, "dir")
+        os.makedirs(victim_dir)
+        precious = self.plant(victim_dir, "inside.txt")
+        directory = os.path.join(self.runtime, "desertfox", "editor")
+        os.makedirs(directory, mode=0o700)
+        link = os.path.join(directory, "doc-link.md")
+        os.symlink(victim, link)
+        self.age(link)
+        dir_link = os.path.join(directory, "doc-dirlink")
+        os.symlink(victim_dir, dir_link)
+        self.age(dir_link)
+        subfolder = os.path.join(directory, "sub")
+        os.makedirs(subfolder)
+        inner = self.plant(subfolder, "old.txt")
+        self.age(subfolder)
+        job_link = os.path.join(directory, "job-" + "a" * 32 + ".json")
+        os.symlink(victim, job_link)
+        self.age(job_link)
+        self.start()
+        self.assertFalse(os.path.lexists(link))
+        self.assertFalse(os.path.lexists(dir_link))
+        self.assertFalse(os.path.lexists(job_link))
+        self.assertTrue(os.path.exists(victim))
+        self.assertTrue(os.path.exists(precious))
+        self.assertTrue(os.path.exists(inner))
+
+    def test_a_job_file_symlinked_to_a_fifo_does_not_block_the_sweep(self):
+        self.configure(self.stub("pass\n"))
+        directory = os.path.join(self.runtime, "desertfox", "editor")
+        os.makedirs(directory, mode=0o700)
+        fifo = os.path.join(directory, "job-" + "b" * 32 + ".json")
+        os.mkfifo(fifo)
+        self.age(fifo)
+        self.start()
+        self.assertFalse(os.path.lexists(fifo))
+
+    def test_a_symlinked_editor_folder_is_not_swept(self):
+        outside = os.path.join(self.tmp.name, "outside")
+        os.makedirs(outside)
+        victim = self.plant(outside, "doc-x")
+        link = os.path.join(self.tmp.name, "linkdir")
+        os.symlink(outside, link)
+        host.sweep_editor_dir(link)
+        self.assertTrue(os.path.exists(victim))
+
+
+class LegacyTest(EditorCase):
+    def test_old_files_in_the_cache_folder_go_and_the_empty_folder_is_removed(self):
+        self.configure(self.stub("pass\n"))
+        legacy = self.legacy_dir()
+        self.plant(legacy, "doc-old.md")
+        self.plant(legacy, "job-" + "c" * 32 + ".json", content="not json")
+        self.start()
+        self.assertFalse(os.path.exists(legacy))
+
+    def test_a_young_legacy_file_and_the_folder_stay(self):
+        self.configure(self.stub("pass\n"))
+        legacy = self.legacy_dir()
+        young = self.plant(legacy, "doc-young.md", days=0.1)
+        self.plant(legacy, "doc-old.md")
+        self.start()
+        self.assertTrue(os.path.exists(young))
+        self.assertFalse(os.path.exists(os.path.join(legacy, "doc-old.md")))
+
+    def test_a_live_legacy_job_survives_whatever_its_age(self):
+        self.configure(self.stub("time.sleep(30)\n"))
+        self.without_runtime_dir()
+        job = self.start()
+        legacy = host.editor_dir()
+        scratch = self.job_record(job)["scratch"]
+        for name in (scratch, f"job-{job}.json"):
+            self.age(os.path.join(legacy, name))
+        os.environ["XDG_RUNTIME_DIR"] = self.runtime
+        time.sleep(0.2)
+        self.start()
+        self.assertTrue(os.path.exists(os.path.join(legacy, scratch)))
+        self.assertTrue(os.path.exists(os.path.join(legacy, f"job-{job}.json")))
+
+    def test_a_symlinked_legacy_folder_is_left_alone(self):
+        self.configure(self.stub("pass\n"))
+        outside = os.path.join(self.tmp.name, "outside")
+        os.makedirs(outside)
+        victim = self.plant(outside, "doc-x")
+        os.makedirs(os.path.join(self.cache, "desertfox"))
+        os.symlink(outside, os.path.join(self.cache, "desertfox", "editor"))
+        self.start()
+        self.assertTrue(os.path.exists(victim))
+
+    def test_the_active_cache_fallback_folder_is_not_removed_as_legacy(self):
+        self.configure(self.stub("time.sleep(30)\n"))
+        self.without_runtime_dir()
+        self.start()
+        self.assertTrue(os.path.isdir(host.editor_dir()))
+
+
+class PrivateTest(EditorCase):
+    def test_private_with_the_runtime_dir_works(self):
+        self.configure(self.stub("pass\n"))
+        self.start(private=True)
+
+    def test_private_with_the_cache_fallback_is_refused_and_writes_nothing(self):
+        self.configure(self.stub("pass\n"))
+        self.without_runtime_dir()
+        self.assertRefused({"cmd": "editor_start", "text": "x", "private": True}, "private windows")
+        self.assertFalse(os.path.exists(os.path.join(self.cache, "desertfox")))
+
+    def test_private_false_with_the_cache_fallback_works(self):
+        self.configure(self.stub("pass\n"))
+        self.without_runtime_dir()
+        self.start(private=False)
+
+    def test_private_of_the_wrong_type_is_refused(self):
+        self.configure(self.stub("pass\n"))
+        for value in ("yes", 1, None):
+            self.assertRefused({"cmd": "editor_start", "text": "x", "private": value}, "boolean private")
+        self.assertFalse(os.path.exists(os.path.join(self.runtime, "desertfox")))
 
 
 if __name__ == "__main__":
