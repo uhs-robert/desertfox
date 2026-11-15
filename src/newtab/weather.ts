@@ -341,7 +341,7 @@ export function start_weather(slot: HTMLElement, settings: WeatherSettings, deps
     });
   };
   const show = (view: WeatherView) => {
-    if (live) draw_weather(slot, view, ask_for_location, settings.newtab_clock_format === 24 ? 24 : 12, Date.now, air);
+    if (live) draw_weather(slot, view, ask_for_location, settings.newtab_clock_format === 24 ? 24 : 12, deps.net.now, air);
   };
   const finished = refused_as(run_weather(settings, { ...deps, net }, show), undefined) as Promise<void>;
   return {
