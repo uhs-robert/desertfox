@@ -1,4 +1,4 @@
-// Key test case of the settings page transfer section: an import shows the snippet's code and asks first, and stores only what is ticked.
+// Key test cases of the settings page transfer section: an import shows the snippet's code and what the config can reach, asks first, and stores only what is ticked.
 import { write_zip } from "../../src/shared/zip.ts";
 import { evaluate_in_background } from "./rdp.mjs";
 
@@ -34,6 +34,41 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, expec
 
     await in_page(`view.document.querySelector('[aria-label="Remove snippets/keep.js"]').click();`);
     await poll_until("the removal to drop the snippet", async () => !(await stored_files()).includes("snippets/keep.js"));
+    await close_tabs();
+  });
+
+  const hostile = write_zip({
+    "desertfox/search_engines.toml": '[evil]\nurl = "https://evil-search.test/?q={query}"\nlabel = "Evil"\n',
+    "desertfox/settings.toml": 'new_tab_page = "https://evil-tab.test/"\nbridge = true\n\n[[site_rules]]\nsite = "bank.test"\n[site_rules.bind]\nzp = "page.clipboard paste"\n',
+    "desertfox/keymap.toml": '[normal]\nzb = "settings.set bridge true"\n',
+  });
+
+  await run_case("settings page: the review lists the addresses and risky keys an import reaches, and stores nothing until Import", async () => {
+    await close_tabs();
+    await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
+    await poll_until("the settings page to list the settings", () => in_page(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20 && !!view.document.querySelector('[data-transfer="import-zip"]');`).catch(() => false), { timeout_ms: 10000 });
+    const before = await stored_files();
+
+    await in_page(`const input = view.document.querySelector('[data-transfer="import-zip"]'); const transfer = new view.DataTransfer(); transfer.items.add(new view.File([new view.Uint8Array(${JSON.stringify([...hostile])})], "config.zip")); input.files = transfer.files; input.dispatchEvent(new view.Event("change"));`);
+    await poll_until("the review to show the reach", () => in_page(`return (view.document.querySelector(".desertfox-transfer-review")?.textContent ?? "").includes("What this import can reach");`).catch(() => false));
+    const text = await in_page(`return view.document.querySelector(".desertfox-transfer-review").textContent;`);
+    for (const part of [
+      "Search engine evil: https://evil-search.test/?q={query}",
+      "New tab page: https://evil-tab.test/",
+      "zp in site bank.test: page.clipboard paste",
+      "These keys read your clipboard or act on a page:",
+      "zb in normal mode: set bridge true (an import cannot switch this on, but this key does)",
+      "bridge is not imported",
+      "Import only configs you trust.",
+    ]) expect(text.includes(part), `the review lacked "${part}": ${text}`);
+    expect(JSON.stringify(await stored_files()) === JSON.stringify(before), `files were stored before Import: ${JSON.stringify(await stored_files())}`);
+    // Set DESERTFOX_SHOT_DIR to also save a screenshot of the review.
+    if (process.env.DESERTFOX_SHOT_DIR) { await in_page(`const target = view.document.querySelector(".desertfox-transfer-review h4"); target.closest("details").open = true; for (let node = target.parentElement; node; node = node.parentElement) if (node.scrollHeight > node.clientHeight) node.scrollTop = target.getBoundingClientRect().top - node.getBoundingClientRect().top + node.scrollTop - 40; view.scrollBy(0, target.getBoundingClientRect().top - 40);`); await sleep(600); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/import-reach.png`); }
+
+    // Cancel, not Import: an import here would replace the config the later pieces run on. The case above proves Import stores.
+    await in_page(`[...view.document.querySelectorAll(".desertfox-transfer-review button")].find((button) => button.textContent === "Cancel").click();`);
+    await poll_until("the review to close", () => in_page(`return !view.document.querySelector(".desertfox-transfer-review");`).catch(() => false));
+    expect(JSON.stringify(await stored_files()) === JSON.stringify(before), `files were stored by a cancelled import: ${JSON.stringify(await stored_files())}`);
     await close_tabs();
   });
 

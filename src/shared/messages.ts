@@ -486,9 +486,18 @@ export type SnippetPreview = {
   requires?: string[];
 };
 
+// A list the consent screen shows in part: at most `rows` entries, and how many more there are.
+export type ReachList<T> = { rows: T[]; more: number };
+export type ReachRow = { what: string; url: string };
+export type KeyGroup = "clipboard_or_page" | "settings" | "host";
+// `names_consent` is set when the key changes a setting that an import cannot switch on by itself.
+export type KeyRow = { where: string; keys: string; run: string; names_consent?: true };
+// What the built import reaches: the addresses it adds, the risky keys by group, and how many site rows add keys of their own.
+export type ImportReach = { addresses: ReachList<ReachRow>; keys: Record<KeyGroup, ReachList<KeyRow>>; site_rows: number };
+
 // `replaces_config` says the import holds config files, which replace every config file in force. `problems` come from a build with every snippet accepted: the commit refuses while any remain.
 export type ConfigImportPreview =
-  | { ok: true; replaces_config: boolean; config_files: string[]; snippets: SnippetPreview[]; problems: string[]; warnings: string[] }
+  | { ok: true; replaces_config: boolean; config_files: string[]; snippets: SnippetPreview[]; problems: string[]; warnings: string[]; reach: ImportReach }
   | { ok: false; message: string };
 
 export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; message: string };

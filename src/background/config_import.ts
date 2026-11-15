@@ -11,6 +11,7 @@ import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, Impor
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
+import { CONSENT_SETTINGS, import_reach, no_reach } from "./import_reach.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
 // Problem messages and origins of an import name this folder instead of the host's config folder.
@@ -63,8 +64,6 @@ function split_files(files: ConfigFiles): { config_files: ConfigFiles; snippet_f
   };
 }
 
-// Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on.
-const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update"] as const;
 const is_settings_file = (path: string) => path === "settings.toml" || (path.startsWith("settings.d/") && path.endsWith(".toml"));
 
 // A settings file that holds a consent key is rewritten without it, which drops its comments. One that does not parse stays as it is, and the build reports it.
@@ -133,8 +132,9 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
   const { files, replaces_config, dropped } = plan_import_files(incoming, current, imported.snippet_files);
   const warnings: string[] = [...dropped];
   let problems: string[] = [];
+  let reach = no_reach();
   try {
-    build_config(files, commands, warnings, { dir_label: IMPORT_DIR_LABEL });
+    reach = import_reach(build_config(files, commands, warnings, { dir_label: IMPORT_DIR_LABEL }), commands);
   } catch (error) {
     if (!(error instanceof ConfigErrors)) throw error;
     problems = error.problems;
@@ -146,6 +146,7 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
     snippets: Object.entries(imported.snippet_files).map(([path, code]) => preview_snippet(path, code, current)),
     problems,
     warnings,
+    reach,
   };
 }
 

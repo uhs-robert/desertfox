@@ -3,9 +3,9 @@
 
 import { el } from "./render.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
-import { create_transfer_session, can_commit, read_folder_files, read_zip_file, SNIPPET_GLOSS, SNIPPET_WARNING } from "./transfer_model.ts";
-import type { ExportFile, PickedFile, Review, TransferSession } from "./transfer_model.ts";
-import type { InstalledSnippet, SnippetPreview } from "../shared/messages.ts";
+import { create_transfer_session, can_commit, read_folder_files, read_zip_file, reach_block, SNIPPET_GLOSS, SNIPPET_WARNING } from "./transfer_model.ts";
+import type { ExportFile, PickedFile, ReachSegment, Review, TransferSession } from "./transfer_model.ts";
+import type { ImportReach, InstalledSnippet, SnippetPreview } from "../shared/messages.ts";
 import type { TransferDeps } from "./transfer_model.ts";
 
 export function button(label: string, on_click: () => void, disabled = false): HTMLButtonElement {
@@ -60,6 +60,23 @@ export function snippet_card(snippet: SnippetPreview, review: Pick<Review, "acce
   );
 }
 
+const segment_node = (segment: ReachSegment): Node | string => (typeof segment === "string" ? segment : el("code", undefined, segment.code));
+
+// What the import reaches, drawn above the snippet cards. Nothing is drawn when the import reaches nothing to list.
+export function reach_view(reach: ImportReach): HTMLElement[] {
+  const block = reach_block(reach);
+  if (block === undefined) return [];
+  return [
+    el("h4", undefined, block.heading),
+    el("p", "desertfox-transfer-warning", block.warning),
+    ...block.sections.flatMap((section) => [
+      el("p", undefined, section.intro),
+      el("ul", undefined, ...section.rows.map((row) => el("li", undefined, ...row.map(segment_node))), ...(section.more === undefined ? [] : [el("li", "desertfox-help-muted", section.more)])),
+    ]),
+    ...(block.site_rows === undefined ? [] : [el("p", undefined, block.site_rows)]),
+  ];
+}
+
 function review_view(review: Review, session: TransferSession): HTMLElement {
   const { preview } = review;
   const config_line = preview.config_files.length > 0
@@ -73,6 +90,7 @@ function review_view(review: Review, session: TransferSession): HTMLElement {
     el("p", "desertfox-help-muted", USER_CSS_PAUSED_NOTE),
     ...preview.problems.map((problem) => el("div", "desertfox-settings-error", problem)),
     ...preview.warnings.map((warning) => el("div", "desertfox-help-muted", warning)),
+    ...reach_view(preview.reach),
     ...(preview.snippets.length > 0
       ? [el("p", undefined, SNIPPET_GLOSS), el("p", "desertfox-transfer-warning", SNIPPET_WARNING), el("p", undefined, "DesertFox adds no snippet until you accept it here. Snippets you leave unticked are dropped."), ...preview.snippets.map((snippet) => snippet_card(snippet, review, session))]
       : []),
