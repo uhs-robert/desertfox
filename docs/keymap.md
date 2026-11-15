@@ -1,12 +1,6 @@
 # Binding map
 
-The default keymap, generated from `src/background/default_keymap.ts` and `docs/keymap_planned.toml`. Do not edit between the markers. Run `just docs-gen` after a change to either source. `npm test` fails when the tables are stale.
-
-Status values:
-
-- `bound`: the default keymap binds the key.
-- `later`: planned for phase 3. The key is not bound yet.
-- `dropped`: not built. The note gives the reason.
+The default keymap, generated from `src/background/default_keymap.ts`. Do not edit between the markers. Run `just docs-gen` after a change to it. `npm test` fails when the tables are stale.
 
 Search engine keys (`s`, `S`, `,`) and container keys (`c`, `C`) come from the user's config, so no row lists them. The config generates them from `search_keys` and `container_keys`. One default is left unbound on purpose. `ZZ` closes every window with no undo, so users bind it in their config.
 
@@ -24,259 +18,253 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 468 (normal 241, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3) | later: 0 | dropped: 6
+bound: 468 (normal 241, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
 
 ### normal
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `h` | bound | `scroll.pixels --dx=-50` | Scroll left |  |
-| `l` | bound | `scroll.pixels --dx=50` | Scroll right |  |
-| `j` | bound | `scroll 10` | Scroll down |  |
-| `k` | bound | `scroll -10` | Scroll up |  |
-| `gg` | bound | `scroll.to 0` | Scroll to top |  |
-| `G` | bound | `scroll.to 100` | Scroll to bottom |  |
-| `$` | bound | `scroll.to --x 100` | Scroll to right edge |  |
-| `^` | bound | `scroll.to --x 0` | Scroll to left edge |  |
-| `<C-d>` | bound | `scroll.pages --fraction=0.5` | Scroll half page down |  |
-| `<C-u>` | bound | `scroll.pages --fraction=-0.5` | Scroll half page up |  |
-| `<C-f>` | bound | `scroll.pages` | Scroll page down |  |
-| `<C-b>` | bound | `scroll.pages --fraction=-1` | Scroll page up |  |
-| `H` | bound | `page.back` | Back |  |
-| `L` | bound | `page.forward` | Forward |  |
-| `<C-o>` | bound | `page.jump --older` | Jump back |  |
-| `<C-i>` | bound | `page.jump --newer` | Jump forward |  |
-| `rr` | bound | `page.reload` | Reload |  |
-| `rh` | bound | `page.reload --hard` | Hard reload |  |
-| `R` | bound | `page.reload --hard` | Hard reload |  |
-| `rc` | bound | `page.reload --site` | Clear site data, reload |  |
-| `rC` | bound | `page.reload --all` (prompts) | Clear all data, reload |  |
-| `xp` | bound | `page.stop` | Stop loading |  |
-| `gh` | bound | `page.home` | Home page |  |
-| `gH` | bound | `page.home --tab` | Home page |  |
-| `]]` | bound | `page.follow --next` | Next page |  |
-| `[[` | bound | `page.follow --prev` | Previous page |  |
-| `]i` | bound | `page.focus_field --next` | Next form control |  |
-| `[i` | bound | `page.focus_field --prev` | Previous form control |  |
-| `]h` | bound | `page.heading --next` | Next heading |  |
-| `[h` | bound | `page.heading --prev` | Previous heading |  |
-| `sh` | bound | `cmdline.open --text='heading '` | Search headings |  |
-| `.` | bound | `repeat` | Repeat |  |
-| `J` | bound | `tab.next` | Next tab |  |
-| `K` | bound | `tab.prev` | Previous tab |  |
-| `gt` | bound | `tab.goto` | Next tab |  |
-| `gT` | bound | `tab.prev` | Previous tab |  |
-| `ga` | bound | `tab.goto_audible` | Go to audible tab |  |
-| `gl` | bound | `tab.alternate` | Last used tab |  |
-| `gL` | bound | `tab.alternate_any_window` | Last used tab, any window |  |
-| `gp` | bound | `tab.split_other` | Other pane |  |
-| `gP` | bound | `tab.split_swap` | Swap panes |  |
-| `gF` | bound | `frame.exit` | Focus top page |  |
-| `g0` | bound | `tab.goto 1` | First tab |  |
-| `g^` | bound | `tab.goto 1` | First tab |  |
-| `g$` | bound | `tab.goto -1` | Last tab |  |
-| `T` | bound | `tab` (prompts) | Switch tab |  |
-| `<<` | bound | `tab.move --offset=-1` | Move tab left |  |
-| `>>` | bound | `tab.move --offset=1` | Move tab right |  |
-| `xx` | bound | `tab.close` | Close tab |  |
-| `dd` | bound | `tab.close` | Close tab |  |
-| `D` | bound | `tab.close --focus-previous` | Close tab |  |
-| `dL` | bound | `tab.close --all-after` | Close tabs after this one |  |
-| `dH` | bound | `tab.close --all-before` | Close tabs before this one |  |
-| `gx0` | bound | `tab.close --all-before` | Close tabs before this one |  |
-| `gx$` | bound | `tab.close --all-after` | Close tabs after this one |  |
-| `u` | bound | `tab.undo_close` | Reopen closed tab |  |
-| `<A-p>` | bound | `tab.pin` | Toggle pin |  |
-| `<A-m>` | bound | `tab.mute` | Toggle mute |  |
-| `am` | bound | `tab.mute` | Toggle mute |  |
-| `aa` | bound | `media enter` | Start media mode |  |
-| `ap` | bound | `media play_pause` | Play or pause |  |
-| `as` | bound | `media speed up` | Speed up |  |
-| `aS` | bound | `media speed down` | Slow down |  |
-| `ar` | bound | `media speed reset` | Reset speed |  |
-| `av` | bound | `media volume up` | Volume up |  |
-| `aV` | bound | `media volume down` | Volume down |  |
-| `al` | bound | `media seek up` | Seek forward |  |
-| `ah` | bound | `media seek down` | Seek back |  |
-| `aP` | bound | `media pip` | Toggle picture-in-picture |  |
-| `af` | bound | `media fullscreen` | Toggle fullscreen |  |
-| `A` | bound | `cmdline.open --text='media '` | Media command |  |
-| `tt` | bound | `open --tab` (prompts) | Open URL |  |
-| `tT` | bound | `tab` (prompts) | Switch tab |  |
-| `ts` | bound | `session.save` (prompts) | Save tab session |  |
-| `tS` | bound | `session.open` (prompts) | Open tab session |  |
-| `td` | bound | `tab.duplicate` | Duplicate tab |  |
-| `tm` | bound | `tab.move` (prompts) | Move tab |  |
-| `tM` | bound | `cmdline.open --text='tab.move --offset='` | Move tab by an offset |  |
-| `tn` | bound | `tab.next` | Next tab |  |
-| `tp` | bound | `tab.prev` | Previous tab |  |
-| `ta` | bound | `tab.goto_audible` | Go to audible tab |  |
-| `t0` | bound | `tab.goto 1` | First tab |  |
-| `t^` | bound | `tab.goto 1` | First tab |  |
-| `t$` | bound | `tab.goto -1` | Last tab |  |
-| `tl` | bound | `tab.alternate` | Last used tab |  |
-| `tL` | bound | `tab.alternate_any_window` | Last used tab, any window |  |
-| `tuu` | bound | `tab.unload` | Unload tab |  |
-| `tuh` | bound | `tab.unload --all-before` | Unload tabs before this one |  |
-| `tul` | bound | `tab.unload --all-after` | Unload tabs after this one |  |
-| `tUh` | bound | `tab.load --all-before` | Load tabs before this one |  |
-| `tUl` | bound | `tab.load --all-after` | Load tabs after this one |  |
-| `tga` | bound | `tabgroup.add` (prompts) | Add tab to a group |  |
-| `tgA` | bound | `tabgroup.add` | Add tab to a new group |  |
-| `tgd` | bound | `tabgroup.remove` | Remove tab from group |  |
-| `tgn` | bound | `tabgroup.name` (prompts) | Name tab group |  |
-| `tgc` | bound | `tabgroup.collapse` | Collapse tab group |  |
-| `tge` | bound | `tabgroup.expand` | Expand tab group |  |
-| `tgt` | bound | `tabgroup.toggle` | Toggle tab group |  |
-| `tgl` | bound | `tabgroup.color` (prompts) | Color tab group |  |
-| `tgj` | bound | `tabgroup.next` | Next tab group |  |
-| `tgk` | bound | `tabgroup.prev` | Previous tab group |  |
-| `W` | bound | `window.new` (prompts) | New window, edit current URL |  |
-| `ww` | bound | `window.new` (prompts) | New window, edit current URL |  |
-| `wo` | bound | `window.new` (prompts) | New window, enter URL |  |
-| `wn` | bound | `window.new` | New window |  |
-| `wp` | bound | `window.new --private` | New private window |  |
-| `wc` | bound | `window.close` | Close window |  |
-| `wa` | bound | `tab.attach` (prompts) | Attach tab to window |  |
-| `wd` | bound | `tab.duplicate` | Duplicate tab |  |
-| `wD` | bound | `tab.detach` | Detach tab |  |
-| `wh` | bound | `hint --window` | Click element in new window |  |
-| `wu` | bound | `window.undo_close` | Reopen closed window |  |
-| `U` | bound | `window.undo_close` | Reopen closed window |  |
-| `yy` | bound | `copy` | Copy URL |  |
-| `yc` | bound | `copy --canonical` | Copy URL |  |
-| `ym` | bound | `copy --markdown` | Copy URL |  |
-| `yo` | bound | `copy --org` | Copy URL |  |
-| `ys` | bound | `copy --short` | Copy URL |  |
-| `yt` | bound | `copy --title` | Copy URL |  |
-| `yL` | bound | `copylinks` | Copy page links |  |
-| `yl` | bound | `copylinks --viewport` | Copy links in view |  |
-| `yT` | bound | `copytabs` | Copy tab links |  |
-| `gu` | bound | `url.parent` | Parent URL |  |
-| `gU` | bound | `url.root` | Root URL |  |
-| `<C-a>` | bound | `url.increment --up` | Change URL number |  |
-| `<C-x>` | bound | `url.increment --down` | Change URL number |  |
-| `]c` | bound | `url.increment --up` | Change URL number |  |
-| `[c` | bound | `url.increment --down` | Change URL number |  |
-| `gi` | bound | `page.focus_input` | Focus input |  |
-| `I` | bound | `page.focus_input` | Focus input |  |
-| `i` | bound | `mode.insert` | Insert mode |  |
-| `pp` | bound | `paste` | Open clipboard |  |
-| `pt` | bound | `paste --tab` | Open clipboard |  |
-| `pw` | bound | `paste --window` | Open clipboard |  |
-| `P` | bound | `paste --tab` | Open clipboard |  |
-| `pr` | bound | `page.print` | Print |  |
-| `ps` | bound | `page.save_pdf` | Save as PDF |  |
-| `ba` | bound | `bookmark.add` (prompts) | Add bookmark, edit URL |  |
-| `bA` | bound | `bookmark.add` (prompts) | Add bookmark, pick folder |  |
-| `be` | bound | `bookmark.edit_url` (prompts) | Edit bookmark address |  |
-| `br` | bound | `bookmark.rename` (prompts) | Rename bookmark |  |
-| `bm` | bound | `bookmark.move` (prompts) | Move bookmark to folder |  |
-| `bf` | bound | `bookmark.open_folder --tab` (prompts) | Open folder in tabs |  |
-| `bF` | bound | `bookmark.open_folder --window` (prompts) | Open folder in a new window |  |
-| `bd` | bound | `bookmark.remove` | Remove bookmark |  |
-| `bD` | bound | `bookmark.remove` (prompts) | Remove bookmark, pick from list |  |
-| `bb` | bound | `bookmark` (prompts) | Open bookmark |  |
-| `B` | bound | `bookmark --tab` (prompts) | Open bookmark |  |
-| `zi` | bound | `zoom.by 0.1` | Zoom in |  |
-| `z+` | bound | `zoom.by 0.1` | Zoom in |  |
-| `zo` | bound | `zoom.by -0.1` | Zoom out |  |
-| `z-` | bound | `zoom.by -0.1` | Zoom out |  |
-| `zm` | bound | `zoom.by 0.5` | Zoom in a lot |  |
-| `zM` | bound | `zoom.by 0.5` | Zoom in a lot |  |
-| `zr` | bound | `zoom.by -0.5` | Zoom out a lot |  |
-| `zR` | bound | `zoom.by -0.5` | Zoom out a lot |  |
-| `z=` | bound | `zoom 1` | Reset zoom |  |
-| `zI` | bound | `zoom 3` | Zoom to 300% |  |
-| `zO` | bound | `zoom 0.3` | Zoom to 30% |  |
-| `zt` | bound | `scroll.align --top` | Align focus |  |
-| `zz` | bound | `scroll.align` | Align focus |  |
-| `zb` | bound | `scroll.align --bottom` | Align focus |  |
-| `<S-Escape>` | bound | `mode ignore` | Set mode |  |
-| `<S-Insert>` | bound | `mode ignore` | Set mode |  |
-| `<AC-Escape>` | bound | `mode ignore` | Set mode |  |
-| ``<AC-`>`` | bound | `mode ignore` | Set mode |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-[>` | bound | `mode.escape` | Escape |  |
-| `<C-v>` | bound | `mode.pass_next` | Pass next key |  |
-| `<F1>` | bound | `help` | Help |  |
-| `,r` | bound | `config.reload` | Reload config |  |
-| `,h` | bound | `help` | Help |  |
-| `,s` | bound | `help settings` | Settings page |  |
-| `,t` | bound | `toggle` (prompts) | Toggle a setting |  |
-| `,i` | bound | `mode ignore` | Set mode |  |
-| `,,` | bound | `anything` (prompts) | Find anything |  |
-| `,b` | bound | `page.blur` | Blur |  |
-| `,?` | bound | `help.whichkey` | Which key |  |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `,"` | bound | `registers` (prompts) | List registers |  |
-| `,fs` | bound | `firefox settings` | Firefox settings |  |
-| `,fa` | bound | `firefox addons` | Firefox add-ons |  |
-| `,fd` | bound | `firefox downloads` | Firefox downloads |  |
-| `,fc` | bound | `firefox config` | Firefox about:config |  |
-| `,fp` | bound | `firefox profiles` | Firefox profiles |  |
-| `,fS` | bound | `firefox support` | Firefox support info |  |
-| `,fD` | bound | `firefox debugging` | Firefox debugging |  |
-| `,fl` | bound | `firefox logins` | Firefox passwords |  |
-| `,fP` | bound | `firefox processes` | Firefox processes |  |
-| `,ff` | bound | `firefox` (prompts) | Firefox page |  |
-| `m` | bound | `mark.add` | Set mark |  |
-| `q` | bound | `macro.record` | Record macro |  |
-| `@` | bound | `macro.play` | Play macro |  |
-| `'` | bound | `mark.jump` | Jump to mark |  |
-| `` ` `` | bound | `mark.jump` | Jump to mark |  |
-| `o` | bound | `open` (prompts) | Open URL |  |
-| `O` | bound | `open --tab` (prompts) | Open URL |  |
-| `ge` | bound | `open` (prompts) | Open URL |  |
-| `gE` | bound | `open --tab` (prompts) | Open URL |  |
-| `M` | bound | `quickmark.add` | Add quickmark |  |
-| `go` | bound | `quickmark.open` | Open quickmark |  |
-| `gn` | bound | `quickmark.open --tab` | Open quickmark |  |
-| `f` | bound | `hint` | Click element |  |
-| `F` | bound | `hint --background` | Click element in background tab |  |
-| `v` | bound | `mode caret` | Start caret mode |  |
-| `V` | bound | `mode visual` | Start visual mode |  |
-| `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
-| `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
-| `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
-| `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
-| `;b` | bound | `hint --buttons` | Click button |  |
-| `;a` | bound | `hint --every` | Click every element |  |
-| `;t` | bound | `hint --prose` | Click text |  |
-| `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
-| `;i` | bound | `hint --inputs` | Click input |  |
-| `;l` | bound | `hint --links` | Click link |  |
-| `;I` | bound | `hint --images` | Open image in new tab |  |
-| `;yl` | bound | `hint --copy --links` | Copy link URL |  |
-| `;yi` | bound | `hint --copy-image --images` | Copy picture |  |
-| `;yI` | bound | `hint --copy --images` | Copy image URL |  |
-| `;ym` | bound | `hint --copy --media` | Copy media URL |  |
-| `;yf` | bound | `hint --copy --frames` | Copy frame URL |  |
-| `;yt` | bound | `hint --copy-text --all` | Copy text |  |
-| `;yc` | bound | `hint --copy-selector --every` | Copy CSS selector |  |
-| `;Y` | bound | `hint --copy --links --rapid` | Copy several link URLs |  |
-| `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
-| `;f` | bound | `hint --frames` | Focus frame |  |
-| `;m` | bound | `hint --media` | Play or pause media |  |
-| `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
-| `;gg` | bound | `hint --grab --draggable` | Grab an element and drop it on a target |  |
-| `;Gg` | bound | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
-| `;w` | bound | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |  |
-| `:` | bound | `cmdline.open` | Command line |  |
-| `/` | bound | `find` | Find forward |  |
-| `?` | bound | `find --backward` | Find backward |  |
-| `*` | bound | `find --word` | Find word forward |  |
-| `#` | bound | `find --backward --word` | Find word backward |  |
-| `n` | bound | `find.next` | Next match |  |
-| `N` | bound | `find.prev` | Previous match |  |
-| `g?` | bound | `help` | Help |  |
-| `gV` | bound | `mode caret` | Set mode |  |
-| `wi` | dropped |  |  | needs a shell |
-| `yq` | dropped |  |  | no longer planned |
-| `gf` | dropped |  |  | no longer planned |
-| `g!` | dropped |  |  | joke binding |
-| `g;` | dropped |  |  | pages keep no history of edits to jump through |
-| `;c` | dropped |  |  | needs a shell |
+| Key | Command | Label |
+| --- | --- | --- |
+| `h` | `scroll.pixels --dx=-50` | Scroll left |
+| `l` | `scroll.pixels --dx=50` | Scroll right |
+| `j` | `scroll 10` | Scroll down |
+| `k` | `scroll -10` | Scroll up |
+| `gg` | `scroll.to 0` | Scroll to top |
+| `G` | `scroll.to 100` | Scroll to bottom |
+| `$` | `scroll.to --x 100` | Scroll to right edge |
+| `^` | `scroll.to --x 0` | Scroll to left edge |
+| `<C-d>` | `scroll.pages --fraction=0.5` | Scroll half page down |
+| `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
+| `<C-f>` | `scroll.pages` | Scroll page down |
+| `<C-b>` | `scroll.pages --fraction=-1` | Scroll page up |
+| `H` | `page.back` | Back |
+| `L` | `page.forward` | Forward |
+| `<C-o>` | `page.jump --older` | Jump back |
+| `<C-i>` | `page.jump --newer` | Jump forward |
+| `rr` | `page.reload` | Reload |
+| `rh` | `page.reload --hard` | Hard reload |
+| `R` | `page.reload --hard` | Hard reload |
+| `rc` | `page.reload --site` | Clear site data, reload |
+| `rC` | `page.reload --all` (prompts) | Clear all data, reload |
+| `xp` | `page.stop` | Stop loading |
+| `gh` | `page.home` | Home page |
+| `gH` | `page.home --tab` | Home page |
+| `]]` | `page.follow --next` | Next page |
+| `[[` | `page.follow --prev` | Previous page |
+| `]i` | `page.focus_field --next` | Next form control |
+| `[i` | `page.focus_field --prev` | Previous form control |
+| `]h` | `page.heading --next` | Next heading |
+| `[h` | `page.heading --prev` | Previous heading |
+| `sh` | `cmdline.open --text='heading '` | Search headings |
+| `.` | `repeat` | Repeat |
+| `J` | `tab.next` | Next tab |
+| `K` | `tab.prev` | Previous tab |
+| `gt` | `tab.goto` | Next tab |
+| `gT` | `tab.prev` | Previous tab |
+| `ga` | `tab.goto_audible` | Go to audible tab |
+| `gl` | `tab.alternate` | Last used tab |
+| `gL` | `tab.alternate_any_window` | Last used tab, any window |
+| `gp` | `tab.split_other` | Other pane |
+| `gP` | `tab.split_swap` | Swap panes |
+| `gF` | `frame.exit` | Focus top page |
+| `g0` | `tab.goto 1` | First tab |
+| `g^` | `tab.goto 1` | First tab |
+| `g$` | `tab.goto -1` | Last tab |
+| `T` | `tab` (prompts) | Switch tab |
+| `<<` | `tab.move --offset=-1` | Move tab left |
+| `>>` | `tab.move --offset=1` | Move tab right |
+| `xx` | `tab.close` | Close tab |
+| `dd` | `tab.close` | Close tab |
+| `D` | `tab.close --focus-previous` | Close tab |
+| `dL` | `tab.close --all-after` | Close tabs after this one |
+| `dH` | `tab.close --all-before` | Close tabs before this one |
+| `gx0` | `tab.close --all-before` | Close tabs before this one |
+| `gx$` | `tab.close --all-after` | Close tabs after this one |
+| `u` | `tab.undo_close` | Reopen closed tab |
+| `<A-p>` | `tab.pin` | Toggle pin |
+| `<A-m>` | `tab.mute` | Toggle mute |
+| `am` | `tab.mute` | Toggle mute |
+| `aa` | `media enter` | Start media mode |
+| `ap` | `media play_pause` | Play or pause |
+| `as` | `media speed up` | Speed up |
+| `aS` | `media speed down` | Slow down |
+| `ar` | `media speed reset` | Reset speed |
+| `av` | `media volume up` | Volume up |
+| `aV` | `media volume down` | Volume down |
+| `al` | `media seek up` | Seek forward |
+| `ah` | `media seek down` | Seek back |
+| `aP` | `media pip` | Toggle picture-in-picture |
+| `af` | `media fullscreen` | Toggle fullscreen |
+| `A` | `cmdline.open --text='media '` | Media command |
+| `tt` | `open --tab` (prompts) | Open URL |
+| `tT` | `tab` (prompts) | Switch tab |
+| `ts` | `session.save` (prompts) | Save tab session |
+| `tS` | `session.open` (prompts) | Open tab session |
+| `td` | `tab.duplicate` | Duplicate tab |
+| `tm` | `tab.move` (prompts) | Move tab |
+| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset |
+| `tn` | `tab.next` | Next tab |
+| `tp` | `tab.prev` | Previous tab |
+| `ta` | `tab.goto_audible` | Go to audible tab |
+| `t0` | `tab.goto 1` | First tab |
+| `t^` | `tab.goto 1` | First tab |
+| `t$` | `tab.goto -1` | Last tab |
+| `tl` | `tab.alternate` | Last used tab |
+| `tL` | `tab.alternate_any_window` | Last used tab, any window |
+| `tuu` | `tab.unload` | Unload tab |
+| `tuh` | `tab.unload --all-before` | Unload tabs before this one |
+| `tul` | `tab.unload --all-after` | Unload tabs after this one |
+| `tUh` | `tab.load --all-before` | Load tabs before this one |
+| `tUl` | `tab.load --all-after` | Load tabs after this one |
+| `tga` | `tabgroup.add` (prompts) | Add tab to a group |
+| `tgA` | `tabgroup.add` | Add tab to a new group |
+| `tgd` | `tabgroup.remove` | Remove tab from group |
+| `tgn` | `tabgroup.name` (prompts) | Name tab group |
+| `tgc` | `tabgroup.collapse` | Collapse tab group |
+| `tge` | `tabgroup.expand` | Expand tab group |
+| `tgt` | `tabgroup.toggle` | Toggle tab group |
+| `tgl` | `tabgroup.color` (prompts) | Color tab group |
+| `tgj` | `tabgroup.next` | Next tab group |
+| `tgk` | `tabgroup.prev` | Previous tab group |
+| `W` | `window.new` (prompts) | New window, edit current URL |
+| `ww` | `window.new` (prompts) | New window, edit current URL |
+| `wo` | `window.new` (prompts) | New window, enter URL |
+| `wn` | `window.new` | New window |
+| `wp` | `window.new --private` | New private window |
+| `wc` | `window.close` | Close window |
+| `wa` | `tab.attach` (prompts) | Attach tab to window |
+| `wd` | `tab.duplicate` | Duplicate tab |
+| `wD` | `tab.detach` | Detach tab |
+| `wh` | `hint --window` | Click element in new window |
+| `wu` | `window.undo_close` | Reopen closed window |
+| `U` | `window.undo_close` | Reopen closed window |
+| `yy` | `copy` | Copy URL |
+| `yc` | `copy --canonical` | Copy URL |
+| `ym` | `copy --markdown` | Copy URL |
+| `yo` | `copy --org` | Copy URL |
+| `ys` | `copy --short` | Copy URL |
+| `yt` | `copy --title` | Copy URL |
+| `yL` | `copylinks` | Copy page links |
+| `yl` | `copylinks --viewport` | Copy links in view |
+| `yT` | `copytabs` | Copy tab links |
+| `gu` | `url.parent` | Parent URL |
+| `gU` | `url.root` | Root URL |
+| `<C-a>` | `url.increment --up` | Change URL number |
+| `<C-x>` | `url.increment --down` | Change URL number |
+| `]c` | `url.increment --up` | Change URL number |
+| `[c` | `url.increment --down` | Change URL number |
+| `gi` | `page.focus_input` | Focus input |
+| `I` | `page.focus_input` | Focus input |
+| `i` | `mode.insert` | Insert mode |
+| `pp` | `paste` | Open clipboard |
+| `pt` | `paste --tab` | Open clipboard |
+| `pw` | `paste --window` | Open clipboard |
+| `P` | `paste --tab` | Open clipboard |
+| `pr` | `page.print` | Print |
+| `ps` | `page.save_pdf` | Save as PDF |
+| `ba` | `bookmark.add` (prompts) | Add bookmark, edit URL |
+| `bA` | `bookmark.add` (prompts) | Add bookmark, pick folder |
+| `be` | `bookmark.edit_url` (prompts) | Edit bookmark address |
+| `br` | `bookmark.rename` (prompts) | Rename bookmark |
+| `bm` | `bookmark.move` (prompts) | Move bookmark to folder |
+| `bf` | `bookmark.open_folder --tab` (prompts) | Open folder in tabs |
+| `bF` | `bookmark.open_folder --window` (prompts) | Open folder in a new window |
+| `bd` | `bookmark.remove` | Remove bookmark |
+| `bD` | `bookmark.remove` (prompts) | Remove bookmark, pick from list |
+| `bb` | `bookmark` (prompts) | Open bookmark |
+| `B` | `bookmark --tab` (prompts) | Open bookmark |
+| `zi` | `zoom.by 0.1` | Zoom in |
+| `z+` | `zoom.by 0.1` | Zoom in |
+| `zo` | `zoom.by -0.1` | Zoom out |
+| `z-` | `zoom.by -0.1` | Zoom out |
+| `zm` | `zoom.by 0.5` | Zoom in a lot |
+| `zM` | `zoom.by 0.5` | Zoom in a lot |
+| `zr` | `zoom.by -0.5` | Zoom out a lot |
+| `zR` | `zoom.by -0.5` | Zoom out a lot |
+| `z=` | `zoom 1` | Reset zoom |
+| `zI` | `zoom 3` | Zoom to 300% |
+| `zO` | `zoom 0.3` | Zoom to 30% |
+| `zt` | `scroll.align --top` | Align focus |
+| `zz` | `scroll.align` | Align focus |
+| `zb` | `scroll.align --bottom` | Align focus |
+| `<S-Escape>` | `mode ignore` | Set mode |
+| `<S-Insert>` | `mode ignore` | Set mode |
+| `<AC-Escape>` | `mode ignore` | Set mode |
+| ``<AC-`>`` | `mode ignore` | Set mode |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `<C-v>` | `mode.pass_next` | Pass next key |
+| `<F1>` | `help` | Help |
+| `,r` | `config.reload` | Reload config |
+| `,h` | `help` | Help |
+| `,s` | `help settings` | Settings page |
+| `,t` | `toggle` (prompts) | Toggle a setting |
+| `,i` | `mode ignore` | Set mode |
+| `,,` | `anything` (prompts) | Find anything |
+| `,b` | `page.blur` | Blur |
+| `,?` | `help.whichkey` | Which key |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `,"` | `registers` (prompts) | List registers |
+| `,fs` | `firefox settings` | Firefox settings |
+| `,fa` | `firefox addons` | Firefox add-ons |
+| `,fd` | `firefox downloads` | Firefox downloads |
+| `,fc` | `firefox config` | Firefox about:config |
+| `,fp` | `firefox profiles` | Firefox profiles |
+| `,fS` | `firefox support` | Firefox support info |
+| `,fD` | `firefox debugging` | Firefox debugging |
+| `,fl` | `firefox logins` | Firefox passwords |
+| `,fP` | `firefox processes` | Firefox processes |
+| `,ff` | `firefox` (prompts) | Firefox page |
+| `m` | `mark.add` | Set mark |
+| `q` | `macro.record` | Record macro |
+| `@` | `macro.play` | Play macro |
+| `'` | `mark.jump` | Jump to mark |
+| `` ` `` | `mark.jump` | Jump to mark |
+| `o` | `open` (prompts) | Open URL |
+| `O` | `open --tab` (prompts) | Open URL |
+| `ge` | `open` (prompts) | Open URL |
+| `gE` | `open --tab` (prompts) | Open URL |
+| `M` | `quickmark.add` | Add quickmark |
+| `go` | `quickmark.open` | Open quickmark |
+| `gn` | `quickmark.open --tab` | Open quickmark |
+| `f` | `hint` | Click element |
+| `F` | `hint --background` | Click element in background tab |
+| `v` | `mode caret` | Start caret mode |
+| `V` | `mode visual` | Start visual mode |
+| `;v` | `hint --caret --prose` | Start caret mode at text |
+| `;V` | `hint --visual --prose` | Start visual mode at text |
+| `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
+| `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
+| `;b` | `hint --buttons` | Click button |
+| `;a` | `hint --every` | Click every element |
+| `;t` | `hint --prose` | Click text |
+| `;s` | `hint --focus --scrollable` | Focus scroll box |
+| `;i` | `hint --inputs` | Click input |
+| `;l` | `hint --links` | Click link |
+| `;I` | `hint --images` | Open image in new tab |
+| `;yl` | `hint --copy --links` | Copy link URL |
+| `;yi` | `hint --copy-image --images` | Copy picture |
+| `;yI` | `hint --copy --images` | Copy image URL |
+| `;ym` | `hint --copy --media` | Copy media URL |
+| `;yf` | `hint --copy --frames` | Copy frame URL |
+| `;yt` | `hint --copy-text --all` | Copy text |
+| `;yc` | `hint --copy-selector --every` | Copy CSS selector |
+| `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
+| `;yh` | `hint --copy-html --every` | Copy outer HTML |
+| `;f` | `hint --frames` | Focus frame |
+| `;m` | `hint --media` | Play or pause media |
+| `;M` | `hint --enter-media --media` | Start media mode at a video |
+| `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |
+| `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
+| `;w` | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |
+| `:` | `cmdline.open` | Command line |
+| `/` | `find` | Find forward |
+| `?` | `find --backward` | Find backward |
+| `*` | `find --word` | Find word forward |
+| `#` | `find --backward --word` | Find word backward |
+| `n` | `find.next` | Next match |
+| `N` | `find.prev` | Previous match |
+| `g?` | `help` | Help |
+| `gV` | `mode caret` | Set mode |
 
 Which-key group names:
 
@@ -313,279 +301,279 @@ Which-key group names:
 
 ### media
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `0` | bound | `media seek reset` | Seek to the start |  |
-| `f` | bound | `hint` | Click element |  |
-| `;v` | bound | `hint --caret --prose` | Start caret mode at text |  |
-| `;V` | bound | `hint --visual --prose` | Start visual mode at text |  |
-| `;u` | bound | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
-| `;;` | bound | `cmdline.open --text='hint '` | Open the command line with hint |  |
-| `;b` | bound | `hint --buttons` | Click button |  |
-| `;a` | bound | `hint --every` | Click every element |  |
-| `;t` | bound | `hint --prose` | Click text |  |
-| `;s` | bound | `hint --focus --scrollable` | Focus scroll box |  |
-| `;i` | bound | `hint --inputs` | Click input |  |
-| `;l` | bound | `hint --links` | Click link |  |
-| `;I` | bound | `hint --images` | Open image in new tab |  |
-| `;yl` | bound | `hint --copy --links` | Copy link URL |  |
-| `;yi` | bound | `hint --copy-image --images` | Copy picture |  |
-| `;yI` | bound | `hint --copy --images` | Copy image URL |  |
-| `;ym` | bound | `hint --copy --media` | Copy media URL |  |
-| `;yf` | bound | `hint --copy --frames` | Copy frame URL |  |
-| `;yt` | bound | `hint --copy-text --all` | Copy text |  |
-| `;yc` | bound | `hint --copy-selector --every` | Copy CSS selector |  |
-| `;Y` | bound | `hint --copy --links --rapid` | Copy several link URLs |  |
-| `;yh` | bound | `hint --copy-html --every` | Copy outer HTML |  |
-| `;f` | bound | `hint --frames` | Focus frame |  |
-| `;m` | bound | `hint --media` | Play or pause media |  |
-| `;M` | bound | `hint --enter-media --media` | Start media mode at a video |  |
-| `;gg` | bound | `hint --grab --draggable` | Grab an element and drop it on a target |  |
-| `;Gg` | bound | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
-| `;w` | bound | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |  |
-| `:` | bound | `cmdline.open` | Command line |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-[>` | bound | `mode.escape` | Escape |  |
-| `?` | bound | `help.whichkey` | Show the keys |  |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `F` | bound | `media fullscreen` | Toggle fullscreen |  |
-| `h` | bound | `media seek down` | Seek back |  |
-| `l` | bound | `media seek up` | Seek forward |  |
-| `^` | bound | `media seek reset` | Seek to the start |  |
-| `$` | bound | `media seek end` | Seek to the end |  |
-| `%` | bound | `media seek percent` | Seek to a percent, as 50% |  |
-| `H` | bound | `media skip previous` | Previous video |  |
-| `L` | bound | `media skip next` | Next video |  |
-| `j` | bound | `media volume down` | Volume down |  |
-| `k` | bound | `media volume up` | Volume up |  |
-| `<` | bound | `media speed down` | Slow down |  |
-| `>` | bound | `media speed up` | Speed up |  |
-| `=` | bound | `media speed reset` | Reset speed |  |
-| `c` | bound | `media captions` | Toggle captions |  |
-| `,` | bound | `media frame down` | Previous frame |  |
-| `.` | bound | `media frame up` | Next frame |  |
-| `m` | bound | `media mute` | Mute or unmute |  |
-| `<Space>` | bound | `media play_pause` | Play or pause |  |
-| `p` | bound | `media pip` | Toggle picture-in-picture |  |
-| `q` | bound | `cmdline.open --text='media quality '` | Pick the quality |  |
-| `r` | bound | `media loop` | Toggle loop |  |
-| `i` | bound | `media info` | Show the time, speed, quality and volume |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `0` | `media seek reset` | Seek to the start |
+| `f` | `hint` | Click element |
+| `;v` | `hint --caret --prose` | Start caret mode at text |
+| `;V` | `hint --visual --prose` | Start visual mode at text |
+| `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
+| `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
+| `;b` | `hint --buttons` | Click button |
+| `;a` | `hint --every` | Click every element |
+| `;t` | `hint --prose` | Click text |
+| `;s` | `hint --focus --scrollable` | Focus scroll box |
+| `;i` | `hint --inputs` | Click input |
+| `;l` | `hint --links` | Click link |
+| `;I` | `hint --images` | Open image in new tab |
+| `;yl` | `hint --copy --links` | Copy link URL |
+| `;yi` | `hint --copy-image --images` | Copy picture |
+| `;yI` | `hint --copy --images` | Copy image URL |
+| `;ym` | `hint --copy --media` | Copy media URL |
+| `;yf` | `hint --copy --frames` | Copy frame URL |
+| `;yt` | `hint --copy-text --all` | Copy text |
+| `;yc` | `hint --copy-selector --every` | Copy CSS selector |
+| `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
+| `;yh` | `hint --copy-html --every` | Copy outer HTML |
+| `;f` | `hint --frames` | Focus frame |
+| `;m` | `hint --media` | Play or pause media |
+| `;M` | `hint --enter-media --media` | Start media mode at a video |
+| `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |
+| `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
+| `;w` | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |
+| `:` | `cmdline.open` | Command line |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `F` | `media fullscreen` | Toggle fullscreen |
+| `h` | `media seek down` | Seek back |
+| `l` | `media seek up` | Seek forward |
+| `^` | `media seek reset` | Seek to the start |
+| `$` | `media seek end` | Seek to the end |
+| `%` | `media seek percent` | Seek to a percent, as 50% |
+| `H` | `media skip previous` | Previous video |
+| `L` | `media skip next` | Next video |
+| `j` | `media volume down` | Volume down |
+| `k` | `media volume up` | Volume up |
+| `<` | `media speed down` | Slow down |
+| `>` | `media speed up` | Speed up |
+| `=` | `media speed reset` | Reset speed |
+| `c` | `media captions` | Toggle captions |
+| `,` | `media frame down` | Previous frame |
+| `.` | `media frame up` | Next frame |
+| `m` | `media mute` | Mute or unmute |
+| `<Space>` | `media play_pause` | Play or pause |
+| `p` | `media pip` | Toggle picture-in-picture |
+| `q` | `cmdline.open --text='media quality '` | Pick the quality |
+| `r` | `media loop` | Toggle loop |
+| `i` | `media info` | Show the time, speed, quality and volume |
 
 ### grab
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `h` | bound | `grab.move left` | Move left |  |
-| `j` | bound | `grab.move down` | Move down |  |
-| `k` | bound | `grab.move up` | Move up |  |
-| `l` | bound | `grab.move right` | Move right |  |
-| `[` | bound | `grab.step finer` | Halve the step |  |
-| `]` | bound | `grab.step coarser` | Double the step |  |
-| `<Enter>` | bound | `grab.drop` | Drop |  |
-| `<Escape>` | bound | `grab.cancel` | Cancel the grab |  |
-| `<C-[>` | bound | `grab.cancel` | Cancel the grab |  |
-| `?` | bound | `help.whichkey` | Show the keys |  |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `h` | `grab.move left` | Move left |
+| `j` | `grab.move down` | Move down |
+| `k` | `grab.move up` | Move up |
+| `l` | `grab.move right` | Move right |
+| `[` | `grab.step finer` | Halve the step |
+| `]` | `grab.step coarser` | Double the step |
+| `<Enter>` | `grab.drop` | Drop |
+| `<Escape>` | `grab.cancel` | Cancel the grab |
+| `<C-[>` | `grab.cancel` | Cancel the grab |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
 
 ### hint
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-[>` | bound | `mode.escape` | Escape |  |
-| `/` | bound | `hint.key slash` | Type link text |  |
-| `<Tab>` | bound | `hint.key tab` | Next match |  |
-| `<S-Tab>` | bound | `hint.key shift_tab` | Previous match |  |
-| `<Enter>` | bound | `hint.key enter` | Pick the active match |  |
-| `<Space>` | bound | `hint.key space` | Turn overlapping labels |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `/` | `hint.key slash` | Type link text |
+| `<Tab>` | `hint.key tab` | Next match |
+| `<S-Tab>` | `hint.key shift_tab` | Previous match |
+| `<Enter>` | `hint.key enter` | Pick the active match |
+| `<Space>` | `hint.key space` | Turn overlapping labels |
 
 ### cmdline
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<Tab>` | bound | `cmdline.next_completion` | Next completion |  |
-| `<C-n>` | bound | `cmdline.next_completion` | Next completion |  |
-| `<A-ArrowDown>` | bound | `cmdline.next_completion` | Next completion |  |
-| `<S-Tab>` | bound | `cmdline.prev_completion` | Previous completion |  |
-| `<C-p>` | bound | `cmdline.prev_completion` | Previous completion |  |
-| `<A-ArrowUp>` | bound | `cmdline.prev_completion` | Previous completion |  |
-| `<Enter>` | bound | `cmdline.submit` | Submit |  |
-| `<S-Enter>` | bound | `cmdline.submit --tab` | Run and open in a new tab |  |
-| `<ArrowUp>` | bound | `cmdline.history prev` | History |  |
-| `<ArrowDown>` | bound | `cmdline.history next` | History |  |
-| `<C-u>` | bound | `cmdline.clear` | Clear line |  |
-| `<C-h>` | bound | `cmdline.help` | Command help |  |
-| `<A-u>` | bound | `list.act unload` | Unload or load the tab |  |
-| `<C-Space>` | bound | `list.select toggle` | Mark or unmark the tab |  |
-| `<A-x>` | bound | `list.act close` | Close the tab |  |
-| `<A-m>` | bound | `list.act mute` | Mute or unmute the tab |  |
-| `<A-p>` | bound | `list.act pin` | Pin or unpin the tab |  |
-| `<A-c>` | bound | `list.act reopen` | Reopen the tab in a container |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `<Escape>` | `mode.escape` | Escape |
+| `<Tab>` | `cmdline.next_completion` | Next completion |
+| `<C-n>` | `cmdline.next_completion` | Next completion |
+| `<A-ArrowDown>` | `cmdline.next_completion` | Next completion |
+| `<S-Tab>` | `cmdline.prev_completion` | Previous completion |
+| `<C-p>` | `cmdline.prev_completion` | Previous completion |
+| `<A-ArrowUp>` | `cmdline.prev_completion` | Previous completion |
+| `<Enter>` | `cmdline.submit` | Submit |
+| `<S-Enter>` | `cmdline.submit --tab` | Run and open in a new tab |
+| `<ArrowUp>` | `cmdline.history prev` | History |
+| `<ArrowDown>` | `cmdline.history next` | History |
+| `<C-u>` | `cmdline.clear` | Clear line |
+| `<C-h>` | `cmdline.help` | Command help |
+| `<A-u>` | `list.act unload` | Unload or load the tab |
+| `<C-Space>` | `list.select toggle` | Mark or unmark the tab |
+| `<A-x>` | `list.act close` | Close the tab |
+| `<A-m>` | `list.act mute` | Mute or unmute the tab |
+| `<A-p>` | `list.act pin` | Pin or unpin the tab |
+| `<A-c>` | `list.act reopen` | Reopen the tab in a container |
 
 ### caret
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `0` | bound | `caret.move --line-start` | Move caret |  |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `v` | bound | `mode visual` | Set mode |  |
-| `V` | bound | `mode visual_line` | Start line visual mode |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-[>` | bound | `mode.escape` | Escape |  |
-| `/` | bound | `find` | Find forward |  |
-| `?` | bound | `find --backward` | Find backward |  |
-| `*` | bound | `find --word` | Find word forward |  |
-| `#` | bound | `find --backward --word` | Find word backward |  |
-| `n` | bound | `find.next` | Next match |  |
-| `N` | bound | `find.prev` | Previous match |  |
-| `h` | bound | `caret.move --char --back` | Move caret |  |
-| `l` | bound | `caret.move --char` | Move caret |  |
-| `j` | bound | `caret.move --line` | Move caret |  |
-| `k` | bound | `caret.move --line --back` | Move caret |  |
-| `<ArrowLeft>` | bound | `caret.move --char --back` | Move caret |  |
-| `<ArrowRight>` | bound | `caret.move --char` | Move caret |  |
-| `<ArrowDown>` | bound | `caret.move --line` | Move caret |  |
-| `<ArrowUp>` | bound | `caret.move --line --back` | Move caret |  |
-| `w` | bound | `caret.move --word` | Move caret |  |
-| `b` | bound | `caret.move --word --back` | Move caret |  |
-| `e` | bound | `caret.move --word-end` | Move caret |  |
-| `W` | bound | `caret.move --word --big` | Move caret by WORD |  |
-| `B` | bound | `caret.move --word --back --big` | Move caret by WORD backward |  |
-| `E` | bound | `caret.move --word-end --big` | Move caret to WORD end |  |
-| `^` | bound | `caret.move --line-first` | Move caret |  |
-| `$` | bound | `caret.move --line-end` | Move caret |  |
-| `gg` | bound | `caret.move --start` | Move caret |  |
-| `G` | bound | `caret.move --end` | Move caret |  |
-| `f` | bound | `caret.find` | Move to a character |  |
-| `t` | bound | `caret.find --till` | Move before a character |  |
-| `F` | bound | `caret.find --back` | Move back to a character |  |
-| `T` | bound | `caret.find --back --till` | Move back after a character |  |
-| `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
-| `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `0` | `caret.move --line-start` | Move caret |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `v` | `mode visual` | Set mode |
+| `V` | `mode visual_line` | Start line visual mode |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `/` | `find` | Find forward |
+| `?` | `find --backward` | Find backward |
+| `*` | `find --word` | Find word forward |
+| `#` | `find --backward --word` | Find word backward |
+| `n` | `find.next` | Next match |
+| `N` | `find.prev` | Previous match |
+| `h` | `caret.move --char --back` | Move caret |
+| `l` | `caret.move --char` | Move caret |
+| `j` | `caret.move --line` | Move caret |
+| `k` | `caret.move --line --back` | Move caret |
+| `<ArrowLeft>` | `caret.move --char --back` | Move caret |
+| `<ArrowRight>` | `caret.move --char` | Move caret |
+| `<ArrowDown>` | `caret.move --line` | Move caret |
+| `<ArrowUp>` | `caret.move --line --back` | Move caret |
+| `w` | `caret.move --word` | Move caret |
+| `b` | `caret.move --word --back` | Move caret |
+| `e` | `caret.move --word-end` | Move caret |
+| `W` | `caret.move --word --big` | Move caret by WORD |
+| `B` | `caret.move --word --back --big` | Move caret by WORD backward |
+| `E` | `caret.move --word-end --big` | Move caret to WORD end |
+| `^` | `caret.move --line-first` | Move caret |
+| `$` | `caret.move --line-end` | Move caret |
+| `gg` | `caret.move --start` | Move caret |
+| `G` | `caret.move --end` | Move caret |
+| `f` | `caret.find` | Move to a character |
+| `t` | `caret.find --till` | Move before a character |
+| `F` | `caret.find --back` | Move back to a character |
+| `T` | `caret.find --back --till` | Move back after a character |
+| `;` | `caret.move --find-repeat` | Repeat the character find |
+| `,` | `caret.move --find-repeat --back` | Repeat the character find backward |
 
 ### visual
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `0` | bound | `caret.move --line-start` | Move caret |  |
-| `h` | bound | `caret.move --char --back` | Move caret |  |
-| `l` | bound | `caret.move --char` | Move caret |  |
-| `j` | bound | `caret.move --line` | Move caret |  |
-| `k` | bound | `caret.move --line --back` | Move caret |  |
-| `<ArrowLeft>` | bound | `caret.move --char --back` | Move caret |  |
-| `<ArrowRight>` | bound | `caret.move --char` | Move caret |  |
-| `<ArrowDown>` | bound | `caret.move --line` | Move caret |  |
-| `<ArrowUp>` | bound | `caret.move --line --back` | Move caret |  |
-| `w` | bound | `caret.move --word` | Move caret |  |
-| `b` | bound | `caret.move --word --back` | Move caret |  |
-| `e` | bound | `caret.move --word-end` | Move caret |  |
-| `W` | bound | `caret.move --word --big` | Move caret by WORD |  |
-| `B` | bound | `caret.move --word --back --big` | Move caret by WORD backward |  |
-| `E` | bound | `caret.move --word-end --big` | Move caret to WORD end |  |
-| `^` | bound | `caret.move --line-first` | Move caret |  |
-| `$` | bound | `caret.move --line-end` | Move caret |  |
-| `gg` | bound | `caret.move --start` | Move caret |  |
-| `G` | bound | `caret.move --end` | Move caret |  |
-| `f` | bound | `caret.find` | Move to a character |  |
-| `t` | bound | `caret.find --till` | Move before a character |  |
-| `F` | bound | `caret.find --back` | Move back to a character |  |
-| `T` | bound | `caret.find --back --till` | Move back after a character |  |
-| `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
-| `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `/` | bound | `find` | Find forward |  |
-| `?` | bound | `find --backward` | Find backward |  |
-| `*` | bound | `find --word` | Find word forward |  |
-| `#` | bound | `find --backward --word` | Find word backward |  |
-| `n` | bound | `find.next` | Next match |  |
-| `N` | bound | `find.prev` | Previous match |  |
-| `y` | bound | `visual.act yank` | Act on selection |  |
-| `o` | bound | `visual.act swap` | Act on selection |  |
-| `s` | bound | `visual.act search` | Act on selection |  |
-| `aw` | bound | `visual.object --word` | Select a text object |  |
-| `iw` | bound | `visual.object --word --inner` | Select a text object |  |
-| `as` | bound | `visual.object --sentence` | Select a text object |  |
-| `is` | bound | `visual.object --sentence --inner` | Select a text object |  |
-| `p` | bound | `visual.open` | Open the selection |  |
-| `P` | bound | `visual.open --tab` | Open the selection |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-[>` | bound | `mode.escape` | Escape |  |
-| `V` | bound | `mode visual_line` | Switch to line visual mode |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `0` | `caret.move --line-start` | Move caret |
+| `h` | `caret.move --char --back` | Move caret |
+| `l` | `caret.move --char` | Move caret |
+| `j` | `caret.move --line` | Move caret |
+| `k` | `caret.move --line --back` | Move caret |
+| `<ArrowLeft>` | `caret.move --char --back` | Move caret |
+| `<ArrowRight>` | `caret.move --char` | Move caret |
+| `<ArrowDown>` | `caret.move --line` | Move caret |
+| `<ArrowUp>` | `caret.move --line --back` | Move caret |
+| `w` | `caret.move --word` | Move caret |
+| `b` | `caret.move --word --back` | Move caret |
+| `e` | `caret.move --word-end` | Move caret |
+| `W` | `caret.move --word --big` | Move caret by WORD |
+| `B` | `caret.move --word --back --big` | Move caret by WORD backward |
+| `E` | `caret.move --word-end --big` | Move caret to WORD end |
+| `^` | `caret.move --line-first` | Move caret |
+| `$` | `caret.move --line-end` | Move caret |
+| `gg` | `caret.move --start` | Move caret |
+| `G` | `caret.move --end` | Move caret |
+| `f` | `caret.find` | Move to a character |
+| `t` | `caret.find --till` | Move before a character |
+| `F` | `caret.find --back` | Move back to a character |
+| `T` | `caret.find --back --till` | Move back after a character |
+| `;` | `caret.move --find-repeat` | Repeat the character find |
+| `,` | `caret.move --find-repeat --back` | Repeat the character find backward |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `/` | `find` | Find forward |
+| `?` | `find --backward` | Find backward |
+| `*` | `find --word` | Find word forward |
+| `#` | `find --backward --word` | Find word backward |
+| `n` | `find.next` | Next match |
+| `N` | `find.prev` | Previous match |
+| `y` | `visual.act yank` | Act on selection |
+| `o` | `visual.act swap` | Act on selection |
+| `s` | `visual.act search` | Act on selection |
+| `aw` | `visual.object --word` | Select a text object |
+| `iw` | `visual.object --word --inner` | Select a text object |
+| `as` | `visual.object --sentence` | Select a text object |
+| `is` | `visual.object --sentence --inner` | Select a text object |
+| `p` | `visual.open` | Open the selection |
+| `P` | `visual.open --tab` | Open the selection |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `V` | `mode visual_line` | Switch to line visual mode |
 
 ### visual_line
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `0` | bound | `caret.move --line-start` | Move caret |  |
-| `h` | bound | `caret.move --char --back` | Move caret |  |
-| `l` | bound | `caret.move --char` | Move caret |  |
-| `j` | bound | `caret.move --line` | Move caret |  |
-| `k` | bound | `caret.move --line --back` | Move caret |  |
-| `<ArrowLeft>` | bound | `caret.move --char --back` | Move caret |  |
-| `<ArrowRight>` | bound | `caret.move --char` | Move caret |  |
-| `<ArrowDown>` | bound | `caret.move --line` | Move caret |  |
-| `<ArrowUp>` | bound | `caret.move --line --back` | Move caret |  |
-| `w` | bound | `caret.move --word` | Move caret |  |
-| `b` | bound | `caret.move --word --back` | Move caret |  |
-| `e` | bound | `caret.move --word-end` | Move caret |  |
-| `W` | bound | `caret.move --word --big` | Move caret by WORD |  |
-| `B` | bound | `caret.move --word --back --big` | Move caret by WORD backward |  |
-| `E` | bound | `caret.move --word-end --big` | Move caret to WORD end |  |
-| `^` | bound | `caret.move --line-first` | Move caret |  |
-| `$` | bound | `caret.move --line-end` | Move caret |  |
-| `gg` | bound | `caret.move --start` | Move caret |  |
-| `G` | bound | `caret.move --end` | Move caret |  |
-| `f` | bound | `caret.find` | Move to a character |  |
-| `t` | bound | `caret.find --till` | Move before a character |  |
-| `F` | bound | `caret.find --back` | Move back to a character |  |
-| `T` | bound | `caret.find --back --till` | Move back after a character |  |
-| `;` | bound | `caret.move --find-repeat` | Repeat the character find |  |
-| `,` | bound | `caret.move --find-repeat --back` | Repeat the character find backward |  |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `/` | bound | `find` | Find forward |  |
-| `?` | bound | `find --backward` | Find backward |  |
-| `*` | bound | `find --word` | Find word forward |  |
-| `#` | bound | `find --backward --word` | Find word backward |  |
-| `n` | bound | `find.next` | Next match |  |
-| `N` | bound | `find.prev` | Previous match |  |
-| `y` | bound | `visual.act yank` | Act on selection |  |
-| `o` | bound | `visual.act swap` | Act on selection |  |
-| `s` | bound | `visual.act search` | Act on selection |  |
-| `aw` | bound | `visual.object --word` | Select a text object |  |
-| `iw` | bound | `visual.object --word --inner` | Select a text object |  |
-| `as` | bound | `visual.object --sentence` | Select a text object |  |
-| `is` | bound | `visual.object --sentence --inner` | Select a text object |  |
-| `p` | bound | `visual.open` | Open the selection |  |
-| `P` | bound | `visual.open --tab` | Open the selection |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-[>` | bound | `mode.escape` | Escape |  |
-| `v` | bound | `mode visual` | Switch to character visual mode |  |
-| `V` | bound | `mode caret` | Return to caret mode |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `0` | `caret.move --line-start` | Move caret |
+| `h` | `caret.move --char --back` | Move caret |
+| `l` | `caret.move --char` | Move caret |
+| `j` | `caret.move --line` | Move caret |
+| `k` | `caret.move --line --back` | Move caret |
+| `<ArrowLeft>` | `caret.move --char --back` | Move caret |
+| `<ArrowRight>` | `caret.move --char` | Move caret |
+| `<ArrowDown>` | `caret.move --line` | Move caret |
+| `<ArrowUp>` | `caret.move --line --back` | Move caret |
+| `w` | `caret.move --word` | Move caret |
+| `b` | `caret.move --word --back` | Move caret |
+| `e` | `caret.move --word-end` | Move caret |
+| `W` | `caret.move --word --big` | Move caret by WORD |
+| `B` | `caret.move --word --back --big` | Move caret by WORD backward |
+| `E` | `caret.move --word-end --big` | Move caret to WORD end |
+| `^` | `caret.move --line-first` | Move caret |
+| `$` | `caret.move --line-end` | Move caret |
+| `gg` | `caret.move --start` | Move caret |
+| `G` | `caret.move --end` | Move caret |
+| `f` | `caret.find` | Move to a character |
+| `t` | `caret.find --till` | Move before a character |
+| `F` | `caret.find --back` | Move back to a character |
+| `T` | `caret.find --back --till` | Move back after a character |
+| `;` | `caret.move --find-repeat` | Repeat the character find |
+| `,` | `caret.move --find-repeat --back` | Repeat the character find backward |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `/` | `find` | Find forward |
+| `?` | `find --backward` | Find backward |
+| `*` | `find --word` | Find word forward |
+| `#` | `find --backward --word` | Find word backward |
+| `n` | `find.next` | Next match |
+| `N` | `find.prev` | Previous match |
+| `y` | `visual.act yank` | Act on selection |
+| `o` | `visual.act swap` | Act on selection |
+| `s` | `visual.act search` | Act on selection |
+| `aw` | `visual.object --word` | Select a text object |
+| `iw` | `visual.object --word --inner` | Select a text object |
+| `as` | `visual.object --sentence` | Select a text object |
+| `is` | `visual.object --sentence --inner` | Select a text object |
+| `p` | `visual.open` | Open the selection |
+| `P` | `visual.open --tab` | Open the selection |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `v` | `mode visual` | Switch to character visual mode |
+| `V` | `mode caret` | Return to caret mode |
 
 ### insert
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `<A-?>` | bound | `help.whichkey` | Show the keys |  |
-| `<Escape>` | bound | `mode.escape` | Escape |  |
-| `<C-r>` | bound | `register.paste` | Paste register |  |
-| `<C-o>` | bound | `text.edit_external` | Edit the field in the external editor |  |
-| `<A-Escape>` | bound | `page.send_key --key=Escape --key_code=27` | Send Escape to the page |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-r>` | `register.paste` | Paste register |
+| `<C-o>` | `text.edit_external` | Edit the field in the external editor |
+| `<A-Escape>` | `page.send_key --key=Escape --key_code=27` | Send Escape to the page |
 
 ### ignore
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `<S-Escape>` | bound | `mode normal` | Set mode |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `<S-Escape>` | `mode normal` | Set mode |
 
 ### browser
 
-| Key | Status | Command | Label | Note |
-| --- | --- | --- | --- | --- |
-| `<A-j>` | bound | `tab.next` | Next tab |  |
-| `<A-k>` | bound | `tab.prev` | Previous tab |  |
-| `<A-,>` | bound | `browser.focus_page` | Focus page |  |
+| Key | Command | Label |
+| --- | --- | --- |
+| `<A-j>` | `tab.next` | Next tab |
+| `<A-k>` | `tab.prev` | Previous tab |
+| `<A-,>` | `browser.focus_page` | Focus page |
 
 <!-- END generated -->
