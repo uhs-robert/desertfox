@@ -95,17 +95,27 @@ export function create_themes_session(deps: ThemesDeps) {
 
   // A file past the scheme size limit is refused before its text is read.
   async function load_file(file: PickedFile): Promise<void> {
+    const mine = ++draft_revision;
     if (file.size > MAX_SCHEME_CHARS * 4) {
       state.message = { ok: false, text: `${file.name} is too large for a color scheme.` };
       deps.on_change();
       return;
     }
-    const mine = ++draft_revision;
-    const text = await file.text();
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (error) {
+      if (mine === draft_revision) {
+        state.message = { ok: false, text: `${file.name} could not be read: ${message_of(error)}` };
+        deps.on_change();
+      }
+      return;
+    }
     if (mine === draft_revision) apply_text(text);
   }
 
   function clear(): void {
+    draft_revision++;
     state.text = "";
     state.name = "";
     state.name_typed = false;
@@ -140,7 +150,7 @@ export function create_themes_session(deps: ThemesDeps) {
   async function send_save(name: string, text: string, replace: boolean): Promise<void> {
     await change({ type: "change_imported_themes", action: "save", name, text, ...(replace && { replace }) }, () => {
       // A draft typed while the request ran stays.
-      if (state.text === text) clear_keeping_message();
+      if (state.text === text && state.name === name) clear_keeping_message();
     });
   }
 

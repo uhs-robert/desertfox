@@ -155,3 +155,53 @@ test("an older file read does not replace newer input, and the last pick wins", 
   await three;
   assert.equal(themes.state.text, "typed after the pick");
 });
+
+test("a slow file read cannot refill the draft after Clear or after an oversized pick", async () => {
+  const { themes } = session(() => ({ ok: true, names: [] }));
+  let done!: () => void;
+  const read = new Promise<string>((resolve) => (done = () => resolve(NAMED)));
+  const loading = themes.load_file({ name: "x.yaml", size: 10, text: () => read, arrayBuffer: async () => new ArrayBuffer(0) });
+  themes.clear();
+  done();
+  await loading;
+  assert.equal(themes.state.text, "");
+  let finish!: () => void;
+  const slow = new Promise<string>((resolve) => (finish = () => resolve(NAMED)));
+  const again = themes.load_file({ name: "y.yaml", size: 10, text: () => slow, arrayBuffer: async () => new ArrayBuffer(0) });
+  await themes.load_file({ name: "big.yaml", size: 10_000_000, text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) });
+  finish();
+  await again;
+  assert.equal(themes.state.text, "");
+  assert.match(themes.state.message?.text ?? "", /too large/);
+});
+
+test("a file that cannot be read shows a message and a stale failure stays quiet", async () => {
+  const { themes } = session(() => ({ ok: true, names: [] }));
+  const failing = { name: "bad.yaml", size: 10, text: async () => Promise.reject(new Error("denied")), arrayBuffer: async () => new ArrayBuffer(0) };
+  await themes.load_file(failing);
+  assert.match(themes.state.message?.text ?? "", /bad\.yaml could not be read: denied/);
+  let fail!: () => void;
+  const late = new Promise<string>((_, reject) => (fail = () => reject(new Error("late"))));
+  const loading = themes.load_file({ ...failing, text: () => late });
+  themes.set_text(NAMED);
+  fail();
+  await loading;
+  assert.equal(themes.state.message, undefined);
+});
+
+test("a save clears the form only when both the name and the text are still the ones sent", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { themes } = session(async (message) => {
+    if (message.type === "list_imported_themes") return { ok: true, names: [] };
+    await gate;
+    return { ok: true, message: "Saved." };
+  });
+  themes.set_text(NAMED);
+  const saving = themes.save();
+  themes.set_name("renamed");
+  release();
+  await saving;
+  assert.equal(themes.state.name, "renamed");
+  assert.equal(themes.state.text, NAMED);
+});
