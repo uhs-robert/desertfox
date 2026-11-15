@@ -9,7 +9,7 @@ import { createServer as create_port_probe } from "node:net";
 import { policy_addon_state, remove_policy_addon } from "./policy_addon.mjs";
 import { match_labels } from "./match_labels.mjs";
 import { page_body } from "./pages.mjs";
-import { as_action, interstitial_click, MAX_INTERSTITIAL_TRIES, check_names_of, CROSS_FRAME_ROWS, FRAME_ROWS, judge_frame_entry, judge_load_focus, LOAD_FOCUS_ROWS, needs_load_focus, subframe_of, describe_mode_on_load, focus_of, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
+import { as_action, interstitial_click, MAX_INTERSTITIAL_TRIES, check_names_of, CROSS_FRAME_ROWS, FRAME_ROWS, judge_frame_entry, judge_load_focus, LOAD_FOCUS_ROWS, needs_load_focus, subframe_of, describe_mode_on_load, focus_of, activation_evidence, judge_activation, judge_cell_move, judge_escape, judge_frame_activation, judge_frame_hints, judge_frame_leave, describe_mode_after_leave, is_frame_mode, judge_hints, judge_jk_clash, judge_leave, judge_movement, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, needs_leave_key, tab_into_work_area, tab_note, PASSTHROUGH_KEYS, control_of, step3_names, SITES, timed_out, TOOL_KEYS } from "./sites.mjs";
 import { analyze_tab_switch, NEXT_TAB_KEY, RETRY_MS } from "./tab_timing.mjs";
 import { CHECK_FAILED_STATUS, DESERTFOX_ID, PAGE_NAMES, PINNED_BUILDS, xpi_path } from "./tools.mjs";
 
@@ -100,6 +100,11 @@ const navigate = (url) => chrome(`(async () => { ${selected_browser}.fixupAndLoa
 const frame_script_url = `data:application/javascript;charset=utf-8,${encodeURIComponent(readFileSync(`${script_dir}framescript.js`, "utf8"))}`;
 // Loaded again after each navigation because a new content process has not run it. The script guards against a second load in one process.
 const load_frame_script = () => chrome(`(async () => { ${selected_browser}.messageManager.loadFrameScript(${JSON.stringify(frame_script_url)}, false); return 1; })()`);
+
+// Collects the click and focus reports the frame script sends from inside its event listener, which still arrive when the click navigates away. One listener at a time, and each check starts with an empty list.
+const collect_activation_reports = () => chrome(`(() => { const message_manager = ${selected_browser}.messageManager; const old = globalThis.__rivals_evidence_listener; if (old) message_manager.removeMessageListener("rivals:evidence", old); globalThis.__rivals_evidence = []; globalThis.__rivals_evidence_listener = (message) => { globalThis.__rivals_evidence.push(message.data); }; message_manager.addMessageListener("rivals:evidence", globalThis.__rivals_evidence_listener); return 1; })()`);
+const read_activation_reports = async () => JSON.parse(await chrome(`(() => { ${selected_browser}.messageManager.removeMessageListener("rivals:evidence", globalThis.__rivals_evidence_listener); return JSON.stringify(globalThis.__rivals_evidence ?? []); })()`));
+let activation_checks = 0;
 
 // Sends a message to the frame script and waits for its one reply.
 const ask_page = (name, data = {}, limit_ms = 2000) => chrome_long(`{ const message_manager = ${selected_browser}.messageManager; return await new Promise((resolve) => { const on_reply = (message) => { message_manager.removeMessageListener("rivals:reply", on_reply); resolve(message.data); }; message_manager.addMessageListener("rivals:reply", on_reply); message_manager.sendAsyncMessage("rivals:${name}", ${JSON.stringify(data)}); }); }`, limit_ms);
@@ -685,14 +690,17 @@ async function check_site(site) {
       const again = await show_hints();
       const { pick, reason } = site.activate_selector ? pick_chosen_activation(again.labels, again.targets) : { pick: pick_activation(again.labels, again.targets), reason: "no label on a visible target to type" };
       if (!pick) return { status: "fail", reason };
-      const armed = await ask_page("arm_activation", { target: pick.target }, 5000);
+      const check_id = ++activation_checks;
+      await collect_activation_reports();
+      const armed = await ask_page("arm_activation", { target: pick.target, check_id }, 5000);
       const url_before = await current_url();
       await press_keys(pick.keys);
       await sleep(3000);
       // A navigation into another content process takes the frame script's state with it, and then only the address can tell.
       const seen = await ask_page("activation_result", {}, 5000).catch(() => null);
       const url_after = await current_url();
-      return { ...judge_activation({ event: null, navigated: false, ...seen, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via, at: pick.at, label_rect: pick.label_rect, target_rect: pick.target_rect };
+      const evidence = activation_evidence(await read_activation_reports(), check_id);
+      return { ...judge_activation({ event: null, navigated: false, ...seen, ...evidence, expected_href: armed.expected_href, url_before, url_after }), typed: pick.keys, target: armed.tag, picked_via: pick.via, at: pick.at, label_rect: pick.label_rect, target_rect: pick.target_rect };
     },
   };
   for (const name of step3_names(site)) await run_check(name, async () => as_action(await actions[name]()));
