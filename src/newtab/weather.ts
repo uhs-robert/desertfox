@@ -29,7 +29,7 @@ export type WeatherDeps = {
   page_is_private: () => Promise<boolean>;
   // The optional `locationInfo` data collection permission. Without it the card sends nothing, whatever place it has.
   has_location_consent: () => Promise<boolean>;
-  // Deletes the stored forecast, coordinates, place and air quality answer. Runs when the consent is missing, so a withdrawal leaves nothing behind.
+  // Deletes the stored forecast, coordinates, place and air quality answer. Runs when a new tab finds the consent missing.
   forget_stored: () => Promise<void>;
   has_geolocation_permission: () => Promise<boolean>;
   // Resolves with the position, rejects when the browser or the user refuses.
