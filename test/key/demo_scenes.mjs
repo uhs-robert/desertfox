@@ -1,15 +1,10 @@
 // The scenes of the README demo, played by demo.mjs as a piece of the key-test session. wf-recorder films the nested display.
-// Seven shots, in the order of the approved storyboard. The key presses of the film go to key_presses.json, which demo.mjs burns into the GIF as a corner overlay.
+// Seven shots, in the order of the approved storyboard v3, played on the 14-lesson Practice page. The key presses of the film go to key_presses.json, which demo.mjs burns into the GIF as a corner overlay.
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import http from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { evaluate_in_chrome } from "./rdp.mjs";
 import { OUTPUT } from "./session.mjs";
-
-const key_test_dir = dirname(fileURLToPath(import.meta.url));
-const page_template = readFileSync(join(key_test_dir, "demo", "docs_page.html"), "utf8");
 
 // The Firefox window is floated to this size, and the stills and the film cover exactly this area.
 const SIZE = { width: 1280, height: 800 };
@@ -20,27 +15,16 @@ const RECORDER_STOP_LIMIT_MS = 20000;
 // Everything the run makes lands here first, so a failed run leaves docs/images as it was. demo.mjs copies the results out and removes the folder.
 export const stage_dir = mkdtempSync(join(tmpdir(), "desertfox-demo-"));
 
-// PLACEHOLDER targets until the help Practice page (#/practice) exists. Shot 2 hints the Help link in place of the Practice link, and shots 3 to 5 run on the fixture page in place of the Practice page. When the Practice page merges, point them at it and set the labels from a still.
-const PLACEHOLDER = {
-  new_tab_link_label: "H",
-  practice_page_url: (docs_url) => docs_url("Get started"),
-  practice_hint_label: "d",
-  practice_log_text: "",
-};
-
-// A name under *.localhost resolves to the loopback, so the address bar reads like a site and not 127.0.0.1.
-function start_docs_server() {
-  const server = http.createServer((request, response) => {
-    const title = new URL(request.url, "http://x").searchParams.get("title") ?? "Get started";
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(page_template.replace("__TITLE__", title));
-  });
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
-}
+// <A-?> is Alt+Shift+/ on the test layout.
+const WHICH_KEY = ["-M", "alt", "-M", "shift", "/", "-m", "shift", "-m", "alt"];
+const DARK_MODE_PREF = "layout.css.prefers-color-scheme.content-override";
+// A lesson can be taller than the window, so a target outside the view is scrolled in before its hint keys.
+const PRACTICE_VIEW = `(browser.extension.getViews({ type: "tab" }).find((each) => each.location.pathname === "/home.html" && each.location.hash.includes("practice")) ?? null)`;
 
 const KEY_NAMES = { Escape: "Esc", Return: "Enter", Tab: "Tab", space: "Space" };
 // The overlay text of one wtype-style argument list: "-k Name" is a named key, any other argument is typed text.
 function overlay_labels(wtype_args) {
+  if (wtype_args.join(" ") === WHICH_KEY.join(" ")) return ["Alt+?"];
   const labels = [];
   for (let index = 0; index < wtype_args.length; index++) {
     if (wtype_args[index] === "-k") labels.push(KEY_NAMES[wtype_args[++index]] ?? wtype_args[index]);
@@ -49,9 +33,7 @@ function overlay_labels(wtype_args) {
   return labels;
 }
 
-export async function run_cases({ spawn_client, take_shot, sleep, press_keys, poll_until, in_background, in_active_tab, hint_label_count, wait_cmdline, close_cmdline, config_copy, load_config_dir, open_page, wait_view_takes_keys, extension_view, rdp, extension_id }) {
-  const docs_server = await start_docs_server();
-  const docs_url = (title) => `http://fennec-docs.localhost:${docs_server.address().port}/?title=${encodeURIComponent(title)}`;
+export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, press_keys, poll_until, in_background, wait_cmdline, config_copy, load_config_dir, open_page, wait_view_takes_keys, extension_view, rdp, extension_id, expect }) {
   const wait_for_exit = (child) => new Promise((resolve) => child.once("exit", resolve));
   const run_client = async (argv) => { const child = spawn_client(argv, "demo.log"); await wait_for_exit(child); };
 
@@ -89,12 +71,58 @@ export async function run_cases({ spawn_client, take_shot, sleep, press_keys, po
   const wait_in_page = (what, read) => poll_until(what, async () => Boolean(await read()));
   const read_mode = () => in_background(`${extension_view("newtab.html")}?.desertfox_host?.get_mode() ?? null`);
 
+  // The helpers of p40_help_practice.mjs, on the Practice view.
+  const in_practice = (code) => in_background(`(() => { const view = ${PRACTICE_VIEW}; ${code} })()`);
+  const practice_mode = () => in_practice(`return view?.desertfox_host?.get_mode() ?? null;`);
+  const wait_practice_mode = (wanted) => poll_until(`${wanted} mode`, async () => (await practice_mode()) === wanted);
+  const focused_id = () => in_practice(`return view.document.activeElement?.id ?? "";`);
+  const wait_focus = (id) => poll_until(`the focus on ${id}`, async () => (await focused_id()) === id);
+  const heading_top = (slug) => in_practice(`return Math.round(view.document.getElementById("practice-${slug}").getBoundingClientRect().top);`);
+  // sh puts the lesson heading at the top of the view, and the film waits for it as a reader does.
+  const wait_lesson_at_top = (slug) => poll_until(`lesson ${slug} at the top of the view`, async () => Math.abs(await heading_top(slug)) < 12);
+  const to_lesson = async (slug, search) => {
+    await press("sh");
+    await wait_cmdline((line) => line.open && line.focused, "the heading list to open");
+    await sleep(250);
+    await type(search, 90);
+    await sleep(300);
+    await press("-k", "Return");
+    await wait_lesson_at_top(slug);
+    await sleep(400);
+  };
+  // The label that the hint mode draws on a target, read from the closed shadow root of the labels.
+  const label_at = (selector) => in_practice(`
+    const target = view.document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    const labels = [...view.document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])]).filter((label) => label.style.display !== "none" && label.style.visibility !== "hidden");
+    const near = labels.map((label) => { const box = label.getBoundingClientRect(); return { text: label.textContent, far: Math.hypot(box.left - target.left, box.top - target.top) }; }).sort((a, b) => a.far - b.far)[0];
+    return near && near.far < 30 ? near.text : null;`);
+  const scroll_into_view = (selector) => in_practice(`
+    const box = view.document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    if (box.top < 0 || box.bottom > view.innerHeight) view.document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" });`);
+  async function pick(selector, hold_ms = 0) {
+    let label;
+    await poll_until(`a hint label on ${selector}`, async () => (label = await label_at(selector)) !== null);
+    await sleep(hold_ms);
+    await press(label);
+  }
+  async function hint(keys, selector, hold_ms) {
+    await scroll_into_view(selector);
+    await sleep(300);
+    await press(keys);
+    await wait_practice_mode("hint");
+    await pick(selector, hold_ms);
+  }
+
+  // Dark mode as the maintainer runs it, and the pref goes back when the piece ends.
+  on_teardown(() => evaluate_in_chrome(rdp, `Services.prefs.clearUserPref("${DARK_MODE_PREF}")`));
+  await evaluate_in_chrome(rdp, `Services.prefs.setIntPref("${DARK_MODE_PREF}", 0)`);
+
   // The tabs for shot 6, and the first tab, which the film starts on.
-  for (const title of ["Plugins", "Changelog"]) await in_background(`browser.tabs.create({ url: ${JSON.stringify(docs_url(title))}, active: false })`);
+  for (const hash of ["settings", "commands"]) await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/${hash}"), active: false })`);
   await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.update(tab.id, { url: browser.runtime.getURL("newtab.html") }); })()`);
   await poll_until("the new tab page to render and take focus", async () => await in_background(`(() => { const view = ${extension_view("newtab.html")}; return !!view?.document.querySelector(".desertfox-newtab") && view.document.hasFocus(); })()`).catch(() => false));
   await wait_view_takes_keys("newtab.html");
-  await sleep(1500);
+  await sleep(1200);
 
   const film_path = join(stage_dir, "film.mkv");
   const recorder = spawn_client(["wf-recorder", "-o", OUTPUT, "-g", region, "-r", String(FRAME_RATE_OF_FILM), "-c", "libx264", "-p", "preset=ultrafast", "-p", "crf=14", "-y", "-f", film_path], "wf-recorder.log");
@@ -102,60 +130,101 @@ export async function run_cases({ spawn_client, take_shot, sleep, press_keys, po
   let recorder_exited = false;
   recorder.once("exit", () => { recorder_exited = true; });
   film_started_ms = Date.now();
-  await sleep(1500);
+  await sleep(1000);
 
   console.log("shot 1: new tab page");
-  await sleep(1500);
+  await sleep(1000);
 
   console.log("shot 2: f, hint labels, open the Practice link");
+  const practice_link = '.builtin-links a[href="home.html#/practice"]';
   await press("f");
   await poll_until("the hint mode on the new tab page", async () => (await read_mode()) === "hint");
   await sleep(1400);
   await still("hints");
-  await press(PLACEHOLDER.new_tab_link_label);
+  let link_label;
+  await poll_until("the label on the Practice link", async () => (link_label = await in_background(`(() => { const view = ${extension_view("newtab.html")}; const target = view.document.querySelector(${JSON.stringify(practice_link)}).getBoundingClientRect(); const labels = [...view.document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])]).filter((label) => label.style.display !== "none"); const near = labels.map((label) => { const box = label.getBoundingClientRect(); return { text: label.textContent, far: Math.hypot(box.left - target.left, box.top - target.top) }; }).sort((a, b) => a.far - b.far)[0]; return near && near.far < 40 ? near.text : null; })()`)) !== null);
+  await press(link_label);
+  await poll_until("the Practice page", async () => (await in_practice(`return !!view?.document.getElementById("practice-end");`).catch(() => false)));
+  // The probe of wait_view_takes_keys answers from the first help view, which is a background tab here, so the Practice view gets a focus wait and a pause.
+  await poll_until("the Practice view to take focus", async () => await in_practice(`return view.document.hasFocus();`));
+  await sleep(300);
+  // dd lands on the tab to the right of the closed one, so Settings sits directly left of Practice.
+  await in_background(`(async () => { const tabs = await browser.tabs.query({ currentWindow: true }); const practice = tabs.find((tab) => /home\\.html#.*practice/.test(tab.url)); const settings = tabs.find((tab) => tab.url.endsWith("#/settings")); await browser.tabs.move(settings.id, { index: practice.index > settings.index ? practice.index - 1 : practice.index }); })()`);
+  await sleep(900);
+
+  console.log("shot 3: Alt+?, the which-key panel, z narrows it");
+  const panel_open = `return [...view.document.documentElement.children].some((node) => node.getAttribute("data-desertfox-layer") === "2147483646" && node.matches(":popover-open"));`;
+  await to_lesson("which-key", "see every");
+  await press(...WHICH_KEY);
+  await poll_until("the which-key panel to open", async () => await in_practice(panel_open));
   await sleep(1500);
-  // PLACEHOLDER: the Practice page stands in as the fixture page.
-  await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.update(tab.id, { url: ${JSON.stringify(PLACEHOLDER.practice_page_url(docs_url))} }); })()`);
-  await sleep(2500);
-
-  console.log("shot 3: Practice page, hint a sandbox link");
-  await press("f");
-  await poll_until("hint labels", async () => (await hint_label_count()) > 0);
-  await sleep(1200);
-  await press(PLACEHOLDER.practice_hint_label);
-  await sleep(1800);
-
-  console.log("shot 4: g, the which-key Go panel");
-  await press("g");
-  await sleep(1800);
   await still("which-key");
-  await press("-k", "Escape");
+  await press("z");
   await sleep(800);
+  await press("-k", "Escape");
+  await poll_until("the which-key panel to close", async () => !(await in_practice(panel_open)));
+  await sleep(300);
+
+  console.log("shot 4: gi and ]i fill a form, ;i picks a radio, ;Gg grabs a slider");
+  await to_lesson("form", "fill in");
+  await press("gi");
+  await wait_focus("practice-name");
+  await sleep(300);
+  await type("ada");
+  await press("-k", "Escape");
+  await sleep(300);
+  await press("]i");
+  await sleep(800);
+  await press("-k", "Escape");
+  await to_lesson("inputs", "go straight");
+  await hint(";i", "#practice-radio-2", 600);
+  await sleep(900);
+  await press("]h");
+  await wait_lesson_at_top("slider");
+  await sleep(300);
+  await hint(";Gg", "#practice-range", 600);
+  await wait_practice_mode("grab");
+  for (let step = 0; step < 5; step++) { await press("l"); await sleep(200); }
+  await poll_until("the slider to read 7", async () => (await in_practice(`return view.document.getElementById("practice-range").value;`)) === "7");
+  await sleep(500);
+  await press("-k", "Return");
+  await sleep(900);
 
   console.log("shot 5: caret mode selects a sentence, y copies");
-  await press("v");
+  await to_lesson("copy", "copy");
+  await hint(";V", "#practice-copy-1", 600);
+  await sleep(400);
+  await press("as");
   await sleep(700);
-  for (const key of ["j", "w", "w"]) { await press(key); await sleep(350); }
-  await press("v");
-  await sleep(500);
-  for (const key of ["w", "w", "w", "w"]) { await press(key); await sleep(300); }
-  await wait_in_page("a selection in caret mode", () => in_active_tab(`getSelection().toString() !== ""`));
-  await sleep(500);
   await press("y");
-  await sleep(1500);
+  await sleep(1200);
   await press("-k", "Escape");
   await sleep(300);
   await press("-k", "Escape");
   await sleep(600);
 
-  console.log("shot 6: T, the tab finder over the extra tabs");
+  console.log("shot 6: T, the tab finder, Settings, dd");
+  const practice_tab_active = () => in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => /home\\.html#.*practice/.test(tab.url))`);
   await press("T");
   await wait_cmdline((line) => line.open, "the tab finder to open");
-  await sleep(800);
-  await type("chang");
-  await sleep(1000);
+  await sleep(500);
+  await type("sett");
+  await sleep(400);
+  // The typed text narrows the list loosely, so the Settings row is not always the first.
+  let line = await wait_cmdline((state) => state.row_texts.some((row) => row.includes("#/settings")), "a Settings row");
+  for (let step = 0; step < 5 && !(line.row_texts[line.selected] ?? "").includes("#/settings"); step++) {
+    const before = line.selected;
+    await press("-k", "Down");
+    line = await wait_cmdline((state) => state.selected !== before, "the Down arrow to move to the next row");
+  }
+  expect((line.row_texts[line.selected] ?? "").includes("#/settings"), `the tab finder did not reach the Settings row: ${JSON.stringify(line.row_texts)}`);
+  await sleep(400);
   await press("-k", "Return");
-  await sleep(1500);
+  await poll_until("the Settings tab to be active", async () => await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => tab.url.endsWith("#/settings"))`));
+  await sleep(1200);
+  await press("dd");
+  await poll_until("dd to land on the Practice tab", async () => (await practice_tab_active()) && (await in_practice(`return view.document.hasFocus();`)));
+  await sleep(700);
 
   console.log("shot 7: :set theme, Tab completes, Enter");
   await press(":");
@@ -182,7 +251,8 @@ export async function run_cases({ spawn_client, take_shot, sleep, press_keys, po
   }
   if (statSync(film_path).size < 100000) throw new Error(`the film is only ${statSync(film_path).size} bytes, so the recorder caught no frames`);
   writeFileSync(join(stage_dir, "film.json"), JSON.stringify({ film_seconds, key_presses }));
-  docs_server.close();
+  // The Commands tab stays open from the start, and the first tab is the one the harness keeps.
+  await in_background(`browser.tabs.query({ currentWindow: true }).then((tabs) => browser.tabs.remove(tabs.filter((tab) => tab.url.endsWith("#/commands")).map((tab) => tab.id)))`);
   // The harness cleans up through a key probe that only its own pages answer, and it keeps only the tab the piece started on.
   await in_background(`(async () => { const [first_tab] = await browser.tabs.query({ index: 0, currentWindow: true }); await browser.tabs.update(first_tab.id, { active: true }); })()`);
   await open_page("page", "demo_done", {});
