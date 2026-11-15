@@ -168,7 +168,7 @@ test("the reach block holds the exact warning, each group with its intro, the ov
   const reach = no_reach();
   reach.addresses.rows.push({ what: "Search engine duck (default)", url: "https://duck.test/?q={query}" });
   reach.keys.clipboard_or_page.rows.push({ where: "normal mode", keys: "zp", run: "page.clipboard paste" });
-  reach.keys.settings.rows.push({ where: "site a.test", keys: "zb", run: "set bridge true", names_consent: true }, { where: "normal mode", keys: "zn", run: "set new_tab_page https://evil.test/" });
+  reach.keys.settings.rows.push({ where: "site a.test", keys: "zb", run: "set bridge true", consent: "switch_on" }, { where: "normal mode", keys: "zn", run: "set new_tab_page https://evil.test/" });
   reach.keys.settings.rest = [{ where: "normal mode", keys: "zq", run: "toggle x" }, { where: "normal mode", keys: "zr", run: "toggle y" }, { where: "normal mode", keys: "zs", run: "toggle z" }];
   reach.keys.host.rows.push({ where: "command line", keys: ":inst", run: "native.install" });
   reach.site_rows = 2;
@@ -184,7 +184,7 @@ test("the reach block holds the exact warning, each group with its intro, the ov
   assert.deepEqual(block.sections.map((section) => section.rows.map(text_of)), [
     ["Search engine duck (default): https://duck.test/?q={query}"],
     ["zp in normal mode: page.clipboard paste"],
-    ["zb in site a.test: set bridge true (an import cannot switch this on, but this key does)", "zn in normal mode: set new_tab_page https://evil.test/"],
+    ["zb in site a.test: set bridge true (an import cannot switch this on, but this key can)", "zn in normal mode: set new_tab_page https://evil.test/"],
     [":inst in command line: native.install"],
   ]);
   assert.equal(block.sections[2]!.rest!.summary, "Show 3 more");

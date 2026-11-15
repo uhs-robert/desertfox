@@ -69,10 +69,10 @@ test("a settings key lands in settings, and naming a consent setting adds the no
     "keymap.toml": '[normal]\nzb = "settings.set bridge true"\nzh = "settings.toggle host_auto_update"\nzn = "settings.set new_tab_page https://evil.test/"\nzi = "settings.set newtab_ip_info true"\n',
   });
   const by_key = Object.fromEntries(reach.keys.settings.rows.map((row) => [row.keys, row]));
-  assert.equal(by_key.zb?.names_consent, true);
-  assert.equal(by_key.zh?.names_consent, true);
-  assert.equal(by_key.zi?.names_consent, true);
-  assert.equal(by_key.zn?.names_consent, undefined);
+  assert.equal(by_key.zb?.consent, "switch_on");
+  assert.equal(by_key.zh?.consent, "switch_on");
+  assert.equal(by_key.zi?.consent, "switch_on");
+  assert.equal(by_key.zn?.consent, undefined);
   assert.match(by_key.zn!.run, /new_tab_page/);
 });
 
@@ -161,7 +161,7 @@ test("twelve harmless setting keys before a consent key still show the consent k
   const reach = reach_of({ "keymap.toml": `[normal]\n${toggles}\nzzb = "settings.set bridge true"\n` });
   assert.equal(reach.keys.settings.rows.length, ROW_CAP);
   assert.equal(reach.keys.settings.rows[0]!.keys, "zzb");
-  assert.equal(reach.keys.settings.rows[0]!.names_consent, true);
+  assert.equal(reach.keys.settings.rows[0]!.consent, "switch_on");
 });
 
 test("twelve clipboard copy keys before register.paste + and open @clipboard still show the reads first", () => {
@@ -201,9 +201,17 @@ test("register.paste of the system clipboard register is a clipboard key, and a 
   assert.deepEqual(reach.keys.clipboard_or_page.rows.map((row) => row.keys), ["<C-v>"]);
 });
 
+test("the consent note follows the operation: set true, toggle and unset can switch on, set false changes, a read-only set has none", () => {
+  const reach = reach_of({
+    "keymap.toml": '[normal]\nza = "settings.set bridge true"\nzb = "settings.set bridge false"\nzc = "settings.toggle bridge"\nzd = "settings.set bridge"\nze = "settings.unset bridge"\n',
+  });
+  const by_key = Object.fromEntries(reach.keys.settings.rows.map((row) => [row.keys, row.consent]));
+  assert.deepEqual(by_key, { za: "switch_on", zb: "change", zc: "switch_on", zd: undefined, ze: "switch_on" });
+});
+
 test("a modifier whose args name a consent setting or the clipboard register is listed", () => {
   const reach = reach_of({ "keymap.toml": '[modifiers]\n",z" = { name = "bridge" }\n",c" = { register = "+" }\n' });
-  assert.deepEqual(reach.keys.settings.rows.map((row) => [row.keys, row.names_consent]), [[",z", true]]);
+  assert.deepEqual(reach.keys.settings.rows.map((row) => [row.keys, row.consent]), [[",z", "switch_on"]]);
   assert.deepEqual(reach.keys.clipboard_or_page.rows.map((row) => row.keys), [",c"]);
 });
 

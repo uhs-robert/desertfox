@@ -57,7 +57,7 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, expec
       "New tab page: https://evil-tab.test/",
       "zp in site bank.test: page.clipboard paste",
       "These keys read your clipboard or act on a page:",
-      "zb in normal mode: set bridge true (an import cannot switch this on, but this key does)",
+      "zb in normal mode: set bridge true (an import cannot switch this on, but this key can)",
       "bridge is not imported",
       "Import only configs you trust.",
       "Show 3 more",
