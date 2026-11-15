@@ -73,14 +73,20 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_badge(["NORMAL"]);
   });
 
-  await run_case("f and the text of a link follows it to its section", async () => {
+  await run_case("f and the text of a link follows it to its section and keeps the typed text and the log line", async () => {
+    await in_page(`const input = ${by_id("practice-input")}; input.value = "typed text"; input.dataset.kept = "yes";`);
+    const log_before = await log_text();
     await hint_by_text("f", "typi", "practice-link-3");
     await poll_until("the page to jump to the typing section", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/type-in-a-box");
-    await poll_until("the page to draw again with its targets", async () => await in_page(`return !!${by_id("practice-input")};`));
+    await poll_until("the typing heading to reach the top", async () => await in_page(`return Math.abs(view.document.getElementById("practice-type-in-a-box").getBoundingClientRect().top) < 40;`));
+    const kept = await in_page(`const input = ${by_id("practice-input")}; return { value: input.value, kept: input.dataset.kept, log: ${by_id("practice-log")}.textContent };`);
+    expect(kept.value === "typed text" && kept.kept === "yes" && kept.log === log_before, `the jump rebuilt the page: ${JSON.stringify(kept)}`);
     await wait_view_takes_keys("home.html");
   });
 
   await run_case("j, G and gg scroll the tall area", async () => {
+    await in_page(`view.scrollTo(0, 0);`);
+    await poll_until("the page to be at the top", async () => (await in_page(`return view.scrollY;`)) === 0);
     await press_keys("j", "j", "j");
     await poll_until("the page to scroll after j", async () => (await in_page(`return view.scrollY;`)) > 0);
     await press_keys("G");
@@ -113,20 +119,20 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await press_keys("-M", "ctrl", "v", "-m", "ctrl");
     await poll_until("the paste box to hold the copied text", async () => (await in_page(`return ${by_id("practice-paste")}.value;`)).length > 0);
     const pasted = await in_page(`return ${by_id("practice-paste")}.value;`);
-    expect(/listen|before|it/.test(pasted), `the paste box holds ${JSON.stringify(pasted)}`);
+    const paragraph = await in_page(`return ${by_id("practice-prose-2")}.textContent;`);
+    expect(pasted.trim().length >= 3 && paragraph.includes(pasted.trim()), `the paste box holds ${JSON.stringify(pasted)}, which is not part of ${JSON.stringify(paragraph)}`);
     await in_page(`${by_id("practice-paste")}.blur();`);
     await wait_badge(["NORMAL"]);
   });
 
   await run_case("insert mode types in the text input and the text area", async () => {
-    await in_page(`${by_id("practice-input")}.focus();`);
+    await in_page(`${by_id("practice-input")}.value = ""; ${by_id("practice-input")}.focus();`);
     await press_keys("h", "i");
     await poll_until("the input to hold hi", async () => (await in_page(`return ${by_id("practice-input")}.value;`)) === "hi");
     await leave_to_normal();
     await in_page(`${by_id("practice-textarea")}.focus();`);
     await press_keys("a", "-k", "Return", "b");
     await poll_until("the text area to hold two lines", async () => (await in_page(`return ${by_id("practice-textarea")}.value;`)) === "a\nb");
-    await in_page(`document.activeElement?.blur();`).catch(() => undefined);
     await in_page(`view.document.activeElement.blur();`);
     await wait_badge(["NORMAL"]);
   });
@@ -141,11 +147,10 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   });
 
   await run_case("a theme change keeps typed text, the selection and the node", async () => {
-    await in_page(`const input = ${by_id("practice-input")}; input.value = "keep me"; input.dataset.kept = "yes"; input.focus(); input.setSelectionRange(2, 6);`);
-    await leave_to_normal().catch(() => undefined);
+    await in_page(`const input = ${by_id("practice-input")}; input.value = "keep me"; input.dataset.kept = "yes"; input.focus(); input.setSelectionRange(2, 6); input.blur();`);
+    await wait_badge(["NORMAL"]);
     const before = await in_page(`return getComputedStyle(view.document.documentElement).getPropertyValue("--desertfox-bg-core");`);
-    await in_page(`view.document.activeElement.blur();`);
-    await run_line(":set theme catppuccin");
+    await run_line(":set -t theme catppuccin");
     await poll_until("the page colors to change", async () => (await in_page(`return getComputedStyle(view.document.documentElement).getPropertyValue("--desertfox-bg-core");`)) !== before);
     const kept = await in_page(`const input = ${by_id("practice-input")}; return { value: input.value, kept: input.dataset.kept, start: input.selectionStart, end: input.selectionEnd };`);
     expect(kept.value === "keep me" && kept.kept === "yes" && kept.start === 2 && kept.end === 6, `the input after the theme change: ${JSON.stringify(kept)}`);
@@ -153,9 +158,18 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await shot("practice-catppuccin-middle", "practice-textarea");
   });
 
-  await run_case("the tab finder lists the Settings and Commands tabs opened from the page and jumps to one", async () => {
-    await evaluate(`Promise.all(["settings", "commands"].map((page) => browser.tabs.create({ url: browser.runtime.getURL("home.html#/" + page), active: false }))).then(() => true)`);
-    await evaluate(`browser.tabs.query({}).then((tabs) => browser.tabs.update(tabs.find((tab) => tab.url.endsWith("#/practice")).id, { active: true })).then(() => true)`);
+  await run_case("the tab finder lists the Settings and Commands tabs opened by the page links and jumps to one", async () => {
+    // F opens the pick in a background tab. The sidebar link of the same name ranks first, so Tab moves to the link on the page.
+    for (const [id, start] of [["practice-open-settings", "sett"], ["practice-open-commands", "comm"]]) {
+      await in_page(`${by_id(id)}.scrollIntoView({ block: "center" });`);
+      await sleep(200);
+      await press_keys("F");
+      await poll_until("hint mode", async () => (await mode()) === "hint");
+      await press_keys("/", start, "-k", "Tab", "-k", "Return");
+      await poll_until("hint mode to end", async () => (await mode()) === "normal");
+    }
+    await poll_until("both tabs to open", async () => await evaluate(`browser.tabs.query({}).then((tabs) => ["#/settings", "#/commands"].every((hash) => tabs.some((tab) => tab.url.endsWith(hash))))`));
+    await evaluate(`browser.tabs.query({}).then((tabs) => browser.tabs.update(tabs.find((tab) => tab.url.endsWith("#/practice") || tab.url.includes("#section=practice")).id, { active: true })).then(() => true)`);
     await wait_view_takes_keys("home.html");
     await press_keys(",,");
     const line = await wait_cmdline((state) => state.open && state.focused, "the tab finder to open");

@@ -27,7 +27,7 @@ import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../bac
 import { create_host_start_session } from "./host_start_model.ts";
 import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "./route.ts";
-import type { PageId } from "./route.ts";
+import type { PageId, Route } from "./route.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
@@ -140,7 +140,14 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   files_hold.dispose();
   files_hold = open_user_css_hold();
   if (files_box) mount_files(files_box, files_session, files_hold);
+  shown_page = route.page;
   if (cause === "refresh") return;
+  land_on(route, cause);
+}
+
+// Scrolls and focuses where the route points. Runs after a render, and alone on a move within a page that keeps its own state.
+function land_on(route: Route, cause: "first" | "moved"): void {
+  stop_section_hold?.();
   // The render removed the link that had focus. Not on first load, where focus belongs to the browser.
   const section_heading = route.section === undefined ? null : document.getElementById(section_anchor(route.page, route.section));
   if (section_heading) {
@@ -201,19 +208,26 @@ async function load_inputs(): Promise<Inputs> {
 
 // The Settings page follows storage by itself and keeps what the user is typing, so a full redraw there would only clobber it. It still takes the new inputs, for the next page.
 // The Practice page is left alone for the same reason: a theme change must keep the typed text, the selection and the caret. Its prompts follow a rebind when the page opens again.
-const REDRAW_FREE_PAGES: PageId[] = ["settings", "practice"];
+// Pages that hold state a rebuild would wipe (typed text, a caret, counts). They are not drawn again on a settings change or a move within the page.
+const KEEPS_STATE_PAGES: PageId[] = ["settings", "practice"];
+let shown_page: PageId | undefined;
 
 async function draw(first: boolean): Promise<void> {
   current = await load_inputs();
   if (first) show_route(current.model_, current.guide, current.engines, "first");
-  else if (!REDRAW_FREE_PAGES.includes(parse_route(location.hash).page)) show_route(current.model_, current.guide, current.engines, "refresh");
+  else if (!KEEPS_STATE_PAGES.includes(parse_route(location.hash).page)) show_route(current.model_, current.guide, current.engines, "refresh");
   else update_config_source(current.model_);
 }
 
 window.addEventListener("keydown", key_capture.on_keydown, true);
 window.addEventListener("keydown", close_drawer_on_escape, true);
 window.addEventListener("blur", close_drawer_on_window_blur);
-window.addEventListener("hashchange", () => current && show_route(current.model_, current.guide, current.engines, "moved"));
+window.addEventListener("hashchange", () => {
+  if (!current) return;
+  const route = parse_route(location.hash);
+  if (route.page === shown_page && KEEPS_STATE_PAGES.includes(route.page)) land_on(route, "moved");
+  else show_route(current.model_, current.guide, current.engines, "moved");
+});
 listen_for_bundle_requests();
 follow_theme(":root, .desertfox-help");
 const open_user_css_hold = create_user_css_gate(follow_user_css());

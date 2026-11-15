@@ -98,7 +98,7 @@ test("build-config: a bad newtab_links item is named by index, label and field",
   assert.match(problems_with_settings('[[newtab_links]]\nlabel = "A"\nurl = "https://a.example/"\nlink = 1'), /item 1 \("A"\) has the unknown field "link"/);
 });
 
-test("the built-in text links are Getting Started and Help, and Settings is one gear anchor with a label", () => {
+test("the built-in text links are Getting Started, Practice and Help, and Settings is one gear anchor with a label", () => {
   const html = readFileSync(new URL("../src/newtab/newtab.html", import.meta.url), "utf8");
   const nav = /<nav class="builtin-links">([\s\S]*?)<\/nav>/.exec(html)![1]!;
   const anchors = [...nav.matchAll(/<a href="([^"]*)">([^<]*)<\/a>/g)].map((match) => [match[2], match[1]]);

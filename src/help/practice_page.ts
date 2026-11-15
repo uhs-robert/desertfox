@@ -1,7 +1,7 @@
 // The Practice page: one small target for each kind of key, so a reader can try them with nothing at stake.
 // The element ids are fixed because the key test and the demo script address the targets by id.
 
-import { el, inline_node, page_sections, section_hash, section_heading } from "./render.ts";
+import { el, inline_node, new_tab_link, page_sections, section_hash, section_heading } from "./render.ts";
 import { PRACTICE_AREAS } from "./quick_start.ts";
 import type { PracticeArea } from "./quick_start.ts";
 import type { Inline } from "./blocks.ts";
@@ -14,7 +14,7 @@ const PROSE = [
   "Foxes dig dens deep into the dunes, where the sand stays cool at noon. At dusk the family comes out into the open and the day begins again.",
 ];
 
-// Each link jumps to a section of this page. A hint follows a link by loading its address, so a link that fired only a click handler would do nothing.
+// Each link jumps to a section of this page, so following one shows a visible move. The page keeps its state across the jump (KEEPS_STATE_PAGES in main.ts).
 const LINKS: { text: string; area: PracticeArea }[] = [
   { text: "Jump to search", area: "find" },
   { text: "Jump to caret mode", area: "caret" },
@@ -23,10 +23,6 @@ const LINKS: { text: string; area: PracticeArea }[] = [
   { text: "Jump to scrolling", area: "scroll" },
 ];
 const SCROLL_LINES = 40;
-
-function log_into(line: HTMLElement, text: string): void {
-  line.textContent = text;
-}
 
 function target_link(text: string, href: string, index: number): HTMLElement {
   const link = el("a", undefined, text);
@@ -42,7 +38,7 @@ function echo_button(label: string, id: string, log: HTMLElement): HTMLElement {
   let count = 0;
   button.addEventListener("click", () => {
     count += 1;
-    log_into(log, `Clicked ${label}, ${count} time${count === 1 ? "" : "s"}.`);
+    log.textContent = `Clicked ${label}, ${count} time${count === 1 ? "" : "s"}.`;
   });
   return button;
 }
@@ -53,7 +49,7 @@ function checkbox(log: HTMLElement): HTMLElement {
   box.id = "practice-checkbox";
   // A hint names a box with no text of its own by this label, so a typed name finds it.
   box.setAttribute("aria-label", "A checkbox");
-  box.addEventListener("change", () => log_into(log, `The checkbox is ${box.checked ? "on" : "off"}.`));
+  box.addEventListener("change", () => { log.textContent = `The checkbox is ${box.checked ? "on" : "off"}.`; });
   return el("label", undefined, box, " A checkbox");
 }
 
@@ -71,12 +67,10 @@ function prompt(inlines: Inline[]): HTMLElement {
   return el("div", "desertfox-help-tip", ...inlines.map(inline_node));
 }
 
-function new_tab_link(text: string, page: string, id: string, log: HTMLElement): HTMLElement {
-  const link = el("a", undefined, text);
+function practice_tab_link(text: string, page: string, id: string, log: HTMLElement): HTMLElement {
+  const link = new_tab_link(text, `home.html#/${page}`);
   link.id = id;
-  link.setAttribute("href", `home.html#/${page}`);
-  link.setAttribute("target", "_blank");
-  link.addEventListener("click", () => log_into(log, `Opened ${text}.`));
+  link.addEventListener("click", () => { log.textContent = `Opened ${text}.`; });
   return link;
 }
 
@@ -118,7 +112,7 @@ export function practice_page(prompts: Record<PracticeArea, Inline[]>): HTMLElem
     ...head("whichkey"),
     ...head("cmdline"),
     ...head("tabs"),
-    el("p", undefined, new_tab_link("Settings", "settings", "practice-open-settings", log), "  ", new_tab_link("Commands", "commands", "practice-open-commands", log)),
+    el("p", undefined, practice_tab_link("Settings", "settings", "practice-open-settings", log), "  ", practice_tab_link("Commands", "commands", "practice-open-commands", log)),
     ...head("scroll"),
     scroll_area(),
   ];
