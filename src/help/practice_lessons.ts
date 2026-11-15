@@ -90,7 +90,7 @@ const LESSONS = [
       "Press {hint_inputs_rapid}. The letters stay after each pick. Type the letters on \"Sun\", \"Moon\" and \"Stars\", one after the other, then press {escape}.",
       "Press {hint_buttons}. Only the buttons get letters. Type the letter on \"Done\".",
     ],
-    notes: ["Press {hint_inputs:wait} and wait. The panel lists every kind of hint."],
+    notes: ["Press {hint_inputs:wait} and wait. The panel lists the keys that can come next."],
     checks: { bravo: "chose Bravo", charlie: "moved to Charlie", oasis: "set the dropdown to Oasis", rapid: "ticked all three boxes", done: "pressed Done" },
   },
   {

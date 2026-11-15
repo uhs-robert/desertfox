@@ -127,6 +127,14 @@ test("practice: a hint key bound to one key promises no panel after a wait", asy
   assert.deepEqual(practice_lessons(single, all_commands).find((lesson) => lesson.slug === "inputs")!.notes, []);
 });
 
+test("practice: the hint-key note claims only what holds for any prefix", async () => {
+  const { practice_lessons } = await import("../src/help/practice_lessons.ts");
+  const normal = Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, bound]) => (bound as { args?: { filter?: string; rapid?: boolean } }).args?.filter !== "inputs"));
+  const under_q = compile({ ...DEFAULT_KEYMAP, normal: { ...normal, Qi: { id: "hint.run", args: { filter: "inputs" } } } } as never);
+  const notes = practice_lessons(under_q, all_commands).find((lesson) => lesson.slug === "inputs")!.notes.map((note) => note.map((inline) => inline.text).join(""));
+  assert.deepEqual(notes, ["Press Q and wait. The panel lists the keys that can come next."]);
+});
+
 test("practice: the grab lesson names no key letter apart from the bound keys", async () => {
   const { practice_lessons } = await import("../src/help/practice_lessons.ts");
   const normal = Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, bound]) => (bound as { args?: { action?: string } }).args?.action !== "grab_move"));
