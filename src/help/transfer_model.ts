@@ -26,7 +26,10 @@ export const REACH_KEY_INTROS: Record<KeyGroup, string> = {
   host: "These keys use the native host or ask for permissions:",
 };
 
-export const REACH_CONSENT_NOTE = " (an import cannot switch this on, but this key does)";
+export const REACH_CONSENT_NOTES = {
+  switch_on: " (an import cannot switch this on, but this key can)",
+  change: " (this key changes a setting that an import cannot switch on)",
+} as const;
 
 const reach_more = (count: number): string => `Show ${count} more`;
 
@@ -48,7 +51,7 @@ export function reach_block(reach: ImportReach): ReachBlock | undefined {
   const sections = [
     ...section_of(REACH_ADDRESSES_INTRO, reach.addresses, ({ what, url }) => [`${what}: `, { code: url }]),
     ...KEY_GROUPS.flatMap((group) =>
-      section_of(REACH_KEY_INTROS[group], reach.keys[group], ({ keys, where, run, names_consent }) => [{ code: keys }, ` in ${where}: `, { code: run }, ...(names_consent ? [REACH_CONSENT_NOTE] : [])]),
+      section_of(REACH_KEY_INTROS[group], reach.keys[group], ({ keys, where, run, consent }) => [{ code: keys }, ` in ${where}: `, { code: run }, ...(consent === undefined ? [] : [REACH_CONSENT_NOTES[consent]])]),
     ),
   ];
   if (sections.length === 0 && reach.site_rows === 0) return undefined;

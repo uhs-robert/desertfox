@@ -76,6 +76,15 @@ function args_reach(args: Record<string, unknown>, command: CommandMeta | undefi
   };
 }
 
+// What a settings key does to a consent setting. A set to true, a toggle and an unset can switch it on. A set to another value changes it. A set with no value only reads it, so it gets no note.
+function consent_use(id: string, args: Record<string, unknown>): KeyRow["consent"] {
+  if (id === "settings.toggle" || id === "settings.unset") return "switch_on";
+  if (id !== "settings.set") return "change";
+  const value = args.value;
+  if (value === undefined || value === "") return undefined;
+  return String(value).toLowerCase() === "false" ? "change" : "switch_on";
+}
+
 // A clipboard row reads the clipboard or presses keys on a page, or only writes the clipboard (copy, cut). Reads and key presses rank first.
 const reads_or_presses = (id: string, args: Record<string, unknown>, clipboard: boolean): boolean => clipboard || id === "open.clipboard" || id === "page.send_key" || (id === "page.clipboard" && args.action === "paste");
 
@@ -104,8 +113,9 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
       if (group === undefined) continue;
       const printed_args = step.prompt && prefill !== undefined ? { ...args, [step.prompt.param]: prefill } : args;
       const run = print_command(command ?? { id: step.id }, printed_args, { flags: "long" });
-      const rank = consent || group === "host" ? RISKY : group === "clipboard_or_page" ? (reads_or_presses(step.id, args, clipboard) ? RISKY : NOTABLE) : urls.length > 0 ? NOTABLE : PLAIN;
-      add_key(group, { where, keys: sequence, run, ...(consent ? { names_consent: true as const } : {}) }, rank);
+      const consent_note = consent ? consent_use(step.id, args) : undefined;
+      const rank = consent_note !== undefined || group === "host" ? RISKY : group === "clipboard_or_page" ? (reads_or_presses(step.id, args, clipboard) ? RISKY : NOTABLE) : urls.length > 0 ? NOTABLE : PLAIN;
+      add_key(group, { where, keys: sequence, run, ...(consent_note === undefined ? {} : { consent: consent_note }) }, rank);
     }
   };
 
@@ -118,7 +128,7 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
     for (const url of addresses_in(undefined, args)) add_address({ what: `Modifier ${sequence} adds to its keys`, url }, NOTABLE);
     const { clipboard, consent } = args_reach(args, undefined);
     const adds = `adds ${Object.entries(args).map(([name, value]) => `${name}=${String(value)}`).join(" ")} to every key of its group`;
-    if (consent) add_key("settings", { where: "normal mode", keys: sequence, run: adds, names_consent: true }, RISKY);
+    if (consent) add_key("settings", { where: "normal mode", keys: sequence, run: adds, consent: "switch_on" }, RISKY);
     if (clipboard) add_key("clipboard_or_page", { where: "normal mode", keys: sequence, run: adds }, RISKY);
   }
 

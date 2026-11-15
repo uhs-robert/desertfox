@@ -490,8 +490,8 @@ export type SnippetPreview = {
 export type ReachList<T> = { rows: T[]; rest: T[] };
 export type ReachRow = { what: string; url: string };
 export type KeyGroup = "clipboard_or_page" | "settings" | "host";
-// `names_consent` is set when the key changes a setting that an import cannot switch on by itself.
-export type KeyRow = { where: string; keys: string; run: string; names_consent?: true };
+// `consent` is set when the key names a setting that an import cannot switch on by itself: `switch_on` when the key can turn it on, `change` for any other write.
+export type KeyRow = { where: string; keys: string; run: string; consent?: "switch_on" | "change" };
 // What the built import reaches: the addresses it adds, the risky keys by group, and how many site rows add keys of their own.
 export type ImportReach = { addresses: ReachList<ReachRow>; keys: Record<KeyGroup, ReachList<KeyRow>>; site_rows: number };
 
