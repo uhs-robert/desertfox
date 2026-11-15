@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-expect-error The rig is plain JavaScript without types.
-import { as_action, interstitial_click, MAX_INTERSTITIAL_TRIES, CROSS_FRAME_ROWS, judge_frame_entry, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, judge_load_focus, needs_load_focus, focus_of, judge_activation, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
+import { as_action, interstitial_click, MAX_INTERSTITIAL_TRIES, CROSS_FRAME_ROWS, judge_frame_entry, FRAME_ROWS, subframe_of, check_names_of, cell_of, describe_mode_after_leave, describe_mode_on_load, is_frame_mode, judge_frame_activation, judge_frame_hints, judge_frame_leave, judge_load_focus, needs_load_focus, focus_of, judge_activation, activation_evidence, judge_leave, judge_cell_move, judge_escape, judge_hints, judge_jk_clash, judge_movement, maps_center, excalidraw_scroll, monaco_first_line, monaco_cursor_line, control_verdict, control_of, needs_leave_key, tab_into_work_area, tab_note, MAX_TAB_PRESSES, PASSTHROUGH_KEYS, judge_play_pause, judge_scroll, judge_volume, main_scroller, page_wall, pick_activation, pick_chosen_activation, same_address, sites_table, SITES, takes_typing, timed_out, TOOL_KEYS } from "../tools/measure/rivals/sites.mjs";
 
 const rect = (left: number, top: number, width = 160, height = 30) => ({ left, top, right: left + width, bottom: top + height, width, height });
 const target = (name: string, top: number) => ({ name, rect: rect(20, top) });
@@ -101,6 +101,24 @@ test("a navigation passes only when it reaches the link's own address", () => {
   assert.equal(went("https://example.com/other", null).status, "fail");
   // The frame script's state went with a process switch: the new address alone decides.
   assert.equal(judge_activation({ event: null, navigated: false, expected_href: link, url_before: page, url_after: link }).status, "pass");
+});
+
+test("a click report sent before a navigation passes a button target, and only for its own check", () => {
+  const button_url = "https://example.com/b/?node=1";
+  const reports = [
+    { check_id: 1, event: "click", relation: "self", tag: "button#old" },
+    { check_id: 2, event: "click", relation: "other", tag: "div" },
+    { check_id: 2, event: "click", relation: "self", tag: "button#menu" },
+  ];
+  // The page's own record is lost in the process switch: only the parent's copy of the report is left.
+  const lost = { navigated: false, expected_href: null, url_before: page, url_after: button_url };
+  assert.equal(judge_activation({ ...lost, event: null, ...activation_evidence(reports, 2) }).status, "pass");
+  // A navigation with no click report stays blocked.
+  assert.equal(activation_evidence([], 2), null);
+  assert.equal(judge_activation({ ...lost, event: null, ...activation_evidence([], 2) }).status, "fail");
+  // A report from an earlier check or pass does not count for this one.
+  assert.equal(activation_evidence(reports, 3), null);
+  assert.equal(judge_activation({ ...lost, event: null, ...activation_evidence(reports.slice(0, 1), 2) }).status, "fail");
 });
 
 test("two addresses are the same page when only the fragment differs", () => {
@@ -550,4 +568,42 @@ test("a known interstitial gives a click selector, the real page and other walls
   assert.equal(interstitial_click({ url: amazon, text: "Enter the characters you see below" }), null);
   assert.equal(interstitial_click({ url: "https://example.com/", text: "Click the button below to continue shopping" }), null);
   assert.equal(MAX_INTERSTITIAL_TRIES, 3);
+});
+
+// Loads framescript.js with a fake browser, so the wiring that sends the report is tested without Firefox.
+// run.mjs starts Firefox at import, so its parent-side listener cannot be loaded here.
+async function load_frame_script_with_page() {
+  const { readFileSync } = await import("node:fs");
+  const { runInNewContext } = await import("node:vm");
+  const handlers: Record<string, (message: { data: unknown }) => void> = {};
+  const sent: { name: string; data: any }[] = [];
+  const page_listeners: Record<string, (event: unknown) => void> = { click() {} };
+  const button = { localName: "button", id: "menu", getBoundingClientRect: () => rect(10, 10, 30, 30), contains: (el: unknown) => el === button, matches: () => false };
+  const content = {
+    innerWidth: 1000, innerHeight: 800,
+    document: { querySelectorAll: () => [button], elementFromPoint: () => button },
+    addEventListener: (type: string, listener: (event: unknown) => void) => { page_listeners[type] = listener; },
+    removeEventListener: () => {},
+  };
+  const sandbox = {
+    content, Ci: {}, Cc: { "@mozilla.org/text-input-processor;1": { createInstance: () => ({}) } },
+    addMessageListener: (name: string, handler: (message: { data: unknown }) => void) => { handlers[name] = handler; },
+    sendAsyncMessage: (name: string, data: unknown) => { sent.push({ name, data }); },
+  };
+  runInNewContext(readFileSync(new URL("../tools/measure/rivals/framescript.js", import.meta.url), "utf8"), sandbox);
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  const call = async (name: string, data: unknown) => { handlers["rivals:" + name]!({ data }); await settle(); };
+  return { sent, page_listeners, button, call };
+}
+
+test("the frame script reports a click to the parent from inside the listener, with the current check id", async () => {
+  const { sent, page_listeners, button, call } = await load_frame_script_with_page();
+  await call("hint_targets", {});
+  await call("arm_activation", { target: "0", check_id: 7 });
+  page_listeners.click!({ type: "click", target: button });
+  // Nothing has run after the click, so a report that exists now left before any navigation could end the script.
+  const report = sent.find((message) => message.name === "rivals:evidence");
+  assert.deepEqual(JSON.parse(JSON.stringify(report?.data)), { check_id: 7, event: "click", relation: "self", tag: "button#menu" });
+  assert.equal(activation_evidence([report?.data], 7)?.relation, "self");
+  assert.equal(activation_evidence([report?.data], 8), null);
 });

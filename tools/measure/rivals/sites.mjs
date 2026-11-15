@@ -225,8 +225,16 @@ export function same_address(a, b) {
   try { return without_fragment(a) === without_fragment(b); } catch { return false; }
 }
 
+// The click or focus reports the frame script sent for one activation check, each { check_id, event, relation, tag }. Reports of another check (an earlier check or pass arriving late) never count. The first report on the target or inside it wins, else the first report. framescript.js applies the same rule to its own record and cannot import this file.
+export function activation_evidence(reports, check_id) {
+  const mine = reports.filter((report) => report.check_id === check_id);
+  const best = mine.find((report) => report.relation !== "other") ?? mine[0];
+  return best ? { event: best.event, relation: best.relation, tag: best.tag } : null;
+}
+
 // One rule for every tool, wherever it draws its label: typing the label must click or focus the labelled target or an element inside it, or navigate to the target's own address when it is a link.
 // A click on an ancestor never counts, because a wrapper or the body holds every target.
+// A click on a labelled button passes by its click report even when the click navigates to another page and the page's own record is lost (see activation_evidence). A navigation with no click report still fails.
 // reply: { event: "click" | "focus" | null, relation: "self" | "inside" | "other", tag, navigated } from the page, plus expected_href (the link's address, or null), url_before and url_after from the parent process.
 export function judge_activation({ event, relation, tag, navigated, expected_href, url_before, url_after }) {
   if (event && relation !== "other") return pass(`${event} on the labelled ${tag}${relation === "inside" ? " (an element inside it)" : ""}`);

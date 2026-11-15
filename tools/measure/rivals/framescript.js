@@ -148,14 +148,17 @@ answer("top_labels", async () => visible_labels());
 
 // Arms the activation check before run.mjs types the label: a click or a focus on the page, and a page hide when it navigates. The first event on the labelled target or inside it wins, else the first event is kept, so sites.mjs sees what happened.
 // A navigation into another content process takes this script's state with it, so run.mjs keeps the expected address returned here and compares the new address itself.
-answer("arm_activation", async ({ target }) => {
+// Every event also goes to the parent at once, from inside the listener. The click can start a navigation that ends this script and its message port, so a report sent later never arrives. check_id lets the parent drop a report that belongs to another check.
+answer("arm_activation", async ({ target, check_id }) => {
   const expected = last_targets[Number(target)] ?? null;
   const record = { event: null, relation: null, tag: null, navigated: false };
   const on_event = (event) => {
     const el = event.target;
     const relation = !expected ? "other" : el === expected ? "self" : expected.contains(el) ? "inside" : "other";
     if (record.event && (record.relation !== "other" || relation === "other")) return;
-    Object.assign(record, { event: event.type === "focusin" ? "focus" : "click", relation, tag: describe(el) });
+    const report = { event: event.type === "focusin" ? "focus" : "click", relation, tag: describe(el) };
+    sendAsyncMessage("rivals:evidence", { check_id, ...report });
+    Object.assign(record, report);
   };
   const on_hide = () => { record.navigated = true; };
   const page = content;
