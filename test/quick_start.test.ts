@@ -75,7 +75,7 @@ test("quick start: a hint on inputs only is not picked for clicking", () => {
 
 test("quick start: the default keymap gives the keys it always gave", () => {
   const codes = codes_of(quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands));
-  assert.deepEqual(codes, ["j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", ",,", "g", "<Escape>", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", ",s", "<C-o>", ",fs", "~/.config/desertfox/", "config.reload", ":native.install"]);
+  assert.deepEqual(codes, ["f", "j", "k", "gg", "G", "<C-d>", "f", "<Escape>", ";yl", ":", "open", "<Escape>", ",,", "g", "<Escape>", "/", "?", "n", "N", "v", "h", "j", "k", "l", "w", "v", "V", "y", "o", "<Escape>", ";v", ";V", "g?", ",s", "<C-o>", ",fs", "~/.config/desertfox/", "config.reload", ":native.install"]);
 });
 
 test("quick start: a binding that spells out a default still matches", () => {
@@ -128,14 +128,36 @@ test("quick start: a bound key is a keys inline and a command line or name is a 
   assert.ok(!inlines.some((inline) => inline.kind === "code" && inline.text === "gg"));
 });
 
-test("practice: one prompt per area, from the keymap, and Quick Start links to the page", async () => {
-  const { practice_prompts, PRACTICE_AREAS } = await import("../src/help/quick_start.ts");
-  const prompts = practice_prompts(compile(DEFAULT_KEYMAP), all_commands);
-  assert.deepEqual(Object.keys(prompts).sort(), PRACTICE_AREAS.map((entry) => entry.area).sort());
-  const keys = (area: keyof typeof prompts) => prompts[area].filter((inline) => inline.kind === "keys").map((inline) => inline.text);
-  assert.ok(keys("hints").includes("f") && keys("insert").includes("i") && keys("tabs").length === 1);
-  const rebound = practice_prompts(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "i")), "<A-i>": { id: "mode.insert" } } } as never), all_commands);
-  assert.ok(rebound.insert.some((inline) => inline.kind === "keys" && inline.text === "<A-i>"));
-  const links = quick_start_blocks(compile(DEFAULT_KEYMAP), all_commands).flatMap((block) => (block.kind === "paragraph" ? block.inlines : [])).filter((inline) => inline.kind === "link");
+test("practice: every lesson key comes from the keymap, and each lesson names its fastest key", async () => {
+  const { practice_lessons, practice_intro, practice_outro, PRACTICE_LESSONS } = await import("../src/help/practice_lessons.ts");
+  const compiled = compile(DEFAULT_KEYMAP);
+  const lessons = practice_lessons(compiled, all_commands);
+  assert.deepEqual(lessons.map((lesson) => lesson.slug), PRACTICE_LESSONS.map((lesson) => lesson.slug));
+  const inlines_of = (slug: string) => { const lesson = lessons.find((each) => each.slug === slug)!; return [...lesson.goal, ...lesson.steps.flat(), ...lesson.notes.flat()]; };
+  const keys = (slug: string) => inlines_of(slug).filter((inline) => inline.kind === "keys").map((inline) => inline.text);
+  // A default key that went missing would show as a command line or as "(no key bound)".
+  for (const inline of [...lessons.flatMap((lesson) => inlines_of(lesson.slug)), ...practice_intro(compiled, all_commands), ...practice_outro(compiled, all_commands)]) {
+    assert.ok(!(inline.kind === "code" && inline.text.startsWith(":")) && inline.text !== "(no key bound)", JSON.stringify(inline));
+  }
+  const expected: Record<string, string[]> = {
+    scroll: ["j", "k", "<C-d>", "<C-u>", "G", "gg", "l", "h"],
+    "which-key": ["<A-?>"],
+    headings: ["]h", "[h", "sh"],
+    form: ["gi", "]i", "[i"],
+    inputs: [";i", ";ri", ";b"],
+    slider: [";Gg", ";gg", "l", "h", "<Enter>", "?"],
+    copy: [";yt", ";V", "as", "y"],
+    "command-line": [":", "H"],
+    tabs: ["F", "T", "<A-x>", "gl"],
+    video: ["aa", "<Space>", "H"],
+    marks: ["m", "'", "<C-o>"],
+    ignore: ["<C-v>", "<S-Escape>"],
+  };
+  for (const [slug, wanted] of Object.entries(expected)) for (const key of wanted) assert.ok(keys(slug).includes(key), `${slug} lacks ${key}: ${keys(slug).join(" ")}`);
+  // The tab lesson teaches the tab list, and names Find anything only as the wider search.
+  assert.ok(keys("tabs").indexOf("T") < keys("tabs").indexOf(",,"));
+  const rebound = practice_lessons(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "gi" && key !== "I")), "<A-i>": { id: "page.focus_input" } } } as never), all_commands);
+  assert.ok(rebound.find((lesson) => lesson.slug === "form")!.steps.flat().some((inline) => inline.kind === "keys" && inline.text === "<A-i>"));
+  const links = quick_start_blocks(compiled, all_commands).flatMap((block) => (block.kind === "paragraph" ? block.inlines : [])).filter((inline) => inline.kind === "link");
   assert.deepEqual(links, [{ kind: "link", text: "Practice page", href: "#/practice" }]);
 });

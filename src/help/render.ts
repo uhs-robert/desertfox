@@ -10,7 +10,6 @@ import { key_caps } from "../shared/key_caps.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
 import { practice_page } from "./practice_page.ts";
-import { PRACTICE_AREAS } from "./quick_start.ts";
 import { ADVANCED_SUFFIX, PAGES } from "./route.ts";
 import type { PageId, Route } from "./route.ts";
 
@@ -421,7 +420,6 @@ const ADVANCED_FILES_EDITOR_SECTION = "Advanced: edit files";
 const SETTINGS_SECTION_TITLES = [...GROUPS.map((group) => group.title), KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ADVANCED_FILES_SECTION, ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION];
 const settings_sections = sections_from_titles(SETTINGS_SECTION_TITLES);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
-const PRACTICE_SECTIONS = sections_from_titles(PRACTICE_AREAS.map((entry) => entry.title));
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
 export function page_sections(page: PageId, source: HelpModel | Block[], guide: Block[] = []): Section[] {
@@ -433,7 +431,8 @@ export function page_sections(page: PageId, source: HelpModel | Block[], guide: 
     // The slug comes from the id part, so a link to a group keeps working. Only the shown title is plain.
     case "commands": return Array.isArray(source) ? [] : sections_from_titles(source.groups.map((group) => group.name)).map((section, index) => ({ ...section, title: group_title(source.groups[index]!.name) }));
     case "search-engines": return sections_from_titles([...guide.flatMap((block) => (block.kind === "heading" && block.level === GUIDE_SUBSECTION_LEVEL ? [block.text] : [])), YOUR_ENGINES]);
-    case "practice": return PRACTICE_SECTIONS;
+    // Practice lists no sections: the lessons are read in order, and each link would be one more hint label on a page that teaches hints.
+    case "practice": return [];
     case "styling": return STYLING_SECTIONS;
     case "site-rules": return [];
   }
