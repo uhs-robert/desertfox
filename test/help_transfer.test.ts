@@ -169,7 +169,7 @@ test("the reach block holds the exact warning, each group with its intro, the ov
   reach.addresses.rows.push({ what: "Search engine duck (default)", url: "https://duck.test/?q={query}" });
   reach.keys.clipboard_or_page.rows.push({ where: "normal mode", keys: "zp", run: "page.clipboard paste" });
   reach.keys.settings.rows.push({ where: "site a.test", keys: "zb", run: "set bridge true", names_consent: true }, { where: "normal mode", keys: "zn", run: "set new_tab_page https://evil.test/" });
-  reach.keys.settings.more = 3;
+  reach.keys.settings.rest = [{ where: "normal mode", keys: "zq", run: "toggle x" }, { where: "normal mode", keys: "zr", run: "toggle y" }, { where: "normal mode", keys: "zs", run: "toggle z" }];
   reach.keys.host.rows.push({ where: "command line", keys: ":inst", run: "native.install" });
   reach.site_rows = 2;
   const block = reach_block(reach)!;
@@ -187,8 +187,9 @@ test("the reach block holds the exact warning, each group with its intro, the ov
     ["zb in site a.test: set bridge true (an import cannot switch this on, but this key does)", "zn in normal mode: set new_tab_page https://evil.test/"],
     [":inst in command line: native.install"],
   ]);
-  assert.equal(block.sections[2]!.more, "and 3 more");
-  assert.equal(block.sections[1]!.more, undefined);
+  assert.equal(block.sections[2]!.rest!.summary, "Show 3 more");
+  assert.equal(block.sections[2]!.rest!.rows.length, 3);
+  assert.equal(block.sections[1]!.rest, undefined);
   assert.equal(block.site_rows, "2 site rows add their own keys on the sites they name.");
   reach.site_rows = 1;
   assert.equal(reach_block(reach)!.site_rows, "1 site row adds its own keys on the site it names.");

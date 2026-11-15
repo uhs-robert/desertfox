@@ -28,19 +28,19 @@ export const REACH_KEY_INTROS: Record<KeyGroup, string> = {
 
 export const REACH_CONSENT_NOTE = " (an import cannot switch this on, but this key does)";
 
-const reach_more = (count: number): string => `and ${count} more`;
+const reach_more = (count: number): string => `Show ${count} more`;
 
 const reach_site_rows = (count: number): string => (count === 1 ? "1 site row adds its own keys on the site it names." : `${count} site rows add their own keys on the sites they name.`);
 
 // A row is text and code, so the page draws the code in `<code>`.
 export type ReachSegment = string | { code: string };
-export type ReachSection = { intro: string; rows: ReachSegment[][]; more?: string };
+export type ReachSection = { intro: string; rows: ReachSegment[][]; rest?: { summary: string; rows: ReachSegment[][] } };
 export type ReachBlock = { heading: string; warning: string; sections: ReachSection[]; site_rows?: string };
 
 const KEY_GROUPS: readonly KeyGroup[] = ["clipboard_or_page", "settings", "host"];
 
 function section_of<T>(intro: string, list: ReachList<T>, row: (item: T) => ReachSegment[]): ReachSection[] {
-  return list.rows.length === 0 ? [] : [{ intro, rows: list.rows.map(row), ...(list.more > 0 && { more: reach_more(list.more) }) }];
+  return list.rows.length === 0 ? [] : [{ intro, rows: list.rows.map(row), ...(list.rest.length > 0 && { rest: { summary: reach_more(list.rest.length), rows: list.rest.map(row) } }) }];
 }
 
 // What the consent screen lists above the snippets, or undefined when the import reaches nothing to list.

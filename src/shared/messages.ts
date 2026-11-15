@@ -486,8 +486,8 @@ export type SnippetPreview = {
   requires?: string[];
 };
 
-// A list the consent screen shows in part: at most `rows` entries, and how many more there are.
-export type ReachList<T> = { rows: T[]; more: number };
+// A list the consent screen shows in two parts: the first rows, and the `rest` behind a fold. Nothing is dropped.
+export type ReachList<T> = { rows: T[]; rest: T[] };
 export type ReachRow = { what: string; url: string };
 export type KeyGroup = "clipboard_or_page" | "settings" | "host";
 // `names_consent` is set when the key changes a setting that an import cannot switch on by itself.

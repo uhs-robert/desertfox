@@ -60,6 +60,7 @@ export function snippet_card(snippet: SnippetPreview, review: Pick<Review, "acce
   );
 }
 
+const row_node = (row: ReachSegment[]): HTMLElement => el("li", undefined, ...row.map(segment_node));
 const segment_node = (segment: ReachSegment): Node | string => (typeof segment === "string" ? segment : el("code", undefined, segment.code));
 
 // What the import reaches, drawn above the snippet cards. Nothing is drawn when the import reaches nothing to list.
@@ -71,7 +72,8 @@ export function reach_view(reach: ImportReach): HTMLElement[] {
     el("p", "desertfox-transfer-warning", block.warning),
     ...block.sections.flatMap((section) => [
       el("p", undefined, section.intro),
-      el("ul", undefined, ...section.rows.map((row) => el("li", undefined, ...row.map(segment_node))), ...(section.more === undefined ? [] : [el("li", "desertfox-help-muted", section.more)])),
+      el("ul", undefined, ...section.rows.map(row_node)),
+      ...(section.rest === undefined ? [] : [el("details", undefined, el("summary", undefined, section.rest.summary), el("ul", undefined, ...section.rest.rows.map(row_node)))]),
     ]),
     ...(block.site_rows === undefined ? [] : [el("p", undefined, block.site_rows)]),
   ];

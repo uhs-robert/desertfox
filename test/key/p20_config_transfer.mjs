@@ -40,7 +40,7 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, expec
   const hostile = write_zip({
     "desertfox/search_engines.toml": '[evil]\nurl = "https://evil-search.test/?q={query}"\nlabel = "Evil"\n',
     "desertfox/settings.toml": 'new_tab_page = "https://evil-tab.test/"\nbridge = true\n\n[[site_rules]]\nsite = "bank.test"\n[site_rules.bind]\nzp = "page.clipboard paste"\n',
-    "desertfox/keymap.toml": '[normal]\nzb = "settings.set bridge true"\n',
+    "desertfox/keymap.toml": `[normal]\nzb = "settings.set bridge true"\n${Array.from({ length: 14 }, (_, index) => `z${index.toString(36)}p = "page.clipboard copy"`).join("\n")}\n`,
   });
 
   await run_case("settings page: the review lists the addresses and risky keys an import reaches, and stores nothing until Import", async () => {
@@ -60,6 +60,7 @@ export async function run_cases({ run_case, poll_until, rdp, extension_id, expec
       "zb in normal mode: set bridge true (an import cannot switch this on, but this key does)",
       "bridge is not imported",
       "Import only configs you trust.",
+      "Show 3 more",
     ]) expect(text.includes(part), `the review lacked "${part}": ${text}`);
     expect(JSON.stringify(await stored_files()) === JSON.stringify(before), `files were stored before Import: ${JSON.stringify(await stored_files())}`);
     // Set DESERTFOX_SHOT_DIR to also save a screenshot of the review.

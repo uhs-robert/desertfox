@@ -135,7 +135,7 @@ test("a list stops at the cap and counts the rest", () => {
   const bindings = Array.from({ length: 30 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard paste"`);
   const reach = reach_of({ "keymap.toml": `[normal]\n${bindings.join("\n")}\n` });
   assert.equal(reach.keys.clipboard_or_page.rows.length, ROW_CAP);
-  assert.equal(reach.keys.clipboard_or_page.more, 30 - ROW_CAP);
+  assert.equal(reach.keys.clipboard_or_page.rest.length, 30 - ROW_CAP);
 });
 
 test("every classified id is a registered command, and every command the bridge never runs is classified or named local only", () => {
@@ -153,7 +153,7 @@ test("twelve harmless engines before new_tab_page still show the new tab page", 
   const reach = reach_of({ "search_engines.toml": engines, "settings.toml": 'new_tab_page = "https://evil.test/"\n' });
   assert.equal(reach.addresses.rows.length, ROW_CAP);
   assert.equal(reach.addresses.rows[0]!.what, "New tab page");
-  assert.equal(reach.addresses.more, 1);
+  assert.equal(reach.addresses.rest.length, 1);
 });
 
 test("twelve harmless setting keys before a consent key still show the consent key first", () => {
@@ -164,14 +164,43 @@ test("twelve harmless setting keys before a consent key still show the consent k
   assert.equal(reach.keys.settings.rows[0]!.names_consent, true);
 });
 
-test("twelve plain key rows before a host key show the host key, and clipboard keys come before address keys", () => {
-  const pastes = Array.from({ length: 12 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard paste"`).join("\n");
-  const reach = reach_of({ "keymap.toml": `[normal]\n${pastes}\nzzn = "native.install"\n` });
+test("twelve config.reload aliases before native.install still show native.install first", () => {
+  const aliases = Array.from({ length: 12 }, (_, index) => `r${index.toString(36)} = "config.reload"`).join("\n");
+  const reach = reach_of({ "command_aliases.toml": `${aliases}\nzz = "native.install"\n`, "keymap.toml": '[normal]\nzzn = "native.install"\n' });
   assert.equal(reach.keys.host.rows[0]!.keys, "zzn");
-  const opens = Array.from({ length: 12 }, (_, index) => `"o${index.toString(36)}" = "open https://o${index}.test/"`).join("\n");
-  const mixed = reach_of({ "keymap.toml": `[normal]\n${opens}\nzzp = "page.clipboard paste"\n`, "settings.toml": 'home_page = "https://home.test/"\n' });
-  assert.equal(mixed.addresses.rows[0]!.what, "Home page");
-  assert.equal(mixed.keys.clipboard_or_page.rows[0]!.keys, "zzp");
+  assert.equal(reach.keys.host.rows.length, ROW_CAP);
+});
+
+test("twelve clipboard copy keys before register.paste + and open @clipboard still show the reads first", () => {
+  const copies = Array.from({ length: 12 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard copy"`).join("\n");
+  const reach = reach_of({ "keymap.toml": `[normal]\n${copies}\nzzo = "open @clipboard"\nzzk = "page.send_key --key=Enter --key-code=13"\n[insert]\n"<C-v>" = "register.paste +"\n` });
+  assert.deepEqual(reach.keys.clipboard_or_page.rows.slice(0, 3).map((row) => row.keys).sort(), ["<C-v>", "zzk", "zzo"]);
+  assert.equal(reach.keys.clipboard_or_page.rows.length, ROW_CAP);
+});
+
+test("twelve harmless engines before an engine a key reaches show that engine, and so for a quickmark", () => {
+  const engines = Array.from({ length: 12 }, (_, index) => `[e${index}]\nurl = "https://e${index}.test/?q={query}"\nlabel = "E${index}"\n`).join("\n");
+  const marks = Array.from({ length: 12 }, (_, index) => `${index.toString(36)} = "https://m${index}.test/"`).join("\n");
+  const reach = reach_of({
+    "search_engines.toml": `${engines}\n[evil]\nurl = "https://evil.test/?q={query}"\nlabel = "Evil"\n`,
+    "keymap.toml": '[normal]\nzs = "open.search --engine=evil"\nzq = "quickmark.open z"\n',
+    "quickmarks.toml": `${marks}\nz = "https://phish.test/"\n`,
+  });
+  const shown = reach.addresses.rows.map((row) => row.what);
+  assert.ok(shown.includes("Search engine evil"), shown.join("; "));
+  assert.ok(shown.includes("Quickmark z"), shown.join("; "));
+  assert.equal(reach.addresses.rows.length + reach.addresses.rest.length, 26);
+});
+
+test("a row past the cap stays in the rest, so nothing is dropped", () => {
+  const bindings = Array.from({ length: 15 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard paste"`);
+  const reach = reach_of({ "keymap.toml": `[normal]\n${bindings.join("\n")}\n` });
+  assert.equal(reach.keys.clipboard_or_page.rows.length + reach.keys.clipboard_or_page.rest.length, 15);
+});
+
+test("a name of + on a command that is not a register command makes no clipboard row", () => {
+  const reach = reach_of({ "keymap.toml": '[normal]\nzt = "mode.site +"\n' });
+  assert.equal(reach.keys.clipboard_or_page.rows.length, 0);
 });
 
 test("register.paste of the system clipboard register is a clipboard key, and a named register is not", () => {
