@@ -105,15 +105,18 @@ function work_board(mark: (name: string) => void): HTMLElement {
   let dragged: HTMLElement | undefined;
   const board = el("div", "desertfox-practice-board");
   board.id = "practice-board";
+  const resets: (() => void)[] = [];
   board.addEventListener("dragend", () => {
     dragged = undefined;
-    board.querySelectorAll(".desertfox-practice-column").forEach((column) => column.classList.remove("desertfox-practice-over"));
+    for (const reset of resets) reset();
   });
   for (const spec of BOARD_COLUMNS) {
     const column = el("div", "desertfox-practice-column", el("strong", undefined, spec.title));
     column.id = `practice-column-${spec.id}`;
     // dragenter and dragleave fire in pairs as the pointer crosses the cards, so a counter keeps the highlight steady.
     let inside = 0;
+    const reset = () => { inside = 0; column.classList.remove("desertfox-practice-over"); };
+    resets.push(reset);
     column.addEventListener("dragenter", () => { inside++; column.classList.add("desertfox-practice-over"); });
     column.addEventListener("dragleave", () => {
       inside = Math.max(0, inside - 1);
@@ -122,11 +125,10 @@ function work_board(mark: (name: string) => void): HTMLElement {
     column.addEventListener("dragover", (event) => event.preventDefault());
     column.addEventListener("drop", (event) => {
       event.preventDefault();
-      inside = 0;
-      column.classList.remove("desertfox-practice-over");
+      reset();
       const card = dragged;
       if (card === undefined) return;
-      (event.currentTarget as HTMLElement).append(card);
+      column.append(card);
       if (card.textContent === BOARD_GOAL.card && spec.id === BOARD_GOAL.column) mark("moved");
     });
     for (const text of spec.cards) {

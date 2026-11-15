@@ -166,7 +166,7 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await poll_until("the which-key panel to close", async () => !(await in_practice(panel_open)));
   await sleep(300);
 
-  console.log("shot 4: gi and ]i fill a form, ;i picks a radio, ;Gg grabs a slider, ;gg drops a card in another column");
+  console.log("shot 4: gi and ]i fill a form, ;i picks a radio, ;Gg grabs a slider, ;gg moves a card across the board");
   await to_lesson("form", "fill in");
   await press("gi");
   await wait_focus("practice-name");
@@ -191,12 +191,26 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await press("-k", "Return");
   await sleep(900);
   // The board below the slider: ;gg grabs the card, the second pass labels every place it can go.
-  await hint(";gg", "#practice-card-review-the-pr", 600);
-  await sleep(500);
+  // The slider's "Grab dropped" toast must be gone, so the still shows only the board.
+  await poll_until("the Grab dropped toast to clear", async () => await in_practice(`return ![...view.document.documentElement.children].some((child) => (child.openOrClosedShadowRoot?.textContent ?? "").includes("Grab dropped"));`), { timeout_ms: 30000 });
+  const card_column = (id) => in_practice(`return view.document.getElementById(${JSON.stringify(id)}).parentElement.id;`);
+  const target_labels_up = () => in_practice(`return [...view.document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])]).filter((label) => label.style.display !== "none" && label.style.visibility !== "hidden" && label.textContent.length > 1).length > 0;`);
+  // One card moves twice, To do to Doing and then Doing to Done, so the board reads as work in motion.
+  const fix_card = "#practice-card-fix-the-bug";
+  const board_scene = { start_s: (Date.now() - film_started_ms) / 1000 };
+  await hint(";gg", fix_card, 600);
+  await wait_in_page("the labels of the drop targets", target_labels_up);
   await still("drag");
+  await pick("#practice-column-doing", 900);
+  await poll_until("the card to land in Doing", async () => (await card_column("practice-card-fix-the-bug")) === "practice-column-doing");
+  await sleep(1000);
+  await hint(";gg", fix_card, 400);
+  await wait_in_page("the labels of the drop targets", target_labels_up);
+  await sleep(500);
   await pick("#practice-column-done", 900);
-  await poll_until("the card to land in Done", async () => (await in_practice(`return view.document.getElementById("practice-card-review-the-pr").parentElement.id;`)) === "practice-column-done");
+  await poll_until("the card to land in Done", async () => (await card_column("practice-card-fix-the-bug")) === "practice-column-done");
   await sleep(1200);
+  board_scene.end_s = (Date.now() - film_started_ms) / 1000;
 
   console.log("shot 5: caret mode selects a sentence, y copies");
   await to_lesson("copy", "copy");
@@ -260,7 +274,7 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
     await sleep(300);
   }
   if (statSync(film_path).size < 100000) throw new Error(`the film is only ${statSync(film_path).size} bytes, so the recorder caught no frames`);
-  writeFileSync(join(stage_dir, "film.json"), JSON.stringify({ film_seconds, key_presses }));
+  writeFileSync(join(stage_dir, "film.json"), JSON.stringify({ film_seconds, key_presses, board_scene }));
   // The Commands tab stays open from the start, and the first tab is the one the harness keeps.
   await in_background(`browser.tabs.query({ currentWindow: true }).then((tabs) => browser.tabs.remove(tabs.filter((tab) => tab.url.endsWith("#/commands")).map((tab) => tab.id)))`);
   // The harness cleans up through a key probe that only its own pages answer, and it keeps only the tab the piece started on.

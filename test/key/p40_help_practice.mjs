@@ -292,10 +292,19 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await poll_until("Fix the bug to land in Done", async () => await in_page(`return ${by_id("practice-card-fix-the-bug")}.parentElement.id === "practice-column-done";`));
     await wait_mode("normal");
     expect(!(await is_done("slider", "moved")), "a wrong card in Done ticked the check");
+    expect(!(await in_page(`return !!view.document.querySelector(".desertfox-practice-over");`)), "a drop highlight stayed on a column");
     await hint(";gg", "#practice-card-review-the-pr");
     await wait_target_labels();
     await pick("#practice-column-done");
     await wait_done("slider", "moved");
+    expect(!(await in_page(`return !!view.document.querySelector(".desertfox-practice-over");`)), "a drop highlight stayed on a column");
+    // A card in Done drags out again, and the tick stays.
+    await wait_mode("normal");
+    await hint(";gg", "#practice-card-review-the-pr");
+    await wait_target_labels();
+    await pick("#practice-column-doing");
+    await poll_until("Review the PR to leave Done", async () => await in_page(`return ${by_id("practice-card-review-the-pr")}.parentElement.id === "practice-column-doing";`));
+    expect(await is_done("slider", "moved"), "the tick went away when the card left Done");
     await leave_to_normal();
   });
 
