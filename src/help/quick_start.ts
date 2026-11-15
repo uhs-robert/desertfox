@@ -173,7 +173,7 @@ export function practice_prompts(compiled: CompiledKeymap | undefined, commands:
   return {
     scroll: say("Press {down} and {up} to scroll. {bottom} jumps to the end of the page and {top} back to the start."),
     hints: say("Press {hint}, then type the letters of a label to click a link or button. The log line below shows what you clicked. {escape} cancels."),
-    cmdline: say("Press {cmdline}, type [set theme catppuccin] and press Enter. The page changes colors at once. Type [set theme oasis_moonlight] to go back."),
+    cmdline: say("Press {cmdline}, type [set -t theme catppuccin] and press Enter. The page changes colors at once, until the browser restarts. Type [unset -t theme] to get your own theme back."),
     whichkey: prefix === undefined ? say("No key starts a longer sequence now, so there is no which-key panel to show.") : say(`Press [${prefix}] and wait. The which-key panel lists the keys that can come next. {escape} closes it.`),
     find: say("Press {find}, type [fox] and press Enter. {next} jumps to the next match and {previous} to the one before."),
     caret: say("Press {caret_at_text}, then type the label of a paragraph below. Move with {caret_left}, {caret_down}, {caret_up} and {caret_right}. Press {visual} to select, then {yank} to copy. {escape} steps back."),

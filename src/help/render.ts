@@ -374,7 +374,7 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
 }
 
 // An external link that opens in a new tab.
-function new_tab_link(title: string, url: string, class_name?: string): HTMLElement {
+export function new_tab_link(title: string, url: string, class_name?: string): HTMLElement {
   const link = el("a", class_name, title);
   link.setAttribute("href", url);
   link.setAttribute("target", "_blank");
