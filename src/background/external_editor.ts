@@ -103,7 +103,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
             continue;
           }
           const current = await clear(held.job);
-          const where = unknown_job ? "" : " The saved text stays in $XDG_RUNTIME_DIR/desertfox/editor, or in ~/.cache/desertfox/editor when that variable is unset.";
+          const where = unknown_job ? "" : " The saved text stays in desertfox/editor under $XDG_RUNTIME_DIR, or under the cache folder when that folder is missing or fails the host's safety checks.";
           if (current && !current.orphaned) await best_effort(deps.toast(current.tab_id, current.frame_id, failure_text(error) + where));
           return;
         }

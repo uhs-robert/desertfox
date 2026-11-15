@@ -298,7 +298,7 @@ test("three failed collects in a row give up and the toast names the folder that
   await open(1, 0);
   await settle();
   assert.equal(log.collects, 3);
-  assert.match(log.toasts[0] ?? "", /spawn failed.*\$XDG_RUNTIME_DIR\/desertfox\/editor.*~\/\.cache\/desertfox\/editor/);
+  assert.match(log.toasts[0] ?? "", /spawn failed.*\$XDG_RUNTIME_DIR.*cache folder.*safety checks/);
   assert.deepEqual(store.desertfox_editor_jobs, {});
 });
 

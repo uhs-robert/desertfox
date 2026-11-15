@@ -86,14 +86,14 @@ class EditorCase(ConfigDirCase):
         return reply["job"]
 
     def job_record(self, job):
-        with open(os.path.join(host.editor_dir(), f"job-{job}.json")) as file:
+        with open(os.path.join(host.editor_dirs()[0], f"job-{job}.json")) as file:
             return json.load(file)
 
     def collect(self, job, wait_s=5):
         return host.editor_collect({"cmd": "editor_collect", "job": job}, wait_s=wait_s)
 
     def editor_files(self):
-        return sorted(os.listdir(host.editor_dir()))
+        return sorted(os.listdir(host.editor_dirs()[0]))
 
     def without_runtime_dir(self):
         patcher = mock.patch.dict(os.environ)
@@ -183,7 +183,7 @@ class StartTest(EditorCase):
         self.configure(self.stub("time.sleep(30)\n"))
         job = self.start(ext="md")
         directory = os.path.join(self.runtime, "desertfox", "editor")
-        self.assertEqual(directory, host.editor_dir())
+        self.assertEqual(directory, host.editor_dirs()[0])
         scratch = [name for name in self.editor_files() if name.startswith("doc-")]
         self.assertEqual(len(scratch), 1)
         self.assertTrue(scratch[0].endswith(".md"))
@@ -271,7 +271,7 @@ class CollectTest(EditorCase):
         self.configure(self.stub("pass\n"))
         job = self.start()
         time.sleep(0.2)
-        job_path, record, scratch = host.read_job(host.editor_dir(), job)
+        job_path, record, scratch = host.read_job(host.editor_dirs()[0], job)
         claimed = host.claim_job(job_path)
         long_ago = time.time() - 2 * host.STALE_JOB_S
         os.utime(claimed, (long_ago, long_ago))
@@ -322,7 +322,7 @@ class CollectTest(EditorCase):
     def test_only_one_of_two_collectors_gets_the_job(self):
         self.configure(self.stub("open(path, 'w').write('x')\n"))
         job = self.start()
-        directory = host.editor_dir()
+        directory = host.editor_dirs()[0]
         job_path, record, scratch = host.read_job(directory, job)
         first = host.claim_job(job_path)
         with self.assertRaises(host.HostError):
@@ -339,7 +339,7 @@ class CollectTest(EditorCase):
     def test_a_job_file_cannot_point_outside_the_editor_folder(self):
         self.configure(self.stub("time.sleep(30)\n"))
         job = self.start()
-        directory = host.editor_dir()
+        directory = host.editor_dirs()[0]
         victim = os.path.join(self.tmp.name, "victim")
         with open(victim, "w") as file:
             file.write("keep")
@@ -377,7 +377,7 @@ class CollectTest(EditorCase):
     def test_stale_jobs_of_a_dead_editor_are_swept_at_the_next_start(self):
         self.configure(self.stub("pass\n"))
         old = self.start()
-        directory = host.editor_dir()
+        directory = host.editor_dirs()[0]
         time.sleep(0.2)
         long_ago = time.time() - 2 * host.STALE_JOB_S
         os.utime(os.path.join(directory, f"job-{old}.json"), (long_ago, long_ago))
@@ -392,13 +392,13 @@ class RuntimeDirTest(EditorCase):
     def used_dir(self):
         self.configure(self.stub("pass\n"))
         self.start()
-        return host.editor_dir()
+        return host.editor_dirs()[0]
 
     def test_unset_and_relative_runtime_dirs_fall_back_to_the_cache(self):
         self.without_runtime_dir()
         self.assertEqual(self.used_dir(), os.path.join(self.cache, "desertfox", "editor"))
         os.environ["XDG_RUNTIME_DIR"] = "relative/run"
-        self.assertEqual(host.editor_dir(), os.path.join(self.cache, "desertfox", "editor"))
+        self.assertEqual(host.editor_dirs()[0], os.path.join(self.cache, "desertfox", "editor"))
 
     def test_a_group_or_other_writable_runtime_parent_is_rejected(self):
         for mode in (0o770, 0o707, 0o777):
@@ -480,7 +480,7 @@ class MemoryBackedTest(EditorCase):
         self.configure(self.stub("pass\n"))
         with mock.patch.object(host, "filesystem_type_of", return_value="ext4"):
             self.start()
-            self.assertEqual(host.editor_dir(), os.path.join(self.runtime, "desertfox", "editor"))
+            self.assertEqual(host.editor_dirs()[0], os.path.join(self.runtime, "desertfox", "editor"))
             before = self.editor_files()
             self.assertRefused({"cmd": "editor_start", "text": "x", "private": True}, "private windows")
             self.assertEqual(self.editor_files(), before)
@@ -517,14 +517,14 @@ class SweepTest(EditorCase):
                 host.handle({"cmd": "editor_start", "text": "page text"})
         orphans = self.editor_files()
         self.assertEqual(len(orphans), 1)
-        self.age(os.path.join(host.editor_dir(), orphans[0]))
+        self.age(os.path.join(host.editor_dirs()[0], orphans[0]))
         self.start()
         self.assertNotIn(orphans[0], self.editor_files())
 
     def test_the_files_of_a_live_editor_survive_whatever_their_age(self):
         self.configure(self.stub("time.sleep(30)\n"))
         job = self.start(ext="md")
-        directory = host.editor_dir()
+        directory = host.editor_dirs()[0]
         scratch = self.job_record(job)["scratch"]
         swap = self.plant(directory, f".{scratch}.swp")
         backup = self.plant(directory, f"{scratch}~")
@@ -543,7 +543,7 @@ class SweepTest(EditorCase):
         self.configure(self.stub("pass\n"))
         job = self.start()
         time.sleep(0.3)
-        directory = host.editor_dir()
+        directory = host.editor_dirs()[0]
         scratch = self.job_record(job)["scratch"]
         swap = self.plant(directory, f".{scratch}.swp")
         self.age(os.path.join(directory, f"job-{job}.json"))
@@ -570,11 +570,35 @@ class SweepTest(EditorCase):
             host.sweep_editor_dir(directory)
         self.assertTrue(os.path.exists(saved))
 
+    def test_a_collector_that_claims_between_the_record_read_and_the_unlink_keeps_the_saved_text(self):
+        self.configure(self.stub("pass\n"))
+        job = self.start()
+        time.sleep(0.3)
+        directory = host.editor_dirs()[0]
+        job_path, record, scratch = host.read_job(directory, job)
+        self.age(job_path)
+        self.age(scratch)
+        real_read = host.read_job_file_quietly
+
+        def read_then_collect(directory_fd, name):
+            result = real_read(directory_fd, name)
+            if name == f"job-{job}.json":
+                with open(scratch, "w") as file:
+                    file.write("SAVED")
+                host.claim_job(job_path)
+            return result
+
+        with mock.patch.object(host, "read_job_file_quietly", read_then_collect):
+            host.sweep_editor_dir(directory)
+        with open(scratch) as file:
+            self.assertEqual(file.read(), "SAVED")
+        self.assertEqual([n for n in os.listdir(directory) if n.endswith(".done")], [f"job-{job}.json.{os.getpid()}.done"])
+
     def test_a_claimed_job_of_a_long_run_is_not_swept_while_it_is_collected(self):
         self.configure(self.stub("pass\n"))
         job = self.start()
         time.sleep(0.3)
-        directory = host.editor_dir()
+        directory = host.editor_dirs()[0]
         job_path, record, scratch = host.read_job(directory, job)
         self.age(job_path)
         claimed = host.claim_job(job_path)
@@ -655,7 +679,7 @@ class LegacyTest(EditorCase):
         self.configure(self.stub("time.sleep(30)\n"))
         self.without_runtime_dir()
         job = self.start()
-        legacy = host.editor_dir()
+        legacy = host.editor_dirs()[0]
         scratch = self.job_record(job)["scratch"]
         for name in (scratch, f"job-{job}.json"):
             self.age(os.path.join(legacy, name))
@@ -679,7 +703,7 @@ class LegacyTest(EditorCase):
         self.configure(self.stub("time.sleep(30)\n"))
         self.without_runtime_dir()
         self.start()
-        self.assertTrue(os.path.isdir(host.editor_dir()))
+        self.assertTrue(os.path.isdir(host.editor_dirs()[0]))
 
 
 class PrivateTest(EditorCase):

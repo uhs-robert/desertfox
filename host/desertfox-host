@@ -612,10 +612,6 @@ def editor_dirs():
     return ([runtime] if runtime else []) + [cache_editor_dir()]
 
 
-def editor_dir():
-    return editor_dirs()[0]
-
-
 def read_toml_strings(text):
     """The `key = ["a", 'b']` entries of an editor.toml. This is the only TOML shape the file takes, and the host parses it
     itself because python3 3.9 has no tomllib. Strings are basic ("..." with JSON escapes) or literal ('...')."""
@@ -741,6 +737,22 @@ def is_stale(directory_fd, name):
     return not stat.S_ISDIR(info.st_mode) and time.time() - info.st_mtime >= STALE_JOB_S
 
 
+def claim_dead_job(directory_fd, name):
+    """Claims the job file of a dead, uncollected job with the rename `claim_job` uses, so of the sweep and a collector
+    exactly one wins, and the winner removes the claimed file. Only the winner may remove the scratch file: a collector that claimed after the sweep read the record
+    would otherwise lose the text its editor saved just before it exited. A `.done` file has no collector left."""
+    if name.endswith(".done"):
+        return True
+    claimed = f"{name}.{os.getpid()}.done"
+    try:
+        os.rename(name, claimed, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+    except OSError:
+        return False
+    with contextlib.suppress(OSError):
+        os.unlink(claimed, dir_fd=directory_fd)
+    return True
+
+
 def sweep_editor_dir(directory):
     """Removes what no editor needs any more: the job file and scratch file of a job whose editor is gone and which
     nobody collected for a day (a closed browser), a claimed `.done` job file, and any other file in the folder older
@@ -755,7 +767,7 @@ def sweep_editor_dir(directory):
     try:
         names = os.listdir(directory_fd)
         aged = {name for name in names if is_stale(directory_fd, name)}
-        dead_jobs_files = set()
+        claimed_by_sweep = set()
         kept_names = set()
         kept_scratch = set()
         for name in names:
@@ -768,14 +780,14 @@ def sweep_editor_dir(directory):
                 kept_names.add(name)
                 if scratch:
                     kept_scratch.add(scratch)
-            elif name in aged and scratch:
-                dead_jobs_files.add(scratch)
-        for name in sorted(aged | dead_jobs_files):
+            elif name in aged and scratch and claim_dead_job(directory_fd, name):
+                claimed_by_sweep.add(scratch)
+        for name in sorted(aged | claimed_by_sweep):
             if name in kept_names or any(scratch in name for scratch in kept_scratch):
                 continue
-            # An editor may have saved since the listing, and the file is then fresh. A scratch file of a dead, old job
-            # goes whatever its mtime, because that editor is gone.
-            if name not in dead_jobs_files and not is_stale(directory_fd, name):
+            # An editor may have saved since the listing, and the file is then fresh. The scratch file of a job this sweep
+            # claimed goes whatever its mtime, because the claim shows nobody collects it.
+            if name not in claimed_by_sweep and not is_stale(directory_fd, name):
                 continue
             with contextlib.suppress(OSError):
                 os.unlink(name, dir_fd=directory_fd)
