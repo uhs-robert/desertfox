@@ -76,13 +76,10 @@ function args_reach(args: Record<string, unknown>, command: CommandMeta | undefi
   };
 }
 
-// What a settings key does to a consent setting. A set to true, a toggle and an unset can switch it on. A set to another value changes it. A set with no value only reads it, so it gets no note.
-function consent_use(id: string, args: Record<string, unknown>): KeyRow["consent"] {
-  if (id === "settings.toggle" || id === "settings.unset") return "switch_on";
-  if (id !== "settings.set") return "change";
-  const value = args.value;
-  if (value === undefined || value === "") return undefined;
-  return String(value).toLowerCase() === "false" ? "change" : "switch_on";
+// What a key that names a consent setting can do to it. Only a plain set to a literal false changes it without a way to switch it on. A prompt, a missing value that a modifier can fill, a toggle and an unset can all switch it on.
+function consent_use(step: BoundInvocation): KeyRow["consent"] {
+  const plain_false = step.id === "settings.set" && step.prompt === undefined && String(step.args?.value).toLowerCase() === "false";
+  return plain_false ? "change" : "switch_on";
 }
 
 // A clipboard row reads the clipboard or presses keys on a page, or only writes the clipboard (copy, cut). Reads and key presses rank first.
@@ -113,7 +110,7 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
       if (group === undefined) continue;
       const printed_args = step.prompt && prefill !== undefined ? { ...args, [step.prompt.param]: prefill } : args;
       const run = print_command(command ?? { id: step.id }, printed_args, { flags: "long" });
-      const consent_note = consent ? consent_use(step.id, args) : undefined;
+      const consent_note = consent ? consent_use(step) : undefined;
       const rank = consent_note !== undefined || group === "host" ? RISKY : group === "clipboard_or_page" ? (reads_or_presses(step.id, args, clipboard) ? RISKY : NOTABLE) : urls.length > 0 ? NOTABLE : PLAIN;
       add_key(group, { where, keys: sequence, run, ...(consent_note === undefined ? {} : { consent: consent_note }) }, rank);
     }
