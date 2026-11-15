@@ -370,17 +370,9 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
   }
 }
 
-function support_link(title: string, url: string): HTMLElement {
-  const link = el("a", "desertfox-help-support-link", title);
-  link.setAttribute("href", url);
-  link.setAttribute("target", "_blank");
-  link.setAttribute("rel", "noopener noreferrer");
-  return link;
-}
-
 // An external link that opens in a new tab.
-function new_tab_link(title: string, url: string): HTMLElement {
-  const link = el("a", undefined, title);
+function new_tab_link(title: string, url: string, class_name?: string): HTMLElement {
+  const link = el("a", class_name, title);
   link.setAttribute("href", url);
   link.setAttribute("target", "_blank");
   link.setAttribute("rel", "noopener noreferrer");
@@ -394,8 +386,8 @@ function support_card(): HTMLElement {
     "desertfox-help-support",
     heading,
     el("div", "desertfox-help-support-note", "Support its work"),
-    support_link("GitHub Sponsors", "https://github.com/sponsors/uhs-robert"),
-    support_link("Ko-fi", "https://ko-fi.com/uphillsolutions"),
+    new_tab_link("GitHub Sponsors", "https://github.com/sponsors/uhs-robert", "desertfox-help-support-link"),
+    new_tab_link("Ko-fi", "https://ko-fi.com/uphillsolutions", "desertfox-help-support-link"),
   );
 }
 
