@@ -64,9 +64,9 @@ function check_film_length(film_path, film_seconds) {
 }
 
 async function main() {
-  scenes.set_stage_dir(mkdtempSync(join(tmpdir(), "desertfox-demo-")));
   const session = await create_session({ name: `demo${process.pid.toString(36)}`, timings: create_timings(), print_summary: false });
   try {
+    scenes.set_stage_dir(mkdtempSync(join(tmpdir(), "desertfox-demo-")));
     try {
       await session.run_piece("demo_scenes.mjs", scenes);
     } finally {
