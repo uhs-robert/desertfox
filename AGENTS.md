@@ -77,6 +77,7 @@ just settings-defaults  # regenerate src/shared/default_settings.ts from src/sha
 just host-test   # Python unit tests of the native host and install.sh, with a temporary HOME and a stubbed curl
 just key-test    # real key presses in a nested Hyprland, about 34 s on 8 shards, one run at a time (the recipe takes /tmp/desertfox-key-test.lock itself, so never wrap it in `flock`)
 just key-test-flakes [n=10]    # loop key-test n times and append one line to ~/.local/state/desertfox/key-test-flakes.jsonl; run it when you suspect a flaky test
+just readme-demo    # record the README demo GIF and stills into docs/images (needs wf-recorder, ffmpeg and grim; takes the key-test lock)
 just test-all    # `just test` and `just key-test` at once, about as long as key-test alone; exit 1 if either fails
 just sign        # sign as unlisted on addons.mozilla.org
 just install     # install through the Firefox policy file (needs sudo)
