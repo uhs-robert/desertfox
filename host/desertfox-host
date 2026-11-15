@@ -739,8 +739,7 @@ def is_stale(directory_fd, name):
 
 def claim_dead_job(directory_fd, name):
     """Claims the job file of a dead, uncollected job with the rename `claim_job` uses, so of the sweep and a collector
-    exactly one wins, and the winner removes the claimed file. Only the winner may remove the scratch file: a collector that claimed after the sweep read the record
-    would otherwise lose the text its editor saved just before it exited. A `.done` file has no collector left."""
+    exactly one wins, and the winner removes the claimed file. Only the winner may remove the scratch file. A `.done` file has no collector left."""
     if name.endswith(".done"):
         return True
     claimed = f"{name}.{os.getpid()}.done"
@@ -754,8 +753,9 @@ def claim_dead_job(directory_fd, name):
 
 
 def sweep_editor_dir(directory):
-    """Removes what no editor needs any more: the job file and scratch file of a job whose editor is gone and which
-    nobody collected for a day (a closed browser), a claimed `.done` job file, and any other file in the folder older
+    """Removes what no editor needs any more: the job file and scratch file of a job whose editor is gone and whose
+    job file and scratch file both are a day old (a closed browser; a scratch file saved within the day is left for its
+    collector, and the sweep claims the job file before it removes the scratch file), a claimed `.done` job file, and any other file in the folder older
     than a day (a scratch file with no job file because the host died between the two writes, an editor's swap and
     backup files). Files of a running editor stay, whatever their age: its job file, its scratch file and every file whose
     name contains the scratch name. Works through a descriptor of the folder, so a symlink as the folder is refused and a
@@ -767,7 +767,6 @@ def sweep_editor_dir(directory):
     try:
         names = os.listdir(directory_fd)
         aged = {name for name in names if is_stale(directory_fd, name)}
-        claimed_by_sweep = set()
         kept_names = set()
         kept_scratch = set()
         for name in names:
@@ -780,14 +779,17 @@ def sweep_editor_dir(directory):
                 kept_names.add(name)
                 if scratch:
                     kept_scratch.add(scratch)
-            elif name in aged and scratch and claim_dead_job(directory_fd, name):
-                claimed_by_sweep.add(scratch)
-        for name in sorted(aged | claimed_by_sweep):
+            elif name in aged and scratch:
+                # A scratch file saved within the day belongs to an editor that just exited, and its collector is due.
+                if scratch in names and not is_stale(directory_fd, scratch):
+                    kept_names.add(name)
+                elif not claim_dead_job(directory_fd, name):
+                    kept_scratch.add(scratch)
+        for name in sorted(aged):
             if name in kept_names or any(scratch in name for scratch in kept_scratch):
                 continue
-            # An editor may have saved since the listing, and the file is then fresh. The scratch file of a job this sweep
-            # claimed goes whatever its mtime, because the claim shows nobody collects it.
-            if name not in claimed_by_sweep and not is_stale(directory_fd, name):
+            # An editor may have saved since the listing, and the file is then fresh.
+            if not is_stale(directory_fd, name):
                 continue
             with contextlib.suppress(OSError):
                 os.unlink(name, dir_fd=directory_fd)
