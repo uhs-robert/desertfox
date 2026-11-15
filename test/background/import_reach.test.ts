@@ -201,12 +201,17 @@ test("register.paste of the system clipboard register is a clipboard key, and a 
   assert.deepEqual(reach.keys.clipboard_or_page.rows.map((row) => row.keys), ["<C-v>"]);
 });
 
-test("the consent note follows the operation: set true, toggle and unset can switch on, set false changes, a read-only set has none", () => {
+test("the consent note follows the operation: only a plain set to false is neutral", () => {
   const reach = reach_of({
-    "keymap.toml": '[normal]\nza = "settings.set bridge true"\nzb = "settings.set bridge false"\nzc = "settings.toggle bridge"\nzd = "settings.set bridge"\nze = "settings.unset bridge"\n',
+    "keymap.toml": '[normal]\nza = "settings.set bridge true"\nzb = "settings.set bridge false"\nzc = "settings.toggle bridge"\nzd = "settings.set bridge"\nze = "settings.unset bridge"\nzf = ":set bridge"\nzg = ":set bridge @clipboard"\n',
   });
   const by_key = Object.fromEntries(reach.keys.settings.rows.map((row) => [row.keys, row.consent]));
-  assert.deepEqual(by_key, { za: "switch_on", zb: "change", zc: "switch_on", zd: undefined, ze: "switch_on" });
+  assert.deepEqual(by_key, { za: "switch_on", zb: "change", zc: "switch_on", zd: "switch_on", ze: "switch_on", zf: "switch_on", zg: "switch_on" });
+});
+
+test("a value-less set that a modifier completes with true still gets the switch-on note", () => {
+  const reach = reach_of({ "keymap.toml": '[normal]\n",q" = "settings.set bridge"\n[modifiers]\n",z" = { value = "true" }\n' });
+  assert.equal(reach.keys.settings.rows.find((row) => row.keys === ",q")?.consent, "switch_on");
 });
 
 test("a modifier whose args name a consent setting or the clipboard register is listed", () => {
