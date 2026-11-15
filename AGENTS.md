@@ -83,7 +83,7 @@ just readme-demo    # record the README demo GIF and stills into docs/images (ne
 just test-all    # `just test` and `just key-test` at once, about as long as key-test alone; exit 1 if either fails
 just sign        # sign as unlisted on addons.mozilla.org
 just source_archive  # write the source archive for Mozilla's reviewers from HEAD (BUILD.md at its root gives the npm-only build steps)
-just sign_listed # PUBLIC and one-way: submit the version in src/manifest.json to the listed channel with amo/metadata.json and the source archive; never run it without the maintainer's go-ahead
+just sign_listed # PUBLIC and one-way: submit the version in src/manifest.json to the listed channel with amo/metadata.json and the source archive
 just install     # install through the Firefox policy file (needs sudo)
 just release     # from a clean non-main branch: bump the patch version, sign and install, commit and push the bump, create the GitHub release that carries the native host, skip the install on a machine whose policy follows the beta, and leave the beta to the nightly after the release PR merges (needs a logged-in gh), reading the AMO key from rbw when unset
 just beta        # build main as pushed and publish it as a beta: start the CI beta workflow on main and watch its run (needs a logged-in gh); run it after a release PR merges to get the matching beta at once, as the nightly builds it a day later; a failed run is started again, not rerun
