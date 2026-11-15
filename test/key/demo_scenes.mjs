@@ -1,7 +1,6 @@
 // The scenes of the README demo, played by demo.mjs as a piece of the key-test session. wf-recorder films the nested display.
 // Seven shots, in the order of the approved storyboard v3, played on the 14-lesson Practice page. The key presses of the film go to key_presses.json, which demo.mjs burns into the GIF as a corner overlay.
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { evaluate_in_chrome } from "./rdp.mjs";
 import { OUTPUT } from "./session.mjs";
@@ -12,8 +11,9 @@ const FRAME_RATE_OF_FILM = 24;
 // The recorder is asked to stop and then fed frames until it does. A recorder that is not done by then is a failure.
 const RECORDER_STOP_LIMIT_MS = 20000;
 
-// Everything the run makes lands here first, so a failed run leaves docs/images as it was. demo.mjs copies the results out and removes the folder.
-export const stage_dir = mkdtempSync(join(tmpdir(), "desertfox-demo-"));
+// Everything the run makes lands here first, so a failed run leaves docs/images as it was. demo.mjs makes the folder, copies the results out and removes it.
+export let stage_dir;
+export function set_stage_dir(dir) { stage_dir = dir; }
 
 // <A-?> is Alt+Shift+/ on the test layout.
 const WHICH_KEY = ["-M", "alt", "-M", "shift", "/", "-m", "shift", "-m", "alt"];
@@ -243,6 +243,8 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
 
   const film_seconds = (Date.now() - film_started_ms) / 1000;
   // wf-recorder closes the file on the next frame, so a page that stops changing holds it open. Scrolling after the cut gives it that frame, and the GIF stops at film_seconds.
+  // An exit before this point leaves a partial film that must not be published.
+  if (recorder_exited) throw new Error("wf-recorder exited before the film was done");
   recorder.kill("SIGINT");
   const stop_deadline_ms = Date.now() + RECORDER_STOP_LIMIT_MS;
   while (!recorder_exited) {
