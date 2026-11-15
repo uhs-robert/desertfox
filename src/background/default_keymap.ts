@@ -373,7 +373,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "<Escape>": { id: "mode.escape" },
     "<C-[>": { id: "mode.escape" },
     "/": { id: "hint.key", args: { key: "slash" }, label: "Type link text" },
-    "<Tab>": { id: "hint.key", args: { key: "tab" }, label: "Next match" },
+    "<Tab>": { id: "hint.key", args: { key: "tab" }, label: "Next match, or every drop target" },
     "<S-Tab>": { id: "hint.key", args: { key: "shift_tab" }, label: "Previous match" },
     "<Enter>": { id: "hint.key", args: { key: "enter" }, label: "Pick the active match" },
     "<Space>": { id: "hint.key", args: { key: "space" }, label: "Turn overlapping labels" },
