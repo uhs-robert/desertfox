@@ -336,9 +336,14 @@ export async function forget_weather(remove: (key: string) => Promise<void> = (k
   await remove(net_cache_key("air"));
 }
 
-// `net` that checks the consent before every request, so a consent withdrawn while the page stays open stops the later ones (the forecast refresh and the air quality row behind More). A stored answer still draws.
+// `net` that checks the consent before every request, so a consent withdrawn while the page stays open stops the later ones (the forecast refresh and the air quality row behind More). A stored answer still draws, and an answer that arrives after the withdrawal is not written back.
 function consent_net(net: NetEnv, has_consent: () => Promise<boolean>): NetEnv {
-  return { ...net, fetch: async (input, init) => ((await refused_as(has_consent(), false)) ? net.fetch(input, init) : new Response(null, { status: 503 })) };
+  const consented = async () => refused_as(has_consent(), false);
+  return {
+    ...net,
+    fetch: async (input, init) => ((await consented()) ? net.fetch(input, init) : new Response(null, { status: 503 })),
+    storage: { get: (key) => net.storage.get(key), set: async (items) => ((await consented()) ? net.storage.set(items) : undefined) },
+  };
 }
 
 // Fills `slot` and keeps the page free: nothing here is awaited by the draw, and a failure leaves the slot empty. A click on the permission button asks first, then stops this run and runs the card again. `stop` ends the run, and a run the click started.

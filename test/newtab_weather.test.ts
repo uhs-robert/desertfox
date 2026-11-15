@@ -641,6 +641,17 @@ test("a consent withdrawn while the page is open stops the air quality request b
     card.run.stop();
   }));
 
+test("a consent withdrawn during the air quality request keeps its answer out of storage", () =>
+  with_fake_document(async () => {
+    let consented = true;
+    const card = await air_card({ consented: () => consented, air_response: async () => ((consented = false), new Response(AIR_BODY)) });
+    card.click();
+    await settle();
+    assert.equal(card.requests.length, 1, "the request started under consent");
+    assert.equal(card.store["newtab_net_cache_air"], undefined, "the late answer was not written back");
+    card.run.stop();
+  }));
+
 test("air quality parsing takes the scale of the units, keeps what is numeric and refuses an answer with no index", () => {
   assert.deepEqual(parse_air_quality(AIR_BODY, "metric"), { scale: "eu", index: 34, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 });
   assert.deepEqual(parse_air_quality(AIR_BODY, "imperial"), { scale: "us", index: 61, pm2_5: 8.4, pm10: 14.9, ozone: 70.2 });
