@@ -4,7 +4,10 @@ import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages.ts";
+import type { SourceItems } from "../../src/background/completion_rank.ts";
+import { create_ranked_client } from "../../src/cmdline/completion/ranked_client.ts";
+import { reply_for } from "../support/ranked_items.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
@@ -78,7 +81,7 @@ function make(containers: { name: string; cookie_store_id: string }[] = STORES, 
   let tab_items: TabItem[] | undefined;
   let tabs_asked = false;
   const live = create_live_source({
-    ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items }) })),
+    ask: (kind) => new Promise((resolve) => void asks.push({ kind, answer: (items) => resolve({ items } as CompleteItemsAnswer) })),
     tabs: () => {
       if (!tabs_asked) {
         tabs_asked = true;
@@ -96,12 +99,17 @@ function make(containers: { name: string; cookie_store_id: string }[] = STORES, 
     all_tabs: () => tab_items,
     on_ready: () => session.source_ready(),
   });
+  // The ranked lists ask the background per word. `answer` gives the items the background ranks this word over.
+  const ranked = create_ranked_client({
+    send: (request) => void asks.push({ kind: request.source, answer: (items) => ranked.receive(reply_for({ source: request.source, items } as SourceItems, request.word, request.over_fetch, request.seq)) }),
+    on_ready: () => session.source_ready(),
+  });
   const session = create_session({
     history,
     parse: (text) => parse_command_line(lookup, text, SOURCES),
     tabs: () => tab_items,
     containers,
-    complete: create_completer(lookup, COMMANDS, {}, SOURCES, "normal", live),
+    complete: create_completer(lookup, COMMANDS, {}, SOURCES, "normal", live, [], ranked),
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   return { session, live, asks, settle, change_tabs: (items: TabItem[]) => { tab_items = items; session.source_ready(); } };
@@ -1027,20 +1035,25 @@ test("history shows the capped newest on an empty word, ranks every row for a ty
   await settle();
   assert.deepEqual(names(session), ["Visit 0", "Visit 1", "Visit 2", "Visit 3", "Visit 4"]);
   session.edit("history 27");
+  // The rows of the empty word stay drawn while the typed word's rows are on their way.
+  assert.deepEqual([names(session).length, session.get_hint()], [5, "loading"]);
+  asks[1]!.answer(VISITS);
+  await settle();
   assert.deepEqual(names(session), ["Visit 27"]);
   tab_key(session);
   assert.equal(session.get_text(), "history https://v27.test/ ");
 });
 
-test("a typed word keeps matching while a later history reply is the only one that counts", async () => {
-  const { session, live, asks, settle } = make();
+test("words typed while a rank runs wait for it, and only the newest is asked next", async () => {
+  const { session, asks, settle } = make();
   session.edit("history v");
-  live.close();
   session.edit("history vi");
+  session.edit("history vis");
+  assert.deepEqual(asks.map((ask) => ask.kind), ["history"]);
+  asks[0]!.answer({ rows: [{ title: "Stale visit", url: "https://stale.test/" }], max: 5 });
+  await settle();
   assert.equal(asks.length, 2);
   asks[1]!.answer({ rows: [{ title: "Fresh visit", url: "https://fresh.test/" }], max: 5 });
-  await settle();
-  asks[0]!.answer({ rows: [{ title: "Stale visit", url: "https://stale.test/" }], max: 5 });
   await settle();
   assert.deepEqual(names(session), ["Fresh visit"]);
 });

@@ -317,3 +317,25 @@ test("help after a history recall uses the recalled command, not the stale selec
   assert.equal(session.get_text(), "tab.close --right");
   assert.deepEqual(session.run("cmdline.help", undefined), { kind: "help", command_id: "tab.close" });
 });
+
+test("while rows are on their way, the keys that act on them wait, and Enter and a fresh line's Up do not", () => {
+  let completion: { loading?: true; highlight_first?: true } = { loading: true };
+  const session = create_session({
+    history: ["open earlier"],
+    parse: (text) => parse_command_line(lookup, text, SOURCES),
+    complete: () => ({ rows: [], start: 0, end: 0, listing: true, ...completion }),
+  });
+  session.open("");
+  // A fresh line's Up and Down recall the history.
+  assert.equal(session.waits_for_rows("cmdline.history"), false);
+  session.edit("o");
+  for (const id of ["cmdline.next_completion", "cmdline.prev_completion", "cmdline.history", "list.act", "list.select"]) assert.equal(session.waits_for_rows(id), true, id);
+  for (const id of ["cmdline.submit", "mode.escape", "cmdline.clear", "cmdline.help"]) assert.equal(session.waits_for_rows(id), false, id);
+  // The finder's Enter submits the highlighted row, so it waits for it.
+  completion = { loading: true, highlight_first: true };
+  session.edit("on");
+  assert.equal(session.waits_for_rows("cmdline.submit"), true);
+  completion = { highlight_first: true };
+  session.edit("one");
+  assert.equal(session.waits_for_rows("cmdline.submit"), false);
+});

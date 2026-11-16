@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { anything_ranked } from "../../src/cmdline/completion/anything.ts";
+import type { FinderInput } from "../../src/cmdline/completion/anything.ts";
+import { ranked_items, reply_for } from "../support/ranked_items.ts";
+import { ranking_of } from "../../src/background/completion_rank.ts";
+import { RANKED_ROWS } from "../../src/shared/rank_port.ts";
 import { create_model_client } from "../../src/cmdline/completion/model_client.ts";
 import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
@@ -67,7 +71,7 @@ function make(items: AnythingItems = ITEMS) {
   const session = create_session({
     history: [],
     parse: (text) => parse_command_line(lookup, text, { search_engines: [], containers: [] }),
-    complete: create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live),
+    complete: create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live, [], ranked_items({ anything: items })),
     has_param: (command_id, name) => lookup.find(command_id)?.params?.some((param) => param.name === name) === true,
     tabs: () => TABS,
     precheck: () => undefined,
@@ -80,6 +84,9 @@ function make(items: AnythingItems = ITEMS) {
   };
   return { session, type };
 }
+
+// The finder's rows as the page builds them from the background's answer for these items.
+const finder_rows = ({ items, ...input }: Omit<FinderInput, "reply"> & { items: AnythingItems }) => anything_ranked({ ...input, reply: reply_for({ source: "anything", items }, input.word, new Set(input.tabs.map((tab) => tab.url)).size) });
 
 const names = (rows: readonly Row[]) => rows.map((row) => `${row.tag ?? "tab"}:${row.name}`);
 const ref_of = (row: Row | undefined): AnythingRef | undefined => (row?.ref === undefined ? undefined : decode_ref(row.ref));
@@ -111,19 +118,19 @@ test("typed query: one ranked list, an equal score keeps the group order, and an
 test("typed query: a strong history hit leads a weak tab hit, and use raises a row past an equal hit", () => {
   const input = { usage: "", engines: ENGINES, tabs: [{ row: { name: "1: Digital tools", insert: "", description: "https://mail.test/", args: "", also_named: [], keywords: [], usage: "" }, url: "https://mail.test/", id: 1, last_used: 0, current: false }] };
   const items: AnythingItems = { ...ITEMS, tab_boost: {}, quickmarks: [], bookmarks: [], closed: [], history: [{ title: "git", url: "https://git.test/" }, { title: "A git page", url: "https://a.test/" }, { title: "B git page", url: "https://b.test/", boost: 0.3 }] };
-  assert.deepEqual(names(anything_ranked({ ...input, items, word: "git" })), ["hist:git", "hist:B git page", "hist:A git page", "tab:1: Digital tools", "search:Search: git"]);
+  assert.deepEqual(names(finder_rows({ ...input, items, word: "git" })), ["hist:git", "hist:B git page", "hist:A git page", "tab:1: Digital tools", "search:Search: git"]);
 });
 
 test("typed query: a visited host gives a site row that ranks by its use, unless a tab holds its home page", () => {
   const items: AnythingItems = { ...ITEMS, quickmarks: [], bookmarks: [], closed: [], history: [{ title: "Pull requests", url: "https://github.com/pulls" }], sites: [{ url: "https://github.com/", boost: 0.6 }, { url: "https://www.gitlab.com/", boost: 0.2 }] };
   const input = { usage: "", engines: ENGINES, tabs: [], items };
-  const rows = anything_ranked({ ...input, word: "git" });
+  const rows = finder_rows({ ...input, word: "git" });
   assert.deepEqual(names(rows), ["site:github.com", "site:www.gitlab.com", "hist:Pull requests", "search:Search: git"]);
   assert.deepEqual(ref_of(rows[0]), { kind: "page", url: "https://github.com/" });
   // One letter is too short for a site row.
-  assert.deepEqual(names(anything_ranked({ ...input, word: "g" })), ["hist:Pull requests", "search:Search: g"]);
+  assert.deepEqual(names(finder_rows({ ...input, word: "g" })), ["hist:Pull requests", "search:Search: g"]);
   const tab_row = { name: "1: GitHub", insert: "", description: "https://github.com/", args: "", also_named: [], keywords: [], usage: "" };
-  assert.deepEqual(names(anything_ranked({ ...input, items: { ...items, tab_boost: { 1: 0.3 } }, tabs: [{ row: tab_row, url: "https://github.com/", id: 1, last_used: 0, current: false }], word: "git" })), ["tab:1: GitHub", "site:www.gitlab.com", "hist:Pull requests", "search:Search: git"]);
+  assert.deepEqual(names(finder_rows({ ...input, items: { ...items, tab_boost: { 1: 0.3 } }, tabs: [{ row: tab_row, url: "https://github.com/", id: 1, last_used: 0, current: false }], word: "git" })), ["tab:1: GitHub", "site:www.gitlab.com", "hist:Pull requests", "search:Search: git"]);
 });
 
 test("the first row is highlighted as the user types and the last row searches the default engine", async () => {
@@ -177,7 +184,7 @@ test("row keys act on the highlighted tab row", async () => {
 
 test("an engine keyword with a space and more text puts that engine's row before the default row", () => {
   const input = { usage: "", tabs: [], items: { ...ITEMS, quickmarks: [], bookmarks: [], history: [], closed: [] }, engines: ENGINES };
-  const rows = (word: string) => anything_ranked({ ...input, word });
+  const rows = (word: string) => finder_rows({ ...input, word });
   assert.deepEqual(rows("gh some repo").map(ref_of), [
     { kind: "engine", engine: "github", query: "some repo" },
     { kind: "web", query: "gh some repo" },
@@ -202,14 +209,17 @@ test("speed: ranking 1000 history rows, 3000 bookmarks and 300 tabs per key", as
     bookmarks: Array.from({ length: 3000 }, (_, index) => ({ title: `Bookmark ${index} on subject ${index % 23}`, url: `https://b${index}.example.test/read/${index}` })),
   };
   const tabs = Array.from({ length: 300 }, (_, index) => tab(index + 10, `Tab ${index} reading`, `https://t${index}.example.test/`));
-  const live = create_live_source({ ask: async (kind) => ({ items: (kind === "engines" ? ENGINES : many) as CompleteItemsAnswer["items"] }), tabs: () => tabs, groups: () => [], all_tabs: () => tabs, on_ready: () => {} });
-  const complete = create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live);
-  complete("anything x", 10);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const text = "anything read topic";
+  const finder_tabs = tabs.map((found) => ({ row: { name: `${found.number}: ${found.title}`, insert: "", description: found.url, args: "", also_named: [], keywords: [], usage: "" }, url: found.url, id: found.id, last_used: 0, current: false }));
+  // The background builds the rows once per line and ranks them per key. The page merges the tabs in.
+  const ranking = ranking_of({ source: "anything", items: many });
+  const text = "read topic";
   const runs = 20;
   const started = process.cpuUsage();
-  for (let run = 0; run < runs; run++) complete(text.slice(0, 10 + (run % 9)), 10 + (run % 9));
+  for (let run = 0; run < runs; run++) {
+    const word = text.slice(0, 1 + (run % 9));
+    const { rows, finder } = ranking(word, RANKED_ROWS, tabs.length);
+    anything_ranked({ word, usage: "", tabs: finder_tabs, engines: ENGINES, reply: { type: "ranked", seq: run, rows, partial: false, ...(finder ? { finder } : {}) } });
+  }
   // CPU time, not wall clock: a loaded machine stretches the wall clock but not the work.
   const used = process.cpuUsage(started);
   const per_key = (used.user + used.system) / 1000 / runs;
@@ -229,7 +239,7 @@ test("empty query: only the line's own tab is left out, not the active tab of an
     all_tabs: () => client.all_items(),
     on_ready: () => {},
   });
-  const complete = create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live);
+  const complete = create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live, [], ranked_items({ anything: { ...ITEMS, quickmarks: [], bookmarks: [], history: [], closed: [] } }));
   complete("anything ", 9);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(complete("anything ", 9).rows.map((found) => found.tab?.id).sort(), [2, 3]);
@@ -247,7 +257,7 @@ test("a closed tab wins over the history row of its address, in the empty list a
     history_max: 5,
   };
   for (const word of ["", "notes"]) {
-    const rows = anything_ranked({ word, usage: "", tabs: [], items, engines: [] });
+    const rows = finder_rows({ word, usage: "", tabs: [], items, engines: [] });
     const closed = rows.filter((row) => row.tag === "closed");
     assert.equal(closed.length, 1, word);
     assert.deepEqual(ref_of(closed[0]), { kind: "closed", session_id: "s9" });
@@ -268,7 +278,7 @@ test("a keyword query puts the engine row first and highlighted, ahead of a tab 
   const session = create_session({
     history: [],
     parse: (text) => parse_command_line(lookup, text, { search_engines: [], containers: [] }),
-    complete: create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live),
+    complete: create_completer(lookup, COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live, [], ranked_items({ anything: items })),
     has_param: () => true,
     precheck: () => undefined,
   });
@@ -302,7 +312,7 @@ test("empty query: a recent page that a hidden group also holds still shows", ()
     ],
     history_max: 5,
   };
-  const rows = anything_ranked({ word: "", usage: "", tabs, items, engines: [] });
+  const rows = finder_rows({ word: "", usage: "", tabs, items, engines: [] });
   assert.deepEqual(rows.filter((row) => row.tag === "hist").map((row) => row.description), ["https://bookmarked.test/", "https://tab9.test/"]);
   assert.equal(rows.filter((row) => row.ref && decode_ref(row.ref)?.kind === "tab").length, 8);
 });

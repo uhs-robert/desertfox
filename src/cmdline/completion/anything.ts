@@ -1,18 +1,19 @@
 // The rows of the finder (`,,`): open tabs, quickmarks, bookmarks, history, recently closed tabs and visited sites, ranked as one list between the search rows.
-// The strongest hit leads whatever its group, with use (visits, an open tab) raising a score. An equal score keeps that group order. Pure.
+// The strongest hit leads whatever its group, with use (visits, an open tab) raising a score. An equal score keeps that group order.
+// The background ranks every group but the tabs (`background/completion_rank.ts`). The tabs come from the page's tab model, so they rank here and merge in by score. Pure.
 
 import { encode_ref } from "../../shared/anything_ref.ts";
 import type { AnythingRef } from "../../shared/anything_ref.ts";
 import type { AnythingItems, EngineItem } from "../../shared/messages.ts";
-import { rank } from "../../shared/score.ts";
+import { MAX_SITE_ROWS, RANKED_ROWS, RECENT_CLOSED } from "../../shared/rank_port.ts";
+import type { FinderExtras, RankedReply, WireRow } from "../../shared/rank_port.ts";
+import { score_candidate } from "../../shared/score.ts";
 import type { Ranked } from "../../shared/score.ts";
 import type { Row } from "./sources.ts";
 import { quote_word } from "./tokenize.ts";
-import { host_of, matching_sites } from "./sites.ts";
 
-// With no query the list shows every quickmark, then this many recent tabs, `history_max` history rows and this many closed tabs.
+// With no query the list shows every quickmark, then this many recent tabs, `history_max` history rows and `RECENT_CLOSED` closed tabs.
 const RECENT_TABS = 8;
-const RECENT_CLOSED = 5;
 
 // The order an equal score keeps. A tab row has no tag.
 const FOUND_GROUPS = [undefined, "qm", "bm", "hist", "closed", "site"];
@@ -23,9 +24,12 @@ export type FinderInput = {
   word: string;
   usage: string;
   tabs: readonly FinderTab[];
-  items: AnythingItems;
+  reply: RankedReply;
   engines: readonly EngineItem[];
 };
+
+// The row the list shows for a ranked row from the background. The name, positions, tag, reference and boost carry over as they are.
+export const row_of_wire = ({ url, score, also_named, ...kept }: WireRow, usage: string): Ranked<Row> => ({ ...kept, insert: `${quote_word(url)} `, description: url, args: "", also_named: also_named ?? [], keywords: [], usage });
 
 const url_row = (title: string, url: string, tag: string, ref: AnythingRef, usage: string, boost?: number): Row => ({
   name: title,
@@ -64,24 +68,9 @@ const closed_row = (entry: AnythingItems["closed"][number], usage: string) => ur
 const history_row = (entry: AnythingItems["history"][number], usage: string) => url_row(entry.title, entry.url, "hist", { kind: "page", url: entry.url }, usage, entry.boost);
 const quickmark_row = (mark: AnythingItems["quickmarks"][number], usage: string) => url_row(mark.key, mark.url, "qm", { kind: "page", url: mark.url }, usage, mark.boost);
 
-// Built once per fetch, as the page ranks on every key and history holds up to 8000 rows.
-const quickmark_titles = new WeakMap<AnythingItems, Map<string, string>>();
-
-const page_title = (items: AnythingItems, url: string): string | undefined => {
-  let titles = quickmark_titles.get(items);
-  if (!titles) {
-    const marked = new Set(items.quickmarks.map((mark) => mark.url));
-    titles = new Map();
-    // Bookmarks first, so a bookmark's own title wins over the history title.
-    for (const entry of [...items.bookmarks, ...items.history]) if (marked.has(entry.url) && !titles.has(entry.url)) titles.set(entry.url, entry.title);
-    quickmark_titles.set(items, titles);
-  }
-  return titles.get(url);
-};
-
 // Only the rows the list shows claim an address, so a page that a hidden group also holds still shows. The line's own tab claims its address, so its page is not offered again.
 // A closed tab claims its address before history, so it wins over the history row.
-function recent_rows({ usage, tabs, items }: Omit<FinderInput, "word" | "engines">): Row[] {
+function recent_rows(usage: string, tabs: readonly FinderTab[], items: NonNullable<FinderExtras["recent"]>): Row[] {
   const seen = new Set(tabs.filter((tab) => tab.current).map((tab) => tab.url));
   // Stops at `limit`, so a row past the cap claims nothing.
   const shown = <Entry extends { url: string }>(entries: readonly Entry[], limit: number): Entry[] => {
@@ -101,25 +90,27 @@ function recent_rows({ usage, tabs, items }: Omit<FinderInput, "word" | "engines
   return [...quickmarks.map((mark) => quickmark_row(mark, usage)), ...recent_tabs.map(tab_with_ref), ...history.map((entry) => history_row(entry, usage)), ...closed.map((entry) => closed_row(entry, usage))];
 }
 
-export function anything_ranked({ word, usage, tabs, items, engines }: FinderInput): Ranked<Row>[] {
-  const as_ranked = (rows: Row[]): Ranked<Row>[] => rows.map((row) => ({ ...row, positions: [] }));
-  if (word.trim() === "") return as_ranked(recent_rows({ usage, tabs, items }));
+const NO_RECENT: NonNullable<FinderExtras["recent"]> = { quickmarks: [], closed: [], history: [], history_max: 0 };
 
-  // An address shows once, in the first group that holds it. A closed tab wins over the history row of its address, because Enter restores the tab with its state.
-  const seen = new Set(tabs.map((tab) => tab.url));
-  const fresh = <Entry extends { url: string }>(entries: readonly Entry[]): Entry[] => entries.filter((entry) => !seen.has(entry.url) && seen.add(entry.url));
-  // A quickmark's name is its key, so it takes the title of the bookmark or history row its address hides. Else a quickmarked page would match only by its address and sink below every title hit.
-  const quickmarks = fresh(items.quickmarks).map((mark) => {
-    const title = page_title(items, mark.url);
-    return { ...quickmark_row(mark, usage), ...(title === undefined ? {} : { also_named: [title] }) };
+type Merged = { row: Ranked<Row>; score: number; group: number; order: number };
+
+export function anything_ranked({ word, usage, tabs, reply, engines }: FinderInput): Ranked<Row>[] {
+  const as_ranked = (rows: Row[]): Ranked<Row>[] => rows.map((row) => ({ ...row, positions: [] }));
+  const finder = reply.finder ?? { tab_boost: {}, tab_used: {}, sites: [] };
+  if (word.trim() === "") return as_ranked(recent_rows(usage, tabs, finder.recent ?? NO_RECENT));
+
+  // An address shows once, and an open tab holds it first. The background sent enough more rows to make up for the ones dropped here.
+  const tab_urls = new Set(tabs.map((tab) => tab.url));
+  const found: Merged[] = tabs.flatMap((tab, order) => {
+    const row = tab_with_ref(tab, finder.tab_boost[tab.id]);
+    const hit = score_candidate(word, row);
+    return hit ? [{ row: { ...row, positions: hit.positions }, score: hit.score, group: 0, order }] : [];
   });
-  const bookmarks = fresh(items.bookmarks).map((bookmark) => url_row(bookmark.title, bookmark.url, "bm", { kind: "page", url: bookmark.url }, usage, bookmark.boost));
-  const closed = fresh(items.closed).map((entry) => closed_row(entry, usage));
-  const history = fresh(items.history).map((entry) => history_row(entry, usage));
-  // The background left out a site whose home page it sent as a row. A tab can still hold it.
-  const sites = matching_sites(word, items.sites, (url) => seen.has(url)).map((site) => url_row(host_of(site), site.url, "site", { kind: "page", url: site.url }, usage, site.boost));
-  const found = [...tabs.map((tab) => tab_with_ref(tab, items.tab_boost[tab.id])), ...quickmarks, ...bookmarks, ...history, ...closed, ...sites];
+  const from_background = (rows: readonly WireRow[]): Merged[] => rows.filter((wire) => !tab_urls.has(wire.url)).map((wire, order) => ({ row: row_of_wire(wire, usage), score: wire.score, group: FOUND_GROUPS.indexOf(wire.tag), order }));
+  found.push(...from_background(reply.rows), ...from_background(finder.sites).slice(0, MAX_SITE_ROWS));
+  // As `rank` breaks ties: the group, then the shorter name, then the order each group came in.
+  found.sort((left, right) => right.score - left.score || left.group - right.group || left.row.name.length - right.row.name.length || left.order - right.order);
   // The keyword row goes first, so the highlighted row and Enter search the engine the user named.
   const { keyword, fallback } = search_rows(word, engines, usage);
-  return [...as_ranked(keyword ? [keyword] : []), ...rank(word, found, (row) => FOUND_GROUPS.indexOf(row.tag)), ...as_ranked([fallback])];
+  return [...as_ranked(keyword ? [keyword] : []), ...found.slice(0, RANKED_ROWS).map((merged) => merged.row), ...as_ranked([fallback])];
 }

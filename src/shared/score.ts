@@ -118,17 +118,26 @@ export function score_candidate(query: string, candidate: Candidate, terms: stri
   return { score, positions };
 }
 
-// Best first. A tie goes to the lower `group_of` when the caller ranks several groups as one list, then to the shorter name, then to the order of the source. An empty query keeps the source order.
-export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0): Ranked<Item>[] {
-  if (query.trim() === "") return items.map((item) => ({ ...item, positions: [] }));
+function sorted_hits<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number): { item: Item; hit: Hit; order: number }[] {
   const terms = query_terms(query);
   const hits: { item: Item; hit: Hit; order: number }[] = [];
   items.forEach((item, order) => {
     const hit = score_candidate(query, item, terms);
     if (hit) hits.push({ item, hit, order });
   });
-  hits.sort((left, right) => right.hit.score - left.hit.score || group_of(left.item) - group_of(right.item) || left.item.name.length - right.item.name.length || left.order - right.order);
-  return hits.map(({ item, hit }) => ({ ...item, positions: hit.positions }));
+  return hits.sort((left, right) => right.hit.score - left.hit.score || group_of(left.item) - group_of(right.item) || left.item.name.length - right.item.name.length || left.order - right.order);
+}
+
+// Best first. A tie goes to the lower `group_of` when the caller ranks several groups as one list, then to the shorter name, then to the order of the source. An empty query keeps the source order.
+export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0): Ranked<Item>[] {
+  if (query.trim() === "") return items.map((item) => ({ ...item, positions: [] }));
+  return sorted_hits(query, items, group_of).map(({ item, hit }) => ({ ...item, positions: hit.positions }));
+}
+
+// `rank(...).slice(0, limit)` with each row's score, copying only the rows it keeps.
+export function rank_top<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number, limit: number): (Ranked<Item> & { score: number })[] {
+  if (query.trim() === "") return items.slice(0, limit).map((item) => ({ ...item, positions: [], score: 0 }));
+  return sorted_hits(query, items, group_of).slice(0, limit).map(({ item, hit }) => ({ ...item, positions: hit.positions, score: hit.score }));
 }
 
 export type BestMatch<Item> = { found: "none" } | { found: "one"; item: Item } | { found: "tie"; first: Item; second: Item };
