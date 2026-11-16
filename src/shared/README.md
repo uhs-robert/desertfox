@@ -33,6 +33,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `anything_ref.ts`: the reference a finder row carries to the `anything` command, so the handler acts on the row the list showed and never ranks again.
 - `config_file_path.ts`: which paths the files editor may store. The page refuses early and the background decides.
 - `engine_fields.ts`: the checks of the engine form's fields. The page runs them while the user types and the background runs them again at Save.
+- `font_candidates.ts`: the built-in font names (`FONT_CANDIDATES`), `probe_fonts` (keeps the names whose canvas width differs from both `monospace` and `serif`), `canvas_measure` and `merge_font_names` (dedupe, drop names `parse_font_family` refuses, sort, cap 2000). Extension pages only: the background page runs it (`background/font_names.ts`).
 - `host_version.ts`: release versions of the extension and the native hosts, and the check that a host is older than the extension.
 - `inspect.ts`: what the background relay and the hints bundle agree on for the Inspector handoff.
 - `jump_names.ts`: the limits and the entry of the jump list, shared by its store, its step and the page.

@@ -249,3 +249,51 @@ test("update_row sets data-changed, the tag text and the tag title for each top 
     assert.notEqual(row.tag.title, "", layer);
   }
 });
+
+test("the font settings suggest the names the background answers, and no other text setting does", async () => {
+  const names = ["Cantarell", "Hack"];
+  install_fake_browser({});
+  const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
+  await startup.get_config();
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [] });
+  const send = async (message: unknown) => {
+    const type = (message as { type: string }).type;
+    return type === "list_font_names" ? names : type === "list_settings" ? messages.list() : messages.change(message as never);
+  };
+  const session = create_settings_session({ send, engines: [], resolve_keys: (text) => text, on_change: () => undefined });
+  await session.load();
+  assert.deepEqual(session.field("font_family")!.control, { type: "text", suggestions: names });
+  assert.deepEqual(session.field("font_family_mono")!.control, { type: "text", suggestions: names });
+  assert.deepEqual(session.field("home_page")!.control, { type: "text", suggestions: [] });
+});
+
+test("a font ask that fails leaves the font settings with no suggestions", async () => {
+  install_fake_browser({});
+  const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
+  await startup.get_config();
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [] });
+  const send = async (message: unknown) => {
+    const type = (message as { type: string }).type;
+    if (type === "list_font_names") throw new Error("background restarting");
+    return type === "list_settings" ? messages.list() : messages.change(message as never);
+  };
+  const session = create_settings_session({ send, engines: [], resolve_keys: (text) => text, on_change: () => undefined });
+  assert.equal(await session.load(), true);
+  assert.deepEqual(session.field("font_family")!.control, { type: "text", suggestions: [] });
+});
+
+test("update_row sets the preview line from the draft, else from the value in force, and keeps the last line for refused text", async () => {
+  const { session } = await make();
+  const field = session.field("font_family")!;
+  const make_row = (preview: { style: { fontFamily: string } }) => ({ node: { setAttribute: () => undefined }, tag: { textContent: "", title: "" }, message: { textContent: "", classList: { toggle: () => undefined } }, reset: { disabled: false }, preview, widget: { node: { getAttribute: () => "false", setAttribute: () => undefined }, read: () => "", write: () => undefined } });
+  const preview = { style: { fontFamily: "" } };
+  update_row(make_row(preview) as never, { ...field, draft: { value: "Fira Code, monospace" } });
+  assert.equal(preview.style.fontFamily, '"Fira Code", monospace');
+  update_row(make_row(preview) as never, { ...field, draft: { value: 'bad"name' } });
+  assert.equal(preview.style.fontFamily, '"Fira Code", monospace');
+  update_row(make_row(preview) as never, { ...field, row: { ...field.row, value: "Hack" } });
+  assert.equal(preview.style.fontFamily, '"Hack"');
+  const mono = { style: { fontFamily: "x" } };
+  update_row(make_row(mono) as never, { ...session.field("font_family_mono")!, row: { ...session.field("font_family_mono")!.row, value: "" } });
+  assert.equal(mono.style.fontFamily, "monospace");
+});

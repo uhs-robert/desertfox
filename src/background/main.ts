@@ -79,6 +79,8 @@ import { browser_timing_log } from "./timing_browser.ts";
 import { accept_hint_timing } from "./timing_log.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { answer_sessions_transfer } from "./sessions_transfer.ts";
+import { create_font_names } from "./font_names.ts";
+import { canvas_measure } from "../shared/font_candidates.ts";
 import { create_settings_messages } from "./settings_message.ts";
 import { is_extension_page } from "./extension_page.ts";
 import { answer_host_start_choice } from "./host_start.ts";
@@ -181,6 +183,7 @@ wire_repeat({
   run_batch: (invocations, ctx) =>
     router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }), ...(ctx.from_page && { from_page: true }) }),
 });
+const font_names = create_font_names({ storage: browser.storage.local, host_fonts: () => refused_as(native_host.list_fonts(), undefined), measure: canvas_measure });
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
   tickets: browser.storage.session,
@@ -196,7 +199,7 @@ const cmdline = create_cmdline_service({
   page_config: async () => {
     const config = await get_config();
     const settings = effective_settings(config.settings);
-    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, theme_names: Object.keys(config.local_themes ?? {}).filter((name) => !built_in_theme_names().includes(name)), prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
+    return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, theme_names: Object.keys(config.local_themes ?? {}).filter((name) => !built_in_theme_names().includes(name)), font_names: await refused_as(font_names.read(), []), prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
   },
 });
 
@@ -286,6 +289,7 @@ const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, 
 host_update.on_updated(() => bridge.reconnect());
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
+void refused_as(font_names.refresh(), undefined);
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort() });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
@@ -316,6 +320,13 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (page_request?.type === "change_setting" || page_request?.type === "list_settings") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change settings" });
     return get_config().then((): Promise<unknown> => (page_request.type === "list_settings" ? settings_messages.list() : settings_messages.change(page_request)));
+  }
+  if (page_request?.type === "list_font_names") {
+    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve([]);
+    // The cache answers at once. The refresh (it may wait on the host) lands for the next open.
+    const cached = refused_as(font_names.read(), []);
+    void refused_as(font_names.refresh(), undefined);
+    return cached;
   }
   if (page_request?.type === "list_bindings" || page_request?.type === "check_binding" || page_request?.type === "change_keymap") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change keys" });

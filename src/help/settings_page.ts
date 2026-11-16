@@ -2,6 +2,7 @@
 
 import { el } from "./render.ts";
 import { create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
+import { parse_font_family } from "../shared/theme/font_family.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
 
@@ -232,7 +233,15 @@ function widget_of(field: Field, hooks: Hooks): Widget | undefined {
 // The long description is kept for power users in a closed fold: it holds the input format, such as CSS selectors or the range of a number.
 const more_of = (doc: string): HTMLElement => el("details", "desertfox-settings-more", el("summary", undefined, "More"), el("p", "desertfox-help-muted", doc));
 
-export type Row = { node: HTMLElement; tag: HTMLElement; message: HTMLElement; reset: HTMLButtonElement; widget?: Widget };
+export type Row = { node: HTMLElement; tag: HTMLElement; message: HTMLElement; reset: HTMLButtonElement; widget?: Widget; preview?: HTMLElement };
+
+const PREVIEW_TEXT = "The quick brown fox jumps over the lazy dog. 0123456789 { } [ ] ( ) -> =>";
+
+// A line set in the family as typed, so a name can be judged before it is saved. Text the parser refuses leaves the last line as it was. No family shows the browser's own default, or `monospace` for the mono setting, which is what the command line falls back to.
+function show_preview(preview: HTMLElement, name: string, value: unknown): void {
+  const family = parse_font_family(value);
+  if (family !== undefined) preview.style.fontFamily = family || (name === "font_family_mono" ? "monospace" : "");
+}
 
 function build_row(field: Field, session: SettingsSession, reload_key: string): Row {
   const name = field.row.name;
@@ -246,13 +255,15 @@ function build_row(field: Field, session: SettingsSession, reload_key: string): 
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
   const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.summary);
   const head = el("div", "desertfox-settings-head", el("strong", undefined, field.label), tag);
+  const has_preview = widget !== undefined && (name === "font_family" || name === "font_family_mono");
+  const preview = has_preview ? el("div", "desertfox-settings-preview", PREVIEW_TEXT) : undefined;
   const body = widget
     ? el("div", "desertfox-settings-body", widget.node, reset)
     : el("div", "desertfox-settings-body", el("code", "desertfox-settings-value", JSON.stringify(field.row.value) ?? "unset"), el("span", "desertfox-help-muted", read_only_note(reload_key)));
   const code_name = el("small", "desertfox-help-muted", el("code", undefined, name));
-  const node = el("div", "desertfox-settings-row", head, code_name, doc, more_of(field.doc), body, message);
+  const node = el("div", "desertfox-settings-row", head, code_name, doc, more_of(field.doc), body, ...(preview ? [preview] : []), message);
   node.setAttribute("data-setting", name);
-  return { node, tag, message, reset, ...(widget ? { widget } : {}) };
+  return { node, tag, message, reset, ...(widget ? { widget } : {}), ...(preview ? { preview } : {}) };
 }
 
 // With the changed-only filter on, a reset row turns "default" and CSS hides it, so its button would drop the focus to the page. The focus goes to the next changed row, else to the filter box.
@@ -274,6 +285,7 @@ export function update_row(row: Row, field: Field): void {
   row.message.textContent = field.error ?? field.note ?? "";
   row.message.classList.toggle("desertfox-settings-error", field.error !== undefined);
   if (!row.widget) return;
+  if (row.preview) show_preview(row.preview, field.row.name, field.draft ? field.draft.value : field.row.value);
   if (row.widget.node.getAttribute("aria-invalid") !== String(field.error !== undefined)) row.widget.node.setAttribute("aria-invalid", String(field.error !== undefined));
   // The reader's own draft stays as typed.
   if (field.draft !== undefined) return;

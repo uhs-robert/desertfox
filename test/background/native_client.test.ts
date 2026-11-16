@@ -134,3 +134,21 @@ test("open_firefox_page without the host names the install page", async () => {
   const { client } = client_with(async () => Promise.reject(new Error("No such native application desertfox_host")));
   await assert.rejects(client.open_firefox_page("settings"), (error: unknown) => error instanceof NativeHostError && error.failure === "host_missing" && /:native\.install/.test(error.message));
 });
+
+test("list_fonts sends the bare verb and returns the names", async () => {
+  const { client, sent } = client_with(async () => ({ ok: true, fonts: ["Cantarell", "DejaVu Sans"] }));
+  assert.deepEqual(await client.list_fonts(), ["Cantarell", "DejaVu Sans"]);
+  assert.deepEqual(sent, [{ cmd: "list_fonts" }]);
+});
+
+test("list_fonts refuses a reply with no list of names", async () => {
+  for (const fonts of [undefined, "Cantarell", [1]]) {
+    const { client } = client_with(async () => ({ ok: true, fonts }));
+    assert.equal(await failure_of(() => client.list_fonts()), "bad_reply", JSON.stringify(fonts));
+  }
+});
+
+test("list_fonts on a host from before the verb is a host failure the caller can swallow", async () => {
+  const { client } = client_with(async () => ({ ok: false, error: "unknown cmd: 'list_fonts'" }));
+  assert.equal(await failure_of(() => client.list_fonts()), "host_failed");
+});

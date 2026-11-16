@@ -1,6 +1,6 @@
 // The settings page without a DOM: which control each setting gets, the checks as you type, and the session that sends changes and absorbs refreshes. Tests read this module.
 
-import type { ChangeSetting, ChangeSettingAnswer, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
+import type { ChangeSetting, ChangeSettingAnswer, ListFontNames, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../shared/settings_docs.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
@@ -38,7 +38,7 @@ export type Control =
   | { type: "read_only" };
 
 // `engines` are the names `default_engine` can take. A value in force that no option names stays selectable, so the control never shows something the setting does not hold.
-export function control_of(row: SettingListRow, engines: string[]): Control {
+export function control_of(row: SettingListRow, engines: string[], font_names: readonly string[] = []): Control {
   if (!row.settable) return { type: "read_only" };
   const keep_current = (options: unknown[]) => (row.value === undefined || options.some((option) => option === row.value) ? options : [...options, row.value]);
   switch (row.kind) {
@@ -49,7 +49,8 @@ export function control_of(row: SettingListRow, engines: string[]): Control {
     case "text_list": return { type: "text_list" };
     case "table_list": return { type: "link_list" };
     case "custom":
-      return row.name === "theme" ? { type: "select", options: keep_current(row.allowed ?? []) } : { type: "text", suggestions: [] };
+      if (row.name === "theme") return { type: "select", options: keep_current(row.allowed ?? []) };
+      return { type: "text", suggestions: row.name === "font_family" || row.name === "font_family_mono" ? [...font_names] : [] };
     case "text":
       return row.name === "default_engine" ? { type: "select", options: keep_current(engines) } : { type: "text", suggestions: [] };
     case "line": return { type: "text", suggestions: (row.allowed ?? []) as string[] };
@@ -116,7 +117,7 @@ export type Field = {
 };
 
 export type SessionDeps = {
-  send: (message: ChangeSetting | ListSettings) => Promise<unknown>;
+  send: (message: ChangeSetting | ListSettings | ListFontNames) => Promise<unknown>;
   engines: string[];
   // Fills the `{key:name}` marks of the setting prose with the keys of the live keymap.
   resolve_keys: (text: string) => string;
@@ -126,6 +127,8 @@ export type SessionDeps = {
 
 export function create_settings_session(deps: SessionDeps) {
   const fields = new Map<string, Field>();
+  // The font setting's suggestions. Read once per load, so a slow host never holds up the list.
+  let font_names: string[] = [];
   // Bumped when a field's own edit starts and when its answer lands. A refresh that began before a bump is stale for that field.
   const touched = new Map<string, number>();
   const bump = (name: string) => touched.set(name, (touched.get(name) ?? 0) + 1);
@@ -134,7 +137,7 @@ export function create_settings_session(deps: SessionDeps) {
 
   const new_field = (row: SettingListRow): Field => ({
     row,
-    control: control_of(row, deps.engines),
+    control: control_of(row, deps.engines, font_names),
     group: group_of(row.name),
     doc: deps.resolve_keys(SETTING_DOCS[row.name as keyof typeof SETTING_DOCS] ?? ""),
     label: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.label ?? row.name,
@@ -153,6 +156,16 @@ export function create_settings_session(deps: SessionDeps) {
       return (await deps.send({ type: "list_settings" })) as ListSettingsAnswer;
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  // Names are only suggestions, so a failed ask leaves the field with none.
+  async function ask_for_font_names(): Promise<string[]> {
+    try {
+      const names = await deps.send({ type: "list_font_names" });
+      return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string") : [];
+    } catch {
+      return [];
     }
   }
 
@@ -250,7 +263,8 @@ export function create_settings_session(deps: SessionDeps) {
     fields: () => [...fields.values()],
     field: (name: string) => fields.get(name),
     load: async (): Promise<boolean> => {
-      const answer = await ask_for_list();
+      let answer: ListSettingsAnswer;
+      [font_names, answer] = await Promise.all([ask_for_font_names(), ask_for_list()]);
       if (!answer.ok) return false;
       fields.clear();
       for (const row of answer.settings) take_row(row.name, row);
