@@ -10,7 +10,7 @@ const TICKET = "issued-ticket";
 const leaf = (id: string) => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }] });
 const KEYMAP = {
   format_version: COMPILED_KEYMAP_VERSION,
-  modes: { cmdline: { kind: "branch", children: { "<Enter>": leaf("cmdline.submit"), "<Escape>": leaf("mode.escape"), "<Tab>": leaf("cmdline.next_completion") } } },
+  modes: { cmdline: { kind: "branch", children: { "<Enter>": leaf("cmdline.submit"), "<Escape>": leaf("mode.escape"), "<Tab>": leaf("cmdline.next_completion"), "<C-n>": leaf("cmdline.next_completion"), "<C-u>": leaf("cmdline.clear") } } },
 };
 const OPENED = {
   history: ["open https://private.example"],
@@ -663,6 +663,17 @@ test("behind a held key, browser shortcuts and Shift with an arrow act at once, 
   answer([ranked_row("GitHub", "https://github.com/")]);
   await until(() => input.value !== "open git");
   assert.equal(input.value, "open https://github.com/ x");
+});
+
+test("behind a held key, a bound key that is not a row key runs at once, and a row key waits", async (t) => {
+  const { input, press, answer } = await ranked_line(t, "hold_bound_keys", "open git");
+  await settle();
+  assert.equal(press("Tab"), true);
+  // Ctrl+U clears the line now, before Tab, and Ctrl+N waits behind Tab for the rows.
+  assert.equal(press("u", { ctrlKey: true }), true);
+  assert.equal(input.value, "");
+  assert.equal(press("n", { ctrlKey: true }), true);
+  assert.equal(input.value, "");
 });
 
 test("the finder's Enter waits for the rows of the typed query and opens the first one that landed", async (t) => {
