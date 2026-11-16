@@ -14,12 +14,14 @@ define("mark.add", {
 
 define("mark.step", {
   label: "Step to mark",
-  intent: "Scroll to the next mark below or the previous mark above. It uses the marks of this page, by scroll position. A global mark counts on the page it names, and the previous-position mark `'` never counts. It stops with a notice when no mark lies that way. It does not wrap and it leaves `'` alone.",
+  intent: "Scroll to the next mark below or the previous mark above. It uses the marks of this page, by scroll position. A global mark counts on the page it names, and the previous-position mark `'` never counts. It stops with a notice when no mark lies that way. A count moves that many marks and stops on the last one. It does not wrap and it leaves `'` alone.",
   params: [
     { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next mark", prev: "to previous mark" }, description: { next: "Scroll to the nearest mark below.", prev: "Scroll to the nearest mark above." } },
+    { name: "steps", type: "int", default: 1, min: 1, description: "Move this many marks." },
   ],
   bridge: false,
   runs_in: "content",
+  count: { param: "steps" },
   bundle: "page",
   jumps: true,
 });

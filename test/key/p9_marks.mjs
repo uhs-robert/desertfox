@@ -125,6 +125,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
       await poll_until("the mark to be stored", async () => (await stored_y("p9m_step", key)) != null);
     }
     await scroll_to(0);
+    await to_y("p9m_step", ["2", "]", "'"], 1500, "2]' from the top to reach the second mark");
+    await scroll_to(0);
     await to_y("p9m_step", ["]", "'"], 500, "]' from the top to reach the lower mark a");
     await to_y("p9m_step", ["]", "'"], 1500, "]' to reach the mark b");
     const refused = async (keys, what, page_id = "p9m_step") => {

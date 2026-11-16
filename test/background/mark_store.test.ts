@@ -393,7 +393,7 @@ test("clear page on a page with no marks still drops the globals", async () => {
   assert.deepEqual(await store.items("https://b.test/none", false), []);
 });
 
-const step = (direction: "next" | "prev", y: number, url = "https://a.test/p") => ({ type: "mark_step" as const, direction, url, x: 0, y });
+const step = (direction: "next" | "prev", y: number, url = "https://a.test/p", steps = 1) => ({ type: "mark_step" as const, direction, steps, url, x: 0, y });
 
 test("a step goes to the nearest mark below or above the scroll position, whatever the order the marks were set in", async () => {
   const { store } = make();
@@ -453,4 +453,15 @@ test("a step message answers through the sender's privacy and refuses with no ta
   assert.deepEqual(await answer_mark_step(store, step("next", 100), { incognito: false }), { ok: false, message: "No next mark" });
   assert.equal((await answer_mark_step(store, step("next", 0), undefined)).ok, false);
   assert.equal((await answer_mark_step(store, { ...step("next", 0), direction: "sideways" as "next" }, { incognito: false })).ok, false);
+});
+
+test("a step with a count moves that many marks and stops on the last one in that direction", async () => {
+  const { store } = make();
+  for (const [key, y] of [["a", 100], ["b", 500], ["c", 900]] as const) await store.run(set(key, y), false);
+  assert.deepEqual(await store.step(step("next", 0, undefined, 2), false), { ok: true, x: 0, y: 500 });
+  assert.deepEqual(await store.step(step("next", 0, undefined, 3), false), { ok: true, x: 0, y: 900 });
+  assert.deepEqual(await store.step(step("next", 0, undefined, 9), false), { ok: true, x: 0, y: 900 });
+  assert.deepEqual(await store.step(step("prev", 1000, undefined, 2), false), { ok: true, x: 0, y: 500 });
+  assert.deepEqual(await store.step(step("prev", 1000, undefined, 9), false), { ok: true, x: 0, y: 100 });
+  await assert.rejects(store.step(step("next", 900, undefined, 3), false), /No next mark/);
 });

@@ -253,8 +253,8 @@ export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y
 // `arrival` names the global mark jump the background pushed into the tab it went to, as in `JumpStep`.
 export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number; arrival?: number };
 export type MarkRequest = MarkSet | MarkJump;
-// From the `page` bundle. Answers the offset of the nearest mark of this page below (`next`) or above (`prev`) the scroll offset `y`, and stores nothing.
-export type MarkStep = { type: "mark_step"; direction: "next" | "prev"; url: string; x: number; y: number };
+// From the `page` bundle. Answers the offset of the nearest mark of this page below (`next`) or above (`prev`) the scroll offset `y`, or the one `steps` marks on (the last one when there are fewer), and stores nothing.
+export type MarkStep = { type: "mark_step"; direction: "next" | "prev"; steps: number; url: string; x: number; y: number };
 // Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
 export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };
 
