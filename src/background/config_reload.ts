@@ -7,6 +7,7 @@ import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { pick_config } from "./config_load.ts";
+import { css_limit_breaches } from "./css_limits.ts";
 import type { FilesSlot, LoadedConfig } from "./config_load.ts";
 
 export type ApplyAction = "reload" | "import" | "remove" | "edit" | "layer";
@@ -39,6 +40,9 @@ const PROBLEMS_SHOWN = 3;
 
 // `stored` goes to `storage.local` as it is, so a restart picks it the same way the swap did.
 export function build_files_config(files: ConfigFiles, dir_label: string, commands: CommandMeta[], action: ApplyAction): { stored: FilesSlot; loaded: LoadedConfig } {
+  // The layer rebuild reuses the stored CSS text, which an earlier reload or edit already passed.
+  const [breach] = action === "layer" ? [] : css_limit_breaches(files);
+  if (breach) throw new ConfigRefusal(`${KEPT_CURRENT[action]} ${breach.file} line ${breach.line} holds ${breach.what}. CSS may not load anything but data: addresses. Remove it from the file and ${AGAIN_VERB[action]} again.`);
   const build_warnings: string[] = [];
   let config: MergedConfig;
   try {

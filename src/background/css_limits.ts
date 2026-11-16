@@ -1,5 +1,5 @@
-// What imported CSS may not load. Imported CSS may reference only `data:` addresses and `#` fragment references, so an import cannot make a page fetch from a remote host.
-// CSS in the user's own folder or typed in the files editor is never checked: only the import path calls this.
+// What user CSS may not load. It may reference only `data:` addresses and `#` fragment references, so it cannot make a page fetch from a remote host.
+// Every way CSS enters the config calls this: an import, a reload of the own folder and a saved edit (`build_files_config`). `@namespace` is not limited: it names a namespace and fetches nothing.
 
 import { css_sources } from "../shared/config_build/source_files.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";

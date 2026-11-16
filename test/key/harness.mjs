@@ -15,7 +15,8 @@ import { default_timings_path } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
-const dist_dir = join(repo_dir, "dist");
+// The key-test build (`just build-key-test`) carries the test attributes the release build leaves out.
+const dist_dir = join(repo_dir, "dist-key-test");
 const EXTENSION_ID = "desertfox@uhs-robert";
 const PADDED_BUNDLE_BYTES = 20 * 1024;
 

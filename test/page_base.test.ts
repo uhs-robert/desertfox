@@ -5,7 +5,7 @@ import { test } from "node:test";
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("the build ships page_base.css and both pages link it before any style", () => {
-  assert.match(read("tools/build.mjs"), /copyFile\("src\/shared\/page_base\.css", "dist\/page_base\.css"\)/);
+  assert.match(read("tools/build.mjs"), /copyFile\("src\/shared\/page_base\.css", `\$\{out_dir\}\/page_base\.css`\)/);
   for (const page of ["src/help/home.html", "src/newtab/newtab.html"]) {
     const html = read(page);
     const link = html.indexOf('<link rel="stylesheet" href="page_base.css">');

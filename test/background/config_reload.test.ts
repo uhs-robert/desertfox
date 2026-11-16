@@ -7,7 +7,7 @@ import { registry } from "../../src/shared/registry/builtin.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
-import { ConfigRefusal } from "../../src/background/config_reload.ts";
+import { build_files_config, ConfigRefusal } from "../../src/background/config_reload.ts";
 import { create_autoconfig_mirror } from "../../src/background/autoconfig_mirror.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
@@ -244,6 +244,55 @@ test("a reload with problems in the files keeps the current config and names the
   });
   assert.equal((await startup.get_config()).settings.hint_letters, "ab");
   assert.equal(status_of(local).source, "files");
+});
+
+const remote_css = ".a { background: url(https://t.test/x.png) }\n";
+
+test("build_files_config refuses remote CSS for a reload, an edit and a remove, but not for a layer rebuild", () => {
+  const files = { "style.css": `/* one */\n${remote_css}` };
+  for (const action of ["reload", "edit", "remove"] as const) {
+    assert.throws(() => build_files_config(files, "", [], action), (error: Error) => {
+      assert.ok(error instanceof ConfigRefusal);
+      assert.match(error.message, /^[A-Za-z ]+not (reloaded|saved|removed), the current (one|config) stays\./);
+      assert.match(error.message, /style\.css line 2 holds url\(\) that is not data:/);
+      return true;
+    });
+  }
+  assert.doesNotThrow(() => build_files_config(files, "", [], "layer"));
+});
+
+test("build_files_config allows @namespace and data: addresses", () => {
+  const css = '@namespace svg "x";\n.a { background: url(data:image/png;base64,AA==) }\n';
+  assert.doesNotThrow(() => build_files_config({ "style.css": css }, "", [], "reload"));
+});
+
+test("a reload with remote CSS in the own folder keeps the current config and names the file and line", async () => {
+  const host: { files: Files } = { files: { ...settings_file('hint_letters = "ab"\n'), "style.css": ".a { color: red }\n" } };
+  install_fake_browser(host);
+  const startup = await fresh_startup("remote_css_reload");
+  await startup.get_config();
+  await startup.reload_config();
+  host.files = { ...settings_file('hint_letters = "cd"\n'), "style.d/x.css": `\n${remote_css}` };
+  await assert.rejects(startup.reload_config(), (error: Error) => {
+    assert.ok(error instanceof ConfigRefusal);
+    assert.match(error.message, /style\.d\/x\.css line 2 holds url\(\) that is not data:/);
+    return true;
+  });
+  assert.equal((await startup.get_config()).settings.hint_letters, "ab");
+});
+
+test("a files editor save with remote CSS is refused and the file is not saved", async () => {
+  const host = { files: { ...settings_file('hint_letters = "ab"\n'), "style.css": ".a { color: red }\n" } };
+  install_fake_browser(host);
+  const startup = await fresh_startup("remote_css_save");
+  await startup.get_config();
+  await startup.reload_config();
+  await assert.rejects(startup.save_config_file("style.css", `@import "https://t.test/a.css";\n`, ".a { color: red }\n"), (error: Error) => {
+    assert.ok(error instanceof ConfigRefusal);
+    assert.match(error.message, /^File not saved, the current config stays\. style\.css line 1 holds @import/);
+    return true;
+  });
+  assert.equal(host.files["style.css"], ".a { color: red }\n");
 });
 
 test("the build skips autoconfig.toml, which the host writes beside the files", async () => {

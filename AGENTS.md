@@ -29,7 +29,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Keep the content script within the size guard and admission rule in "Content script size", with no runtime dependency. Load anything else on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
-- Put no test hooks in `src/`. Tests drive the extension through its public surface. The one exception is the `data-desertfox-tree-read-ms` attribute on the document element, which the key test reads as the signal that the content script is ready.
+- Put no test hooks in `src/`. Tests drive the extension through its public surface. The exceptions are the `data-desertfox-tree-read-ms`, `data-desertfox-mode` and `data-desertfox-whichkey*` attributes, which the key test reads (the first as the signal that the content script is ready). They exist only in the key-test build (`just build-key-test`), behind `KEY_TEST_BUILD` from `src/shared/key_test_build.ts`, so a page cannot read them in a release.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small. A copy of stored state may sit in memory when it refills from storage and drops on `storage.onChanged` (see `src/background/keymap_source.ts`).
 - Write a migration for every change to stored data: extension storage, config files and exported zips. An installed copy keeps working after an update.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.

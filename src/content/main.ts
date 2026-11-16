@@ -3,6 +3,7 @@
 
 import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
+import { KEY_TEST_BUILD } from "../shared/key_test_build.ts";
 import { create_matcher, event_to_token, physical_token } from "../shared/keys/index.ts";
 import { all_off_step } from "./site_rule.ts";
 import { create_keymap_asks } from "./ask_keymap.ts";
@@ -49,7 +50,7 @@ function refresh_mode_indicator(): void {
   show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label));
 }
 
-const script_started_ms = performance.now();
+const script_started_ms = KEY_TEST_BUILD ? performance.now() : 0;
 
 async function send_to_background(message: ContentToBackground): Promise<RunResponse> {
   try {
@@ -318,7 +319,8 @@ function install_matcher(reply: PageKeymap | undefined): void {
   refresh_mode_indicator();
   install_tree();
   // The key test's ready signal waits for the first matcher, not for a reply that a newer ask overtook.
-  if (first_install) publish_timing();
+  // The one test hook in src/, set only in the key-test build: a page can read it. Time is milliseconds.
+  if (KEY_TEST_BUILD && first_install) document.documentElement?.setAttribute("data-desertfox-tree-read-ms", String(performance.now() - script_started_ms));
 }
 
 // The matcher's tree is normal mode with the running site mode's keys laid over it, so keys the mode does not bind keep their meaning.
@@ -329,12 +331,6 @@ function install_tree(): void {
   const tree = (keymap && overlay && normal ? { ...keymap, modes: { ...keymap.modes, normal: { ...normal, children: { ...normal.children, ...overlay.tree } } } } : keymap ?? { modes: {} }) as CompiledKeymap;
   const frees = page_reply?.frees;
   key_flow.set_matcher_(create_matcher(tree, frees && ((token) => !overlay?.tree[token] && is_freed(frees, token))), keymap?.modes.browser);
-}
-
-// The one test hook in src/: the key test reads this attribute as the content script's ready signal. Time is milliseconds.
-function publish_timing(): void {
-  const root = document.documentElement;
-  root?.setAttribute("data-desertfox-tree-read-ms", String(performance.now() - script_started_ms));
 }
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {

@@ -29,6 +29,10 @@ measure-rivals: build
 build: install_deps
     npm run --silent build
 
+# The build the key test loads, in dist-key-test/. It differs from dist/ only by the page-readable test attributes (src/shared/key_test_build.ts). Run it after `build`, which does the typecheck.
+build-key-test: install_deps
+    KEY_TEST_BUILD=1 node tools/build.mjs
+
 # Check docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, lint for floating and misused promises, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
 test: install_deps
     #!/usr/bin/env bash
@@ -146,7 +150,7 @@ host-test:
     python3 -m unittest discover -s host -p 'test_*.py'
 
 # Real key presses in a nested session. A full run takes about 34 s on 8 shards. `just test-all` runs the unit tests beside it. One run at a time per machine: a second waits up to 900 s for the lock. Needs labwc, Hyprland, dbus-daemon and python3 (test/key/session.mjs).
-key-test: build
+key-test: build build-key-test
     #!/usr/bin/env bash
     set -euo pipefail
     # One run at a time: two sharded runs together break the memory budget. -o keeps the lock fd out of the run, so a session that outlives it does not hold the lock.
@@ -213,7 +217,7 @@ test-all: install_deps
     exit "$failed"
 
 # Record the README demo: a looping GIF of seven shots with a key overlay and four 1280x800 stills, written to docs/images (or DEMO_OUT_DIR) only when the whole run worked. Plays real key presses in a key-test session and films it with wf-recorder, so it needs wf-recorder, ffmpeg, grim and the key-test tools. Takes the key-test lock, so never wrap it in `flock`. About 2 minutes.
-readme-demo: build
+readme-demo: build build-key-test
     #!/usr/bin/env bash
     set -euo pipefail
     lock_file=/tmp/desertfox-key-test.lock
@@ -226,7 +230,7 @@ readme-demo: build
     exec flock -o -w 900 "$lock_file" node test/key/demo.mjs
 
 # Replay the key-test lifecycle probes: signals at startup and mid-run, a killed worker, a crashed Firefox, the deadline, distinct ports, a foreign sweep and a SIGKILLed run followed by a rerun. Serial, about 2 minutes, one probe at a time. Takes the key-test lock like `just key-test`, so never wrap it in `flock`. Name probes to run only those: `just key-test-lifecycle deadline kill-worker`.
-key-test-lifecycle *probes: build
+key-test-lifecycle *probes: build build-key-test
     #!/usr/bin/env bash
     set -euo pipefail
     # The lock and scope lines repeat those of key-test. The scope's time limit covers every probe, each of which stops its own runs.
