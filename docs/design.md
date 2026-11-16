@@ -222,7 +222,7 @@ The user config is a directory of files, one file per kind of setting. `config.r
 
 ### Source files
 
-The tool reads `~/.config/desertfox/` by default. Every data file is TOML. A leftover `.jsonc` file is an unknown file.
+The tool reads `~/.config/desertfox/` by default. Every data file is TOML. The build reports any file or directory it does not know as unknown, a leftover `.jsonc` file included. Only `.toml` files belong in the `.d` directories and in `themes/`, and only `.css` files in `style.d/`.
 
 | File | Holds |
 | --- | --- |
@@ -489,7 +489,7 @@ Every command that opens an address checks it against one allow-list, `openable_
 
 Typed text repeats too. A lazy recorder (the `text` bundle) builds one insert session from `input` events: the text typed in one field, never in a secret field (`is_secret_field`: a password input, an autocomplete of `current-password`, `new-password`, `one-time-code` or any `cc-*` token, and a field that was once one). The session ends on Escape, on focusout, on page hide and before any command is sent from the field, so the text is stored before that command. It is stored as a `text.insert` step through the same `record_step` message, led by the command that focused the field (`gi`, `]i`, `[i`, a hint pick on a field) when there was one. `.` runs the entry, then types the text through one field writer; a field focused by a click has no entry, and the replay types into the field the last Escape left, or refuses with "No text field to type into". `3.` types the text three times. The text stays in `storage.session`, in the slot of the window it was typed in.
 
-The content script must have the keymap before the first key. At start it sends `read_keymap` to the background, which reads the compiled prefix tree from `storage.local`, trims it for the page's site rule and replies with the tree as a JSON string. The page keeps every key until the reply arrives, then replays them against the trimmed tree. A held key that the tree leaves unbound goes back to the page as a synthetic keydown on the element it was pressed on, so page scripts see it, and a keyup follows when the real one was already swallowed. Its default action (scroll, Tab focus) is lost, and so is the key when its element has left the page. A rejected ask (the background has not registered its listener yet) is retried every 100 ms, 30 times, and then the page installs an empty tree. The next `tree_updated` asks again and heals it. An ask answered after a newer one started is dropped. Phase 1 measured the old direct storage read at 6-10 ms (median 8); the ask through the background keeps the median under 12 ms (see [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements").
+The content script must have the keymap before the first key. At start it sends `read_keymap` to the background, which reads the compiled prefix tree from `storage.local`, trims it for the page's site rule and replies with the tree as a JSON string. The page keeps every key until the reply arrives, then replays them against the trimmed tree. A held key that the tree leaves unbound goes back to the page as a synthetic keydown on the element it was pressed on, so page scripts see it, and a keyup follows when the real one was already swallowed. Its default action (scroll, Tab focus) is lost, and so is the key when its element has left the page. A rejected ask (the background has not registered its listener yet) is retried every 100 ms, 30 times, and then the page installs an empty tree. The next `tree_updated` asks again and heals it. An ask answered after a newer one started is dropped. The old direct storage read measured at 6-10 ms (median 8); the ask through the background keeps the median under 12 ms (see [firefox-behavior.md](firefox-behavior.md), "Phase 1 measurements").
 
 ## Bundles and loading
 
@@ -985,7 +985,7 @@ Two channels exist, stable and beta. The `update_url` in the installed build's m
 | Status | Contents |
 | --- | --- |
 | Built | Snippets and `config.reload`, with a managed storage config (since removed) and `tools/build-config`. Normal, insert and ignore modes. Scrolling, back and forward, reload, stop, home, parent and root URL. Tab and window commands, including containers and closed-tab undo. Search engines and explicit prompts. Bookmarks. Hints with every action above, rapid mode included. Copying the URL in 6 formats. Zoom. Search engines with slots and children replace the former site commands (site search, GitHub, subreddit, archive, isdown, translate), which now ship as examples. |
-| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, page-event hooks, a mode that captures every key for a site (not the grab mode, which moves a dragged element), a theme engine, an update nag, an interactive tutorial, joke commands, a QR code of the URL and view source. |
+| Dropped | Shell access, string eval, command strings with chaining and pipes, a config language, userChrome editing, rewriting Firefox prefs, page-event hooks, a mode that captures every key for a site (not the grab mode, which moves a dragged element), a theme engine, an update nag, an interactive walkthrough in Quick Start (the Practice page holds hands-on lessons), joke commands, a QR code of the URL and view source. |
 
 ## Trade-offs
 
@@ -1016,7 +1016,7 @@ Two channels exist, stable and beta. The `update_url` in the installed build's m
 - A sidebar that groups tabs by site.
 - A command result passed to the next step of a binding (`returns` and `{ from: "previous" }`, see [Invocations and prompts](#invocations-and-prompts)).
 - Real input from the native host, such as a drag across tabs or apps.
-- The listed addons.mozilla.org release. Built: the listing fields and reviewer notes (`amo/metadata.json`), the privacy policy (`docs/privacy.md`), the source archive and its build steps (`just source_archive`, `BUILD.md`), the listed submit (`just sign_listed`) and the optional `locationInfo` consent for the weather card. Not done: the submission itself, Mozilla's review and the public listing.
+- The listed addons.mozilla.org release. Built: the listing fields and reviewer notes (`amo/metadata.json`), the privacy policy (`docs/privacy.md`), the source archive and its build steps (`just source_archive`, `BUILD.md`), the listed submit (`just sign_listed`) and the optional `locationInfo` consent for the weather card. The submission, Mozilla's review and the public listing happen on addons.mozilla.org, so their state is not kept here. `amo/README.md` holds the steps.
 
 ## Open questions
 
