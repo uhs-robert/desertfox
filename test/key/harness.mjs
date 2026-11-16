@@ -450,7 +450,7 @@ export async function create_session({ name: session_name, timings, sweep = true
       }
     }
     if (stall_capture) rdp.on_close(() => stall_capture.note_lost(rdp.lost_reason()));
-    // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
+    // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist-key-test/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
     // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks. The which-key bundle stays real.

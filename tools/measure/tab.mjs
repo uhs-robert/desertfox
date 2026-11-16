@@ -27,7 +27,7 @@ const bg = (code) => evaluate_in_background(rdp, ID, code);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const out = { loaded: [], discarded: [], reloaded: [], misc: {} };
 try {
-  await install_temporary_addon(rdp, `${repo}/dist`);
+  await install_temporary_addon(rdp, `${repo}/dist-key-test`);
   await sleep(3000);
   out.misc.setup = await bg(`(async () => {
     const now = () => performance.timeOrigin + performance.now();

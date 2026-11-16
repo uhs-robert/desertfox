@@ -42,8 +42,11 @@ test("the manifest CSP keeps scripts, fonts and sheets local and allows remote i
 });
 
 test("the release bundles hold none of the page-readable test attributes, and the key-test build holds them", async () => {
-  const entries = { content: "src/content/main.ts", whichkey: "src/content/whichkey/main.ts", ui: "src/content/ui/main.ts", hints: "src/content/hints/main.ts" };
-  const attributes = { content: "data-desertfox-tree-read-ms", whichkey: "data-desertfox-whichkey", ui: "data-desertfox-mode", hints: "" };
+  // The test builds with its own esbuild call, not tools/build.mjs: that script clears dist/ and dist-key-test/, which a key test may be using. So pin the define it passes.
+  assert.match(read("tools/build.mjs"), /define: \{ __KEY_TEST__: String\(key_test_build\) \}/);
+  assert.match(read("tools/build.mjs"), /key_test_build = process\.env\.KEY_TEST_BUILD === "1"/);
+  const entries = { content: "src/content/main.ts", whichkey: "src/content/whichkey/main.ts", ui: "src/content/ui/main.ts" };
+  const attributes = { content: "data-desertfox-tree-read-ms", whichkey: "data-desertfox-whichkey", ui: "data-desertfox-mode" };
   for (const [name, entry] of Object.entries(entries)) {
     const bundle_with = async (key_test: boolean) => {
       const result = await build({ bundle: true, format: "iife", target: "firefox140", logLevel: "silent", entryPoints: { [name]: entry }, write: false, minify: true, define: { __KEY_TEST__: String(key_test) } });

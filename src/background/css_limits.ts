@@ -9,6 +9,10 @@ export type CssLimitBreach = { file: string; line: number; what: string };
 const HEX = /[0-9a-f]/i;
 const FILE_SEPARATOR = "\n";
 
+// An escaped quote cannot open a string in CSS: `url(\"data:x)` is an unquoted url whose value starts with a quote. Decoding it to a real quote would let the
+// `LIMITED` pattern read it as an opening quote, so it decodes to a placeholder instead.
+const not_a_quote = (char: string) => (char === '"' || char === "'" ? "�" : char);
+
 // The browser gets every CSS file joined in one text (`build_config.ts`), so a rule can run across files: an escape at the end of one file reads
 // the start of the next. The check reads the same joined text. Line breaks become one `\n` and escapes are decoded as the CSS spec does, in one
 // pass. `origin` keeps, for each decoded character, its offset in the joined text, so a breach maps back to a file and line.
@@ -33,10 +37,10 @@ function decode(joined: string): { text: string; origin: number[] } {
       while (end < joined.length && end - i - 1 < 6 && HEX.test(joined[end]!)) end++;
       const code = Number.parseInt(joined.slice(i + 1, end), 16);
       if (" \t\n".includes(joined[end] ?? "x")) end++;
-      emit(code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : "�", i);
+      emit(code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? not_a_quote(String.fromCodePoint(code)) : "�", i);
       i = end;
     } else {
-      emit(joined[i + 1]!, i);
+      emit(not_a_quote(joined[i + 1]!), i);
       i += 2;
     }
   }
@@ -46,7 +50,7 @@ function decode(joined: string): { text: string; origin: number[] } {
 // `image-set(` and `src(` take strings that load, so they are refused whole. A `url(` is let through when it holds a `data:` address or only a
 // fragment (`#f`), which names a place in the same document. The optional group is read after the match: a lookahead would let `\s*`
 // back off and see the space before a quote instead.
-const LIMITED = /@import\b|@font-face\b|\bimage-set\(|\bsrc\(|\burl\(\s*["']?(data:|#)?/gi;
+const LIMITED = /@import\b|@font-face\b|\bimage-set\(|\bsrc\(|\burl\([ \t\n]*["']?(data:|#)?/gi;
 
 function what_of(match: string): string {
   const keyword = match.toLowerCase();

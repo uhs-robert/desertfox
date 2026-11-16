@@ -248,9 +248,9 @@ test("a reload with problems in the files keeps the current config and names the
 
 const remote_css = ".a { background: url(https://t.test/x.png) }\n";
 
-test("build_files_config refuses remote CSS for a reload, an edit and a remove, but not for a layer rebuild", () => {
+test("build_files_config refuses remote CSS for a reload and an edit, but not for a remove or a layer rebuild", () => {
   const files = { "style.css": `/* one */\n${remote_css}` };
-  for (const action of ["reload", "edit", "remove"] as const) {
+  for (const action of ["reload", "edit"] as const) {
     assert.throws(() => build_files_config(files, "", [], action), (error: Error) => {
       assert.ok(error instanceof ConfigRefusal);
       assert.match(error.message, /^[A-Za-z ]+not (reloaded|saved|removed), the current (one|config) stays\./);
@@ -258,7 +258,7 @@ test("build_files_config refuses remote CSS for a reload, an edit and a remove, 
       return true;
     });
   }
-  assert.doesNotThrow(() => build_files_config(files, "", [], "layer"));
+  for (const action of ["remove", "layer"] as const) assert.doesNotThrow(() => build_files_config(files, "", [], action));
 });
 
 test("build_files_config allows @namespace and data: addresses", () => {

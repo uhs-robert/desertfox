@@ -21,7 +21,7 @@ const script_dir = new URL(".", import.meta.url).pathname;
 const pass = process.env.PASS ?? "0";
 const page_names = (process.env.PAGES ?? PAGE_NAMES.join(",")).split(",");
 
-const addon = tool === "none" ? null : tool === "desertfox" ? { path: `${repo_dir}/dist`, id: DESERTFOX_ID } : { path: xpi_path(work_dir, tool), id: PINNED_BUILDS[tool].gecko_id };
+const addon = tool === "none" ? null : tool === "desertfox" ? { path: `${repo_dir}/dist-key-test`, id: DESERTFOX_ID } : { path: xpi_path(work_dir, tool), id: PINNED_BUILDS[tool].gecko_id };
 
 const profile_dir = `${work_dir}/profiles/${tool}`;
 rmSync(profile_dir, { recursive: true, force: true });

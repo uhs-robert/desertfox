@@ -112,3 +112,8 @@ test("the user css gate: a mount that is gone cannot release the hold of the mou
   new_mount.set(false);
   assert.equal(sheet.media, "");
 });
+
+test("css limits: an escaped quote or a non-CSS space before data: does not make the address pass", () => {
+  for (const opening of ['\\"', "\\27 ", "\\'", " ", "﻿"]) assert.deepEqual(breaches_of(`a { background: url(${opening}data:x) }`), ["1 url() that is not data:"], JSON.stringify(opening));
+  assert.deepEqual(breaches_of('a { background: url( "data:x") } b { background: url(\n\'data:y\') }'), []);
+});

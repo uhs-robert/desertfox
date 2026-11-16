@@ -490,7 +490,7 @@ The off check reads the keymap once per trigger, about 3 reads per hard load for
 
 ## Manifest CSP on the extension pages (sec-css-attrs)
 
-Measured in the key-test Firefox with the policy `script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https: http: resource: moz-icon:; connect-src https: http: data: blob:; worker-src 'self'`.
+Measured in the key-test Firefox with the policy `script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https: http: resource: moz-icon:; connect-src 'self' https: http: data: blob:; worker-src 'self'`.
 
 - The new tab font (`DSEG7 Classic`, a packaged file) loads. A tab's `favIconUrl` came back as a `data:` address, which loads, and a favicon over `http:` loads. A container icon (`resource://usercontext-content/briefcase.svg`) loads.
 - The image copy fetch in the background page works for an `http:` image and a `data:` PNG.

@@ -2,7 +2,7 @@
 
 The scripts that produced the numbers in [`docs/firefox-behavior.md`](../../docs/firefox-behavior.md), "content.js size". Re-run them before raising the content.js guard past its present value, or the ceiling (see `AGENTS.md`, "Content script size"). They need `firefox` on the path. Run each from the repo root.
 
-Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-measure`. Results are not committed. The scripts that install the extension read `dist/`, so run `just build` first. Each one drives headless Firefox over the debugger protocol (`test/key/rdp.mjs`) and prints or writes JSON.
+Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-measure`. Results are not committed. The scripts that install the extension read `dist/`, so run `just build` first. `tab.mjs` and the rivals rig read `dist-key-test/` (`just build-key-test`) instead, because they read the page-readable test attributes that the release build leaves out. Each one drives headless Firefox over the debugger protocol (`test/key/rdp.mjs`) and prints or writes JSON.
 
 | Script | Run | Measures | Output |
 |---|---|---|---|
@@ -17,7 +17,7 @@ Scratch files (profiles, results) go to `$MEASURE_DIR`, default `/tmp/desertfox-
 
 ## Rival benchmark
 
-`just measure-rivals` runs `tools/measure/rivals/`: DesertFox from `dist/` and the pinned store builds of three rival extensions, each alone in a fresh headless Firefox profile, plus a no-extension baseline. It needs `firefox`, `unzip` and network. Settings by environment: `PAGES` (default `large,wiki,frames,frames0`), `RUNS` (timed runs per page and tool, default 8), `PASSES` (default 2; each even pass runs the tools in reverse order).
+`just measure-rivals` runs `tools/measure/rivals/`: DesertFox from `dist-key-test/` and the pinned store builds of three rival extensions, each alone in a fresh headless Firefox profile, plus a no-extension baseline. It needs `firefox`, `unzip` and network. Settings by environment: `PAGES` (default `large,wiki,frames,frames0`), `RUNS` (timed runs per page and tool, default 8), `PASSES` (default 2; each even pass runs the tools in reverse order).
 
 | File | Role |
 |---|---|

@@ -40,8 +40,8 @@ const PROBLEMS_SHOWN = 3;
 
 // `stored` goes to `storage.local` as it is, so a restart picks it the same way the swap did.
 export function build_files_config(files: ConfigFiles, dir_label: string, commands: CommandMeta[], action: ApplyAction): { stored: FilesSlot; loaded: LoadedConfig } {
-  // The layer rebuild reuses the stored CSS text, which an earlier reload or edit already passed.
-  const [breach] = action === "layer" ? [] : css_limit_breaches(files);
+  // A layer rebuild and a snippet removal change no CSS. They rebuild from the stored files, so CSS stored before this check stays until the next reload.
+  const [breach] = action === "layer" || action === "remove" ? [] : css_limit_breaches(files);
   if (breach) throw new ConfigRefusal(`${KEPT_CURRENT[action]} ${breach.file} line ${breach.line} holds ${breach.what}. CSS may not load anything but data: addresses. Remove it from the file and ${AGAIN_VERB[action]} again.`);
   const build_warnings: string[] = [];
   let config: MergedConfig;

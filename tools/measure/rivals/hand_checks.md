@@ -5,7 +5,7 @@ The rig (`PAGES=sites`) cannot log in, so these sites are checked by hand. Fill 
 ## Setup
 
 - Use a fresh Firefox profile per extension, with only that extension installed. Log in to each site in that profile.
-- Install the same builds as the rig: DesertFox from `dist/` after `just build`, the rivals from the pinned xpis in `tools.mjs`. A rig run leaves them in `$MEASURE_DIR/rivals/xpi/`. Load each through `about:debugging`, "Load Temporary Add-on".
+- Install the same builds as the rig: DesertFox from `dist-key-test/` after `just build-key-test`, the rivals from the pinned xpis in `tools.mjs`. A rig run leaves them in `$MEASURE_DIR/rivals/xpi/`. Load each through `about:debugging`, "Load Temporary Add-on".
 - Keep each extension's default settings and keys:
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
