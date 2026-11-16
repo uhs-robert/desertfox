@@ -50,7 +50,7 @@ define("scroll.to", {
 
 define("scroll.align", {
   label: "Align focus",
-  intent: "Align the focused element in the view. It scrolls the focus to the top, center or bottom. The focus is the focused element, or else the selection.",
+  intent: "Align the focused element in the view. It scrolls the focus to the top, center or bottom. The focus is the heading that a heading jump just reached, else the focused element, else the selection. A focus or selection change after the jump takes over from the heading.",
   params: [{ name: "position", type: "enum", values: ["top", "center", "bottom"], default: "center", short: { top: "t", bottom: "b" }, value_labels: { top: "to top", bottom: "to bottom" }, description: { top: "Align the focus to the top.", bottom: "Align the focus to the bottom." } }],
   bridge: true,
   runs_in: "content",

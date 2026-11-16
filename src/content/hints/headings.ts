@@ -2,6 +2,7 @@
 // The list is a snapshot, taken when the line first reads it and dropped when the line is done with it.
 
 import { RuntimeRefusal } from "../../shared/command.ts";
+import type { HeadingJump } from "../align_target.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
 import { best_match } from "../../shared/score.ts";
 import { collect, scroll_clips_in_page } from "./candidates.ts";
@@ -88,6 +89,23 @@ export function scroll_to_top(element: Element, frames: readonly Element[]): voi
   for (const target of [element, ...[...frames].reverse()]) target.scrollIntoView({ block: "start", behavior: "instant" });
 }
 
+type JumpSlot = { desertfox_heading_jump?: HeadingJump };
+let clears_slot = false;
+
+// The jump leaves the heading in the slot `scroll.align` reads (the page bundle, which cannot see this module). A focus or selection change after the jump
+// empties the slot again, so the newest of the three wins. A focus change inside a frame goes unseen here, and the next jump replaces the slot.
+function keep_for_align(element: Element, frames: readonly Element[]): void {
+  const slot = window as unknown as JumpSlot;
+  slot.desertfox_heading_jump = { element: new WeakRef(element), frames: frames.map((frame) => new WeakRef(frame)) };
+  if (clears_slot) return;
+  clears_slot = true;
+  const clear = () => {
+    delete (window as unknown as JumpSlot).desertfox_heading_jump;
+  };
+  document.addEventListener("focusin", clear, true);
+  document.addEventListener("selectionchange", clear);
+}
+
 export type HeadingDirection = "next" | "prev";
 
 // A heading whose top is within this many pixels of the view top is the one the last jump put there, so the next move passes it.
@@ -123,6 +141,7 @@ export function step_heading(direction: HeadingDirection, steps: number): string
   if (index === undefined) return direction === "next" ? "No next heading" : "No previous heading";
   const { element, frames } = found[index]!;
   scroll_to_top(element, frames);
+  keep_for_align(element, frames);
   last_heading = new WeakRef(element);
   return undefined;
 }
@@ -130,10 +149,11 @@ export function step_heading(direction: HeadingDirection, steps: number): string
 export type Snapshot = { found: Found[]; rows: HeadingItem[] };
 
 // The heading may have left the page since the list was read, with its frame or alone.
-export function jump_in({ found, rows }: Snapshot, typed: string): void {
+export function jump_in({ found, rows }: Snapshot, typed: string): Found {
   const chosen = found[pick_heading(rows, typed)]!;
   if (!chosen.element.isConnected || !chosen.frames.every((frame) => frame.isConnected)) throw new RuntimeRefusal("That heading is gone");
   scroll_to_top(chosen.element, chosen.frames);
+  return chosen;
 }
 
 let snapshot: Snapshot | undefined;
@@ -153,7 +173,8 @@ export const clear_snapshot = (): void => {
 export function go_to_heading(typed: string): void {
   const held = snapshot;
   try {
-    jump_in(held ?? take_snapshot(), typed);
+    const { element, frames } = jump_in(held ?? take_snapshot(), typed);
+    keep_for_align(element, frames);
   } finally {
     if (!held) clear_snapshot();
   }

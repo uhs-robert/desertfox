@@ -1,4 +1,4 @@
-// scroll.align (zt, zz, zb) on a field and on a page with nothing focused, the zoom reset z=, and the form control keys ]i and [i.
+// scroll.align (zt, zz, zb) on a field, on the heading a jump just reached, and on a page with nothing focused, the zoom reset z=, and the form control keys ]i and [i.
 
 export const areas = ["scroll", "hints"];
 
@@ -24,6 +24,41 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     const bottom = await field_top_after(["zb"]);
     expect(bottom > center, `zb left the field at ${bottom}, zz at ${center}`);
     record("align_field_tops", { top, center, bottom });
+  });
+
+  const heading_top_of = (id) => in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(`document.getElementById("${id}")?.getBoundingClientRect().top`)} }))`).then((answer) => answer?.[0]);
+
+  await run_case("scroll.align puts the heading that ]h jumped to at the bottom, center and top", async () => {
+    await open_page("headings", "align_heading", { new_tab: true });
+    // The rows in page order are the title, Intro and Below, so a count of 3 lands on Below.
+    let mark = events.length;
+    await press_keys("3", "]", "h");
+    await wait_event(mark, scroll_of("align_heading"), "the scroll of 3]h");
+    await poll_until("Below at the top of the view", async () => Math.abs(await heading_top_of("below")) < 4);
+    const top_after = async (keys) => {
+      mark = events.length;
+      await press_keys(...keys);
+      await wait_event(mark, scroll_of("align_heading"), `scroll after ${keys.join(" ")}`);
+      return heading_top_of("below");
+    };
+    const bottom = await top_after(["zb"]);
+    const center = await top_after(["zz"]);
+    const top = await top_after(["zt"]);
+    expect(Math.abs(top) <= 2, `zt left the heading at ${top}`);
+    expect(center > 100 && center < bottom, `zz left the heading at ${center}, zb at ${bottom}`);
+    record("align_heading_tops", { top, center, bottom });
+  });
+
+  await run_case("scroll.align falls through to the refusal when the heading left the page", async () => {
+    await open_page("headings", "align_heading_gone", { new_tab: true });
+    const mark = events.length;
+    await press_keys("3", "]", "h");
+    await wait_event(mark, scroll_of("align_heading_gone"), "the scroll of 3]h");
+    // A stand-in of the same height keeps the layout, so the removal causes no scroll event of its own.
+    await in_background(`browser.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => browser.tabs.executeScript(tab.id, { code: 'const below = document.getElementById("below"); const stand_in = document.createElement("div"); stand_in.style.height = below.offsetHeight + "px"; below.replaceWith(stand_in)' }))`);
+    const before_align = events.length;
+    await press_keys("zb");
+    await expect_no_scroll(before_align, "align_heading_gone");
   });
 
   await run_case("scroll.align with nothing focused leaves the scroll position alone", async () => {
