@@ -28,7 +28,9 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case("on a select, j and k move the value over the disabled option and fire change", async () => {
     await open_widgets("select");
     await focus("sel");
-    await press_keys(...ALT("l"), "j");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys("j");
     await expect_value("sel", "c");
     await press_keys("k");
     await expect_value("sel", "a");
@@ -39,7 +41,9 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case("on a range, l steps up and h steps down", async () => {
     await open_widgets("range");
     await focus("rng");
-    await press_keys(...ALT("l"), "ll");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys("ll");
     await expect_value("rng", "7");
     await press_keys("h");
     await expect_value("rng", "6");
@@ -48,7 +52,9 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case("on a radio, j clicks the next radio of the group, so a page that listens to click sees it", async () => {
     await open_widgets("radio");
     await focus("r1");
-    await press_keys(...ALT("l"), "j");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys("j");
     await expect_value("r2", "true", "checked");
     expect((await in_active_tab(`document.activeElement.id`)) === "r2", "the focus did not follow the check");
     expect((await dataset("changes")) === "r2,", `change events: ${await dataset("changes")}`);
@@ -58,20 +64,26 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   await run_case("on a select inside a shadow root, j moves the inner select", async () => {
     await open_widgets("shadow");
     await in_active_tab(`document.getElementById("shadow_host").shadowRoot.getElementById("inner_sel").focus(); 0`);
-    await press_keys(...ALT("l"), "j");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys("j");
     await poll_until("the inner select to move", async () => (await in_active_tab(`document.getElementById("shadow_host").shadowRoot.getElementById("inner_sel").value`)) === "y", { timeout_ms: 3000, expected_timeout: true }).catch(() => expect(false, "the inner select did not move"));
   });
 
   await run_case("on a script widget, j sends an ArrowDown keydown the page reads", async () => {
     await open_widgets("script");
     await focus("list");
-    await press_keys(...ALT("l"), "jk");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys("jk");
     await poll_until("the listbox to see both arrows", async () => (await dataset("keys")) === "ArrowDown,ArrowUp,", { timeout_ms: 3000, expected_timeout: true }).catch(async () => expect(false, `the listbox saw ${await dataset("keys")}`));
   });
 
   await run_case("with nothing focused, j scrolls the page", async () => {
     await open_widgets("scroll");
-    await press_keys(...ALT("l"), "j");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys("j");
     await poll_until("the page to scroll", async () => (await in_active_tab(`scrollY`)) > 0, { timeout_ms: 3000, expected_timeout: true }).catch(() => expect(false, "j did not scroll"));
     expect((await dataset("keys")) === "", "a key reached the page");
   });
