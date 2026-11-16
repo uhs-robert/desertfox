@@ -8,6 +8,9 @@ const SEEDED = 2000;
 // Old enough that no other piece's visits fall in the range the teardown deletes.
 const SEED_START = Date.UTC(2001, 0, 1);
 const TARGET_TITLE = "Xylophone target page";
+const SEED_CHUNK = 250;
+// Below the harness's 30 s cap on a setup, so a slow intake fails with this piece's own message.
+const SEED_INTAKE_LIMIT_MS = 27_000;
 
 // Runs in the line's frame and holds no outer variable. Each keydown gets its time to the next frame (the typed key drawn) and the list's redraws are timed, with the line's text and whether the note still read "loading".
 // The text ties a draw to its query: the page ranks the text the line shows, so a draw of that text that is not loading shows its rows.
@@ -46,21 +49,28 @@ export async function run_cases({ rdp, extension_id, run_case, setup, on_teardow
 
   await setup("seed the history", async () => {
     on_teardown(() => background(`browser.history.deleteRange({ startTime: ${SEED_START}, endTime: ${SEED_START + (SEEDED + 2) * 1000} })`));
-    await background(`(async () => {
-      const visits = [];
-      for (let index = 0; index < ${SEEDED}; index++) visits.push(browser.history.addUrl({ url: "https://seed" + index + ".example.test/zebra/" + (index % 37) + "/page", title: "zebra seed page " + index + " about quartz", visitTime: ${SEED_START} + index * 1000 }));
-      await Promise.all(visits);
-      await browser.history.addUrl({ url: ${JSON.stringify(target)}, title: ${JSON.stringify(TARGET_TITLE)}, visitTime: ${SEED_START + SEEDED * 1000} });
-    })()`);
+    // In chunks, each its own call: one call for all of them can outlast the harness's 5 s limit on a background call when the machine is busy.
+    for (let first = 0; first < SEEDED; first += SEED_CHUNK)
+      await background(`(async () => {
+        const visits = [];
+        for (let index = ${first}; index < ${Math.min(SEEDED, first + SEED_CHUNK)}; index++) visits.push(browser.history.addUrl({ url: "https://seed" + index + ".example.test/zebra/" + (index % 37) + "/page", title: "zebra seed page " + index + " about quartz", visitTime: ${SEED_START} + index * 1000 }));
+        await Promise.all(visits);
+      })()`);
+    await background(`browser.history.addUrl({ url: ${JSON.stringify(target)}, title: ${JSON.stringify(TARGET_TITLE)}, visitTime: ${SEED_START + SEEDED * 1000} })`);
+  });
+
+  // A setup of its own, so the wait gets the whole 30 s cap of a setup.
+  await setup("the rank Worker lists the seeded history", async () => {
     // The Worker takes a new address after a one-row search lists it, one at a time, so the target lands last. Each line ranks a snapshot of its own, so each try opens a new line.
+    // The intake slows with the machine's load: 7 s alone, 15 s or more beside the other shards.
     const started = Date.now();
-    for (let tries = 0; ; tries++) {
+    for (;;) {
       await open_cmdline();
       await press_keys("history xylophone");
       const found = await wait_cmdline(shows_target_only, "the seeded target in the history list", 2000).then(() => true, () => false);
       await close_cmdline();
       if (found) break;
-      expect(tries < 20, "the rank Worker never listed the seeded history");
+      expect(Date.now() - started < SEED_INTAKE_LIMIT_MS, "the rank Worker never listed the seeded history");
     }
     console.log(`p42: the Worker took ${SEEDED + 1} new addresses in ${Date.now() - started} ms`);
   });
