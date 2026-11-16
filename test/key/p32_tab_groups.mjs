@@ -125,4 +125,24 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     const { id } = await active();
     await wait_group(id, "the tab to group after the refused tgc", (group) => group.id !== -1);
   });
+
+  await run_case("tgD closes the group and every tab in it, and Firefox records the close", async () => {
+    await open_page("page", "p32_a", { new_tab: true });
+    const one = (await active()).id;
+    await settle_focus();
+    await press_keys("tgA");
+    await wait_group(one, "the first tab to join a group", (group) => group.id !== -1);
+    await open_page("page", "p32_b", { new_tab: true });
+    const two = (await active()).id;
+    await settle_focus();
+    const group_id = (await group_of(one)).id;
+    await background(`browser.tabs.group({ tabIds: [${two}], groupId: ${group_id} })`);
+    await wait_group(two, "the second tab to join the group", (group) => group.id === group_id);
+    const before = await background(`(async () => (await browser.sessions.getRecentlyClosed()).length)()`);
+    await press_keys("tgD");
+    await poll_until("both tabs to close", async () => (await background(`(async () => (await browser.tabs.query({})).filter((tab) => [${one}, ${two}].includes(tab.id)).length)()`)) === 0);
+    // Measured probe: how Firefox lists a closed group. The result goes to docs/firefox-behavior.md.
+    const closed = await background(`(async () => (await browser.sessions.getRecentlyClosed()).slice(0, 4).map((entry) => Object.keys(entry).filter((key) => entry[key] && typeof entry[key] === "object").concat(entry.tab ? ["tab"] : [])))()`);
+    console.log("tgD probe: recently closed before", before, "newest entries", JSON.stringify(closed));
+  });
 }

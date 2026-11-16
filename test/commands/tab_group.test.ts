@@ -22,6 +22,7 @@ function make(tab: GroupTabInfo, groups: GroupInfo[], window_tabs: GroupedTab[] 
     groups_in_window: async () => groups,
     tabs_in_window: async () => window_tabs,
     activate: async (id) => void log.push(`activate ${id}`),
+    remove: async (ids) => void log.push(`remove ${ids.join(",")}`),
   };
   return { handlers: make_tab_group_handlers(deps), log };
 }
@@ -89,7 +90,7 @@ test("the schema accepts a bare call and a free-text name for each command", () 
     assert.equal(check_args(command, {}, { search_engines: [], containers: [] }).ok, true, id);
     assert.equal(check_args(command, { [command.params![0]!.name]: "Some title" }, { search_engines: [], containers: [] }).ok, true, id);
   }
-  for (const id of ["tabgroup.remove", "tabgroup.collapse", "tabgroup.expand", "tabgroup.toggle"]) assert.equal(check_args(registry.get(id)!, {}, { search_engines: [], containers: [] }).ok, true, id);
+  for (const id of ["tabgroup.remove", "tabgroup.close", "tabgroup.collapse", "tabgroup.expand", "tabgroup.toggle"]) assert.equal(check_args(registry.get(id)!, {}, { search_engines: [], containers: [] }).ok, true, id);
 });
 
 test("color sets the color of the group of the tab, and a tab in no group refuses", async () => {
@@ -109,8 +110,8 @@ test("the color param holds the Firefox colors, and the validator rejects anothe
 
 // Strip: a(1) a(2) loose(3) b(4) b(5) loose(6) c(7)
 const strip: GroupedTab[] = [
-  { id: 1, index: 0, group_id: 10 }, { id: 2, index: 1, group_id: 10 }, { id: 3, index: 2, group_id: -1 },
-  { id: 4, index: 3, group_id: 20 }, { id: 5, index: 4, group_id: 20 }, { id: 6, index: 5, group_id: -1 }, { id: 7, index: 6, group_id: 30 },
+  { id: 1, index: 0, group_id: 10, active: false }, { id: 2, index: 1, group_id: 10, active: false }, { id: 3, index: 2, group_id: -1, active: false },
+  { id: 4, index: 3, group_id: 20, active: false }, { id: 5, index: 4, group_id: 20, active: false }, { id: 6, index: 5, group_id: -1, active: false }, { id: 7, index: 6, group_id: 30, active: false },
 ];
 const stops = group_stops(strip);
 const picked = (current: number, steps: number) => pick_group_stop(stops, strip[current - 1]!, steps)?.id;
@@ -141,7 +142,7 @@ test("next with a count skips groups, and a window with no group refuses", async
   const { handlers, log } = make(tab({ group_id: 10 }), groups, strip);
   await handlers.next(ctx, { count: 2 });
   assert.deepEqual(log, ["activate 7"]);
-  const none = make(tab(), [], [{ id: 1, index: 0, group_id: -1 }]);
+  const none = make(tab(), [], [{ id: 1, index: 0, group_id: -1, active: false }]);
   await assert.rejects(none.handlers.next(ctx, { count: 1 }), refused(/no tab groups/));
   await assert.rejects(none.handlers.prev(ctx, { count: 1 }), refused(/no tab groups/));
 });
@@ -162,7 +163,7 @@ test("next and prev from an ungrouped tab take the group after and the group bef
 });
 
 test("a pinned tab sits before the groups, so next takes the first group and prev the last", async () => {
-  const pinned_strip: GroupedTab[] = [{ id: 9, index: 0, group_id: -1 }, ...strip.map((t) => ({ ...t, index: t.index + 1 }))];
+  const pinned_strip: GroupedTab[] = [{ id: 9, index: 0, group_id: -1, active: false }, ...strip.map((t) => ({ ...t, index: t.index + 1 }))];
   const next = make(tab({ id: 9, pinned: true }), open_groups, pinned_strip);
   await next.handlers.next(ctx, { count: 1 });
   const prev = make(tab({ id: 9, pinned: true }), open_groups, pinned_strip);
@@ -179,8 +180,33 @@ test("a count above the group count wraps around", async () => {
 });
 
 test("with one collapsed group that holds the tab, next expands it and focuses its first tab", async () => {
-  const only = [{ id: 1, index: 0, group_id: 10 }, { id: 2, index: 1, group_id: 10 }];
+  const only = [{ id: 1, index: 0, group_id: 10, active: false }, { id: 2, index: 1, group_id: 10, active: false }];
   const { handlers, log } = make(tab({ id: 2, group_id: 10 }), [{ id: 10, title: "", collapsed: true }], only);
   await handlers.next(ctx, { count: 1 });
   assert.deepEqual(log, ['update 10 {"collapsed":false}', "activate 1"]);
+});
+
+test("close refuses a tab in no group and a group that holds every tab of the window", async () => {
+  await assert.rejects(make(tab(), []).handlers.close(ctx), refused(/no group/));
+  const whole = [{ id: 1, index: 0, group_id: 10, active: true }, { id: 2, index: 1, group_id: 10, active: false }];
+  const { handlers, log } = make(tab({ group_id: 10 }), [{ id: 10, title: "", collapsed: false }], whole);
+  await assert.rejects(handlers.close(ctx), refused(/every tab in the window/));
+  assert.deepEqual(log, []);
+});
+
+test("close moves focus to the nearest tab outside the group, then closes every tab of the group", async () => {
+  const window_tabs = [
+    { id: 8, index: 0, group_id: -1, active: false }, { id: 1, index: 1, group_id: 10, active: true }, { id: 2, index: 2, group_id: 10, active: false },
+    { id: 3, index: 3, group_id: 20, active: false }, { id: 9, index: 4, group_id: -1, active: false },
+  ];
+  const { handlers, log } = make(tab({ group_id: 10 }), [{ id: 10, title: "", collapsed: false }], window_tabs);
+  await handlers.close(ctx);
+  assert.deepEqual(log, ["activate 8", "remove 1,2"]);
+});
+
+test("close leaves focus alone when no tab of the group is active", async () => {
+  const window_tabs = [{ id: 8, index: 0, group_id: -1, active: true }, { id: 1, index: 1, group_id: 10, active: false }];
+  const { handlers, log } = make(tab({ group_id: 10 }), [{ id: 10, title: "", collapsed: false }], window_tabs);
+  await handlers.close(ctx);
+  assert.deepEqual(log, ["remove 1"]);
 });
