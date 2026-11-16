@@ -29,11 +29,11 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     expect(script_starts("p6_frames_idle_same") === 0, `the unfocused same-origin frame started ${script_starts("p6_frames_idle_same")} times`);
   });
 
-  await run_case(";f a focuses the same-origin frame, and j then scrolls that frame", async () => {
+  await run_case(";ff a focuses the same-origin frame, and j then scrolls that frame", async () => {
     await open_page("frames", page_id, { new_tab: true });
     const before_top = last_scroll_y(page_id);
     const mark = events.length;
-    await press_hint_start(";f");
+    await press_hint_start(";ff");
     await press_keys("a");
     await wait_event(mark, on_page(`${page_id}_same`, "window_focus"), "the frame to take the focus");
     await wait_takes_keys(`${page_id}_same`);
@@ -48,7 +48,7 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     await press_keys("-k", "Escape");
     await press_gF();
     const mark = events.length;
-    await press_hint_start(";f");
+    await press_hint_start(";ff");
     await press_keys("s");
     await wait_event(mark, on_page(`${page_id}_cross`, "tree_read"), "the cross-origin frame to start on focus");
     // The barrier reaches the frame that holds the keys, so a second start would have shown by the time it reports.
@@ -77,7 +77,7 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
 
   await run_case("the 10 px frame gets no label", async () => {
     const mark = events.length;
-    await press_hint_start(";f");
+    await press_hint_start(";ff");
     await press_keys("d");
     await press_keys("-k", "Escape");
     await poll_until("the labels to go after Escape", async () => (await hint_label_count()) === 0);
@@ -100,7 +100,7 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
 
   await run_case("a focused cross-origin frame that navigates keeps the keys, and once removed the top page takes them", async () => {
     let mark = events.length;
-    await press_hint_start(";f");
+    await press_hint_start(";ff");
     await press_keys("s");
     await wait_event(mark, on_page(`${page_id}_cross`, "window_focus"), "the cross-origin frame to take the focus");
     mark = events.length;
@@ -147,7 +147,7 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     await frame_loaded("p6_frames_prompt_in", "same-origin");
     await in_active_tab(`document.getElementById("same").contentDocument.body.insertAdjacentHTML("afterbegin", '<a href="/page?id=framed_link">framed link</a>'); 0`);
     const mark = events.length;
-    await press_hint_start(";f");
+    await press_hint_start(";ff");
     await press_keys("a");
     await wait_event(mark, on_page("p6_frames_prompt_in_same", "window_focus"), "the frame to take the focus");
     await wait_takes_keys("p6_frames_prompt_in_same");
@@ -181,7 +181,7 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     })()`);
   const focus_cross = async () => {
     const mark = events.length;
-    await press_hint_start(";f");
+    await press_hint_start(";ff");
     await press_keys("s");
     await wait_event(mark, on_page(cross_id, "window_focus"), "the cross-origin frame to take the focus");
     // The badge shows that the top page heard of the focused frame, which also starts its watch on that frame.
@@ -189,7 +189,7 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
     await wait_takes_keys(cross_id);
   };
 
-  await run_case(";f into a cross-origin frame shows the FRAME badge and the cue toast in the top page", async () => {
+  await run_case(";ff into a cross-origin frame shows the FRAME badge and the cue toast in the top page", async () => {
     await open_page("frames", top_id, { new_tab: true });
     await focus_cross();
     await poll_until("the cue toast in the top page", async () => (await read_top_toast()) === "Keys act in this frame. gF returns to the page.");

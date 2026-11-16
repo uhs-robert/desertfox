@@ -5,11 +5,12 @@ import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 import { is_scroll_box } from "../scroll_box.ts";
 import { drop_targets_of } from "./drop_targets.ts";
 import { element_address, is_image_element, takes_typing } from "./actions.ts";
+import { HEADINGS, is_heading } from "./headings.ts";
 import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
 // `drop` is internal: the target pass of a grab asks for it, and no command accepts it.
-export type HintFilter = "drop" | "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "custom";
+export type HintFilter = "drop" | "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "headings" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 const LINKS = "a[href]";
@@ -117,6 +118,8 @@ const QUERIES: Record<Exclude<HintFilter, "custom" | "drop">, Query> = {
   media: { selector: "video, audio" },
   images: { selector: "*", test: is_image },
   frames: { selector: "iframe, frame", test: is_pickable_frame },
+  // A function and not `is_heading` itself: headings.ts imports this file, so the binding is not ready while this table is built.
+  headings: { selector: HEADINGS, test: (element) => is_heading(element) },
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 

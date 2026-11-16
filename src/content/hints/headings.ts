@@ -10,7 +10,7 @@ import type { Found } from "./candidates.ts";
 import { boxes_with_fallback, clip_to } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
-const HEADINGS = "h1, h2, h3, h4, h5, h6, [role=heading]";
+export const HEADINGS = "h1, h2, h3, h4, h5, h6, [role=heading]";
 const DEFAULT_HEADING_LEVEL = 2;
 // Boxes thinner than this are the "visually hidden" trick (1px, clipped), made for screen readers only.
 const MIN_BOX_SIDE = 2;

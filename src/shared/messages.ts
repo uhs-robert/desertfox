@@ -96,7 +96,7 @@ export type Relay = {
   args: Record<string, unknown>;
 };
 
-// The extension is about to focus a frame (`;f`, a hint pick): that frame is not parked at its first focus, and `;f` also shows the one-time toast in the top frame.
+// The extension is about to focus a frame (`;ff`, a hint pick): that frame is not parked at its first focus, and `;ff` also shows the one-time toast in the top frame.
 export type FrameCue = {
   type: "frame_cue";
   // Whether the top frame shows the toast. A `here` pick or a pick inside the frame marks the entry and shows none.

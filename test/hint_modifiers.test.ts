@@ -126,12 +126,33 @@ test("the grab modifiers give ;gg and ;Gg for the draggable group, ;ga and ;gb f
   }
 });
 
-test(";w swipes the swipeable group, ;n is the new-window modifier, and ;W and ;w differ in more than case", () => {
+test(";s swipes the swipeable group, ;w is free, ;n is the new-window modifier, and ;W and ;w differ in more than case", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
-  assert.deepEqual([args_at(compiled, ";", "w")?.action, args_at(compiled, ";", "w")?.filter], ["grab_swipe", "swipeable"]);
+  assert.deepEqual([args_at(compiled, ";", "s")?.action, args_at(compiled, ";", "s")?.filter], ["grab_swipe", "swipeable"]);
+  assert.equal(node_at(compiled, ";", "w"), undefined);
   assert.equal(args_at(compiled, ";", "n", "l")?.action, "window");
   assert.equal(node_at(compiled, ";", "W"), undefined);
+});
+
+test("the ;f modifier focuses without clicking, and ;ff ;fF ;fs ;fe ;fh are explicit keys", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  assert.equal((node_at(compiled, ";", "f") as TreeBranch).label, "Focus");
+  for (const [key, filter] of [["l", "links"], ["i", "inputs"], ["b", "buttons"], ["a", "every"], ["t", "prose"], ["m", "media"], ["I", "images"]] as const) {
+    assert.deepEqual([args_at(compiled, ";", "f", key)?.action, args_at(compiled, ";", "f", key)?.filter], ["focus", filter], key);
+  }
+  assert.deepEqual([args_at(compiled, ";", "f", "f")?.action, args_at(compiled, ";", "f", "f")?.filter], [undefined, "frames"]);
+  assert.deepEqual([args_at(compiled, ";", "f", "s")?.action, args_at(compiled, ";", "f", "s")?.filter], ["focus", "scrollable"]);
+  assert.deepEqual([args_at(compiled, ";", "f", "h")?.action, args_at(compiled, ";", "f", "h")?.filter], ["focus", "headings"]);
+  const command_at = (...keys: string[]) => {
+    const node = node_at(compiled, ";", ...keys);
+    return node?.kind === "leaf" ? node.steps[0]!.invocation.id : undefined;
+  };
+  assert.equal(command_at("f", "F"), "frame.exit");
+  assert.equal(command_at("f", "e"), "page.focus_input");
+  assert.equal(args_at(compiled, ";", "s")?.filter, "swipeable");
+  assert.equal(node_at(compiled, ";", "w"), undefined);
 });
 
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
