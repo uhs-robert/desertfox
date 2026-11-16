@@ -11,14 +11,15 @@ import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_frame_cue } from "./frame_cue.ts";
 import { relay_plan } from "../shared/relay.ts";
 import { stored_keymap } from "./keymap_source.ts";
-import { history_cache } from "./history_cache.ts";
+import { listed_by_search } from "./history_cache.ts";
+import { browser_rank_service_deps, start_rank_service } from "./rank_service.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
 import { make_favicon_cache } from "../newtab/icon_cache.ts";
 import { make_favicon_saver, redraw_icon_png } from "./favicon_saver.ts";
 import { shared_previous_tabs } from "./previous_tab.ts";
 import { shared_last_used_tabs } from "./last_used_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
-import { browser_complete_items_deps, create_complete_items } from "./complete_items.ts";
+import { browser_complete_items_deps, create_complete_items, fallback_history } from "./complete_items.ts";
 import type { Asker } from "./complete_items.ts";
 import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
@@ -40,7 +41,7 @@ import { create_word_lookup } from "../cmdline/word_lookup.ts";
 import { build_completer, create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
-import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
+import { answer_mark_request, answer_mark_step, browser_mark_store } from "./mark_store.ts";
 import { browser_quickmark_store } from "./quickmark_store.ts";
 import { answer_register_request, browser_register_store } from "./register_store.ts";
 import { answer_repeat_preview, create_repeat_memory } from "./repeat_memory.ts";
@@ -404,6 +405,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
   if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, global_mark_jump);
+  if (request?.type === "mark_step") return answer_mark_step(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito });
   if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;
@@ -601,12 +603,20 @@ browser.windows.onRemoved.addListener((window_id) => void browser_jump_store.for
 browser.windows.onRemoved.addListener(() => void repeat_memory.clear_private_without_window().catch(warn_and_go("repeat_memory.clear_private_without_window")));
 wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_store, browser_quickmark_store, browser_macro_recorder, browser_last_played, site_zoom], browser.windows);
 
-// Top level, so a future event page gets the events on wake. Each start of the background refills the cache from the browser history.
-browser.history.onVisited.addListener(history_cache.visited);
-browser.history.onTitleChanged.addListener(history_cache.title_changed);
-browser.history.onVisitRemoved.addListener(history_cache.visit_removed);
+// The Worker fills its history at once. The listeners are top level, so a future event page gets the events on wake.
+const rank_service = start_rank_service(
+  browser_rank_service_deps({
+    inputs: complete_items.rank_inputs,
+    is_opener: cmdline.is_opener,
+    fallback: fallback_history,
+    listed: (url) => listed_by_search((text) => browser.history.search({ text, startTime: 0, maxResults: 20 }), url),
+  }),
+);
+browser.runtime.onConnect.addListener(rank_service.connect);
+browser.history.onVisited.addListener(rank_service.visited);
+browser.history.onTitleChanged.addListener(rank_service.title_changed);
+browser.history.onVisitRemoved.addListener(rank_service.visit_removed);
 browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_removed(removal, { marks: browser_mark_store, cmdline, favicons: favicon_saver }).catch(warn_and_go("clear_on_history_removed")));
-void history_cache.start();
 
 browser.tabs.onActivated.addListener(({ tabId, windowId, previousTabId }) => {
   void previous_tabs.activated(windowId, previousTabId);

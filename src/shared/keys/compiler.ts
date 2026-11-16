@@ -67,7 +67,11 @@ function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<strin
     else return [{ sequence, tokens: parsed.tokens, args }];
     return [];
   });
-  const modifier_keys = parsed_modifiers.map(({ tokens }) => tokens.join(""));
+  // Every declared modifier counts, also one that was skipped because a user key took its place. Otherwise the keys under it turn into sources for the other modifiers.
+  const modifier_keys = Object.keys(modifiers).flatMap((sequence) => {
+    const parsed = parse_sequence(sequence);
+    return parsed.error === undefined && parsed.tokens.length >= 2 ? [parsed.tokens.join("")] : [];
+  });
   const sources = [...taken.values()].filter(({ tokens, binding }) => {
     const joined = tokens.join("");
     return !Array.isArray(binding) && binding.args?.action === undefined && !modifier_keys.some((key) => joined.startsWith(key));

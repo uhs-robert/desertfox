@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { heading_level, is_heading, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
+import { is_heading } from "../../src/content/hints/heading_match.ts";
+import { heading_level, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
@@ -143,4 +144,21 @@ test("a count from the remembered heading moves that many and clamps, and the en
   assert.equal(pick_heading_step(five, "prev", 9, 3), 0);
   assert.equal(pick_heading_step(five, "next", 1, 4), undefined);
   assert.equal(pick_heading_step(five, "prev", 1, 0), undefined);
+});
+
+test("first and last pick the ends of the list whatever the view top is, and an empty list is undefined", () => {
+  assert.equal(pick_heading_step(tops, "first", 1), 0);
+  assert.equal(pick_heading_step(tops, "last", 1), 4);
+  assert.equal(pick_heading_step(tops, "first", 1, 2), 0);
+  assert.equal(pick_heading_step(tops, "last", 1, 2), 4);
+  assert.equal(pick_heading_step([], "first", 1), undefined);
+  assert.equal(pick_heading_step([], "last", 1), undefined);
+});
+
+test("a count before first or last passes the check and is ignored", async () => {
+  const { check_args } = await import("../../src/shared/registry/check_args.ts");
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  await import("../../src/background/command_modules.ts");
+  const command = registry.get("page.heading")!;
+  for (const direction of ["first", "last"]) assert.equal(check_args(command, { direction, steps: 3 }).ok, true, direction);
 });

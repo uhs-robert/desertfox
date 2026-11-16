@@ -6,7 +6,7 @@ import type { Outcome } from "../../shared/messages.ts";
 import type { Yanked } from "../caret/copy_text.ts";
 import { collect, name_candidates, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
-import { rendered_text } from "./headings.ts";
+import { rendered_text } from "./heading_match.ts";
 
 export const LINK_FORMATS = ["markdown", "plain", "org"] as const;
 export type LinkFormat = (typeof LINK_FORMATS)[number];

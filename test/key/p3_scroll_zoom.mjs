@@ -54,6 +54,33 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     record("align_heading_tops", { top, center, bottom });
   });
 
+  await run_case("scroll.align puts the heading that [H and ]H jumped to at the top, so zt works after both", async () => {
+    await open_page("headings", "align_ends", { new_tab: true });
+    const scrolled = scroll_of("align_ends");
+    const first_top = () => in_tab(`document.querySelector("h1").getBoundingClientRect().top`);
+    // A scroll key moves the page away without touching the slot, so zt has somewhere to bring the heading back from.
+    const away_then_zt = async (away_keys, top_of_heading, what) => {
+      let mark = events.length;
+      await press_keys(...away_keys);
+      await wait_event(mark, scrolled, `the scroll of ${away_keys.join("")} after ${what}`);
+      await poll_until("the page to settle away from the heading", async () => Math.abs(await top_of_heading()) > 100);
+      mark = events.length;
+      await press_keys("zt");
+      await wait_event(mark, scrolled, `the scroll of zt after ${what}`);
+      await poll_until(`zt to put the heading from ${what} at the top`, async () => Math.abs(await top_of_heading()) <= 2);
+    };
+    let mark = events.length;
+    await press_keys("]", "H");
+    await wait_event(mark, scrolled, "the scroll of ]H");
+    await poll_until("the last heading at the top of the view", async () => Math.abs(await heading_top_of("last")) <= 2);
+    await away_then_zt(["g", "g"], () => heading_top_of("last"), "]H");
+    mark = events.length;
+    await press_keys("[", "H");
+    await wait_event(mark, scrolled, "the scroll of [H");
+    await poll_until("the first heading at the top of the view", async () => Math.abs(await first_top()) <= 2);
+    await away_then_zt(["G"], first_top, "[H");
+  });
+
   await run_case("scroll.align takes the newest of the heading jump and a later field focus, and sh fills the heading slot again", async () => {
     await open_page("headings_field", "align_newest", { new_tab: true });
     const scrolled = scroll_of("align_newest");

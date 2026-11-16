@@ -1,11 +1,11 @@
 import { refused_as } from "../shared/swallow.ts";
-// The newest history rows, kept in the background so history completion reaches pages older than one `history.search` answer holds.
-// Derived state: the browser's history is the truth, so every start of the background refills it with one search. A future event page refills on each wake, and a line that asks before the fill ends gets the plain search.
+// The newest history rows, kept in the rank Worker (`rank_index.ts`) so history completion reaches pages older than one `history.search` answer holds.
+// Derived state: the browser's history is the truth, so every start of the Worker refills it with one search. A future event page refills on each wake, and a line that asks before the fill ends gets the plain search.
 
 export const HISTORY_CACHE_MAX = 8000;
 
 export type HistoryRow = { url: string; title: string; last_visit: number; visit_count: number };
-type Visit = { url?: string | undefined; title?: string | undefined; lastVisitTime?: number | undefined; visitCount?: number | undefined };
+export type Visit = { url?: string | undefined; title?: string | undefined; lastVisitTime?: number | undefined; visitCount?: number | undefined };
 type Change = { kind: "visited"; visit: Visit } | { kind: "title"; url: string; title: string } | { kind: "removed"; urls: readonly string[] } | { kind: "cleared" };
 
 export type HistoryCacheDeps = {
@@ -26,6 +26,8 @@ export function create_history_cache(deps: HistoryCacheDeps) {
   let pending: Change[] = [];
   // True while `drain` runs. Events that arrive then queue behind it, so the order holds across the awaits.
   let draining: Promise<void> | undefined;
+  let became_ready: () => void = () => {};
+  const ready = new Promise<void>((resolve) => (became_ready = resolve));
 
   const drop = (url: string) => {
     const old = by_url.get(url);
@@ -77,6 +79,7 @@ export function create_history_cache(deps: HistoryCacheDeps) {
       rows.sort((left, right) => right.last_visit - left.last_visit);
       await drain();
       state = "ready";
+      became_ready();
     } catch {
       // A failed search leaves the next read to try again. The events held are lost with it, and the new search sees their pages.
       pending = [];
@@ -116,6 +119,8 @@ export function create_history_cache(deps: HistoryCacheDeps) {
       if (state === "empty") void fill();
       return state === "ready" ? rows : undefined;
     },
+    // Resolves when the first fill has ended. A failed fill keeps it waiting for the next one.
+    when_ready: (): Promise<void> => ready,
     // Resolves when the events held so far have applied.
     idle: async (): Promise<void> => {
       await draining;
@@ -133,9 +138,3 @@ export async function listed_by_search(search: (text: string) => Promise<readonl
   return (await search(url.slice(0, SEARCH_PREFIX_LENGTH))).some((item) => item.url === url);
 }
 
-// Marked pure so a bundle that never reads the cache (the new tab page) drops it.
-export const history_cache = /* @__PURE__ */ create_history_cache({
-  search: (max) => browser.history.search({ text: "", startTime: 0, maxResults: max }),
-  max: HISTORY_CACHE_MAX,
-  listed: (url) => listed_by_search((text) => browser.history.search({ text, startTime: 0, maxResults: 20 }), url),
-});

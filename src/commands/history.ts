@@ -1,6 +1,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import { browser_complete_items_deps, history_items } from "../background/complete_items.ts";
+import { browser_complete_items_deps } from "../background/complete_items.ts";
+import { history_items } from "../background/completion_rank.ts";
 import type { HistoryItem } from "../shared/messages.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { open_in, pick_entry, WHERE_PARAM } from "./open_target.ts";

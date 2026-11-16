@@ -126,6 +126,10 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", ";", "#"), undefined);
   assert.equal(leaf_id("normal", "]", "h"), 'page.heading {"direction":"next","steps":1}');
   assert.equal(leaf_id("normal", "[", "h"), 'page.heading {"direction":"prev","steps":1}');
+  assert.equal(leaf_id("normal", "]", "H"), 'page.heading {"direction":"last","steps":1}');
+  assert.equal(leaf_id("normal", "[", "H"), 'page.heading {"direction":"first","steps":1}');
+  assert.equal(leaf_id("normal", "]", "'"), 'mark.step {"direction":"next","steps":1}');
+  assert.equal(leaf_id("normal", "[", "'"), 'mark.step {"direction":"prev","steps":1}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
   assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
@@ -265,14 +269,15 @@ test("the generated search and container keys compile against the full registry 
   for (const prefix of ["s", "S", "c", "C"]) assert.ok((compiled.modes.normal!.children[prefix] as TreeBranch).children.a, `${prefix}a is bound`);
 });
 
-test("the frames filter defaults to the focus action, and ;f and gF are bound", () => {
+test("the frames filter defaults to the focus action, and ;ff and gF are bound", () => {
   const hint = registry.get("hint.run")!;
   const action_of = (args: Record<string, unknown>) => (check_args(hint, args) as { args: Record<string, unknown> }).args.action;
   assert.equal(action_of({ filter: "frames" }), "focus");
   assert.equal(action_of({ filter: "frames", action: "tab" }), "tab");
   assert.equal(action_of({ filter: "links" }), "here");
   const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: unknown; label?: string }>;
-  assert.deepEqual(normal[";f"], { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" });
+  assert.equal(normal[";f"], undefined);
+  assert.deepEqual(normal[";ff"], { id: "hint.run", args: { filter: "frames" }, label: "Focus frame" });
   assert.equal(normal.gF!.id, "frame.exit");
   assert.equal(registry.get("frame.exit")!.label, "Focus top page");
 });
@@ -284,8 +289,8 @@ test("hint modifier variants whose action needs another filter are not bound", (
     for (const key of keys) node = node?.children?.[key] as TreeBranch | undefined;
     return node !== undefined;
   };
-  const hidden = [";Bb", ";Bt", ";Bi", ";nb", ";nt", ";ni", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yt", ";Ya"];
-  const valid = [";Bl", ";BI", ";Bf", ";Bm", ";nl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rb", ";hb", ";xi"];
+  const hidden = [";Bf", ";Bb", ";Bt", ";Bi", ";nb", ";nt", ";ni", ";yB", ";yp", ";YI", ";Yf", ";Ym", ";Yi", ";Yl", ";Yt", ";Ya"];
+  const valid = [";Bl", ";BI", ";Bm", ";fl", ";fI", ";nl", ";yl", ";yI", ";yi", ";yf", ";ym", ";yt", ";yc", ";yh", ";rb", ";hb", ";xi"];
   for (const keys of hidden) assert.equal(is_bound(keys), false, `${keys} is bound`);
   for (const keys of valid) assert.equal(is_bound(keys), true, `${keys} is missing`);
 });

@@ -96,7 +96,7 @@ export type Relay = {
   args: Record<string, unknown>;
 };
 
-// The extension is about to focus a frame (`;f`, a hint pick): that frame is not parked at its first focus, and `;f` also shows the one-time toast in the top frame.
+// The extension is about to focus a frame (`;ff`, a hint pick): that frame is not parked at its first focus, and `;ff` also shows the one-time toast in the top frame.
 export type FrameCue = {
   type: "frame_cue";
   // Whether the top frame shows the toast. A `here` pick or a pick inside the frame marks the entry and shows none.
@@ -144,11 +144,11 @@ export type RecordCmdline = {
   text: string;
 };
 
-// From the command line page when the subject of `bookmark`, `open`, `tab.attach`, or the engine word of `search`, needs its list. The tab list reads the tab model port instead. The answer is undefined unless the
+// From the command line page when the subject of `bookmark`, `tab.attach`, or the engine word of `search`, needs its list. The tab list reads the tab model port instead. The answer is undefined unless the
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "anything";
+  kind: "bookmarks" | "engines" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line
@@ -243,7 +243,7 @@ export type ClosedTabRow = { session_id: string; title: string; url: string } & 
 // `tab_used` maps a tab id to its `lastAccessed` (ms), read once when the line opens, for the empty-query order. The tab model's rows hold no such time. `tab_boost` maps a tab id to its boost.
 export type AnythingItems = { tab_used: Record<number, number>; tab_boost: Record<number, number>; sites: SiteItem[]; quickmarks: ({ key: string; url: string } & Boosted)[]; bookmarks: BookmarkItem[]; history: HistoryItem[]; closed: ClosedTabRow[]; history_max: number };
 
-export type CompleteItemsAnswer = { items: AnythingItems | BookmarkRows | BookmarkItem[] | EngineItem[] | HistoryItems | OpenItems | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
+export type CompleteItemsAnswer = { items: BookmarkRows | BookmarkItem[] | EngineItem[] | WindowItem[] | HeadingItem[] | SessionItem[] | RegisterItem[] | FolderItem[] };
 
 // A mark that a which-key row lists: its key and the scroll offset it keeps, in px. A global mark also carries its address.
 export type MarkItem = { key: string; x: number; y: number; url?: string };
@@ -253,6 +253,8 @@ export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y
 // `arrival` names the global mark jump the background pushed into the tab it went to, as in `JumpStep`.
 export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number; arrival?: number };
 export type MarkRequest = MarkSet | MarkJump;
+// From the `page` bundle. Answers the offset of the nearest mark of this page below (`next`) or above (`prev`) the scroll offset `y`, or the one `steps` marks on (the last one when there are fewer), and stores nothing.
+export type MarkStep = { type: "mark_step"; direction: "next" | "prev"; steps: number; url: string; x: number; y: number };
 // Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
 export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };
 
@@ -608,7 +610,7 @@ export type HintFramesUnhover = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | Relay | FrameCue | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | Relay | FrameCue | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | MarkStep | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.

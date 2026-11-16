@@ -9,19 +9,22 @@ import { check_args_shape } from "../shared/registry/check_shape.ts";
 import { parse_command_line } from "../shared/registry/command_line.ts";
 import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages.ts";
 import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
+import { RANK_PORT_NAME } from "../shared/rank_port.ts";
+import type { RankPush } from "../shared/rank_port.ts";
 import { create_live_source } from "./completion/live.ts";
+import { create_ranked_client } from "./completion/ranked_client.ts";
 import { create_model_client } from "./completion/model_client.ts";
 import type { ModelClient } from "./completion/model_client.ts";
 import { create_completer } from "./completion/sources.ts";
-import { edit_forwarded, run_token, run_token_without_keymap } from "./key_input.ts";
-import type { TokenMatcher } from "./key_input.ts";
+import { edit_forwarded, run_steps, run_token, run_token_without_keymap } from "./key_input.ts";
+import type { KeyOutcome, TokenMatcher, Waits } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
 import { key_labels } from "./completion/keys.ts";
 import { create_list } from "./list.ts";
 import { wheel_rows } from "./wheel.ts";
 import type { Wheel_state } from "./wheel.ts";
-import { create_session } from "./session.ts";
+import { create_session, ROW_COMMANDS } from "./session.ts";
 import type { Effect, Session } from "./session.ts";
 import { status_widgets } from "./status.ts";
 import { create_word_lookup } from "./word_lookup.ts";
@@ -70,6 +73,9 @@ function show_prompt(prompt: HTMLElement, setting: string): void {
 
 const FALLBACK_ROW_HEIGHT_PX = 24;
 
+// How long a key that acts on the list waits for rows on their way before it runs anyway, so a lost answer never stalls the line.
+const HOLD_LIMIT_MS = 1000;
+
 // Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
 // ticket is live, so every `start` is tried and the first one it accepts wins.
 async function open_line(start: Start, port: MessagePort): Promise<void> {
@@ -113,18 +119,14 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       line_window_id: opened.window_id,
       all_windows: opened.all_windows,
       request_resync: () => port.postMessage({ type: "resync" } satisfies TabModelRequest),
-      on_change: () => {
-        session.source_ready();
-        render();
-      },
+      on_change: () => sources_changed(),
     });
     port.onMessage.addListener((message) => client.receive(message as TabModelMessage));
     // The background closes the port when the opener check fails, before any snapshot. A list that has rows keeps them.
     port.onDisconnect.addListener(() => {
       model_lost = true;
       if (client.items() === undefined) session.set_message("could not read the tabs");
-      session.source_ready();
-      render();
+      sources_changed();
     });
     model_port = port;
     return client;
@@ -135,14 +137,30 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     tabs: () => (model ??= connect_model()).items() ?? (model_lost ? [] : undefined),
     groups: () => (model ??= connect_model()).group_items() ?? (model_lost ? [] : undefined),
     all_tabs: () => (model ??= connect_model()).all_items() ?? (model_lost ? [] : undefined),
-    on_ready: () => {
-      session.source_ready();
-      render();
+    on_ready: () => sources_changed(),
+  });
+  // The rank port opens on the first ranked list, after the ticket redeemed, as the tab model port does.
+  let rank_port: browser.runtime.Port | undefined;
+  const ranked = create_ranked_client({
+    send: (request) => {
+      if (!rank_port) {
+        rank_port = browser.runtime.connect({ name: RANK_PORT_NAME });
+        rank_port.onMessage.addListener((message) => ranked.receive(message as RankPush));
+        // The background closes the port when the opener check fails. The ranked lists then list nothing.
+        rank_port.onDisconnect.addListener(() => {
+          ranked.end();
+          sources_changed();
+        });
+      }
+      rank_port.postMessage(request);
     },
+    on_ready: () => sources_changed(),
   });
   const close_sources = () => {
     live.close();
+    ranked.end();
     model_port?.disconnect();
+    rank_port?.disconnect();
   };
   const session: Session = create_session({
     search: start.search !== undefined,
@@ -153,7 +171,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     has_param: (command_id, name) => lookup.find(command_id)?.params?.some((param) => param.name === name) === true,
     tabs: () => model?.items(true),
     containers: opened.container_stores,
-    complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live, opened.theme_names),
+    complete: start.search ? undefined : create_completer(lookup, opened.commands, opened.command_aliases, opened.sources, opened_from, live, opened.theme_names, ranked),
     // Only a missing value is caught here. The router still checks everything else when it runs the command.
     precheck: (invocation) => {
       const command = lookup.find(invocation.id);
@@ -192,9 +210,18 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   let typed_before_focused: string[] | undefined = [];
   // Set once the line ended. Keys that still reach this page wait here for the host's `drain`, which replays them in its frame.
   let late_keys: string[] | undefined;
-  // Keys still waiting for `focused` came after the forwarded key that ended the line, so they are late too.
+  // A key that acts on the list while its rows are on their way waits here with every key after it, and they run in order once the rows land (`replay_held`).
+  // The waiting key's own steps go first. All of them run anyway `HOLD_LIMIT_MS` after the first one waited.
+  let held: ({ steps: Extract<KeyOutcome, { kind: "hold" }>["steps"] } | { token: string })[] = [];
+  let hold_timer: ReturnType<typeof setTimeout> | undefined;
+  // Keys still waiting for `focused`, and keys held for rows, came after the key that ended the line, so they are late too.
   const take_late_keys = () => {
-    late_keys ??= typed_before_focused ?? [];
+    if (!late_keys) {
+      late_keys = [...(typed_before_focused ?? []), ...held.flatMap((entry) => ("token" in entry ? [entry.token] : []))];
+      held = [];
+      clearTimeout(hold_timer);
+      hold_timer = undefined;
+    }
     typed_before_focused = undefined;
     return late_keys;
   };
@@ -235,22 +262,72 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     } else render();
   };
 
-  // Returns true when the keymap took the token, or the line has ended and keeps it for the host.
+  const waits: Waits = (command_id) => session.waits_for_rows(command_id);
+  let held_again = false;
+  // The waiting steps go to the front: during a replay the keys after them are still queued.
+  const hold = (steps: Extract<KeyOutcome, { kind: "hold" }>["steps"]) => {
+    held.unshift({ steps });
+    held_again = true;
+    hold_timer ??= setTimeout(() => replay_held(undefined), HOLD_LIMIT_MS);
+    render();
+  };
+  const settle = (outcome: KeyOutcome): boolean => {
+    if (outcome.kind === "hold") hold(outcome.steps);
+    else if (outcome.kind === "effect") carry_out(outcome.effect);
+    return outcome.kind !== "unbound";
+  };
+  // `wait` is undefined once the time limit passed: then every held key runs. A key that still waits stops the replay where it is.
+  const replay_held = (wait: Waits) => {
+    while (held.length > 0 && !late_keys) {
+      held_again = false;
+      const entry = held.shift()!;
+      if ("token" in entry) type_token(entry.token, wait);
+      else settle(run_steps(session, entry.steps, wait));
+      if (held_again) return;
+    }
+    clearTimeout(hold_timer);
+    hold_timer = undefined;
+  };
+  const sources_changed = () => {
+    session.source_ready();
+    render();
+    replay_held(waits);
+  };
+
+  // Returns true when the keymap took the token, or the line has ended and keeps it for the host, or it waits behind a held key.
   const press = (token: string): boolean => {
     if (late_keys) {
       late_keys.push(token);
       return true;
     }
+    if (held.length > 0 && waits_behind_held(token)) {
+      held.push({ token });
+      return true;
+    }
+    return press_now(token, waits);
+  };
+  // Behind a held key, a key the line types and a key bound to a row command wait too, so the text and the rows they act on stay in order.
+  // Any other key acts at once: a bound key such as Ctrl+U runs, and the browser keeps its own keys (paste, select all, Shift with an arrow), which a replay cannot do.
+  const waits_behind_held = (token: string): boolean => {
+    const bound = matcher ? keymap?.modes.cmdline?.children[token] : undefined;
+    if (bound) return bound.kind === "leaf" && bound.steps.some((step) => ROW_COMMANDS.has(step.invocation.id));
+    return token === "<Enter>" || edit_forwarded({ text: "", start: 0, end: 0 }, token) !== undefined;
+  };
+  const press_now = (token: string, wait: Waits): boolean => {
     // An arrow key or a click moves the caret with no input event, so the list would rank the old word.
     if (input.value === session.get_text()) session.set_caret(input.selectionStart ?? input.value.length);
-    const outcome = matcher ? run_token(matcher, session, token) : run_token_without_keymap(session, token);
-    if (outcome.kind === "effect") carry_out(outcome.effect);
-    return outcome.kind === "effect";
+    return settle(matcher ? run_token(matcher, session, token, wait) : run_token_without_keymap(session, token, wait));
   };
 
   // A key that reached the host script, not this page, so the line types it here.
   const press_forwarded = (token: string) => {
-    if (press(token)) return;
+    if (!press(token)) type_text(token);
+  };
+  // A key that waited behind a held one: the line types it here too, as its keydown was cancelled.
+  const type_token = (token: string, wait: Waits) => {
+    if (!press_now(token, wait)) type_text(token);
+  };
+  const type_text = (token: string) => {
     const end_of_text = input.value.length;
     const edited = edit_forwarded({ text: input.value, start: input.selectionStart ?? end_of_text, end: input.selectionEnd ?? end_of_text }, token);
     if (!edited) return;

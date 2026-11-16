@@ -203,11 +203,10 @@ test("the engine word of search is completed from the configured engines", () =>
   }
 });
 
-test("tabs, bookmarks and history read empty, so the address bar shows none of them", () => {
+test("tabs and bookmarks read empty and the ranked lists have no port, so the address bar shows none of them", () => {
   const live = engines_only_live({ arch: { url: "https://arch.example/?q={query}", label: "Arch" } });
   assert.deepEqual(live.read("tabs"), { loading: false, items: [] });
   assert.deepEqual(live.read("bookmarks"), { loading: false, items: { rows: [], folders: [] } });
-  assert.deepEqual(live.read("history"), { loading: false, items: { rows: [], max: 0 } });
   const { complete } = built_in_completer({});
   for (const text of ["open ", "bookmark ", "history ", "tab "]) assert.deepEqual(complete(text, text.length).rows.filter((row) => row.tag !== undefined || row.tab !== undefined), [], text);
 });

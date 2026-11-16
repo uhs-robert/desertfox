@@ -12,10 +12,12 @@ import { FOLDER_PATH_SEPARATOR, in_folder, pick_filter_folder, rows_in_folder } 
 import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
-import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, HistoryItems, OpenItems, OpenRow, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { RankSource } from "../../shared/rank_port.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import { RECENT_BOOKMARKS } from "../../shared/rank_port.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
-import { anything_ranked } from "./anything.ts";
-import { host_of, matching_sites } from "./sites.ts";
+import { anything_ranked, row_of_wire } from "./anything.ts";
+import type { RankedClient } from "./ranked_client.ts";
 import { cursor_context, quote_word } from "./tokenize.ts";
 import type { CursorContext } from "./tokenize.ts";
 
@@ -196,27 +198,6 @@ function setting_rows(context: Extract<CursorContext, { kind: "subject" }>, text
   return spec.values.concat(setting === "theme" ? theme_names : []).filter((value) => !already_typed.has(value)).map((value) => row(value, `${quote_word(value)} `, ""));
 }
 
-// With no word typed, the bookmark list shows this many of the newest.
-const RECENT_BOOKMARKS = 20;
-
-function open_rows(rows: readonly OpenRow[], usage: string): Row[] {
-  return rows.map((row) => ({ name: row.title, insert: `${quote_word(row.url)} `, description: row.url, args: "", also_named: [], keywords: [], usage, tag: row.tag, ...(row.boost ? { boost: row.boost } : {}) }));
-}
-
-// With no word, each group keeps its newest rows: 20 bookmarks and the history cap that came with the rows.
-// A typed word ranks every row in one list. The background sends the groups in setting order, and an equal score keeps that order, with the site rows last.
-function open_ranked(word: string, rows: Row[], items: OpenItems, usage: string): Ranked<Row>[] {
-  if (word.trim() !== "") {
-    // The background already left out a site whose home page is a row.
-    const sites = matching_sites(word, items.sites, () => false).map((site): Row => ({ name: host_of(site), insert: `${quote_word(site.url)} `, description: site.url, args: "", also_named: [], keywords: [], usage, tag: "site", boost: site.boost }));
-    const group_order = [...new Set(rows.map((row) => row.tag)), "site"];
-    return rank(word, [...rows, ...sites], (row) => group_order.indexOf(row.tag));
-  }
-  const caps: Record<string, number> = { bm: RECENT_BOOKMARKS, hist: items.history_max };
-  const shown: Record<string, number> = {};
-  return rank(word, rows).filter((row) => (shown[row.tag as string] = (shown[row.tag as string] ?? 0) + 1) <= (caps[row.tag as string] ?? Infinity));
-}
-
 const FLAGS: TabFlag[] = ["pinned", "audible", "muted", "discarded", "split"];
 
 const omit_window = ({ window_number, ...marks }: TabMarks): TabMarks => marks;
@@ -290,8 +271,6 @@ function heading_rows(headings: readonly HeadingItem[], usage: string): Row[] {
 
 const bookmark_row = (bookmark: BookmarkItem, usage: string): Row => ({ name: bookmark.title, insert: `${quote_word(bookmark.url)} `, description: bookmark.url, args: "", also_named: [], keywords: [], usage, ...(bookmark.boost ? { boost: bookmark.boost } : {}) });
 
-const bookmark_rows = (bookmarks: readonly BookmarkItem[], usage: string): Row[] => bookmarks.map((bookmark) => bookmark_row(bookmark, usage));
-
 // The dim cell of a bookmark row: the last part of its newest folder, and how many more folders hold the address. Under a filter the newest folder inside it is the one named.
 function folder_tag(answer: BookmarkRows, folders: readonly number[], root_path: string | undefined): string {
   const shown = root_path === undefined ? folders[0] : folders.find((index) => in_folder(answer.folders[index] ?? "", root_path));
@@ -336,7 +315,7 @@ function engine_rows(engines: readonly EngineItem[], usage: string, marks_unavai
 const live_kind_of = (param: ParamDef | undefined): LiveKind | undefined => {
   if (!param || !is_dynamic_values(param.values)) return undefined;
   const from = param.values.from;
-  return from === "tabs" || from === "bookmarks" || from === "history" || from === "open" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" || from === "marks" || from === "quickmarks" || from === "saved_quickmarks" || from === "anything" || from === "groups" ? from : from === "search_engines" ? "engines" : undefined;
+  return from === "tabs" || from === "bookmarks" || from === "windows" || from === "headings" || from === "sessions" || from === "registers" || from === "folders" || from === "marks" || from === "quickmarks" || from === "saved_quickmarks" || from === "groups" ? from : from === "search_engines" ? "engines" : undefined;
 };
 
 // The engine takes the first word of `search`, ahead of the query that follows it.
@@ -348,8 +327,14 @@ function first_word_param(command: Command, engine_settled: boolean): ParamDef |
   return positional && static_values(positional) ? positional : (subject_param(command) ?? bare);
 }
 
+// The lists the background ranks, because they rank the history.
+const ranked_kind_of = (param: ParamDef | undefined): RankSource | undefined => {
+  const from = param && is_dynamic_values(param.values) ? param.values.from : undefined;
+  return from === "open" || from === "history" || from === "anything" ? from : undefined;
+};
+
 // The completer reads the commands once, so each keystroke only ranks.
-// `live` supplies the tabs, bookmarks and engines. Without it those subjects list nothing.
+// `live` supplies the tabs, bookmarks and engines, and `ranked` the rows the background ranks. Without them those subjects list nothing.
 export function create_completer(
   lookup: CommandLookup,
   commands: readonly CommandMeta[],
@@ -358,8 +343,27 @@ export function create_completer(
   opened_from = "normal",
   live?: Pick<LiveSource, "read"> & Partial<Pick<LiveSource, "read_all_tabs">>,
   theme_names: readonly string[] = [],
+  ranked?: Pick<RankedClient, "read">,
 ) {
   const all_commands = command_rows(commands, command_aliases, opened_from);
+  // The last ranked list, which stays drawn while the next answer is on its way.
+  let shown: { source: RankSource; rows: Ranked<Row>[] } | undefined;
+  const ranked_rows = (source: RankSource, word: string, usage: string): { rows: Ranked<Row>[]; loading?: true } => {
+    if (!ranked) return { rows: [] };
+    if (source === "anything") {
+      const engines = live?.read("engines");
+      const tabs = live?.read_all_tabs?.();
+      const read = tabs && ranked.read({ source, word, over_fetch: new Set(tabs.map((tab) => tab.url)).size });
+      if (!read?.ready || !engines || engines.loading) return { rows: shown?.source === source ? shown.rows : [], loading: true };
+      const finder_tabs = tab_rows(tabs!, usage).map((row, index) => ({ row, url: tabs![index]!.url, id: tabs![index]!.id, last_used: read.reply.finder?.tab_used[tabs![index]!.id] ?? 0, current: tabs![index]!.active === true }));
+      shown = { source, rows: anything_ranked({ word, usage, tabs: finder_tabs, reply: read.reply, engines: engines.items }) };
+      return { rows: shown.rows };
+    }
+    const read = ranked.read({ source, word, over_fetch: 0 });
+    if (!read.ready) return { rows: shown?.source === source ? shown.rows : [], loading: true };
+    shown = { source, rows: read.reply.rows.map((wire) => row_of_wire(wire, usage)) };
+    return { rows: shown.rows };
+  };
   return (text: string, caret: number): Completion => {
     const context = cursor_context(text, caret, lookup.find);
     if (context.kind === "none") return NO_COMPLETION;
@@ -372,26 +376,15 @@ export function create_completer(
     const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command, context.engine_settled) : undefined;
     // `media quality ` lists the levels of the page's player: the first word that is not a flag is the action, and the subject after it is the value.
     const kind = context.kind === "subject" && context.command.id === "media.act" && context.position === 1 && (tokenize(text.slice(0, context.start)) as { text: string }[]).slice(1).find((token) => !token.text.startsWith("-"))?.text === "quality" ? "quality_levels" : live_kind_of(param);
-    if (kind === "anything" && live) {
-      const read = live.read("anything");
-      const engines = live.read("engines");
-      const tabs = live.read_all_tabs?.();
-      if (read.loading || engines.loading || !tabs) return { ...span, usage, rows: [], listing: true, loading: true };
-      const finder_tabs = tab_rows(tabs, usage).map((row, index) => ({ row, url: tabs[index]!.url, id: tabs[index]!.id, last_used: read.items.tab_used[tabs[index]!.id] ?? 0, current: tabs[index]!.active === true }));
-      return { ...span, usage, rows: anything_ranked({ word: context.word, usage, tabs: finder_tabs, items: read.items, engines: engines.items }), listing: true, highlight_first: context.word.trim() !== "" };
+    const ranked_source = ranked_kind_of(param);
+    if (ranked_source) {
+      // The finder highlights its first row while a query is typed, also while the rows are on their way, so Enter waits for them.
+      const highlight_first = ranked_source === "anything" && context.word.trim() !== "";
+      return { ...span, usage, listing: true, ...ranked_rows(ranked_source, context.word, usage), ...(highlight_first ? { highlight_first } : {}) };
     }
     if (kind && live) {
       const read = live.read(kind);
       if (read.loading) return { ...span, usage, rows: [], listing: true, loading: true };
-      if (kind === "open") {
-        const items = read.items as OpenItems;
-        return { ...span, usage, rows: open_ranked(context.word, open_rows(items.rows, usage), items, usage), listing: true };
-      }
-      if (kind === "history") {
-        const items = read.items as HistoryItems;
-        const ranked = rank(context.word, bookmark_rows(items.rows, usage));
-        return { ...span, usage, rows: context.word.trim() === "" ? ranked.slice(0, items.max) : ranked, listing: true };
-      }
       const rows =
         kind === "tabs"
           ? tab_rows(read.items as TabItem[], usage)
