@@ -38,7 +38,8 @@ const MAX_BYTES = {
   // 59 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings, and the three newtab_weather settings. `set theme` also offers the theme files and imports of the config, which the page gets when the line opens.
   // 59.5 KB: the lists that rank the history come ranked from the background over a port (`ranked_client.ts`), the finder merges its tab rows into them, and keys that act on the list wait for rows on their way.
   // 60 KB: behind a key that waits for rows, the page looks up each later key in the keymap, so only typed keys and row keys wait in order and every other key acts at once. A failed answer reads as empty for its word without being kept.
-  "cmdline_page.js": 60 * 1024,
+  // 60.5 KB: the font_family, font_family_mono and font_scale settings add their completion entries.
+  "cmdline_page.js": 60.5 * 1024,
   "find_worker.js": 2 * 1024,
   // 10.5 KB: the Worker holds the history cache and builds and ranks the rows of `open`, `history` and the finder. It loads once per background start, never in a page.
   "rank_worker.js": 10.5 * 1024,
