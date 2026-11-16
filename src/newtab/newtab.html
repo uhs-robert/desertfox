@@ -28,6 +28,7 @@
   .desertfox-newtab .clock .bezel { fill: transparent; stroke: var(--desertfox-primary); stroke-width: 2; }
   .desertfox-newtab .clock line { transform-origin: 50px 50px; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
   .desertfox-newtab .clock.jumping line { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .desertfox-newtab .clock line { transition: none; } }
   .desertfox-newtab .clock .hour, .desertfox-newtab .clock .minute { stroke: var(--desertfox-fg-core); }
   .desertfox-newtab .clock .second { stroke: var(--desertfox-secondary); }
   .desertfox-newtab .clock .cap { fill: var(--desertfox-bg-mantle); }

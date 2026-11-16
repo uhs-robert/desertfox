@@ -21,11 +21,15 @@ function with_page(body: (calls: Call[], root: { scrollTop: number }) => void): 
     configurable: true,
     value: { scrollingElement: root, documentElement: root, body: {}, activeElement: null, querySelectorAll: () => [] },
   });
+  const saved_match_media = Object.getOwnPropertyDescriptor(globalThis, "matchMedia");
+  Object.defineProperty(globalThis, "matchMedia", { configurable: true, value: () => ({ matches: false }) });
   mock.timers.enable({ apis: ["setTimeout"] });
   try {
     body(calls, root);
   } finally {
     mock.timers.reset();
+    if (saved_match_media) Object.defineProperty(globalThis, "matchMedia", saved_match_media);
+    else delete (globalThis as { matchMedia?: unknown }).matchMedia;
     if (saved) Object.defineProperty(globalThis, "document", saved);
     else delete (globalThis as { document?: unknown }).document;
   }

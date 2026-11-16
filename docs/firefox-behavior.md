@@ -121,6 +121,14 @@ A single smooth scroll takes about 460 ms to finish. A held key lags with `"smoo
 
 Smooth scrolls restart each other. Three `scrollBy` calls of 400 px in one tick with the pref true ended at 400 px, not 1200, and one call of 1200 px reached 1200. Two taps 50 ms apart ended at 472 px of 800, 150 ms apart at 667, 300 ms apart at 777 and 450 ms apart at 797. So a counted page scroll is one call for the whole distance.
 
+### Reduced motion
+
+Question: does `behavior: "smooth"` still animate when the page asks for reduced motion?
+
+Setup: Firefox 160 headless, a fresh profile with `general.smoothScroll` true and `ui.prefersReducedMotion` 0 or 1, a page script calling `scrollTo({ top: 600, behavior: "smooth" })` on a 6000 px page, sampled with `requestAnimationFrame` for 600 ms. `matchMedia("(prefers-reduced-motion: reduce)")` matched only with the pref at 1.
+
+Result: yes, it still animates. Both runs gave 19 distinct positions and ended at 600. Firefox does not turn a script's smooth scroll into a jump under reduced motion. So the scroll keys check the media query themselves and use `"instant"`.
+
 ## Firefox defaults (not measured)
 
 These are Firefox defaults that the design relies on. Nobody has measured them in this project yet.
