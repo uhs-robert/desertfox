@@ -253,7 +253,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   const pointer_from = action === "hover" ? undefined : leave_toward(target);
   if (action === "delete") return target.remove();
   if (action === "focus") {
-    // Only `;f` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see.
+    // Only `;ff` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see.
     focus_target(target, true);
     return;
   }

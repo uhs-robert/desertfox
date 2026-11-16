@@ -392,11 +392,11 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
 
   const attr_of = (id, name) => read(`document.getElementById("${id}").dataset.${name}`);
 
-  await run_case(";w labels the four swipe targets, and l flings a carousel one slide at a time until Escape", async () => {
+  await run_case(";s labels the four swipe targets, and l flings a carousel one slide at a time until Escape", async () => {
     const page_id = "swipe_car";
     await open_page("drag", page_id, { new_tab: true });
     let mark = events.length;
-    await press_keys(";w");
+    await press_keys(";s");
     await labels_up("labels of the swipeable group");
     expect((await hint_label_count()) === 4, `the snap box, the carousel, the link and the touch-action box are the group, and a page-wide touch-action adds nothing, got ${await hint_label_count()} labels`);
     const label = await label_of("#car");
@@ -417,9 +417,9 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     expect((await attr_of("car", "index")) === "1", "the carousel moved after Escape");
   });
 
-  await run_case(";w on a scroll-snap box lands on the next slide with no pointer press", async () => {
+  await run_case(";s on a scroll-snap box lands on the next slide with no pointer press", async () => {
     await open_page("drag", "swipe_snap", { new_tab: true });
-    await press_keys(";w");
+    await press_keys(";s");
     await pick("#snap");
     await press_keys("l");
     await poll_until("the box on slide 2", async () => Math.abs(parseFloat(await read('document.getElementById("snap").scrollLeft')) - 300) < 2, { timeout_ms: 5000 });
@@ -428,10 +428,10 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     await press_keys("-k", "Escape");
   });
 
-  await run_case(";w on a link slide sends no dragstart and still swipes", async () => {
+  await run_case(";s on a link slide sends no dragstart and still swipes", async () => {
     const page_id = "swipe_link";
     await open_page("drag", page_id, { new_tab: true });
-    await press_keys(";w");
+    await press_keys(";s");
     await pick("#link");
     await press_keys("l");
     await poll_until("the link carousel on slide 1", async () => (await attr_of("link", "index")) === "1", { timeout_ms: 5000 });
@@ -442,10 +442,10 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     expect((await attr_of("link", "downs")) === (await attr_of("link", "ups")), "a press was left down on the link");
   });
 
-  await run_case(";w then l and Escape at once leaves no pointer pressed and the mode closed", async () => {
+  await run_case(";s then l and Escape at once leaves no pointer pressed and the mode closed", async () => {
     const page_id = "swipe_escape";
     await open_page("drag", page_id, { new_tab: true });
-    await press_keys(";w");
+    await press_keys(";s");
     await pick("#car");
     await press_keys("l", "l", "l", "-k", "Escape");
     await sleep(600);
@@ -456,9 +456,9 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     expect((await attr_of("car", "index")) === at, "l flung after Escape");
   });
 
-  await run_case(";w then two fast l presses move two slides, one fling after the other", async () => {
+  await run_case(";s then two fast l presses move two slides, one fling after the other", async () => {
     await open_page("drag", "swipe_queue", { new_tab: true });
-    await press_keys(";w");
+    await press_keys(";s");
     await pick("#car");
     await press_keys("l", "l");
     await poll_until("slide 2", async () => (await attr_of("car", "index")) === "2", { timeout_ms: 5000 });
@@ -466,9 +466,9 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
     await press_keys("-k", "Escape");
   });
 
-  await run_case(";w on a page that ignores untrusted events moves nothing and leaves no raw press", async () => {
+  await run_case(";s on a page that ignores untrusted events moves nothing and leaves no raw press", async () => {
     await open_page("drag", "swipe_strict", { new_tab: true });
-    await press_keys(";w");
+    await press_keys(";s");
     await pick("#car");
     await press_keys("l");
     await poll_until("the raw press", async () => (await read("document.body.dataset.rawdown")) === "1", { timeout_ms: 5000 });
