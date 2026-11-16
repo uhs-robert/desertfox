@@ -2,7 +2,6 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import { stored_keymap } from "./keymap_source.ts";
-import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { Mode } from "../shared/command.ts";
 import { BRIDGE_HOST_NAME, create_bridge } from "./bridge.ts";
 import type { BridgeDeps, BridgeWindow } from "./bridge.ts";

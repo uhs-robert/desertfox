@@ -7,7 +7,7 @@ import { MODES } from "../command.ts";
 import type { SearchEngine, Settings } from "../config.ts";
 import { nodes_of_file, resolve_engines } from "../engines/index.ts";
 import type { EngineNode } from "../engines/index.ts";
-import type { KeymapConfig, ModeBindings } from "../keymap.ts";
+import type { KeymapConfig } from "../keymap.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { is_plain_object } from "./errors.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../settings_schema.ts";

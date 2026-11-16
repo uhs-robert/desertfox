@@ -1,7 +1,7 @@
 // The registry and its define-time checks. Every rejection throws a
 // DefineError that names the command and the field.
 
-import type { CommandDef, DefaultArm, ParamDef, PatternArm, ParamValue } from "../command.ts";
+import type { CommandDef, DefaultArm, ParamDef, PatternArm } from "../command.ts";
 import { MODES } from "../command.ts";
 import { parse_sequence } from "../keys/notation.ts";
 import { always_default, arm_conditions, declared_default, find_param, is_context_source, is_default_list, is_dynamic_values, split_default, static_values } from "./params.ts";

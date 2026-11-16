@@ -6,7 +6,6 @@ import { build_config_status } from "./config_load.ts";
 import { build_setting_list } from "../shared/setting_list.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer } from "../shared/messages.ts";
-import { is_extension_page } from "./extension_page.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
