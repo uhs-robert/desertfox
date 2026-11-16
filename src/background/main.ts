@@ -286,10 +286,15 @@ const toolbar = create_toolbar({
 });
 void toolbar.sync_look();
 const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_theme, host_update.bridge_ready);
-host_update.on_updated(() => bridge.reconnect());
+const refresh_font_names = () => void refused_as(font_names.refresh(), undefined);
+host_update.on_updated(() => {
+  bridge.reconnect();
+  refresh_font_names();
+});
+browser.permissions.onAdded.addListener(refresh_font_names);
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
-void refused_as(font_names.refresh(), undefined);
+refresh_font_names();
 const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort() });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
