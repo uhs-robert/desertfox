@@ -54,7 +54,7 @@ async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (
 }
 
 test("a field's summary and long text come from the key resolver", async () => {
-  const { session } = await make({}, (text) => text.replaceAll("{key:repeat}", "<A-.>"));
+  const { session } = await make({}, (text) => text.replace(/\{key:repeat[^}]*\}/g, "<A-.>"));
   const field = session.fields().find((candidate) => candidate.row.name === "which_key_repeat")!;
   assert.match(field.doc, /^<A-\.> runs your last action again/);
   assert.match(field.summary, /that <A-\.> runs again/);

@@ -40,8 +40,19 @@ test("an unbound action shows its command line, and one with no command line nam
   assert.equal(resolve_key_docs("{key:cmdline}", unbound_compiled, all_commands), "(no key bound)");
 });
 
-test("the default key docs mark only the first key of a text", () => {
-  assert.equal(resolve_key_docs("{key:down} and {key:up}", default_compiled, all_commands, true), "`j` by default and `k`");
+test("the default key docs end with one note that the named keys are the defaults", () => {
+  assert.equal(resolve_key_docs("{key:down} and {key:up}", default_compiled, all_commands, true), "`j` and `k` The keys named here are the default keys.");
+  assert.equal(resolve_key_docs("no marks", default_compiled, all_commands, true), "no marks");
+});
+
+test("an unbound action with no command line reads as its phrase", () => {
+  assert.equal(resolve_key_docs("The words that {key:next_page|the next page key} looks for", unbound_compiled, all_commands), "The words that the next page key looks for");
+  assert.equal(resolve_key_docs("The words that {key:next_page|the next page key} looks for", default_compiled, all_commands), "The words that `]]` looks for");
+});
+
+test("no settings sentence reads (no key bound) when every key is unbound", () => {
+  for (const text of all_prose) assert.ok(!resolve_key_docs(text, unbound_compiled, all_commands).includes("(no key bound)"), text);
+  for (const text of all_prose) assert.ok(!resolve_key_docs(text, undefined, all_commands).includes("(no key bound)"), text);
 });
 
 test("a mark that names no known action fails loudly", () => {
@@ -58,8 +69,9 @@ test("every settings doc names only known actions, and none keeps a mark under a
 test("the settings schema names the default keys and keeps no mark", () => {
   const properties = (build_schemas(all_commands).settings as { properties: Record<string, { description: string }> }).properties;
   for (const [name, property] of Object.entries(properties)) assert.ok(!has_key_mark(property.description), name);
-  assert.match(properties.which_key_repeat!.description, /names the action that `\.` by default runs again/);
-  assert.match(properties.next_patterns!.description, /The words that `\]\]` by default looks for/);
+  assert.match(properties.which_key_repeat!.description, /names the action that `\.` runs again.* The keys named here are the default keys\.$/);
+  assert.match(properties.next_patterns!.description, /The words that `\]\]` looks for/);
+  assert.ok(!properties.which_key_delay_ms!.description.includes("default keys"));
   assert.ok(!properties.newtab_command_hint!.description.includes("press :"));
 });
 
@@ -70,4 +82,24 @@ test("the help model resolves the prose against its own keymap", () => {
 
 test("every action the prose names is in the binding table", () => {
   for (const text of all_prose) for (const [, name] of text.matchAll(/\{key:([a-z_]+)\}/g)) assert.ok(name! in BINDINGS, name ?? "");
+});
+
+test("browser_cmdline_key reads the stored keymap and commands.json", async () => {
+  const globals = globalThis as unknown as { browser?: unknown; fetch?: unknown };
+  const saved = { browser: globals.browser, fetch: globals.fetch };
+  const { browser_cmdline_key } = await import("../src/newtab/cmdline_key.ts");
+  try {
+    for (const [compiled, expected] of [[default_compiled, ":"], [rebound_compiled, "<A-x>"], [unbound_compiled, undefined], [undefined, undefined]] as const) {
+      globals.browser = { storage: { local: { get: async (key: string) => (compiled ? { [key]: compiled } : {}) } }, runtime: { getURL: (path: string) => `moz-extension://x/${path}` } };
+      let fetched = "";
+      globals.fetch = async (url: string) => ((fetched = url), { json: async () => ({ commands: all_commands }) });
+      assert.equal(await browser_cmdline_key(), expected);
+      assert.equal(fetched, "moz-extension://x/commands.json");
+    }
+    globals.fetch = async () => Promise.reject(new Error("offline"));
+    await assert.rejects(browser_cmdline_key(), /offline/);
+  } finally {
+    globals.browser = saved.browser;
+    globals.fetch = saved.fetch;
+  }
 });

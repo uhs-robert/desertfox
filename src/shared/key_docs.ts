@@ -6,8 +6,8 @@ import type { Binding, BindingName } from "./bound_keys.ts";
 import type { CompiledKeymap } from "./prefix_tree.ts";
 import { print_command } from "./registry/print_command.ts";
 
-const NO_KEY = "(no key bound)";
-const KEY_MARK = /\{key:([a-z_]+)\}/g;
+export const NO_KEY = "(no key bound)";
+const KEY_MARK = /\{key:([a-z_]+)(?:\|([^}]*))?\}/g;
 
 // The command line that does the same as the binding, or undefined when the command has no name to type.
 export function command_line_of(commands: CommandMeta[], binding: Binding): string | undefined {
@@ -15,18 +15,21 @@ export function command_line_of(commands: CommandMeta[], binding: Binding): stri
   return command?.name === undefined ? undefined : `:${print_command(command, binding.args, { flags: "long" })}`;
 }
 
-// An unbound action shows its command line, so the sentence still names a way in. `by_default` marks the first key of the text as the shipped one, for a reader without the live keymap.
+const SCHEMA_NOTE = " The keys named here are the default keys.";
+
+// A mark is `{key:name}` or `{key:name|phrase}`. An unbound action reads as its phrase, so the sentence still names the action. With no phrase it shows its command line. `by_default` adds a closing note for a reader without the live keymap.
 export function resolve_key_docs(text: string, compiled: CompiledKeymap | undefined, commands: CommandMeta[], by_default = false): string {
-  let marked = false;
-  return text.replace(KEY_MARK, (_mark, name: string) => {
+  let had_mark = false;
+  const resolved = text.replace(KEY_MARK, (_mark, name: string, phrase: string | undefined) => {
     if (!(name in BINDINGS)) throw new Error(`settings prose names the unknown key action ${name}`);
+    had_mark = true;
     const key = bound_key(compiled, commands, name as BindingName);
-    const shown = key ?? command_line_of(commands, BINDINGS[name as BindingName]);
-    if (shown === undefined) return NO_KEY;
-    const note = by_default && key !== undefined && !marked ? " by default" : "";
-    marked = true;
-    return `\`${shown}\`${note}`;
+    if (key !== undefined) return `\`${key}\``;
+    if (phrase !== undefined) return phrase;
+    const line = command_line_of(commands, BINDINGS[name as BindingName]);
+    return line === undefined ? NO_KEY : `\`${line}\``;
   });
+  return by_default && had_mark ? resolved + SCHEMA_NOTE : resolved;
 }
 
 // Every mark in the prose, for the test that none survives resolution.

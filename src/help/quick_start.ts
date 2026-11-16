@@ -4,11 +4,9 @@
 import type { CommandMeta } from "../shared/command.ts";
 import { BINDINGS, bound_key, key_paths } from "../shared/bound_keys.ts";
 import type { Binding, BindingName } from "../shared/bound_keys.ts";
-import { command_line_of } from "../shared/key_docs.ts";
+import { command_line_of, NO_KEY } from "../shared/key_docs.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { Block, Inline } from "./blocks.ts";
-
-const NO_KEY = "(no key bound)";
 
 // Every command line the page can show in place of a key, for the test that each one resolves.
 export function quick_start_fallbacks(commands: CommandMeta[]): { id: string; text: string }[] {

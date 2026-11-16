@@ -145,8 +145,8 @@ function build_page(settings: WidgetSettings): { page: HTMLElement; stop_ticker:
 // The first call puts the page in at once and fills the lists when they arrive. A later call builds the new page off screen and swaps it in with its lists, so the page height holds and the scroll position stays. The returned promise settles after the swap. Calls must not overlap, which `follow_settings` guarantees.
 export async function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers, read_cmdline_key: CmdlineKeyReader = browser_cmdline_key): Promise<void> {
   const next = build_page(settings);
-  // Started now so it runs beside the lists. A failed read leaves the default key on the hint.
-  const bound = settings.newtab_command_hint ? refused_as(read_cmdline_key().then((key) => ({ key })), undefined) : undefined;
+  // Started now so it runs beside the lists. A failed read is logged and leaves the default key on the hint.
+  const bound = settings.newtab_command_hint ? read_cmdline_key().then((key) => ({ key }), warn_and_go("new tab command line key read")) : undefined;
   const previous = drawn;
   if (!previous) {
     drawn = next;
@@ -163,9 +163,14 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
   if (sections.length > 0) next.page.append(draw_sections(sections));
   if (bound) {
     const hint = draw_command_hint();
+    // Hidden, not absent, so the page does not shift when the key arrives. Until then it names no key, because the default may be the wrong one.
+    hint.style.visibility = "hidden";
     next.page.append(hint);
-    const named = bound.then((found) => found && show_command_key(hint, found.key));
-    // A redraw swaps in only after the key is known, so a rebound key never flashes the default. The first draw is already on screen and fills in later.
+    const named = bound.then((found) => {
+      show_command_key(hint, found ? found.key : DEFAULT_COMMAND_KEY);
+      hint.style.visibility = "";
+    });
+    // A redraw swaps in only after the key is known. The first draw is already on screen and shows the hint when the key arrives.
     if (previous) await named;
   }
   if (settings.newtab_weather !== true) void refused_as(forget_weather(), undefined);
