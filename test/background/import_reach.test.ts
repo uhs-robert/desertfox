@@ -214,6 +214,11 @@ test("a value-less set that a modifier completes with true still gets the switch
   assert.equal(reach.keys.settings.rows.find((row) => row.keys === ",q")?.consent, "switch_on");
 });
 
+test("a plain set to false gets the switch-on note when a modifier carries a value", () => {
+  const reach = reach_of({ "keymap.toml": '[normal]\nzb = "settings.set bridge false"\n[modifiers]\n",z" = { value = "true" }\n' });
+  assert.equal(reach.keys.settings.rows.find((row) => row.keys === "zb")?.consent, "switch_on");
+});
+
 test("a modifier whose args name a consent setting or the clipboard register is listed", () => {
   const reach = reach_of({ "keymap.toml": '[modifiers]\n",z" = { name = "bridge" }\n",c" = { register = "+" }\n' });
   assert.deepEqual(reach.keys.settings.rows.map((row) => [row.keys, row.consent]), [[",z", "switch_on"]]);
