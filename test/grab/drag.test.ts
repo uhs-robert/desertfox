@@ -355,6 +355,7 @@ test("a scroll-snap box scrolls by one view and gets no pointer events, and a bo
   const slide = element({ parent: snap, parentElement: snap });
   const styles = new Map<unknown, string>([[snap, "x mandatory"]]);
   (globalThis as Record<string, unknown>).getComputedStyle = (target: unknown) => ({ scrollSnapType: styles.get(target) ?? "none" });
+  (globalThis as Record<string, unknown>).matchMedia = () => ({ matches: false });
   try {
     assert.equal(snap_scroll(as_element(slide), "right"), true);
     assert.equal(snap_scroll(as_element(slide), "left"), true);
@@ -363,6 +364,7 @@ test("a scroll-snap box scrolls by one view and gets no pointer events, and a bo
     assert.deepEqual([slide.log, snap.log], [[], []]);
   } finally {
     delete (globalThis as Record<string, unknown>).getComputedStyle;
+    delete (globalThis as Record<string, unknown>).matchMedia;
   }
 });
 

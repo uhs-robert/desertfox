@@ -1,5 +1,6 @@
 import type { ScrollCandidate, ScrollAxis } from "../scroll_target.ts";
 import { LINE_PIXELS, percent_to_offset, pick_scroll_target } from "../scroll_target.ts";
+import { smooth_behavior } from "../smooth_behavior.ts";
 import { candidate_of } from "../scroll_box.ts";
 import { deepest_focused_element } from "../editable.ts";
 import type { ContentHandler } from "./types.ts";
@@ -83,7 +84,7 @@ export function scroll_target(axis: ScrollAxis): Element {
 }
 
 // Firefox decides whether "smooth" animates (general.smoothScroll). A held key restarts the animation on every repeat and lags far behind the key, so repeats jump.
-const smooth_unless = (repeat: boolean): ScrollBehavior => (repeat ? "instant" : "smooth");
+const smooth_unless = (repeat: boolean): ScrollBehavior => (repeat ? "instant" : smooth_behavior());
 
 // Firefox restarts a smooth scroll from the animated position, so a second tap would drop the distance the first still had to go. The end of the page scroll in flight is kept and the next tap adds to it.
 let in_flight: { target: Element; end: number } | undefined;
@@ -127,7 +128,7 @@ const smooth_page_tap = (target: Element, distance: number) => {
   clearTimeout(clear_in_flight_timer);
   in_flight = { target, end };
   clear_in_flight_timer = setTimeout(end_flight, FLIGHT_MS);
-  target.scrollTo({ top: end, behavior: "smooth" });
+  target.scrollTo({ top: end, behavior: smooth_behavior() });
 };
 
 export const scroll_lines: ContentHandler = {
