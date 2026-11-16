@@ -131,9 +131,10 @@ export async function run_cases({ in_background, sleep, badge_is, open_cmdline, 
   });
 
   // A pick from the top page mounts the line in the top page, whichever frame holds the element. A pick made inside a focused frame mounts it in that frame. Either way the one line is open and takes the keys.
-  await run_case(";:f a from the top page opens the line with the address of the same-origin frame", async () => {
+  await run_case("hint --prompt --frames from the top page opens the line with the address of the same-origin frame", async () => {
     await open_page("frames", "p6_frames_prompt", { new_tab: true });
-    await press_hint_start(";:f");
+    await run_line("hint --prompt --frames");
+    await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     await press_keys("a");
     await wait_cmdline((line) => line.open && line.value.startsWith("open ") && line.value.endsWith("/frame_inner?id=p6_frames_prompt_same"), "the line to hold the frame address");
     expect(await in_active_tab(`!!document.documentElement.querySelector(":scope > [popover][data-desertfox-layer]")`), "the line holder is not in the top page");
