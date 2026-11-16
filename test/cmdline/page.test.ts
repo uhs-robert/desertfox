@@ -54,9 +54,9 @@ function fake_element() {
 
 // Just enough DOM for the command line page. `head` records what is appended, `parent` what is posted to the web page.
 type StorageListener = (changes: Record<string, { newValue?: unknown }>, area: string) => void;
-type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean; prompt?: string; widgets?: string[] };
+type PageSetup = { keymap?: unknown; with_tab_command?: boolean; without_prompt?: boolean; prompt?: string; widgets?: string[]; extra_commands?: unknown[] };
 
-async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured, widgets }: PageSetup = {}) {
+async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_tab_command = false, without_prompt = false, prompt: configured, widgets, extra_commands = [] }: PageSetup = {}) {
   const window_listeners: ((event: unknown) => void)[] = [];
   // The page window's other listeners, such as `blur`, by type.
   const other_window_listeners: Record<string, () => void> = {};
@@ -142,7 +142,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
           to_background.push(message.type);
           sent.push(message);
           if (message.type === "complete_items") return new Promise((resolve) => void item_asks.push((items) => resolve({ items })));
-          if (message.type === "open_cmdline" && message.ticket === TICKET && with_tab_command) return { ...opened_answer, commands: [...OPENED.commands, TAB_COMMAND] };
+          if (message.type === "open_cmdline" && message.ticket === TICKET && (with_tab_command || extra_commands.length > 0)) return { ...opened_answer, commands: [...OPENED.commands, ...(with_tab_command ? [TAB_COMMAND] : []), ...extra_commands] };
           return message.type === "open_cmdline" && message.ticket === TICKET ? opened_answer : undefined;
         },
       },
@@ -584,4 +584,100 @@ test("a search line shows no widgets", async (t) => {
   const { status, post_start } = await load_page(t, "status_search");
   await post_start(TICKET, "", [], { search: "forward", scroll: { top: 1, max: 600 } }).opened();
   assert.deepEqual(status.children, []);
+});
+
+const OPEN_COMMAND = { id: "open.url", name: "open", label: "Open", intent: "Open a page.", params: [{ name: "url", type: "string", rest: true, main: true, values: { from: "open" } }] };
+const FINDER_COMMAND = { id: "open.anything", name: "anything", label: "Find anything", intent: "Find a page.", params: [{ name: "query", type: "string", rest: true, main: true, values: { from: "anything" } }] };
+const ranked_row = (name: string, url: string, extra: Record<string, unknown> = {}) => ({ name, url, score: 10, positions: [], ...extra });
+type Posted = { seq: number; word: string; source: string };
+
+// A line on `text` whose rank port opened and asked for its first word.
+// The finder asks only once the engines and the tabs are in, so `before_rank` answers those first.
+async function ranked_line(t: TestContext, tag: string, text: string, before_rank: (page: Awaited<ReturnType<typeof load_page>>) => Promise<void> = async () => {}) {
+  const page = await load_page(t, tag, { extra_commands: [OPEN_COMMAND, FINDER_COMMAND] });
+  const host = page.post_start(TICKET, text);
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  await before_rank(page);
+  await until(() => page.model_ports.some((port) => port.name === "desertfox_rank" && port.posted.length > 0));
+  const rank_port = page.model_ports.find((port) => port.name === "desertfox_rank")!;
+  const answer = (rows: unknown[], extra: Record<string, unknown> = {}) => {
+    const request = rank_port.posted.at(-1) as Posted;
+    rank_port.deliver({ type: "ranked", seq: request.seq, rows, partial: false, ...extra });
+  };
+  return { ...page, host, rank_port, answer };
+}
+
+test("Tab and the keys after it wait while the rows are on their way, then run in order on the rows that landed", async (t) => {
+  const { input, rank_port, answer, press } = await ranked_line(t, "hold_tab", "open git");
+  assert.deepEqual((rank_port.posted as Posted[]).map((request) => [request.source, request.word]), [["open", "git"]]);
+  press("Tab");
+  press("x");
+  // Nothing ran yet: the line still holds the typed text.
+  assert.equal(input.value, "open git");
+  answer([ranked_row("GitHub", "https://github.com/"), ranked_row("Gitea", "https://gitea.test/")]);
+  await until(() => input.value !== "open git");
+  assert.equal(input.value, "open https://github.com/ x");
+});
+
+test("Tab waits for the newest word's rows, not for the rows of a word typed before it", async (t) => {
+  const { input, rank_port, answer, press } = await ranked_line(t, "hold_newest", "open g");
+  input.value = "open gi";
+  input.selectionStart = input.selectionEnd = input.value.length;
+  press("i");
+  press("Tab");
+  // The answer for `g` lands first: Tab still waits, and the page asks for `gi`.
+  answer([ranked_row("Old", "https://old.test/")]);
+  await until(() => rank_port.posted.length === 2);
+  assert.equal(input.value, "open gi");
+  answer([ranked_row("Gitea", "https://gitea.test/")]);
+  await until(() => input.value !== "open gi");
+  assert.equal(input.value, "open https://gitea.test/ ");
+});
+
+test("held keys run after 1 s when no rows land, so the line never stalls", async (t) => {
+  const { input, press } = await ranked_line(t, "hold_timeout", "open git");
+  press("Tab");
+  press("x");
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(input.value, "open git");
+  await until(() => input.value !== "open git");
+  assert.equal(input.value, "open gitx");
+});
+
+test("the finder's Enter waits for the rows of the typed query and opens the first one that landed", async (t) => {
+  const { answer, press_enter, host, rank_port } = await ranked_line(t, "hold_finder_enter", "anything rust", async ({ item_asks, model_ports }) => {
+    await until(() => item_asks.length === 1 && model_ports.some((port) => port.name === "desertfox_tab_model"));
+    item_asks[0]!([]);
+    model_ports.find((port) => port.name === "desertfox_tab_model")!.deliver({ type: "snapshot", rev: 0, tabs: [], groups: [] });
+  });
+  press_enter();
+  await settle();
+  assert.deepEqual(host.submits(), []);
+  assert.equal((rank_port.posted.at(-1) as Posted).source, "anything");
+  const ref = "\u0001" + JSON.stringify({ kind: "page", url: "https://rust.test/" });
+  answer([ranked_row("Rust", "https://rust.test/", { tag: "hist", ref })], { finder: { tab_boost: {}, tab_used: {}, sites: [] } });
+  await until(() => host.submits().length === 1);
+  const submitted = host.submits()[0] as { desertfox_cmdline: { invocation: { id: string; args: Record<string, string> } } };
+  assert.equal(submitted.desertfox_cmdline.invocation.id, "open.anything");
+  assert.equal(submitted.desertfox_cmdline.invocation.args.query, ref);
+});
+
+test("Enter on a ranked list that is not the finder runs the text at once", async (t) => {
+  const { press_enter, host } = await ranked_line(t, "no_hold_open_enter", "open https://example.test/");
+  press_enter();
+  await until(() => host.submits().length === 1);
+  assert.equal(host.submits().length, 1);
+});
+
+test("the rank port closes with the line, and a port the background closes leaves an empty list", async (t) => {
+  const closing = await ranked_line(t, "rank_port_closes", "open git");
+  closing.press("Escape");
+  closing.press("Escape");
+  await settle();
+  assert.equal(closing.rank_port.disconnected, true);
+  const dropped = await ranked_line(t, "rank_port_dropped", "open git");
+  dropped.rank_port.drop();
+  await until(() => dropped.note.textContent === "no match");
+  assert.equal(dropped.note.textContent, "no match");
 });

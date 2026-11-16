@@ -99,14 +99,6 @@ test("close drops every kind in flight, and a reply after close does nothing", a
   assert.deepEqual(live.read("bookmarks"), { loading: true });
 });
 
-test("a failed open fetch caches no rows", async () => {
-  const { live, asks, settle } = make();
-  live.read("open");
-  asks[0]!.fail();
-  await settle();
-  assert.deepEqual(live.read("open"), { loading: false, items: { rows: [], history_max: 0, sites: [] } });
-});
-
 test("the tabs are read from the model, not asked for, and read as loading until its snapshot", () => {
   const { live, asks, set_tabs } = make();
   assert.deepEqual(live.read("tabs"), { loading: true });
@@ -115,34 +107,34 @@ test("the tabs are read from the model, not asked for, and read as loading until
   assert.equal(asks.length, 0);
 });
 
-test("a failed history fetch caches no rows and a zero cap", async () => {
+test("a failed bookmark fetch caches no rows and no folders", async () => {
   const { live, asks, settle } = make();
-  live.read("history");
+  live.read("bookmarks");
   asks[0]!.fail();
   await settle();
-  assert.deepEqual(live.read("history"), { loading: false, items: { rows: [], max: 0 } });
+  assert.deepEqual(live.read("bookmarks"), { loading: false, items: { rows: [], folders: [] } });
 });
 
-test("a history reply that lands after close is dropped, and the fetch after the reopen is the one that lands", async () => {
+test("a bookmark reply that lands after close is dropped, and the fetch after the reopen is the one that lands", async () => {
   const { live, asks, settle, ready } = make();
-  live.read("history");
+  live.read("bookmarks");
   live.close();
-  assert.deepEqual(live.read("history"), { loading: true });
+  assert.deepEqual(live.read("bookmarks"), { loading: true });
   assert.equal(asks.length, 2);
   // The first reply comes last of the two, so it must not overwrite the newer one.
-  asks[1]!.answer({ items: { rows: [{ title: "New", url: "https://new.test/" }], max: 5 } });
+  asks[1]!.answer({ items: { rows: [{ title: "New", url: "https://new.test/", folders: [] }], folders: [] } });
   await settle();
-  asks[0]!.answer({ items: { rows: [{ title: "Old", url: "https://old.test/" }], max: 1 } });
+  asks[0]!.answer({ items: { rows: [{ title: "Old", url: "https://old.test/", folders: [] }], folders: [] } });
   await settle();
   assert.equal(ready(), 1);
-  assert.deepEqual(live.read("history"), { loading: false, items: { rows: [{ title: "New", url: "https://new.test/" }], max: 5 } });
+  assert.deepEqual(live.read("bookmarks"), { loading: false, items: { rows: [{ title: "New", url: "https://new.test/", folders: [] }], folders: [] } });
 });
 
-test("a history reply that lands after close, with no reopen, changes nothing", async () => {
+test("a bookmark reply that lands after close, with no reopen, changes nothing", async () => {
   const { live, asks, settle, ready } = make();
-  live.read("history");
+  live.read("bookmarks");
   live.close();
-  asks[0]!.answer({ items: { rows: [{ title: "Old", url: "https://old.test/" }], max: 1 } });
+  asks[0]!.answer({ items: { rows: [{ title: "Old", url: "https://old.test/", folders: [] }], folders: [] } });
   await settle();
   assert.equal(ready(), 0);
 });

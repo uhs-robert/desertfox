@@ -12,6 +12,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `container_store.ts`: the name and cookie store id of the container-less store, shared by the background and the `open` commands.
 - `group_name.ts`: the label of a native tab group (its title, or title plus `#id` when empty or shared) and the lookup of a typed label.
 - `tab_model_port.ts`: the port names of the live tab model, the plain one and its `:normal` and `:private` forms.
+- `rank_port.ts`: the port between the command line page and the background for the lists that rank the history: the request (a word, a sequence number and the finder's over-fetch), the reply of at most 100 ranked rows with their scores, and the `stale` push.
 - `folder_pick.ts`: `pick_by` (exact key, then best fuzzy match, a tie refused), `pick_folder` (the filing rule for a folder path), `in_folder` and `rows_in_folder` (the subtree test). The `bookmark` handlers and the command line page share them, so a typed `--folder=` filters by the rule that filing uses.
 - `mark_names.ts`: the local mark keys (`a-z`, and `'` or the backtick for the previous position), the limits of the mark store and the one rule that cuts the hash off a page address.
 - `mark_text.ts`: the text of a mark or quickmark in a list (address without scheme, scroll offset), which the which-key rows and the command line list share.
@@ -39,7 +40,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `media_values.ts`: the value patterns of the `media` actions. Apart from `media.ts` so the `media` bundle does not carry these texts.
 - `quality.ts`: the messages between the background and the `quality` bundle.
 - `register_names.ts`: the register names and the one check every register user shares.
-- `score.ts`: the fuzzy scorer for every completion source. It scores like fzf version 1 and counts a dot as a word break.
+- `score.ts`: the fuzzy scorer for every completion source. It scores like fzf version 1 and counts a dot as a word break. `rank_top` gives the first rows of `rank` with their scores.
 - `send_key_limit.ts`: the most key pairs one `page.send_key` call sends.
 - `setting_list.ts`: the settings page's view of every setting: typed value, top layer, kind and allowed values.
 - `site_key.ts`: the key that groups tabs of one site. Each subdomain is its own site, so no public suffix list is needed.

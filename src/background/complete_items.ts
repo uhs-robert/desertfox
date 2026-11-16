@@ -4,7 +4,7 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { AnythingItems, BookmarkItem, BookmarkRows, Boosted, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, HistoryItem, HistoryItems, OpenRow, RegisterItem, SessionItem, SiteItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
 import { available_engine_names } from "./availability.ts";
 import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
@@ -12,8 +12,11 @@ import { close_tabs, reopen_tabs_in_container, set_muted, set_pinned } from "./t
 import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
-import { history_cache, history_row } from "./history_cache.ts";
-import { MAX_BOOST } from "../shared/score.ts";
+import { history_row } from "./history_cache.ts";
+import { one_line, SKIPPED_SCHEMES, with_usage, usage_by_url, history_items } from "./completion_rank.ts";
+import type { HistoryNode, OpenSettings, RankInputs, Usage } from "./completion_rank.ts";
+import type { RankSource } from "../shared/rank_port.ts";
+import { rank_history_rows } from "./rank_service.ts";
 import { browser_register_store } from "./register_store.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { refused_as, warn_and_go } from "../shared/swallow.ts";
@@ -65,8 +68,6 @@ export type WindowLike = {
 export type NumberedWindow = WindowItem & { id: number; incognito: boolean; last_used: number };
 
 export type BookmarkNode = { id?: string | undefined; unmodifiable?: string | undefined; type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
-
-const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
 
 // A normal line lists only normal tabs and a private line only private tabs. The line's own window comes first, so
 // that is where a number lands when several windows are listed.
@@ -183,70 +184,6 @@ export function bookmark_view(roots: readonly BookmarkNode[], usage: Usage = new
   return { rows: bookmark_rows(flatten_bookmarks(roots), folders, usage), folders };
 }
 
-// A visit to these is no page the user would open from the line.
-const SKIPPED_SCHEMES = /^(about|moz-extension|data):/i;
-
-export type HistoryNode = { title?: string | undefined; url?: string | undefined; visit_count?: number | undefined; last_visit?: number | undefined };
-
-// The usage boost: half from how often a page was visited and half from how recently. Firefox gives only the count and the last visit per page, not the visit list its own frecency reads.
-// The count weighs by its log, so the 50th visit adds little over the 10th, and the recency halves every two weeks.
-const COUNT_WEIGHT = MAX_BOOST / 2;
-const RECENCY_WEIGHT = MAX_BOOST / 2;
-const FULL_COUNT = 50;
-const RECENCY_HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000;
-// An open tab is a page in use now. Its own visits add to this, up to `MAX_BOOST`.
-export const OPEN_TAB_BOOST = 0.3;
-
-// Two decimals: the rank needs no more, and 8000 rows go to the page in each answer.
-const rounded_boost = (boost: number) => Math.round(Math.min(MAX_BOOST, boost) * 100) / 100;
-
-export function usage_boost(visit_count: number, last_visit: number, now: number): number {
-  const count = Math.min(1, Math.log1p(Math.max(0, visit_count)) / Math.log1p(FULL_COUNT));
-  // A last visit of 0 is unknown, so its recency is 0. A clock set back must not raise it past 1.
-  const recency = last_visit > 0 ? 0.5 ** (Math.max(0, now - last_visit) / RECENCY_HALF_LIFE_MS) : 0;
-  return rounded_boost(COUNT_WEIGHT * count + RECENCY_WEIGHT * recency);
-}
-
-const boosted = (boost: number | undefined): Boosted => (boost ? { boost } : {});
-
-// The boost of each visited address, for rows from other sources that show the same page.
-export type Usage = ReadonlyMap<string, number>;
-
-export const usage_by_url = (history: readonly HistoryItem[]): Usage => new Map(history.flatMap((item) => (item.boost ? [[item.url, item.boost]] : [])));
-
-export const with_usage = <Item extends { url: string }>(items: readonly Item[], usage: Usage): (Item & Boosted)[] => items.map((item) => ({ ...item, ...boosted(usage.get(item.url)) }));
-
-// Newest first, as `history.search` gives them. Skipped schemes drop out.
-export function history_items(nodes: readonly HistoryNode[], now = Date.now()): HistoryItem[] {
-  return nodes
-    .filter((node): node is HistoryNode & { url: string } => !!node.url && !SKIPPED_SCHEMES.test(node.url))
-    .map((node) => ({ title: one_line(node.title || node.url), url: node.url, ...boosted(usage_boost(node.visit_count ?? 0, node.last_visit ?? 0, now)) }));
-}
-
-const WEB_ADDRESS = /^(https?):\/\/([^/?#]+)/i;
-
-// The home page of every visited web host, with the visits of all its pages, the busiest first. http and https pages of a host count as one, at the scheme of its newest page.
-// A host whose home page is already in `listed`, at either scheme, is left out: that row stands for it.
-export function site_items(nodes: readonly HistoryNode[], listed: ReadonlySet<string>, now = Date.now()): SiteItem[] {
-  const hosts = new Map<string, { scheme: string; visit_count: number; last_visit: number }>();
-  for (const node of nodes) {
-    const [, scheme, host] = node.url?.match(WEB_ADDRESS) ?? [];
-    if (!scheme || !host) continue;
-    const key = host.toLowerCase();
-    const last_visit = node.last_visit ?? 0;
-    const known = hosts.get(key) ?? { scheme: scheme.toLowerCase(), visit_count: 0, last_visit };
-    hosts.set(key, {
-      scheme: last_visit > known.last_visit ? scheme.toLowerCase() : known.scheme,
-      visit_count: known.visit_count + (node.visit_count ?? 1),
-      last_visit: Math.max(known.last_visit, last_visit),
-    });
-  }
-  return [...hosts]
-    .filter(([host]) => !listed.has(`https://${host}/`) && !listed.has(`http://${host}/`))
-    .map(([host, site]) => ({ url: `${site.scheme}://${host}/`, boost: usage_boost(site.visit_count, site.last_visit, now) }))
-    .sort((left, right) => right.boost - left.boost);
-}
-
 // A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows, private tabs (which `getRecentlyClosed` returns while their window is open) and tabs with no session id drop out.
 export type ClosedSession = { tab?: { sessionId?: string | undefined; title?: string | undefined; url?: string | undefined; incognito?: boolean | undefined } | undefined };
 
@@ -257,20 +194,6 @@ export function closed_tab_rows(sessions: readonly ClosedSession[]): ClosedTabRo
 // Each tab of the privacy asked for, with the time it was last active.
 export const tab_use_times = (tabs: readonly TabLike[], incognito: boolean): Record<number, number> =>
   Object.fromEntries(tabs.filter((tab) => tab.id !== undefined && tab.incognito === incognito).map((tab) => [tab.id as number, tab.lastAccessed ?? 0]));
-
-export type OpenSource = "bookmarks" | "history";
-
-export type OpenSettings = { sources: readonly OpenSource[]; history_max: number };
-
-// Rows in the order of `sources`. A history row whose address is a bookmark drops out, so the address shows once, as the bookmark, which takes the history row's boost.
-export function open_rows(sources: readonly OpenSource[], bookmarks: readonly BookmarkItem[], history: readonly HistoryItem[]): OpenRow[] {
-  const bookmarked = new Set(bookmarks.map((bookmark) => bookmark.url));
-  const groups: Record<OpenSource, OpenRow[]> = {
-    bookmarks: with_usage(bookmarks, usage_by_url(history)).map((bookmark) => ({ ...bookmark, tag: "bm" })),
-    history: history.filter((item) => !bookmarked.has(item.url)).map((item) => ({ ...item, tag: "hist" })),
-  };
-  return sources.flatMap((source) => groups[source]);
-}
 
 // Every engine in config order. The flag says whether the page can fill it, so the list can mark the rest. The page URL is read here and goes no further.
 export function engine_items(engines: Record<string, SearchEngine>, page: PageInfo | undefined): EngineItem[] {
@@ -301,9 +224,11 @@ export async function read_containers(query: IdentityQuery): Promise<ContainerMa
 
 const FALLBACK_HISTORY_ROWS = 1000;
 
-// The cache holds up to 8,000 rows. Before its fill ends the newest 1,000 come from the browser, so a line never waits. `startTime: 0` reaches all history, since the default is the last day.
-const search_history = async (): Promise<readonly HistoryNode[]> =>
-  history_cache.read() ?? (await browser.history.search({ text: "", startTime: 0, maxResults: FALLBACK_HISTORY_ROWS })).flatMap((visit) => history_row(visit) ?? []);
+// Before the rank Worker's history fill ends, the newest 1,000 come from the browser, so a line never waits. `startTime: 0` reaches all history, since the default is the last day.
+export const fallback_history = async (): Promise<HistoryNode[]> => (await browser.history.search({ text: "", startTime: 0, maxResults: FALLBACK_HISTORY_ROWS })).flatMap((visit) => history_row(visit) ?? []);
+
+// A copy of the Worker's rows, for a handler that picks from the whole history and the bookmark list's use boost.
+const search_history = async (): Promise<readonly HistoryNode[]> => (await rank_history_rows()) ?? (await fallback_history());
 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
@@ -356,58 +281,29 @@ const MAX_ACTION_TABS = 5000;
 export type Asker = LineScope & { tab_id: number; frame_id: number };
 
 export function create_complete_items(deps: CompleteItemsDeps) {
-  const open_items = async (asker: Asker) => {
-    const { sources, history_max } = await deps.open_settings();
-    const bookmarks = sources.includes("bookmarks") ? bookmark_items(await refused_as(deps.all_bookmarks(), [])) : [];
-    // One source failing leaves the other. Firefox records no private visit, so a private line lists none of the normal history either.
-    const visits = sources.includes("history") && !asker.incognito ? await refused_as(deps.search_history(), []) : [];
-    const history = history_items(visits);
-    const rows = open_rows(sources, bookmarks, history);
-    return { rows, history_max, sites: site_items(visits, new Set(rows.map((row) => row.url))) };
-  };
-
-  // A private line lists nothing, as in `open_items`, and the `history` command refuses there.
-  const history_list = async (asker: Asker): Promise<HistoryItems> => ({
-    rows: asker.incognito ? [] : history_items(await refused_as(deps.search_history(), [])),
-    max: await deps.history_list_max(),
-  });
-
-  // Everything the finder lists but the open tabs, which the page takes from the tab model. Each source that fails leaves the others.
-  // A private line gets quickmarks and bookmarks only: Firefox records no private visit, and the closed tabs and sessions are hidden there as in `session`.
-  const anything_items = async (asker: Asker): Promise<AnythingItems> => {
-    const [quickmarks, bookmarks, visits, closed, tabs, history_max] = await Promise.all([
-      refused_as(deps.quickmark_table(asker.incognito), {} as Record<string, string>),
+  // What `rank_service.ts` sends the rank Worker for a line's list, all but the history. Each source that fails leaves the others.
+  // A private line gets quickmarks and bookmarks only: the closed tabs and sessions are hidden there as in `session`.
+  const rank_inputs = async (source: RankSource, asker: Asker): Promise<RankInputs> => {
+    const { incognito } = asker;
+    if (source === "history") return { source, incognito, max: await refused_as(deps.history_list_max(), 0) };
+    if (source === "open") {
+      const { sources, history_max } = await refused_as(deps.open_settings(), { sources: [], history_max: 0 } as OpenSettings);
+      return { source, incognito, sources, history_max, bookmarks: sources.includes("bookmarks") ? bookmark_items(await refused_as(deps.all_bookmarks(), [])) : [] };
+    }
+    const [quickmarks, bookmarks, closed, tabs, history_max] = await Promise.all([
+      refused_as(deps.quickmark_table(incognito), {} as Record<string, string>),
       refused_as(deps.all_bookmarks(), []).then(bookmark_items),
-      asker.incognito ? [] : refused_as(deps.search_history(), []),
-      asker.incognito ? [] : refused_as(deps.closed_tabs(), [] as ClosedTabRow[]),
+      incognito ? [] : refused_as(deps.closed_tabs(), [] as ClosedTabRow[]),
       refused_as(deps.query_tabs(undefined), [] as TabLike[]),
       refused_as(deps.open_settings(), undefined).then((settings) => (settings ? settings.history_max : 0)),
     ]);
-    const history = history_items(visits);
-    const usage = usage_by_url(history);
-    const tab_boost = Object.fromEntries(
-      tabs.filter((tab) => tab.id !== undefined && tab.incognito === asker.incognito).map((tab) => [tab.id as number, rounded_boost(OPEN_TAB_BOOST + (usage.get(tab.url ?? "") ?? 0))]),
-    );
-    const quickmark_rows = Object.entries(quickmarks).sort(([left], [right]) => (left < right ? -1 : 1)).map(([key, url]) => ({ key, url }));
-    const listed = new Set([...quickmark_rows, ...bookmarks, ...history].map((row) => row.url));
-    return {
-      tab_used: tab_use_times(tabs, asker.incognito),
-      tab_boost,
-      sites: site_items(visits, listed),
-      quickmarks: with_usage(quickmark_rows, usage),
-      bookmarks: with_usage(bookmarks, usage),
-      history,
-      closed: with_usage(closed, usage),
-      history_max,
-    };
+    const own = tabs.filter((tab) => tab.id !== undefined && tab.incognito === incognito);
+    return { source, incognito, quickmarks, bookmarks, closed, tabs: own.map((tab) => ({ id: tab.id as number, url: tab.url ?? "" })), tab_used: tab_use_times(tabs, incognito), history_max };
   };
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "history" | "open" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "anything", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const fetch_items = async (kind: "bookmarks" | "engines" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
-    if (kind === "open") return open_items(asker);
-    if (kind === "anything") return anything_items(asker);
-    if (kind === "history") return history_list(asker);
     // A private line lists no sessions, as the commands refuse there.
     if (kind === "sessions") return asker.incognito ? [] : deps.sessions();
     if (kind === "registers") return deps.registers(asker.incognito);
@@ -421,6 +317,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
   };
 
   return {
+    rank_inputs,
     // Runs a row key on the tab ids the page captured at the key press. Undefined for a sender that is not an opener, for a bad argument and when
     // any id names a tab of the other privacy: nothing runs then. An id with no tab is skipped, also one that closes while the action runs.
     // `reopen` also needs `cookie_store_id`, a container the browser lists or the default store. A private line, a tab id of the other privacy and an unknown store give nothing.
@@ -461,8 +358,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "history" && kind !== "open" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels" && kind !== "anything") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
-      const items = await fetch_items(kind, asker).catch(warn_and_go("complete_items.fetch", kind === "open" ? { rows: [], history_max: 0, sites: [] } : kind === "history" ? { rows: [], max: 0 } : kind === "bookmarks" ? { rows: [], folders: [] } : kind === "anything" ? { tab_used: {}, tab_boost: {}, sites: [], quickmarks: [], bookmarks: [], history: [], closed: [], history_max: 0 } : []));
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      const items = await fetch_items(kind, asker).catch(warn_and_go("complete_items.fetch", kind === "bookmarks" ? { rows: [], folders: [] } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },
   };

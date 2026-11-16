@@ -1,5 +1,5 @@
 // A seeded history and the other finder sources, the same on every run, for the completion ranking tests. No real data.
-import type { HistoryNode } from "../../src/background/complete_items.ts";
+import type { HistoryNode } from "../../src/background/completion_rank.ts";
 
 // The clock the rows are dated against. Tests pin `Date.now` to it, because the use boost decays with age.
 export const FIXTURE_NOW = Date.UTC(2026, 10, 16, 12);

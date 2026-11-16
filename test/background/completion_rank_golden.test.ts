@@ -13,6 +13,7 @@ import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { CompleteItemsAnswer, EngineItem, TabItem } from "../../src/shared/messages.ts";
 import { FIXTURE_NOW, history_fixture } from "../support/history_fixture.ts";
+import { rank_pipeline, visit_of } from "../support/rank_pipeline.ts";
 
 const GOLDEN_PATH = new URL("./completion_rank_golden.json", import.meta.url);
 const SHOWN = 100;
@@ -53,7 +54,6 @@ function items_service() {
   const deps = {
     query_tabs: async () => fixture.tabs.map((tab, index) => ({ id: tab.id, index, windowId: 1, title: tab.title, url: tab.url, incognito: false, lastAccessed: tab.last_used })),
     all_bookmarks: async () => fixture.bookmarks,
-    search_history: async () => fixture.history,
     quickmark_table: async () => fixture.quickmarks,
     closed_tabs: async () => fixture.closed,
     open_settings: async () => ({ sources: ["bookmarks", "history"] as const, history_max: 10 }),
@@ -65,27 +65,29 @@ function items_service() {
   return create_complete_items(deps);
 }
 
-// Today's pipeline: the background builds the items, the page ranks them.
+// The page ranks nothing of these lists: it asks the background, which relays to the Worker that holds the history.
 async function rank_all(): Promise<Record<string, { count: number; sha256: string }>> {
   const service = items_service();
+  const pipeline = rank_pipeline({ history: () => fixture.history.map(visit_of), inputs: service.rank_inputs });
+  pipeline.service.start();
   const live = create_live_source({
-    ask: async (kind) => (kind === "engines" ? ({ items: ENGINES } as CompleteItemsAnswer) : service.answer(kind, LINE)),
+    ask: async () => ({ items: ENGINES }) as CompleteItemsAnswer,
     tabs: () => TAB_ITEMS,
     all_tabs: () => TAB_ITEMS,
     groups: () => [],
     on_ready: () => {},
   });
-  const complete = create_completer(create_word_lookup(COMMANDS, {}), COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live);
+  const complete = create_completer(create_word_lookup(COMMANDS, {}), COMMANDS, {}, { search_engines: [], containers: [] }, "normal", live, [], pipeline.line().client);
   const result: Record<string, { count: number; sha256: string }> = {};
+  // The history fills first, so no answer comes from the partial fallback.
+  await pipeline.settle();
   for (const source of SOURCES) {
-    const line_of = (word: string) => `${source} ${word}`;
-    // The first read starts the fetches. Wait until every list has landed.
-    for (let tries = 0; complete(line_of("x"), line_of("x").length).loading; tries++) {
-      assert.ok(tries < 100, `the ${source} items never landed`);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
     for (const word of QUERIES) {
-      const line = line_of(word);
+      const line = `${source} ${word}`;
+      for (let tries = 0; complete(line, line.length).loading; tries++) {
+        assert.ok(tries < 3, `the ${line} rows never landed`);
+        await pipeline.settle();
+      }
       result[`${source} ${JSON.stringify(word)}`] = digest(complete(line, line.length).rows);
     }
   }

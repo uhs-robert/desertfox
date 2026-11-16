@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, history_items, listed_favicon, listed_tabs, listed_windows, OPEN_TAB_BOOST, read_container_identities, read_containers, site_items, usage_boost, usage_by_url } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { anything_items, history_items, history_list, OPEN_TAB_BOOST, open_items, reads_history, site_items, usage_boost, usage_by_url } from "../../src/background/completion_rank.ts";
+import type { HistoryNode, OpenSettings } from "../../src/background/completion_rank.ts";
+import type { RankSource } from "../../src/shared/rank_port.ts";
+import { refused_as } from "../../src/shared/swallow.ts";
 import { MAX_BOOST } from "../../src/shared/score.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { AnythingItems, SessionItem } from "../../src/shared/messages.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
-import type { BookmarkNode, ContainerMarks, FolderNode, HistoryNode, LineScope, OpenSettings, TabLike, WindowLike } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, ContainerMarks, FolderNode, LineScope, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 
 type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
 const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {}, open_tab: async () => {} };
@@ -38,6 +42,12 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
   const history_reads: number[] = [];
   const asked: (number | undefined)[] = [];
   const opened = new Set(openers);
+  // The rank Worker's history.
+  const search_history = async () => {
+    history_reads.push(1);
+    if (fail) throw new Error("no history");
+    return history;
+  };
   const service = create_complete_items({
     query_tabs: async (window_id) => {
       asked.push(window_id);
@@ -85,17 +95,19 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     search_engines: async () => ENGINES,
     page_of: async () => page,
     line_frame_url: async () => frame_url,
-    search_history: async () => {
-      history_reads.push(1);
-      if (fail) throw new Error("no history");
-      return history;
-    },
+    search_history,
     open_settings: async () => open,
     history_list_max: async () => list_max,
     closed_tabs: async () => closed,
     quickmark_table: async () => quickmark_urls,
   });
-  return { service, asked, opened, history_reads, view_privacy };
+  // What a ranked list holds for the line: the inputs the background reads, joined with the history as the rank Worker joins them.
+  const ranked_items = async (source: RankSource, line: typeof NORMAL_LINE = NORMAL_LINE) => {
+    const inputs = await service.rank_inputs(source, line);
+    const visits = reads_history(inputs) ? await refused_as(search_history(), []) : [];
+    return inputs.source === "open" ? open_items(inputs, visits) : inputs.source === "history" ? history_list(inputs, visits) : anything_items(inputs, visits);
+  };
+  return { service, asked, opened, history_reads, view_privacy, ranked_items };
 }
 
 const titles = (answer: Awaited<ReturnType<ReturnType<typeof make>["service"]["answer"]>>) => (answer?.items as { title: string }[]).map((item) => item.title);
@@ -271,187 +283,71 @@ test("history items drop the skipped schemes, keep the order and one-line the ti
 });
 
 test("open rows list the bookmark once, tag each row and send every row with the cap", async () => {
-  const { service } = make({ bookmarks: MARKS, history: VISITS });
-  assert.deepEqual(await service.answer("open", NORMAL_LINE), {
-    items: {
-      history_max: 10,
-      rows: [
-        { title: "Marked", url: "https://marked.test/", tag: "bm" },
-        { title: "Other", url: "https://other.test/", tag: "bm" },
-        { title: "Newest", url: "https://new.test/", tag: "hist" },
-        { title: "https://bare.test/", url: "https://bare.test/", tag: "hist" },
-      ],
-      // Each visited host's home page is a row already.
-      sites: [],
-    },
+  const { ranked_items } = make({ bookmarks: MARKS, history: VISITS });
+  assert.deepEqual(await ranked_items("open"), {
+    history_max: 10,
+    rows: [
+      { title: "Marked", url: "https://marked.test/", tag: "bm" },
+      { title: "Other", url: "https://other.test/", tag: "bm" },
+      { title: "Newest", url: "https://new.test/", tag: "hist" },
+      { title: "https://bare.test/", url: "https://bare.test/", tag: "hist" },
+    ],
+    // Each visited host's home page is a row already.
+    sites: [],
   });
 });
 
 test("the group order follows the setting and the cap setting travels with the rows", async () => {
-  const { service } = make({ bookmarks: MARKS, history: VISITS, open: { sources: ["history", "bookmarks"], history_max: 3 } });
-  const answer = (await service.answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[]; history_max: number };
+  const { ranked_items } = make({ bookmarks: MARKS, history: VISITS, open: { sources: ["history", "bookmarks"], history_max: 3 } });
+  const answer = (await ranked_items("open")) as { rows: { tag: string }[]; history_max: number };
   assert.equal(answer.history_max, 3);
   assert.deepEqual(answer.rows.map((row) => row.tag), ["hist", "hist", "bm", "bm"]);
 });
 
 test("a source left out of the setting is not read", async () => {
   const marks_only = make({ bookmarks: MARKS, history: VISITS, open: { sources: ["bookmarks"], history_max: 10 } });
-  assert.equal(((await marks_only.service.answer("open", NORMAL_LINE))?.items as { rows: unknown[] }).rows.length, 2);
+  assert.equal(((await marks_only.ranked_items("open")) as { rows: unknown[] }).rows.length, 2);
   assert.deepEqual(marks_only.history_reads, []);
   const history_only = make({ bookmarks: MARKS, history: VISITS, open: { sources: ["history"], history_max: 10 } });
-  assert.equal(((await history_only.service.answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.every((row) => row.tag === "hist"), true);
+  assert.equal(((await history_only.ranked_items("open")) as { rows: { tag: string }[] }).rows.every((row) => row.tag === "hist"), true);
 });
 
 test("a private line lists bookmarks and no history, and does not read history", async () => {
-  const { service, history_reads } = make({ bookmarks: MARKS, history: VISITS });
-  const answer = (await service.answer("open", PRIVATE_LINE))?.items as { rows: { tag: string }[] };
+  const { ranked_items, history_reads } = make({ bookmarks: MARKS, history: VISITS });
+  const answer = (await ranked_items("open", PRIVATE_LINE)) as { rows: { tag: string }[] };
   assert.deepEqual(answer.rows.map((row) => row.tag), ["bm", "bm"]);
   assert.deepEqual(history_reads, []);
 });
 
 test("a failed browser call gives no open rows", async () => {
-  const { service } = make({ fail: true });
-  assert.deepEqual(await service.answer("open", NORMAL_LINE), { items: { rows: [], history_max: 10, sites: [] } });
+  const { ranked_items } = make({ fail: true });
+  assert.deepEqual(await ranked_items("open"), { rows: [], history_max: 10, sites: [] });
 });
 
-test("the opener is checked before and after the history fetch", async () => {
-  const before = make({ openers: [], history: VISITS });
-  assert.equal(await before.service.answer("open", NORMAL_LINE), undefined);
-  assert.deepEqual(before.history_reads, []);
-  const opened = new Set([1]);
-  const service = create_complete_items({
-    query_tabs: async () => [],
-    query_windows: async () => [],
-    sessions: async () => [],
-    registers: async () => [],
-    marks: async () => [],
-    quality_levels: async () => [],
-    quickmarks: async () => [],
-    saved_quickmarks: async () => [],
-    folders: async () => [],
-    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
-    all_bookmarks: async () => [],
-    is_opener: async (tab_id) => opened.has(tab_id),
-    containers: async () => new Map(),
-    previous_tab: async () => undefined,
-    read_tab: async () => undefined,
-    discard: {} as DiscardDeps,
-    tab_actions: NO_ACTIONS,
-    search_engines: async () => ENGINES,
-    page_of: async () => undefined,
-    line_frame_url: async () => undefined,
-    search_history: async () => {
-      opened.delete(1);
-      return VISITS;
-    },
-    open_settings: async () => ({ sources: ["history"], history_max: 10 }),
-    history_list_max: async () => 20,
-    closed_tabs: async () => [],
-    quickmark_table: async () => ({}),
-  });
-  assert.equal(await service.answer("open", NORMAL_LINE), undefined);
-});
-
-test("a failed history read leaves the bookmarks, and a failed bookmark read leaves the history", async () => {
-  const service = (failing: "history" | "bookmarks") =>
-    create_complete_items({
-      query_tabs: async () => [],
-      query_windows: async () => [],
-      sessions: async () => [],
-      registers: async () => [],
-      marks: async () => [],
-      quality_levels: async () => [],
-      quickmarks: async () => [],
-      saved_quickmarks: async () => [],
-      folders: async () => [],
-      bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
-      all_bookmarks: async () => {
-        if (failing === "bookmarks") throw new Error("no bookmarks");
-        return MARKS;
-      },
-      is_opener: async () => true,
-      containers: async () => new Map(),
-      previous_tab: async () => undefined,
-    read_tab: async () => undefined,
-    discard: {} as DiscardDeps,
-    tab_actions: NO_ACTIONS,
-      search_engines: async () => ENGINES,
-      page_of: async () => undefined,
-      line_frame_url: async () => undefined,
-      search_history: async () => {
-        if (failing === "history") throw new Error("no history");
-        return VISITS;
-      },
-      open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
-      history_list_max: async () => 20,
-      closed_tabs: async () => [],
-      quickmark_table: async () => ({}),
-    });
-  const tags = async (failing: "history" | "bookmarks") => ((await service(failing).answer("open", NORMAL_LINE))?.items as { rows: { tag: string }[] }).rows.map((row) => row.tag);
-  assert.deepEqual(await tags("history"), ["bm", "bm"]);
-  assert.deepEqual(await tags("bookmarks"), ["hist", "hist", "hist"]);
+test("a failed bookmark read leaves the history", async () => {
+  const { service } = make({ history: VISITS });
+  const failing = create_complete_items({ ...(service as unknown as Record<string, unknown>), all_bookmarks: async () => { throw new Error("no bookmarks"); }, open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }), is_opener: async () => true } as unknown as Parameters<typeof create_complete_items>[0]);
+  const inputs = await failing.rank_inputs("open", NORMAL_LINE);
+  assert.deepEqual(inputs.source === "open" && inputs.bookmarks, []);
+  assert.equal(reads_history(inputs), true);
 });
 
 test("the history kind lists every visit newest first with no dedup against bookmarks, and carries the cap", async () => {
-  const { service } = make({ bookmarks: MARKS, history: VISITS, list_max: 7 });
-  assert.deepEqual(await service.answer("history", NORMAL_LINE), {
-    items: {
-      rows: [
-        { title: "Newest", url: "https://new.test/" },
-        { title: "Marked page", url: "https://marked.test/" },
-        { title: "https://bare.test/", url: "https://bare.test/" },
-      ],
-      max: 7,
-    },
+  const { ranked_items } = make({ bookmarks: MARKS, history: VISITS, list_max: 7 });
+  assert.deepEqual(await ranked_items("history"), {
+    rows: [
+      { title: "Newest", url: "https://new.test/" },
+      { title: "Marked page", url: "https://marked.test/" },
+      { title: "https://bare.test/", url: "https://bare.test/" },
+    ],
+    max: 7,
   });
 });
 
 test("a private line gets no history rows and the history is not read", async () => {
-  const { service, history_reads } = make({ history: VISITS });
-  assert.deepEqual(await service.answer("history", PRIVATE_LINE), { items: { rows: [], max: 20 } });
+  const { ranked_items, history_reads } = make({ history: VISITS });
+  assert.deepEqual(await ranked_items("history", PRIVATE_LINE), { rows: [], max: 20 });
   assert.deepEqual(history_reads, []);
-});
-
-test("a failed history read gives no rows, and a tab that redeemed no ticket gets nothing", async () => {
-  assert.deepEqual(await make({ fail: true }).service.answer("history", NORMAL_LINE), { items: { rows: [], max: 20 } });
-  const closed = make({ openers: [], history: VISITS });
-  assert.equal(await closed.service.answer("history", NORMAL_LINE), undefined);
-  assert.deepEqual(closed.history_reads, []);
-});
-
-test("a history read that finishes after the line closed gives nothing", async () => {
-  const opened = new Set([1]);
-  const service = create_complete_items({
-    query_tabs: async () => [],
-    query_windows: async () => [],
-    sessions: async () => [],
-    registers: async () => [],
-    marks: async () => [],
-    quality_levels: async () => [],
-    quickmarks: async () => [],
-    saved_quickmarks: async () => [],
-    folders: async () => [],
-    bookmark_view: async () => ({ rows: { rows: [], folders: [] }, folders: [] }),
-    all_bookmarks: async () => [],
-    is_opener: async (tab_id) => opened.has(tab_id),
-    containers: async () => new Map(),
-    previous_tab: async () => undefined,
-    read_tab: async () => undefined,
-    discard: {} as DiscardDeps,
-    tab_actions: NO_ACTIONS,
-    search_engines: async () => ENGINES,
-    page_of: async () => undefined,
-    line_frame_url: async () => undefined,
-    search_history: async () => {
-      opened.delete(1);
-      return VISITS;
-    },
-    open_settings: async () => ({ sources: ["history"], history_max: 10 }),
-    history_list_max: async () => 20,
-    closed_tabs: async () => [],
-    quickmark_table: async () => ({}),
-  });
-  assert.equal(await service.answer("history", NORMAL_LINE), undefined);
 });
 
 const FOX = { color: "#37adff", icon: "resource://usercontext-content/fingerprint.svg" };
@@ -868,55 +764,42 @@ test("the finder list holds quickmarks, bookmarks, history, closed tabs and the 
     { id: 1, index: 0, windowId: 10, incognito: false, lastAccessed: 500 },
     { id: 2, index: 0, windowId: 20, incognito: true, lastAccessed: 700 },
   ];
-  const { service } = make({
+  const { ranked_items } = make({
     tabs: used_tabs,
     closed,
     quickmark_urls: { b: "https://b.test/", a: "https://a.test/" },
     bookmarks: [{ type: "bookmark", title: "Mark", url: "https://mark.test/" }],
     history: [{ title: "Seen", url: "https://seen.test/" }],
   });
-  const normal = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  const normal = (await ranked_items("anything")) as AnythingItems;
   assert.deepEqual(normal.quickmarks, [{ key: "a", url: "https://a.test/" }, { key: "b", url: "https://b.test/" }]);
   assert.deepEqual(normal.bookmarks, [{ title: "Mark", url: "https://mark.test/" }]);
   assert.deepEqual(normal.history, [{ title: "Seen", url: "https://seen.test/" }]);
   assert.deepEqual(normal.closed, closed);
   assert.deepEqual(normal.tab_used, { 1: 500 });
   assert.equal(normal.history_max, 10);
-  const private_items = (await service.answer("anything", { ...NORMAL_LINE, incognito: true }))?.items as AnythingItems;
+  const private_items = (await ranked_items("anything", { ...NORMAL_LINE, incognito: true })) as AnythingItems;
   assert.equal(private_items.quickmarks.length, 2);
   assert.equal(private_items.bookmarks.length, 1);
   assert.deepEqual([private_items.history, private_items.closed], [[], []]);
   assert.deepEqual(private_items.tab_used, { 2: 700 });
 });
 
-test("an error in the history_max mapper reaches the fetch fallback and is logged, not swallowed with the read", async () => {
+test("an error in the history_max mapper is not swallowed with the read", async () => {
   const broken = { sources: [], get history_max(): number { throw new Error("mapper bug"); } } as OpenSettings;
   const { service } = make({ open: broken, quickmark_urls: { a: "https://a.test/" } });
-  const warnings: unknown[][] = [];
-  const warn = console.warn;
-  console.warn = (...args: unknown[]) => void warnings.push(args);
-  try {
-    const items = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
-    assert.deepEqual(items.quickmarks, []);
-    assert.equal(warnings.length, 1);
-  } finally {
-    console.warn = warn;
-  }
+  await assert.rejects(service.rank_inputs("anything", NORMAL_LINE), /mapper bug/);
 });
 
-test("the browser reader answers the 1000-row search until the cache has filled, then the cache", async () => {
+test("the browser reader answers the 1000-row search while no rank Worker holds the history", async () => {
   const searches: { maxResults: number }[] = [];
   const rows = [{ url: "https://a.test/", title: "A", lastVisitTime: 2 }];
   (globalThis as { browser?: unknown }).browser = { history: { search: async (query: { maxResults: number }) => (searches.push(query), rows) } };
   const { browser_complete_items_deps } = await import("../../src/background/complete_items.ts");
   try {
-    // The browser's rows take the cache's shape, so the usage reads the same fields from both.
+    // The browser's rows take the Worker's shape, so the usage reads the same fields from both.
     assert.deepEqual(await browser_complete_items_deps.search_history(), [{ url: "https://a.test/", title: "A", last_visit: 2, visit_count: 1 }]);
-    assert.ok(searches.some((query) => query.maxResults === 1000));
-    await new Promise((resolve) => setImmediate(resolve));
-    const before = searches.length;
-    assert.deepEqual((await browser_complete_items_deps.search_history()).map((row) => row.url), ["https://a.test/"]);
-    assert.equal(searches.length, before);
+    assert.deepEqual(searches.map((query) => query.maxResults), [1000]);
   } finally {
     delete (globalThis as { browser?: unknown }).browser;
   }
@@ -992,10 +875,10 @@ test("the bookmark list ranks by use on a normal line only, and its reader is to
 test("a bookmark takes the boost of its address's history, in open, the finder and the bookmark list", async () => {
   const history = [{ title: "Marked page", url: "https://marked.test/", visit_count: 20, last_visit: Date.now() }];
   const boost = usage_boost(20, Date.now(), Date.now());
-  const { service } = make({ bookmarks: MARKS, history });
-  const open = (await service.answer("open", NORMAL_LINE))?.items as { rows: { url: string; boost?: number }[] };
+  const { ranked_items } = make({ bookmarks: MARKS, history });
+  const open = (await ranked_items("open")) as { rows: { url: string; boost?: number }[] };
   assert.deepEqual(open.rows.map((row) => [row.url, row.boost]), [["https://marked.test/", boost], ["https://other.test/", undefined]]);
-  const finder = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  const finder = (await ranked_items("anything")) as AnythingItems;
   assert.equal(finder.bookmarks.find((row) => row.url === "https://marked.test/")?.boost, boost);
   const view = bookmark_view([{ children: [{ type: "bookmark", title: "Marked", url: "https://marked.test/" }] }], usage_by_url(history_items(history)));
   assert.equal(view.rows.rows[0]?.boost, boost);
@@ -1007,13 +890,13 @@ test("the finder sends each tab its open-tab boost plus its page's use, and a pr
     { id: 1, index: 0, windowId: 10, incognito: false, url: "https://code.test/repo" },
     { id: 2, index: 1, windowId: 10, incognito: false, url: "https://fresh.test/" },
   ];
-  const { service } = make({ tabs, history });
-  const normal = (await service.answer("anything", NORMAL_LINE))?.items as AnythingItems;
+  const { ranked_items } = make({ tabs, history });
+  const normal = (await ranked_items("anything")) as AnythingItems;
   assert.deepEqual(normal.tab_boost, { 1: MAX_BOOST, 2: OPEN_TAB_BOOST });
   assert.deepEqual(normal.sites.map((site) => site.url), ["https://code.test/"]);
-  const private_items = (await service.answer("anything", PRIVATE_LINE))?.items as AnythingItems;
+  const private_items = (await ranked_items("anything", PRIVATE_LINE)) as AnythingItems;
   assert.deepEqual(private_items.sites, []);
-  const private_open = (await service.answer("open", PRIVATE_LINE))?.items as { sites: unknown[] };
+  const private_open = (await ranked_items("open", PRIVATE_LINE)) as { sites: unknown[] };
   assert.deepEqual(private_open.sites, []);
 });
 

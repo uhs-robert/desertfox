@@ -5,34 +5,42 @@ import type { Effect, Session } from "./session.ts";
 
 export type TokenMatcher = { feed: (mode: string, token: string) => MatchResult; reset: () => void };
 
+type Step = { id: string; args?: Record<string, unknown> };
+
 export type KeyOutcome =
   | { kind: "effect"; effect: Effect }
   // No binding: the token is text, or a key the line ignores.
-  | { kind: "unbound" };
+  | { kind: "unbound" }
+  // A step must wait for the list's rows (`waits`). It and the steps after it have not run.
+  | { kind: "hold"; steps: Step[] };
 
-export function run_token(matcher: TokenMatcher, session: Session, token: string): KeyOutcome {
+// Whether a command must wait before it runs. Without it nothing waits.
+export type Waits = ((command_id: string) => boolean) | undefined;
+
+export function run_token(matcher: TokenMatcher, session: Session, token: string, waits?: Waits): KeyOutcome {
   const result = matcher.feed("cmdline", token);
   if (result.kind_ === "no_match") return { kind: "unbound" };
   // Swallowed, and the matcher stays on the sequence for the next token.
   if (result.kind_ === "pending") return { kind: "effect", effect: { kind: "render" } };
-  return { kind: "effect", effect: run_steps(session, result.leaf.steps.map((step) => step.invocation)) };
+  return run_steps(session, result.leaf.steps.map((step) => step.invocation), waits);
 }
 
 // In order, like the normal key flow. A close or a submit ends the line, so the steps after it have nothing to act on.
-function run_steps(session: Session, invocations: readonly { id: string; args?: Record<string, unknown> }[]): Effect {
-  for (const invocation of invocations) {
-    const effect = session.run(invocation.id, invocation.args);
-    if (effect.kind !== "render") return effect;
+export function run_steps(session: Session, steps: readonly Step[], waits?: Waits): KeyOutcome {
+  for (const [index, step] of steps.entries()) {
+    if (waits?.(step.id)) return { kind: "hold", steps: steps.slice(index) };
+    const effect = session.run(step.id, step.args);
+    if (effect.kind !== "render") return { kind: "effect", effect };
   }
-  return { kind: "render" };
+  return { kind: "effect", effect: { kind: "render" } };
 }
 
 // With no stored keymap the line still needs a way to run and a way out.
 const KEYS_WITHOUT_KEYMAP: Record<string, string> = { "<Enter>": "cmdline.submit", "<Escape>": "mode.escape" };
 
-export function run_token_without_keymap(session: Session, token: string): KeyOutcome {
+export function run_token_without_keymap(session: Session, token: string, waits?: Waits): KeyOutcome {
   const command_id = KEYS_WITHOUT_KEYMAP[token];
-  return command_id ? { kind: "effect", effect: session.run(command_id, undefined) } : { kind: "unbound" };
+  return command_id ? run_steps(session, [{ id: command_id }], waits) : { kind: "unbound" };
 }
 
 export type TextField = { text: string; start: number; end: number };
