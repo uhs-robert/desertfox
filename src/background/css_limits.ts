@@ -1,5 +1,5 @@
 // What user CSS may not load. It may reference only `data:` addresses and `#` fragment references, so it cannot make a page fetch from a remote host.
-// Every way CSS enters the config calls this: an import, a reload of the own folder and a saved edit (`build_files_config`). `@namespace` is not limited: it names a namespace and fetches nothing.
+// Every way CSS enters the config calls this: an import, a reload of the own folder and a saved edit (`build_files_config`). `@namespace` passes in its string form. Its `url()` form is refused like any other `url()`.
 
 import { css_sources } from "../shared/config_build/source_files.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
