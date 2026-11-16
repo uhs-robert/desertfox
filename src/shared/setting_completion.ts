@@ -197,11 +197,14 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": true,
-    "expectation": "a list of \"sheets\", \"maps\" and \"arrow\" with no repeat",
+    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"ddg\", \"kagi\" and \"brave\" with no repeat",
     "values": [
       "sheets",
       "maps",
-      "arrow"
+      "arrow",
+      "ddg",
+      "kagi",
+      "brave"
     ]
   },
   {
