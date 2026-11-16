@@ -133,9 +133,10 @@ function site_modes_problem(value: unknown): string | undefined {
   for (const [name, mode] of Object.entries(value)) {
     if (!SITE_MODE_NAME.test(name) || name === "off") return `names the mode "${name}", which is not a lowercase word other than "off"`;
     if (!is_table(mode)) return `has the mode "${name}", which is not a table`;
-    const unknown_field = Object.keys(mode).find((field) => field !== "label" && field !== "bind");
+    const unknown_field = Object.keys(mode).find((field) => field !== "label" && field !== "bind" && field !== "sticky");
     if (unknown_field !== undefined) return `has the mode "${name}" with the unknown field "${unknown_field}"`;
     if (!is_one_line_text(mode.label)) return `has the mode "${name}" with no one-line "label"`;
+    if (mode.sticky !== undefined && typeof mode.sticky !== "boolean") return `has the mode "${name}" with a "sticky" that is not true or false`;
     const problem = bindings_problem(mode.bind);
     if (problem !== undefined) return `has the mode "${name}" with a "bind" that ${problem}`;
   }

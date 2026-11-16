@@ -26,7 +26,10 @@ define("mode.set", {
 define("mode.site", {
   label: "Site mode",
   intent: "Start a named mode of the site table, or end it with off. The mode adds its own keys to normal mode and shows its label in the badge. Escape, any key DesertFox leaves to the page, a mouse press and any mode change end it.",
-  params: [{ name: "name", type: "string", main: true, description: "Start this mode, or off to end the one that runs." }],
+  params: [
+    { name: "name", type: "string", main: true, description: "Start this mode, or off to end the one that runs." },
+    { name: "toggle", type: "bool", default: false, description: "End the mode when it already runs." },
+  ],
   bridge: false,
   runs_in: "content",
   repeatable: false,

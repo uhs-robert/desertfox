@@ -21,7 +21,7 @@ export const mode_set: ContentHandler = {
 
 // The site mode is an overlay, not a mode, so this handler and the key listener are all that start and end it.
 export const mode_site: ContentHandler = {
-  run: (args) => site_mode.set_(args.name === "off" ? undefined : (args.name as string)),
+  run: (args) => site_mode.set_(args.name === "off" || (args.toggle && args.name === site_mode.name_) ? undefined : (args.name as string)),
 };
 
 export const mode_escape: ContentHandler = {

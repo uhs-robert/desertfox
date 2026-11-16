@@ -60,7 +60,7 @@ test("the approved keys are all bound", () => {
   for (const key of ["h", "j", "k", "l", "gg", "G", "<C-d>", "<C-u>", "<C-f>", "<C-b>", "H", "L", "J", "K", "gt", "gT", "rr", "rh", "R", "xx", "dd", "u", "yy", "gu", "gU", "gi", "zi", "zo", "zz", "zt", "zb", "<S-Escape>", "<Escape>", "<C-v>", "<F1>", "o", "O", "tt", "f", "F", ":", "g?"]) {
     assert.ok(normal.includes(key), key);
   }
-  assert.deepEqual(Object.keys(DEFAULT_KEYMAP.browser ?? {}), ["<A-j>", "<A-k>", "<A-,>"]);
+  assert.deepEqual(Object.keys(DEFAULT_KEYMAP.browser ?? {}), ["<A-j>", "<A-k>", "<A-,>", "<A-l>"]);
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
 

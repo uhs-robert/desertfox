@@ -92,7 +92,7 @@ const SITE_MODES_SCHEMA: Schema = {
   type: "object",
   minProperties: 1,
   propertyNames: { pattern: "^(?!off$)[a-z][a-z0-9_]*$" },
-  additionalProperties: { type: "object", properties: { label: ONE_LINE_TEXT, bind: BINDINGS_SCHEMA }, required: ["label", "bind"], additionalProperties: false },
+  additionalProperties: { type: "object", properties: { label: ONE_LINE_TEXT, bind: BINDINGS_SCHEMA, sticky: { type: "boolean" } }, required: ["label", "bind"], additionalProperties: false },
 };
 
 type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];

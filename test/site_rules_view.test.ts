@@ -23,11 +23,12 @@ test("rows come in table order, the user's first, each with its origin and patte
   assert.deepEqual(view.rows.map(({ origin, name, site }) => ({ origin, name, site })), [
     { origin: "user", name: undefined, site: "https://docs.google.com/*" },
     { origin: "default", name: "sheets", site: "https://docs.google.com/spreadsheets/*" },
+    { origin: "default", name: "arrow", site: "<all_urls>" },
   ]);
 });
 
 test("a page no row fits gives an empty list, with or without a keymap", () => {
-  assert.deepEqual(site_rules_view(compiled_with({}), "https://example.test/").rows, []);
+  assert.deepEqual(site_rules_view(compiled_with({ default_site_rows_off: ["arrow"] }), "https://example.test/").rows, []);
   assert.deepEqual(site_rules_view(undefined, SHEETS).rows, []);
 });
 
@@ -49,7 +50,7 @@ test("a bind names what the key does without the row", () => {
 });
 
 test("default_site_rows_off drops the shipped rows by name", () => {
-  const view = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://docs.google.com/*", bind: { q: STOP } }] }), SHEETS);
+  const view = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://docs.google.com/*", bind: { q: STOP } }] }), SHEETS);
   assert.deepEqual(view.rows.map(({ origin }) => origin), ["user"]);
 });
 
@@ -62,13 +63,13 @@ test("the first row that sets the key rule decides it, and a later one is shadow
 });
 
 test("only lists the keys it keeps, and a pass row after it is shadowed", () => {
-  const [first, second] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", only: "j k" }, { site: "https://a.test/*", pass: "x" }] }), "https://a.test/").rows;
+  const [first, second] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", only: "j k" }, { site: "https://a.test/*", pass: "x" }] }), "https://a.test/").rows;
   assert.deepEqual(first!.changes, [{ keys: "j", action: "stays a DesertFox key" }, { keys: "k", action: "stays a DesertFox key" }]);
   assert.equal(second!.columns[0]!.shadowed, true);
 });
 
 test("off is a column, and a later off is shadowed by an earlier one", () => {
-  const [first, second] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", off: false }, { site: "https://a.test/*", off: true }] }), "https://a.test/").rows;
+  const [first, second] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", off: false }, { site: "https://a.test/*", off: true }] }), "https://a.test/").rows;
   assert.deepEqual(first!.columns, [{ name: "off", value: "false", shadowed: false }]);
   assert.deepEqual(second!.columns, [{ name: "off", value: "true", shadowed: true }]);
 });
@@ -98,50 +99,50 @@ test("a decided off kills every key change of the other rows", () => {
 });
 
 test("pass frees a key another row binds", () => {
-  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*", bind: { j: STOP, q: STOP } }] }), "https://a.test/");
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", pass: "j" }, { site: "https://a.test/*", bind: { j: STOP, q: STOP } }] }), "https://a.test/");
   assert.equal(dead_of(rows, 1, "j"), "freed by pass");
   assert.equal(dead_of(rows, 1, "q"), undefined);
 });
 
 test("only drops a bind it does not list and keeps one it lists", () => {
-  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", only: "k q" }, { site: "https://a.test/*", bind: { j: STOP, q: STOP } }] }), "https://a.test/");
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", only: "k q" }, { site: "https://a.test/*", bind: { j: STOP, q: STOP } }] }), "https://a.test/");
   assert.equal(dead_of(rows, 1, "j"), "dropped by only");
   assert.equal(dead_of(rows, 1, "q"), undefined);
 });
 
 test("an earlier complete bind of g hides a later row's gx", () => {
-  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", bind: { g: STOP } }, { site: "https://a.test/*", bind: { gx: RELOAD } }] }, ['site_rules: skipped bind "gx": "g" is already a complete bind for the same site']), "https://a.test/");
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", bind: { g: STOP } }, { site: "https://a.test/*", bind: { gx: RELOAD } }] }, ['site_rules: skipped bind "gx": "g" is already a complete bind for the same site']), "https://a.test/");
   assert.equal(dead_of(rows, 0, "g"), undefined);
   assert.equal(dead_of(rows, 1, "gx"), "g is a complete bind and hides longer keys under it");
 });
 
 test("a longer bind under a single-key binding names the binding it takes away", () => {
-  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", bind: { hq: STOP } }] }), "https://a.test/");
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", bind: { hq: STOP } }] }), "https://a.test/");
   assert.equal(rows[0]!.changes[0]!.replaces, "Scroll left");
 });
 
 test("a mode bind hidden by a shorter bind of the same mode is not live", () => {
   const modes = { m: { label: "M", bind: { g: STOP, gq: RELOAD } } };
-  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", modes }] }, ['site_rules: skipped bind "gq": "g" is already a complete bind for the same site']), "https://a.test/");
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", modes }] }, ['site_rules: skipped bind "gq": "g" is already a complete bind for the same site']), "https://a.test/");
   assert.equal(dead_of(rows, 0, "g", "m"), undefined);
   assert.equal(dead_of(rows, 0, "gq", "m"), "g is a complete bind and hides longer keys under it");
 });
 
 test("a mode bind replaces what the page tree holds, so a freed key replaces nothing", () => {
   const modes = { m: { label: "M", bind: { j: STOP, k: STOP } } };
-  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", pass: "j", modes }] }), "https://a.test/");
+  const { rows } = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", pass: "j", modes }] }), "https://a.test/");
   const change = (keys: string) => rows[0]!.changes.find((each) => each.keys === keys && each.mode === "m")!;
   assert.equal(change("j").replaces, undefined);
   assert.equal(change("k").replaces, "Scroll up");
 });
 
 test("the editable and scroll target columns show through the generic path", () => {
-  const [row] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets"], site_rules: [{ site: "https://a.test/*", editable_add: [".ed"], editable_remove: [".no"], editable_remove_unsized: true, scroll_selector: ".pane" }] }), "https://a.test/").rows;
+  const [row] = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", editable_add: [".ed"], editable_remove: [".no"], editable_remove_unsized: true, scroll_selector: ".pane" }] }), "https://a.test/").rows;
   assert.deepEqual(row!.columns.map(({ name, value }) => [name, value]), [["editable_add", ".ed"], ["editable_remove", ".no"], ["editable_remove_unsized", "true"], ["scroll_selector", ".pane"]]);
 });
 
 test("a strip_tracking row shows as a column, and an earlier row shadows a later one", () => {
-  const view = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", strip_tracking: false }, { site: "https://a.test/*", strip_tracking: true }, { site: "https://b.test/*", strip_tracking: true }] }), "https://a.test/");
+  const view = site_rules_view(compiled_with({ default_site_rows_off: ["arrow"], site_rules: [{ site: "https://a.test/*", strip_tracking: false }, { site: "https://a.test/*", strip_tracking: true }, { site: "https://b.test/*", strip_tracking: true }] }), "https://a.test/");
   assert.deepEqual(view.rows.map((row) => row.columns.filter(({ name }) => name === "strip_tracking")), [[{ name: "strip_tracking", value: "false", shadowed: false }], [{ name: "strip_tracking", value: "true", shadowed: true }]]);
   assert.deepEqual(site_rules_view(compiled_with({ strip_tracking: false, site_rules: [{ site: "https://b.test/*", strip_tracking: true }] }), "https://b.test/").rows[0]!.columns, [{ name: "strip_tracking", value: "true", shadowed: false }]);
 });

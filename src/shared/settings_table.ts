@@ -17,7 +17,7 @@ export type BindStep = string | BoundInvocation;
 export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[] | { run: BindStep | readonly BindStep[]; label?: string; intent?: string }>>;
 
 // A site mode: its badge label and its own table of binds, in the same formats as `bind`.
-export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable }>>;
+export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable; sticky?: boolean }>>;
 
 type TableFields = Readonly<Record<string, { value: "text" | "web_url" | "keys" | "boolean" | "bindings" | "site_modes"; optional?: true }>>;
 

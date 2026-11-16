@@ -89,7 +89,7 @@ export function matches_any_address(source: string | undefined, addresses: reado
 // `pass` and `only` form one column, the key rule. Each per-site setting is a column of its own in `values`.
 // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. Its keys are the written sequences in a row, and the normalized sequences once compiled.
 // `modes` is the other merging column: a site mode is decided whole, by the first matching row that has its name.
-export type SiteModeColumn<Bind = unknown> = { label: string; bind: Readonly<Record<string, Bind>> };
+export type SiteModeColumn<Bind = unknown> = { label: string; bind: Readonly<Record<string, Bind>>; sticky?: boolean };
 export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; modes?: Readonly<Record<string, SiteModeColumn<Bind>>>; values?: Readonly<Record<string, unknown>> };
 export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; modes?: Record<string, SiteModeColumn<Bind>>; values: Record<string, unknown> };
 

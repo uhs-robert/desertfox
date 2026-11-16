@@ -204,11 +204,11 @@ test("a joined multi-step text is refused, and a change that changes nothing say
 });
 
 test("a browser chord past the last free Firefox slot is refused by the check", async () => {
-  // The defaults take 3 of the 10 slots.
+  // The defaults take 4 of the 10 slots.
   const browser_edits = (count: number) => ({ browser: Object.fromEntries(Array.from({ length: count }, (_, index) => [`<A-${index + 1}>`, "tab.next"])) });
-  const last_free = await messages_over(config_with({}), { edits: browser_edits(6) }).check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
+  const last_free = await messages_over(config_with({}), { edits: browser_edits(5) }).check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
   assert.equal(last_free.ok && last_free.saves, true, JSON.stringify(last_free));
-  const past = await messages_over(config_with({}), { edits: browser_edits(7) }).check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
+  const past = await messages_over(config_with({}), { edits: browser_edits(6) }).check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
   assert.equal(past.ok && !past.saves && past.warnings.some((warning) => /only 10 Firefox shortcut slots/.test(warning)), true, JSON.stringify(past));
 });
 
@@ -257,8 +257,8 @@ test("a move is refused when the old key changed since the row was shown", async
 
 test("a browser chord moves when every slot is taken, because the old chord is freed first", async () => {
   const browser: Record<string, string> = {};
-  for (const key of "abcdefg") browser[`<A-${key}>`] = "tab.next";
-  // The shipped keymap holds three browser chords, so ten slots are full.
+  for (const key of "abcdef") browser[`<A-${key}>`] = "tab.next";
+  // The shipped keymap holds four browser chords, so ten slots are full.
   const stored = { edits: { browser } as KeymapEdits };
   const messages = messages_over(config_with({}), stored);
   const added = await messages.check({ type: "check_binding", mode: "browser", keys: "<A-z>", text: "tab.next" });
@@ -271,12 +271,12 @@ test("a browser chord moves when every slot is taken, because the old chord is f
   assert.equal(stored.edits.browser?.["<A-z>"], "tab.next");
 });
 
-// The defaults take 3 of the 10 slots, so six chords here leave one slot free.
+// The defaults take 4 of the 10 slots, so five chords here leave one slot free.
 const browser_chords = (keys: string): KeymapEdits => ({ browser: Object.fromEntries([...keys].map((key) => [`<A-${key}>`, "tab.next"])) });
 
 test("two tabs saving the last free slot at once: one binds, the other is refused and nothing drops", async () => {
   // `<A-,>` is a default chord, so it plans before every edit: only the stored slot map keeps the first save's chord on the last slot.
-  const before: KeymapEdits = { browser: { "<A-,>": "", ...browser_chords("abcdefg").browser } };
+  const before: KeymapEdits = { browser: { "<A-,>": "", ...browser_chords("abcdef").browser } };
   const stored = { edits: before };
   const messages = messages_over(config_with({}), stored);
   const answers = await Promise.all([
@@ -291,12 +291,12 @@ test("two tabs saving the last free slot at once: one binds, the other is refuse
 });
 
 test("a move at full slots still lands when another tab takes the last free slot first", async () => {
-  const stored = { edits: browser_chords("abcdef") };
+  const stored = { edits: browser_chords("abcde") };
   const messages = messages_over(config_with({}), stored);
   const [added, moved] = await Promise.all([
     messages.change({ type: "change_keymap", mode: "browser", keys: "<A-y>", action: "set", text: "tab.next" }),
     messages.change({ type: "change_keymap", mode: "browser", keys: "<A-z>", action: "set", text: "tab.next", move_from: "<A-a>", move_from_text: "tab.next" }),
   ]);
   assert.equal(added.ok && moved.ok, true, JSON.stringify([added, moved]));
-  assert.deepEqual(Object.keys(stored.edits.browser ?? {}).sort(), ["<A-b>", "<A-c>", "<A-d>", "<A-e>", "<A-f>", "<A-y>", "<A-z>"]);
+  assert.deepEqual(Object.keys(stored.edits.browser ?? {}).sort(), ["<A-b>", "<A-c>", "<A-d>", "<A-e>", "<A-y>", "<A-z>"]);
 });

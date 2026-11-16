@@ -117,8 +117,8 @@ export type FrameSiteName = (typeof FRAME_SITE_SETTINGS)[number];
 export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partial<Pick<Settings, Name>>;
 
 // `site_values` holds the page reply site settings resolved for the frame's own address, each only when it differs from its default.
-// What a site mode adds to the page's normal tree: its badge label and the top-level children that differ from the normal tree, which the content script lays over it.
-export type PageSiteMode = { label: string; tree: Record<string, TreeNode> };
+// What a site mode adds to the page's normal tree: its badge label and the top-level children that differ from the normal tree, which the content script lays over it. A sticky mode ignores mouse presses and keys the page keeps.
+export type PageSiteMode = { label: string; tree: Record<string, TreeNode>; sticky?: boolean };
 
 export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
