@@ -194,16 +194,18 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await in_active_tab(`window.scrollY`)) === 0, "focusing a heading that is already in view scrolled the page");
   });
 
-  await run_case("zt after ;fh puts the focused heading at the top of the view", async () => {
-    await open_page("headings", "p6_focus_heading_zt", { new_tab: true });
+  await run_case("zb after ;fh moves the focused heading from the top of the view to the bottom", async () => {
+    await open_page("headings", "p6_focus_heading_zb", { new_tab: true });
+    // Only headings in view get a label, so 3]h first scrolls Below, the third heading in page order, to the top.
+    await press_keys("3", "]", "h");
+    await poll_until("Below at the top of the view", async () => Math.abs(await in_active_tab(`document.getElementById("below").getBoundingClientRect().top`)) < 4);
     await press_keys(";fh");
     await wait_for_labels(";fh");
-    // Below is the third heading in page order.
-    await press_keys("d");
+    await press_keys("a");
     await wait_for_label_count(0, "gone after the pick");
     await poll_until("Below to hold the focus", async () => (await in_active_tab(`document.activeElement.id`)) === "below");
-    await press_keys("zt");
-    await poll_until("Below at the top of the view", async () => Math.abs(await in_active_tab(`document.getElementById("below").getBoundingClientRect().top`)) < 4);
+    await press_keys("zb");
+    await poll_until("Below at the bottom of the view", async () => Math.abs(await in_active_tab(`innerHeight - document.getElementById("below").getBoundingClientRect().bottom`)) < 4);
   });
 
   await run_case(";rl opens each pick in a background tab and keeps picking until Escape", async () => {
