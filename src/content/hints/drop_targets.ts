@@ -1,5 +1,7 @@
 // The places a grabbed element can likely be dropped, for the target pass of `hint --grab`. A page does not declare its drop targets, so this guesses from the page's structure. It never proves a place is not a target, which is why the caller falls back to every element when little is found and offers a key that widens to every element.
 
+import { warn_and_go } from "../../shared/swallow.ts";
+
 // What a page marks as a drop place: inline handlers, the old dropzone attributes, and the markers of the drag libraries that put one on a droppable.
 export const MARKERS = "[ondrop], [ondragover], [dropzone], [aria-dropeffect]:not([aria-dropeffect=none]), [data-rbd-droppable-id], [data-rfd-droppable-id], .ui-droppable, .ui-sortable";
 // A thumb drops anywhere along a track, a canvas or a gap, so a widget like this takes labels on every element.
@@ -32,9 +34,9 @@ function is_kin(source: Element, other: Element): boolean {
 export function drop_targets_of(source: Element): Set<Element> | undefined {
   try {
     return read_targets(source);
-  } catch {
-    // A page quirk the selectors cannot read must not leave the pass with no labels.
-    return undefined;
+  } catch (error) {
+    // The pass must not end with no labels, so any error means every element. The warning keeps our own bug visible.
+    return warn_and_go("drop_targets")(error);
   }
 }
 

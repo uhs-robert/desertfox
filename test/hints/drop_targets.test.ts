@@ -147,7 +147,7 @@ test("two cards directly under the body give one place, which is too few, so the
 
 test("a source whose tag is not a plain CSS name still finds its kin", () => {
   const { nodes } = page_of([board([{ name: "col", children: [card("a", { tag: "o:p" }), card("b", { tag: "o:p" })] }])]);
-  assert.deepEqual(names(drop_targets_of(nodes.get("a") as unknown as Element)), ["b", "board", "col"].filter((name) => name !== "board"));
+  assert.deepEqual(names(drop_targets_of(nodes.get("a") as unknown as Element)), ["b", "col"]);
 });
 
 test("a selector error gives no narrowing, so the pass labels every element", () => {
