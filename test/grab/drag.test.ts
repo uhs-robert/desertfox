@@ -368,6 +368,21 @@ test("a scroll-snap box scrolls by one view and gets no pointer events, and a bo
   }
 });
 
+test("a scroll-snap box scrolls instantly under reduced motion", () => {
+  const scrolls: { behavior: string }[] = [];
+  const snap = element({ clientWidth: 300, scrollWidth: 900, clientHeight: 100, scrollHeight: 100, scrollBy: (init: { behavior: string }) => scrolls.push(init) });
+  const slide = element({ parent: snap, parentElement: snap });
+  (globalThis as Record<string, unknown>).getComputedStyle = (target: unknown) => ({ scrollSnapType: target === snap ? "x mandatory" : "none" });
+  (globalThis as Record<string, unknown>).matchMedia = () => ({ matches: true });
+  try {
+    snap_scroll(as_element(slide), "right");
+    assert.deepEqual(scrolls.map((init) => init.behavior), ["instant"]);
+  } finally {
+    delete (globalThis as Record<string, unknown>).getComputedStyle;
+    delete (globalThis as Record<string, unknown>).matchMedia;
+  }
+});
+
 test("the pause grows with the stroke, so the speed stays near 2 px per ms on any width", () => {
   const speed_on = (width: number) => {
     const slide = element({ getBoundingClientRect: () => ({ left: 0, top: 0, width, height: 20 }) });

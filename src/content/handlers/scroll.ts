@@ -128,7 +128,7 @@ const smooth_page_tap = (target: Element, distance: number) => {
   clearTimeout(clear_in_flight_timer);
   in_flight = { target, end };
   clear_in_flight_timer = setTimeout(end_flight, FLIGHT_MS);
-  target.scrollTo({ top: end, behavior: smooth_behavior() });
+  target.scrollTo({ top: end, behavior: "smooth" });
 };
 
 export const scroll_lines: ContentHandler = {
@@ -145,7 +145,7 @@ export const scroll_pages: ContentHandler = {
     when_laid_out(pages ? `pages ${pages}` : "", "y", (instant) => {
       const target = scroll_target("y");
       const distance = pages * target.clientHeight;
-      if (repeat || instant) move_by(0, distance);
+      if (repeat || instant || smooth_behavior() === "instant") move_by(0, distance);
       else smooth_page_tap(target, distance);
     });
   },

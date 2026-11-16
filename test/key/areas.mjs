@@ -79,6 +79,8 @@ export const area_rules = [
   { globs: ["src/background/history_clear.ts"], areas: ["scroll", "keys", "whichkey", "tabs", "cmdline"] },
   { globs: ["src/background/macro_recorder.ts", "src/background/macro_last_played.ts", "src/commands/macro.ts"], areas: ["keys", "whichkey"] },
   { globs: ["src/background/macro_replay.ts", "src/background/hold_on_arrival.ts"], areas: ["keys", "hints", "tabs"] },
+  // The grab bundle's snap swipe uses smooth_behavior too.
+  { globs: ["src/content/smooth_behavior.ts"], areas: ["scroll", "hints"] },
   { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts", "src/background/site_zoom.ts"], areas: ["scroll"] },
   {
     globs: [
