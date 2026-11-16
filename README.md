@@ -45,9 +45,9 @@ You can edit any text box in Neovim: press `<C-o>` in insert mode. This needs th
 
 ## 📦 Install
 
-> [!WARNING]
-> DesertFox is under construction.
-> It has no stable release and no listing on addons.mozilla.org yet. A signed beta is available.
+> [!NOTE]
+> The addons.mozilla.org listing is in review and is not live yet.
+> Until Mozilla approves it, install the signed beta below.
 
 DesertFox runs in Firefox on desktop. The native host is Linux only.
 

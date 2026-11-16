@@ -6,7 +6,7 @@ Guidance for coding agents in this repository. `CLAUDE.md` points here. Keep the
 
 DesertFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host.
 
-DesertFox has no official release and no users yet, so a breaking change costs nothing. Choose the best long-term design, not the cheap migration. This rule ends at the first official release.
+A change to stored data needs a migration.
 
 ## Where to look
 
@@ -118,4 +118,4 @@ While building, run `just key-test-changed [base]` or set `KEY_TEST_PIECES`, not
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`.
-- Put worktrees under `/home/roberth/Development/personal/desertfox-worktrees/`.
+- Put worktrees under `../desertfox-worktrees/`.
