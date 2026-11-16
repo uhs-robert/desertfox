@@ -9,7 +9,8 @@ const SEEDED = 2000;
 const SEED_START = Date.UTC(2001, 0, 1);
 const TARGET_TITLE = "Xylophone target page";
 
-// Runs in the line's frame and holds no outer variable. Each keydown gets its time to the next frame (the typed key drawn) and the list's redraws are timed, with whether the note still read "loading".
+// Runs in the line's frame and holds no outer variable. Each keydown gets its time to the next frame (the typed key drawn) and the list's redraws are timed, with the line's text and whether the note still read "loading".
+// The text ties a draw to its query: the page ranks the text the line shows, so a draw of that text that is not loading shows its rows.
 const install_probe = (frame_window) => {
   const document = frame_window.document;
   const keys = [];
@@ -28,7 +29,7 @@ const install_probe = (frame_window) => {
     true,
   );
   new frame_window.MutationObserver(() => {
-    draws.push({ at: frame_window.performance.now(), loading: document.getElementById("note").textContent === "loading", rows: document.querySelectorAll(".desertfox-cmdline-item").length });
+    draws.push({ at: frame_window.performance.now(), text: document.getElementById("line").value, loading: document.getElementById("note").textContent === "loading", rows: document.querySelectorAll(".desertfox-cmdline-item").length });
     publish();
   }).observe(document.getElementById("list"), { childList: true, subtree: true });
   publish();
@@ -91,7 +92,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, on_teardow
     const [probe] = await evaluate_in_page_frames(rdp, "cmdline.html", read_probe.toString());
     const frames = probe.keys.map((key) => key.frame_ms).filter((ms) => ms !== null);
     const last_key = probe.keys.at(-1).at;
-    const landed = probe.draws.find((draw) => draw.at > last_key && !draw.loading && draw.rows > 0);
+    const landed = probe.draws.find((draw) => draw.at > last_key && draw.text === `open ${burst}` && !draw.loading && draw.rows > 0);
     expect(frames.length === burst.length && landed, `the probe missed keys or the final draw: ${JSON.stringify(probe)}`);
     const rows_ms = landed.at - last_key;
     console.log(`p42 latency: ${frames.length} keys, keydown to next frame median ${median(frames).toFixed(1)} ms, max ${Math.max(...frames).toFixed(1)} ms; last keydown to its rows drawn ${rows_ms.toFixed(1)} ms; ${probe.draws.length} list draws`);
