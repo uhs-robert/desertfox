@@ -80,7 +80,8 @@ function install_fakes() {
     querySelector: (_selector: string): FakeNode | null => null,
   };
   Object.assign(globalThis, {
-    browser: { storage: { onChanged: { addListener: (listener: Listener) => void storage_listeners.push(listener) } } },
+    browser: { storage: { local: { get: async () => ({}) }, onChanged: { addListener: (listener: Listener) => void storage_listeners.push(listener) } }, runtime: { getURL: (path: string) => path }, },
+    fetch: async () => ({ json: async () => ({ commands: [] }) }),
     document: dom,
     window: { scrollX: 0, scrollY: 0, scrollTo: (x: number, y: number) => void scrolls.push([x, y]) },
     CSS: { escape: (text: string) => text },
@@ -295,19 +296,19 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     const readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() };
     const body_node = body as unknown as HTMLElement;
     const off = effective_settings({ newtab_clock: true, newtab_weather: false, newtab_ip_info: false } as never);
-    await render_new_tab(body_node, off, readers);
+    await render_new_tab(body_node, off, readers, async () => ":");
     await settled();
     assert.deepEqual(find_by_class(body.children[0]!, "ip-info"), []);
     assert.equal(requests, 0);
     assert.deepEqual([...removed].sort(), ["newtab_net_cache_air", "newtab_net_cache_ip", "newtab_net_cache_weather"], "each card that is off deletes its own answer");
 
     const on = effective_settings({ newtab_clock: true, newtab_weather: false, newtab_ip_info: true } as never);
-    await render_new_tab(body_node, on, readers);
+    await render_new_tab(body_node, on, readers, async () => ":");
     const [first_slot] = find_by_class(body.children[0]!, "ip-info");
     assert.ok(first_slot);
     await first_request;
     // The redraw swaps the page, which must stop the first run while its request is out.
-    await render_new_tab(body_node, on, readers);
+    await render_new_tab(body_node, on, readers, async () => ":");
     await settled();
     const [second_slot] = find_by_class(body.children[0]!, "ip-info");
     assert.notEqual(second_slot, first_slot);
@@ -319,7 +320,7 @@ test("the IP info line adds a slot only while its setting is on, forgets its ans
     assert.deepEqual(removed.filter((key) => key === "newtab_net_cache_ip"), ["newtab_net_cache_ip"], "the setting on never forgets");
     const weather_on = effective_settings({ newtab_clock: true, newtab_weather: true, newtab_ip_info: true } as never);
     const removed_before = removed.length;
-    await render_new_tab(body_node, weather_on, readers);
+    await render_new_tab(body_node, weather_on, readers, async () => ":");
     await settled();
     assert.equal(removed.slice(removed_before).includes("newtab_net_cache_weather"), false, "the weather setting on never forgets its answer");
   } finally {
@@ -384,7 +385,7 @@ test("a throw while keeping the view is logged and does not stop later redraws",
 const text_under = (node: FakeNode): string => node.textContent + node.children.map(text_under).join("");
 const find_hint = (node: FakeNode): FakeNode | undefined => (node.className === "command-hint" ? node : node.children.map(find_hint).find((found) => found !== undefined));
 
-test("the new tab hint draws at once with the default key, then names the bound key, no key or keeps the default", async () => {
+test("the new tab hint names the bound key, no key, or the default after a failed read, which is logged", async () => {
   mock.timers.enable({ apis: ["setInterval"] });
   try {
   const empty_readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() };
@@ -395,6 +396,7 @@ test("the new tab hint draws at once with the default key, then names the bound 
     ["unbound", async () => undefined, "open the command line"],
     ["a failed read", async () => Promise.reject(new Error("storage gone")), "press : for the command line"],
   ];
+  const warned = mock.method(console, "warn", () => {});
   for (const [name, read, expected] of cases) {
     const { body } = install_fakes();
     // A fresh copy of the module, because it remembers the page of the earlier tests.
@@ -403,13 +405,16 @@ test("the new tab hint draws at once with the default key, then names the bound 
     await render_new_tab(body as unknown as HTMLElement, settings, empty_readers, read);
     await settled();
     assert.equal(text_under(find_hint(body)!), expected, name);
+    assert.equal(find_hint(body)!.style.visibility, "", name);
   }
+  assert.equal(warned.mock.callCount(), 1);
+  warned.mock.restore();
   } finally {
     mock.timers.reset();
   }
 });
 
-test("the first new tab paint does not wait for the keymap, and a redraw waits so the default never flashes", async () => {
+test("the first new tab paint does not wait for the keymap and holds the hint hidden until the key is known, and a redraw waits", async () => {
   mock.timers.enable({ apis: ["setInterval"] });
   try {
   const { body } = install_fakes();
@@ -421,9 +426,10 @@ test("the first new tab paint does not wait for the keymap, and a redraw waits s
   const first = render_new_tab(body as unknown as HTMLElement, effective_settings({} as never), empty_readers, slow);
   await first;
   assert.equal(body.children.length, 1);
-  assert.equal(text_under(find_hint(body)!), "press : for the command line");
+  assert.equal(find_hint(body)!.style.visibility, "hidden");
   release("<A-x>");
   await settled();
+  assert.equal(find_hint(body)!.style.visibility, "");
   assert.equal(text_under(find_hint(body)!), "press <A-x> for the command line");
   let redraw_done = false;
   const second = render_new_tab(body as unknown as HTMLElement, effective_settings({} as never), empty_readers, slow).then(() => (redraw_done = true));
