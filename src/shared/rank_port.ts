@@ -36,7 +36,7 @@ export type FinderExtras = {
 
 // `partial`: the history was still loading, so the rows came from the newest 1000 pages. A `stale` push follows once it has loaded.
 // `skipped`: a newer request from the line replaced this one before it ran.
-// `failed`: building or ranking the list threw. The rows are empty, so the line stops waiting for them.
+// `failed`: building or ranking the list threw. The rows are empty, so the line stops waiting for them, and the page does not keep the answer.
 export type RankedReply = { type: "ranked"; seq: number; rows: WireRow[]; partial: boolean; skipped?: true; failed?: true; finder?: FinderExtras };
 
 export type RankPush = RankedReply | { type: "stale" };
