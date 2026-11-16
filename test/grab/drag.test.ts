@@ -355,6 +355,7 @@ test("a scroll-snap box scrolls by one view and gets no pointer events, and a bo
   const slide = element({ parent: snap, parentElement: snap });
   const styles = new Map<unknown, string>([[snap, "x mandatory"]]);
   (globalThis as Record<string, unknown>).getComputedStyle = (target: unknown) => ({ scrollSnapType: styles.get(target) ?? "none" });
+  (globalThis as Record<string, unknown>).matchMedia = () => ({ matches: false });
   try {
     assert.equal(snap_scroll(as_element(slide), "right"), true);
     assert.equal(snap_scroll(as_element(slide), "left"), true);
@@ -363,6 +364,22 @@ test("a scroll-snap box scrolls by one view and gets no pointer events, and a bo
     assert.deepEqual([slide.log, snap.log], [[], []]);
   } finally {
     delete (globalThis as Record<string, unknown>).getComputedStyle;
+    delete (globalThis as Record<string, unknown>).matchMedia;
+  }
+});
+
+test("a scroll-snap box scrolls instantly under reduced motion", () => {
+  const scrolls: { behavior: string }[] = [];
+  const snap = element({ clientWidth: 300, scrollWidth: 900, clientHeight: 100, scrollHeight: 100, scrollBy: (init: { behavior: string }) => scrolls.push(init) });
+  const slide = element({ parent: snap, parentElement: snap });
+  (globalThis as Record<string, unknown>).getComputedStyle = (target: unknown) => ({ scrollSnapType: target === snap ? "x mandatory" : "none" });
+  (globalThis as Record<string, unknown>).matchMedia = () => ({ matches: true });
+  try {
+    snap_scroll(as_element(slide), "right");
+    assert.deepEqual(scrolls.map((init) => init.behavior), ["instant"]);
+  } finally {
+    delete (globalThis as Record<string, unknown>).getComputedStyle;
+    delete (globalThis as Record<string, unknown>).matchMedia;
   }
 });
 

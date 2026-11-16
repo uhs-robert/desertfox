@@ -110,7 +110,7 @@ Keyboard drag keys. `;` starts the hint keys, and `;g` and `;G` are modifiers th
 - `;Gg` grabs a draggable element and moves it with keys (grab and move). In grab mode, `h` `j` `k` `l` move it, `[` and `]` halve and double the step, `Enter` drops it and `Escape` cancels.
 - `;gg` grabs a draggable element, then hints the page again so you pick the target to drop it on (grab and choose a target).
 - The trailing `g` is the draggable filter: elements that declare drag, sliders, scrollbars and sortable handles. Another letter picks another filter, so `;ga` grabs any element and `;Ga` moves any element.
-- `;w` swipes a carousel or slider with the same `h` `j` `k` `l` keys.
+- `;s` swipes a carousel or slider with the same `h` `j` `k` `l` keys.
 - A drag stays inside one frame, and a page that accepts only real mouse input ignores it.
 
 Hints typically appear in under a tenth of a second, within the blink of an eye.
@@ -182,7 +182,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Click anything: press `f`, then type the short label next to a link, button, input or image. `F` opens a link in a background tab.
 - Narrow the labels by link text: press `/` in hint mode and type part of the text.
 - Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, double-click, focus, inspect in DevTools, or focus a frame.
-- Drag and drop: `;Gg` grabs an element and moves it with `h` `j` `k` `l`, `;gg` grabs one and drops it on a target you pick, and `;w` swipes a carousel.
+- Drag and drop: `;Gg` grabs an element and moves it with `h` `j` `k` `l`, `;gg` grabs one and drops it on a target you pick, and `;s` swipes a carousel.
 - Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
 - Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`.
 

@@ -98,7 +98,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
   await run_case("i in a child frame shows INSERT on the badge and Escape in the frame returns every frame to normal", async () => {
     await open_page("frames", "p22_frames", { new_tab: true });
     let mark = events.length;
-    await press_keys(";f");
+    await press_keys(";ff");
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     await press_keys("a");
     await wait_event(mark, (event) => event.type === "window_focus" && event.page_id === "p22_frames_same", "the frame to take the focus");

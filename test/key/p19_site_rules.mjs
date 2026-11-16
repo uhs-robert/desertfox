@@ -29,7 +29,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
 
   await run_case("a cross-origin frame under a pass rule gets the rule through the tab address", async () => {
     await open_page("frames", "rule_frames", { new_tab: true });
-    await press_keys(";f");
+    await press_keys(";ff");
     await poll_until("the hint labels", async () => (await hint_label_count()) > 0);
     await press_keys("s");
     await wait_event(0, (event) => event.type === "tree_read" && event.page_id === "rule_frames_cross", "the cross-origin frame to start on focus");

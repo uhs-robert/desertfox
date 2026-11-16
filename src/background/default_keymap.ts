@@ -66,6 +66,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ";d": { action: "download", label: "Download" },
     ";o": { action: "inspect", label: "Inspect" },
     ";h": { action: "hover", label: "Hover" },
+    ";f": { action: "focus", label: "Focus" },
     ";x": { action: "delete", label: "Delete" },
     ";2": { action: "double_click", label: "Double-click" },
     ";g": { action: "grab", label: "Grab and drop" },
@@ -358,7 +359,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ";b": { id: "hint.run", args: { filter: "buttons" }, label: "Click button", variant_label: "Button" },
     ";a": { id: "hint.run", args: { filter: "every" }, label: "Click every element", variant_label: "Every element" },
     ";t": { id: "hint.run", args: { filter: "prose" }, label: "Click text", variant_label: "Text" },
-    ";s": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
+    ";s": { id: "hint.run", args: { action: "grab_swipe", filter: "swipeable" }, label: "Swipe a carousel or slider with the keys" },
     ";i": { id: "hint.run", args: { filter: "inputs" }, label: "Click input", variant_label: "Input" },
     ";l": { id: "hint.run", args: { filter: "links" }, label: "Click link", variant_label: "Link" },
     ";I": { id: "hint.run", args: { filter: "images" }, label: "Open image in new tab", variant_label: "Image" },
@@ -371,13 +372,21 @@ const BASE_SECTIONS: KeymapConfig = {
     ";yc": { id: "hint.run", args: { action: "copy_selector", filter: "every" }, label: "Copy CSS selector" },
     ";Y": { id: "hint.run", args: { action: "copy", filter: "links", rapid: true }, label: "Copy several link URLs" },
     ";yh": { id: "hint.run", args: { action: "copy_html", filter: "every" }, label: "Copy outer HTML" },
-    ";f": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame", variant_label: "Frame" },
+    // `;f` is a modifier, so the focus variants of the filter keys derive from it. These keys are hand-bound: the frames filter has no key of its own to derive from.
+    ";ff": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame" },
+    // The frame variants of three modifiers stay as hand-bound keys, because the frames filter has no source key.
+    ";of": { id: "hint.run", args: { action: "inspect", filter: "frames" }, label: "Inspect frame" },
+    ";hf": { id: "hint.run", args: { action: "hover", filter: "frames" }, label: "Hover frame" },
+    ";xf": { id: "hint.run", args: { action: "delete", filter: "frames" }, label: "Delete frame" },
+    ";fF": { id: "frame.exit" },
+    ";fs": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
+    ";fe": { id: "page.focus_input", label: "Main input" },
+    ";fh": { id: "hint.run", args: { action: "focus", filter: "headings" }, label: "Focus heading" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },
     // `;g` and `;G` are modifiers, so these two keys are the draggable group under them: the filter letter `g` follows the modifier `g`.
     ";gg": { id: "hint.run", args: { action: "grab", filter: "draggable" }, label: "Grab an element and drop it on a target", variant_label: "Draggable" },
     ";Gg": { id: "hint.run", args: { action: "grab_move", filter: "draggable" }, label: "Grab an element and move it with the keys", variant_label: "Draggable" },
-    ";w": { id: "hint.run", args: { action: "grab_swipe", filter: "swipeable" }, label: "Swipe a carousel or slider with the keys" },
     ":": { id: "cmdline.open" },
     "/": { id: "find.open", label: "Find forward" },
     "?": { id: "find.open", args: { direction: "backward" }, label: "Find backward" },
@@ -460,7 +469,11 @@ const BASE_SECTIONS: KeymapConfig = {
 };
 
 // The media mode keeps the hint and command line keys of normal mode, so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach.
-const keys_kept_in_media: ModeBindings = Object.fromEntries(Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => sequence === "f" || sequence === ":" || sequence.startsWith(";")));
+// `;fF` and `;fe` sit in the `;` group but run a normal-mode command, so the media mode leaves them out.
+const NORMAL_ONLY_HINT_GROUP_KEYS = new Set([";fF", ";fe"]);
+const keys_kept_in_media: ModeBindings = Object.fromEntries(
+  Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (sequence === "f" || sequence === ":" || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence)),
+);
 
 const media_action = (action: string, value?: string, label?: string) => ({ id: "media.act", args: { action, ...(value === undefined ? {} : { value }) }, ...(label === undefined ? {} : { label }) });
 

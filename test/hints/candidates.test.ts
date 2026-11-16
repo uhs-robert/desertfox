@@ -472,6 +472,16 @@ test("the draggable filter keeps explicit drag signs and grab cursors where they
   assert.equal(is_draggable(pointer_card), true);
 });
 
+test("the headings filter takes the heading tags and roles, and keeps no empty heading or presentation role", () => {
+  const { selector, test: keeps } = query_for("headings", undefined);
+  for (const tag of ["h1", "h2", "h6", "[role=heading]"]) assert.ok(selector.includes(tag), tag);
+  const fake = (role: string | null, text: string) => ({ getAttribute: () => role, innerText: text }) as unknown as Element;
+  assert.equal(keeps?.(fake(null, "Title")), true);
+  assert.equal(keeps?.(fake("heading", "Title")), true);
+  assert.equal(keeps?.(fake("presentation", "Title")), false);
+  assert.equal(keeps?.(fake(null, "  ")), false);
+});
+
 test("the swipeable filter keeps carousel containers, scroll-snap boxes and what a drag moves, and no plain box or page root", (context) => {
   const global_scope = globalThis as unknown as { getComputedStyle?: unknown };
   const snaps = new Set<unknown>();

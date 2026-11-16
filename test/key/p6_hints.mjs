@@ -141,11 +141,11 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
 
   const outline_and_tabindex = async () => await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);
 
-  await run_case(";s focuses a scroll box, then j scrolls the box and not the page", async () => {
+  await run_case(";fs focuses a scroll box, then j scrolls the box and not the page", async () => {
     // The only scroll box is the side panel, so it gets the label "a". The page root is left out.
     await open_page("scrollbox", "p6_scrollbox", { new_tab: true });
-    await press_keys(";s");
-    await wait_for_labels(";s");
+    await press_keys(";fs");
+    await wait_for_labels(";fs");
     await press_keys("a");
     await poll_until("the box to get its outline", async () => (await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`)) === "solid");
     const mark = events.length;
@@ -157,10 +157,10 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("the outline flash to end", async () => { const [outline, tabindex] = await outline_and_tabindex(); return outline === "" && tabindex === "-1"; }).catch(async (error) => { const [outline, tabindex] = await outline_and_tabindex(); throw new Error(`after the flash: inline outline "${outline}", tabindex ${tabindex} (${error.message})`); });
   });
 
-  await run_case(";s focuses a scroll box inside a shadow root, then j scrolls that box and not the page", async () => {
+  await run_case(";fs focuses a scroll box inside a shadow root, then j scrolls that box and not the page", async () => {
     await open_page("shadowbox", "p6_shadowbox", { new_tab: true });
-    await press_keys(";s");
-    await wait_for_labels(";s");
+    await press_keys(";fs");
+    await wait_for_labels(";fs");
     await press_keys("a");
     // The label is gone once the box has the focus.
     await wait_for_label_count(0, "gone after the pick");
@@ -169,6 +169,43 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_shadowbox", "the shadow panel to scroll after j");
     expect(moved.top > 0, `the shadow panel is at ${moved.top} after j`);
     await expect_absent(mark, "p6_shadowbox", (event) => event.type === "scroll" && event.page_id === "p6_shadowbox", "the page scrolled with the shadow panel", { report_delay_ms: scroll_report_wait_ms });
+  });
+
+  await run_case(";fl focuses a link without following it", async () => {
+    await open_page("hints", "p6_focus_link", { new_tab: true });
+    const tabs_before = await tab_count();
+    await press_keys(";fl");
+    await wait_for_labels(";fl");
+    await press_keys("a");
+    await wait_for_label_count(0, "gone after the pick");
+    await poll_until("the link to hold the focus", async () => (await in_active_tab(`document.activeElement.getAttribute("href")`)) === "/page?id=hint_one");
+    expect((await tab_count()) === tabs_before, "the pick opened a tab");
+    expect((await in_active_tab(`location.search`)) === "?id=p6_focus_link", "the pick followed the link");
+  });
+
+  await run_case(";fh focuses a heading by hint and leaves the page where it is", async () => {
+    // The labels run in document order: the title "a", Intro "s".
+    await open_page("headings", "p6_focus_heading", { new_tab: true });
+    await press_keys(";fh");
+    await wait_for_labels(";fh");
+    await press_keys("s");
+    await wait_for_label_count(0, "gone after the pick");
+    await poll_until("the heading to hold the focus", async () => (await in_active_tab(`document.activeElement.id`)) === "intro");
+    expect((await in_active_tab(`window.scrollY`)) === 0, "focusing a heading that is already in view scrolled the page");
+  });
+
+  await run_case("zb after ;fh moves the focused heading from the top of the view to the bottom", async () => {
+    await open_page("headings", "p6_focus_heading_zb", { new_tab: true });
+    // Only headings in view get a label, so 3]h first scrolls Below, the third heading in page order, to the top.
+    await press_keys("3", "]", "h");
+    await poll_until("Below at the top of the view", async () => Math.abs(await in_active_tab(`document.getElementById("below").getBoundingClientRect().top`)) < 4);
+    await press_keys(";fh");
+    await wait_for_labels(";fh");
+    await press_keys("a");
+    await wait_for_label_count(0, "gone after the pick");
+    await poll_until("Below to hold the focus", async () => (await in_active_tab(`document.activeElement.id`)) === "below");
+    await press_keys("zb");
+    await poll_until("Below at the bottom of the view", async () => Math.abs(await in_active_tab(`innerHeight - document.getElementById("below").getBoundingClientRect().bottom`)) < 4);
   });
 
   await run_case(";rl opens each pick in a background tab and keeps picking until Escape", async () => {

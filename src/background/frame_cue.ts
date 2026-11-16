@@ -1,4 +1,4 @@
-// The one-time cue after `;f` focused a frame: a toast in the top frame that says where the keys act now.
+// The one-time cue after `;ff` focused a frame: a toast in the top frame that says where the keys act now.
 
 import type { CommandMeta } from "../shared/command.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";

@@ -5,7 +5,7 @@ import { scroll_lines, scroll_pages, scroll_to, tapped_end } from "../../src/con
 type Call = { method: string; top?: number | undefined; behavior: string };
 
 // A page with one scrolling root, 4000 px tall in an 800 px view, and nothing focused. Records every scroll call.
-function with_page(body: (calls: Call[], root: { scrollTop: number }) => void): void {
+function with_page(body: (calls: Call[], root: { scrollTop: number }) => void, reduced = false): void {
   const calls: Call[] = [];
   const root = {
     scrollTop: 0,
@@ -21,11 +21,15 @@ function with_page(body: (calls: Call[], root: { scrollTop: number }) => void): 
     configurable: true,
     value: { scrollingElement: root, documentElement: root, body: {}, activeElement: null, querySelectorAll: () => [] },
   });
+  const saved_match_media = Object.getOwnPropertyDescriptor(globalThis, "matchMedia");
+  Object.defineProperty(globalThis, "matchMedia", { configurable: true, value: () => ({ matches: reduced }) });
   mock.timers.enable({ apis: ["setTimeout"] });
   try {
     body(calls, root);
   } finally {
     mock.timers.reset();
+    if (saved_match_media) Object.defineProperty(globalThis, "matchMedia", saved_match_media);
+    else delete (globalThis as { matchMedia?: unknown }).matchMedia;
     if (saved) Object.defineProperty(globalThis, "document", saved);
     else delete (globalThis as { document?: unknown }).document;
   }
@@ -96,4 +100,14 @@ test("an instant scroll resets the end in flight", () => {
       assert.equal(calls.at(-1)?.top, 450);
     });
   }
+});
+
+test("under reduced motion page scrolls, taps and jumps are all instant, and a tap keeps no scroll in flight", () => {
+  with_page((calls) => {
+    scroll_pages.run(half_page, false);
+    scroll_pages.run(half_page, false);
+    scroll_to.run({ axis: "y", percent: 100 }, false);
+    assert.deepEqual(calls.map((call) => call.behavior), ["instant", "instant", "instant"]);
+    assert.deepEqual(calls.map((call) => call.top), [400, 400, 3200]);
+  }, true);
 });

@@ -645,7 +645,7 @@ test("focus, hover and delete reach a frame, and here focuses it instead of clic
   assert.equal(page.calls.at(-1), "remove");
 });
 
-// The cue toast of `;f` goes through the background, which words it from the user's keymap.
+// The cue toast of `;ff` goes through the background, which words it from the user's keymap.
 function with_sent_messages(body: () => void): unknown[] {
   const sent: unknown[] = [];
   (globalThis as unknown as { browser?: unknown }).browser = { runtime: { sendMessage: (message: unknown) => (sent.push(message), Promise.resolve()) } };
