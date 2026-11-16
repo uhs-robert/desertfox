@@ -123,3 +123,21 @@ test("an answer that never comes counts as an empty one after 5 s, so the list s
   assert.equal(ready(), 2);
   assert.deepEqual(names_of(read("ab")), ["ab"]);
 });
+
+test("a failed or timed-out answer lists nothing while its word stays, and that word asks again once the line moved on", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { client, sent, reply, read } = make();
+  read("a");
+  client.receive(reply(sent[0]!, "a", { rows: [], failed: true }));
+  // Read again at once, as the redraw does: no second request, so a Worker that keeps failing is not asked in a loop.
+  assert.deepEqual(names_of(read("a")), []);
+  read("b");
+  t.mock.timers.tick(5000);
+  assert.deepEqual(names_of(read("b")), []);
+  read("c");
+  client.receive(reply(sent.at(-1)!));
+  assert.deepEqual(sent.map((request) => request.word), ["a", "b", "c"]);
+  assert.equal(read("a").ready, false);
+  assert.equal(read("b").ready, false);
+  assert.deepEqual(sent.map((request) => request.word), ["a", "b", "c", "a"]);
+});

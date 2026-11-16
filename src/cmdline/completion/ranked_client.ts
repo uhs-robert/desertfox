@@ -30,14 +30,17 @@ export function create_ranked_client(deps: RankedClientDeps) {
   let in_flight: { seq: number; key: string } | undefined;
   let next: RankQuery | undefined;
   const answers = new Map<string, RankedReply>();
+  // The query of the last answer that failed or never came. It reads as empty until the next request goes out, so the redraw does not ask a failing Worker again in a loop, and a later visit to the word asks again.
+  let failed_key: string | undefined;
   // The port is gone or the line closed: every read is an empty answer.
   let ended = false;
 
   const send = (query: RankQuery) => {
     in_flight = { seq: ++seq, key: key_of(query) };
+    failed_key = undefined;
     deps.send({ type: "rank", seq, source: query.source, word: query.word, limit: RANKED_ROWS, over_fetch: query.over_fetch });
     // Lands only while this request is the one in flight, by its sequence number.
-    setTimeout(receive, ANSWER_LIMIT_MS, { ...EMPTY, seq });
+    setTimeout(receive, ANSWER_LIMIT_MS, { ...EMPTY, seq, failed: true });
   };
 
   const receive = (message: RankPush) => {
@@ -45,25 +48,27 @@ export function create_ranked_client(deps: RankedClientDeps) {
     if (message.type === "stale") {
       // The answers came from the newest 1000 pages while the history loaded. One in flight was ranked after the push, so it lands.
       answers.clear();
+      failed_key = undefined;
       return deps.on_ready();
     }
     if (message.seq !== in_flight?.seq) return;
     const { key } = in_flight;
     in_flight = undefined;
-    if (!message.skipped) {
+    if (!message.skipped && !message.failed) {
       answers.set(key, message);
       if (answers.size > KEPT_ANSWERS) answers.delete(answers.keys().next().value!);
     }
     const waiting = next;
     next = undefined;
     if (waiting && !answers.has(key_of(waiting))) send(waiting);
+    if (message.failed) failed_key = key;
     deps.on_ready();
   };
 
   return {
     read: (query: RankQuery): RankRead => {
-      if (ended) return { ready: true, reply: EMPTY };
       const key = key_of(query);
+      if (ended || key === failed_key) return { ready: true, reply: EMPTY };
       const known = answers.get(key);
       if (known) {
         answers.delete(key);
