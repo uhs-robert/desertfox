@@ -495,12 +495,13 @@ test("a tab in a split view carries the split flag, a tab with split id -1 does 
   assert.deepEqual([plain!.split, split!.split], [undefined, true]);
 });
 
-test("only http, https and short data: favicons go on the wire", () => {
-  assert.equal(listed_favicon("https://a.test/icon.png"), "https://a.test/icon.png");
-  assert.equal(listed_favicon("http://a.test/icon.png"), "http://a.test/icon.png");
+test("only data: favicons up to 32768 characters go on the wire", () => {
   assert.equal(listed_favicon("data:image/png;base64,AAAA"), "data:image/png;base64,AAAA");
-  assert.equal(listed_favicon(`data:image/png;base64,${"A".repeat(5000)}`), undefined);
-  for (const dropped of ["chrome://mozapps/skin/places/defaultFavicon.svg", "moz-extension://x/icon.png", "file:///a.png", "javascript:alert(1)", "", undefined]) assert.equal(listed_favicon(dropped), undefined);
+  const large = `data:image/png;base64,${"A".repeat(24000 - 22)}`;
+  assert.equal(large.length, 24000);
+  assert.equal(listed_favicon(large), large);
+  assert.equal(listed_favicon(`data:image/png;base64,${"A".repeat(40000 - 22)}`), undefined);
+  for (const dropped of ["https://a.test/icon.png", "http://a.test/icon.png", "chrome://mozapps/skin/places/defaultFavicon.svg", "moz-extension://x/icon.png", "file:///a.png", "javascript:alert(1)", "", undefined]) assert.equal(listed_favicon(dropped), undefined);
   const [item] = listed_tabs([in_window(1, { favIconUrl: "chrome://branding/content/icon32.png" })], { window_id: 10, incognito: false });
   assert.equal("favicon" in item!, false);
 });
@@ -524,22 +525,22 @@ test("the container lookup maps identities, and gives none when containers are o
 });
 
 test("the row keeps the new fields and sends a long data: favicon nowhere", () => {
-  const long = `data:image/png;base64,${"A".repeat(5000)}`;
+  const long = `data:image/png;base64,${"A".repeat(40000)}`;
   const tabs = [
     in_window(1, { active: true, favIconUrl: long, pinned: true }),
-    in_window(2, { favIconUrl: "https://a.test/i.png", cookieStoreId: "firefox-container-1" }),
+    in_window(2, { favIconUrl: "data:image/png;base64,BBBB", cookieStoreId: "firefox-container-1" }),
   ];
   const listed = listed_tabs(tabs, { window_id: 10, incognito: false }, new Map([["firefox-container-1", FOX]]), 2);
   assert.deepEqual(listed, [
     { id: 1, window_id: 10, number: 1, title: "Tab 1", url: "https://site1.test/", active: true, pinned: true },
-    { id: 2, window_id: 10, number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "https://a.test/i.png", container: FOX, alternate: true },
+    { id: 2, window_id: 10, number: 2, title: "Tab 2", url: "https://site2.test/", favicon: "data:image/png;base64,BBBB", container: FOX, alternate: true },
   ]);
 });
 
 test("a private line lists private tabs with their favicon and flags and no container", () => {
-  const private_tabs = [{ ...tab(4, 0, 20, true), active: true, favIconUrl: "https://p.test/i.png", cookieStoreId: "firefox-private" }];
+  const private_tabs = [{ ...tab(4, 0, 20, true), active: true, favIconUrl: "data:image/png;base64,CCCC", cookieStoreId: "firefox-private" }];
   assert.deepEqual(listed_tabs(private_tabs, { window_id: 20, incognito: true }, new Map([["firefox-container-1", FOX]])), [
-    { id: 4, window_id: 20, number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "https://p.test/i.png", active: true },
+    { id: 4, window_id: 20, number: 1, title: "Tab 4", url: "https://site4.test/", favicon: "data:image/png;base64,CCCC", active: true },
   ]);
 });
 

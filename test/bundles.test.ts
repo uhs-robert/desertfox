@@ -27,7 +27,7 @@ test("each sink mode names a bundle and only real bundles load", () => {
   assert.equal(is_bundle_name("../background"), false);
 });
 
-test("the manifest CSP keeps scripts, fonts and sheets local and allows remote images and fetches", () => {
+test("the manifest CSP keeps scripts, fonts and sheets local and blocks remote images and allows remote fetches", () => {
   const policy = JSON.parse(read("src/manifest.json")).content_security_policy as string;
   const directives = Object.fromEntries(policy.split(";").map((part) => part.trim().split(/\s+/)).map(([name, ...sources]) => [name, sources]));
   assert.deepEqual(directives["script-src"], ["'self'"]);
@@ -35,8 +35,9 @@ test("the manifest CSP keeps scripts, fonts and sheets local and allows remote i
   assert.deepEqual(directives["font-src"], ["'self'"]);
   assert.deepEqual(directives["worker-src"], ["'self'"]);
   assert.deepEqual(directives["style-src"], ["'self'", "'unsafe-inline'"]);
-  // Favicons, the image copy and the weather fetch reach remote hosts. The docs state this gap.
-  assert.ok(directives["img-src"]!.includes("https:"));
+  // Only the image copy and the weather fetch reach remote hosts, and they use fetch.
+  assert.ok(!directives["img-src"]!.some((source: string) => source === "https:" || source === "http:"));
+  assert.ok(directives["img-src"]!.includes("data:"));
   assert.ok(directives["connect-src"]!.includes("https:"));
   assert.ok(!policy.includes("unsafe-eval"));
 });

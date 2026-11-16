@@ -490,10 +490,11 @@ The off check reads the keymap once per trigger, about 3 reads per hard load for
 
 ## Manifest CSP on the extension pages (sec-css-attrs)
 
-Measured in the key-test Firefox with the policy `script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https: http: resource: moz-icon:; connect-src 'self' https: http: data: blob:; worker-src 'self'`.
+Measured in the key-test Firefox with the policy `script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: resource: moz-icon:; connect-src 'self' https: http: data: blob:; worker-src 'self'`.
 
-- The new tab font (`DSEG7 Classic`, a packaged file) loads. A tab's `favIconUrl` came back as a `data:` address, which loads, and a favicon over `http:` loads. A container icon (`resource://usercontext-content/briefcase.svg`) loads.
+- The new tab font (`DSEG7 Classic`, a packaged file) loads. A tab's `favIconUrl` came back as a `data:` address, which loads, and a favicon over `http:` loaded under the earlier policy that allowed it. A container icon (`resource://usercontext-content/briefcase.svg`) loads.
 - The image copy fetch in the background page works for an `http:` image and a `data:` PNG.
-- The policy is in force on an extension page: a remote script, an `@import` and a remote `@font-face` each raised a `securitypolicyviolation` (`script-src-elem`, `style-src-elem`, `font-src`). A remote `url()` image raised none, because `img-src` allows `https:` and `http:`. The CSP is partial for that reason.
+- The policy is in force on an extension page: a remote script, an `@import` and a remote `@font-face` each raised a `securitypolicyviolation` (`script-src-elem`, `style-src-elem`, `font-src`). A remote `url()` image is now blocked too, because `img-src` no longer allows `https:` or `http:`.
+- Tab favicon lengths as Firefox 160 hands them to an extension, all `data:` URLs (characters): google 1874, github 1306, youtube 1689, wikipedia 3401, facebook 3721, reddit 23682. The command line list cap is 32768.
 - Not measured: a favicon over `https:` from the real internet and a `moz-icon:` address, which the test run has no network or source for.
 - The CSP covers extension pages only. A surface that DesertFox draws inside a web page falls under the page's own CSP, so the user CSS check in `build_files_config` is the guard there.

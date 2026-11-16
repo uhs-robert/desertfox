@@ -39,14 +39,12 @@ export type TabLike = {
 // The containers by cookie store id, as `contextualIdentities` names them.
 export type ContainerMarks = ReadonlyMap<string, TabContainer>;
 
-// A longer data: favicon costs more on the wire than the mark is worth, and the row falls back to the plain glyph.
-const MAX_DATA_FAVICON = 2048;
+// Firefox hands every tab favicon over as a data: URL, and a busy site's runs to about 24 KB (reddit, 23682 characters). Each such tab costs up to that much in every list message, so a longer one falls back to the plain glyph.
+const MAX_DATA_FAVICON = 32768;
 
-// Only what an extension page can load and that is cheap to send. A chrome: favicon would fail to load in the page anyway.
+// Only data: favicons pass: the extension CSP blocks remote images, and a chrome: favicon would fail to load in the page anyway.
 export function listed_favicon(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  if (/^https?:\/\//i.test(url)) return url;
-  return /^data:/i.test(url) && url.length <= MAX_DATA_FAVICON ? url : undefined;
+  return url && /^data:/i.test(url) && url.length <= MAX_DATA_FAVICON ? url : undefined;
 }
 
 // A tab the line can list. The page gets `TabItem` only.
