@@ -3,7 +3,7 @@ import type { CommandContext } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { find_group } from "../shared/group_name.ts";
 import { browser_group_deps, group_tabs, set_group, ungroup_tabs } from "../background/tab_actions.ts";
-import type { GroupDeps } from "../background/tab_actions.ts";
+import type { GroupDeps, GroupTabInfo } from "../background/tab_actions.ts";
 import { require_tab_id } from "./open_target.ts";
 import { nearest_tab } from "./tab.ts";
 
@@ -41,13 +41,16 @@ export function pick_group_stop(stops: GroupedTab[], current: GroupedTab, steps:
 
 // Every command acts on the line's own tab and that tab's group. Marked tabs are not passed to commands, so there is no many-tab form yet.
 export function make_tab_group_handlers(deps: TabGroupDeps) {
-  async function group_of_current(ctx: CommandContext): Promise<GroupInfo> {
+  async function group_and_tab_of_current(ctx: CommandContext): Promise<{ group: GroupInfo; groups: GroupInfo[]; info: GroupTabInfo }> {
     const [info] = await deps.tab_infos([require_tab_id(ctx)]);
     if (!info) throw new RuntimeRefusal("the active tab is gone");
-    const group = (await deps.groups_in_window(info.window_id)).find((candidate) => candidate.id === info.group_id);
+    const groups = await deps.groups_in_window(info.window_id);
+    const group = groups.find((candidate) => candidate.id === info.group_id);
     if (!group) throw new RuntimeRefusal("the tab is in no group");
-    return group;
+    return { group, groups, info };
   }
+
+  const group_of_current = async (ctx: CommandContext): Promise<GroupInfo> => (await group_and_tab_of_current(ctx)).group;
 
   const collapse_to = async (ctx: CommandContext, collapsed: (group: GroupInfo) => boolean) => {
     const group = await group_of_current(ctx);
@@ -92,14 +95,17 @@ export function make_tab_group_handlers(deps: TabGroupDeps) {
       await ungroup_tabs(deps, [require_tab_id(ctx)]);
     },
     close: async (ctx: CommandContext) => {
-      const group = await group_of_current(ctx);
-      const [info] = await deps.tab_infos([require_tab_id(ctx)]);
-      const tabs = await deps.tabs_in_window(info!.window_id);
+      const { group, groups, info } = await group_and_tab_of_current(ctx);
+      const tabs = await deps.tabs_in_window(info.window_id);
       const members = tabs.filter((tab) => tab.group_id === group.id);
-      const current = members.find((tab) => tab.id === info!.id);
+      const current = members.find((tab) => tab.id === info.id);
+      if (!current) throw new RuntimeRefusal("the tab left its group");
       if (members.length === tabs.length) throw new RuntimeRefusal("the group holds every tab in the window, use wc to close the window");
       // Focus moves first, as in tab.close, so Firefox does not pick its own tab after the close. Only an active tab in the group needs it.
-      const outside = nearest_tab(tabs, (current ?? members[0]!).index, (tab) => tab.group_id !== group.id);
+      // A tab in a collapsed group is a poor target (see go_to_group), so it counts only when no other tab is outside.
+      const collapsed_ids = new Set(groups.filter((candidate) => candidate.collapsed).map((candidate) => candidate.id));
+      const outside_group = (tab: GroupedTab) => tab.group_id !== group.id;
+      const outside = nearest_tab(tabs, current.index, (tab) => outside_group(tab) && !collapsed_ids.has(tab.group_id)) ?? nearest_tab(tabs, current.index, outside_group);
       if (outside && members.some((tab) => tab.active)) await deps.activate(outside.id);
       await deps.remove(members.map((tab) => tab.id));
     },
