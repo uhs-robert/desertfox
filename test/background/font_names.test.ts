@@ -20,10 +20,10 @@ function make(options: { host?: string[] | undefined; measure?: (() => MeasureWi
   return { service, store, host_calls: () => host_calls };
 }
 
-test("a refresh merges the host's fonts with the probe and stores both", async () => {
-  const { service, store } = make({ host: ["Cantarell", "Hack"] });
-  assert.deepEqual(await service.refresh(), ["Cantarell", "Hack"]);
-  assert.deepEqual(store[FONT_NAMES_STORAGE_KEY], { host: ["Cantarell", "Hack"], names: ["Cantarell", "Hack"] });
+test("a host answer stands alone, with no probe names added", async () => {
+  const { service, store } = make({ host: ["Cantarell"] });
+  assert.deepEqual(await service.refresh(), ["Cantarell"]);
+  assert.deepEqual(store[FONT_NAMES_STORAGE_KEY], { host: ["Cantarell"], names: ["Cantarell"] });
 });
 
 test("without the host the probe alone fills the list", async () => {
@@ -31,9 +31,26 @@ test("without the host the probe alone fills the list", async () => {
   assert.deepEqual(await service.refresh(), ["Hack"]);
 });
 
-test("a host that does not answer keeps the names it gave last time", async () => {
-  const { service } = make({ host: undefined, stored: { host: ["Cantarell"], names: ["Cantarell"] } });
-  assert.deepEqual(await service.refresh(), ["Cantarell", "Hack"]);
+test("a read on an empty cache that starts before a refresh cannot overwrite the host's list", async () => {
+  const { service, store } = make({ host: ["Cantarell"] });
+  const [, refreshed] = await Promise.all([service.read(), service.refresh()]);
+  assert.deepEqual(refreshed, ["Cantarell"]);
+  assert.deepEqual((store[FONT_NAMES_STORAGE_KEY] as { names: string[] }).names, ["Cantarell"]);
+});
+
+test("a read does not wait on a slow host", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const store: Record<string, unknown> = {};
+  const service = create_font_names({
+    storage: { get: async (key) => (typeof key === "string" && key in store ? { [key]: store[key] } : {}), set: async (values) => void Object.assign(store, values) },
+    host_fonts: async () => (await gate, ["Cantarell"]),
+    measure: () => has_hack,
+  });
+  const refreshing = service.refresh();
+  assert.deepEqual(await service.read(), ["Hack"]);
+  release();
+  assert.deepEqual(await refreshing, ["Cantarell"]);
 });
 
 test("read answers from the cache and never asks the host", async () => {
