@@ -34,6 +34,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "tab.split_other": [/not in a split view/],
   "tab.split_swap": [/not in a split view/],
   "tabgroup.remove": [/no group/],
+  "tabgroup.close": [/no group/],
   "tabgroup.name": [/no group/],
   "tabgroup.collapse": [/no group/],
   "tabgroup.expand": [/no group/],

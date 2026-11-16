@@ -293,10 +293,10 @@ export function site_tabs(tabs: TabInfo[], subject: TabInfo): TabInfo[] {
 }
 
 // The tab nearest to `index` among those `eligible` accepts. A tie goes to the tab after.
-export function nearest_tab(tabs: TabInfo[], index: number, eligible: (tab: TabInfo) => boolean): TabInfo | undefined {
+export function nearest_tab<T extends { index: number }>(tabs: T[], index: number, eligible: (tab: T) => boolean): T | undefined {
   return tabs
     .filter(eligible)
-    .reduce<TabInfo | undefined>((best, tab) => {
+    .reduce<T | undefined>((best, tab) => {
       const distance = Math.abs(tab.index - index);
       const best_distance = best && Math.abs(best.index - index);
       return best_distance === undefined || distance < best_distance || (distance === best_distance && tab.index > index) ? tab : best;

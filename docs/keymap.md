@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 465 (normal 239, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
+bound: 466 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
 
 ### normal
 
@@ -116,6 +116,7 @@ bound: 465 (normal 239, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `tga` | `tabgroup.add` (prompts) | Add tab to a group |
 | `tgA` | `tabgroup.add` | Add tab to a new group |
 | `tgd` | `tabgroup.remove` | Remove tab from group |
+| `tgD` | `tabgroup.close` | Close tab group |
 | `tgn` | `tabgroup.name` (prompts) | Name tab group |
 | `tgc` | `tabgroup.collapse` | Collapse tab group |
 | `tge` | `tabgroup.expand` | Expand tab group |

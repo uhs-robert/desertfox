@@ -5,15 +5,17 @@ import { find_group } from "../shared/group_name.ts";
 import { browser_group_deps, group_tabs, set_group, ungroup_tabs } from "../background/tab_actions.ts";
 import type { GroupDeps } from "../background/tab_actions.ts";
 import { require_tab_id } from "./open_target.ts";
+import { nearest_tab } from "./tab.ts";
 
 export type GroupInfo = { id: number; title: string; collapsed: boolean };
 
-export type GroupedTab = { id: number; index: number; group_id: number };
+export type GroupedTab = { id: number; index: number; group_id: number; active: boolean };
 
 export type TabGroupDeps = GroupDeps & {
   groups_in_window: (window_id: number) => Promise<GroupInfo[]>;
   tabs_in_window: (window_id: number) => Promise<GroupedTab[]>;
   activate: (tab_id: number) => Promise<void>;
+  remove: (tab_ids: number[]) => Promise<void>;
 };
 
 // The colors Firefox offers for a tab group, as `tabGroups.Color` lists them.
@@ -89,6 +91,18 @@ export function make_tab_group_handlers(deps: TabGroupDeps) {
       await group_of_current(ctx);
       await ungroup_tabs(deps, [require_tab_id(ctx)]);
     },
+    close: async (ctx: CommandContext) => {
+      const group = await group_of_current(ctx);
+      const [info] = await deps.tab_infos([require_tab_id(ctx)]);
+      const tabs = await deps.tabs_in_window(info!.window_id);
+      const members = tabs.filter((tab) => tab.group_id === group.id);
+      const current = members.find((tab) => tab.id === info!.id);
+      if (members.length === tabs.length) throw new RuntimeRefusal("the group holds every tab in the window, use wc to close the window");
+      // Focus moves first, as in tab.close, so Firefox does not pick its own tab after the close. Only an active tab in the group needs it.
+      const outside = nearest_tab(tabs, (current ?? members[0]!).index, (tab) => tab.group_id !== group.id);
+      if (outside && members.some((tab) => tab.active)) await deps.activate(outside.id);
+      await deps.remove(members.map((tab) => tab.id));
+    },
     name: async (ctx: CommandContext, args: { title: string }) => {
       const group = await group_of_current(ctx);
       await set_group(deps, group.id, { title: args.title.trim() });
@@ -107,8 +121,9 @@ export function make_tab_group_handlers(deps: TabGroupDeps) {
 
 export const browser_tab_group_deps: TabGroupDeps = {
   ...browser_group_deps,
-  tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map((tab) => ({ id: tab.id!, index: tab.index, group_id: tab.groupId ?? -1 })),
+  tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map((tab) => ({ id: tab.id!, index: tab.index, group_id: tab.groupId ?? -1, active: tab.active })),
   activate: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
+  remove: (tab_ids) => browser.tabs.remove(tab_ids),
   groups_in_window: async (window_id) => (await browser.tabGroups.query({ windowId: window_id })).map((group) => ({ id: group.id, title: group.title ?? "", collapsed: group.collapsed })),
 };
 
@@ -129,6 +144,14 @@ define("tabgroup.remove", {
   bridge: false,
   runs_in: "background",
   run: (ctx) => handlers.remove(ctx),
+});
+
+define("tabgroup.close", {
+  label: "Close tab group",
+  intent: "Close the tab group and every tab in it. Focus first moves to the nearest tab outside the group. It refuses when the group holds every tab in the window.",
+  bridge: false,
+  runs_in: "background",
+  run: (ctx) => handlers.close(ctx),
 });
 
 define("tabgroup.name", {

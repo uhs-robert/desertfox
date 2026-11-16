@@ -208,6 +208,7 @@ const BASE_SECTIONS: KeymapConfig = {
     tga: { id: "tabgroup.add", prompt: { param: "group" }, label: "Add tab to a group" },
     tgA: { id: "tabgroup.add", label: "Add tab to a new group" },
     tgd: { id: "tabgroup.remove" },
+    tgD: { id: "tabgroup.close" },
     tgn: { id: "tabgroup.name", prompt: { param: "title" } },
     tgc: { id: "tabgroup.collapse" },
     tge: { id: "tabgroup.expand" },

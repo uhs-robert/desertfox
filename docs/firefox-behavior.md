@@ -425,6 +425,7 @@ Times in ms from the background's `tabs.update` call, median (min to max). Local
 Measured in Firefox 160 in the key test (`test/key/p32_tab_groups.mjs`).
 
 - `browser.tabGroups` is absent from the background page when the manifest lacks the `tabGroups` permission, so the permission is required.
+- After `tgD` closed a two-tab group, the newest four `sessions.getRecentlyClosed()` entries were all plain tab entries (each had a `tab` object, none a `window` or group object). Firefox 160 shows no closed-group entry to the API, so `u` (`tab.undo_close`) restores one tab at a time and the group does not come back as one unit. The probe logs this from `test/key/p32_tab_groups.mjs`. It did not check whether the restored tab rejoins its old group.
 - Not measured: whether the permission adds an install prompt line, whether the active tab of a collapsed group keeps the group open, and whether groups exist in private windows. These need a person.
 
 ## Split view (split-view)
