@@ -12,6 +12,8 @@ The command registry and everything that reads a command definition. Pure TypeSc
 - `commands_file.ts`: the `commands.json` content.
 - `params.ts`: small readers over params shared by the files above, including which param is the subject and which takes the first bare word. `captured_key_param` finds the `key` param a binding leaves out, and `without_param` lets the rest of the args be checked before the key press.
 - `index.ts`: the exports of types and helpers, and nothing else. It runs nothing at import, so a bundle that imports a helper pays only for that helper.
+- `check_shape.ts`: the shape checks of the validator, every rule except the text of a setting value. The command line page imports it directly, because `check_args.ts` pulls in the setting rules, which are too big for that bundle.
+- `single_quote.ts`: one word of command line text in single quotes.
 - `builtin.ts`: the shared `registry` and `define`. Command modules, the background page, Node tools and tests that need the singleton import it. Never import it from a page, the content script or help: the call at import keeps `define.ts` and the setting rules in the bundle. `test/registry/bundle_free.test.ts` bundles each non-background entry and fails when one reaches `builtin` or `define`.
 
 Context-source defaults (`{ from: "selection" }`) stay in the checked args as markers. The router fills them.
