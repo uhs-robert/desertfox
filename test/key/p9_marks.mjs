@@ -115,7 +115,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
   await run_case("]' and [' step through the marks of the page by scroll position, and the ends and a page with none toast", async () => {
     await open_page("aligned", "p9m_step", { new_tab: true });
     const scroll_to = async (y) => {
-      await in_active_tab(`scrollTo(0, ${y})`);
+      await in_active_tab(`scrollTo({ top: ${y}, behavior: "instant" })`);
       await poll_until(`the page to reach ${y}`, async () => Math.abs((await in_active_tab(`scrollY`)) - y) <= 1);
     };
     // Set out of page order, so the step has to sort by position and not by the order of the marks.
