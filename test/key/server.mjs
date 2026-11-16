@@ -227,6 +227,11 @@ export function start_server() {
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/links") {
+      // Two links up top, an anchor without href that ]l skips, and a link far below. The page reports each focus.
+      const links = '<a href="#a" id="first">one</a> <a id="bare">bare</a> <a href="#b" id="second">two</a>' + tall_filler + '<a href="#c" id="last">three</a>';
+      return response.end(page(`links ${id}`, links, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id })); addEventListener('hashchange', () => send('hash', { hash: location.hash }))</script>"));
+    }
     if (url.pathname === "/clipboard") {
       // A stand-in for the Sheets grid editor: a parked, empty, focused box that records the clipboard events it gets (and cancels them when the id has "cancel", as Sheets does, and stops their propagation when it has "stop") (type, whether the browser sent it, and the text it carries) in a data attribute.
       const editor = '<div style="position:absolute;top:-10000px;left:0"><div id="waffle-rich-text-editor" contenteditable="true" style="outline:0"></div></div>';

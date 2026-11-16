@@ -189,6 +189,24 @@ test("every default group name labels a real group, so a typo cannot go quiet", 
   assert.ok(!compiled.modes.normal?.children.g || (compiled.modes.normal.children.g as TreeBranch).label === "Go");
 });
 
+test("the [ and ] groups are named and bind the pairs that reuse existing commands", () => {
+  assert.deepEqual([DEFAULT_KEYMAP.group_names?.["["], DEFAULT_KEYMAP.group_names?.["]"], DEFAULT_KEYMAP.group_names?.["<"], DEFAULT_KEYMAP.group_names?.[">"]], ["Previous", "Next", "Move Left", "Move Right"]);
+  const normal = DEFAULT_KEYMAP.normal!;
+  const bound = (key: string) => ({ id: (normal[key] as { id: string }).id, args: (normal[key] as { args?: unknown }).args });
+  assert.deepEqual(bound("[g"), { id: "tabgroup.prev", args: undefined });
+  assert.deepEqual(bound("]g"), { id: "tabgroup.next", args: undefined });
+  assert.deepEqual(bound("[t"), { id: "tab.prev", args: undefined });
+  assert.deepEqual(bound("]t"), { id: "tab.next", args: undefined });
+  assert.deepEqual(bound("[T"), { id: "tab.goto", args: { index: 1 } });
+  assert.deepEqual(bound("]T"), { id: "tab.goto", args: { index: -1 } });
+  assert.deepEqual(bound("[j"), { id: "page.jump", args: { direction: "older" } });
+  assert.deepEqual(bound("]j"), { id: "page.jump", args: { direction: "newer" } });
+  assert.deepEqual(bound("[v"), { id: "media.act", args: { action: "skip", value: "previous" } });
+  assert.deepEqual(bound("]v"), { id: "media.act", args: { action: "skip", value: "next" } });
+  assert.deepEqual(bound("[l"), { id: "page.focus_link", args: { direction: "prev" } });
+  assert.deepEqual(bound("]l"), { id: "page.focus_link", args: { direction: "next" } });
+});
+
 test("no default key searches the web: search keys come from the user's engines, and `sh` is the one page search", () => {
   const normal = Object.keys(DEFAULT_KEYMAP.normal ?? {});
   assert.deepEqual(normal.filter((key) => key.startsWith("s") || key === "ri"), ["sh"]);

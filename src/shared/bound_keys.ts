@@ -142,7 +142,7 @@ export const BINDINGS = {
   media_keys: { mode: "media", id: "help.whichkey", args: {}, prefer: "?" },
   mark: { mode: "normal", id: "mark.add", args: {} },
   mark_jump: { mode: "normal", id: "mark.jump", args: {}, prefer: "'" },
-  jump_back: { mode: "normal", id: "page.jump", args: { direction: "older" } },
+  jump_back: { mode: "normal", id: "page.jump", args: { direction: "older" }, prefer: "<C-o>" },
   ignore: { mode: "normal", id: "mode.set", args: { mode: "ignore" }, prefer: "<S-Escape>" },
   pass_next: { mode: "normal", id: "mode.pass_next", args: {} },
   // Named for the Settings docs.

@@ -123,6 +123,20 @@ define("page.focus_field", {
   bundle: "hints",
 });
 
+// Both keys start where `page.focus_field` does. Focus only: Enter on the focused link follows it.
+define("page.focus_link", {
+  label: "Focus link",
+  intent: "Focus the next or previous link without following it. It visits links with an address in page order. A count prefix moves that many links. It stops with a notice past the last or before the first link.",
+  params: [
+    { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next link", prev: "to previous link" }, description: { next: "Focus the next link.", prev: "Focus the previous link." } },
+    { name: "steps", type: "int", default: 1, min: 1, description: "Move this many links." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  count: { param: "steps" },
+  bundle: "hints",
+});
+
 // Both keys start from the last heading they jumped to while it is on screen, else from the top of the view. They stop at the ends and do not wrap.
 define("page.heading", {
   label: "Go to heading",

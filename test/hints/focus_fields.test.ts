@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FORM_CONTROLS, focus_field, pick_field, place_of } from "../../src/content/hints/focus_fields.ts";
+import { FORM_CONTROLS, LINKS, focus_field, pick_field, place_of } from "../../src/content/hints/focus_fields.ts";
 
 type Fake = {
   name: string;
   localName: string;
   type?: string;
   disabled?: boolean;
+  href?: boolean;
   in_disabled_fieldset?: boolean;
   editable?: "" | "true" | "false";
   size?: { width: number; height: number };
@@ -23,6 +24,7 @@ const view = { innerHeight: VIEW_HEIGHT, innerWidth: 800, getComputedStyle: () =
 // Matches the one-tag selectors of FORM_CONTROLS: `tag:not([a=b]):not([disabled])` and `[contenteditable="v"]`.
 function matches_selector(fake: Fake, selector: string): boolean {
   return selector.split(", ").some((part) => {
+    if (part === LINKS) return fake.localName === "a" && fake.href === true;
     const attribute = /^\[contenteditable="(.*)"\]$/.exec(part);
     if (attribute) return fake.editable === attribute[1];
     const [tag, ...nots] = part.split(":not(");
@@ -221,4 +223,24 @@ test("place_of takes the first anchor that is in the list", () => {
   assert.deepEqual(place_of([a!, b!, c!], [null, undefined], never), { index: 0, on_field_: false });
   assert.deepEqual(place_of([a!, b!, c!], [], (element) => element !== c), { index: 2, on_field_: false });
   assert.deepEqual(place_of([a!, b!], [], () => true), { index: 2, on_field_: false });
+});
+
+const link = (name: string, extra: Partial<Fake> = {}): Fake => ({ name, localName: "a", href: true, ...extra });
+
+test("links take focus in page order, and an anchor without href is left out", () => {
+  const fakes = [link("one"), { name: "bare", localName: "a" } as Fake, field("box"), link("two")];
+  assert.equal(matches_selector(fakes[1]!, LINKS), false);
+  events.length = 0;
+  assert.equal(focus_field(page(fakes, fakes[0]).root, undefined, "next", 1, "link"), undefined);
+  assert.deepEqual(events, ["focus two"]);
+  events.length = 0;
+  assert.equal(focus_field(page(fakes, fakes[3]).root, undefined, "prev", 1, "link"), undefined);
+  assert.deepEqual(events, ["focus one"]);
+});
+
+test("a link walk answers in link words at the ends and on a page with none", () => {
+  const fakes = [link("one"), link("two")];
+  assert.equal(focus_field(page(fakes, fakes[1]).root, undefined, "next", 1, "link"), "No next link");
+  assert.equal(focus_field(page(fakes, fakes[0]).root, undefined, "prev", 1, "link"), "No previous link");
+  assert.equal(focus_field(page([field("a")]).root, undefined, "next", 1, "link"), "No link on this page");
 });
