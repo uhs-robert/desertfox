@@ -112,6 +112,35 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     expect(after < 1, `the page ended at ${after}, not the top`);
   });
 
+  await run_case("]' and [' step through the marks of the page by scroll position, and the ends and a page with none toast", async () => {
+    await open_page("aligned", "p9m_step", { new_tab: true });
+    const scroll_to = async (y) => {
+      await in_active_tab(`scrollTo(0, ${y})`);
+      await poll_until(`the page to reach ${y}`, async () => Math.abs((await in_active_tab(`scrollY`)) - y) <= 1);
+    };
+    // Set out of page order, so the step has to sort by position and not by the order of the marks.
+    for (const [key, y] of [["b", 1500], ["a", 500]]) {
+      await scroll_to(y);
+      await set_mark(key);
+      await poll_until("the mark to be stored", async () => (await stored_y("p9m_step", key)) != null);
+    }
+    await scroll_to(0);
+    await to_y("p9m_step", ["]", "'"], 500, "]' from the top to reach the lower mark a");
+    await to_y("p9m_step", ["]", "'"], 1500, "]' to reach the mark b");
+    const refused = async (keys, what, page_id = "p9m_step") => {
+      const mark = events.length;
+      await press_keys(...keys);
+      await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, `a toast after ${what}`);
+      await expect_no_scroll(mark, page_id);
+      await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === page_id), { timeout_ms: 8000 });
+    };
+    await refused(["]", "'"], "]' at the last mark");
+    await to_y("p9m_step", ["[", "'"], 500, "[' from b to reach a");
+    await refused(["[", "'"], "[' at the first mark");
+    await open_page("aligned", "p9m_step_none", { new_tab: true });
+    await refused(["]", "'"], "]' on a page with no marks", "p9m_step_none");
+  });
+
   await run_case("a pause after ' lists the marks of the page with their offsets", async () => {
     await open_page("aligned", "p9m_wk", { new_tab: true });
     await set_mark("a");

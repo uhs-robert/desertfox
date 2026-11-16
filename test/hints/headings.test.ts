@@ -144,3 +144,12 @@ test("a count from the remembered heading moves that many and clamps, and the en
   assert.equal(pick_heading_step(five, "next", 1, 4), undefined);
   assert.equal(pick_heading_step(five, "prev", 1, 0), undefined);
 });
+
+test("first and last pick the ends of the list whatever the view top is, and an empty list is undefined", () => {
+  assert.equal(pick_heading_step(tops, "first", 1), 0);
+  assert.equal(pick_heading_step(tops, "last", 1), 4);
+  assert.equal(pick_heading_step(tops, "first", 1, 2), 0);
+  assert.equal(pick_heading_step(tops, "last", 1, 2), 4);
+  assert.equal(pick_heading_step([], "first", 1), undefined);
+  assert.equal(pick_heading_step([], "last", 1), undefined);
+});

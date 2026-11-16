@@ -40,7 +40,7 @@ import { create_word_lookup } from "../cmdline/word_lookup.ts";
 import { build_completer, create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
-import { answer_mark_request, browser_mark_store } from "./mark_store.ts";
+import { answer_mark_request, answer_mark_step, browser_mark_store } from "./mark_store.ts";
 import { browser_quickmark_store } from "./quickmark_store.ts";
 import { answer_register_request, browser_register_store } from "./register_store.ts";
 import { answer_repeat_preview, create_repeat_memory } from "./repeat_memory.ts";
@@ -404,6 +404,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
   if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
   if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, global_mark_jump);
+  if (request?.type === "mark_step") return answer_mark_step(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito });
   if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;

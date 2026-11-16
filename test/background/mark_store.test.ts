@@ -5,7 +5,7 @@ import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { list_keys } from "../../src/background/list_keys.ts";
-import { answer_mark_request, create_mark_store } from "../../src/background/mark_store.ts";
+import { answer_mark_request, answer_mark_step, create_mark_store } from "../../src/background/mark_store.ts";
 import { wire_private_cleanup } from "../../src/background/store_turns.ts";
 import type { MarkArea } from "../../src/background/mark_store.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "../../src/background/storage_keys.ts";
@@ -391,4 +391,66 @@ test("clear page on a page with no marks still drops the globals", async () => {
   await store.run({ type: "mark_set", key: "G", url: "https://a.test/p", x: 1, y: 2 }, false);
   await store.clear("page", "https://b.test/none", false);
   assert.deepEqual(await store.items("https://b.test/none", false), []);
+});
+
+const step = (direction: "next" | "prev", y: number, url = "https://a.test/p") => ({ type: "mark_step" as const, direction, url, x: 0, y });
+
+test("a step goes to the nearest mark below or above the scroll position, whatever the order the marks were set in", async () => {
+  const { store } = make();
+  for (const [key, y] of [["c", 900], ["a", 100], ["b", 500]] as const) await store.run(set(key, y), false);
+  assert.deepEqual(await store.step(step("next", 0), false), { ok: true, x: 0, y: 100 });
+  assert.deepEqual(await store.step(step("next", 100), false), { ok: true, x: 0, y: 500 });
+  assert.deepEqual(await store.step(step("next", 300), false), { ok: true, x: 0, y: 500 });
+  assert.deepEqual(await store.step(step("prev", 900), false), { ok: true, x: 0, y: 500 });
+  assert.deepEqual(await store.step(step("prev", 501), false), { ok: true, x: 0, y: 500 });
+  assert.deepEqual(await store.step(step("prev", 1000), false), { ok: true, x: 0, y: 900 });
+});
+
+test("a step with no mark that way refuses with a notice, at the last mark and the first mark alike", async () => {
+  const { store } = make();
+  await store.run(set("a", 100), false);
+  await store.run(set("b", 500), false);
+  await assert.rejects(store.step(step("next", 500), false), /No next mark/);
+  await assert.rejects(store.step(step("next", 9000), false), /No next mark/);
+  await assert.rejects(store.step(step("prev", 100), false), /No previous mark/);
+});
+
+test("a page with no marks, or marks only on other pages, refuses both ways", async () => {
+  const { store } = make();
+  await assert.rejects(store.step(step("next", 0), false), /No next mark/);
+  await assert.rejects(store.step(step("prev", 99), false), /No previous mark/);
+  await store.run(set("a", 300, "https://other.test/q"), false);
+  await assert.rejects(store.step(step("next", 0), false), /No next mark/);
+  await assert.rejects(store.step(step("prev", 900), false), /No previous mark/);
+});
+
+test("a step skips the previous-position slot, counts a global mark of this page and skips one of another page", async () => {
+  const { store } = make();
+  await store.run(set("a", 100), false);
+  await store.run(jump("a", 700), false);
+  assert.deepEqual((await store.items("https://a.test/p", false)).map((item) => item.key), ["'", "a"]);
+  await assert.rejects(store.step(step("next", 100), false), /No next mark/);
+  await store.run(set("B", 400, "https://a.test/p#top"), false);
+  await store.run(set("C", 450, "https://elsewhere.test/"), false);
+  assert.deepEqual(await store.step(step("next", 100), false), { ok: true, x: 0, y: 400 });
+  await assert.rejects(store.step(step("next", 400), false), /No next mark/);
+});
+
+test("a step stores nothing, and a private window steps over its own marks", async () => {
+  const { store, local, session } = make();
+  await store.run(set("a", 100), true);
+  const before = structuredClone([...session.values]);
+  assert.deepEqual(await store.step(step("next", 0), true), { ok: true, x: 0, y: 100 });
+  assert.deepEqual([...session.values], before);
+  await assert.rejects(store.step(step("next", 0), false), /No next mark/);
+  assert.equal(local.values.size, 0);
+});
+
+test("a step message answers through the sender's privacy and refuses with no tab or a bad direction", async () => {
+  const { store } = make();
+  await store.run(set("a", 100), false);
+  assert.deepEqual(await answer_mark_step(store, step("next", 0), { incognito: false }), { ok: true, x: 0, y: 100 });
+  assert.deepEqual(await answer_mark_step(store, step("next", 100), { incognito: false }), { ok: false, message: "No next mark" });
+  assert.equal((await answer_mark_step(store, step("next", 0), undefined)).ok, false);
+  assert.equal((await answer_mark_step(store, { ...step("next", 0), direction: "sideways" as "next" }, { incognito: false })).ok, false);
 });

@@ -106,14 +106,16 @@ function keep_for_align(element: Element, frames: readonly Element[]): void {
   document.addEventListener("selectionchange", clear);
 }
 
-export type HeadingDirection = "next" | "prev";
+export type HeadingDirection = "next" | "prev" | "first" | "last";
 
 // A heading whose top is within this many pixels of the view top is the one the last jump put there, so the next move passes it.
 const AT_TOP_SLACK = 1;
 
 // `tops` are the heading tops in page order, relative to the view top. `from` is the index of the remembered heading, which the move steps from. Without it the move starts at the view top.
 // A count that runs past the end stops on the last heading, and `undefined` means there is none in that direction.
+// `first` and `last` are the ends of the page, whatever the view top or the remembered heading is, and take no count.
 export function pick_heading_step(tops: readonly number[], direction: HeadingDirection, steps: number, from?: number): number | undefined {
+  if (direction === "first" || direction === "last") return tops.length === 0 ? undefined : direction === "first" ? 0 : tops.length - 1;
   const first =
     from !== undefined
       ? direction === "next" ? from + 1 : from - 1
@@ -122,6 +124,8 @@ export function pick_heading_step(tops: readonly number[], direction: HeadingDir
   const index = direction === "next" ? first + steps - 1 : first - steps + 1;
   return Math.min(Math.max(index, 0), tops.length - 1);
 }
+
+const NO_HEADING: Record<HeadingDirection, string> = { next: "No next heading", prev: "No previous heading", first: "No headings", last: "No headings" };
 
 // The view-top rule alone gets stuck on a heading near the page end, which cannot scroll to the top, so it would be picked again and again.
 // The last jump target is the start while it is still on screen. A weak reference, so a page can still drop the heading.
@@ -138,7 +142,7 @@ export function step_heading(direction: HeadingDirection, steps: number): string
   const at = remembered === undefined ? -1 : found.findIndex(({ element }) => element === remembered);
   const on_screen = at !== -1 && tops[at]! >= -AT_TOP_SLACK && tops[at]! < window.innerHeight;
   const index = pick_heading_step(tops, direction, steps, on_screen ? at : undefined);
-  if (index === undefined) return direction === "next" ? "No next heading" : "No previous heading";
+  if (index === undefined) return NO_HEADING[direction];
   const { element, frames } = found[index]!;
   scroll_to_top(element, frames);
   keep_for_align(element, frames);

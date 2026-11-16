@@ -3,7 +3,7 @@
 // All pages sit in one value, so one queue orders the writes and evicting the oldest page is one edit.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { MarkAnswer, MarkItem, MarkJump, MarkRequest } from "../shared/messages.ts";
+import type { MarkAnswer, MarkItem, MarkJump, MarkRequest, MarkStep } from "../shared/messages.ts";
 import { is_global_mark, MARK_ADD_KEY, MARK_JUMP_KEY, mark_page_url, mark_slot, MAX_MARK_PAGES, MAX_MARK_URL_CHARS, PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "./storage_keys.ts";
@@ -100,6 +100,18 @@ export function create_mark_store(deps: MarkStoreDeps) {
   return {
     // A jump answers the stored offset and keeps the offset it left as the previous position, in one turn, so `''` toggles even when two presses race.
     run: (request: MarkRequest, is_private: boolean) => in_turn(() => run_now(request, is_private)),
+    // The nearest mark of this page past the scroll offset, by position and not by key. The marks of this page are its local marks and the global marks on its address. `'` is a place a jump left and no mark, so it never counts.
+    step: async (request: MarkStep, is_private: boolean): Promise<MarkAnswer> => {
+      const [, here] = check_position(request.x, request.y);
+      const address = address_of(request.url);
+      const all = await read_all(is_private);
+      const local = Object.entries(all.pages[address]?.marks ?? {}).filter(([key]) => key !== PREVIOUS_MARK).map(([, position]) => position);
+      const global = Object.values(all.globals).filter((mark) => mark_page_url(mark.url) === address).map((mark): [number, number] => [mark.x, mark.y]);
+      const ahead = [...local, ...global].filter(([, y]) => (request.direction === "next" ? y > here : y < here));
+      const nearest = ahead.reduce<[number, number] | undefined>((best, mark) => (best === undefined || (request.direction === "next" ? mark[1] < best[1] : mark[1] > best[1]) ? mark : best), undefined);
+      if (!nearest) throw new RuntimeRefusal(request.direction === "next" ? "No next mark" : "No previous mark");
+      return { ok: true, x: nearest[0], y: nearest[1] };
+    },
     // The marks of one page in key order, then the global marks in key order, for the which-key rows. Only a global mark carries its address.
     items: async (url: string, is_private: boolean): Promise<MarkItem[]> => {
       const all = await read_all(is_private);
@@ -173,4 +185,11 @@ export async function answer_mark_request(store: MarkStore, request: MarkRequest
     return store.run({ ...request, url: tab.url as string }, tab.incognito);
   };
   return answer().catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
+}
+
+// A step message from a content script, for the sender tab's privacy.
+export async function answer_mark_step(store: MarkStore, request: MarkStep, tab: MarkSender | undefined): Promise<MarkAnswer> {
+  if (!tab || typeof request.url !== "string") return { ok: false, message: "No page to step in" };
+  if (request.direction !== "next" && request.direction !== "prev") return { ok: false, message: "A mark step goes next or prev" };
+  return store.step(request, tab.incognito).catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
 }

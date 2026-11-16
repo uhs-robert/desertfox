@@ -10,14 +10,14 @@ import type { CopyFormat } from "../handlers/copy.ts";
 import { selected_text } from "./selection.ts";
 import { arm_leave_watch, scroll_offset, type LeaveWatch } from "./leave_watch.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { BackgroundToContent, JumpStep, MarkAnswer, MarkRequest } from "../../shared/messages.ts";
+import type { BackgroundToContent, JumpStep, MarkAnswer, MarkRequest, MarkStep } from "../../shared/messages.ts";
 
 type PageWindow = { desertfox_host?: BundleHostApi; desertfox_page_ready?: true };
 const page = window as unknown as PageWindow;
 
 // A set stores the scroll offset now. A jump asks the background for the stored one, which keeps the offset now as the previous position, then scrolls instantly so a smooth scroll in flight ends.
 // A step of the jump list asks the same way and gets the entry the cursor moved to, or nothing to scroll to when the background went to another tab.
-async function ask_at_scroll(host: BundleHostApi, watch: LeaveWatch, message: { type: MarkRequest["type"]; key: string; arrival?: number } | Pick<JumpStep, "type" | "step" | "arrival">) {
+async function ask_at_scroll(host: BundleHostApi, watch: LeaveWatch, message: { type: MarkRequest["type"]; key: string; arrival?: number } | Pick<JumpStep, "type" | "step" | "arrival"> | Pick<MarkStep, "type" | "direction">) {
   const box = host.scroll_box_();
   const answer = (await browser.runtime.sendMessage({ ...message, url: location.href, x: box.scrollLeft, y: box.scrollTop })) as MarkAnswer;
   if (!answer.ok) throw new RuntimeRefusal(answer.message);
@@ -39,6 +39,7 @@ if (!page.desertfox_page_ready && host) {
   });
   host.register_handler_("mark.add", (args) => ask_at_scroll(host, watch, { type: "mark_set", key: args.key as string }));
   const arrival_of = (args: Record<string, unknown>) => typeof args.arrival === "number" && { arrival: args.arrival };
+  host.register_handler_("mark.step", (args) => ask_at_scroll(host, watch, { type: "mark_step", direction: args.direction as MarkStep["direction"] }));
   host.register_handler_("mark.jump", (args) => ask_at_scroll(host, watch, { type: "mark_jump", key: args.key as string, ...arrival_of(args) }));
   host.register_handler_("page.jump", (args) => ask_at_scroll(host, watch, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...arrival_of(args) }));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));

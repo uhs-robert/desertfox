@@ -253,6 +253,8 @@ export type MarkSet = { type: "mark_set"; key: string; url: string; x: number; y
 // `arrival` names the global mark jump the background pushed into the tab it went to, as in `JumpStep`.
 export type MarkJump = { type: "mark_jump"; key: string; url: string; x: number; y: number; arrival?: number };
 export type MarkRequest = MarkSet | MarkJump;
+// From the `page` bundle. Answers the offset of the nearest mark of this page below (`next`) or above (`prev`) the scroll offset `y`, and stores nothing.
+export type MarkStep = { type: "mark_step"; direction: "next" | "prev"; url: string; x: number; y: number };
 // Without `x` the background does the scroll itself, after it switched to or opened the tab of a global mark.
 export type MarkAnswer = { ok: true; x: number; y: number } | { ok: true; x?: undefined; y?: undefined } | { ok: false; message: string };
 
@@ -608,7 +610,7 @@ export type HintFramesUnhover = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | Relay | FrameCue | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | JumpRequest | JumpLeave | EditorOpen;
+export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | Relay | FrameCue | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | MarkStep | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
