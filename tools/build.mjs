@@ -21,8 +21,8 @@ const MAX_BYTES = {
   // 7 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The subframe also hides its focus loss from the page while the line is open (#634), so a popup that closes on blur stays open. The bundle loads on the first `:`, not on every page.
   "cmdline.js": 7 * 1024,
   "ui.js": 8 * 1024,
-  // 5.5 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. The bundle loads on first use, not on every page.
-  "page.js": 5.5 * 1024,
+  // 6 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. `scroll.align` reads the heading jump and aligns its frame chain. The bundle loads on first use, not on every page.
+  "page.js": 6 * 1024,
   "text.js": 4 * 1024,
   "editor.js": 6.5 * 1024, // 6.5 KB: the clipboard fallback for CodeMirror, Ace and Monaco, with its copy checks and paste read-back. The bundle loads on first use.
   // 6.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, the captions and frame keys read the text tracks and step the time, and the volume and play keys go through the YouTube player (#632, #656). The bundle loads on first use, not on every page.

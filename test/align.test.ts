@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { choose_align_target } from "../src/content/align_target.ts";
+import { choose_align_target, live_heading_jump } from "../src/content/align_target.ts";
 import "../src/commands/scroll.ts";
 import { check_args } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
@@ -34,6 +34,42 @@ test("the blurred element is the last resort, after focus and selection", () => 
 
 test("a selection on the field's wrapper gives way to the blurred field inside it", () => {
   assert.equal(choose_align_target(undefined, { editable: undefined, parent: "wrapper", holds_remembered_: true }, "field"), "field");
+});
+
+const alive = (name: string) => ({ name, isConnected: true, ownerDocument: { defaultView: {} as object | null } });
+const detached = (name: string) => ({ name, isConnected: false, ownerDocument: { defaultView: {} as object | null } });
+const navigated_away = (name: string) => ({ name, isConnected: true, ownerDocument: { defaultView: null } });
+type Fake = ReturnType<typeof alive>;
+const slot = (element: Fake, ...frames: Fake[]) => ({ element: new WeakRef(element), frames: frames.map((frame) => new WeakRef(frame)) });
+
+test("a heading jump is the target when nothing else is focused or selected", () => {
+  assert.equal(choose_align_target(undefined, undefined, undefined, "heading"), "heading");
+  assert.equal(choose_align_target(page_root("body"), undefined, "left", "heading"), "heading");
+});
+
+test("a heading jump beats an older field focus, selection and blurred element", () => {
+  assert.equal(choose_align_target(focus("field"), { editable: undefined, parent: "paragraph", holds_remembered_: false }, "left", "heading"), "heading");
+});
+
+test("with the slot cleared by a later focus or selection, the field wins again", () => {
+  assert.equal(choose_align_target(focus("field"), undefined, undefined, undefined), "field");
+});
+
+test("a live heading jump gives the element and its frames", () => {
+  const element = alive("heading");
+  const frame = alive("frame");
+  assert.deepEqual(live_heading_jump(slot(element, frame)), { element, frames: [frame] });
+});
+
+test("a dead heading jump gives nothing, so the next candidate is used", () => {
+  assert.equal(live_heading_jump(undefined), undefined);
+  assert.equal(live_heading_jump(slot(detached("heading"))), undefined);
+  assert.equal(live_heading_jump(slot(alive("heading"), detached("frame"))), undefined);
+  assert.equal(live_heading_jump(slot(navigated_away("heading"))), undefined);
+  assert.equal(live_heading_jump(slot(alive("heading"), navigated_away("frame"))), undefined);
+  const dropped = { element: { deref: () => undefined }, frames: [] };
+  assert.equal(live_heading_jump(dropped as never), undefined);
+  assert.equal(choose_align_target(focus("field"), undefined, undefined, live_heading_jump(slot(detached("heading")))?.element.name), "field");
 });
 
 test("scroll.align defaults to center and refuses an unknown position", () => {

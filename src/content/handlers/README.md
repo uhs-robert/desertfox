@@ -6,7 +6,7 @@ The content-side code of each command that runs in the page. One file per comman
 - `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`). The `scroll_selector` site setting picks the target first. The pick of the whole-page scan is kept per axis and dropped on `focusin`, `pointerdown`, a failed re-check or a 1 s pause between scroll keys.
 - `page.ts`: `page.blur`. It holds `blur_focused_element` and remembers the last blurred field, which the bundles read through the host. It also holds `hand_focus_to_parent`, the hand-off of a hidden input frame (`../hidden_frame.ts`).
 - `mode.ts`, `stop.ts`: the mode and stop commands.
-- `align.ts`, `copy.ts`, `focus_input.ts`: the code of `scroll.align`, `copy.url` and `page.focus_input`. These are plain functions, not `ContentHandler` objects. The `page` bundle (`../page/main.ts`) registers them.
+- `align.ts`, `copy.ts`, `focus_input.ts`: the code of `scroll.align`, `copy.url` and `page.focus_input`. These are plain functions, not `ContentHandler` objects. The `page` bundle (`../page/main.ts`) registers them. `align.ts` aligns the last heading jump first (and its frames, innermost first), then the focus, the selection and the blurred field. It skips a heading that left the page or whose frame navigated away.
 - `focus.ts`: a helper that has no handler object.
 
 How a handler is found and called:
