@@ -14,6 +14,8 @@ const perl_script = (comm: string) => `syscall(157, 4, 0); my $comm = "${comm}";
 const skip = process.arch !== "x64" ? "the stand-in clears the dumpable flag with the x86_64 prctl number" : false;
 
 const started: ChildProcess[] = [];
+// Session runtime dirs a test made, removed with the rest in with_tmp_root's finally.
+const runtime_dirs: string[] = [];
 // Started in its own process group, as start_child does.
 // `comm` is the name /proc/<pid>/stat shows. `detached: false` leaves it in the test's group, so kill(-pid) cannot reach it.
 async function start_fake_labwc(script_path: string, { comm = "labwc", detached = true } = {}): Promise<ChildProcess> {
@@ -22,7 +24,12 @@ async function start_fake_labwc(script_path: string, { comm = "labwc", detached 
   const child = spawn("perl", ["-C", script_path], { argv0: "labwc", detached, stdio: ["ignore", "pipe", "ignore"] });
   started.push(child);
   const lines = createInterface({ input: child.stdout! });
-  await new Promise((resolve_ready) => lines.once("line", resolve_ready));
+  // A stand-in that exits or never answers fails the test at once, so its finally still removes the dirs.
+  await new Promise<void>((resolve_ready, reject_ready) => {
+    const timer = setTimeout(() => reject_ready(new Error("the stand-in labwc was not ready within 5 s")), 5000);
+    child.once("exit", (code) => reject_ready(new Error(`the stand-in labwc exited (${code}) before it was ready`)));
+    lines.once("line", () => { clearTimeout(timer); resolve_ready(); });
+  });
   return child;
 }
 const is_running = (pid: number) => {
@@ -53,6 +60,7 @@ async function with_tmp_root(body: (tmp_root: string) => Promise<void>) {
       try { process.kill(child.pid!, "SIGKILL"); } catch { /* gone */ }
     }
     rmSync(tmp_root, { recursive: true, force: true });
+    for (const dir of runtime_dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   }
 }
 const dead_run_dir = (tmp_root: string, name: string, owner: string = dead_owner) => {
@@ -112,6 +120,7 @@ test("the sweep spares a labwc under a run folder with no owner file", { skip },
 // stop_session_named stops a session whose environment scan sees nothing: the recorded process group goes.
 async function session_with_recorded_labwc(tmp_root: string, name: string, recorded_ticks: (real: string) => string, options = {}) {
   const runtime_dir = runtime_dir_of(name);
+  runtime_dirs.push(runtime_dir);
   mkdirSync(runtime_dir, { recursive: true, mode: 0o700 });
   const child = await start_fake_labwc(session_labwc(dead_run_dir(tmp_root, name)), options);
   writeFileSync(join(runtime_dir, "pids"), `${child.pid} ${recorded_ticks(start_ticks(child.pid!))}\n`, { flag: "a" });
