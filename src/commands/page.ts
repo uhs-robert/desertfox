@@ -140,10 +140,10 @@ define("page.focus_link", {
 // Both keys start from the last heading they jumped to while it is on screen, else from the top of the view. They stop at the ends and do not wrap.
 define("page.heading", {
   label: "Go to heading",
-  intent: "Scroll the next or previous heading to the top of the view. It counts h1 to h6 and role=heading, in page order, from the last heading it jumped to while that is on screen, else from the top of the view. A count prefix moves that many headings. It stops with a notice past the last or before the first heading.",
+  intent: "Scroll a heading to the top of the view. It goes to the next, previous, first or last one. It counts h1 to h6 and role=heading, in page order, from the last heading it jumped to while that is on screen, else from the top of the view. A count prefix moves that many headings. It stops with a notice past the last or before the first heading. First and last take no count and go to the ends of the page.",
   params: [
-    { name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next heading", prev: "to previous heading" }, description: { next: "Scroll the next heading to the top.", prev: "Scroll the previous heading to the top." } },
-    { name: "steps", type: "int", default: 1, min: 1, description: "Move this many headings." },
+    { name: "direction", type: "enum", values: ["next", "prev", "first", "last"], value_labels: { next: "to next heading", prev: "to previous heading", first: "to first heading", last: "to last heading" }, description: { next: "Scroll the next heading to the top.", prev: "Scroll the previous heading to the top.", first: "Scroll the first heading of the page to the top.", last: "Scroll the last heading of the page to the top." } },
+    { name: "steps", type: "int", default: 1, min: 1, description: "Move this many headings, which first and last ignore." },
   ],
   bridge: false,
   runs_in: "content",

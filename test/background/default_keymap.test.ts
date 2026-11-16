@@ -126,6 +126,10 @@ test("the keys of the new modes compile and resolve to their commands", () => {
   assert.equal(leaf_id("normal", ";", "#"), undefined);
   assert.equal(leaf_id("normal", "]", "h"), 'page.heading {"direction":"next","steps":1}');
   assert.equal(leaf_id("normal", "[", "h"), 'page.heading {"direction":"prev","steps":1}');
+  assert.equal(leaf_id("normal", "]", "H"), 'page.heading {"direction":"last","steps":1}');
+  assert.equal(leaf_id("normal", "[", "H"), 'page.heading {"direction":"first","steps":1}');
+  assert.equal(leaf_id("normal", "]", "'"), 'mark.step {"direction":"next","steps":1}');
+  assert.equal(leaf_id("normal", "[", "'"), 'mark.step {"direction":"prev","steps":1}');
   assert.equal(leaf_id("normal", ";", ";"), 'cmdline.open {"text":"hint "}');
   assert.equal(leaf_id("normal", ";", "u"), 'cmdline.open {"text":"hint --custom "}');
   assert.equal(leaf_id("caret", "v"), 'mode.set {"mode":"visual"}');
