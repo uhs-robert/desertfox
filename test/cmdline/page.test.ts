@@ -172,7 +172,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   // Returns whether the page cancelled the key, which keeps the browser from acting on it.
-  const press = (key: string, modifiers: { ctrlKey?: boolean } = {}) => {
+  const press = (key: string, modifiers: { ctrlKey?: boolean; shiftKey?: boolean } = {}) => {
     let cancelled = false;
     input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, ...modifiers, preventDefault: () => void (cancelled = true) });
     return cancelled;
@@ -650,14 +650,19 @@ test("held keys run after 1 s when no rows land, so the line never stalls", asyn
   assert.equal(input.value, "open gitx");
 });
 
-test("a browser shortcut the line does not bind runs the held keys first and keeps its own action", async (t) => {
-  const { press } = await ranked_line(t, "hold_native_key", "open git");
+test("behind a held key, browser shortcuts and Shift with an arrow act at once, and typed keys still wait in order", async (t) => {
+  const { input, press, answer } = await ranked_line(t, "hold_native_key", "open git");
   // Keys typed before the host's `focused` lands wait for it, cancelled, whatever they are.
   await settle();
   assert.equal(press("Tab"), true);
-  // Ctrl+V pastes: the page must not cancel it, and Tab must not wait behind it.
+  // Ctrl+V pastes and Shift+Left selects: the page must not cancel them, and Tab must not run early.
   assert.equal(press("v", { ctrlKey: true }), false);
-  assert.equal(press("x"), false);
+  assert.equal(press("ArrowLeft", { shiftKey: true }), false);
+  assert.equal(input.value, "open git");
+  assert.equal(press("x"), true);
+  answer([ranked_row("GitHub", "https://github.com/")]);
+  await until(() => input.value !== "open git");
+  assert.equal(input.value, "open https://github.com/ x");
 });
 
 test("the finder's Enter waits for the rows of the typed query and opens the first one that landed", async (t) => {
