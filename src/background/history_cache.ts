@@ -2,7 +2,9 @@ import { refused_as } from "../shared/swallow.ts";
 // The newest history rows, kept in the rank Worker (`rank_index.ts`) so history completion reaches pages older than one `history.search` answer holds.
 // Derived state: the browser's history is the truth, so every start of the Worker refills it with one search. A future event page refills on each wake, and a line that asks before the fill ends gets the plain search.
 
-export const HISTORY_CACHE_MAX = 8000;
+export const HISTORY_CACHE_MAX = 20000;
+// More new addresses than this waiting for a check cost more as one-row checks than as one search (50 is a guess until the fill is timed on a real profile), so the cache refills instead.
+export const REFILL_AFTER = 50;
 
 export type HistoryRow = { url: string; title: string; last_visit: number; visit_count: number };
 export type Visit = { url?: string | undefined; title?: string | undefined; lastVisitTime?: number | undefined; visitCount?: number | undefined };
@@ -63,20 +65,23 @@ export function create_history_cache(deps: HistoryCacheDeps) {
     }
   };
 
+  const load = (found: readonly Visit[]) => {
+    rows = [];
+    by_url.clear();
+    for (const visit of found) {
+      const row = history_row(visit);
+      if (row && !by_url.has(row.url)) {
+        rows.push(row);
+        by_url.set(row.url, row);
+      }
+    }
+    rows.sort((left, right) => right.last_visit - left.last_visit);
+  };
+
   const fill = async () => {
     state = "filling";
     try {
-      const found = await deps.search(deps.max);
-      rows = [];
-      by_url.clear();
-      for (const visit of found) {
-        const row = history_row(visit);
-        if (row && !by_url.has(row.url)) {
-          rows.push(row);
-          by_url.set(row.url, row);
-        }
-      }
-      rows.sort((left, right) => right.last_visit - left.last_visit);
+      load(await deps.search(deps.max));
       await drain();
       state = "ready";
       became_ready();
@@ -90,9 +95,25 @@ export function create_history_cache(deps: HistoryCacheDeps) {
   // An address the cache has not seen waits for the search to list it. A search that fails leaves the page out until its next visit checks again.
   const needs_check = (change: Change) => change.kind === "visited" && !!change.visit.url && !by_url.has(change.visit.url);
 
+  // One search in place of the queued checks. The events held so far happened before the search reads the browser, so it already shows them and they drop. Events that arrive during the search queue as usual and apply after it. The rows swap in one step, so a read never sees a half-built list.
+  const refill = async () => {
+    const held = pending;
+    pending = [];
+    try {
+      load(await deps.search(deps.max));
+    } catch {
+      // The rows stay as they were. The unchecked addresses are lost until their next visit, and the other held events still apply.
+      pending = [...held.filter((change) => !needs_check(change)), ...pending];
+    }
+  };
+
   const drain = (): Promise<void> => {
     draining ??= (async () => {
       while (pending.length > 0) {
+        if (new Set(pending.filter(needs_check).map((change) => (change as { visit: { url: string } }).visit.url)).size > REFILL_AFTER) {
+          await refill();
+          continue;
+        }
         const change = pending.shift()!;
         if (needs_check(change) && !(await refused_as(deps.listed((change as { visit: { url: string } }).visit.url), false))) continue;
         apply(change);

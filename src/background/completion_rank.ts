@@ -24,7 +24,7 @@ const RECENCY_HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000;
 // An open tab is a page in use now. Its own visits add to this, up to `MAX_BOOST`.
 export const OPEN_TAB_BOOST = 0.3;
 
-// Two decimals: the rank needs no more, and 8000 rows go to the page in each answer.
+// Two decimals: the rank needs no more, and the page gets only the top rows of each answer.
 export const rounded_boost = (boost: number) => Math.round(Math.min(MAX_BOOST, boost) * 100) / 100;
 
 export function usage_boost(visit_count: number, last_visit: number, now: number): number {
