@@ -1,4 +1,4 @@
-// The arrow mode (gA): hjkl act as arrows on the focused control, Escape ends it and reaches the page once, and only Escape, gA and a focus move into a field end it. The /arrow_widgets page records what its own scripts saw in data attributes.
+// The arrow mode (Alt+l): hjkl act as arrows on the focused control, Escape ends it and reaches the page once, and only Escape, Alt+l and a focus move into a field end it. Alt+l also starts it from a text field and from caret mode. The /arrow_widgets page records what its own scripts saw in data attributes.
 export const areas = ["keys", "scroll", "ui"];
 
 import { ALT } from "./harness.mjs";
@@ -119,12 +119,27 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     expect((await dataset("keys")) === "", "the mode came back with the focus leaving the field");
   });
 
-  await run_case("typing in a field with the mode off is unchanged", async () => {
-    await open_widgets("field_off");
+  await run_case("Alt+l from a text field blurs the field and starts the mode, and j then acts as an arrow", async () => {
+    await open_widgets("from_field");
     await focus("field");
     await expect_badge("INSERT");
-    await press_keys("gA");
-    await expect_value("field", "gA");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    expect((await in_active_tab(`document.activeElement === document.body`)) === true, "the field kept the focus");
+    expect((await value("field")) === "", "Alt+l typed into the field");
+    await focus("list");
+    await press_keys("j");
+    await poll_until("j to send an arrow", async () => (await dataset("keys")) === "ArrowDown,", { timeout_ms: 3000, expected_timeout: true }).catch(async () => expect(false, `the listbox saw ${await dataset("keys")}`));
+  });
+
+  await run_case("Alt+l from caret mode leaves it and starts the mode, and Alt+l again ends it", async () => {
+    await open_widgets("from_caret");
+    await press_keys("v");
+    await expect_badge("CARET");
+    await press_keys(...ALT("l"));
+    await expect_badge("ARROW");
+    await press_keys(...ALT("l"));
+    await expect_badge("NORMAL");
   });
 
   await run_case("a new page starts with the mode off", async () => {

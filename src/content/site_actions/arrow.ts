@@ -38,7 +38,7 @@ function step_range(range: Control, grow: boolean): void {
   try {
     grow ? range.stepUp() : range.stepDown();
   } catch {
-    const step = ((Number(range.max) || 100) - (Number(range.min) || 0)) / 100;
+    const step = (Number(range.max || 100) - Number(range.min || 0)) / 100;
     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(range), "value")!.set!.call(range, String(Number(before) + (grow ? step : -step)));
   }
   if (range.value !== before) fire_changed(range);

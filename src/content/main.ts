@@ -11,7 +11,7 @@ import { message_of } from "./bundle_host.ts";
 import type { PageHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element, set_editable_rules } from "./editable.ts";
-import { scroll_pixels, set_scroll_selector } from "./handlers/scroll.ts";
+import { scroll_by, set_scroll_selector } from "./handlers/scroll.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
@@ -341,7 +341,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, frame_parked_: () => frame_parked, scroll_by_: (dx: number, dy: number) => void scroll_pixels.run({ dx, dy }, false), focused_: deepest_focused_element });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);

@@ -126,6 +126,14 @@ test("a range with step any steps by one percent of its span, through the protot
   assert.equal(stored, 20);
 });
 
+test("a range with step any and a maximum of 0 steps by one percent of its span", () => {
+  let stored = -50;
+  const proto = { get value() { return String(stored); }, set value(next: string) { stored = Number(next); } };
+  const input = Object.assign(Object.create(proto), fake({ tagName: "INPUT", type: "range", min: "-100", max: "0", stepUp: () => { throw new Error("InvalidStateError"); }, stepDown: () => { throw new Error("InvalidStateError"); } }));
+  arrow_step(page_of(input).page, "right");
+  assert.equal(stored, -49);
+});
+
 test("the steps of a count are one gap apart", async () => {
   const stamps: number[] = [];
   const item = fake({ tagName: "DIV" }, true);

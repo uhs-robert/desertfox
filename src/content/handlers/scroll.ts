@@ -121,7 +121,7 @@ const move_by = (dx: number, dy: number) => {
   scroll_target(dy !== 0 ? "y" : "x").scrollBy({ left: dx, top: dy, behavior: "instant" });
 };
 
-const scroll_by = (dx: number, dy: number) => when_laid_out(dx || dy ? `by ${dx} ${dy}` : "", dy !== 0 ? "y" : "x", () => move_by(dx, dy));
+export const scroll_by = (dx: number, dy: number) => when_laid_out(dx || dy ? `by ${dx} ${dy}` : "", dy !== 0 ? "y" : "x", () => move_by(dx, dy));
 
 const smooth_page_tap = (target: Element, distance: number) => {
   const end = tapped_end(in_flight?.target === target ? in_flight.end : undefined, target.scrollTop, distance, target.scrollHeight - target.clientHeight);

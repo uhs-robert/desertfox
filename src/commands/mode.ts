@@ -25,7 +25,7 @@ define("mode.set", {
 // The mode itself is a column of a site table row, so this command takes the mode's name and no list of values. A name the page's rows lack does nothing.
 define("mode.site", {
   label: "Site mode",
-  intent: "Start a named mode of the site table, or end it with off. The mode adds its own keys to normal mode and shows its label in the badge. Escape, any key DesertFox leaves to the page, a mouse press and any mode change end it.",
+  intent: "Start a named mode of the site table, or end it with off. The mode adds its own keys to normal mode and shows its label in the badge. Escape, any key DesertFox leaves to the page, a mouse press and any mode change end it, except in a sticky mode, which ignores the mouse press and the key. With toggle, a second start ends the mode, and a start leaves a text field and the mode it came from first.",
   params: [
     { name: "name", type: "string", main: true, description: "Start this mode, or off to end the one that runs." },
     { name: "toggle", type: "bool", default: false, description: "End the mode when it already runs." },
