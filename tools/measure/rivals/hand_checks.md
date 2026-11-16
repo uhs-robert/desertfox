@@ -81,13 +81,13 @@ Site checked (Discord):
 
 ## ChatGPT or Claude web
 
-Site checked (ChatGPT or Claude web):
+Site checked (ChatGPT or Claude web): ChatGPT, 2026-11-15, default settings. Only the scroll row was checked. The rest is blank.
 
 | Check | DesertFox | Vimium | Vimium C | Tridactyl |
 | --- | --- | --- | --- | --- |
 | 1. Mode on load (focus, mode) | | | | |
 | 2. Leave with `Escape` | | | | |
-| 3. Scroll | | | | |
+| 3. Scroll (side panel and chat) | | fail: cannot scroll the chat, cannot focus the side panel | fail: scrolls the chat, cannot focus the side panel (no key path) | pass: the `;;` focus hint shows about 900 labels, the right one focuses a scroll area and then it scrolls, many labels in the right area still miss, a near miss does not focus |
 | 3. Hints | | | | |
 | 3. Activate | | | | |
 | 3. `Escape` out of hints | | | | |
