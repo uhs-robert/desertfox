@@ -9,13 +9,13 @@
 <style>
   /* The help layout is measured in 16px rems (sidebar 12rem, column 60rem), so the page keeps that root up to 1600px wide.
      Above 1600px the root grows in a straight line to 18px at 3440px, and the column cap below grows with it, so a wide screen shows bigger text and a wider column.
-     The text size comes from --desertfox-font on .desertfox-help, in rem (15px at a 16px root) so it grows with the root, and a theme can replace it. */
+     The text size comes from --desertfox-font on .desertfox-help, in rem (15px at a 16px root) so it grows with the root. The font_scale setting multiplies only that text size, never the root, so the layout stays put. A theme can replace it. */
   html { background: var(--desertfox-bg-core); font-size: 16px; }
   @media (min-width: 1600px) { html { font-size: clamp(16px, calc(16px + (100vw - 1600px) * 2 / 1840), 18px); } }
   body { margin: 0; }
   /* Set here, below the base, so the theme sheet that follows can still replace it. */
   .desertfox-help {
-    --desertfox-font: 0.9375rem/1.5 system-ui, sans-serif;
+    --desertfox-font: calc(0.9375rem * var(--desertfox-font-scale, 1))/1.5 var(--desertfox-font-family, system-ui, sans-serif);
     display: flex;
     min-height: 100vh;
     background: var(--desertfox-bg-core);
@@ -35,7 +35,8 @@
     display: flex; flex-direction: column; gap: .25rem; overscroll-behavior: contain;
     background: color-mix(in srgb, var(--desertfox-fg-core) 6%, var(--desertfox-bg-core));
   }
-  .desertfox-help-brand { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; color: var(--desertfox-primary); font-weight: bold; }
+  .desertfox-help-sidebar > * { flex-shrink: 0; }
+  .desertfox-help-brand { display: flex; flex-wrap: wrap; overflow-wrap: anywhere; align-items: center; gap: .5rem; margin-bottom: .75rem; color: var(--desertfox-primary); font-weight: bold; }
   .desertfox-help-home-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem; text-align: center; }
   .desertfox-help-keycap { display: block; width: 7rem; height: 7rem; margin-bottom: 1rem; }
   .desertfox-help-logo { width: 1.75rem; height: 1.75rem; }
@@ -93,9 +94,10 @@
   .desertfox-help-command-head h3 { margin: 0; }
   .desertfox-help-keys { display: flex; flex-direction: column; align-items: flex-end; gap: var(--desertfox-space-1); font-size: .9em; }
   .desertfox-help-key-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--desertfox-space-2); }
-  .desertfox-help-usage, .desertfox-help kbd, .desertfox-help code {
+  .desertfox-help-usage, .desertfox-help code {
     font-family: ui-monospace, monospace;
   }
+  .desertfox-help kbd { font-family: var(--desertfox-font-family-mono, ui-monospace, monospace); }
   .desertfox-help-usage { margin: var(--desertfox-space-2) 0; padding: .35rem .6rem; border: 1px solid var(--desertfox-border); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-core); white-space: pre-wrap; overflow-wrap: anywhere; }
   .desertfox-help-code {
     --code-bg: var(--desertfox-bg-mantle);
@@ -110,7 +112,7 @@
   .desertfox-help-code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .5rem .25rem 1rem; min-height: 1.75rem; }
   .desertfox-help-code-lang { font: .8em ui-monospace, monospace; opacity: .6; }
   .desertfox-help-code-copy {
-    margin-left: auto; padding: .1rem .6rem; font: .8em system-ui, sans-serif; color: inherit; cursor: pointer;
+    margin-left: auto; padding: .1rem .6rem; font: .8em var(--desertfox-font-family, system-ui, sans-serif); color: inherit; cursor: pointer;
     background: transparent; border: 1px solid var(--code-border); border-radius: var(--desertfox-radius);
   }
   .desertfox-help-code-copy:hover, .desertfox-help-code-copy:focus-visible { border-color: var(--desertfox-primary); color: var(--desertfox-primary); }

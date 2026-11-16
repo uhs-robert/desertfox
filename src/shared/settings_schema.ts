@@ -8,6 +8,7 @@ import { parse_sequence } from "./keys/notation.ts";
 import { MAX_BIND_STEPS } from "./table_constants.ts";
 import { SETTINGS_TABLE, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
+import { parse_font_family } from "./theme/font_family.ts";
 import { DESKTOP_THEME } from "./theme/roles.ts";
 
 export type SettingSpec = {
@@ -221,12 +222,16 @@ function rule_of(row: Exclude<SettingRow, { kind: "custom" }>): Rule {
 
 type CustomName = { [K in SettingName]: (typeof SETTINGS_TABLE)[K] extends { kind: "custom" } ? K : never }[SettingName];
 
+const FONT_FAMILY_EXPECTATION = "up to 8 font names separated by commas, at most 200 characters, or empty for none";
+
 const CUSTOM_RULES: Record<CustomName, Rule> = {
   hint_letters: { check: (value) => typeof value === "string" && new Set(value).size === value.length && value.length >= 2 && !value.includes("/"), expectation: "a string of 2 or more distinct letters, without /" },
   editor_ext: { check: (value) => typeof value === "string" && /^[A-Za-z0-9]{0,10}$/.test(value), expectation: "a file extension of up to 10 letters or digits, without a dot, or empty for none" },
   scroll_selector: { check: (value) => typeof value === "string", expectation: "a CSS selector, or empty for none" },
   focus_on_load: { check: (value) => typeof value === "string", expectation: "a CSS selector, or empty for none" },
   theme: { check: is_text, expectation: "a theme name", listed_values: () => [DESKTOP_THEME, ...BUILT_IN_THEME_NAMES] },
+  font_family: { check: (value) => parse_font_family(value) !== undefined, expectation: FONT_FAMILY_EXPECTATION },
+  font_family_mono: { check: (value) => parse_font_family(value) !== undefined, expectation: FONT_FAMILY_EXPECTATION },
   new_tab_page: { check: (value) => is_text(value) && (value === BUILT_IN_PAGE || is_web_url(value)), expectation: `"${BUILT_IN_PAGE}" or an http or https URL`, listed_values: () => [BUILT_IN_PAGE] },
 };
 

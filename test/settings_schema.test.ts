@@ -88,3 +88,14 @@ test("the engine form calls the keyword a search word in its messages", async ()
   const problems = field_problems({ name: "a", url: "https://x/{query}", keyword: "TOO LONG!" });
   assert.deepEqual(problems, ["The search word is one to eight lower case letters or digits."]);
 });
+
+test("the font settings take a parsed family list and a whole percent from 50 to 300", () => {
+  for (const name of ["font_family", "font_family_mono"] as const) {
+    assert.equal(SETTING_SPECS[name].check("Fira Code, monospace"), true);
+    assert.equal(SETTING_SPECS[name].check(""), true);
+    assert.equal(SETTING_SPECS[name].check("a;b"), false);
+    assert.equal(SETTING_SPECS[name].check(5), false);
+  }
+  assert.equal(SETTING_SPECS.font_scale.check(100), true);
+  for (const bad of [49, 301, 99.5, "100"]) assert.equal(SETTING_SPECS.font_scale.check(bad), false);
+});

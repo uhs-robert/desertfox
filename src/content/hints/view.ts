@@ -13,13 +13,16 @@ export const KEY_LINE_LABELS = "/: type text \u00b7 Space: turn labels";
 export const KEY_LINE_WIDEN = " \u00b7 Tab: every element";
 export const KEY_LINE_TEXT = "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels";
 
+// The overlay text font. A user `--desertfox-font` replaces all of it.
+const UI_FONT = "var(--desertfox-font, calc(14px * var(--desertfox-font-scale, 1)) var(--desertfox-font-family, system-ui, sans-serif))";
+
 // A filled label in the brand color. The 1px border keeps the box size of the older outlined label. Typed letters fade to half the text color.
 // Defaults are var() fallbacks, never declarations: a declaration here would shadow a value the page or host sets.
 export const STYLE = `
 .desertfox-hints {
   --primary: var(--desertfox-primary, #7fa3c9);
   --label-text: var(--desertfox-bg-core, #0c0e13);
-  font: bold 12px/1 ui-monospace, monospace;
+  font: bold calc(12px * var(--desertfox-font-scale, 1))/1 var(--desertfox-font-family-mono, ui-monospace, monospace);
 }
 .desertfox-hint {
   position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase;
@@ -27,16 +30,16 @@ export const STYLE = `
 }
 .desertfox-hint b { opacity: .6; font-weight: inherit; }
 .desertfox-hint-text {
-  position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre;
+  position: fixed; left: 50%; bottom: calc(48px * var(--desertfox-font-scale, 1)); transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre;
   background: var(--primary); color: var(--label-text); font: inherit;
 }
 .desertfox-hint-keys {
   position: fixed; right: 16px; bottom: 8px; padding: 4px 8px; pointer-events: none; white-space: pre;
-  background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
+  background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: ${UI_FONT}; border-radius: var(--desertfox-radius, 6px);
 }
 .desertfox-hint-message {
-  position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 8px 12px;
-  background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
+  position: fixed; left: 50%; bottom: calc(48px * var(--desertfox-font-scale, 1)); transform: translateX(-50%); padding: 8px 12px;
+  background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: ${UI_FONT}; border-radius: var(--desertfox-radius, 6px);
 }`;
 
 // Where the element sits on the top page: its anchor box plus the box of every frame around it. Undefined when the element has no box to anchor to.

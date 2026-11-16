@@ -321,6 +321,9 @@ const ROLE_MEANINGS: Record<Role, string> = {
 
 export const STYLE_VARIABLES: { name: string; meaning: string }[] = [
   { name: "--desertfox-font", meaning: "Font shorthand, for example 14px system-ui, sans-serif" },
+  { name: "--desertfox-font-family", meaning: "Font family list that replaces each surface's own, for example \"Fira Sans\", sans-serif. Set by the font_family setting" },
+  { name: "--desertfox-font-family-mono", meaning: "Font family list of the command line, the key caps and the hint labels. Set by the font_family_mono setting" },
+  { name: "--desertfox-font-scale", meaning: "A number that multiplies each surface's own text size, for example 1.2. Set by the font_scale setting" },
   { name: "--desertfox-radius", meaning: "Corner radius" },
   ...ROLES.map((role) => ({ name: token_name(role), meaning: ROLE_MEANINGS[role] })),
 ];

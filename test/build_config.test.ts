@@ -123,6 +123,13 @@ test("light_intensity is a whole number from 1 to 5, and defaults to 3 by being 
   }
 });
 
+test("a hand-edited font_scale outside 50 to 300 or with a fraction is a settings problem", () => {
+  assert.equal(build_config(config_dir_with({ "settings.toml": "font_scale = 150" }), commands).settings.font_scale, 150);
+  for (const bad of ["1e9", "49", "301", "150.5", '"150"']) {
+    assert.match(problems_of(config_dir_with({ "settings.toml": `font_scale = ${bad}` })).join("\n"), /settings\.toml: font_scale: /, bad);
+  }
+});
+
 test("a local theme that still uses the old role names is an error", () => {
   const dir = config_dir_with({ "themes/old.toml": '[dark]\nbg = "#000"\nfg = "#fff"\nmuted = "#888"\nprimary = "#fff"\naccent = "#fff"' });
   const problems = problems_of(dir).join("\n");

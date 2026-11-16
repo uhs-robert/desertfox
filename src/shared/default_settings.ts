@@ -33,6 +33,9 @@ export const DEFAULT_LAYOUT_FALLBACK: Settings["layout_fallback"] = true;
 export const DEFAULT_MODE_INDICATOR: Settings["mode_indicator"] = "always";
 export const DEFAULT_THEME: Settings["theme"] = "oasis_moonlight";
 export const DEFAULT_LIGHT_INTENSITY: Settings["light_intensity"] = 3;
+export const DEFAULT_FONT_FAMILY: Settings["font_family"] = "";
+export const DEFAULT_FONT_FAMILY_MONO: Settings["font_family_mono"] = "";
+export const DEFAULT_FONT_SCALE: Settings["font_scale"] = 100;
 export const DEFAULT_SEARCH_PREFIXES: Settings["search_prefixes"] = {"here":"s","tab":"S"};
 export const DEFAULT_CONTAINER_PREFIXES: Settings["container_prefixes"] = {"reopen":"c","tab":"C"};
 export const DEFAULT_DEFAULT_ENGINE: Settings["default_engine"] = "duck";
@@ -94,6 +97,9 @@ export const DEFAULT_SETTINGS: Settings = {
   mode_indicator: DEFAULT_MODE_INDICATOR,
   theme: DEFAULT_THEME,
   light_intensity: DEFAULT_LIGHT_INTENSITY,
+  font_family: DEFAULT_FONT_FAMILY,
+  font_family_mono: DEFAULT_FONT_FAMILY_MONO,
+  font_scale: DEFAULT_FONT_SCALE,
   search_prefixes: DEFAULT_SEARCH_PREFIXES,
   container_prefixes: DEFAULT_CONTAINER_PREFIXES,
   default_engine: DEFAULT_DEFAULT_ENGINE,

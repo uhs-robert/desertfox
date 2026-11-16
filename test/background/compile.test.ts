@@ -178,3 +178,13 @@ test("a jump bound without its count param is marked too, so the keys after a ty
   assert.equal(step.runs_in, "background");
   assert.equal(step.jump, true);
 });
+
+test("the stored theme carries the font settings that are set, in canonical form, and no font field while none is", () => {
+  const { registry } = make_fake(commands);
+  const compile = (settings: Record<string, unknown>) =>
+    compile_config({ config: { ...empty_config(), settings }, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: { search_engines: [], containers: [] } }).theme;
+  assert.equal("font" in compile({}), false);
+  assert.equal("font" in compile({ font_family: "", font_family_mono: "", font_scale: 100 }), false);
+  assert.deepEqual(compile({ font_family: "Fira Sans, serif", font_family_mono: "Fira Code", font_scale: 120 }).font, { "--desertfox-font-family": '"Fira Sans", serif', "--desertfox-font-family-mono": '"Fira Code"', "--desertfox-font-scale": "1.2" });
+  assert.equal("font" in compile({ font_family: "a;b" }), false);
+});
