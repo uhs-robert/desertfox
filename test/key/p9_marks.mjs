@@ -129,18 +129,21 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, e
     await scroll_to(0);
     await to_y("p9m_step", ["]", "'"], 500, "]' from the top to reach the lower mark a");
     await to_y("p9m_step", ["]", "'"], 1500, "]' to reach the mark b");
-    const refused = async (keys, what, page_id = "p9m_step") => {
+    const toast_layer = 2147483647 - 2;
+    const toast_text = () => in_active_tab(`(() => { const host = [...document.documentElement.children].find((child) => child.style.zIndex === "${toast_layer}"); return host?.openOrClosedShadowRoot?.textContent ?? ""; })()`);
+    const refused = async (keys, what, text, page_id = "p9m_step") => {
       const mark = events.length;
       await press_keys(...keys);
       await wait_event(mark, (event) => event.type === "toast" && event.page_id === page_id, `a toast after ${what}`);
       await expect_no_scroll(mark, page_id);
+      await poll_until(`the toast to say ${text}`, async () => (await toast_text()).includes(text));
       await poll_until("the toast to go", async () => events.slice(mark).some((event) => event.type === "toast_gone" && event.page_id === page_id), { timeout_ms: 8000 });
     };
-    await refused(["]", "'"], "]' at the last mark");
+    await refused(["]", "'"], "]' at the last mark", "No next mark");
     await to_y("p9m_step", ["[", "'"], 500, "[' from b to reach a");
-    await refused(["[", "'"], "[' at the first mark");
+    await refused(["[", "'"], "[' at the first mark", "No previous mark");
     await open_page("aligned", "p9m_step_none", { new_tab: true });
-    await refused(["]", "'"], "]' on a page with no marks", "p9m_step_none");
+    await refused(["]", "'"], "]' on a page with no marks", "No next mark", "p9m_step_none");
   });
 
   await run_case("a pause after ' lists the marks of the page with their offsets", async () => {

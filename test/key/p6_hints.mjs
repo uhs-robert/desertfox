@@ -402,10 +402,16 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("the notice past the last heading", async () => (await toast_text()).includes("No next heading"));
   });
 
-  await run_case("]H goes to the last heading and [H to the first, from anywhere, and a repeat stays put", async () => {
+  await run_case("]H goes to the last heading and [H to the first, from anywhere, a repeat or a count changes nothing", async () => {
     await open_page("headings", "p6_heading_ends", { new_tab: true });
     await press_keys("]H");
     await poll_until("Last at the top", async () => Math.abs(await top_of("last")) <= 2);
+    await press_keys("]H");
+    await sleep(400);
+    expect(Math.abs(await top_of("last")) <= 2, "a second ]H moved the last heading off the top");
+    await press_keys("3]H");
+    await sleep(400);
+    expect(Math.abs(await top_of("last")) <= 2, "3]H moved the last heading off the top");
     await press_keys("[H");
     await poll_until("the title back in view, a little below the page top for its margin", async () => (await scroll_y()) < 100 && (await top_of("intro")) > 0);
     await press_keys("2]h");

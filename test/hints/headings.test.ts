@@ -153,3 +153,11 @@ test("first and last pick the ends of the list whatever the view top is, and an 
   assert.equal(pick_heading_step([], "first", 1), undefined);
   assert.equal(pick_heading_step([], "last", 1), undefined);
 });
+
+test("a count before first or last passes the check and is ignored", async () => {
+  const { check_args } = await import("../../src/shared/registry/check_args.ts");
+  const { registry } = await import("../../src/shared/registry/builtin.ts");
+  await import("../../src/background/command_modules.ts");
+  const command = registry.get("page.heading")!;
+  for (const direction of ["first", "last"]) assert.equal(check_args(command, { direction, steps: 3 }).ok, true, direction);
+});
