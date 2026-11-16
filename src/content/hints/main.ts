@@ -528,6 +528,10 @@ function register(host: PageHostApi): void {
     mark_text_entry({ id: "page.focus_field", args: { direction: args.direction, steps: args.steps } });
     return done;
   });
+  host.register_handler_("page.focus_link", (args): Outcome => {
+    const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number, "link");
+    return message === undefined ? done : { ok: false, message };
+  });
   host.register_handler_("page.heading", (args): Outcome => {
     const message = step_heading(args.direction as HeadingDirection, args.steps as number);
     return message === undefined ? done : { ok: false, message };

@@ -1,8 +1,8 @@
-// scroll.align (zt, zz, zb) on a field, on the heading a jump just reached, and on a page with nothing focused, the zoom reset z=, and the form control keys ]i and [i.
+// scroll.align (zt, zz, zb) on a field, on the heading a jump just reached, and on a page with nothing focused, the zoom reset z=, and the form control keys ]i and [i, and the link keys ]l and [l.
 
 export const areas = ["scroll", "hints"];
 
-export async function run_cases({ run_case, on_teardown, expect, open_page, press_keys, poll_until, events, wait_event, find_event, scroll_of, expect_no_scroll, in_background, record, wait_cmdline, type_in_line, read_cmdline_state }) {
+export async function run_cases({ run_case, on_teardown, expect, open_page, press_keys, poll_until, events, wait_event, find_event, scroll_of, expect_no_scroll, in_background, in_active_tab, record, wait_cmdline, type_in_line, read_cmdline_state }) {
   await run_case("scroll.align puts the field just left at the top, center and bottom", async () => {
     await open_page("aligned", "align", { new_tab: true });
     const field_top_after = async (keys) => {
@@ -151,6 +151,31 @@ export async function run_cases({ run_case, on_teardown, expect, open_page, pres
     await press_keys("]i");
     await wait_event(mark_end, (event) => event.type === "toast" && event.page_id === "controls", "the stop notice past the last control");
     expect(!find_event(mark_end, (event) => event.type === "focused" && event.page_id === "controls"), "focus moved past the last control");
+  });
+
+  await run_case("]l and [l walk the links without clicking, skip an anchor without href and stop with a notice", async () => {
+    await open_page("links", "links", { new_tab: true });
+    const focused = (id) => (event) => event.type === "focused" && event.page_id === "links" && event.id === id;
+    const press_and_wait = async (keys, predicate, what) => {
+      const mark = events.length;
+      await press_keys(...keys);
+      await wait_event(mark, predicate, what);
+      return mark;
+    };
+    const mark_first = await press_and_wait(["]l"], focused("first"), "]l to focus the first link");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(!find_event(mark_first, (event) => event.type === "hash" && event.page_id === "links"), "]l followed the link");
+    const mode = await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
+    expect(mode === "NORMAL", `the mode after ]l reads ${mode}, not NORMAL`);
+    await press_and_wait(["]l"], focused("second"), "]l to skip the anchor without href");
+    const mark_last = await press_and_wait(["]l"], focused("last"), "]l to the far link");
+    await wait_event(mark_last, (event) => event.type === "scroll" && event.page_id === "links" && event.y > 0, "the page to scroll to the far link");
+    await press_and_wait(["[l"], focused("second"), "[l back to the second link");
+    await press_and_wait(["]l"], focused("last"), "]l to the far link again");
+    const mark_end = events.length;
+    await press_keys("]l");
+    await wait_event(mark_end, (event) => event.type === "toast" && event.page_id === "links", "the stop notice past the last link");
+    await press_and_wait(["-k", "Return"], (event) => event.type === "hash" && event.page_id === "links" && event.hash === "#c", "Enter to follow the focused link");
   });
 
   await run_case("focus into and out of a field in a closed shadow root switches between INSERT and NORMAL", async () => {

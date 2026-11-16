@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 466 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
+bound: 478 (normal 252, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
 
 ### normal
 
@@ -54,6 +54,18 @@ bound: 466 (normal 240, media 54, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `[i` | `page.focus_field --prev` | Previous form control |
 | `]h` | `page.heading --next` | Next heading |
 | `[h` | `page.heading --prev` | Previous heading |
+| `]l` | `page.focus_link --next` | Next link |
+| `[l` | `page.focus_link --prev` | Previous link |
+| `]g` | `tabgroup.next` | Next tab group |
+| `[g` | `tabgroup.prev` | Previous tab group |
+| `]t` | `tab.next` | Next tab |
+| `[t` | `tab.prev` | Previous tab |
+| `]T` | `tab.goto -1` | Last tab |
+| `[T` | `tab.goto 1` | First tab |
+| `]j` | `page.jump --newer` | Jump forward |
+| `[j` | `page.jump --older` | Jump back |
+| `]v` | `media skip next` | Next video |
+| `[v` | `media skip previous` | Previous video |
 | `sh` | `cmdline.open --text='heading '` | Search headings |
 | `.` | `repeat` | Repeat |
 | `J` | `tab.next` | Next tab |
@@ -275,7 +287,10 @@ Which-key group names:
 - `x`: Stop or close
 - `r`: Reload
 - `p`: Page
-- `>`: Move tab
+- `<`: Move Left
+- `>`: Move Right
+- `[`: Previous
+- `]`: Next
 - `t`: Tabs
 - `tg`: Tab groups
 - `tu`: Unload tabs
