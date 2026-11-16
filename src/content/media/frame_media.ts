@@ -38,13 +38,16 @@ export type FrameView = {
   toggle_fullscreen: (player: Player) => Promise<unknown>;
 };
 
+// Rounding after a step drops the binary float error (1.05 + 0.05 is 1.1, not 1.1000000000000001), so a walk up and back ends on the clean value it started from.
+const without_drift = (value: number): number => Math.round(value * 1e9) / 1e9;
+
 export function next_level(current: number, value: string | undefined, times: number, rule: LevelRule): number {
   if (value === undefined) return current;
   // A live stream has no end to jump to.
   if ((value === "end" || value === "percent") && !Number.isFinite(rule.max)) return current;
   const wanted =
-    value === "up" ? current + rule.step * times
-    : value === "down" ? current - rule.step * times
+    value === "up" ? without_drift(current + rule.step * times)
+    : value === "down" ? without_drift(current - rule.step * times)
     : value === "reset" ? rule.reset
     : value === "end" ? rule.max
     : value === "percent" ? rule.min + ((rule.max - rule.min) * times) / 100

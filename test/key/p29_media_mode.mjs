@@ -87,7 +87,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await wait_event(mark, media(id, "volumechange", "big", (event) => event.muted === false), "unmuted");
     mark = events.length;
     await press_keys(">");
-    await wait_event(mark, media(id, "ratechange", "big", (event) => event.rate === 1.25), "1.25x");
+    await wait_event(mark, media(id, "ratechange", "big", (event) => event.rate === 1.05), "1.05x");
     mark = events.length;
     await press_keys("<");
     await wait_event(mark, media(id, "ratechange", "big", (event) => event.rate === 1), "1x");

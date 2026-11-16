@@ -45,16 +45,27 @@ function frame(entries: { player: Player; area: number }[], pip: { element: unkn
 }
 
 test("up and down move by steps times the count, reset and numbers set, a sign moves, and the rule's range clamps", () => {
-  assert.equal(next_level(1, "up", 1, SPEED_RULE), 1.25);
-  assert.equal(next_level(1, "up", 3, SPEED_RULE), 1.75);
-  assert.equal(next_level(0.5, "down", 2, SPEED_RULE), 0.25);
-  assert.equal(next_level(3.9, "up", 1, SPEED_RULE), 4);
+  assert.equal(next_level(1, "up", 1, SPEED_RULE), 1.05);
+  assert.equal(next_level(1, "up", 5, SPEED_RULE), 1.25);
+  assert.equal(next_level(0.3, "down", 2, SPEED_RULE), 0.25);
+  assert.equal(next_level(3.98, "up", 1, SPEED_RULE), 4);
   assert.equal(next_level(2, "reset", 1, SPEED_RULE), 1);
   assert.equal(next_level(1, "1.5", 1, SPEED_RULE), 1.5);
   assert.equal(next_level(60, "+10", 1, VOLUME_RULE), 70);
   assert.equal(next_level(60, "250", 1, VOLUME_RULE), 100);
   assert.equal(next_level(5, "-10", 1, SEEK_RULE), 0);
   assert.equal(next_level(42, undefined, 1, SEEK_RULE), 42);
+});
+
+test("repeated speed steps land on clean values, so up from 1 to 4 and back ends at exactly 1", () => {
+  assert.equal(next_level(1.05, "up", 1, SPEED_RULE), 1.1);
+  let rate = 1;
+  const seen: number[] = [];
+  while (rate < 4) seen.push((rate = next_level(rate, "up", 1, SPEED_RULE)));
+  assert.equal(seen.length, 60);
+  assert.deepEqual(seen, seen.map((value) => Number(value.toFixed(2))));
+  while (rate > 1) rate = next_level(rate, "down", 1, SPEED_RULE);
+  assert.equal(rate, 1);
 });
 
 test("the walk finds media inside open and closed shadow roots, nested", () => {
@@ -89,9 +100,9 @@ test("a playing target changes every playing element and leaves the paused ones"
     { player: two, area: 10 },
   ]);
   const result = await apply_in_frame(view, apply({ target: "playing", value: "up", times: 2 }));
-  assert.deepEqual([one.playbackRate, two.playbackRate, idle.playbackRate], [1.5, 2.5, 1]);
+  assert.deepEqual([one.playbackRate, two.playbackRate, idle.playbackRate], [1.1, 2.1, 1]);
   assert.equal(result.acted, 2);
-  assert.equal(result.state?.rate, 1.5);
+  assert.equal(result.state?.rate, 1.1);
 });
 
 test("an audible target changes the element with sound and leaves a muted one that also plays", async () => {
