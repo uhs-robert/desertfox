@@ -585,6 +585,11 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const body = `<h2 id="intro">Intro</h2>${dropped}${filler}<div id="below" role="heading" aria-level="2">Below the fold</div>${filler}<h3 id="last">Last</h3>${filler}`;
       return response.end(page(`headings ${id}`, body));
     }
+    if (url.pathname === "/headings_field") {
+      // In page order the rows are the title, Intro and Below. The field sits between Intro and Below, far enough from both that each one scrolls on its own.
+      const filler = '<div style="height:1500px;background:linear-gradient(#fff,#ccc)"></div>';
+      return response.end(page(`headings_field ${id}`, `<h2 id="intro">Intro</h2>${filler}<input id="field">${filler}<h2 id="below">Below</h2>${filler}`));
+    }
     if (url.pathname === "/headings_end") {
       // Headings b, c and d sit in the last 260px, so the page cannot scroll them to the top of the view. In page order: title, a, b, c, d.
       const gap = '<div style="height:60px"></div>';
