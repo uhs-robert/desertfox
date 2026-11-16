@@ -47,24 +47,27 @@ if (MAX_BYTES["content.js"] > CONTENT_CEILING_BYTES) {
   process.exit(1);
 }
 
-await rm("dist", { recursive: true, force: true });
-await mkdir("dist", { recursive: true });
+// KEY_TEST_BUILD=1 builds the extension the key test loads into dist-key-test/. It defines `__KEY_TEST__`, which turns on the page-readable test attributes (src/shared/key_test_build.ts). The release build never carries them, so the size guards below measure the release only.
+const key_test_build = process.env.KEY_TEST_BUILD === "1";
+const out_dir = key_test_build ? "dist-key-test" : "dist";
+const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "warning", mangleProps: /_$/, define: { __KEY_TEST__: String(key_test_build) } };
+await rm(out_dir, { recursive: true, force: true });
+await mkdir(out_dir, { recursive: true });
 
 // A property name that ends in `_` is internal to the extension's own scripts, and the build shortens it. One cache serves every build, so a name that crosses bundles (the bundle host API) gets the same short name in each. esbuild does not change the cache it is given. It returns the grown one, so `build_with_cache` passes that on to the next build. Never end a name in `_` when it crosses storage, a runtime message, the manifest, a DOM attribute, CSS, a page or browser API, or a file on disk.
 let mangle_cache = {};
-const common = { bundle: true, format: "iife", target: "firefox140", logLevel: "warning", mangleProps: /_$/ };
 async function build_with_cache(options) {
   const result = await build({ ...common, ...options, mangleCache: mangle_cache });
   mangle_cache = result.mangleCache;
 }
 
 // content.js builds first, on the empty cache: esbuild gives the shortest names to the first build's most used names, so content.js then depends on its own source alone. Any build before it makes a bundle's edit move content.js's size.
-const content_options = { entryPoints: { content: "src/content/main.ts" }, outdir: "dist", minify: true };
+const content_options = { entryPoints: { content: "src/content/main.ts" }, outdir: out_dir, minify: true };
 await build_with_cache(content_options);
-await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
-await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
-await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
-await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: "dist", minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
+await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
 const minified_entries = {
   hints: "src/content/hints/main.ts",
   caret: "src/content/caret/main.ts",
@@ -89,44 +92,44 @@ const minified_entries = {
   devtools: "src/devtools/main.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {
-  await build_with_cache({ entryPoints: { [name]: entry }, outdir: "dist", minify: true });
+  await build_with_cache({ entryPoints: { [name]: entry }, outdir: out_dir, minify: true });
 }
 
 for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html", "devtools/devtools.html"]) {
-  await copyFile(`src/${file}`, `dist/${file.split("/").pop()}`);
+  await copyFile(`src/${file}`, `${out_dir}/${file.split("/").pop()}`);
 }
 
 // The shared base sheet of the help and new tab pages, linked by both.
-await copyFile("src/shared/page_base.css", "dist/page_base.css");
+await copyFile("src/shared/page_base.css", `${out_dir}/page_base.css`);
 
 // The font is copied as is with its licence: the licence reserves the name "DSEG", so a converted or edited font could not keep it.
-for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(`src/newtab/fonts/${file}`, `dist/${file}`);
+for (const file of ["DSEG7Classic-Regular.ttf", "OFL-DSEG.txt"]) await copyFile(`src/newtab/fonts/${file}`, `${out_dir}/${file}`);
 
 // The theme colors ship compiled into themes.ts, so the credits and the Apache-2.0 text (section 4(a)) travel with the package.
-for (const file of ["NOTICE.md", "LICENSE-Apache-2.0.txt"]) await copyFile(`themes/${file}`, `dist/${file}`);
+for (const file of ["NOTICE.md", "LICENSE-Apache-2.0.txt"]) await copyFile(`themes/${file}`, `${out_dir}/${file}`);
 
-await mkdir("dist/icons", { recursive: true });
-await copyFile("src/icons/desertfox.svg", "dist/icons/desertfox.svg");
-await writeFile("dist/icons/desertfox-off.svg", grey_svg(await readFile("src/icons/desertfox.svg", "utf8")));
+await mkdir(`${out_dir}/icons`, { recursive: true });
+await copyFile("src/icons/desertfox.svg", `${out_dir}/icons/desertfox.svg`);
+await writeFile(`${out_dir}/icons/desertfox-off.svg`, grey_svg(await readFile("src/icons/desertfox.svg", "utf8")));
 // The keycap mark lives with the docs images; the help welcome page shows it, so it ships from there.
-await copyFile("docs/images/desertfox-keycap.svg", "dist/icons/desertfox-keycap.svg");
+await copyFile("docs/images/desertfox-keycap.svg", `${out_dir}/icons/desertfox-keycap.svg`);
 
 // The sample engines the Search engines section adds in one click. The background fetches this copy.
-await copyFile("examples/engines.toml", "dist/starter_engines.toml");
+await copyFile("examples/engines.toml", `${out_dir}/starter_engines.toml`);
 
 // A doc the renderer cannot read fails the build here, with the file and line.
 const { parse_markdown } = await import("./render_docs.ts");
 const guide_blocks = parse_markdown("docs/search_engines.md", await readFile("docs/search_engines.md", "utf8"));
-await writeFile("dist/search_engines_guide.json", `${JSON.stringify(guide_blocks)}\n`);
+await writeFile(`${out_dir}/search_engines_guide.json`, `${JSON.stringify(guide_blocks)}\n`);
 
 // Rebuild content.js on an empty cache. A different result means something built before it.
 const content_alone = await build({ ...common, ...content_options, write: false, mangleCache: {} });
-if (!Buffer.from(content_alone.outputFiles[0].contents).equals(await readFile("dist/content.js"))) {
-  console.error("dist/content.js differs from a build on an empty mangle cache: content.js must be the first build in tools/build.mjs");
+if (!Buffer.from(content_alone.outputFiles[0].contents).equals(await readFile(`${out_dir}/content.js`))) {
+  console.error(`${out_dir}/content.js differs from a build on an empty mangle cache: content.js must be the first build in tools/build.mjs`);
   process.exit(1);
 }
 
-const command_count = await write_commands_json("dist");
+const command_count = await write_commands_json(out_dir);
 
 // `just release_stamp` hashes the stamped hosts. The signed build carries those hashes, and a host updates only to files
 // that match them. A build with no stamp of its own version carries none, so its hosts never update themselves.
@@ -134,13 +137,17 @@ const release_assets_dir = process.env.RELEASE_ASSETS_DIR || "release-assets";
 const manifest_version = JSON.parse(await readFile("src/manifest.json", "utf8")).version;
 const host_hashes_text = await refused_as(readFile(`${release_assets_dir}/host_sha256.json`, "utf8"), null);
 if (host_hashes_text !== null && JSON.parse(host_hashes_text).version === manifest_version) {
-  await writeFile("dist/host_sha256.json", host_hashes_text);
+  await writeFile(`${out_dir}/host_sha256.json`, host_hashes_text);
 }
 
+if (key_test_build) {
+  console.log(`built ${out_dir}/ (${command_count} commands, key-test build, no size guards)`);
+  process.exit(0);
+}
 const sizes = [];
 let over_limit = false;
 for (const [file, limit] of Object.entries(MAX_BYTES)) {
-  const bytes = (await stat(`dist/${file}`)).size;
+  const bytes = (await stat(`${out_dir}/${file}`)).size;
   sizes.push(`${file} ${bytes} of ${limit}`);
   if (bytes > limit) {
     console.error(`${file} is ${bytes} bytes minified, over the ${limit} byte limit`);
@@ -148,4 +155,4 @@ for (const [file, limit] of Object.entries(MAX_BYTES)) {
   }
 }
 if (over_limit) process.exit(1);
-console.log(`built dist/ (${command_count} commands, ${sizes.join(", ")} bytes)`);
+console.log(`built ${out_dir}/ (${command_count} commands, ${sizes.join(", ")} bytes)`);

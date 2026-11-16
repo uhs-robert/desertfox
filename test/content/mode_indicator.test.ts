@@ -90,6 +90,16 @@ test("a page element that carries the mode attribute survives the cleanup", asyn
   assert.equal(root.children.filter((node) => !node.textContent.includes("::backdrop")).length, 2);
 });
 
+test("outside the key-test build the badge host carries no mode attribute a page could read", async () => {
+  const { root } = page_with_orphan_badge();
+  const { show_mode_label } = await import("../../src/content/mode_indicator.ts");
+  show_mode_label("normal", "normal");
+
+  const badge = root.children.find((node) => node.attributes.has("data-desertfox-badge"));
+  assert.ok(badge?.attributes.has("data-desertfox-badge"));
+  assert.equal(badge?.attributes.has("data-desertfox-mode"), false);
+});
+
 test("a new instance with no badge to show still removes the orphan, without loading the ui bundle", async () => {
   const { root } = page_with_orphan_badge();
   const { show_mode_label } = await import("../../src/content/ui_proxy.ts");

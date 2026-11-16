@@ -1,6 +1,7 @@
 // A badge in the bottom-right corner that names the mode.
 // Top frame only, so frames do not each draw one.
 
+import { KEY_TEST_BUILD } from "../shared/key_test_build.ts";
 import { LAYERS } from "../shared/layers.ts";
 import { BADGE_HOST_ATTRIBUTE, remove_badge_hosts } from "./badge_hosts.ts";
 import { create_surface, mount_surface } from "./surface.ts";
@@ -33,8 +34,8 @@ export function show_mode_label(label: string | undefined, mode?: string): void 
   surface.text.textContent = label;
   if (mode === undefined) surface.text.removeAttribute("data-mode");
   else surface.text.setAttribute("data-mode", mode);
-  // The key test reads this attribute, because the shadow root is closed.
-  surface.host.setAttribute("data-desertfox-mode", label);
+  // The key test reads this attribute, because the shadow root is closed. A release build leaves it out: a page can read it.
+  if (KEY_TEST_BUILD) surface.host.setAttribute("data-desertfox-mode", label);
   surface.host.style.pointerEvents = "none";
   remove_badge_hosts();
   mount_surface(surface.host);

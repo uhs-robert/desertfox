@@ -2,6 +2,7 @@
 // Hovering a row shows what the command does.
 
 import type { WhichKeyPanel } from "../../shared/messages.ts";
+import { KEY_TEST_BUILD } from "../../shared/key_test_build.ts";
 import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
 import { choose_columns, fit_title } from "./layout.ts";
@@ -79,12 +80,13 @@ export function show_panel({ title, rows, border, repeat }: WhichKeyPanel): void
   const chip = element("div", "chip");
   title_bar.append(chip);
   surface.text.replaceChildren(title_bar, frame);
-  // The key test reads these attributes, because the shadow root is closed.
-  surface.host.setAttribute("data-desertfox-whichkey", `${columns}:${rows.length}`);
+  // The key test reads these attributes, because the shadow root is closed. A release build leaves them out: a page can read them.
+  if (KEY_TEST_BUILD) surface.host.setAttribute("data-desertfox-whichkey", `${columns}:${rows.length}`);
   mount_surface(surface.host);
   // Only a rendered chip can say whether it overflows.
   const { text, dropped } = fit_title(title, (candidate) => ((chip.textContent = candidate), chip.scrollWidth > chip.clientWidth));
   chip.textContent = text;
+  if (!KEY_TEST_BUILD) return;
   // Numbers only: the group names are the user's, and a page script can read this host.
   surface.host.setAttribute("data-desertfox-whichkey-dropped", String(dropped));
   surface.host.setAttribute("data-desertfox-whichkey-width", String(frame.getBoundingClientRect().width));

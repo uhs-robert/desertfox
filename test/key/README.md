@@ -172,7 +172,7 @@ The key tests reach into five Firefox internals: `ExtensionPageChild.sys.mjs`, t
 
 ## Traps
 
-- Run key tests only in your own worktree. Never run two from one worktree: each `just key-test` rebuilds and clears that worktree's `dist/`.
+- Run key tests only in your own worktree. Never run two from one worktree: each `just key-test` rebuilds and clears that worktree's `dist/` and `dist-key-test/`.
 - Do not wrap `just key-test` in `timeout`. The recipe already runs in a systemd scope with a memory cap of 16 GB (throttled from 14 GB), no swap and CPU limited to 14 cores, and a time limit of the deadline plus 70 seconds (300 by default). Without a systemd user session it runs uncapped and says so.
 - On the first run after a build, an early setup case can fail. Rerun once before you debug.
 - Add-ons force-installed through the Firefox policy file can eat modifier chords in the nested session. Disable them before you trust a chord result.

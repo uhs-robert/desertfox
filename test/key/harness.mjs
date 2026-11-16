@@ -15,7 +15,8 @@ import { default_timings_path } from "./timings.mjs";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
 const repo_dir = resolve(key_test_dir, "../..");
-const dist_dir = join(repo_dir, "dist");
+// The key-test build (`just build-key-test`) carries the test attributes the release build leaves out.
+const dist_dir = join(repo_dir, "dist-key-test");
 const EXTENSION_ID = "desertfox@uhs-robert";
 const PADDED_BUNDLE_BYTES = 20 * 1024;
 
@@ -449,7 +450,7 @@ export async function create_session({ name: session_name, timings, sweep = true
       }
     }
     if (stall_capture) rdp.on_close(() => stall_capture.note_lost(rdp.lost_reason()));
-    // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist/ stays as built.
+    // The padded bundles stand in for a 20 KB hints or caret bundle. They go into a copy, so dist-key-test/ stays as built.
     const extension_dir = join(work_dir, "extension");
     cpSync(dist_dir, extension_dir, { recursive: true });
     // The caret bundle keeps its real code and gains the padding after it, so the caret cases run the real sinks. The which-key bundle stays real.
