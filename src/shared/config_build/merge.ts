@@ -35,7 +35,6 @@ function merge_map_layers(
   layers: DataLayer[],
   section: string,
   origins: Origins,
-  problems: string[],
   accept: (value: unknown, where: string, key: string) => boolean,
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
@@ -140,7 +139,7 @@ function merge_search_engines(layers: DataLayer[], origins: Origins, problems: s
 }
 
 function merge_command_aliases(layers: DataLayer[], origins: Origins, problems: string[]) {
-  return merge_map_layers(layers, "command_aliases", origins, problems, (value, where) => {
+  return merge_map_layers(layers, "command_aliases", origins, (value, where) => {
     const valid = typeof value === "string" && value !== "";
     if (!valid) problems.push(`${where}: an alias maps to a command id string`);
     return valid;
@@ -148,7 +147,7 @@ function merge_command_aliases(layers: DataLayer[], origins: Origins, problems: 
 }
 
 function merge_quickmarks(layers: DataLayer[], origins: Origins, problems: string[]) {
-  return merge_map_layers(layers, "quickmarks", origins, problems, (value, where, key) => {
+  return merge_map_layers(layers, "quickmarks", origins, (value, where, key) => {
     const valid_key = QUICKMARK_KEY.test(key);
     if (!valid_key) problems.push(`${where}: a quickmark key is one letter or digit`);
     const valid_url = typeof value === "string" && value !== "" && value.length <= MAX_QUICKMARK_URL_CHARS;
@@ -158,7 +157,7 @@ function merge_quickmarks(layers: DataLayer[], origins: Origins, problems: strin
 }
 
 function merge_settings(layers: DataLayer[], origins: Origins, problems: string[]) {
-  return merge_map_layers(layers, "settings", origins, problems, (value, where, name) => {
+  return merge_map_layers(layers, "settings", origins, (value, where, name) => {
     if (!is_setting_name(name)) {
       problems.push(`${where}: unknown setting (known: ${SETTING_NAMES.join(", ")})`);
       return false;
