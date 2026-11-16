@@ -2,7 +2,7 @@
 
 The background page. It loads the config, compiles the keymap, assigns the Firefox shortcut slots and routes run requests.
 
-This folder and `src/commands/` import each other. Commands call background helpers (stores, `browser_deps.ts`). The background takes only `main.ts`'s wiring and the pure plan, URL and target helpers from `commands/` (`availability.ts`, `bridge_browser.ts`, `settings_message.ts`). That works because ES modules resolve the cycle and each side uses the other only inside functions, at call time, never while its module loads.
+This folder and `src/commands/` import each other. `command_modules.ts` imports every command module for its side effect, and `main.ts` imports `command_modules.ts`. Commands call background helpers (stores, `browser_deps.ts`). The background also takes the pure plan, URL and target helpers from `commands/` (`availability.ts`, `bridge_browser.ts`, `settings_message.ts`) and the wiring calls in `main.ts`. A command module calls a background function while it loads only when that background module imports nothing from `commands/`: `commands/media.ts` does so with `create_tab_media` from `tab_media.ts`.
 
 - `main.ts`: registers the listeners, then waits for the config.
 - `bookmark_title.ts`: `title_for_address`, the title that prefills a bookmark rename. A managed bookmark, which cannot be renamed, gives its title only when no other bookmark has the address.

@@ -1,6 +1,6 @@
 # shared
 
-Types and constants that fix the hand-off formats between the background page, the content script and `tools/build-config`. Besides types and constants it holds small pure helpers and the pure parts of the config, the keys and the registry (`registry/`, `keys/`, `theme/`, `config_build/`, `match_pattern.ts`, `score.ts`, `site_key.ts`). Every other source folder may import from it, and it imports from none of them. The one exception is `config_build/schemas.ts`, which only the build tool and tests load and which reads `background/default_keymap.ts`.
+Types and constants that fix the hand-off formats between the background page, the content script and `tools/build-config`. Besides types and constants it holds small helpers and the config, key and registry logic (`registry/`, `keys/`, `theme/`, `config_build/`, `match_pattern.ts`, `score.ts`, `site_key.ts`). Most of it is pure. A few files touch the browser or the DOM: `storage_watch.ts`, `load_commands.ts`, `key_caps.ts`. Every other source folder may import from it, and it imports from none of them. The one exception is `config_build/schemas.ts`, which only the build tool and tests load and which reads `background/default_keymap.ts`.
 
 - `command.ts`: a command definition, and the `commands.json` entry cut from it.
 - `invocation.ts`: the `Invocation` every caller produces, and a key binding.
