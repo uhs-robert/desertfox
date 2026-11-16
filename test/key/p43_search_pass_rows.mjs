@@ -28,6 +28,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await in_active_tab(`(() => {
       document.documentElement.dataset.keys = "";
       addEventListener("keydown", (event) => { document.documentElement.dataset.keys += event.key + (event.isTrusted ? "" : "!") + ","; });
+      document.body.style.minWidth = "5000px";
       document.activeElement?.blur();
       return true;
     })()`);
@@ -39,6 +40,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await keys()) === wanted, `the page keys changed to ${await keys()}`);
     expect((await in_active_tab("scrollY")) === 0, "a passed or sent key also scrolled the page");
   };
+
+  await run_case("on a page with no search row, j scrolls down, so the zero scroll on the rows below means something", async () => {
+    await open_search("none");
+    await press_keys("j");
+    await poll_until("j scrolled the page", async () => (await in_active_tab("scrollY")) > 0);
+    expect((await keys()) === "", `j reached the page: ${await keys()}`);
+  });
 
   for (const name of ["ddg", "kagi"]) {
     await run_case(`on ${name}, j and k reach the page as the browser's own keys`, async () => {
@@ -52,6 +60,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_search("ddg");
     await press_keys("hl", "j");
     await expect_keys("j,");
+  });
+
+  await run_case("on ddg, h and l scroll the page sideways", async () => {
+    await open_search("ddg");
+    await press_keys("l");
+    await poll_until("l scrolled right", async () => (await in_active_tab("scrollX")) > 0);
+    await press_keys("h");
+    await poll_until("h scrolled back", async () => (await in_active_tab("scrollX")) === 0);
+    expect((await keys()) === "", `h or l reached the page: ${await keys()}`);
   });
 
   await run_case("on brave, j and k send untrusted arrow keys and no j or k reaches the page", async () => {

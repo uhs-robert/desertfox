@@ -86,7 +86,8 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "arrow", row: { site: "<all_urls>", modes: { arrow: ARROW_MODE } } },
   // These engines move their own result highlight on j and k, so the keys go to the page. h, l, v and ' stay ours.
-  { name: "ddg", row: { site: "https://duckduckgo.com/*", pass: "j k" } },
+  // DuckDuckGo's results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep their own j and k scroll.
+  { name: "ddg", row: { site: "https://duckduckgo.com/?*", pass: "j k" } },
   { name: "kagi", row: { site: "https://kagi.com/search*", pass: "j k" } },
   // Brave moves its highlight on arrow keys only, so j and k send them to the focused element.
   { name: "brave", row: { site: "https://search.brave.com/search*", bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } }, k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } } } } },

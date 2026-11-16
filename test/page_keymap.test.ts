@@ -574,6 +574,8 @@ test("the search rows: ddg and kagi pass j and k, brave binds them to arrow keys
     assert.equal(reply.keymap.modes.normal?.children.k, undefined, `k still bound on ${url}`);
     assert.notEqual(reply.keymap.modes.normal?.children.h, undefined, `h freed on ${url}`);
   }
+  assert.equal(await key_at(compiled, "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=cats", "j"), undefined);
+  for (const url of ["https://duckduckgo.com/settings", "https://duckduckgo.com/duckduckgo-help-pages/"]) assert.notEqual(await key_at(compiled, url, "j"), undefined, `j freed on ${url}`);
   const brave = "https://search.brave.com/search?q=cats";
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
