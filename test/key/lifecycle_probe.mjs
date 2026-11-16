@@ -6,7 +6,7 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -64,13 +64,34 @@ function firefox_of(runtime_dir) {
   return all_pids().find((pid) => read_proc(pid, "comm")?.trim() === "firefox" && environ_of(pid).XDG_RUNTIME_DIR === runtime_dir && read_proc(parent_of(pid), "comm")?.trim() !== "firefox");
 }
 
-const tmp_entries = () => readdirSync("/tmp").filter((name) => name.startsWith(RUNTIME_PREFIX) || name.startsWith(RUN_DIR_PREFIX));
+const tmp_entries = () => [...readdirSync("/tmp").filter((name) => name.startsWith(RUNTIME_PREFIX)), ...readdirSync(tmpdir()).filter((name) => name.startsWith(RUN_DIR_PREFIX))];
 
-// Processes of a key-test run: anything that carries a session dir, and any run.mjs or worker.mjs of this checkout.
+const pgid_of = (pid) => {
+  const stat = read_proc(pid, "stat");
+  return stat === undefined ? undefined : Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+};
+
+// labwc carries a file capability, so the kernel makes it non-dumpable and its environ is unreadable. Its cmdline is readable:
+// `labwc -C <session dir>/labwc`, with the session dir under a run folder or, outside a run, a desertfox-key-* folder, both under the temp root that make_run_dir uses (os.tmpdir(), which honors TMPDIR).
+const is_session_labwc = (pid) => {
+  const [program, flag, config_dir] = (read_proc(pid, "cmdline") ?? "").split("\0");
+  return basename(program ?? "") === "labwc" && flag === "-C" && (config_dir ?? "").startsWith(join(tmpdir(), "desertfox-key-"));
+};
+
+const session_labwc_pids = () => all_pids().filter((pid) => is_session_labwc(pid) && !foreign_labwc.has(pid));
+
+// Compositors that were running before the probes started belong to another job, so no probe counts them.
+const foreign_labwc = new Set();
+
+// Processes of a key-test run: anything that carries a session dir, any run.mjs or worker.mjs of this checkout, and the
+// session's labwc, found by its cmdline, with every process of its process group.
 function stray_processes() {
-  return all_pids().filter((pid) => {
+  const labwc_groups = new Set(session_labwc_pids().map(pgid_of).filter((pgid) => pgid !== undefined));
+  return all_pids().filter((pid) => !foreign_labwc.has(pid)).filter((pid) => {
     const environ = environ_of(pid);
     if (Object.values(environ).some((value) => value.startsWith(`/tmp/${RUNTIME_PREFIX}`))) return true;
+    const pgid = pgid_of(pid);
+    if (is_session_labwc(pid) || (pgid !== undefined && labwc_groups.has(pgid))) return true;
     const cmdline = read_proc(pid, "cmdline") ?? "";
     return cmdline.includes(join(key_test_dir, "run.mjs")) || cmdline.includes(join(key_test_dir, "worker.mjs"));
   });
@@ -233,6 +254,14 @@ const probes = {
   "int-group-at-2s": startup_probe({ signal: "SIGINT", signal_name: "SIGINT", exit_code: 130, delay_ms: 2000, to_group: true }),
   "term-coordinator-at-1s": startup_probe({ signal: "SIGTERM", signal_name: "SIGTERM", exit_code: 143, delay_ms: 1000, to_group: false }),
 
+  // The plain end of a run: its session is stopped by the worker's own close().
+  async "normal-end"(context) {
+    const result = await finish(start_run({ ...context, pieces: SHORT_PIECES, shards: 1 }));
+    const problems = [];
+    check(problems, result.code === 0, `exit code ${result.code} (signal ${result.signal}), want 0`);
+    return { problems, result };
+  },
+
   async "kill-worker"(context) {
     const run = start_run(context);
     const line = await run.line_matching(first_case_line);
@@ -246,6 +275,8 @@ const probes = {
     check(problems, new RegExp(`^FAIL \\S+: worker s${shard} died \\(signal SIGKILL\\) while running it`, "m").test(result.output), `no "worker s${shard} died (signal SIGKILL)" line`);
     check(problems, result.report?.incomplete?.in_flight?.length === 1, `report.incomplete.in_flight is ${JSON.stringify(result.report?.incomplete?.in_flight)}, want the one lost piece`);
     check(problems, result.report?.shards?.length === SHARDS, "the report lists a different number of shards");
+    // The coordinator stops the dead worker's session itself, and the rerun's sweep catches what it missed.
+    problems.push(...await rerun_after_kill(context));
     return { problems, result };
   },
 
@@ -300,9 +331,12 @@ const probes = {
     const run = start_run(context);
     for (let shard = 1; shard <= SHARDS; shard++) await run.line_matching(new RegExp(`^\\[s${shard}\\] (PASS|FAIL) `));
     const before = tmp_entries();
+    const labwc_before = session_labwc_pids();
     const sweep_script = `import { sweep_dead_sessions, sweep_dead_run_dirs } from ${JSON.stringify(join(key_test_dir, "session.mjs"))}; await sweep_dead_sessions(); await sweep_dead_run_dirs();`;
     const { stdout, stderr } = await run_execfile(process.execPath, ["--input-type=module", "-e", sweep_script]);
     const problems = [];
+    check(problems, labwc_before.length === SHARDS, `${labwc_before.length} session labwc before the sweep, want ${SHARDS}`);
+    check(problems, JSON.stringify(session_labwc_pids()) === JSON.stringify(labwc_before), "the foreign sweep stopped a labwc of the live run");
     check(problems, stdout.trim() === "" && stderr.trim() === "", `the foreign sweep printed: ${stdout}${stderr}`.trim());
     check(problems, JSON.stringify(tmp_entries()) === JSON.stringify(before), "the foreign sweep changed /tmp");
     check(problems, workers_of(run.pid).length === SHARDS && !run.has_exited(), "the foreign sweep stopped a worker or the run");
@@ -368,6 +402,7 @@ async function run_probe(name, body) {
   return problems.length === 0;
 }
 
+for (const pid of all_pids().filter(is_session_labwc)) foreign_labwc.add(pid);
 const wanted = process.argv.slice(2);
 const unknown = wanted.filter((name) => !(name in probes));
 if (unknown.length > 0) {
