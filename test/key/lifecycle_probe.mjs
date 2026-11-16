@@ -86,11 +86,12 @@ const foreign_labwc = new Set();
 // Processes of a key-test run: anything that carries a session dir, any run.mjs or worker.mjs of this checkout, and the
 // session's labwc, found by its cmdline, with every process of its process group.
 function stray_processes() {
-  const labwc_groups = new Set(all_pids().filter(is_session_labwc).map(pgid_of));
+  const labwc_groups = new Set(all_pids().filter(is_session_labwc).map(pgid_of).filter((pgid) => pgid !== undefined));
   return all_pids().filter((pid) => !foreign_labwc.has(pid)).filter((pid) => {
     const environ = environ_of(pid);
     if (Object.values(environ).some((value) => value.startsWith(`/tmp/${RUNTIME_PREFIX}`))) return true;
-    if (is_session_labwc(pid) || labwc_groups.has(pgid_of(pid))) return true;
+    const pgid = pgid_of(pid);
+    if (is_session_labwc(pid) || (pgid !== undefined && labwc_groups.has(pgid))) return true;
     const cmdline = read_proc(pid, "cmdline") ?? "";
     return cmdline.includes(join(key_test_dir, "run.mjs")) || cmdline.includes(join(key_test_dir, "worker.mjs"));
   });
@@ -261,12 +262,6 @@ const probes = {
     return { problems, result };
   },
 
-  // The coordinator stops the dead worker's session itself, and the rerun's sweep catches what it missed.
-  async "kill-worker-then-rerun"(context) {
-    const outcome = await probes["kill-worker"](context);
-    return { ...outcome, problems: [...outcome.problems, ...await rerun_after_kill(context)] };
-  },
-
   async "kill-worker"(context) {
     const run = start_run(context);
     const line = await run.line_matching(first_case_line);
@@ -280,6 +275,8 @@ const probes = {
     check(problems, new RegExp(`^FAIL \\S+: worker s${shard} died \\(signal SIGKILL\\) while running it`, "m").test(result.output), `no "worker s${shard} died (signal SIGKILL)" line`);
     check(problems, result.report?.incomplete?.in_flight?.length === 1, `report.incomplete.in_flight is ${JSON.stringify(result.report?.incomplete?.in_flight)}, want the one lost piece`);
     check(problems, result.report?.shards?.length === SHARDS, "the report lists a different number of shards");
+    // The coordinator stops the dead worker's session itself, and the rerun's sweep catches what it missed.
+    problems.push(...await rerun_after_kill(context));
     return { problems, result };
   },
 

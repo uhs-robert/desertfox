@@ -10,15 +10,16 @@ const { make_run_dir, runtime_dir_of, stop_session_named, sweep_orphan_composito
 
 // A stand-in for labwc: perl treats `-C <file>` as "run that file", so the command line reads `labwc -C <path>` as labwc's does,
 // and the script clears the dumpable flag as a file-capability exec does, so its /proc/<pid>/environ is EACCES (x86_64 prctl).
-const PERL_SCRIPT = "syscall(157, 4, 0); $| = 1; print qq(ready\\n); sleep 300;\n";
+const perl_script = (comm: string) => `syscall(157, 4, 0); my $comm = "${comm}"; syscall(157, 15, $comm); $| = 1; print qq(ready\\n); sleep 300;\n`;
 const skip = process.arch !== "x64" ? "the stand-in clears the dumpable flag with the x86_64 prctl number" : false;
 
 const started: ChildProcess[] = [];
 // Started in its own process group, as start_child does.
-async function start_fake_labwc(script_path: string): Promise<ChildProcess> {
+// `comm` is the name /proc/<pid>/stat shows. `detached: false` leaves it in the test's group, so kill(-pid) cannot reach it.
+async function start_fake_labwc(script_path: string, { comm = "labwc", detached = true } = {}): Promise<ChildProcess> {
   mkdirSync(join(script_path, ".."), { recursive: true });
-  writeFileSync(script_path, PERL_SCRIPT);
-  const child = spawn("perl", ["-C", script_path], { argv0: "labwc", detached: true, stdio: ["ignore", "pipe", "ignore"] });
+  writeFileSync(script_path, perl_script(comm));
+  const child = spawn("perl", ["-C", script_path], { argv0: "labwc", detached, stdio: ["ignore", "pipe", "ignore"] });
   started.push(child);
   const lines = createInterface({ input: child.stdout! });
   await new Promise((resolve_ready) => lines.once("line", resolve_ready));
@@ -47,7 +48,10 @@ async function with_tmp_root(body: (tmp_root: string) => Promise<void>) {
   try {
     await body(tmp_root);
   } finally {
-    for (const child of started.splice(0)) try { process.kill(-child.pid!, "SIGKILL"); } catch { /* gone */ }
+    for (const child of started.splice(0)) {
+      try { process.kill(-child.pid!, "SIGKILL"); } catch { /* not a group leader */ }
+      try { process.kill(child.pid!, "SIGKILL"); } catch { /* gone */ }
+    }
     rmSync(tmp_root, { recursive: true, force: true });
   }
 }
@@ -106,11 +110,11 @@ test("the sweep spares a labwc under a run folder with no owner file", { skip },
 }));
 
 // stop_session_named stops a session whose environment scan sees nothing: the recorded process group goes.
-async function session_with_recorded_labwc(tmp_root: string, name: string, recorded_ticks: (real: string) => string) {
+async function session_with_recorded_labwc(tmp_root: string, name: string, recorded_ticks: (real: string) => string, options = {}) {
   const runtime_dir = runtime_dir_of(name);
   mkdirSync(runtime_dir, { recursive: true, mode: 0o700 });
-  const child = await start_fake_labwc(session_labwc(dead_run_dir(tmp_root, name)));
-  writeFileSync(join(runtime_dir, "pids"), `${child.pid} ${recorded_ticks(start_ticks(child.pid!))}\n`);
+  const child = await start_fake_labwc(session_labwc(dead_run_dir(tmp_root, name)), options);
+  writeFileSync(join(runtime_dir, "pids"), `${child.pid} ${recorded_ticks(start_ticks(child.pid!))}\n`, { flag: "a" });
   return child;
 }
 
@@ -129,4 +133,51 @@ test("stopping a session spares a recorded pid whose start time differs, a reuse
   await stop_session_named(name);
   assert.ok(is_running(child.pid!), "another process holds the pid now");
   assert.ok(!existsSync(runtime_dir_of(name)));
+}));
+
+test("a trailing slash on the tmp root does not make the sweep stop a live run's labwc", { skip }, () => with_tmp_root(async (tmp_root) => {
+  const live = await start_fake_labwc(session_labwc(make_run_dir(tmp_root)));
+  const dead = await start_fake_labwc(session_labwc(dead_run_dir(tmp_root, "dead")));
+  await quietly(() => sweep_orphan_compositors(`${tmp_root}/`));
+  await wait_gone(dead.pid!);
+  assert.ok(is_running(live.pid!), "the live run's labwc is spared");
+  assert.ok(!is_running(dead.pid!), "the dead run's labwc is still stopped");
+}));
+
+test("the sweep spares a labwc while a process still carries its dead run's folder", { skip }, () => with_tmp_root(async (tmp_root) => {
+  const run_dir = dead_run_dir(tmp_root, "stopping");
+  const labwc = await start_fake_labwc(session_labwc(run_dir));
+  // An orphaned worker that is still tearing down its session carries the run folder in TMPDIR.
+  const worker = spawn("sleep", ["300"], { env: { ...process.env, TMPDIR: join(run_dir, "s1") }, stdio: "ignore" });
+  try {
+    await quietly(() => sweep_orphan_compositors(tmp_root));
+    assert.ok(is_running(labwc.pid!));
+    worker.kill("SIGKILL");
+    await new Promise((resolve_exit) => worker.once("exit", resolve_exit));
+    await quietly(() => sweep_orphan_compositors(tmp_root));
+    await wait_gone(labwc.pid!);
+    assert.ok(!is_running(labwc.pid!), "once the worker is gone the labwc is stopped");
+  } finally {
+    worker.kill("SIGKILL");
+  }
+}));
+
+test("a recorded process whose name holds spaces and parentheses is still stopped", { skip }, () => with_tmp_root(async (tmp_root) => {
+  const name = `lsy${process.pid.toString(36)}`;
+  const child = await session_with_recorded_labwc(tmp_root, name, (real) => real, { comm: "a (b) c d" });
+  assert.match(readFileSync(`/proc/${child.pid}/stat`, "latin1"), /\(a \(b\) c d\)/);
+  await stop_session_named(name);
+  await wait_gone(child.pid!);
+  assert.ok(!is_running(child.pid!));
+}));
+
+test("stopping a session throws when a recorded process survives, after it stopped every other one", { skip }, () => with_tmp_root(async (tmp_root) => {
+  const name = `lsz${process.pid.toString(36)}`;
+  const stoppable = await session_with_recorded_labwc(tmp_root, name, (real) => real);
+  // Not a group leader, so the group kill finds no group and this one outlives the stop.
+  const survivor = await session_with_recorded_labwc(tmp_root, name, (real) => real, { detached: false });
+  await assert.rejects(stop_session_named(name), new RegExp(`still run from .* after SIGKILL: ${survivor.pid}$`));
+  await wait_gone(stoppable.pid!);
+  assert.ok(!is_running(stoppable.pid!));
+  assert.ok(is_running(survivor.pid!));
 }));

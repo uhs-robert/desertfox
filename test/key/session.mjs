@@ -255,9 +255,11 @@ export function make_run_dir(tmp_root = tmpdir()) {
 }
 
 // Whether the run that owns a run folder may still be running. A folder that is gone means its run ended.
-// A folder with no readable owner file counts as live, as the sweeps skip it.
+// A folder with no readable owner file counts as live, as the sweeps skip it. So does one that a process still carries:
+// the workers of a SIGKILLed coordinator are still stopping their sessions, and labwc goes last.
 function run_dir_is_live(run_dir) {
   if (!existsSync(run_dir)) return false;
+  if (pids_carrying(run_dir).length > 0) return true;
   try {
     const [owner_pid, owner_start_ticks] = readFileSync(join(run_dir, OWNER_FILE), "utf8").trim().split(" ");
     return !/^\d+$/.test(owner_pid) || !/^\d+$/.test(owner_start_ticks ?? "") || process_start_ticks(Number(owner_pid)) === owner_start_ticks;
@@ -283,7 +285,10 @@ export async function sweep_orphan_compositors(tmp_root = tmpdir()) {
       continue;
     }
     if (basename(program ?? "") !== "labwc" || flag !== "-C" || !config_dir?.startsWith(run_prefix) || uid !== process.getuid()) continue;
-    const run_dir = join(tmp_root, config_dir.slice(tmp_root.length + 1).split("/")[0]);
+    // From the matched prefix, so an unnormalized tmp_root such as "/tmp/" cannot cut the name at the wrong offset.
+    const run_dir_end = config_dir.indexOf("/", run_prefix.length);
+    if (run_dir_end === -1) continue;
+    const run_dir = config_dir.slice(0, run_dir_end);
     const found = process_state_and_ticks(pid);
     if (found === undefined || found.state === "Z" || run_dir_is_live(run_dir)) continue;
     orphans.push({ pid, ticks: found.ticks, run_dir });
