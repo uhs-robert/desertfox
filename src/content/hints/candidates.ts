@@ -5,7 +5,7 @@ import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 import { is_scroll_box } from "../scroll_box.ts";
 import { drop_targets_of } from "./drop_targets.ts";
 import { element_address, is_image_element, takes_typing } from "./actions.ts";
-import { HEADINGS, is_heading } from "./headings.ts";
+import { HEADINGS, is_heading } from "./heading_match.ts";
 import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
@@ -118,8 +118,7 @@ const QUERIES: Record<Exclude<HintFilter, "custom" | "drop">, Query> = {
   media: { selector: "video, audio" },
   images: { selector: "*", test: is_image },
   frames: { selector: "iframe, frame", test: is_pickable_frame },
-  // A function and not `is_heading` itself: headings.ts imports this file, so the binding is not ready while this table is built.
-  headings: { selector: HEADINGS, test: (element) => is_heading(element) },
+  headings: { selector: HEADINGS, test: is_heading },
   scrollable: { selector: "*", test: (element) => !takes_typing(element as HTMLElement) && is_scroll_box(element) },
 };
 

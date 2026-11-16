@@ -368,11 +368,15 @@ const BASE_SECTIONS: KeymapConfig = {
     ";yc": { id: "hint.run", args: { action: "copy_selector", filter: "every" }, label: "Copy CSS selector" },
     ";Y": { id: "hint.run", args: { action: "copy", filter: "links", rapid: true }, label: "Copy several link URLs" },
     ";yh": { id: "hint.run", args: { action: "copy_html", filter: "every" }, label: "Copy outer HTML" },
-    // `;f` is a modifier, so these are the keys under it that no filter letter derives: the filter letter `f` for frames follows the modifier `f`.
+    // `;f` is a modifier, so the focus variants of the filter keys derive from it. These keys are hand-bound: the frames filter has no key of its own to derive from.
     ";ff": { id: "hint.run", args: { filter: "frames" }, label: "Focus frame" },
+    // The frame variants of three modifiers stay as hand-bound keys, because the frames filter has no source key.
+    ";of": { id: "hint.run", args: { action: "inspect", filter: "frames" }, label: "Inspect frame" },
+    ";hf": { id: "hint.run", args: { action: "hover", filter: "frames" }, label: "Hover frame" },
+    ";xf": { id: "hint.run", args: { action: "delete", filter: "frames" }, label: "Delete frame" },
     ";fF": { id: "frame.exit" },
     ";fs": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
-    ";fe": { id: "page.focus_input" },
+    ";fe": { id: "page.focus_input", label: "Main input" },
     ";fh": { id: "hint.run", args: { action: "focus", filter: "headings" }, label: "Focus heading" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },

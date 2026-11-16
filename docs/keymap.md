@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 482 (normal 255, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
+bound: 488 (normal 258, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
 
 ### normal
 
@@ -262,9 +262,12 @@ bound: 482 (normal 255, media 55, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
 | `;yh` | `hint --copy-html --every` | Copy outer HTML |
 | `;ff` | `hint --frames` | Focus frame |
+| `;of` | `hint --inspect --frames` | Inspect frame |
+| `;hf` | `hint --hover --frames` | Hover frame |
+| `;xf` | `hint --delete --frames` | Delete frame |
 | `;fF` | `frame.exit` | Focus top page |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |
-| `;fe` | `page.focus_input` | Focus input |
+| `;fe` | `page.focus_input` | Main input |
 | `;fh` | `hint --focus --headings` | Focus heading |
 | `;m` | `hint --media` | Play or pause media |
 | `;M` | `hint --enter-media --media` | Start media mode at a video |
@@ -343,6 +346,9 @@ Which-key group names:
 | `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
 | `;yh` | `hint --copy-html --every` | Copy outer HTML |
 | `;ff` | `hint --frames` | Focus frame |
+| `;of` | `hint --inspect --frames` | Inspect frame |
+| `;hf` | `hint --hover --frames` | Hover frame |
+| `;xf` | `hint --delete --frames` | Delete frame |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |
 | `;fh` | `hint --focus --headings` | Focus heading |
 | `;m` | `hint --media` | Play or pause media |
