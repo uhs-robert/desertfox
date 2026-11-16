@@ -76,7 +76,7 @@ function args_reach(args: Record<string, unknown>, command: CommandMeta | undefi
   };
 }
 
-// What a key that names a consent setting can do to it. Only a plain set to a literal false changes it without a way to switch it on. A prompt, a missing value that a modifier can fill, a toggle and an unset can all switch it on. So can a literal false when a modifier carries a `value`, which wins over the key's own.
+// What a key that names a consent setting can do to it. Only a plain set to a literal false changes it without a way to switch it on. A prompt, a missing value that a modifier can fill, a toggle and an unset can all switch it on. So can a literal false when any modifier carries a `value` (whatever its group, deliberately), which wins over the key's own.
 function consent_use(step: BoundInvocation, modifier_sets_value: boolean): KeyRow["consent"] {
   const plain_false = !modifier_sets_value && step.id === "settings.set" && step.prompt === undefined && String(step.args?.value).toLowerCase() === "false";
   return plain_false ? "change" : "switch_on";
