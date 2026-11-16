@@ -33,17 +33,23 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, p
     await delay_keymap_reads(true);
     try {
       const mark = events.length;
-      await wait_in_front(await open_tab(url_of("page", "early_space")));
+      const tab_id = await open_tab(url_of("page", "early_space"));
+      await wait_in_front(tab_id);
       await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "early_space", "the page to report that it shows");
-      const pressed_at = Date.now();
+      // The page's report carries the server's receive time, which trails the keydown by the report's trip. This listener stamps the keydown itself, in the same bubble phase as the page's own listener, so it sees the same Space the page reports.
+      const in_page = (code) => in_background(`browser.tabs.executeScript(${tab_id}, { code: ${JSON.stringify(code)} }).then((answers) => answers[0])`);
+      await in_page(`addEventListener("keydown", (event) => { if (event.key === " ") globalThis.space_keydown_at ??= Date.now(); }); 1`);
       await press_keys("-k", "space");
-      const seen = await wait_event(mark, (event) => event.type === "keydown" && event.key === " " && event.page_id === "early_space", "the page to see the held Space", KEYMAP_DELAY_MS + 4000);
-      // Only a held key arrives after the keymap read ends. A key the page got at once would show about 2 s before it.
+      // press_keys resolves once the compositor took the key, so a release after this moment found Space already sent.
+      const pressed_at = Date.now();
+      await wait_event(mark, (event) => event.type === "keydown" && event.key === " " && event.page_id === "early_space", "the page to see the held Space", KEYMAP_DELAY_MS + 4000);
       const released_at = await in_background("globalThis.keymap_released_at");
+      const space_keydown_at = await in_page("globalThis.space_keydown_at");
       expect(released_at !== undefined, "the delayed keymap read never ended");
       // A press after the release proves nothing: the page would get Space at once and still pass the check below.
       expect(pressed_at < released_at, `Space was pressed ${pressed_at - released_at} ms after the keymap read ended, so the case proves nothing`);
-      expect(seen.at_ms >= released_at, `Space reached the page ${released_at - seen.at_ms} ms before the keymap read ended, so the keymap delay did not hold it`);
+      // Only a held key arrives after the keymap read ends. A key the page got at once would show about 2 s before it.
+      expect(space_keydown_at >= released_at, `Space reached the page ${released_at - space_keydown_at} ms before the keymap read ended, so the keymap delay did not hold it`);
     } finally {
       await delay_keymap_reads(false);
     }
