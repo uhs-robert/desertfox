@@ -6,6 +6,7 @@ import type { HistoryRow, Visit } from "./history_cache.ts";
 import { reads_history, snapshot_of } from "./completion_rank.ts";
 import type { HistoryNode, RankInputs, Snapshot } from "./completion_rank.ts";
 import type { RankedReply, RankRequest, RankSource } from "../shared/rank_port.ts";
+import { warn_and_go } from "../shared/swallow.ts";
 
 // The history events, in the order Firefox fired them.
 export type HistoryEvent = { kind: "visited"; visit: Visit } | { kind: "title"; url: string; title: string } | { kind: "removed"; allHistory: boolean; urls: string[] };
@@ -24,7 +25,6 @@ export type ToWorker =
   | { type: "history_rows"; id: number };
 
 export type FromWorker =
-  | { type: "ready" }
   | { type: "ask"; id: number; question: Question }
   | { type: "ranked"; line: number; reply: RankedReply }
   // A line's snapshot came from the fallback rows and the fill has ended: its page should ask again.
@@ -78,6 +78,16 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
     }
   };
 
+  // The service lets a line have one request in the Worker at a time, so a request that throws must still answer, or the line waits on it for good.
+  const rank_and_answer = async (line_id: number, request: RankRequest) => {
+    try {
+      await rank(line_id, request);
+    } catch (error) {
+      warn_and_go("rank_index.rank")(error);
+      post({ type: "ranked", line: line_id, reply: { type: "ranked", seq: request.seq, rows: [], partial: false, failed: true } });
+    }
+  };
+
   void history.when_ready().then(() => {
     for (const [line_id, line] of lines) {
       const partial = [...line.snapshots].filter(([, entry]) => entry.partial);
@@ -87,7 +97,6 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
   });
 
   void history.start();
-  post({ type: "ready" });
 
   return {
     receive: (message: ToWorker) => {
@@ -106,7 +115,7 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
         lines.set(message.line, line);
         line.inputs.set(message.inputs.source, message.inputs);
         line.snapshots.delete(message.inputs.source);
-      } else if (message.type === "rank") void rank(message.line, message.request);
+      } else if (message.type === "rank") void rank_and_answer(message.line, message.request);
       else if (message.type === "close") lines.delete(message.line);
       else post({ type: "history_rows", id: message.id, rows: history.read() as HistoryRow[] | undefined });
     },

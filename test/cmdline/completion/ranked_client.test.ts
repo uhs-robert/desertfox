@@ -105,3 +105,21 @@ test("a skipped reply keeps nothing and sends the word waiting behind it", () =>
   assert.deepEqual(sent.map((request) => request.word), ["a", "ab"]);
   assert.equal(read("a").ready, false);
 });
+
+test("an answer that never comes counts as an empty one after 5 s, so the list stops loading and the next word goes out", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { client, sent, reply, read, ready } = make();
+  read("a");
+  read("ab");
+  t.mock.timers.tick(4999);
+  assert.equal(ready(), 0);
+  t.mock.timers.tick(1);
+  assert.equal(ready(), 1);
+  assert.deepEqual(names_of(read("a")), []);
+  assert.deepEqual(sent.map((request) => request.word), ["a", "ab"]);
+  // An answer that lands in time stops its own clock.
+  client.receive(reply(sent[1]!));
+  t.mock.timers.tick(5000);
+  assert.equal(ready(), 2);
+  assert.deepEqual(names_of(read("ab")), ["ab"]);
+});

@@ -20,6 +20,9 @@ const KEPT_ANSWERS = 4;
 
 const EMPTY: RankedReply = { type: "ranked", seq: 0, rows: [], partial: false };
 
+// The background answers every request, even one that fails. This catches an answer lost anyway, such as from a Worker that hangs: the query then lists nothing, and the keys that wait for its rows run.
+const ANSWER_LIMIT_MS = 5000;
+
 const key_of = (query: RankQuery) => `${query.source} ${query.over_fetch} ${query.word}`;
 
 export function create_ranked_client(deps: RankedClientDeps) {
@@ -33,6 +36,28 @@ export function create_ranked_client(deps: RankedClientDeps) {
   const send = (query: RankQuery) => {
     in_flight = { seq: ++seq, key: key_of(query) };
     deps.send({ type: "rank", seq, source: query.source, word: query.word, limit: RANKED_ROWS, over_fetch: query.over_fetch });
+    // Lands only while this request is the one in flight, by its sequence number.
+    setTimeout(receive, ANSWER_LIMIT_MS, { ...EMPTY, seq });
+  };
+
+  const receive = (message: RankPush) => {
+    if (ended) return;
+    if (message.type === "stale") {
+      // The answers came from the newest 1000 pages while the history loaded. One in flight was ranked after the push, so it lands.
+      answers.clear();
+      return deps.on_ready();
+    }
+    if (message.seq !== in_flight?.seq) return;
+    const { key } = in_flight;
+    in_flight = undefined;
+    if (!message.skipped) {
+      answers.set(key, message);
+      if (answers.size > KEPT_ANSWERS) answers.delete(answers.keys().next().value!);
+    }
+    const waiting = next;
+    next = undefined;
+    if (waiting && !answers.has(key_of(waiting))) send(waiting);
+    deps.on_ready();
   };
 
   return {
@@ -49,25 +74,7 @@ export function create_ranked_client(deps: RankedClientDeps) {
       else next = in_flight.key === key ? undefined : query;
       return { ready: false };
     },
-    receive: (message: RankPush) => {
-      if (ended) return;
-      if (message.type === "stale") {
-        // The answers came from the newest 1000 pages while the history loaded. One in flight was ranked after the push, so it lands.
-        answers.clear();
-        return deps.on_ready();
-      }
-      if (message.seq !== in_flight?.seq) return;
-      const { key } = in_flight;
-      in_flight = undefined;
-      if (!message.skipped) {
-        answers.set(key, message);
-        if (answers.size > KEPT_ANSWERS) answers.delete(answers.keys().next().value!);
-      }
-      const waiting = next;
-      next = undefined;
-      if (waiting && !answers.has(key_of(waiting))) send(waiting);
-      deps.on_ready();
-    },
+    receive,
     // The line closed or the port went away: a late answer lands nowhere.
     end: () => {
       ended = true;

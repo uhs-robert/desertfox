@@ -1,5 +1,6 @@
 // The ranked lists end to end in one process: the page's ranked client, a fake rank port, the background's rank service and a fake Worker that runs the real rank index.
 // Every hop is a message delivered later and in order, as `postMessage` delivers them, so tests can drive races between the hops.
+// Each hop copies its message when it is posted, as the browser does, so a sender that changes the object afterwards changes nothing on the way.
 import { create_rank_index } from "../../src/background/rank_index.ts";
 import type { FromWorker, ToWorker } from "../../src/background/rank_index.ts";
 import { create_rank_service } from "../../src/background/rank_service.ts";
@@ -21,6 +22,10 @@ export type PipelineOptions = {
   is_opener?: (tab_id: number, frame_id: number) => Promise<boolean>;
   // Whether a new Worker loads. False makes it fail before `ready`, as a script that cannot load does.
   worker_loads?: () => boolean;
+  // Whether a new Worker crashes just after it loads, as one that runs out of memory during its fill does.
+  crashes_after_start?: () => boolean;
+  // Messages to the Worker that it never handles, as a Worker that hangs.
+  worker_ignores?: (message: ToWorker) => boolean;
   // The service's restart waits, scaled, so a test need not wait seconds.
   timer_scale?: number;
 };
@@ -47,12 +52,14 @@ export function rank_pipeline(options: PipelineOptions) {
     const worker: RankWorker = {
       onmessage: null,
       onerror: null,
-      postMessage: (message) =>
+      postMessage: (message) => {
+        const sent = structuredClone(message);
         later(() => {
-          if (fake.terminated || !fake.index) return;
-          fake.received.push(message);
-          fake.index.receive(structuredClone(message));
-        }),
+          if (fake.terminated || !fake.index || options.worker_ignores?.(sent)) return;
+          fake.received.push(sent);
+          fake.index.receive(structuredClone(sent));
+        });
+      },
       terminate: () => void (fake.terminated = true),
     };
     fake.crash = () => worker.onerror?.({ message: "crash" });
@@ -60,13 +67,21 @@ export function rank_pipeline(options: PipelineOptions) {
     later(() => {
       if (fake.terminated) return;
       if (!loads) return worker.onerror?.({ message: "load failed" });
-      fake.index = create_rank_index((message: FromWorker) => later(() => !fake.terminated && worker.onmessage?.({ data: structuredClone(message) })));
+      fake.index = create_rank_index((message: FromWorker) => {
+        const sent = structuredClone(message);
+        later(() => !fake.terminated && worker.onmessage?.({ data: sent }));
+      });
+      if (options.crashes_after_start?.()) later(() => !fake.terminated && worker.onerror?.({ message: "out of memory" }));
     });
     workers.push(fake);
     return worker;
   };
 
   const scale = options.timer_scale ?? 1;
+  // Every wait the service asked for, unscaled, in order.
+  const timer_delays: number[] = [];
+  // Added to the clock the service reads, so a test can age a Worker without waiting.
+  let clock_offset_ms = 0;
   const deps: RankServiceDeps = {
     start_worker,
     search: async (max) => {
@@ -78,8 +93,12 @@ export function rank_pipeline(options: PipelineOptions) {
     inputs: options.inputs,
     is_opener: options.is_opener ?? (async () => true),
     is_line_page: () => true,
-    set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms * scale),
+    set_timer: (callback, delay_ms) => {
+      timer_delays.push(delay_ms);
+      return setTimeout(callback, delay_ms * scale);
+    },
     clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    now: () => Date.now() + clock_offset_ms,
   };
   const service = create_rank_service(deps);
 
@@ -92,7 +111,10 @@ export function rank_pipeline(options: PipelineOptions) {
     const background_port: RankPort = {
       name: RANK_PORT_NAME,
       sender,
-      postMessage: (message) => later(() => open && client.receive(structuredClone(message))),
+      postMessage: (message) => {
+        const sent = structuredClone(message);
+        later(() => open && client.receive(sent));
+      },
       disconnect: () => {
         open = false;
         disconnected_by_background = true;
@@ -112,7 +134,8 @@ export function rank_pipeline(options: PipelineOptions) {
           service.connect(background_port);
         }
         sent.push(request);
-        later(() => open && to_background.message.forEach((listener) => listener(structuredClone(request))));
+        const copy = structuredClone(request);
+        later(() => open && to_background.message.forEach((listener) => listener(copy)));
       },
       on_ready,
     });
@@ -125,7 +148,8 @@ export function rank_pipeline(options: PipelineOptions) {
           connected = true;
           service.connect(background_port);
         }
-        later(() => open && to_background.message.forEach((listener) => listener(message)));
+        const copy = structuredClone(message);
+        later(() => open && to_background.message.forEach((listener) => listener(copy)));
       },
       // The line closes: the client ends and the port goes.
       close: () => {
@@ -148,6 +172,8 @@ export function rank_pipeline(options: PipelineOptions) {
   return {
     service,
     workers,
+    timer_delays,
+    pass_time: (ms: number) => void (clock_offset_ms += ms),
     line,
     hold_searches: () => void (hold_searches = true),
     release_searches: () => {

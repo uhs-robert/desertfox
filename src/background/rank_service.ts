@@ -39,11 +39,14 @@ export type RankServiceDeps = {
   is_line_page: (port: RankPort) => boolean;
   set_timer: (callback: () => void, delay_ms: number) => unknown;
   clear_timer: (handle: unknown) => void;
+  now: () => number;
 };
 
-// A Worker that fails before it says `ready` restarts after this wait, doubled each time, so a Worker that cannot start does not spin.
+// A Worker that fails within `STABLE_MS` of its start restarts after this wait, doubled each time, so a Worker that cannot load or dies in its fill does not spin.
+// One that ran longer restarts at once.
 const RESTART_FIRST_MS = 250;
 const RESTART_MAX_MS = 30_000;
+const STABLE_MS = 5000;
 // A handler that reads the history falls back to the plain search when the Worker does not answer in time.
 const HISTORY_ROWS_WAIT_MS = 2000;
 const MAX_WORD_LENGTH = 1000;
@@ -55,7 +58,7 @@ const is_count = (value: unknown, max: number): value is number => Number.isInte
 
 const is_rank_request = (message: unknown): message is RankRequest => {
   const request = message as Partial<RankRequest> | undefined;
-  return request?.type === "rank" && is_count(request.seq, Number.MAX_SAFE_INTEGER) && SOURCES.includes(request.source) && typeof request.word === "string" && request.word.length <= MAX_WORD_LENGTH && is_count(request.limit, RANKED_ROWS) && is_count(request.over_fetch, MAX_OVER_FETCH);
+  return request?.type === "rank" && is_count(request.seq, Number.MAX_SAFE_INTEGER) && SOURCES.includes(request.source) && typeof request.word === "string" && is_count(request.limit, RANKED_ROWS) && is_count(request.over_fetch, MAX_OVER_FETCH);
 };
 
 type Line = {
@@ -75,7 +78,7 @@ type Line = {
 
 export function create_rank_service(deps: RankServiceDeps) {
   let worker: RankWorker | undefined;
-  let worker_ready = false;
+  let worker_started_at = 0;
   let failures = 0;
   let restart_timer: unknown;
   let next_rows_id = 0;
@@ -87,11 +90,12 @@ export function create_rank_service(deps: RankServiceDeps) {
 
   const relay = async (line: Line, request: RankRequest) => {
     line.in_flight = request;
+    const asked = worker;
     let inputs = line.inputs.get(request.source);
     if (!inputs) line.inputs.set(request.source, (inputs = deps.inputs(request.source, line.asker!).catch(warn_and_go("rank_service.inputs", no_inputs(request.source, line.asker!.incognito)))));
     const read = await inputs;
     // A restart while the inputs were read relays this request again itself.
-    if (line.closed || line.in_flight !== request || !worker) return;
+    if (line.closed || line.in_flight !== request || !worker || worker !== asked) return;
     if (!line.posted.has(request.source)) {
       post({ type: "inputs", line: line.id, inputs: read });
       line.posted.add(request.source);
@@ -113,10 +117,7 @@ export function create_rank_service(deps: RankServiceDeps) {
   };
 
   const from_worker = (message: FromWorker) => {
-    if (message.type === "ready") {
-      worker_ready = true;
-      failures = 0;
-    } else if (message.type === "ask") void answer_question(message.id, message.question);
+    if (message.type === "ask") void answer_question(message.id, message.question);
     else if (message.type === "history_rows") {
       rows_waiting.get(message.id)?.(message.rows);
       rows_waiting.delete(message.id);
@@ -135,7 +136,7 @@ export function create_rank_service(deps: RankServiceDeps) {
 
   const start = () => {
     restart_timer = undefined;
-    worker_ready = false;
+    worker_started_at = deps.now();
     let started: RankWorker;
     try {
       started = deps.start_worker();
@@ -150,6 +151,8 @@ export function create_rank_service(deps: RankServiceDeps) {
       if (worker === started) lost();
     };
     for (const line of lines.values()) {
+      // The line's kept answers came from the old Worker, maybe from its fallback rows, and the new one does not know the line until it asks again.
+      if (line.posted.size > 0) line.port.postMessage({ type: "stale" });
       line.posted.clear();
       if (line.in_flight) void relay(line, line.in_flight);
     }
@@ -161,9 +164,8 @@ export function create_rank_service(deps: RankServiceDeps) {
     worker = undefined;
     for (const resolve of rows_waiting.values()) resolve(undefined);
     rows_waiting.clear();
-    const delay = worker_ready ? 0 : Math.min(RESTART_MAX_MS, RESTART_FIRST_MS * 2 ** failures);
-    failures = worker_ready ? 0 : failures + 1;
-    worker_ready = false;
+    failures = deps.now() - worker_started_at < STABLE_MS ? failures + 1 : 0;
+    const delay = failures === 0 ? 0 : Math.min(RESTART_MAX_MS, RESTART_FIRST_MS * 2 ** (failures - 1));
     restart_timer = deps.set_timer(start, delay);
   };
 
@@ -178,6 +180,8 @@ export function create_rank_service(deps: RankServiceDeps) {
 
   const on_request = async (line: Line, message: unknown) => {
     if (!is_rank_request(message) || !(await line.admitted) || line.closed) return;
+    // Too long to rank, but the line waits for an answer to every request it sends.
+    if (message.word.length > MAX_WORD_LENGTH) return line.port.postMessage({ type: "ranked", seq: message.seq, rows: [], partial: false });
     if (!line.in_flight) return void relay(line, message);
     if (line.queued) line.port.postMessage({ type: "ranked", seq: line.queued.seq, rows: [], partial: false, skipped: true });
     line.queued = message;
@@ -256,5 +260,6 @@ export function browser_rank_service_deps(from_services: Pick<RankServiceDeps, "
     is_line_page: (port) => port.sender?.url?.replace(/[?#].*$/, "") === line_page_url,
     set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),
     clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    now: Date.now,
   };
 }

@@ -175,10 +175,13 @@ test("a Worker that crashes with a request in flight restarts, fills again and a
   pipeline.hold_searches();
   line.client.read({ source: "history", word: "beta", over_fetch: 0 });
   await new Promise((resolve) => setImmediate(resolve));
+  // It ran long enough to count as started, so the new one starts at once.
+  pipeline.pass_time(5000);
   pipeline.workers[0]!.crash();
   pipeline.release_searches();
   await pipeline.settle();
   assert.equal(pipeline.workers.length, 2);
+  assert.deepEqual(pipeline.timer_delays, [0]);
   assert.equal(pipeline.workers[0]!.terminated, true);
   assert.deepEqual(await names("beta"), ["beta"]);
   // The new Worker got the line's inputs again before the request.
@@ -211,4 +214,82 @@ test("the history rows read undefined while the fill runs, and a copy once it en
   pipeline.release_searches();
   await pipeline.settle();
   assert.deepEqual((await pipeline.service.history_rows())?.map((row) => row.url), ["https://alpha.test/", "https://beta.test/", "https://gamma.test/"]);
+});
+
+test("a throw while a list is built still answers, empty and marked failed, so the line asks again for the next word", async () => {
+  const { pipeline } = make(undefined, { inputs: async (_source, asker) => ({ source: "open", incognito: asker.incognito, sources: ["history"], history_max: 10, bookmarks: null as never }) });
+  pipeline.service.start();
+  await pipeline.settle();
+  const { names, replies } = open_line(pipeline);
+  assert.deepEqual(await names("alpha", "open"), []);
+  assert.deepEqual(await names("beta", "open"), []);
+  assert.deepEqual(replies().map((reply) => reply.failed), [true, true]);
+});
+
+test("a word longer than the service ranks gets an empty answer, so the line does not wait on it", async () => {
+  const { pipeline } = make();
+  pipeline.service.start();
+  await pipeline.settle();
+  const { names } = open_line(pipeline);
+  assert.deepEqual(await names("a".repeat(1001)), []);
+  assert.deepEqual(await names("alpha"), ["alpha"]);
+});
+
+test("a Worker that keeps crashing soon after it starts restarts after a wait that doubles", async () => {
+  let starts = 0;
+  const { pipeline } = make(undefined, { crashes_after_start: () => ++starts <= 4, timer_scale: 0.01 });
+  pipeline.service.start();
+  const { names } = open_line(pipeline);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  await pipeline.settle();
+  assert.deepEqual(pipeline.timer_delays, [250, 500, 1000, 2000]);
+  assert.deepEqual(await names("gamma"), ["gamma"]);
+});
+
+test("a restart while a line's inputs are read sends its request to the new Worker once", async () => {
+  let release_inputs = () => {};
+  const held_inputs = new Promise<void>((resolve) => (release_inputs = resolve));
+  const { pipeline } = make(undefined, {
+    inputs: async (source, asker) => {
+      await held_inputs;
+      return { source: "history", incognito: asker.incognito, max: 20 } as RankInputs;
+    },
+  });
+  pipeline.service.start();
+  await pipeline.settle();
+  const { line, names } = open_line(pipeline);
+  line.client.read({ source: "history", word: "beta", over_fetch: 0 });
+  await pipeline.settle();
+  pipeline.pass_time(5000);
+  pipeline.workers[0]!.crash();
+  await pipeline.settle();
+  release_inputs();
+  assert.deepEqual(await names("beta"), ["beta"]);
+  assert.equal(pipeline.workers[1]!.received.filter((message) => message.type === "rank").length, 1);
+});
+
+test("a Worker restart tells each line that ranked to ask again, so a partial answer does not stay", async () => {
+  const history = [...Array.from({ length: 1000 }, (_, index) => visit(`new${index}`, index)), visit("old", 5000)];
+  const { pipeline } = make(history);
+  pipeline.hold_searches();
+  pipeline.service.start();
+  const { names, pushes } = open_line(pipeline);
+  assert.deepEqual(await names("old"), []);
+  pipeline.pass_time(5000);
+  pipeline.workers[0]!.crash();
+  await pipeline.settle();
+  pipeline.release_searches();
+  await pipeline.settle();
+  assert.equal(pushes.some((push) => push.type === "stale"), true);
+  assert.deepEqual(await names("old"), ["old"]);
+});
+
+test("the history rows read undefined when the Worker does not answer within 2 s", async () => {
+  const { pipeline } = make(undefined, { worker_ignores: (message) => message.type === "history_rows", timer_scale: 0.01 });
+  pipeline.service.start();
+  await pipeline.settle();
+  const started = Date.now();
+  assert.equal(await pipeline.service.history_rows(), undefined);
+  assert.equal(Date.now() - started >= 15, true);
+  assert.deepEqual(pipeline.timer_delays, [2000]);
 });
