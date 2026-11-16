@@ -81,7 +81,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("search keyfam. lists the family, Tab previews its engine and Enter runs the search with it", async () => {
     await open_line();
     const mark = events.length;
-    await type_in_line("search keyfam.");
+    // The engine rows come from the background after the text, and a Tab pressed before they land does nothing.
+    await type_in_line("search keyfam.", { until: (line) => line.rows > 0, what: "the keyfam. family rows" });
     await complete_in_line();
     await type_in_line("hello");
     await press_keys("-k", "Return");
