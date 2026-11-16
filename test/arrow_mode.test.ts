@@ -241,6 +241,8 @@ test("a mode with the sticky flag keeps running through a mouse press or an unca
 });
 
 test("mode.site with toggle starts the mode the first time and ends it the second", async () => {
+  // The start reads the focus, which a top frame with nothing focused answers with no element.
+  Object.assign(globalThis, { document: { activeElement: null }, HTMLElement: class {}, window: { frameElement: null } });
   site_mode.modes_ = { arrow: { label: "ARROW", tree: {}, sticky: true } };
   site_mode.on_change_ = () => {};
   await mode_site.run({ name: "arrow", toggle: true }, false);
