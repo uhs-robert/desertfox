@@ -133,10 +133,12 @@ function recorded_leaders(runtime_dir) {
   return text.split("\n").map((line) => line.split(" ")).filter(([pid, ticks]) => /^\d+$/.test(pid) && /^\d+$/.test(ticks ?? "") && leader_is_running(Number(pid), ticks)).map(([pid]) => Number(pid));
 }
 
-// Every running process in a recorded group, also after its leader exited: a member can outlive the leader and ignore SIGTERM.
-// While any member lives, the kernel keeps the pgid from being reused as a pid. A leader that is still there must match its
-// recorded start time, so a recorded pid that a new process took over is never counted.
-function recorded_group_members(runtime_dir) {
+// Every running process in a group that a stop follows: the recorded leaders that ran when the stop began (`followed`) and
+// those that run now. A member can outlive its leader and ignore SIGTERM, so a followed group counts after its leader exits.
+// A recorded leader already dead when the stop began is not followed: its pid may name an unrelated group by now. While a
+// member lives, the kernel keeps the group id from being reused. A leader that is still there must match its recorded
+// start time.
+function recorded_group_members(runtime_dir, followed) {
   let text;
   try {
     text = readFileSync(join(runtime_dir, PIDS_FILE), "utf8");
@@ -144,15 +146,16 @@ function recorded_group_members(runtime_dir) {
     return [];
   }
   const recorded = new Map(text.split("\n").map((line) => line.split(" ")).filter(([pid, ticks]) => /^\d+$/.test(pid) && /^\d+$/.test(ticks ?? "")).map(([pid, ticks]) => [Number(pid), ticks]));
+  const groups = new Set([...followed, ...recorded_leaders(runtime_dir)]);
   const members = [];
   for (const entry of readdirSync("/proc")) {
     if (!/^\d+$/.test(entry)) continue;
     const pid = Number(entry);
     const found = process_state_and_ticks(pid);
     const pgid = process_group_of(pid);
-    if (found === undefined || found.state === "Z" || !recorded.has(pgid)) continue;
-    if (pid === pgid && found.ticks !== recorded.get(pgid)) continue;
-    if (pid !== pgid && process_state_and_ticks(pgid) !== undefined && process_state_and_ticks(pgid).ticks !== recorded.get(pgid)) continue;
+    if (found === undefined || found.state === "Z" || !groups.has(pgid)) continue;
+    const leader = pid === pgid ? found : process_state_and_ticks(pgid);
+    if (leader !== undefined && leader.ticks !== recorded.get(pgid)) continue;
     members.push(pid);
   }
   return members;
@@ -186,12 +189,13 @@ async function terminate(pids_now, wait_ms, signal_now = signal_all) {
 // The clients go first, so Firefox and the keyboard never see their compositor vanish under them. Then the rest of
 // the session, bus and compositors and any stray that carries the dir. A process left after SIGKILL is an error.
 async function stop_runtime(runtime_dir, client_groups = new Set()) {
+  const followed = new Set(recorded_leaders(runtime_dir));
   const is_client = (pid) => client_groups.has(process_group_of(pid));
   if (client_groups.size > 0) await terminate(() => pids_carrying(runtime_dir).filter(is_client), STOP_WAIT_MS);
   await terminate(() => pids_carrying(runtime_dir), STOP_WAIT_MS);
   // The recorded groups after the carriers, so labwc outlives the Hyprland nested in it.
-  await terminate(() => recorded_group_members(runtime_dir), STOP_WAIT_MS, signal_groups_of);
-  const everything_left = () => [...new Set([...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir), ...recorded_group_members(runtime_dir)])];
+  await terminate(() => recorded_group_members(runtime_dir, followed), STOP_WAIT_MS, signal_groups_of);
+  const everything_left = () => [...new Set([...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir), ...recorded_group_members(runtime_dir, followed)])];
   await wait_until("killed processes to go", () => everything_left().length === 0, { timeout_ms: 1000 }).catch(() => undefined);
   const left = everything_left();
   rmSync(runtime_dir, { recursive: true, force: true });
@@ -219,15 +223,16 @@ export function kill_session_now(name) {
   // A process stuck in an uninterruptible wait outlives SIGKILL. Its dir and owner file stay, so a later sweep stops it.
   // A failed /proc scan counts the same way, and never throws, since the caller exits right after.
   try {
+    const followed = new Set(recorded_leaders(runtime_dir));
     for (let pass = 0; pass < 50; pass++) {
       const pids = pids_carrying(runtime_dir);
-      const members = recorded_group_members(runtime_dir);
+      const members = recorded_group_members(runtime_dir, followed);
       if (pids.length === 0 && members.length === 0) break;
       signal_all(pids, "SIGKILL");
       signal_groups_of(members, "SIGKILL");
       sleep_sync(20);
     }
-    const left = [...new Set([...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir), ...recorded_group_members(runtime_dir)])];
+    const left = [...new Set([...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir), ...recorded_group_members(runtime_dir, followed)])];
     if (left.length > 0) {
       console.error(`session ${name}: processes still run from ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
       return;

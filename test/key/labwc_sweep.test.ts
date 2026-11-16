@@ -220,3 +220,32 @@ test("stopping a session ends a group member that ignores SIGTERM after its lead
   assert.ok(!is_running(leader.pid!));
   assert.ok(!is_running(member!), "the member that ignored SIGTERM is killed");
 }));
+
+test("stopping a session spares an unrelated group whose pgid a dead recorded leader once held", { skip }, () => with_tmp_root(async () => {
+  const name = `lsh${process.pid.toString(36)}`;
+  const runtime_dir = runtime_dir_of(name);
+  runtime_dirs.push(runtime_dir);
+  mkdirSync(runtime_dir, { recursive: true, mode: 0o700 });
+  // A process of ours that took the pid, called setsid and exited, as a reused pid would: its child keeps the group.
+  const code = 'use POSIX; $| = 1; setsid(); if (fork()) { exit 0 } else { print qq(ready\\n); sleep 300 }';
+  const stranger = spawn("perl", ["-e", code], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
+  started.push(stranger);
+  await new Promise<void>((resolve_ready, reject_ready) => {
+    const timer = setTimeout(() => reject_ready(new Error("the stranger was not ready within 5 s")), 5000);
+    createInterface({ input: stranger.stdout! }).once("line", () => { clearTimeout(timer); resolve_ready(); });
+  });
+  const child = readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).map(Number).find((pid) => {
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "latin1");
+      return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]) === stranger.pid && pid !== stranger.pid;
+    } catch {
+      return false;
+    }
+  });
+  // Reaped, so no zombie leader with other start ticks is left for the stop to compare.
+  for (let attempt = 0; attempt < 100 && existsSync(`/proc/${stranger.pid}`); attempt++) await new Promise((resolve_wait) => setTimeout(resolve_wait, 50));
+  assert.ok(child !== undefined && !existsSync(`/proc/${stranger.pid}`), "the stranger's leader is gone and its child lives in the group");
+  writeFileSync(join(runtime_dir, "pids"), `${stranger.pid} 1\n`);
+  await stop_session_named(name);
+  assert.ok(is_running(child!), "a group of a leader that was dead before the stop is left alone");
+}));
