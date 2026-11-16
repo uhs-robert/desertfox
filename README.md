@@ -30,7 +30,7 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 <p align="center"><img src="./docs/images/drag.gif" width="800" alt="One card on the Practice page work board is grabbed with ;gg and dropped on the Doing column picked by hint, then grabbed again and dropped on Done."/></p>
 
-You can edit any text box in Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)).
+You can edit any text box in your own editor, such as Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor (see [host/README.md](host/README.md)). Without it the key refuses and says where to create the file.
 
 ## 🏆 Why DesertFox
 
@@ -100,7 +100,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Script loaded on every page and frame | 20.4 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
+| Script loaded on every page and frame | 20.3 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
 
@@ -154,7 +154,7 @@ You gain:
 - A which-key popup for the keys you forget, and a Practice page for the ones you never learned.
 - Keyboard drag and drop, which neither Vimium nor Tridactyl has built in.
 - Macros and caret mode, which Tridactyl lacks, and settings per site, where Vimium has keys only.
-- A script of 20.4 KB on each page.
+- A script of 20.3 KB on each page.
 
 You lose:
 
