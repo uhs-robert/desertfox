@@ -25,5 +25,6 @@ The source archive for the submit comes from `just source_archive`. Its `BUILD.m
    - `docs/images/theme-switch.png`: 29 built-in themes. One command switches, and a message confirms it.
    - `docs/images/drag.png`: Drag and drop without the mouse: grab a card, then type the label on its target.
 5. After approval, add the signed xpi to the release with `gh release upload v<version> <file>` if you want it there.
+6. Point the README at the listing.
 
 After the add-on is listed, `just release` signs the unlisted channel. It does not touch the listing, and a new listed version still follows the steps above.

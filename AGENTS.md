@@ -6,8 +6,6 @@ Guidance for coding agents in this repository. `CLAUDE.md` points here. Keep the
 
 DesertFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host.
 
-A change to stored data needs a migration.
-
 ## Where to look
 
 Read the design for an area before you change it. Read a folder's README before you change or research code in that folder.
@@ -33,6 +31,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Put no test hooks in `src/`. Tests drive the extension through its public surface. The one exception is the `data-desertfox-tree-read-ms` attribute on the document element, which the key test reads as the signal that the content script is ready.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small. A copy of stored state may sit in memory when it refills from storage and drops on `storage.onChanged` (see `src/background/keymap_source.ts`).
+- Write a migration for every change to stored data: extension storage, config files and exported zips. An installed copy keeps working after an update.
 - Set each command line name by hand. Never derive it from the id. The registry rejects duplicate names.
 - Express flags that exclude each other as one `enum` param with preset flags. `when`, the conditional `default`, `value_when` (which values of an enum a sibling's value allows) and `pattern_arms` (which text pattern a string takes per sibling value) are the only conditions; the last three reuse the syntax of `when`. Split a command that needs more.
 - Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value. Throw runtime failures as `RuntimeRefusal`. A test fails when a handler refuses args the schema accepts.
@@ -118,4 +117,4 @@ While building, run `just key-test-changed [base]` or set `KEY_TEST_PIECES`, not
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`.
-- Put worktrees under `../desertfox-worktrees/`.
+- Put worktrees in a `desertfox-worktrees/` folder beside the main checkout.
