@@ -47,6 +47,9 @@ export type SessionDeps = {
 
 const NO_ROWS: Completion["rows"] = [];
 
+// The commands that act on the list's rows, so they can wait for rows on their way (`waits_for_rows`). Enter acts on rows only in the finder, and Up and Down only once the line is edited.
+export const ROW_COMMANDS: ReadonlySet<string> = new Set(["cmdline.next_completion", "cmdline.prev_completion", "cmdline.history", "cmdline.submit", "list.act", "list.select"]);
+
 export function create_session(deps: SessionDeps) {
   const cursor = create_history_cursor(deps.history);
   let text = "";
@@ -336,7 +339,7 @@ export function create_session(deps: SessionDeps) {
       if (command_id === "cmdline.submit") return completion.highlight_first === true;
       // A fresh line's Up and Down recall the history, not the list.
       if (command_id === "cmdline.history") return !fresh;
-      return command_id === "cmdline.next_completion" || command_id === "cmdline.prev_completion" || command_id === "list.act" || command_id === "list.select";
+      return ROW_COMMANDS.has(command_id);
     },
     // For the note row: the selected row's usage, else "no match" for an empty list, else the typed command's usage.
     get_hint: (): string | undefined => {
