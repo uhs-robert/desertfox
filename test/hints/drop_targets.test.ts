@@ -15,7 +15,12 @@ function page_of(specs: Spec[]): { nodes: Map<string, Node>; body: Node } {
   const nodes = new Map<string, Node>();
   const body: Node = { name: "body", localName: "body", parentElement: null, parentNode: null, children: [], classList: { contains: () => false, *[Symbol.iterator]() {} }, spec: { name: "body" } };
   const root = {
-    querySelectorAll: (selector: string) => (selector === MARKERS ? all.filter((node) => node.spec.marked !== undefined && MARKERS_LISTED.includes(node.spec.marked)) : all.filter((node) => node.localName === selector)),
+    // A tag name with a colon is no type selector until it is escaped, as in a browser.
+    querySelectorAll: (selector: string) => {
+      if (selector === MARKERS) return all.filter((node) => node.spec.marked !== undefined && MARKERS_LISTED.includes(node.spec.marked));
+      if (/(^|[^\\]):/.test(selector)) throw new SyntaxError("invalid selector");
+      return all.filter((node) => node.localName === selector.replace(/\\/g, ""));
+    },
   };
   const doc = { documentElement: { name: "html" }, body };
   const make = (spec: Spec, parent: Node): Node => {
@@ -138,4 +143,16 @@ test("two cards directly under the body give one place, which is too few, so the
   const targets = drop_targets_of(nodes.get("a") as unknown as Element)!;
   assert.deepEqual(names(targets), ["b"]);
   assert.equal(keeps_narrowing(targets.size), false);
+});
+
+test("a source whose tag is not a plain CSS name still finds its kin", () => {
+  const { nodes } = page_of([board([{ name: "col", children: [card("a", { tag: "o:p" }), card("b", { tag: "o:p" })] }])]);
+  assert.deepEqual(names(drop_targets_of(nodes.get("a") as unknown as Element)), ["b", "board", "col"].filter((name) => name !== "board"));
+});
+
+test("a selector error gives no narrowing, so the pass labels every element", () => {
+  const { nodes } = page_of([card("a"), card("b")]);
+  const source = nodes.get("a") as unknown as Element;
+  (source as unknown as { getRootNode: () => unknown }).getRootNode = () => ({ querySelectorAll: () => { throw new SyntaxError("bad"); } });
+  assert.equal(drop_targets_of(source), undefined);
 });

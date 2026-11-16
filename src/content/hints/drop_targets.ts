@@ -30,9 +30,21 @@ function is_kin(source: Element, other: Element): boolean {
 // - the siblings of each ancestor of the source: the empty columns and a trash box beside the board. They need no kin, so only a box counts, and a column that holds one wrapper stays.
 // - drop markers anywhere in the document.
 export function drop_targets_of(source: Element): Set<Element> | undefined {
+  try {
+    return read_targets(source);
+  } catch {
+    // A page quirk the selectors cannot read must not leave the pass with no labels.
+    return undefined;
+  }
+}
+
+// A tag such as `o:p` (pasted Office markup) is no type selector until its odd characters are escaped.
+const escaped_tag = (element: Element): string => element.localName.replace(/[^\w-]/g, "\\$&");
+
+function read_targets(source: Element): Set<Element> | undefined {
   if (source.matches(POINTER_WIDGETS)) return undefined;
   const root = source.getRootNode() as ParentNode;
-  const kin = Array.from(root.querySelectorAll(source.localName)).filter((other) => is_kin(source, other));
+  const kin = Array.from(root.querySelectorAll(escaped_tag(source))).filter((other) => is_kin(source, other));
   if (kin.length === 0) return undefined;
   const targets = new Set<Element>(kin);
   for (const card of [source, ...kin]) {
