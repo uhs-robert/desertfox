@@ -75,30 +75,38 @@ export async function run_cases({ config_dir, load_config_dir, take_shot, run_ca
       await poll_until("the key handler to start on the new tab page", async () => await in_background(`${NEWTAB_VIEW}.document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false));
       const tile_count = () => in_background(`${NEWTAB_VIEW}.document.querySelectorAll(".tiles .tile").length`);
       const labels = () => in_background(`(() => { const doc = ${NEWTAB_VIEW}.document; return [...doc.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0); })()`);
-      // Read only on a label mismatch: positions as "top/left", so a missing label points at the card it skipped and the window and lists box show a clip.
+      // Its reads only feed failure messages. Positions are "top/left", so a missing label points at the card it skipped and the window and lists box show a clip.
+      const read_layout = () => label_layout().catch((read_error) => read_error.message);
       const label_layout = () => in_background(`(() => { const view = ${NEWTAB_VIEW}; const doc = view.document; const lists = doc.querySelector(".lists"); const place = (node) => { const box = node.getBoundingClientRect(); return Math.round(box.top) + "/" + Math.round(box.left); }; return { window: view.innerWidth + "x" + view.innerHeight, lists_top_bottom: lists && [lists.getBoundingClientRect().top, lists.getBoundingClientRect().bottom].map(Math.round), lists_scroll_client: lists && [lists.scrollHeight, lists.clientHeight], cards: [...doc.querySelectorAll(".tiles .tile")].map(place), labels: [...doc.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map(place)) }; })()`);
       // A settings write redraws the page and swaps its whole tree, and the labels of a page that is still settling can miss cards. So `f` waits for the same tiles node, count and window size on two reads in a row.
       // The first read of a tiles node answers "new", so a swapped-in page starts the count again.
-      // Hints skip a card that the lists box clips, so a clipped box answers "clipped" and never counts as settled.
-      const tiles_state = () => in_background(`(() => { const view = ${NEWTAB_VIEW}; const tiles = view.document.querySelector(".tiles"); if (!tiles) return "none"; const fresh = !tiles.read_by_test; tiles.read_by_test = true; const lists = tiles.closest(".lists"); if (lists.scrollHeight > lists.clientHeight) return "clipped"; return fresh ? "new" : tiles.querySelectorAll(".tile").length + " " + view.innerWidth + "x" + view.innerHeight; })()`);
+      // Hints skip a card that the lists box clips, so a clipped box answers "clipped" and never counts as settled. The case assumes the lists box fits all its cards, which the 20 cards of a full run do in the test window.
+      // The 1 px allowance covers rounding: scrollHeight and clientHeight round the same fractional height on their own.
+      const tiles_state = () => in_background(`(() => { const view = ${NEWTAB_VIEW}; const tiles = view.document.querySelector(".tiles"); if (!tiles) return "none"; const fresh = !tiles.read_by_test; tiles.read_by_test = true; const lists = tiles.closest(".lists"); if (lists && lists.scrollHeight > lists.clientHeight + 1) return "clipped"; return fresh ? "new" : tiles.querySelectorAll(".tile").length + " " + view.innerWidth + "x" + view.innerHeight; })()`);
       let previous = "";
-      await poll_until("the tiles node, count and window size to stop changing with no card clipped", async () => {
-        const now = await tiles_state();
-        const same = now === previous && !["new", "none", "clipped"].includes(now);
-        previous = now;
-        return same;
-      }, { timeout_ms: 10000, step_ms: 150 });
+      try {
+        await poll_until("the tiles node, count and window size to stop changing with no card clipped", async () => {
+          const now = await tiles_state();
+          const same = now === previous && !["new", "none", "clipped"].includes(now);
+          previous = now;
+          return same;
+        }, { timeout_ms: 10000, step_ms: 150 });
+      } catch (error) {
+        throw new Error(`${error.message}: the last read was ${JSON.stringify(previous)}. Layout now: ${JSON.stringify(await read_layout())}`);
+      }
       const cards_now = await tile_count();
       // The page renders in about 100 ms, when it can still drop a key.
       await wait_view_takes_keys("newtab.html");
       await press_keys("f");
+      // Read at once, while a brief clip during the scan can still show. The read after a timeout comes seconds later.
+      const layout_at_f = await read_layout();
       // One label per card, plus the four built-in links and the command line hint.
       let last_labels;
       let last_tiles;
       try {
         await poll_until(`${cards_now + 5} hint labels, one per card`, async () => ((last_labels = await labels()), (last_tiles = await tile_count()), last_labels === last_tiles + 5));
       } catch (error) {
-        throw new Error(`${error.message}: the last read found ${last_labels} labels and ${last_tiles} tiles, so ${last_tiles + 5} labels were expected. Layout now: ${JSON.stringify(await label_layout().catch((read_error) => read_error.message))}`);
+        throw new Error(`${error.message}: the last read found ${last_labels} labels and ${last_tiles} tiles, so ${last_tiles + 5} labels were expected. Layout right after f: ${JSON.stringify(layout_at_f)}. Layout now: ${JSON.stringify(await read_layout())}`);
       }
       await press_keys("-k", "Escape");
     });
