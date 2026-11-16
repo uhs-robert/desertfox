@@ -80,6 +80,14 @@ document.addEventListener("pointerup", (e) => {
 <style>.card{height:30px;width:100px;margin:4px;background:#9cf}#aside{height:100px;padding-top:300px;background:#ddd}#zone{height:50px;width:150px;background:#fc9}</style>
 <div id="board"><div id="a"><div id="c1" class="card" draggable="true">card1</div><div id="c2" class="card" draggable="true">card2</div></div></div>
 <div id="aside"><div><div id="zone" ondragover="event.preventDefault()" ondrop="event.preventDefault();this.dataset.got='yes'">zone</div></div></div>`,
+  // A page with a same-origin frame (the dragin page). Both hold an html5 source and target, and each target records what dropped on it.
+  dragframe: `
+<div id="src" draggable="true" style="width:80px;height:30px;background:#9cf">src</div>
+<div id="dst" style="width:200px;height:40px;margin:10px 0;background:#fc9" ondragover="event.preventDefault()" ondrop="event.preventDefault();this.dataset.got='top'">dst</div>
+<iframe id="f" src="/drag?id=dragin_inner" style="display:block;width:320px;height:160px"></iframe>`,
+  dragin: `
+<div id="fsrc" draggable="true" style="width:80px;height:30px;background:#9cf">fsrc</div>
+<div id="fdst" style="width:200px;height:40px;margin:10px 0;background:#fc9" ondragover="event.preventDefault()" ondrop="event.preventDefault();this.dataset.got='frame'">fdst</div>`,
   h5: `
 <div id="src" draggable="true" style="width:80px;height:40px;background:#9cf">src</div>
 <div id="dst" style="width:200px;height:80px;margin-top:20px;background:#fc9">dst</div>
