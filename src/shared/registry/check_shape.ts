@@ -75,7 +75,7 @@ export function check_args_shape(
   for (const param of params) {
     if (!param.when) continue;
     const explicit = args[param.name] !== undefined;
-    const error = when_error(command, param, args);
+    const error = when_error(param, args);
     if (error && explicit) return fail(error);
     if (error) continue;
     const value = explicit ? args[param.name] : default_of(param);
@@ -162,7 +162,7 @@ function enum_values(param: ParamDef, sources: EnumSources): readonly string[] |
   return is_dynamic_values(param.values) ? sources[param.values.from] : static_values(param);
 }
 
-function when_error(command: Pick<CommandDef, "params">, param: ParamDef, args: CheckedArgs): string | null {
+function when_error(param: ParamDef, args: CheckedArgs): string | null {
   const [sibling_name, allowed] = Object.entries(param.when ?? {})[0] as [string, readonly ParamValue[]];
   const sibling_value = args[sibling_name];
   if (is_context_source(sibling_value)) return null;

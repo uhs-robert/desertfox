@@ -1,7 +1,7 @@
 import tseslint from "typescript-eslint";
 
 // test/ is out of scope: node:test calls `test(...)` return promises, which is thousands of hits that are not bugs.
-// The two promise rules catch a promise nobody awaits and a promise handed to a callback that ignores it. A third rule bans a silent `.catch` handler: name the reason with a helper from src/shared/swallow.ts. Two more rules: a switch over a union lists every member, and an unused import, local or argument is an error unless its name starts with `_`. A rest-destructure sibling is spared (`ignoreRestSiblings`), because omit-by-rest is how this code drops a key. No other style rules, no formatter.
+// The two promise rules catch a promise nobody awaits and a promise handed to a callback that ignores it. A third rule bans a silent `.catch` handler: name the reason with a helper from src/shared/swallow.ts. Two more rules: a switch over a union lists every member, and an unused import, local or argument (`args: "all"`, so one before a used argument counts too) is an error unless its name starts with `_`. A rest-destructure sibling is spared (`ignoreRestSiblings`), because omit-by-rest is how this code drops a key. No other style rules, no formatter.
 // Silent means a handler that cannot act on the error, in `.catch(h)` or as the second argument of `.then(ok, h)`. Without a parameter, the body is empty, returns nothing, or is a bare value instead of an action (`() => undefined`, `function () {}`, `() => { return []; }`). A call, await, assignment, `void log(x)` or `fn?.()` acts and is spared. With a parameter, only a constant body counts (`_e => undefined`, `(error) => []`), because a body such as `error.message` may use the error.
 // A handler passed as an identifier (`.catch(noop)`) is not checked: that needs scope analysis. src/shared/swallow.ts is exempt in the config below, since the helpers live there. There is no comment escape except an `eslint-disable-next-line` with a reason, for a site a bundle size guard forces inline.
 const ACTING = "/^(CallExpression|AwaitExpression|ChainExpression|AssignmentExpression|UpdateExpression|SequenceExpression)$/";
@@ -61,7 +61,7 @@ export default tseslint.config(
             "@typescript-eslint/no-floating-promises": "error",
             "@typescript-eslint/no-misused-promises": "error",
             "@typescript-eslint/switch-exhaustiveness-check": "error",
-            "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }],
+            "@typescript-eslint/no-unused-vars": ["error", { args: "all", argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }],
             "no-restricted-syntax": ["error", { selector: SILENT_CATCH_HANDLER, message: "Silent .catch: name the reason with a helper from src/shared/swallow.ts, or log with warn_and_go." }],
         },
     },
