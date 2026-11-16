@@ -18,6 +18,7 @@ import { DEFAULT_LIGHT_INTENSITY, DEFAULT_THEME, DEFAULT_SETTINGS } from "../sha
 import { DESKTOP_THEME, LIGHT_INTENSITIES } from "../shared/theme/roles.ts";
 import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
+import { parse_font_family } from "../shared/theme/font_family.ts";
 import type { Registry } from "../shared/registry/index.ts";
 import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
@@ -40,6 +41,20 @@ export type CompileInput = {
   // The theme the desktop last pushed. `theme = "desktop"` shows it, or the default while none was pushed.
   desktop_theme?: string | undefined;
 };
+
+// The font settings as the `font` field of the stored theme, with only the ones that are set. A value the parser refuses was warned about when the settings were checked, so it reads as unset here.
+function stored_font(settings: MergedConfig["settings"]): Pick<StoredTheme, "font"> {
+  const family = parse_font_family(settings.font_family);
+  const mono = parse_font_family(settings.font_family_mono);
+  // The settings check holds the scale to 50-300 before it is stored.
+  const percent = settings.font_scale;
+  const font = {
+    ...(family && { "--desertfox-font-family": family }),
+    ...(mono && { "--desertfox-font-family-mono": mono }),
+    ...(percent && percent !== 100 && { "--desertfox-font-scale": String(percent / 100) }),
+  };
+  return Object.keys(font).length > 0 ? { font } : {};
+}
 
 export type CompileOutput = { compiled: CompiledKeymap; theme: StoredTheme; warnings: string[] };
 
@@ -141,7 +156,7 @@ export function compile_config(input: CompileInput): CompileOutput {
     for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, site, input, warnings);
   }
   warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
-  return { compiled, theme: { dark: theme.dark, light: theme.light }, warnings: [...resolve_warnings, ...warnings] };
+  return { compiled, theme: { dark: theme.dark, light: theme.light, ...stored_font(input.config.settings) }, warnings: [...resolve_warnings, ...warnings] };
 }
 
 // Checks the binds of a site row or one of its modes, and drops the bad ones in place. A mode lays over normal mode, so its binds run in normal mode.

@@ -28,11 +28,11 @@ test("every class the base defines is on the Styling page", async () => {
   for (const name of defined) assert.ok(listed.includes(name), name);
 });
 
-test("the help page keeps a 16px root and sets its font through the token a theme can replace", () => {
+test("the help page keeps a 16px root, whatever the font scale and sets its font through the token a theme can replace", () => {
   const html = read("src/help/home.html");
   assert.match(html, /html \{[^}]*font-size: 16px/);
   const rule = /\n  \.desertfox-help \{([^}]*)\}/.exec(html)![1]!;
-  assert.match(rule, /--desertfox-font: 0\.9375rem\/1\.5 system-ui, sans-serif;/);
+  assert.match(rule, /--desertfox-font: calc\(0\.9375rem \* var\(--desertfox-font-scale, 1\)\)\/1\.5 var\(--desertfox-font-family, system-ui, sans-serif\);/);
   assert.match(rule, /font: var\(--desertfox-font\);/);
   assert.ok(!/(^|[\s;])font-size:/.test(rule), "a font-size longhand would beat the theme's --desertfox-font");
 });

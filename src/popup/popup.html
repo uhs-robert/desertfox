@@ -11,7 +11,7 @@
     --desertfox-bg-core: #0c0e13;
     --desertfox-fg-core: #f5f5dc;
     --desertfox-primary: #7fa3c9;
-    --desertfox-font: 14px/1.4 system-ui, sans-serif;
+    --desertfox-font: calc(14px * var(--desertfox-font-scale, 1))/1.4 var(--desertfox-font-family, system-ui, sans-serif);
     --desertfox-radius: 6px;
     box-sizing: border-box; width: 17rem; padding: .35rem;
     background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: var(--desertfox-font);

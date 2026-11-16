@@ -46,6 +46,9 @@ const EXPECTATIONS: Record<string, string> = {
   mode_indicator: '"always", "not_normal" or "off"',
   theme: "a theme name",
   light_intensity: "a whole number from 1 to 5",
+  font_family: "up to 8 font names separated by commas, at most 200 characters, or empty for none",
+  font_family_mono: "up to 8 font names separated by commas, at most 200 characters, or empty for none",
+  font_scale: "a whole number of percent, from 50 to 300",
   search_prefixes: '{"here": "...", "tab": "..."} with non-empty strings',
   container_prefixes: '{"reopen": "...", "tab": "..."} with non-empty strings',
   home_page: "a non-empty URL string",
@@ -164,6 +167,9 @@ const ACCEPTS: Record<string, unknown[]> = {
   mode_indicator: ["always", "not_normal", "off"],
   theme: ["oasis_moonlight", "no_such_theme"],
   light_intensity: [1, 5],
+  font_family: ["", "Fira Sans, sans-serif", '"Noto Sans CJK JP", serif'],
+  font_family_mono: ["", "Fira Code, monospace"],
+  font_scale: [50, 100, 300],
   search_prefixes: [{ here: "s", tab: "S" }, { tab: "T", here: "h" }],
   container_prefixes: [{ reopen: "c", tab: "C" }],
   home_page: ["desertfox", "x"],
@@ -233,6 +239,9 @@ const REFUSES: Record<string, unknown[]> = {
   mode_indicator: ["normal", true],
   theme: ["", 1],
   light_intensity: [0, 6, 2.5, "3"],
+  font_family: ["a;b", "x\ny", 5, "var(--x)"],
+  font_family_mono: ["a;b", "url(x)", 5],
+  font_scale: [49, 301, 99.5, "100"],
   search_prefixes: [{ here: "s" }, { here: "s", tab: "" }, { here: "s", tab: "S", extra: "x" }, { reopen: "c", tab: "C" }, ["s", "S"], null],
   container_prefixes: [{ here: "s", tab: "S" }],
   home_page: ["", 1],
@@ -346,6 +355,9 @@ test("the defaults stay the same", () => {
     mode_indicator: "always",
     theme: "oasis_moonlight",
     light_intensity: 3,
+    font_family: "",
+    font_family_mono: "",
+    font_scale: 100,
     media_quality: "auto",
     editor_ext: "",
     search_prefixes: { here: "s", tab: "S" },
@@ -413,7 +425,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info", "font_family", "font_family_mono", "font_scale"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
   // #620 rewrote every description for a first-time reader.
   const described_now = settings_schema(all_commands).properties as Record<string, { description: string }>;
   for (const [name, property] of Object.entries(properties as Record<string, { description?: string | undefined }>)) property.description = described_now[name]?.description;

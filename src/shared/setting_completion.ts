@@ -354,6 +354,30 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "font_family",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "up to 8 font names separated by commas, at most 200 characters, or empty for none",
+    "values": []
+  },
+  {
+    "name": "font_family_mono",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "up to 8 font names separated by commas, at most 200 characters, or empty for none",
+    "values": []
+  },
+  {
+    "name": "font_scale",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "a whole number of percent, from 50 to 300",
+    "values": []
+  },
+  {
     "name": "search_prefixes",
     "settable": false,
     "is_toggle": false,

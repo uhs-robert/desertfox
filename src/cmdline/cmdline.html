@@ -22,7 +22,7 @@
         --desertfox-selection: #24364d;
         --desertfox-bg-mantle: #141c24;
         --desertfox-secondary: #f0e68c;
-        --desertfox-font: 12px/1.4 ui-monospace, monospace;
+        --desertfox-font: calc(12px * var(--desertfox-font-scale, 1))/1.4 var(--desertfox-font-family-mono, ui-monospace, monospace);
         box-sizing: border-box;
         flex: none;
         background: var(--desertfox-bg-core);
@@ -42,9 +42,9 @@
       .desertfox-cmdline-status[hidden] { display: none; }
       .desertfox-cmdline-status-ok { color: var(--desertfox-ok); }
       .desertfox-cmdline-status-warn { color: var(--desertfox-warn); }
-      /* Each row is 20px. The keys column is last and never shrinks: --desertfox-keys-width is its widest text. */
+      /* Each row is 20px at the default scale. The keys column is last and never shrinks: --desertfox-keys-width is its widest text. */
       .desertfox-cmdline-list { overflow: hidden; }
-      .desertfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: 20px; padding: 0 .75rem; white-space: nowrap; }
+      .desertfox-cmdline-item { display: flex; align-items: center; gap: .75rem; height: max(14px, calc(20px * var(--desertfox-font-scale, 1))); padding: 0 .75rem; white-space: nowrap; }
       .desertfox-cmdline-selected { background: var(--desertfox-selection); color: var(--desertfox-secondary, #f0e68c); }
       .desertfox-cmdline-unavailable { opacity: .5; }
       .desertfox-cmdline-item-discarded:not(.desertfox-cmdline-selected) .desertfox-cmdline-name { color: var(--desertfox-fg-dim); }

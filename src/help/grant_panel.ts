@@ -72,7 +72,7 @@ export const browser_permission_deps = (permission: GrantablePermission): Permis
 const PANEL_STYLE =
   "position:fixed;top:1rem;right:1rem;z-index:2147483000;box-sizing:border-box;width:min(36rem,calc(100vw - 2rem));padding:1rem 1.25rem;" +
   "background:var(--desertfox-bg-core,#0c0e13);color:var(--desertfox-fg-core,#f5f5dc);border:1px solid var(--desertfox-primary,#7fa3c9);" +
-  "border-radius:var(--desertfox-radius,6px);font:var(--desertfox-font,15px/1.5 system-ui,sans-serif);box-shadow:0 4px 24px rgba(0,0,0,.5)";
+  "border-radius:var(--desertfox-radius,6px);font:var(--desertfox-font,calc(15px*var(--desertfox-font-scale,1))/1.5 var(--desertfox-font-family,system-ui,sans-serif));box-shadow:0 4px 24px rgba(0,0,0,.5)";
 const BUTTON_STYLE = "font:inherit;padding:.25rem .75rem;cursor:pointer";
 
 function element(tag: string, text?: string, style?: string): HTMLElement {

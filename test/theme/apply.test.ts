@@ -157,3 +157,15 @@ test("a hung read shows the page at the deadline, and a late read still applies 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(next.visibility, "");
 });
+
+test("theme_css emits the font variables once in the base block and nothing while they are unset", () => {
+  const plain = theme_css(stored, ".x");
+  assert.doesNotMatch(plain, /--desertfox-font/);
+  assert.equal(theme_css({ ...stored, font: {} }, ".x"), plain);
+  const css = theme_css({ ...stored, font: { "--desertfox-font-family": '"A", serif', "--desertfox-font-family-mono": '"B", monospace', "--desertfox-font-scale": "1.2" } }, ".x");
+  assert.equal(css.match(/--desertfox-font-family:/g)?.length, 1);
+  assert.equal(css.match(/--desertfox-font-family-mono:/g)?.length, 1);
+  assert.equal(css.match(/--desertfox-font-scale: 1\.2;/g)?.length, 1);
+  assert.equal(css.split("@media")[1], plain.split("@media")[1]);
+  assert.match(css.split("@media")[0]!, /--desertfox-font-family: "A", serif;/);
+});

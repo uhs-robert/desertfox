@@ -23,8 +23,8 @@
   /* One column: the clock area takes the room above the lists and centers the clock in it, and the lists shrink to a scroll area, so they never cover the clock. The page scrolls when both cannot fit. */
   .desertfox-newtab { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .desertfox-newtab .time-area { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; }
-  .desertfox-newtab .time { margin: 1rem; font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
-  .desertfox-newtab .clock { display: block; width: 100%; max-width: 10em; margin: 0 auto; }
+  .desertfox-newtab .time { margin: 1rem; font-size: calc(24px * var(--desertfox-font-scale, 1)); text-align: center; font-variant-numeric: tabular-nums; }
+  .desertfox-newtab .clock { display: block; width: 100%; max-width: calc(10em / var(--desertfox-font-scale, 1)); margin: 0 auto; }
   .desertfox-newtab .clock .bezel { fill: transparent; stroke: var(--desertfox-primary); stroke-width: 2; }
   .desertfox-newtab .clock line { transform-origin: 50px 50px; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
   .desertfox-newtab .clock.jumping line { transition: none; }
@@ -53,9 +53,9 @@
   .desertfox-newtab .tile-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .desertfox-newtab .tile-site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); }
   /* The top-right corner of the page, right-aligned and out of the centered column. The settings gear sits in the opposite corner, so nothing is covered. */
-  .desertfox-newtab .weather { position: absolute; top: 1rem; right: 1.25rem; z-index: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; text-align: right; }
+  .desertfox-newtab .weather { --weather-scale: min(var(--desertfox-font-scale, 1), 1.5); --desertfox-text-small: calc(0.85rem * var(--weather-scale)); font-size: calc(1rem * var(--weather-scale)); position: absolute; top: 1rem; right: 1.25rem; z-index: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; text-align: right; }
   .desertfox-newtab .weather-reading { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
-  .desertfox-newtab .weather-main { display: flex; align-items: center; gap: 0.5rem; color: var(--desertfox-fg-core); font-size: 2rem; line-height: 1; }
+  .desertfox-newtab .weather-main { display: flex; align-items: center; gap: 0.5rem; color: var(--desertfox-fg-core); font-size: calc(2rem * var(--weather-scale, 1)); line-height: 1; }
   .desertfox-newtab .weather-icon { width: 2rem; height: 2rem; fill: none; stroke: var(--desertfox-secondary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   .desertfox-newtab .weather-stat { display: flex; flex-direction: column; align-items: flex-end; }
   .desertfox-newtab .weather-value { font-weight: 600; color: var(--desertfox-primary); }
@@ -100,13 +100,14 @@
   @media (max-width: 61rem) { .desertfox-newtab .weather:has(.weather-detail:not([hidden])) { position: static; order: -1; align-self: flex-end; margin: 1rem 1.25rem 0; } }
   .desertfox-newtab .command-hint { flex: none; align-self: center; margin: 0.75rem 0 0; padding: 0.25rem 0.5rem; background: none; border: 1px solid transparent; border-radius: 6px; font: inherit; font-size: var(--desertfox-text-small); color: color-mix(in srgb, var(--desertfox-fg-core) 65%, transparent); cursor: pointer; }
   .desertfox-newtab .command-hint:hover, .desertfox-newtab .command-hint:focus-visible { border-color: var(--desertfox-border); outline: none; }
-  .desertfox-newtab .command-hint kbd { padding: 0 0.4em; border: 1px solid var(--desertfox-border); border-radius: 4px; background: var(--desertfox-bg-mantle); font: inherit; }
+  .desertfox-newtab .command-hint kbd { padding: 0 0.4em; border: 1px solid var(--desertfox-border); border-radius: 4px; background: var(--desertfox-bg-mantle); font: inherit; font-family: var(--desertfox-font-family-mono, inherit); }
   /* The top-left corner, mirroring the weather card. Fixed, so it stays out of the column and the page redraw never touches it. */
   .settings-gear { position: fixed; top: 1rem; left: 1.25rem; z-index: 2; display: flex; padding: 0.25rem; border-radius: 6px; color: var(--desertfox-primary); }
   .settings-gear svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .settings-gear:hover, .settings-gear:focus-visible { outline: 1px solid var(--desertfox-border); }
   /* After the script-drawn page in the body column, so it has its own background. */
   .builtin-links { flex: none; padding: 0.75rem 0 1.5rem; background: var(--desertfox-bg-core); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; }
+  .builtin-links { font-size: calc(16px * var(--desertfox-font-scale, 1)); font-family: var(--desertfox-font-family, inherit); }
   .builtin-links a { color: var(--desertfox-primary); text-decoration: none; padding: 0.25rem 0.5rem; border-bottom: 1px solid transparent; }
   .builtin-links a:hover, .builtin-links a:focus-visible { border-bottom-color: var(--desertfox-border); color: var(--desertfox-primary); outline: none; }
 </style>

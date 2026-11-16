@@ -12,7 +12,7 @@ export const STYLE = `
 .desertfox-mode {
   position: fixed; right: 16px; bottom: 8px; padding: 4px 8px; pointer-events: none;
   background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc);
-  font: var(--desertfox-font, 14px system-ui, sans-serif); border-radius: var(--desertfox-radius, 6px);
+  font: var(--desertfox-font, calc(14px * var(--desertfox-font-scale, 1)) var(--desertfox-font-family, system-ui, sans-serif)); border-radius: var(--desertfox-radius, 6px);
 }
 .desertfox-mode:where([data-mode]) { color: var(--desertfox-bg-core, #0c0e13); }
 .desertfox-mode:where([data-mode="normal"]) { background: var(--desertfox-mode-normal, #7fa3c9); }

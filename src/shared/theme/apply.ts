@@ -11,14 +11,15 @@ export const THEME_STORAGE_KEY = "desertfox_theme";
 // `style.css` then `style.d/*.css` as text, for the surfaces the content script draws. Rewritten at every publish.
 export const USER_CSS_STORAGE_KEY = "desertfox_user_css";
 
-// The light set is already the one `light_intensity` picked.
-export type StoredTheme = { dark: RoleColors; light: RoleColors };
+// The light set is already the one `light_intensity` picked. `font` holds the font custom properties that are set (`--desertfox-font-family`, `--desertfox-font-family-mono`, `--desertfox-font-scale`) with their CSS values, already canonical, so this size-guarded module carries no names for them. A record written before the font settings has none and reads as unset.
+export type StoredTheme = { dark: RoleColors; light: RoleColors; font?: Record<`--desertfox-font-${string}`, string> };
 
 // Dark is the base block and light sits under the system's light scheme. A value that is not a string is skipped, because the stored
 // value can come from a hand-edited local theme. `selector` is the inner element of the surface: a block on the host would lose to the hex blocks that pages still declare there.
 export function theme_css(theme: StoredTheme, selector: string): string {
   const block = (colors: RoleColors) => ROLES.filter((role) => typeof colors?.[role] === "string").map((role) => `${token_name(role)}: ${colors[role]};`).join(" ");
-  return `${selector} { ${block(theme.dark)} }\n@media (prefers-color-scheme: light) { ${selector} { ${block(theme.light)} } }`;
+  const base = [block(theme.dark), ...Object.entries(theme.font ?? {}).map(([name, value]) => `${name}: ${value};`)].filter(Boolean).join(" ");
+  return `${selector} { ${base} }\n@media (prefers-color-scheme: light) { ${selector} { ${block(theme.light)} } }`;
 }
 
 // How long a surface or page stays hidden for its first reads. A hung read must not hide it for good. A read that returns later still applies.

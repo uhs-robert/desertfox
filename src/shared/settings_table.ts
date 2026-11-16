@@ -104,6 +104,11 @@ export const SETTINGS_TABLE = {
   // The theme names are examples, not an enum: a theme file in the config directory takes any name. `desktop` follows the theme the desktop pushed over the bridge.
   theme: { kind: "custom", schema: { type: "string", minLength: 1, examples: [DESKTOP_THEME, ...BUILT_IN_THEME_NAMES] }, default: "oasis_moonlight" },
   light_intensity: { kind: "enum", values: LIGHT_INTENSITIES, default: 3 },
+  // Empty keeps each surface's own family. Checked and stored as canonical CSS by `parse_font_family`.
+  font_family: { kind: "custom", schema: { type: "string", maxLength: 200, examples: ["Fira Sans, sans-serif"] }, default: "" },
+  font_family_mono: { kind: "custom", schema: { type: "string", maxLength: 200, examples: ["Fira Code, monospace"] }, default: "" },
+  // A percent of each surface's own size, so 100 changes nothing.
+  font_scale: { kind: "number", whole: true, min: 50, max: 300, unit: "percent", default: 100 },
   // A live change to a prefix could collide with other keys, so `:set` refuses the prefix tables.
   search_prefixes: { kind: "text_table", keys: ["here", "tab"], default: { here: "s", tab: "S" }, settable: false },
   container_prefixes: { kind: "text_table", keys: ["reopen", "tab"], default: { reopen: "c", tab: "C" }, settable: false },
