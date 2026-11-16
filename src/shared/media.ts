@@ -3,9 +3,9 @@
 export const MEDIA_ACTIONS = ["play_pause", "speed", "volume", "seek", "pip", "fullscreen", "mute", "loop", "info", "quality", "skip", "captions", "frame", "enter"] as const;
 export type MediaAction = (typeof MEDIA_ACTIONS)[number];
 
-// Volume is in percent here and 0 to 1 on the element. Seek has no fixed maximum: the media duration is its end.
-export type LevelRule = { step: number; min: number; max: number; reset: number };
-export const SPEED_RULE: LevelRule = { step: 0.05, min: 0.25, max: 4, reset: 1 };
+// `snap` puts a step from an off-grid value on the step grid first, so a rate a site set (1.33) reaches 1x again. Volume is in percent here and 0 to 1 on the element. Seek has no fixed maximum: the media duration is its end.
+export type LevelRule = { step: number; min: number; max: number; reset: number; snap?: true };
+export const SPEED_RULE: LevelRule = { step: 0.05, min: 0.25, max: 4, reset: 1, snap: true };
 export const VOLUME_RULE: LevelRule = { step: 5, min: 0, max: 100, reset: 100 };
 // No API gives the frame rate, so a frame is a thirtieth of a second.
 export const FRAME_RULE: LevelRule = { step: 1 / 30, min: 0, max: Infinity, reset: 0 };

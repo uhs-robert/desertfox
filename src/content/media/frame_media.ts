@@ -45,15 +45,17 @@ export function next_level(current: number, value: string | undefined, times: nu
   if (value === undefined) return current;
   // A live stream has no end to jump to.
   if ((value === "end" || value === "percent") && !Number.isFinite(rule.max)) return current;
+  // A snapping rule moves from the grid line the step heads for, so 1.33 up one step is 1.35 and down one step is 1.3.
+  const from = (round: (lines: number) => number): number => (rule.snap ? round(without_drift(current / rule.step)) * rule.step : current);
   const wanted =
-    value === "up" ? without_drift(current + rule.step * times)
-    : value === "down" ? without_drift(current - rule.step * times)
+    value === "up" ? from(Math.floor) + rule.step * times
+    : value === "down" ? from(Math.ceil) - rule.step * times
     : value === "reset" ? rule.reset
     : value === "end" ? rule.max
     : value === "percent" ? rule.min + ((rule.max - rule.min) * times) / 100
     : value.startsWith("+") || value.startsWith("-") ? current + Number(value)
     : Number(value);
-  return Math.min(Math.max(wanted, rule.min), rule.max);
+  return Math.min(Math.max(without_drift(wanted), rule.min), rule.max);
 }
 
 const is_video = (player: Player): boolean => player.localName === "video";

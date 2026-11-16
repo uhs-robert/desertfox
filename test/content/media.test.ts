@@ -68,6 +68,18 @@ test("repeated speed steps land on clean values, so up from 1 to 4 and back ends
   assert.equal(rate, 1);
 });
 
+test("a speed step from an off-grid rate snaps to the 0.05 grid first, and a signed speed value stays clean", () => {
+  assert.equal(next_level(1.33, "up", 1, SPEED_RULE), 1.35);
+  assert.equal(next_level(1.33, "down", 1, SPEED_RULE), 1.3);
+  assert.equal(next_level(1.33, "up", 2, SPEED_RULE), 1.4);
+  assert.equal(next_level(1.33, "down", 2, SPEED_RULE), 1.25);
+  assert.equal(next_level(1.05, "down", 1, SPEED_RULE), 1);
+  assert.equal(next_level(0.3, "+0.6", 1, SPEED_RULE), 0.9);
+  assert.equal(next_level(0.27, "down", 1, SPEED_RULE), 0.25);
+  assert.equal(next_level(7.3, "down", 1, { ...SEEK_RULE }), 2.3);
+  assert.equal(next_level(7.3, "up", 1, { ...SEEK_RULE }), 12.3);
+});
+
 test("the walk finds media inside open and closed shadow roots, nested", () => {
   const element = (localName: string, shadow?: { querySelectorAll: () => unknown[] }) => ({ localName, openOrClosedShadowRoot: shadow ?? null, shadowRoot: null });
   const inner = { querySelectorAll: () => [element("audio")] };
