@@ -526,12 +526,12 @@ test("the sender tab decides privacy over the port name", async () => {
 });
 
 test("rows carry only a favicon an extension page can load", async () => {
-  const f = make([tab(1, 1, 0, { favIconUrl: "chrome://branding/x.png" }), tab(2, 1, 1, { favIconUrl: "https://a.example/i.png" }), tab(3, 1, 2, { favIconUrl: `data:image/png;base64,${"A".repeat(3000)}` })]);
+  const f = make([tab(1, 1, 0, { favIconUrl: "chrome://branding/x.png" }), tab(2, 1, 1, { favIconUrl: "https://a.example/i.png" }), tab(3, 1, 2, { favIconUrl: `data:image/png;base64,${"A".repeat(40000)}` }), tab(4, 1, 3, { favIconUrl: "data:image/png;base64,BBBB" })]);
   await f.model.start();
   const p = await f.connect_port();
   const snap = p.messages[0];
   assert.ok(snap.type === "snapshot");
-  assert.deepEqual(snap.tabs.map((r) => r.favicon_url), ["", "https://a.example/i.png", ""]);
+  assert.deepEqual(snap.tabs.map((r) => r.favicon_url), ["", "", "", "data:image/png;base64,BBBB"]);
 });
 
 test("an update between detach and attach is kept", async () => {

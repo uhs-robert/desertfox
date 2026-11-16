@@ -170,7 +170,7 @@ export type TabRowsActionAnswer = { refusal?: string };
 // A tab's container, drawn as a mark in the container's color. Absent for the default container and for private tabs.
 export type TabContainer = { color: string; icon: string };
 
-// `id` is the browser's tab id, which the row keys send back in `tab_rows_action`. `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is an http, https or short data: URL and is absent otherwise.
+// `id` is the browser's tab id, which the row keys send back in `tab_rows_action`. `number` is the tab's place in its window's tab bar, counted from 1. `favicon` is a data: URL of at most 32768 characters and is absent otherwise.
 // The flags are present only when true, which keeps the answer small.
 export type TabItem = {
   id: number;

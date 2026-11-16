@@ -36,7 +36,7 @@
       "match_about_blank": true
     }
   ],
-  "content_security_policy": "script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https: http: resource: moz-icon:; connect-src 'self' https: http: data: blob:; worker-src 'self'",
+  "content_security_policy": "script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: resource: moz-icon:; connect-src 'self' https: http: data: blob:; worker-src 'self'",
   "devtools_page": "devtools.html",
   "web_accessible_resources": [
     "cmdline.html"
