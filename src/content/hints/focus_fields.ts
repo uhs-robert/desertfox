@@ -58,7 +58,8 @@ function reveal({ element, frames }: Found): void {
 
 export function focus_field(root: ParentNode, last_blurred: Element | undefined, direction: FieldDirection, steps: number, kind: FieldKind = "control"): string | undefined {
   const { selector, noun } = KINDS[kind];
-  const found = keep_present_found(collect(root, { selector }));
+  // An inert element takes no focus, so a pick of one would leave the walk where it started.
+  const found = keep_present_found(collect(root, { selector })).filter((item) => !item.element.closest("[inert]"));
   if (found.length === 0) return `No ${noun} on this page`;
   const place = place_of(found.map((item) => item.element), [deepest_focused_element(), last_blurred], is_above_view);
   const pick = pick_field(found.length, place, direction, steps);
