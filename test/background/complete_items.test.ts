@@ -501,7 +501,10 @@ test("only data: favicons up to 32768 characters go on the wire", () => {
   assert.equal(large.length, 24000);
   assert.equal(listed_favicon(large), large);
   assert.equal(listed_favicon(`data:image/png;base64,${"A".repeat(40000 - 22)}`), undefined);
-  for (const dropped of ["https://a.test/icon.png", "http://a.test/icon.png", "chrome://mozapps/skin/places/defaultFavicon.svg", "moz-extension://x/icon.png", "file:///a.png", "javascript:alert(1)", "", undefined]) assert.equal(listed_favicon(dropped), undefined);
+  const at_cap = `data:image/png;base64,${"A".repeat(32768 - 22)}`;
+  assert.equal(listed_favicon(at_cap), at_cap);
+  assert.equal(listed_favicon(`${at_cap}A`), undefined);
+  for (const dropped of ["https://a.test/icon.png", "http://a.test/icon.png", "data:text/html,<p>x</p>", "chrome://mozapps/skin/places/defaultFavicon.svg", "moz-extension://x/icon.png", "file:///a.png", "javascript:alert(1)", "", undefined]) assert.equal(listed_favicon(dropped), undefined);
   const [item] = listed_tabs([in_window(1, { favIconUrl: "chrome://branding/content/icon32.png" })], { window_id: 10, incognito: false });
   assert.equal("favicon" in item!, false);
 });
