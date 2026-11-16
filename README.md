@@ -28,7 +28,7 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 **Drag and drop from the keyboard.** Press `;Gg`, type the label on a slider or a card, and move it with `h` `j` `k` `l`. Press `;gg` to pick an element and then pick the place to drop it. Keyboard drag is built in and needs no script.
 
-<p align="center"><img src="./docs/images/drag.gif" width="800" alt="Two cards on the Practice page work board are grabbed with ;gg and dropped on a column picked by hint."/></p>
+<p align="center"><img src="./docs/images/drag.gif" width="800" alt="One card on the Practice page work board is grabbed with ;gg and dropped on the Doing column picked by hint, then grabbed again and dropped on Done."/></p>
 
 You can edit any text box in Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)).
 
