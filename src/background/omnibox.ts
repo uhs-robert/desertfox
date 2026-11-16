@@ -49,8 +49,7 @@ export function engines_only_live(engines: Record<string, SearchEngine>) {
   return {
     read: <Kind extends LiveKind>(kind: Kind): LiveRead<Kind> => {
       if (kind === "engines") return { loading: false, items: engine_items(engines, undefined) } as LiveRead<Kind>;
-      if (kind === "anything") return { loading: true };
-      const empty: Partial<{ [Kind in LiveKind]: LiveItems[Kind] }> = { open: { rows: [], history_max: 0, sites: [] }, history: { rows: [], max: 0 }, bookmarks: { rows: [], folders: [] } };
+      const empty: Partial<{ [Kind in LiveKind]: LiveItems[Kind] }> = { bookmarks: { rows: [], folders: [] } };
       return { loading: false, items: empty[kind] ?? [] } as LiveRead<Kind>;
     },
   };

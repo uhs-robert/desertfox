@@ -1,0 +1,482 @@
+{
+ "open \"\"": {
+  "count": 30,
+  "sha256": "695a80bcd0d1fad6eb2ed4bcedf89dd6489a64153bc475412a1b4f39e514c353"
+ },
+ "open \" \"": {
+  "count": 30,
+  "sha256": "695a80bcd0d1fad6eb2ed4bcedf89dd6489a64153bc475412a1b4f39e514c353"
+ },
+ "open \"f\"": {
+  "count": 100,
+  "sha256": "e2541f74d6c5808bba30e61bb5a422b1782a27d407dc4936e4178a1fbaca3a09"
+ },
+ "open \"fi\"": {
+  "count": 100,
+  "sha256": "97961b91f84dc2145b7ae439993079d56a1763b7afcccfe10e2ff6850e0ee6e8"
+ },
+ "open \"fir\"": {
+  "count": 100,
+  "sha256": "63daba3bc0bb1f804e6d3b74f56b36f6ec355f68cc81768d6ad8683b54f98bc2"
+ },
+ "open \"fire\"": {
+  "count": 100,
+  "sha256": "c3b6e7f17eaf198ad85dca5ad8976dd03214b261059bb87ce12275f62a77ae07"
+ },
+ "open \"firef\"": {
+  "count": 100,
+  "sha256": "d89daafd1fcb03d7a92b2f2c542c85363661aeccae02d600ec72ac0fe1b57798"
+ },
+ "open \"firefox\"": {
+  "count": 100,
+  "sha256": "2a529feb0b0c455045b0401027b6792b8e3f9751b296ef5a5946c492b088e439"
+ },
+ "open \"g\"": {
+  "count": 100,
+  "sha256": "8037ff70ef0f0f035fa6447f193ec68809f0b6fabaa0810a082fcf6bc33abf09"
+ },
+ "open \"gi\"": {
+  "count": 100,
+  "sha256": "2dabc6667475e9b3d7b78758589de0c9f9934f4c1f01c5754fbdbc13d825917e"
+ },
+ "open \"git\"": {
+  "count": 100,
+  "sha256": "a8360862592b0ae0f84f5d593f470b2c77173b03eb8d7d348bbf2dea8de9de0a"
+ },
+ "open \"github\"": {
+  "count": 100,
+  "sha256": "e4da56161f9b9d0847f725166bd99d14869e1a447bec7a07eff131bddc9e472f"
+ },
+ "open \"github rust\"": {
+  "count": 100,
+  "sha256": "b76049ae7da8731c25d741d2f0716c9b244f89f4f1b1151e37d874d9332262b3"
+ },
+ "open \"rust async\"": {
+  "count": 100,
+  "sha256": "5101b1c0e65fb123fd5d52fe25b649d971a82792b3bd23466de7a26d9452269c"
+ },
+ "open \"mdn async iter\"": {
+  "count": 100,
+  "sha256": "c939f41faea603eae06489cdee7df31bd764020f07e953f646050d0ee633d51f"
+ },
+ "open \"zzzq\"": {
+  "count": 7,
+  "sha256": "be3570c63cf3624d17f64cfb2bab69dc658845121f509f6c1424725d3d62231c"
+ },
+ "open \"qqqqqq\"": {
+  "count": 0,
+  "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+ },
+ "open \"rust.\"": {
+  "count": 100,
+  "sha256": "35302b13da04baedafc017b7684b5634817c4da3b04d1dec6552308965dec147"
+ },
+ "open \"Rust\"": {
+  "count": 100,
+  "sha256": "2877f766502f8cc09c7e11df5e24ce291c7aa603e976e1a7236e45fc95bfc04d"
+ },
+ "open \"RUST\"": {
+  "count": 100,
+  "sha256": "2877f766502f8cc09c7e11df5e24ce291c7aa603e976e1a7236e45fc95bfc04d"
+ },
+ "open \"docs\"": {
+  "count": 100,
+  "sha256": "9cc02a1f60229dbdb1c1210daaae8eece9cb22089c7c9d1c3f26bcb2ec99526d"
+ },
+ "open \"docs.rs\"": {
+  "count": 100,
+  "sha256": "14204c0e909defb194aca41f50876adf91c5b3933146c2d3957f798afd30aed4"
+ },
+ "open \"Docs.rs\"": {
+  "count": 100,
+  "sha256": "14204c0e909defb194aca41f50876adf91c5b3933146c2d3957f798afd30aed4"
+ },
+ "open \"GitHub\"": {
+  "count": 100,
+  "sha256": "e4da56161f9b9d0847f725166bd99d14869e1a447bec7a07eff131bddc9e472f"
+ },
+ "open \"https\"": {
+  "count": 100,
+  "sha256": "f17986b6dfdd55d00401350497aec4ce7fd7fec39aeca62cb633483e0da1bd31"
+ },
+ "open \"github.com/\"": {
+  "count": 100,
+  "sha256": "2116708457af7b76ae730f7a84c38618f6afbe2b8500d01046964735024df6bf"
+ },
+ "open \"bm\"": {
+  "count": 100,
+  "sha256": "27bd4452cd6f323833a04e7f6e5eac6253af6332c460e36f93a78675307e9b6c"
+ },
+ "open \"bookmark 12\"": {
+  "count": 84,
+  "sha256": "93eb1f3e632f217c78dee879c21ad094d081d1a88ae9e658c8052e9050b0cb08"
+ },
+ "open \"closed\"": {
+  "count": 100,
+  "sha256": "ab99f1e90ec46822d26b4a5d5bb3ad097a72ac63dfec78328f76760bc7ecaa05"
+ },
+ "open \"tab\"": {
+  "count": 100,
+  "sha256": "9970a75d6d5221692b01973a5842dd09c157d9bd2e31b6e86d5573a0c60f0105"
+ },
+ "open \"tab close\"": {
+  "count": 100,
+  "sha256": "51a0c10a4ff5e7bba9eece615f9eecfaee4b37724908c66947e687cfef71431a"
+ },
+ "open \"café\"": {
+  "count": 100,
+  "sha256": "ff46ffecfd38ac92ed7319c2327dffb1ac48133e4616896bd963bf8baf1f5b51"
+ },
+ "open \"zürich\"": {
+  "count": 100,
+  "sha256": "c7faf0731948d2df14cd6ee009569671065ee1fee117e4e25e608e2e7ec34c3d"
+ },
+ "open \"z\"": {
+  "count": 100,
+  "sha256": "46ff7937f119701d2c90393242819f4cbb90e480fb45b6d45736e53f4ef052de"
+ },
+ "open \"m\"": {
+  "count": 100,
+  "sha256": "c5092a858ba3106fdd92bcc719fc0a97deb915d5e39fc91a43d6fb285cb5015a"
+ },
+ "open \"r\"": {
+  "count": 100,
+  "sha256": "a5b5770f7e2af50f298d00e1ee1d281eb537f6d3970b2b805f074860971c9a82"
+ },
+ "open \"worker port\"": {
+  "count": 100,
+  "sha256": "b50fc3b77bc0fc582a8d297b8f575fcc574d0b06a321ee3e591d698bc94a1602"
+ },
+ "open \"hist\"": {
+  "count": 100,
+  "sha256": "d39df4ccf95ea3ae621f84b2ab14c1f6c21f980355f8df59496c53b8a9a5a4d8"
+ },
+ "open \"gh rust\"": {
+  "count": 100,
+  "sha256": "1d1b010183f89fdfc5abd0d721ed3d7df6483cec09b887570f41f7d0b6cb5790"
+ },
+ "open \"wiki arch linux\"": {
+  "count": 100,
+  "sha256": "4fe96930ab4e961113dad31d023f84e821fb9273582073229aec564c352fabfe"
+ },
+ "history \"\"": {
+  "count": 20,
+  "sha256": "f6f20eb389ca41611ebe2a1622831f739e5bc1fc05b72c11cf53b54748ef32bc"
+ },
+ "history \" \"": {
+  "count": 20,
+  "sha256": "f6f20eb389ca41611ebe2a1622831f739e5bc1fc05b72c11cf53b54748ef32bc"
+ },
+ "history \"f\"": {
+  "count": 100,
+  "sha256": "9260c0d27c228d22e99f517abbd26cdb36347df067b7fbce0d4d484cfdaac870"
+ },
+ "history \"fi\"": {
+  "count": 100,
+  "sha256": "93fd35e8cab89db2f832a4e3bb0acddfd835b039abdf42a7b5136b17e5f15c08"
+ },
+ "history \"fir\"": {
+  "count": 100,
+  "sha256": "8a399b43d050876cd446ded82b8346e405ca162f0cac5b3696769168bec52641"
+ },
+ "history \"fire\"": {
+  "count": 100,
+  "sha256": "418a32791080ba32fb88461a8b19bac9c287186c6c7da218c83cfd5e7cd41302"
+ },
+ "history \"firef\"": {
+  "count": 100,
+  "sha256": "b79b81eed049ca6a4d9c23d50e7ab5fb3076900b69cb443d66d505c1b3641843"
+ },
+ "history \"firefox\"": {
+  "count": 100,
+  "sha256": "85c2b7b9d0797d0084a9a41b8cd080558f3997e9aeee3aab846d1fdab9a5688b"
+ },
+ "history \"g\"": {
+  "count": 100,
+  "sha256": "8b21256720bb6d26186c3ee1621aa3ba1344776cbf93e8c54c0c5c002bc97944"
+ },
+ "history \"gi\"": {
+  "count": 100,
+  "sha256": "b4a7b95a675feac17dd1a6ebdd2f298f22383ca8a46355116803655bb68c3ba7"
+ },
+ "history \"git\"": {
+  "count": 100,
+  "sha256": "13407e8475027990eca242e9f749a20d36438fb8262ae2257ea0af519997e115"
+ },
+ "history \"github\"": {
+  "count": 100,
+  "sha256": "af20c996e8bff6e654fa81a26d856001f3a03ca1809b330b37c587d3430263df"
+ },
+ "history \"github rust\"": {
+  "count": 100,
+  "sha256": "fa612d70e3b29c298c7b24c0ca27961823f899c2cdd939b2e4aa72033923da39"
+ },
+ "history \"rust async\"": {
+  "count": 100,
+  "sha256": "13f9d191de99028361592f3f6e65f2c4573337c384d2a46a95c1288008ee0512"
+ },
+ "history \"mdn async iter\"": {
+  "count": 100,
+  "sha256": "844cb4c1fe4f5344884dd55667bea9560550acbf1738f2a9759310b6b12615d6"
+ },
+ "history \"zzzq\"": {
+  "count": 7,
+  "sha256": "891f93ecd4a3412186951df77ac2aa705f8f63a49e5b4b8beb6be45249b753c7"
+ },
+ "history \"qqqqqq\"": {
+  "count": 0,
+  "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+ },
+ "history \"rust.\"": {
+  "count": 100,
+  "sha256": "c8a9d7690d60fcdd1e5dbd155819b41fe52546c2466de73ee164a7f4996a1cc7"
+ },
+ "history \"Rust\"": {
+  "count": 100,
+  "sha256": "0259d1dac5783364f8e7f12d1079538b4c12baad53ca0c11f93755bc17725525"
+ },
+ "history \"RUST\"": {
+  "count": 100,
+  "sha256": "0259d1dac5783364f8e7f12d1079538b4c12baad53ca0c11f93755bc17725525"
+ },
+ "history \"docs\"": {
+  "count": 100,
+  "sha256": "eb6b3c7e0ed4274451d295cec13c7d91f43a750e746519f57c04496cff7e58ba"
+ },
+ "history \"docs.rs\"": {
+  "count": 100,
+  "sha256": "33cb91834c57fd448c0d9106597969c764a0467461e1aa979d8eaea3cb7a7054"
+ },
+ "history \"Docs.rs\"": {
+  "count": 100,
+  "sha256": "33cb91834c57fd448c0d9106597969c764a0467461e1aa979d8eaea3cb7a7054"
+ },
+ "history \"GitHub\"": {
+  "count": 100,
+  "sha256": "af20c996e8bff6e654fa81a26d856001f3a03ca1809b330b37c587d3430263df"
+ },
+ "history \"https\"": {
+  "count": 100,
+  "sha256": "836e4bc2703804f34bad78cee0d89813596c929e4f4c5c3e93cfee0a76ac5c71"
+ },
+ "history \"github.com/\"": {
+  "count": 100,
+  "sha256": "ead826124d21b391a680385afb3c7afeec256cdc0b155f791ef3957899cf0c3e"
+ },
+ "history \"bm\"": {
+  "count": 100,
+  "sha256": "1487a28abfe48ac0cde283852f61234cc0f05e64a3b10ae2fd41d6e335b25118"
+ },
+ "history \"bookmark 12\"": {
+  "count": 64,
+  "sha256": "f7864e5f8d7f047ee9899f995d04f1ba4ef51db0ef9c0978d06a78d347df57bd"
+ },
+ "history \"closed\"": {
+  "count": 100,
+  "sha256": "b9e3ebd0111d17e14c0261bd6696a3c2fc30e93bfd1e4df4af4b93f77af554a2"
+ },
+ "history \"tab\"": {
+  "count": 100,
+  "sha256": "94a504063889fb755ad81c0d1cafc0c840b3d5ff7e038a2dfc1c97fb5199b552"
+ },
+ "history \"tab close\"": {
+  "count": 100,
+  "sha256": "2b50c427dec18ee443e063b46225f049ea3544aad3d85a13e94cb577d49d1ad1"
+ },
+ "history \"café\"": {
+  "count": 100,
+  "sha256": "4ed3a9c6d7cde36161d20a5010aedf7b2280a3f2bed45a61ef39c1dd074f27bf"
+ },
+ "history \"zürich\"": {
+  "count": 100,
+  "sha256": "2f6ba2958fcd5c5eddaa6d1ed24ac7120f8be845cb3497f700573a365ca5f4c4"
+ },
+ "history \"z\"": {
+  "count": 100,
+  "sha256": "3675836c9fd62d0f104209a2842e33fcd183321e6b93b357ef3adc6051d0ca87"
+ },
+ "history \"m\"": {
+  "count": 100,
+  "sha256": "2337f71ae5a7440ec1748f0231baab77de0a21692d73eb7fe47f8ffc1536e5fe"
+ },
+ "history \"r\"": {
+  "count": 100,
+  "sha256": "b6047922afc91036164cea6605363d005483bc1a63a5e6875640a52604d16b7a"
+ },
+ "history \"worker port\"": {
+  "count": 100,
+  "sha256": "5f299d2808e696610078b63e252c57612d0ed1f98959fe24f01000a64ad81c26"
+ },
+ "history \"hist\"": {
+  "count": 100,
+  "sha256": "87ce14b22ab92edb72648eeac430086216bddf06012963a950996368a71bca34"
+ },
+ "history \"gh rust\"": {
+  "count": 100,
+  "sha256": "68d3cf3a57884ea9bc983b27e8ab52edf48e348a29fc21a207bf4d275e932f05"
+ },
+ "history \"wiki arch linux\"": {
+  "count": 100,
+  "sha256": "a4c782fba535104861086a8cdf4c34d8cc8e941f68f05a4a2222c21043e73a52"
+ },
+ "anything \"\"": {
+  "count": 28,
+  "sha256": "23ae9d337b2b0ded0ae9a6cc3496a56f0ba5ace66d5806bb6b01d6a95c487d57"
+ },
+ "anything \" \"": {
+  "count": 28,
+  "sha256": "23ae9d337b2b0ded0ae9a6cc3496a56f0ba5ace66d5806bb6b01d6a95c487d57"
+ },
+ "anything \"f\"": {
+  "count": 100,
+  "sha256": "23d1b59e67050dbdb43ac216ed3d6ce7caad32d58d5f1012b9d5a2823a8e61ad"
+ },
+ "anything \"fi\"": {
+  "count": 100,
+  "sha256": "6b99a60247ec5e21474049d44f28d96dda0fd64fa033a200aaf5baff0956d138"
+ },
+ "anything \"fir\"": {
+  "count": 100,
+  "sha256": "5ba0d8d1d9a4a48dbe8d07ad9de71e2e5f7986438fad8e8c6de837ebbb98f471"
+ },
+ "anything \"fire\"": {
+  "count": 100,
+  "sha256": "9e7cbde004195db097df7a40a6346ac7d3057b811099a7cf3d6220639ff509e6"
+ },
+ "anything \"firef\"": {
+  "count": 100,
+  "sha256": "bb8f7a9ba3fc03029216231a9584fda729e70e0cee3bc4063eb40e3ad9572dd2"
+ },
+ "anything \"firefox\"": {
+  "count": 100,
+  "sha256": "c709680ca22a68b1d9e85dec6204d0390ca0814545338b2d577693226b685f83"
+ },
+ "anything \"g\"": {
+  "count": 100,
+  "sha256": "21c216ff0360b2e35b8935d299fecbdaa81e5121ea1d025c21cd48c4f1e25ad9"
+ },
+ "anything \"gi\"": {
+  "count": 100,
+  "sha256": "8a02ea1af92c587ea30a352240ca293293666aa390e0ee8c41b665c02aa3c4b0"
+ },
+ "anything \"git\"": {
+  "count": 100,
+  "sha256": "7bf18bbaff0598b5a45a9c20f5e15dac4987d7056294e52279ed5d426fe2ea04"
+ },
+ "anything \"github\"": {
+  "count": 100,
+  "sha256": "0141dc8447756ce985198f9b563033dcaa6d0b5917f4571cc0509db7a0cd77e4"
+ },
+ "anything \"github rust\"": {
+  "count": 100,
+  "sha256": "29e16740b4c2976bf7cd5358c1ff70ae13f2e8ed4953521b323dddf18b6fd996"
+ },
+ "anything \"rust async\"": {
+  "count": 100,
+  "sha256": "5c213058eff04ea5239420d5b788b823ad0122b47ac771aa96e6a6cccc85d930"
+ },
+ "anything \"mdn async iter\"": {
+  "count": 100,
+  "sha256": "9f7d0b4114bdb4f4175b64775f94744b8a5051cfea8f5d2bb01ec5234b0bf22a"
+ },
+ "anything \"zzzq\"": {
+  "count": 8,
+  "sha256": "d22798fb6b67785f95169dd01d2bfd1ef1d1646f203aff21b3d8aa876f456d90"
+ },
+ "anything \"qqqqqq\"": {
+  "count": 1,
+  "sha256": "3940babf100d9757ac51e9aed652bb7b49fa7e92d0040f395201c2d3b627106b"
+ },
+ "anything \"rust.\"": {
+  "count": 100,
+  "sha256": "9d49474df4b0e3811f3b810f3f16f865d13898bd8fa3e2a4f0c3acbaa3738280"
+ },
+ "anything \"Rust\"": {
+  "count": 100,
+  "sha256": "8ac8045080bb73dd7ce94053d9f6a5ad5b8bd457a08cf689263a5403d2b3647b"
+ },
+ "anything \"RUST\"": {
+  "count": 100,
+  "sha256": "8ac8045080bb73dd7ce94053d9f6a5ad5b8bd457a08cf689263a5403d2b3647b"
+ },
+ "anything \"docs\"": {
+  "count": 100,
+  "sha256": "24fdd961baf1eb93a2239a195ec22b48dfa528de1ded83558dc2708bcc95b305"
+ },
+ "anything \"docs.rs\"": {
+  "count": 100,
+  "sha256": "aba979a3e7c1d68f6dc2dc918d2cbf133cf1f12dfed5c32d688c5d55aa282a59"
+ },
+ "anything \"Docs.rs\"": {
+  "count": 100,
+  "sha256": "aba979a3e7c1d68f6dc2dc918d2cbf133cf1f12dfed5c32d688c5d55aa282a59"
+ },
+ "anything \"GitHub\"": {
+  "count": 100,
+  "sha256": "0141dc8447756ce985198f9b563033dcaa6d0b5917f4571cc0509db7a0cd77e4"
+ },
+ "anything \"https\"": {
+  "count": 100,
+  "sha256": "8fb998ff04d27231d73ad30fad33ee6f0392faea0ca0d1338df0d9b87756b4bb"
+ },
+ "anything \"github.com/\"": {
+  "count": 100,
+  "sha256": "5c257f4222fafbd35a9a1142f724749553d6ca604653c1a1f3231707100052df"
+ },
+ "anything \"bm\"": {
+  "count": 100,
+  "sha256": "74c92d65c52f5302cf538a19ab54268ff5a42eea6cdecb6a227f7ccb678f0989"
+ },
+ "anything \"bookmark 12\"": {
+  "count": 85,
+  "sha256": "483e228bfe9d6b79d4e382667adfde3dc852a9bd8bbf4bd7066849675eca5f79"
+ },
+ "anything \"closed\"": {
+  "count": 100,
+  "sha256": "d5a3fd6849e00d8eca6cf8a54c89456bc9add58d291457c5cc9d9f1901813c9d"
+ },
+ "anything \"tab\"": {
+  "count": 100,
+  "sha256": "111b1b014753648a5a184fbcaf5c1c9827228b781af9e5809b25de5de0888a3c"
+ },
+ "anything \"tab close\"": {
+  "count": 100,
+  "sha256": "fb4c066a888b80ce9ea46a7bdcc82f120b3acca2e90fa4fd1a8332b71f1baebb"
+ },
+ "anything \"café\"": {
+  "count": 100,
+  "sha256": "c8903d787fecace3936d5230aae6b763483fd7e03225b2ba2397e7268323c9f6"
+ },
+ "anything \"zürich\"": {
+  "count": 100,
+  "sha256": "65862bfee37e2290e81c51e707d664ac6d695508a685b103f36d82f1d45784b1"
+ },
+ "anything \"z\"": {
+  "count": 100,
+  "sha256": "f5ea93b9c8a40596ecccd0bf006bf8552c6ef1555ef4ffc701bda8fd1dff4a73"
+ },
+ "anything \"m\"": {
+  "count": 100,
+  "sha256": "e29496ea186d2f89e7da3e0e3a63813da2171349afee33297832549851f30a21"
+ },
+ "anything \"r\"": {
+  "count": 100,
+  "sha256": "d03394ea8955242fe2d59fee1e7c53db52939125c491c7321013f1d9ad80e46f"
+ },
+ "anything \"worker port\"": {
+  "count": 100,
+  "sha256": "2ab8093c20c515fa11bb73d5e644526a5ecdd34059a11a0edb1e260b7425f801"
+ },
+ "anything \"hist\"": {
+  "count": 100,
+  "sha256": "8d88eb60029d013fe44409f1ba1cb0752515c921a6edfb787890b9ac22d4ff3f"
+ },
+ "anything \"gh rust\"": {
+  "count": 100,
+  "sha256": "1313b89f5faa2e056409fff02f8074994708f4d7a5e98dc6d7226239e305aef5"
+ },
+ "anything \"wiki arch linux\"": {
+  "count": 100,
+  "sha256": "3eca1c7a84132cd3718b7e6e65540d32a2fb0d553a182da3311af4fb3a16de49"
+ }
+}

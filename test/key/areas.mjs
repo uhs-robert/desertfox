@@ -48,7 +48,7 @@ export const area_rules = [
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,history_cache,bookmark_title}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,history_cache,bookmark_title,completion_rank,rank_index,rank_service,rank_worker}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick,rank_port}.ts"],
     areas: ["cmdline"],
   },
   // Before the general help rule: `areas_of_file` takes the first match.
