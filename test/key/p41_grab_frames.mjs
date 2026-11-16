@@ -6,6 +6,9 @@ export const areas = ["hints", "keys", "bundles"];
 // LAYERS.hints in src/shared/layers.ts, which the test cannot import.
 const HINTS_LAYER = 2147483647 - 4;
 
+// The nearest label to an element must sit at its corner. A label further off belongs to another element, such as the frame that holds it.
+const MAX_LABEL_GAP_PX = 6;
+
 export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, hint_label_count, expect, sleep }) {
   // The label nearest to the top-left corner of the element. A frame's element sits at the frame's offset in the top page, where the labels are drawn.
   const label_of = (selector, in_frame = false) =>
@@ -21,18 +24,27 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
         const distance = Math.abs(box.left - (at.left + origin.left)) + Math.abs(box.top - (at.top + origin.top));
         if (distance < nearest) [best, nearest] = [label.textContent, distance];
       }
-      return best;
+      return nearest <= ${MAX_LABEL_GAP_PX} ? best : "no label within ${MAX_LABEL_GAP_PX} px of ${selector}, the nearest is " + nearest + " px away";
     })()`);
   const labels_up = (what) => poll_until(what, async () => (await hint_label_count()) > 0);
   const labels_gone = (what) => poll_until(what, async () => (await hint_label_count()) === 0);
   const pick = async (selector, in_frame = false) => {
     await labels_up(`labels for ${selector}`);
-    await press_keys(await label_of(selector, in_frame));
+    const label = await label_of(selector, in_frame);
+    expect(/^[a-z]+$/i.test(label), label);
+    await press_keys(label);
     await labels_gone(`labels gone after ${selector}`);
   };
   const got_in_top = () => in_active_tab('document.getElementById("dst").dataset.got ?? ""');
   const got_in_frame = () => in_active_tab('document.getElementById("f").contentDocument.getElementById("fdst").dataset.got ?? ""');
-  const open_frame_page = (page_id) => open_page("drag", `dragframe_${page_id}`, { new_tab: true });
+  // The page's tree read comes before the frame loads, so the frame is awaited here.
+  const open_frame_page = async (page_id) => {
+    await open_page("drag", `dragframe_${page_id}`, { new_tab: true });
+    await poll_until("the frame to load", async () => await in_active_tab('(() => { const doc = document.getElementById("f").contentDocument; return doc?.readyState === "complete" && !!doc.getElementById("fdst"); })()'));
+  };
+  // The refusal shows in a closed shadow root of the hints or the toast layer, so every layer host is searched.
+  const notice_seen = (text) =>
+    in_active_tab(`[...document.documentElement.children].some((host) => host.openOrClosedShadowRoot?.textContent.includes(${JSON.stringify(text)}))`);
 
   await run_case(";gg drops in the top page when the page holds a frame", async () => {
     await open_frame_page("top");
@@ -57,9 +69,10 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await press_keys(";gg");
     await pick("#src");
     await pick("#fdst", true);
+    await poll_until("the refusal notice", () => notice_seen("Grab works inside one frame"));
     await sleep(500);
     expect((await got_in_frame()) === "" && (await got_in_top()) === "", "a drop landed across the frame border");
-    // The refusal ends the drag, so a new grab on the top page works.
+    // After the refusal a new grab on the top page still works.
     await press_keys(";gg");
     await pick("#src");
     await pick("#dst");
