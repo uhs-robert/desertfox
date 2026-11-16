@@ -75,6 +75,8 @@ const FALLBACK_ROW_HEIGHT_PX = 24;
 
 // How long a key that acts on the list waits for rows on their way before it runs anyway, so a lost answer never stalls the line.
 const HOLD_LIMIT_MS = 1000;
+// A token from `event_to_token`, whose modifiers come in the order A, C, M, S.
+const WITH_COMMAND_MODIFIER = /^<[ACM]+S?-/;
 
 // Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
 // ticket is live, so every `start` is tried and the first one it accepts wins.
@@ -268,7 +270,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const hold = (steps: Extract<KeyOutcome, { kind: "hold" }>["steps"]) => {
     held.unshift({ steps });
     held_again = true;
-    hold_timer ??= setTimeout(() => replay_held(undefined), HOLD_LIMIT_MS);
+    hold_timer ??= setTimeout(() => replay_held(), HOLD_LIMIT_MS);
     render();
   };
   const settle = (outcome: KeyOutcome): boolean => {
@@ -276,8 +278,8 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     else if (outcome.kind === "effect") carry_out(outcome.effect);
     return outcome.kind !== "unbound";
   };
-  // `wait` is undefined once the time limit passed: then every held key runs. A key that still waits stops the replay where it is.
-  const replay_held = (wait: Waits) => {
+  // Without `wait`, as once the time limit passed or a browser shortcut came, every held key runs. A key that still waits stops the replay where it is.
+  const replay_held = (wait?: Waits) => {
     while (held.length > 0 && !late_keys) {
       held_again = false;
       const entry = held.shift()!;
@@ -295,13 +297,19 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   };
 
   // Returns true when the keymap took the token, or the line has ended and keeps it for the host, or it waits behind a held key.
+  // Held is always empty once the line ended, so a held key goes first.
   const press = (token: string): boolean => {
+    if (held.length > 0) {
+      if (!WITH_COMMAND_MODIFIER.test(token)) {
+        held.push({ token });
+        return true;
+      }
+      // The browser acts on a key with Ctrl, Alt or Meta itself (paste, select all, undo) only if this keydown goes uncancelled, and a replay cannot do that.
+      // So the held keys run now, without their rows, and the key goes on as usual.
+      replay_held();
+    }
     if (late_keys) {
       late_keys.push(token);
-      return true;
-    }
-    if (held.length > 0) {
-      held.push({ token });
       return true;
     }
     return press_now(token, waits);
