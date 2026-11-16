@@ -73,7 +73,7 @@ export async function run_cases({ config_dir, config_copy, load_config_dir, run_
   });
 
   await run_case(";g still moves a card when the page's setPointerCapture call fails", async () => {
-    await open_page("drag", "ptr", { new_tab: true });
+    await open_page("drag", "ptr_capture_fails", { new_tab: true });
     const mark = events.length;
     await press_keys(";gg");
     await pick("#c1");
