@@ -1,6 +1,6 @@
 {
   "name": "desertfox",
-  "version": "0.1.24",
+  "version": "1.0.0",
   "private": true,
   "description": "Vim keys for Firefox. Desert the mouse. The keys teach themselves.",
   "license": "MPL-2.0",
