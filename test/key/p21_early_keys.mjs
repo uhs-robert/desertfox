@@ -9,7 +9,7 @@ const SETTLED_READS = 4;
 
 export async function run_cases({ run_case, in_background, url_of, wait_event, poll_until, events, expect, sleep, press_keys, in_active_tab }) {
   // The background keeps the keymap in memory (keymap_source.ts) and drops it on a change to the key, so turning the delay on rewrites the key to force the next read through the wrapped `get`.
-  // That rewrite starts the delayed read at once: the bridge reads the keymap on every change (bridge_browser.ts), and a page that asks later joins that read. So the delay runs from the rewrite, not from the page's open, and `keymap_released_at` records when the read ends.
+  // That rewrite starts the delayed read at once: the bridge reads the keymap on every change (bridge_browser.ts), and a page that asks later joins that read. So the delay runs from the rewrite, not from the page's open.
   const delay_keymap_reads = (on) => in_background(`(async () => {
     const local = browser.storage.local;
     if (!${on}) { if (local.get.original) local.get = local.get.original; return 0; }
@@ -35,11 +35,15 @@ export async function run_cases({ run_case, in_background, url_of, wait_event, p
       const mark = events.length;
       await wait_in_front(await open_tab(url_of("page", "early_space")));
       await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "early_space", "the page to report that it shows");
+      const pressed_at = Date.now();
       await press_keys("-k", "space");
       const seen = await wait_event(mark, (event) => event.type === "keydown" && event.key === " " && event.page_id === "early_space", "the page to see the held Space", KEYMAP_DELAY_MS + 4000);
       // Only a held key arrives after the keymap read ends. A key the page got at once would show about 2 s before it.
       const released_at = await in_background("globalThis.keymap_released_at");
-      expect(released_at !== undefined && seen.at_ms >= released_at, `Space reached the page ${released_at - seen.at_ms} ms before the keymap read ended, so the keymap delay did not hold it`);
+      expect(released_at !== undefined, "the delayed keymap read never ended");
+      // A press after the release proves nothing: the page would get Space at once and still pass the check below.
+      expect(pressed_at < released_at, `Space was pressed ${pressed_at - released_at} ms after the keymap read ended, so the case proves nothing`);
+      expect(seen.at_ms >= released_at, `Space reached the page ${released_at - seen.at_ms} ms before the keymap read ended, so the keymap delay did not hold it`);
     } finally {
       await delay_keymap_reads(false);
     }
