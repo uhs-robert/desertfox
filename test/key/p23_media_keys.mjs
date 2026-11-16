@@ -24,15 +24,15 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
   await run_case("as speeds up the video that plays in the other frame, not the larger idle one on top", async () => {
     const mark = events.length;
     await press_keys("a", "s");
-    await wait_event(mark, report(inner, "ratechange", (event) => event.rate === 1.25), "the framed video at 1.25x");
-    await wait_toast("Speed 1.25x");
+    await wait_event(mark, report(inner, "ratechange", (event) => event.rate === 1.05), "the framed video at 1.05x");
+    await wait_toast("Speed 1.05x");
     await expect_absent(mark, top, report(top, "ratechange"), "the idle top video changed speed");
   });
 
   await run_case("3as moves three steps in one press, and ar resets to 1x", async () => {
     let mark = events.length;
     await press_keys("3", "a", "s");
-    await wait_event(mark, report(inner, "ratechange", (event) => event.rate === 2), "the framed video at 2x");
+    await wait_event(mark, report(inner, "ratechange", (event) => event.rate === 1.2), "the framed video at 1.2x");
     mark = events.length;
     await press_keys("a", "r");
     await wait_event(mark, report(inner, "ratechange", (event) => event.rate === 1), "the framed video back at 1x");
@@ -56,7 +56,7 @@ export async function run_cases({ run_case, setup, open_page, press_keys, wait_e
   await run_case("with nothing playing, the keys act on the largest visible video", async () => {
     let mark = events.length;
     await press_keys("a", "s");
-    await wait_event(mark, report(top, "ratechange", (event) => event.rate === 1.25), "the top video at 1.25x");
+    await wait_event(mark, report(top, "ratechange", (event) => event.rate === 1.05), "the top video at 1.05x");
     mark = events.length;
     await press_keys("a", "V");
     await wait_event(mark, report(top, "volumechange", (event) => event.volume === 0.95), "the top video at 95%");
