@@ -110,6 +110,8 @@ src.addEventListener("dragend", (e) => log("dragend", e));
 <div id="a" class="col"><div id="c1" class="card">card1</div><div id="c2" class="card">card2</div></div><div id="b" class="col"></div>
 <script>
 const strict = location.search.includes("strict");
+// Firefox throws for pointerId 0 only until a real mouse click in the session, and an earlier piece on the shard may have clicked, so a page that must see the failure fakes it.
+if (location.search.includes("capture_fails")) Element.prototype.setPointerCapture = () => { throw new DOMException("no active pointer", "NotFoundError"); };
 let dragged = null;
 document.addEventListener("pointerdown", (e) => { if (strict && !e.isTrusted) return; if (e.target.classList.contains("card")) { dragged = e.target; try { dragged.setPointerCapture(e.pointerId); send("drag", { ev: "capture_ok" }); } catch (err) { send("drag", { ev: "capture_error", name: err.name }); } } });
 document.addEventListener("pointermove", (e) => { if (dragged) dragged.style.opacity = "0.5"; });
