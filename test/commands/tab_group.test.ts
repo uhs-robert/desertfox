@@ -210,3 +210,31 @@ test("close leaves focus alone when no tab of the group is active", async () => 
   await handlers.close(ctx);
   assert.deepEqual(log, ["remove 1"]);
 });
+
+test("close from a tab that is not active still moves focus when another member is active, to the nearest outside tab after the group", async () => {
+  const window_tabs = [
+    { id: 1, index: 0, group_id: 10, active: false }, { id: 2, index: 1, group_id: 10, active: true }, { id: 9, index: 2, group_id: -1, active: false },
+  ];
+  const { handlers, log } = make(tab({ id: 1, group_id: 10 }), [{ id: 10, title: "", collapsed: false }], window_tabs);
+  await handlers.close({ tab_id: 1, window_id: 5 } as CommandContext);
+  assert.deepEqual(log, ["activate 9", "remove 1,2"]);
+});
+
+test("close prefers an outside tab that is not in a collapsed group, and falls back to one that is", async () => {
+  const window_tabs = [
+    { id: 1, index: 0, group_id: 10, active: true }, { id: 3, index: 1, group_id: 20, active: false }, { id: 9, index: 2, group_id: -1, active: false },
+  ];
+  const groups = [{ id: 10, title: "", collapsed: false }, { id: 20, title: "", collapsed: true }];
+  const prefer = make(tab({ group_id: 10 }), groups, window_tabs);
+  await prefer.handlers.close(ctx);
+  assert.deepEqual(prefer.log, ["activate 9", "remove 1"]);
+  const only_collapsed = make(tab({ group_id: 10 }), groups, window_tabs.slice(0, 2));
+  await only_collapsed.handlers.close(ctx);
+  assert.deepEqual(only_collapsed.log, ["activate 3", "remove 1"]);
+});
+
+test("close refuses when the tab left its group between the queries", async () => {
+  const { handlers, log } = make(tab({ group_id: 10 }), [{ id: 10, title: "", collapsed: false }], [{ id: 1, index: 0, group_id: -1, active: true }, { id: 2, index: 1, group_id: -1, active: false }]);
+  await assert.rejects(handlers.close(ctx), refused(/left its group/));
+  assert.deepEqual(log, []);
+});

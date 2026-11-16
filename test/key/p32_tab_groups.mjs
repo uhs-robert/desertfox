@@ -139,10 +139,19 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await background(`browser.tabs.group({ tabIds: [${two}], groupId: ${group_id} })`);
     await wait_group(two, "the second tab to join the group", (group) => group.id === group_id);
     const before = await background(`(async () => (await browser.sessions.getRecentlyClosed()).length)()`);
+    // The nearest tab outside the group, a tie going to the tab after. Firefox would choose its own tab when the focus move is missing.
+    const expected = await background(`(async () => {
+      const tabs = await browser.tabs.query({ currentWindow: true });
+      const at = tabs.find((tab) => tab.id === ${two}).index;
+      const outside = tabs.filter((tab) => tab.groupId !== ${group_id});
+      const distance = (tab) => Math.abs(tab.index - at) * 2 - (tab.index > at ? 1 : 0);
+      return outside.sort((a, b) => distance(a) - distance(b))[0].id;
+    })()`);
     await press_keys("tgD");
     await poll_until("both tabs to close", async () => (await background(`(async () => (await browser.tabs.query({})).filter((tab) => [${one}, ${two}].includes(tab.id)).length)()`)) === 0);
+    await poll_until("focus on the nearest tab outside the group", async () => (await active()).id === expected);
     // Measured probe: how Firefox lists a closed group. The result goes to docs/firefox-behavior.md.
-    const closed = await background(`(async () => (await browser.sessions.getRecentlyClosed()).slice(0, 4).map((entry) => Object.keys(entry).filter((key) => entry[key] && typeof entry[key] === "object").concat(entry.tab ? ["tab"] : [])))()`);
+    const closed = await background(`(async () => (await browser.sessions.getRecentlyClosed()).slice(0, 2).map((entry) => Object.keys(entry).filter((key) => entry[key] && typeof entry[key] === "object")))()`);
     console.log("tgD probe: recently closed before", before, "newest entries", JSON.stringify(closed));
   });
 }
