@@ -8,7 +8,6 @@ import { DEFAULT_SETTINGS, with_fallback_engines, type SnippetEntry } from "../c
 import { intent_problem, label_problem, to_firefox_shortcut, parse_sequence } from "../keys/index.ts";
 import { captured_key_param, find_param, source_text, without_param } from "../registry/params.ts";
 import { check_args, create_registry, DefineError, type Registry } from "../registry/index.ts";
-import { parse_binding } from "../registry/parse_binding.ts";
 import { COUNT_MODES } from "../keys/matcher.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
 import type { Modifier } from "../keymap.ts";

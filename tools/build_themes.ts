@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { read_theme_dir } from "./build-config/theme_dir.ts";
 import { LIGHT_INTENSITIES, ROLES } from "../src/shared/theme/roles.ts";
-import type { LightIntensity, OasisTheme, PackedOasisTheme, Role, RoleColors } from "../src/shared/theme/roles.ts";
+import type { LightIntensity, OasisTheme, Role, RoleColors } from "../src/shared/theme/roles.ts";
 import { parse_color } from "../src/shared/theme/theme_file.ts";
 import { clamped_fg_dim, FG_DIM_MIN_CONTRAST } from "../src/shared/theme/contrast.ts";
 

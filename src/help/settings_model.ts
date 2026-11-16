@@ -53,6 +53,8 @@ export function control_of(row: SettingListRow, engines: string[]): Control {
     case "text":
       return row.name === "default_engine" ? { type: "select", options: keep_current(engines) } : { type: "text", suggestions: [] };
     case "line": return { type: "text", suggestions: (row.allowed ?? []) as string[] };
+    case "site_table":
+    case "text_table":
     default: return { type: "read_only" };
   }
 }

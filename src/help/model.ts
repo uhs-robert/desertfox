@@ -1,7 +1,7 @@
 // Turns the three inputs of the help page into plain rows. No DOM here, so tests can read the rows.
 
 import { MODES } from "../shared/command.ts";
-import type { CommandMeta, ParamDef, ParamValue } from "../shared/command.ts";
+import type { CommandMeta, ParamDef } from "../shared/command.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
 import { search_engine_name } from "../commands/url_build.ts";
@@ -18,7 +18,7 @@ import { describe_default, is_dynamic_values, positional_params, source_text } f
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { subject_param } from "../shared/registry/params.ts";
-import type { Block, Inline } from "./blocks.ts";
+import type { Block } from "./blocks.ts";
 import { site_rules_view } from "../background/site_rules_view.ts";
 import type { SiteRulesView } from "../background/site_rules_view.ts";
 import { bound_key } from "../shared/bound_keys.ts";

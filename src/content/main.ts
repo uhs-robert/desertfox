@@ -1,7 +1,7 @@
 // Content script entry: a capture listener on keydown, the keymap from
 // the background, and the modes. Runs in every frame. A subframe starts on its first focus.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse, TreeLeaf } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse } from "../shared/index.ts";
 import { DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
 import { KEY_TEST_BUILD } from "../shared/key_test_build.ts";
 import { create_matcher, event_to_token, physical_token } from "../shared/keys/index.ts";

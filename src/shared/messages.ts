@@ -2,7 +2,6 @@
 // and `tabs.sendMessage`. The `type` field selects the shape.
 
 import type { BundleName } from "./bundles.ts";
-import type { MediaScan } from "./media.ts";
 import type { QualityProbe, QualityReport } from "./quality.ts";
 import type { CommandMeta, Mode } from "./command.ts";
 import type { WhichKeyBorder } from "./config.ts";
