@@ -38,7 +38,7 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
 }
 
 // A session wired to the real background handlers over fake storage. `other_tab` sends the same messages, as a `:set` in another tab would.
-async function make(file_settings: Record<string, unknown> = {}) {
+async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (text: string) => string = (text) => text) {
   const fake = install_fake_browser(file_settings);
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
@@ -48,10 +48,17 @@ async function make(file_settings: Record<string, unknown> = {}) {
     return request.type === "list_settings" ? messages.list() : messages.change(message as never);
   };
   const changes: (string | undefined)[] = [];
-  const session = create_settings_session({ send, engines: ["google", "ddg"], on_change: (name) => changes.push(name) });
+  const session = create_settings_session({ send, engines: ["google", "ddg"], resolve_keys, on_change: (name) => changes.push(name) });
   await session.load();
   return { ...fake, session, messages, changes };
 }
+
+test("a field's summary and long text come from the key resolver", async () => {
+  const { session } = await make({}, (text) => text.replaceAll("{key:repeat}", "<A-.>"));
+  const field = session.fields().find((candidate) => candidate.row.name === "which_key_repeat")!;
+  assert.match(field.doc, /^<A-\.> runs your last action again/);
+  assert.match(field.summary, /that <A-\.> runs again/);
+});
 
 test("each setting kind gets its control", async () => {
   const rows = new Map<string, SettingListRow>();
@@ -192,11 +199,11 @@ test("unmounting stops the listener, and a load that ends after it adds none", a
     await last_send;
     await new Promise((resolve) => setImmediate(resolve));
   };
-  const stop_late = mount_settings(container, send, [], events, ",r");
+  const stop_late = mount_settings(container, send, [], events, ",r", (text) => text);
   stop_late();
   await settled();
   assert.equal(added.length, 0);
-  const stop = mount_settings(container, send, [], events, ",r");
+  const stop = mount_settings(container, send, [], events, ",r", (text) => text);
   await settled();
   assert.equal(added.length, 1);
   stop();
@@ -214,7 +221,7 @@ test("typing while a save is in flight keeps the new draft and its check", async
 });
 
 test("a rejected send reads as a refusal for load and refresh", async () => {
-  const failing = create_settings_session({ send: async () => { throw new Error("background gone"); }, engines: [], on_change: () => undefined });
+  const failing = create_settings_session({ send: async () => { throw new Error("background gone"); }, engines: [], resolve_keys: (text) => text, on_change: () => undefined });
   assert.equal(await failing.load(), false);
   await failing.refresh();
   assert.deepEqual(failing.fields(), []);

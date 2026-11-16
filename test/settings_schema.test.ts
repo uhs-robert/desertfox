@@ -4,9 +4,14 @@ import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { is_setting_name, parse_setting_words, PER_SITE_SETTING_NAMES, SETTING_NAMES, SETTING_SPECS, table_list_rule } from "../src/shared/settings_schema.ts";
 import { SETTINGS_TABLE, type SettingRow } from "../src/shared/settings_table.ts";
 import { settings_schema } from "../src/shared/config_build/schemas.ts";
+import "../src/background/command_modules.ts";
+import { command_meta } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
+
+const all_commands = registry.list().map(command_meta);
 
 test("the editor schema names exactly the settings the checks know", () => {
-  const properties = Object.keys((settings_schema().properties as Record<string, unknown>)).sort();
+  const properties = Object.keys((settings_schema(all_commands).properties as Record<string, unknown>)).sort();
   assert.deepEqual(properties, [...SETTING_NAMES].sort());
 });
 

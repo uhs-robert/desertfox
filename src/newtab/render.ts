@@ -5,6 +5,7 @@ import { refused_as, warn_and_go } from "../shared/swallow.ts";
 import { draw_tile } from "./tile.ts";
 import { forget_ip_info, start_ip_info } from "./ip_info.ts";
 import { forget_weather, start_weather } from "./weather.ts";
+import { browser_cmdline_key, type CmdlineKeyReader } from "./cmdline_key.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
@@ -61,18 +62,31 @@ export function draw_sections(sections: readonly ListSection[]): HTMLElement {
   return lists;
 }
 
-// A button, so a hint reaches it. It asks the background to run `cmdline.open` in this tab, the same command the colon key runs. No input, so the address bar keeps the focus on a new tab.
-export function draw_command_hint(): HTMLButtonElement {
+// The key the hint names until the keymap has been read: the one the add-on ships with.
+const DEFAULT_COMMAND_KEY = ":";
+
+// Also puts the bound key on a hint drawn with the default one. The words around the key: with no key bound the button still works, so it says what it does and names no key.
+export function show_command_key(hint: HTMLElement, key: string | undefined): void {
+  const words = (text: string) => {
+    const span = document.createElement("span");
+    span.textContent = text;
+    return span;
+  };
+  if (key === undefined) {
+    hint.replaceChildren(words("open the command line"));
+    return;
+  }
+  const kbd = document.createElement("kbd");
+  kbd.textContent = key;
+  hint.replaceChildren(words("press "), kbd, words(" for the command line"));
+}
+
+// A button, so a hint reaches it. It asks the background to run `cmdline.open` in this tab, which works whatever key is bound. No input, so the address bar keeps the focus on a new tab.
+export function draw_command_hint(key: string | undefined = DEFAULT_COMMAND_KEY): HTMLButtonElement {
   const hint = document.createElement("button");
   hint.type = "button";
   hint.className = "command-hint";
-  const key = document.createElement("kbd");
-  key.textContent = ":";
-  const before = document.createElement("span");
-  before.textContent = "press ";
-  const after = document.createElement("span");
-  after.textContent = " for the command line";
-  hint.append(before, key, after);
+  show_command_key(hint, key);
   hint.addEventListener("click", () => {
     void browser.runtime.sendMessage({ type: "run", invocations: [{ id: "cmdline.open" }], mode: "normal" });
   });
@@ -129,8 +143,10 @@ function build_page(settings: WidgetSettings): { page: HTMLElement; stop_ticker:
 }
 
 // The first call puts the page in at once and fills the lists when they arrive. A later call builds the new page off screen and swaps it in with its lists, so the page height holds and the scroll position stays. The returned promise settles after the swap. Calls must not overlap, which `follow_settings` guarantees.
-export async function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers): Promise<void> {
+export async function render_new_tab(body: HTMLElement, settings: WidgetSettings, readers: PageReaders = browser_page_readers, read_cmdline_key: CmdlineKeyReader = browser_cmdline_key): Promise<void> {
   const next = build_page(settings);
+  // Started now so it runs beside the lists. A failed read leaves the default key on the hint.
+  const bound = settings.newtab_command_hint ? refused_as(read_cmdline_key().then((key) => ({ key })), undefined) : undefined;
   const previous = drawn;
   if (!previous) {
     drawn = next;
@@ -145,7 +161,13 @@ export async function render_new_tab(body: HTMLElement, settings: WidgetSettings
     throw error;
   }
   if (sections.length > 0) next.page.append(draw_sections(sections));
-  if (settings.newtab_command_hint) next.page.append(draw_command_hint());
+  if (bound) {
+    const hint = draw_command_hint();
+    next.page.append(hint);
+    const named = bound.then((found) => found && show_command_key(hint, found.key));
+    // A redraw swaps in only after the key is known, so a rebound key never flashes the default. The first draw is already on screen and fills in later.
+    if (previous) await named;
+  }
   if (settings.newtab_weather !== true) void refused_as(forget_weather(), undefined);
   if (settings.newtab_weather === true) {
     // A corner of the page, outside the centered column. The fetch is not awaited, so a slow or failed request never holds the page.

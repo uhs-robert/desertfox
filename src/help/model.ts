@@ -21,7 +21,9 @@ import { subject_param } from "../shared/registry/params.ts";
 import type { Block, Inline } from "./blocks.ts";
 import { site_rules_view } from "../background/site_rules_view.ts";
 import type { SiteRulesView } from "../background/site_rules_view.ts";
-import { bound_key, key_text, quick_start_blocks, tip_block } from "./quick_start.ts";
+import { bound_key } from "../shared/bound_keys.ts";
+import { resolve_key_docs } from "../shared/key_docs.ts";
+import { key_text, quick_start_blocks, tip_block } from "./quick_start.ts";
 import { practice_intro, practice_lessons, practice_outro } from "./practice_lessons.ts";
 import type { PracticeText } from "./practice_page.ts";
 import { flag_alternatives, usage_line } from "../shared/registry/usage.ts";
@@ -82,6 +84,8 @@ export type HelpModel = {
   tip: Block;
   // The keys the Settings page names, read from the keymap like the Quick Start text.
   keys: { reload: string; find_anything: string };
+  // Fills the `{key:name}` marks of the setting prose from the same keymap.
+  resolve_keys: (text: string) => string;
   // The Site Rules page's rows for one address, read from the keymap the model was built from.
   site_rules_for: (address: string) => SiteRulesView;
 };
@@ -224,6 +228,7 @@ export function build_help_model(commands: CommandMeta[], compiled: CompiledKeym
     practice: { intro: practice_intro(compiled, commands), outro: practice_outro(compiled, commands), lessons: practice_lessons(compiled, commands) },
     tip: tip_block(compiled, commands),
     keys: { reload: key_text(compiled, commands, "reload"), find_anything: key_text(compiled, commands, "find_anything") },
+    resolve_keys: (text) => resolve_key_docs(text, compiled, commands),
     site_rules_for: (address) => site_rules_view(compiled, address),
     groups: [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, rows]) => ({ name, commands: rows })),
   };

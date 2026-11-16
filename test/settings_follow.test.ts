@@ -379,3 +379,60 @@ test("a throw while keeping the view is logged and does not stop later redraws",
     logged.mock.restore();
   }
 });
+
+// The text of the hint button, in the order it reads.
+const text_under = (node: FakeNode): string => node.textContent + node.children.map(text_under).join("");
+const find_hint = (node: FakeNode): FakeNode | undefined => (node.className === "command-hint" ? node : node.children.map(find_hint).find((found) => found !== undefined));
+
+test("the new tab hint draws at once with the default key, then names the bound key, no key or keeps the default", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+  const empty_readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() };
+  const settings = effective_settings({} as never);
+  const cases: [string, () => Promise<string | undefined>, string][] = [
+    ["default", async () => ":", "press : for the command line"],
+    ["rebound", async () => "<A-x>", "press <A-x> for the command line"],
+    ["unbound", async () => undefined, "open the command line"],
+    ["a failed read", async () => Promise.reject(new Error("storage gone")), "press : for the command line"],
+  ];
+  for (const [name, read, expected] of cases) {
+    const { body } = install_fakes();
+    // A fresh copy of the module, because it remembers the page of the earlier tests.
+    const fresh_module = `../src/newtab/render.ts?hint_key_${name.replaceAll(" ", "_")}`;
+    const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
+    await render_new_tab(body as unknown as HTMLElement, settings, empty_readers, read);
+    await settled();
+    assert.equal(text_under(find_hint(body)!), expected, name);
+  }
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("the first new tab paint does not wait for the keymap, and a redraw waits so the default never flashes", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+  const { body } = install_fakes();
+  const empty_readers = { query_tabs: async () => [], bookmark_tree: async () => [], page_is_private: async () => false, closed_sessions: async () => [], visits: async () => [], cached_icons: async () => new Map() };
+  const fresh_module = "../src/newtab/render.ts?hint_key_wait";
+  const { render_new_tab } = (await import(fresh_module)) as typeof import("../src/newtab/render.ts");
+  let release!: (key: string) => void;
+  const slow = () => new Promise<string | undefined>((resolve) => (release = resolve));
+  const first = render_new_tab(body as unknown as HTMLElement, effective_settings({} as never), empty_readers, slow);
+  await first;
+  assert.equal(body.children.length, 1);
+  assert.equal(text_under(find_hint(body)!), "press : for the command line");
+  release("<A-x>");
+  await settled();
+  assert.equal(text_under(find_hint(body)!), "press <A-x> for the command line");
+  let redraw_done = false;
+  const second = render_new_tab(body as unknown as HTMLElement, effective_settings({} as never), empty_readers, slow).then(() => (redraw_done = true));
+  await settled();
+  assert.equal(redraw_done, false);
+  release("<A-y>");
+  await second;
+  assert.equal(text_under(find_hint(body)!), "press <A-y> for the command line");
+  } finally {
+    mock.timers.reset();
+  }
+});

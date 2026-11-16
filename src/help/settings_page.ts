@@ -283,7 +283,7 @@ export function update_row(row: Row, field: Field): void {
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
 // Loads the settings into `container` and keeps them current: a change in another tab refreshes the rows the reader is not editing. The returned function stops the listening. The router calls it before it rebuilds the body.
-export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents, reload_key: string): () => void {
+export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents, reload_key: string, resolve_keys: SessionDeps["resolve_keys"]): () => void {
   const rows = new Map<string, Row>();
   // The headings and the group boxes come from the render, so a section link reaches a heading before the settings load.
   const build = (session: SettingsSession) => {
@@ -304,6 +304,7 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
   const session: SettingsSession = create_settings_session({
     send,
     engines,
+    resolve_keys,
     on_change: (name) => {
       if (rows.size === 0) return build(session);
       for (const field of session.fields()) {

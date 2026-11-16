@@ -8,6 +8,11 @@ import { parse_setting_words, SETTING_NAMES, SETTING_SPECS } from "../src/shared
 import { enabled_widgets } from "../src/newtab/render.ts";
 import { read_sections } from "../src/newtab/lists.ts";
 import { settings_schema } from "../src/shared/config_build/schemas.ts";
+import "../src/background/command_modules.ts";
+import { command_meta } from "../src/shared/registry/index.ts";
+import { registry } from "../src/shared/registry/builtin.ts";
+
+const all_commands = registry.list().map(command_meta);
 
 const EXPECTATIONS: Record<string, string> = {
   which_key_delay_ms: "a number of milliseconds, 0 or more",
@@ -395,22 +400,22 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // The check refuses an empty pattern, and now the editor does too.
   // `ignore_sites` became `site_rules`.
   delete properties.ignore_sites;
-  properties.site_rules = (settings_schema().properties as Record<string, unknown>).site_rules;
+  properties.site_rules = (settings_schema(all_commands).properties as Record<string, unknown>).site_rules;
   // Defaults that were written at the readers.
   properties.new_tab_page.default = "desertfox";
   properties.open_completion.default = ["bookmarks", "history"];
   properties.newtab_links.default = [];
   // A setting added after the fixture.
-  properties.history_list_max = (settings_schema().properties as Record<string, unknown>).history_list_max;
+  properties.history_list_max = (settings_schema(all_commands).properties as Record<string, unknown>).history_list_max;
   // `palette` became `theme`, and `desktop` joined its examples and description.
   delete properties.palette;
-  properties.theme = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>).theme));
+  properties.theme = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>).theme));
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info"]) properties[name] = JSON.parse(JSON.stringify((settings_schema().properties as Record<string, unknown>)[name]));
+  for (const name of ["statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
   // #620 rewrote every description for a first-time reader.
-  const described_now = settings_schema().properties as Record<string, { description: string }>;
+  const described_now = settings_schema(all_commands).properties as Record<string, { description: string }>;
   for (const [name, property] of Object.entries(properties as Record<string, { description?: string | undefined }>)) property.description = described_now[name]?.description;
-  assert.deepEqual(JSON.parse(JSON.stringify(settings_schema())), JSON.parse(JSON.stringify(before)));
+  assert.deepEqual(JSON.parse(JSON.stringify(settings_schema(all_commands))), JSON.parse(JSON.stringify(before)));
 });
