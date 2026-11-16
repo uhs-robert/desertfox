@@ -176,6 +176,20 @@ define("page.send_key", {
   bundle: "site_actions",
 });
 
+// Meant for the arrow mode, which binds h, j, k and l to it. Firefox ignores a script's arrow keys on its own controls, so the handler moves each native control through the DOM and sends a keydown to the rest.
+define("page.arrow", {
+  label: "Arrow on the focused control",
+  intent: "Press an arrow on the focused control. A select, range or radio changes its value and fires input and change. With nothing focused, the page scrolls as the normal keys do. On any other element, it sends an ArrowLeft, ArrowDown, ArrowUp or ArrowRight keydown and keyup, which only a page script reads. A count prefix repeats it.",
+  params: [
+    { name: "direction", type: "enum", values: ["left", "down", "up", "right"], value_labels: { left: "left", down: "down", up: "up", right: "right" }, description: { left: "Press the left arrow.", down: "Press the down arrow.", up: "Press the up arrow.", right: "Press the right arrow." } },
+    { name: "times", type: "int", default: 1, min: 1, max: SEND_KEY_MAX_TIMES, description: "Press this many times." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  count: { param: "times" },
+  bundle: "site_actions",
+});
+
 // Meant for site rows, where a synthetic Ctrl+X or Ctrl+V keydown does not cut or paste: the browser runs a clipboard action only from `execCommand`, so a row binds a key to this command instead.
 define("page.clipboard", {
   label: "Cut, copy or paste in the page",

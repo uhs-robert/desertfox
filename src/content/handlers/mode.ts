@@ -1,6 +1,7 @@
 import type { Mode } from "../../shared/index.ts";
 import type { LeaveTabInsert } from "../../shared/messages.ts";
 import { bundles } from "../bundles.ts";
+import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { page_mode } from "../page_mode.ts";
 import { site_mode } from "../site_mode.ts";
 import type { ContentHandler } from "./types.ts";
@@ -21,7 +22,16 @@ export const mode_set: ContentHandler = {
 
 // The site mode is an overlay, not a mode, so this handler and the key listener are all that start and end it.
 export const mode_site: ContentHandler = {
-  run: (args) => site_mode.set_(args.name === "off" ? undefined : (args.name as string)),
+  run: (args) => {
+    const ending = args.name === "off" || (args.toggle && args.name === site_mode.name_);
+    // A toggle that starts the mode leaves a text field and any other mode first. Both are mode changes, and a mode change ends a site mode, so they come before the start. A mode the page lacks changes nothing, so it leaves both alone.
+    if (args.toggle && !ending) {
+      if (!site_mode.modes_?.[args.name as string]) return;
+      if (is_editable_element(deepest_focused_element())) blur_focused_element();
+      if (page_mode.get_mode_() !== "normal") void bundles.set_mode_("normal");
+    }
+    site_mode.set_(ending ? undefined : (args.name as string));
+  },
 };
 
 export const mode_escape: ContentHandler = {

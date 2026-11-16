@@ -96,9 +96,9 @@ export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSit
 // Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a mode bind survives a key rule. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.
 function site_modes_for(tree: TreeBranch | undefined, modes: Readonly<Record<string, SiteModeColumn<SiteBind>>>): Record<string, PageSiteMode> {
   return Object.fromEntries(
-    Object.entries(modes).map(([name, { label, bind }]) => {
+    Object.entries(modes).map(([name, { label, bind, sticky }]) => {
       const grafted = graft_binds(tree, bind);
-      return [name, { label, tree: Object.fromEntries(Object.entries(grafted.children).filter(([token, child]) => child !== tree?.children[token])) }];
+      return [name, { label, ...(sticky && { sticky }), tree: Object.fromEntries(Object.entries(grafted.children).filter(([token, child]) => child !== tree?.children[token])) }];
     }),
   );
 }

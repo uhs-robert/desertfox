@@ -406,7 +406,7 @@ function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, se
     if (regex === undefined) return [];
     const { keys, bind, modes, ...columns } = site_row_columns(row);
     const compiled_bind = bind === undefined ? {} : { bind: compile_binds(bind as BindingTable, resolve, settings, sources, warnings) };
-    const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
+    const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, ...(mode.sticky && { sticky: true }), bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
     const rule: SiteRule = { ...(row_sources[index] ?? { origin: "user" }), site: row.site, regex, ...columns, ...compiled_bind, ...compiled_modes };
     if (keys === undefined) return [{ site: row.site, rule }];
     return [{ site: row.site, rule: { ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } } }];

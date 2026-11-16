@@ -3,7 +3,7 @@ import type { PageSiteMode } from "../shared/index.ts";
 // The site mode in force on this page, or undefined. It lays a row's own binds over normal mode and is not a `Mode`. Plain state like `page_mode`: main.ts wires the listener that swaps the keymap.
 
 // `modes_` is what the page reply defines. A name it lacks changes nothing, so a typo cannot end the running mode.
-export const site_mode: { name_: string | undefined; modes_: Record<string, PageSiteMode> | undefined; on_change_: () => void; set_: (next?: string) => void } = {
+export const site_mode: { name_: string | undefined; modes_: Record<string, PageSiteMode> | undefined; on_change_: () => void; set_: (next?: string) => void; end_on_input_: () => void } = {
   name_: undefined,
   modes_: undefined,
   on_change_: () => {},
@@ -12,4 +12,6 @@ export const site_mode: { name_: string | undefined; modes_: Record<string, Page
     site_mode.name_ = next;
     site_mode.on_change_();
   },
+  // A mouse press or a key the page keeps. A sticky mode survives them, so a widget can be opened and picked from.
+  end_on_input_: () => site_mode.modes_?.[site_mode.name_!]?.sticky || site_mode.set_(),
 };

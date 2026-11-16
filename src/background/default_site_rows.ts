@@ -64,11 +64,27 @@ const MAPS_TARGET = 'div[role="application"][tabindex="0"]';
 const map_arrow = (key: string, key_code: number): BoundInvocation => ({ id: "page.send_key", args: { key, key_code, target: MAPS_TARGET, focus: true }, when_focus: MAPS_TARGET });
 const MAPS_BIND: BindingTable = { h: map_arrow("ArrowLeft", 37), j: map_arrow("ArrowDown", 40), k: map_arrow("ArrowUp", 38), l: map_arrow("ArrowRight", 39) };
 
+// The arrow mode on every site, started by Alt+l (the `browser` block of the default keymap). Each key goes through `page.arrow`, which moves a native control itself because Firefox ignores a script's arrow keys there. Escape sends Escape to the page, so a script menu closes, and ends the mode.
+const arrow_key = (direction: "left" | "down" | "up" | "right"): BoundInvocation => ({ id: "page.arrow", args: { direction } });
+const ARROW_MODE: SiteModeTable[string] = {
+  label: "ARROW",
+  sticky: true,
+  bind: {
+    h: arrow_key("left"),
+    j: arrow_key("down"),
+    k: arrow_key("up"),
+    l: arrow_key("right"),
+    // The mode ends first, so a page that cannot take the Escape never leaves it on.
+    "<Escape>": [{ id: "mode.site", args: { name: "off" } }, { id: "page.send_key", args: { key: "Escape", key_code: 27 } }],
+  },
+};
+
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
   { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
   { name: "maps", row: { site: "https://www.google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
+  { name: "arrow", row: { site: "<all_urls>", modes: { arrow: ARROW_MODE } } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

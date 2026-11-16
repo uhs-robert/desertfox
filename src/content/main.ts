@@ -11,7 +11,7 @@ import { message_of } from "./bundle_host.ts";
 import type { PageHostApi } from "./bundle_host.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element, set_editable_rules } from "./editable.ts";
-import { set_scroll_selector } from "./handlers/scroll.ts";
+import { scroll_by, set_scroll_selector } from "./handlers/scroll.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
@@ -159,13 +159,13 @@ function on_keydown(event: KeyboardEvent): void {
     event.repeat,
     () => {
       target && replay_key_to_page(event, target, press, cancelled_keys, (type, init) => new KeyboardEvent(type, init));
-      site_mode.set_();
+      site_mode.end_on_input_();
     },
     physical_token(event),
   );
   cancelled_keys.record_keydown_(event.code, decision, press);
   if (decision === "cancel") cancel(event);
-  else site_mode.set_();
+  else site_mode.end_on_input_();
 }
 
 function on_keypress(event: KeyboardEvent): void {
@@ -341,7 +341,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, frame_parked_: () => frame_parked });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);
@@ -351,7 +351,7 @@ function start(): void {
   watch_roots_around_focus();
   listen("pagehide", bundles.page_hidden_, false);
   listen("visibilitychange", on_visibility_change, false, document);
-  listen("mousedown", () => site_mode.set_());
+  listen("mousedown", site_mode.end_on_input_);
   site_mode.on_change_ = () => {
     install_tree();
     refresh_mode_indicator();

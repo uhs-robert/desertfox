@@ -258,6 +258,21 @@ export function start_server() {
       </script>`;
       return response.end(page(`closed_field ${id}`, build));
     }
+    if (url.pathname === "/arrow_widgets") {
+      // Every widget the arrow mode drives, plus a script listbox and a text field. The page records in data attributes what its own scripts saw: `keys` the arrow keydowns of the listbox, `escapes` every Escape keydown anywhere, `changes` the change events of the native controls.
+      const widgets = '<select id="sel"><option>a</option><option disabled>b</option><option>c</option></select><input id="rng" type="range" min="0" max="10" value="5"><input type="radio" name="g" id="r1" checked><input type="radio" name="g" id="r2"><div id="list" tabindex="0" role="listbox">list</div><input id="field" type="text"><div id="shadow_host"></div>';
+      const script = `<script>
+        const arrow_root = document.documentElement;
+        arrow_root.dataset.keys = ""; arrow_root.dataset.escapes = "0"; arrow_root.dataset.changes = "";
+        addEventListener("keydown", (event) => { if (event.key === "Escape") arrow_root.dataset.escapes = String(Number(arrow_root.dataset.escapes) + 1); }, true);
+        document.getElementById("list").addEventListener("keydown", (event) => { if (event.key.startsWith("Arrow")) arrow_root.dataset.keys += event.key + ","; });
+        arrow_root.dataset.clicks = "";
+        for (const id of ["r1", "r2"]) document.getElementById(id).addEventListener("click", () => (arrow_root.dataset.clicks += id + ","));
+        document.getElementById("shadow_host").attachShadow({ mode: "open" }).innerHTML = '<select id="inner_sel"><option>x</option><option>y</option></select>';
+        for (const id of ["sel", "rng", "r1", "r2"]) document.getElementById(id).addEventListener("change", () => (arrow_root.dataset.changes += id + ","));
+      </script>`;
+      return response.end(page(`arrow_widgets ${id}`, widgets + tall_filler + script));
+    }
     if (url.pathname === "/framed") {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));

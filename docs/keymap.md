@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 492 (normal 262, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 3)
+bound: 493 (normal 262, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -602,5 +602,6 @@ Which-key group names:
 | `<A-j>` | `tab.next` | Next tab |
 | `<A-k>` | `tab.prev` | Previous tab |
 | `<A-,>` | `browser.focus_page` | Focus page |
+| `<A-l>` | `mode.site --toggle arrow` | Arrow mode |
 
 <!-- END generated -->
