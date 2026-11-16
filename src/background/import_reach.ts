@@ -76,9 +76,9 @@ function args_reach(args: Record<string, unknown>, command: CommandMeta | undefi
   };
 }
 
-// What a key that names a consent setting can do to it. Only a plain set to a literal false changes it without a way to switch it on. A prompt, a missing value that a modifier can fill, a toggle and an unset can all switch it on.
-function consent_use(step: BoundInvocation): KeyRow["consent"] {
-  const plain_false = step.id === "settings.set" && step.prompt === undefined && String(step.args?.value).toLowerCase() === "false";
+// What a key that names a consent setting can do to it. Only a plain set to a literal false changes it without a way to switch it on. A prompt, a missing value that a modifier can fill, a toggle and an unset can all switch it on. So can a literal false when a modifier carries a `value`, which wins over the key's own.
+function consent_use(step: BoundInvocation, modifier_sets_value: boolean): KeyRow["consent"] {
+  const plain_false = !modifier_sets_value && step.id === "settings.set" && step.prompt === undefined && String(step.args?.value).toLowerCase() === "false";
   return plain_false ? "change" : "switch_on";
 }
 
@@ -96,6 +96,7 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
   const add_address = (row: ReachRow, rank: number) => addresses.push({ row, rank });
   const add_key = (group: KeyGroup, row: KeyRow, rank: number) => keys[group].push({ row, rank });
 
+  const modifier_sets_value = Object.values(config.keymap.modifiers ?? {}).some((args) => "value" in args);
   const walk_binding = (sequence: string, where: string, binding: unknown) => {
     for (const step of steps_of(binding)) {
       const command = meta.get(step.id);
@@ -110,7 +111,7 @@ export function import_reach(config: MergedConfig, commands: CommandMeta[]): Imp
       if (group === undefined) continue;
       const printed_args = step.prompt && prefill !== undefined ? { ...args, [step.prompt.param]: prefill } : args;
       const run = print_command(command ?? { id: step.id }, printed_args, { flags: "long" });
-      const consent_note = consent ? consent_use(step) : undefined;
+      const consent_note = consent ? consent_use(step, modifier_sets_value) : undefined;
       const rank = consent_note !== undefined || group === "host" ? RISKY : group === "clipboard_or_page" ? (reads_or_presses(step.id, args, clipboard) ? RISKY : NOTABLE) : urls.length > 0 ? NOTABLE : PLAIN;
       add_key(group, { where, keys: sequence, run, ...(consent_note === undefined ? {} : { consent: consent_note }) }, rank);
     }
