@@ -11,7 +11,8 @@ const MAX_BYTES = {
   "content.js": 20.5 * 1024,
   // 49 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB. The three newtab_weather settings add their default values, which every bundle that imports the defaults carries.
   // 50.5 KB: the `drop` filter of the grab target pass (`drop_targets.ts`, the Tab widen key and the fallback) passed 49 KB.
-  "hints.js": 50.5 * 1024,
+  // 50.75 KB: the review fixes of the `drop` filter (shadow-root climb, tag escape, warn_and_go) passed 50.5 KB.
+  "hints.js": 50.75 * 1024,
   "caret.js": 32 * 1024,
   // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
   // 9 KB (owner approved): the top frame keeps its own panel when a subframe's late erase arrives (`relayed_panel.ts`, #619).
