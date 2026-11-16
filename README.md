@@ -43,7 +43,7 @@ You can edit any text box in your own editor, such as Neovim: press `<C-o>` in i
 - **It is safe by design.** DesertFox never runs the keys, commands or config lines you type as code, and its optional helper program takes a fixed set of requests. [Details](docs/design.md#decisions).
 - **It is tested with real key presses.** A test suite presses real keys in a real Firefox.
 
-**DesertFox stays alive.** Its background page is a persistent Manifest V2 page, so Firefox does not unload it on a timer and it is there for every key. The page keeps no state only in memory: settings, marks and the compiled keymap all live in extension storage, so a restart of the page loses none of them. On each page the content script starts at `document_start` and asks the background for the keymap, so keys work within milliseconds of a page starting to load. If Firefox drops Manifest V2 one day, a move to an event page changes the manifest and little else, because state is already in storage.
+**DesertFox stays alive.** Its background page is a persistent Manifest V2 page, so Firefox does not unload it on a timer and it is there for every key. Settings, marks and the compiled keymap live in extension storage, so a restart of the page keeps them. Temporary settings, private marks and other session state clear on an add-on reload or update, and a macro that is playing stops. On each page the content script starts at `document_start` and asks the background for the keymap. Keys work within milliseconds of a page starting to load. If Firefox drops Manifest V2 one day, a move to an event page changes the manifest and little else. State is already in storage.
 
 ## 📦 Install
 
