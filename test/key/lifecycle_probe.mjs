@@ -64,7 +64,7 @@ function firefox_of(runtime_dir) {
   return all_pids().find((pid) => read_proc(pid, "comm")?.trim() === "firefox" && environ_of(pid).XDG_RUNTIME_DIR === runtime_dir && read_proc(parent_of(pid), "comm")?.trim() !== "firefox");
 }
 
-const tmp_entries = () => readdirSync("/tmp").filter((name) => name.startsWith(RUNTIME_PREFIX) || name.startsWith(RUN_DIR_PREFIX));
+const tmp_entries = () => [...readdirSync("/tmp").filter((name) => name.startsWith(RUNTIME_PREFIX)), ...readdirSync(tmpdir()).filter((name) => name.startsWith(RUN_DIR_PREFIX))];
 
 const pgid_of = (pid) => {
   const stat = read_proc(pid, "stat");
@@ -72,10 +72,10 @@ const pgid_of = (pid) => {
 };
 
 // labwc carries a file capability, so the kernel makes it non-dumpable and its environ is unreadable. Its cmdline is readable:
-// `labwc -C <session dir>/labwc`, with the session dir under a run folder or, outside a run, a desertfox-key-* folder in /tmp.
+// `labwc -C <session dir>/labwc`, with the session dir under a run folder or, outside a run, a desertfox-key-* folder, both under the temp root that make_run_dir uses (os.tmpdir(), which honors TMPDIR).
 const is_session_labwc = (pid) => {
   const [program, flag, config_dir] = (read_proc(pid, "cmdline") ?? "").split("\0");
-  return basename(program ?? "") === "labwc" && flag === "-C" && /^\/tmp\/desertfox-key(-run)?-/.test(config_dir ?? "");
+  return basename(program ?? "") === "labwc" && flag === "-C" && (config_dir ?? "").startsWith(join(tmpdir(), "desertfox-key-"));
 };
 
 const session_labwc_pids = () => all_pids().filter((pid) => is_session_labwc(pid) && !foreign_labwc.has(pid));
@@ -86,7 +86,7 @@ const foreign_labwc = new Set();
 // Processes of a key-test run: anything that carries a session dir, any run.mjs or worker.mjs of this checkout, and the
 // session's labwc, found by its cmdline, with every process of its process group.
 function stray_processes() {
-  const labwc_groups = new Set(all_pids().filter(is_session_labwc).map(pgid_of).filter((pgid) => pgid !== undefined));
+  const labwc_groups = new Set(session_labwc_pids().map(pgid_of).filter((pgid) => pgid !== undefined));
   return all_pids().filter((pid) => !foreign_labwc.has(pid)).filter((pid) => {
     const environ = environ_of(pid);
     if (Object.values(environ).some((value) => value.startsWith(`/tmp/${RUNTIME_PREFIX}`))) return true;

@@ -133,6 +133,36 @@ function recorded_leaders(runtime_dir) {
   return text.split("\n").map((line) => line.split(" ")).filter(([pid, ticks]) => /^\d+$/.test(pid) && /^\d+$/.test(ticks ?? "") && leader_is_running(Number(pid), ticks)).map(([pid]) => Number(pid));
 }
 
+// Every running process in a recorded group, also after its leader exited: a member can outlive the leader and ignore SIGTERM.
+// While any member lives, the kernel keeps the pgid from being reused as a pid. A leader that is still there must match its
+// recorded start time, so a recorded pid that a new process took over is never counted.
+function recorded_group_members(runtime_dir) {
+  let text;
+  try {
+    text = readFileSync(join(runtime_dir, PIDS_FILE), "utf8");
+  } catch {
+    return [];
+  }
+  const recorded = new Map(text.split("\n").map((line) => line.split(" ")).filter(([pid, ticks]) => /^\d+$/.test(pid) && /^\d+$/.test(ticks ?? "")).map(([pid, ticks]) => [Number(pid), ticks]));
+  const members = [];
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    const pid = Number(entry);
+    const found = process_state_and_ticks(pid);
+    const pgid = process_group_of(pid);
+    if (found === undefined || found.state === "Z" || !recorded.has(pgid)) continue;
+    if (pid === pgid && found.ticks !== recorded.get(pgid)) continue;
+    if (pid !== pgid && process_state_and_ticks(pgid) !== undefined && process_state_and_ticks(pgid).ticks !== recorded.get(pgid)) continue;
+    members.push(pid);
+  }
+  return members;
+}
+
+// Signals the group of each member, so a group whose leader is gone is still reached.
+function signal_groups_of(pids, signal) {
+  signal_groups([...new Set(pids.map(process_group_of).filter((pgid) => pgid !== undefined))], signal);
+}
+
 function recorded_leaders_anywhere() {
   return readdirSync("/tmp").filter((name) => name.startsWith(RUNTIME_PREFIX)).flatMap((name) => recorded_leaders(join("/tmp", name)));
 }
@@ -160,8 +190,8 @@ async function stop_runtime(runtime_dir, client_groups = new Set()) {
   if (client_groups.size > 0) await terminate(() => pids_carrying(runtime_dir).filter(is_client), STOP_WAIT_MS);
   await terminate(() => pids_carrying(runtime_dir), STOP_WAIT_MS);
   // The recorded groups after the carriers, so labwc outlives the Hyprland nested in it.
-  await terminate(() => recorded_leaders(runtime_dir), STOP_WAIT_MS, signal_groups);
-  const everything_left = () => [...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir)];
+  await terminate(() => recorded_group_members(runtime_dir), STOP_WAIT_MS, signal_groups_of);
+  const everything_left = () => [...new Set([...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir), ...recorded_group_members(runtime_dir)])];
   await wait_until("killed processes to go", () => everything_left().length === 0, { timeout_ms: 1000 }).catch(() => undefined);
   const left = everything_left();
   rmSync(runtime_dir, { recursive: true, force: true });
@@ -191,13 +221,13 @@ export function kill_session_now(name) {
   try {
     for (let pass = 0; pass < 50; pass++) {
       const pids = pids_carrying(runtime_dir);
-      const leaders = recorded_leaders(runtime_dir);
-      if (pids.length === 0 && leaders.length === 0) break;
+      const members = recorded_group_members(runtime_dir);
+      if (pids.length === 0 && members.length === 0) break;
       signal_all(pids, "SIGKILL");
-      signal_groups(leaders, "SIGKILL");
+      signal_groups_of(members, "SIGKILL");
       sleep_sync(20);
     }
-    const left = [...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir)];
+    const left = [...new Set([...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir), ...recorded_group_members(runtime_dir)])];
     if (left.length > 0) {
       console.error(`session ${name}: processes still run from ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
       return;

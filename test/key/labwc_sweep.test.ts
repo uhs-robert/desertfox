@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -189,4 +189,34 @@ test("stopping a session throws when a recorded process survives, after it stopp
   await wait_gone(stoppable.pid!);
   assert.ok(!is_running(stoppable.pid!));
   assert.ok(is_running(survivor.pid!));
+}));
+
+test("stopping a session ends a group member that ignores SIGTERM after its leader exited", { skip }, () => with_tmp_root(async () => {
+  const name = `lsg${process.pid.toString(36)}`;
+  const runtime_dir = runtime_dir_of(name);
+  runtime_dirs.push(runtime_dir);
+  mkdirSync(runtime_dir, { recursive: true, mode: 0o700 });
+  // The leader dies on SIGTERM. Its child stays in the group, ignores SIGTERM and says so once it does.
+  const code = 'use POSIX; $| = 1; if (fork()) { sleep 300 } else { $SIG{TERM} = "IGNORE"; print qq(ready\\n); sleep 300 }';
+  const leader = spawn("perl", ["-e", code], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
+  started.push(leader);
+  await new Promise<void>((resolve_ready, reject_ready) => {
+    const timer = setTimeout(() => reject_ready(new Error("the member was not ready within 5 s")), 5000);
+    createInterface({ input: leader.stdout! }).once("line", () => { clearTimeout(timer); resolve_ready(); });
+  });
+  writeFileSync(join(runtime_dir, "pids"), `${leader.pid} ${start_ticks(leader.pid!)}\n`);
+  const member = readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).map(Number).find((pid) => {
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "latin1");
+      return pid !== leader.pid && Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]) === leader.pid;
+    } catch {
+      return false;
+    }
+  });
+  assert.ok(member !== undefined, "the member is in the leader's group");
+  await stop_session_named(name);
+  await wait_gone(leader.pid!);
+  await wait_gone(member!);
+  assert.ok(!is_running(leader.pid!));
+  assert.ok(!is_running(member!), "the member that ignored SIGTERM is killed");
 }));
