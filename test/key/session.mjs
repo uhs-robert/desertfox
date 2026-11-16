@@ -2,9 +2,11 @@
 // Hyprland nested in it, plus one keyboard client (keyboard.py) for the whole session.
 // Each session lives in its own runtime dir, /tmp/dfk-<uid>-<name>, which holds its bus, its Wayland sockets and an
 // owner file with the pid of the process that started it. Every process of the session carries that dir in its
-// environment, which is how stop() and the sweep find them, children and strays included.
+// environment, which is how stop() and the sweep find them, children and strays included. The one exception is labwc:
+// its file capability makes the kernel hide its environment, so a `pids` file in the dir records each child's pid and
+// start time, and stop() and the sweep end each recorded process group too.
 import { execFile, spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
@@ -17,6 +19,7 @@ const RUNTIME_PREFIX = `dfk-${process.getuid()}-`;
 // Hyprland's event socket <runtime>/hypr/<62-char signature>/.socket2.sock must fit sun_path (107 bytes).
 const MAX_NAME_LENGTH = 107 - `/tmp/${RUNTIME_PREFIX}`.length - "/hypr/".length - 62 - "/.socket2.sock".length;
 const OWNER_FILE = "owner";
+const PIDS_FILE = "pids";
 const SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin";
 export const OUTPUT = "WAYLAND-1";
 const STOP_WAIT_MS = 2000;
@@ -43,6 +46,22 @@ function process_is_alive(pid) {
   }
 }
 
+// A process of ours whose environment is unreadable (non-dumpable, as after exec of a file-capability binary) is invisible to the
+// scan below. One that belongs to a key-test session and is not in any pids file is reported, once, so a leak cannot hide again.
+const reported_unreadable = new Set();
+function report_unreadable_environ(pid) {
+  if (reported_unreadable.has(pid)) return;
+  try {
+    if (statSync(`/proc/${pid}`).uid !== process.getuid()) return;
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "latin1").replaceAll("\0", " ").trim();
+    if (!cmdline.includes("/desertfox-key-") || recorded_leaders_anywhere().includes(pid)) return;
+    reported_unreadable.add(pid);
+    console.error(`session scan: the environment of pid ${pid} (${cmdline.slice(0, 100)}) is unreadable (EACCES), so the scan cannot tell whether it belongs to a session`);
+  } catch {
+    // Gone while it was read.
+  }
+}
+
 // Anchored on "=<runtime>" plus "/" or the end, so session "ok1" never matches "ok12".
 function pids_carrying(runtime_dir) {
   const pids = [];
@@ -51,7 +70,8 @@ function pids_carrying(runtime_dir) {
     let environ;
     try {
       environ = readFileSync(`/proc/${entry}/environ`, "latin1");
-    } catch {
+    } catch (error) {
+      if (error.code === "EACCES") report_unreadable_environ(Number(entry));
       continue;
     }
     if (environ.split("\0").some((pair) => { const value = pair.slice(pair.indexOf("=") + 1); return pair.includes("=") && (value === runtime_dir || value.startsWith(`${runtime_dir}/`)); })) pids.push(Number(entry));
@@ -79,10 +99,58 @@ function signal_all(pids, signal) {
   }
 }
 
-async function terminate(pids_now, wait_ms) {
-  signal_all(pids_now(), "SIGTERM");
+// A zombie counts as gone: its parent has not reaped it yet, but it runs nothing.
+function process_state_and_ticks(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "latin1");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return { state: fields[0], ticks: fields[19] };
+  } catch {
+    return undefined;
+  }
+}
+
+function leader_is_running(pid, ticks) {
+  const found = process_state_and_ticks(pid);
+  return found !== undefined && found.ticks === ticks && found.state !== "Z";
+}
+
+// Each child is a group leader (start_child), so its pid names its group. kill(-pgid) needs no read access to the
+// processes, so it reaches labwc even though its /proc files are hidden.
+function record_child(runtime_dir, pid) {
+  if (pid === undefined) return;
+  appendFileSync(join(runtime_dir, PIDS_FILE), `${pid} ${process_start_ticks(pid)}\n`);
+}
+
+// The recorded children of a session that still run. A pid whose start time differs now names another process and is dropped.
+function recorded_leaders(runtime_dir) {
+  let text;
+  try {
+    text = readFileSync(join(runtime_dir, PIDS_FILE), "utf8");
+  } catch {
+    return [];
+  }
+  return text.split("\n").map((line) => line.split(" ")).filter(([pid, ticks]) => /^\d+$/.test(pid) && /^\d+$/.test(ticks ?? "") && leader_is_running(Number(pid), ticks)).map(([pid]) => Number(pid));
+}
+
+function recorded_leaders_anywhere() {
+  return readdirSync("/tmp").filter((name) => name.startsWith(RUNTIME_PREFIX)).flatMap((name) => recorded_leaders(join("/tmp", name)));
+}
+
+function signal_groups(leaders, signal) {
+  for (const pid of leaders) {
+    try {
+      process.kill(-pid, signal);
+    } catch {
+      // Gone already.
+    }
+  }
+}
+
+async function terminate(pids_now, wait_ms, signal_now = signal_all) {
+  signal_now(pids_now(), "SIGTERM");
   await wait_until("processes to exit", () => pids_now().length === 0, { timeout_ms: wait_ms }).catch(() => undefined);
-  signal_all(pids_now(), "SIGKILL");
+  signal_now(pids_now(), "SIGKILL");
 }
 
 // The clients go first, so Firefox and the keyboard never see their compositor vanish under them. Then the rest of
@@ -91,10 +159,13 @@ async function stop_runtime(runtime_dir, client_groups = new Set()) {
   const is_client = (pid) => client_groups.has(process_group_of(pid));
   if (client_groups.size > 0) await terminate(() => pids_carrying(runtime_dir).filter(is_client), STOP_WAIT_MS);
   await terminate(() => pids_carrying(runtime_dir), STOP_WAIT_MS);
-  await wait_until("killed processes to go", () => pids_carrying(runtime_dir).length === 0, { timeout_ms: 1000 }).catch(() => undefined);
-  const left = pids_carrying(runtime_dir);
+  // The recorded groups after the carriers, so labwc outlives the Hyprland nested in it.
+  await terminate(() => recorded_leaders(runtime_dir), STOP_WAIT_MS, signal_groups);
+  const everything_left = () => [...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir)];
+  await wait_until("killed processes to go", () => everything_left().length === 0, { timeout_ms: 1000 }).catch(() => undefined);
+  const left = everything_left();
   rmSync(runtime_dir, { recursive: true, force: true });
-  if (left.length > 0) throw new Error(`processes still carry ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
+  if (left.length > 0) throw new Error(`processes still run from ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
 }
 
 function read_owner_pid(runtime_dir) {
@@ -120,13 +191,15 @@ export function kill_session_now(name) {
   try {
     for (let pass = 0; pass < 50; pass++) {
       const pids = pids_carrying(runtime_dir);
-      if (pids.length === 0) break;
+      const leaders = recorded_leaders(runtime_dir);
+      if (pids.length === 0 && leaders.length === 0) break;
       signal_all(pids, "SIGKILL");
+      signal_groups(leaders, "SIGKILL");
       sleep_sync(20);
     }
-    const left = pids_carrying(runtime_dir);
+    const left = [...pids_carrying(runtime_dir), ...recorded_leaders(runtime_dir)];
     if (left.length > 0) {
-      console.error(`session ${name}: processes still carry ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
+      console.error(`session ${name}: processes still run from ${runtime_dir} after SIGKILL: ${left.join(", ")}`);
       return;
     }
   } catch (error) {
@@ -147,6 +220,7 @@ export async function sweep_dead_sessions() {
     console.log(`sweep: stopping ${entry.slice(RUNTIME_PREFIX.length)}, left by dead run ${owner_pid}`);
     await stop_runtime(runtime_dir).catch((error) => console.error(`sweep: ${error.message}`));
   }
+  await sweep_orphan_compositors();
 }
 
 const RUN_DIR_PREFIX = "desertfox-key-run-";
@@ -178,6 +252,55 @@ export function make_run_dir(tmp_root = tmpdir()) {
   const run_dir = mkdtempSync(join(tmp_root, RUN_DIR_PREFIX));
   writeFileSync(join(run_dir, OWNER_FILE), `${process.pid} ${process_start_ticks(process.pid)}\n`);
   return run_dir;
+}
+
+// Whether the run that owns a run folder may still be running. A folder that is gone means its run ended.
+// A folder with no readable owner file counts as live, as the sweeps skip it.
+function run_dir_is_live(run_dir) {
+  if (!existsSync(run_dir)) return false;
+  try {
+    const [owner_pid, owner_start_ticks] = readFileSync(join(run_dir, OWNER_FILE), "utf8").trim().split(" ");
+    return !/^\d+$/.test(owner_pid) || !/^\d+$/.test(owner_start_ticks ?? "") || process_start_ticks(Number(owner_pid)) === owner_start_ticks;
+  } catch {
+    return true;
+  }
+}
+
+// A labwc whose session was never stopped, found by its command line `labwc -C <tmp>/desertfox-key-run-X/.../labwc`, because
+// its environment is hidden. Only a labwc of this user under a run folder whose run is dead is stopped: not one of a live run
+// (parallel shards, a run holding the lock), and not one anywhere else, such as another job's under /tmp/db-measure.
+export async function sweep_orphan_compositors(tmp_root = tmpdir()) {
+  const run_prefix = join(tmp_root, RUN_DIR_PREFIX);
+  const orphans = [];
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry) || Number(entry) === process.pid) continue;
+    const pid = Number(entry);
+    let program, flag, config_dir, uid;
+    try {
+      [program, flag, config_dir] = readFileSync(`/proc/${pid}/cmdline`, "latin1").split("\0");
+      uid = statSync(`/proc/${pid}`).uid;
+    } catch {
+      continue;
+    }
+    if (basename(program ?? "") !== "labwc" || flag !== "-C" || !config_dir?.startsWith(run_prefix) || uid !== process.getuid()) continue;
+    const run_dir = join(tmp_root, config_dir.slice(tmp_root.length + 1).split("/")[0]);
+    const found = process_state_and_ticks(pid);
+    if (found === undefined || found.state === "Z" || run_dir_is_live(run_dir)) continue;
+    orphans.push({ pid, ticks: found.ticks, run_dir });
+  }
+  const still_orphan = ({ pid, ticks }) => leader_is_running(pid, ticks);
+  // The group when labwc leads one (start_child does that), else the process alone.
+  const signal_orphans = (list, signal) => {
+    for (const { pid } of list) (process_group_of(pid) === pid ? signal_groups : signal_all)([pid], signal);
+  };
+  for (const { pid, run_dir } of orphans) console.log(`sweep: stopping labwc ${pid} of dead run ${basename(run_dir)}, its environment is unreadable (EACCES) so it is found by its command line`);
+  if (orphans.length === 0) return;
+  signal_orphans(orphans, "SIGTERM");
+  await wait_until("labwc to exit", () => !orphans.some(still_orphan), { timeout_ms: STOP_WAIT_MS }).catch(() => undefined);
+  signal_orphans(orphans.filter(still_orphan), "SIGKILL");
+  await sleep(100);
+  const survivors = orphans.filter(still_orphan);
+  if (survivors.length > 0) console.error(`sweep: labwc still runs after SIGKILL: ${survivors.map(({ pid }) => pid).join(", ")}`);
 }
 
 // A SIGKILLed coordinator leaves its run folder, over 1 GB of profiles and session files. This removes each run folder
@@ -281,6 +404,7 @@ export async function start_session({ name, session_dir }) {
     closeSync(log_fd);
     child.on("error", (error) => console.error(`session ${name}: ${argv[0]} failed to start: ${error.message}`));
     child.unref();
+    record_child(runtime_dir, child.pid);
     if (client) client_groups.add(child.pid);
     return child;
   }
@@ -388,6 +512,7 @@ export async function start_session({ name, session_dir }) {
 async function start_keyboard(env, client_groups) {
   const child = spawn("python3", ["-I", join(key_test_dir, "keyboard.py")], { env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
   client_groups.add(child.pid);
+  record_child(env.XDG_RUNTIME_DIR, child.pid);
   const pending = new Map();
   let next_id = 1;
   let stderr_tail = "";
