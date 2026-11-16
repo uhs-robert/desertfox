@@ -8,6 +8,7 @@ Builds the merged config from the user's config files. It takes raw file text an
 - `merge.ts`: merges the layers of each data kind and records where each value came from.
 - `snippet.ts`: turns a snippet file header into a registry entry.
 - `check.ts`: builds the registry with the snippets and checks bindings, args, engines and settings.
+- `resolve_binding.ts`: turns one binding as a config file writes it into invocations. The keymap, the site rows and the compile share it.
 - `schemas.ts`: the editor schemas for the data files. Only the tool and tests call it.
 - `errors.ts`: `ConfigErrors`, which collects every problem of one run.
 

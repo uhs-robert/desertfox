@@ -2,6 +2,8 @@
 
 The command definitions. Each file is a command module: it calls `define` from `src/shared/registry/` once per command and holds the code that runs it. Keys, the command line, completion, help and which-key read the definition and never carry behavior of their own.
 
+This folder and `src/background/` import each other. A command may call background helpers. The background takes only `main.ts`'s wiring and the pure plan, URL and target helpers from here (`settings.ts`, `open_target.ts`, `url_build.ts`). That works because ES modules resolve the cycle and each side uses the other only inside functions, at call time, never while its module loads.
+
 - A definition gives an id (`tab.pin`, group then verb), a label, an intent, params and `runs_in`. The first sentence of the intent is the summary that lists show: a verb first, at most 60 characters, no other command named. Every flag param has a one-sentence `description`. A registry audit test checks both. A `background` command runs here, with browser APIs. A `content` command's `run` is a handler from `src/content/handlers/`, which the content script runs in the page (`scroll.ts`, `copy.ts`, `mode.ts`).
 - State `bridge: true` or `bridge: false` on every definition. True lets a program outside the browser run the command through the bridge socket. The built-in `define` requires the field, a registry audit test checks it, and a hard-coded never-list in `src/background/bridge_run.ts` wins over a true. Say true only for a command that is safe to run with no one watching: tab navigation, media, scroll and mode commands today.
 - Set the typed `name` by hand, and only for one-word commands and family words (`open`, `search`, `tab`). Every other command is typed by its dotted id. The registry rejects a duplicate name.
@@ -9,6 +11,11 @@ The command definitions. Each file is a command module: it calls `define` from `
 - `settings.ts` holds `set`, `toggle` and `unset`. The pure `plan_set`, `plan_toggle` and `plan_unset` turn the checked params into the edits to keep (saved, or temp with `--temp`) and the toast that answers. The handlers publish through `change_edits` in `startup.ts` and toast after the publish.
 - A handler throws `RuntimeRefusal` (`src/shared/command.ts`) for a failure that depends on browser or config state. A bad argument value belongs in the param schema (`min`, `pattern`, `strict`, `optional`), never in a handler.
 - `hint.ts`, `heading.ts`, `cmdline.ts`, `caret.ts` and `visual.ts` hold commands whose code sits in a bundle. Such a command has a `bundle` field and no `run`. The compiler and the router pass the field to the content script (`LeafStep.bundle`, `Invocation.bundle`), which loads the bundle on the first run, or refuses with `needs <label>` while the bundle registers no handler (`run_content.ts`).
+- `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.
+- `grab.ts`: the keys of grab mode (`grab.move`, `grab.step`, `grab.drop`, `grab.cancel`). The `grab` bundle runs them.
+- `hint_text.ts`: `hint.key`, the binding that holds Tab, Enter, Space and Slash while the hints bundle loads. The bundle takes those keys itself once hint mode is open.
+- `mark_list.ts`: `mark.list`, `mark.delete` and `mark.clear`. Typing the command is the confirmation, and `.` never replays `all`.
+- `reload_clear.ts`: the clear scopes of `reload --clear` (`site` and `all`). Firefox ignores `hostnames` for the cache, local storage and service workers, so a site clear takes only the cookies by host name.
 
 Helpers:
 
