@@ -8,6 +8,7 @@ type Fake = {
   type?: string;
   disabled?: boolean;
   href?: boolean;
+  inert?: boolean;
   in_disabled_fieldset?: boolean;
   editable?: "" | "true" | "false";
   size?: { width: number; height: number };
@@ -55,6 +56,7 @@ function realize(fake: Fake): Element {
     clientLeft: 0,
     clientTop: 0,
     ownerDocument: { defaultView: view },
+    closest: (selector: string) => (selector === "[inert]" && fake.inert ? element : null),
     matches: (selector: string) => matches_selector(fake, selector),
     querySelectorAll: () => [],
     getClientRects: () => (size.width > 0 && size.height > 0 ? [{ left: box.left, top: box.top, right: box.right, bottom: box.top + size.height, width: size.width, height: size.height }] : []),
@@ -243,4 +245,15 @@ test("a link walk answers in link words at the ends and on a page with none", ()
   assert.equal(focus_field(page(fakes, fakes[1]).root, undefined, "next", 1, "link"), "No next link");
   assert.equal(focus_field(page(fakes, fakes[0]).root, undefined, "prev", 1, "link"), "No previous link");
   assert.equal(focus_field(page([field("a")]).root, undefined, "next", 1, "link"), "No link on this page");
+});
+
+test("an inert link or control is skipped, so the walk moves past it", () => {
+  const links = [link("one"), link("stuck", { inert: true }), link("two")];
+  events.length = 0;
+  assert.equal(focus_field(page(links, links[0]).root, undefined, "next", 1, "link"), undefined);
+  assert.deepEqual(events, ["focus two"]);
+  const fields = [field("a"), field("stuck", { inert: true }), field("c")];
+  events.length = 0;
+  assert.equal(focus_field(page(fields, fields[0]).root, undefined, "next", 1), undefined);
+  assert.deepEqual(events, ["focus c"]);
 });
