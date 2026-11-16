@@ -28,7 +28,7 @@ const refuse = (message: string): never => {
 export function send_key(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): boolean {
   const element = key_target(doc, args.target);
   if (args.focus === true) (element as HTMLElement).focus();
-  const init = { key: args.key, keyCode: args.key_code, ctrlKey: args.ctrl === true, shiftKey: args.shift === true, altKey: args.alt === true, metaKey: args.meta === true, bubbles: true, cancelable: true };
+  const init = { key: args.key, keyCode: args.key_code, ctrlKey: args.ctrl === true, shiftKey: args.shift === true, altKey: args.alt === true, metaKey: args.meta === true, bubbles: true, cancelable: true, composed: true };
   const keydown_kept = element.dispatchEvent(make_event("keydown", init));
   // A page that cancels the keydown gets no keypress, as with a real key. A printable key carries its character code, which keypress handlers read.
   if (args.keypress === true && keydown_kept) element.dispatchEvent(make_event("keypress", args.key.length === 1 ? { ...init, charCode: args.key.charCodeAt(0), which: args.key.charCodeAt(0) } : init));
@@ -57,13 +57,19 @@ export function queued_in_page<T>(task: () => Promise<T>): Promise<T> {
   return result;
 }
 
+// A count prefix replaces `times` after the validator has checked it, so the limit is checked again here, before a long count takes the queue. The check is synchronous, so a call that passes takes its place in the queue in the caller's turn.
+export const refused_times = (times: number, id: string): Promise<never> | undefined =>
+  times > SEND_KEY_MAX_TIMES ? Promise.reject(new RuntimeRefusal(`A count of ${times} is over the limit of ${SEND_KEY_MAX_TIMES} for ${id}`)) : undefined;
+
 export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): Promise<void> {
   const times = args.times ?? 1;
-  if (times > SEND_KEY_MAX_TIMES) return Promise.reject(new RuntimeRefusal(`A count of ${times} is over the limit of ${SEND_KEY_MAX_TIMES} for page.send_key`));
-  return queued_in_page(async () => {
-    for (let sent = 0; sent < times; sent++) {
-      if (sent > 0) await wait_for_gap();
-      send_key(doc, args, make_event);
-    }
-  });
+  return (
+    refused_times(times, "page.send_key") ??
+    queued_in_page(async () => {
+      for (let sent = 0; sent < times; sent++) {
+        if (sent > 0) await wait_for_gap();
+        send_key(doc, args, make_event);
+      }
+    })
+  );
 }

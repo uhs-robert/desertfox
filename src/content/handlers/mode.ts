@@ -24,8 +24,9 @@ export const mode_set: ContentHandler = {
 export const mode_site: ContentHandler = {
   run: (args) => {
     const ending = args.name === "off" || (args.toggle && args.name === site_mode.name_);
-    // A toggle that starts the mode leaves a text field and any other mode first. Both are mode changes, and a mode change ends a site mode, so they come before the start.
+    // A toggle that starts the mode leaves a text field and any other mode first. Both are mode changes, and a mode change ends a site mode, so they come before the start. A mode the page lacks changes nothing, so it leaves both alone.
     if (args.toggle && !ending) {
+      if (!site_mode.modes_?.[args.name as string]) return;
       if (is_editable_element(deepest_focused_element())) blur_focused_element();
       if (page_mode.get_mode_() !== "normal") void bundles.set_mode_("normal");
     }

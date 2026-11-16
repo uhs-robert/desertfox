@@ -7,6 +7,7 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
 import { arrow_queued, arrow_step } from "../src/content/site_actions/arrow.ts";
+import type { ArrowPage } from "../src/content/site_actions/arrow.ts";
 import { site_mode } from "../src/content/site_mode.ts";
 import { mode_site } from "../src/content/handlers/mode.ts";
 import { deepest_focused_element } from "../src/content/editable.ts";
@@ -16,6 +17,7 @@ import { create_mode_state } from "../src/content/mode_state.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
+import { RuntimeRefusal } from "../src/shared/command.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, PageKeymap, TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";
 
@@ -45,6 +47,12 @@ test("a select moves one option per press, skips disabled ones, stops at the end
   arrow_step(page, "up");
   assert.equal(select["selectedIndex"], 0);
   assert.deepEqual(select.log, ["input", "change", "input", "change"]);
+});
+
+test("a select skips an option whose optgroup is disabled", () => {
+  const select = fake({ tagName: "SELECT", selectedIndex: 0, options: [{ disabled: false }, { disabled: false, parentElement: { disabled: true } }, { disabled: false }] });
+  arrow_step(page_of(select).page, "down");
+  assert.equal(select["selectedIndex"], 2);
 });
 
 test("a range steps by its own step, and fires events only when the value changed", () => {
@@ -83,6 +91,16 @@ test("a radio press checks and focuses the next radio of its group, wraps, and l
   assert.deepEqual(a.log, ["focus", "click", "focus", "click"], "the previous radio of c is a, as b is disabled");
 });
 
+test("a radio outside its form that names the form with form= is in the group of the radios inside it", () => {
+  const form = { querySelectorAll: () => [inside] };
+  const inside = fake({ tagName: "INPUT", type: "radio", name: "g", disabled: false, form });
+  const outside = fake({ tagName: "INPUT", type: "radio", name: "g", disabled: false, form });
+  const root = { querySelectorAll: () => [inside, outside] };
+  for (const r of [inside, outside]) r["getRootNode"] = () => root;
+  arrow_step(page_of(inside).page, "down");
+  assert.deepEqual(outside.log, ["focus", "click"]);
+});
+
 test("with nothing focused, or the body, a press scrolls like the normal keys and sends no key", () => {
   for (const active of [null, fake({ tagName: "BODY" })]) {
     const { page, scrolls } = page_of(active);
@@ -95,8 +113,10 @@ test("with nothing focused, or the body, a press scrolls like the normal keys an
 test("any other focused element gets a synthetic arrow keydown and keyup, and the page scrolls only when the page did not cancel the keydown", () => {
   const widget = fake({ tagName: "DIV" }, true);
   const widget_page = page_of(widget);
-  arrow_step(widget_page.page, "up");
+  let init: KeyboardEventInit | undefined;
+  arrow_step({ ...(widget_page.page as ArrowPage), make_event: (type: string, event_init: KeyboardEventInit) => ((init = event_init), { type }) as unknown as Event }, "up");
   assert.deepEqual(widget.log, ["keydown", "keyup"]);
+  assert.equal(init?.composed, true, "a real key crosses shadow roots, so a widget's listener on its host sees the arrow");
   assert.deepEqual(widget_page.scrolls, []);
   const link = fake({ tagName: "A" });
   const link_page = page_of(link);
@@ -148,6 +168,18 @@ test("a count repeats the step, and one call is one queue entry", async () => {
   const { page } = page_of(select);
   await arrow_queued(page, { direction: "down", times: 3 });
   assert.equal(select["selectedIndex"], 3);
+});
+
+test("a count over the limit refuses before it takes the queue", async () => {
+  const select = fake({ tagName: "SELECT", selectedIndex: 0, options: options(false, false) });
+  await assert.rejects(arrow_queued(page_of(select).page, { direction: "down", times: 100 }), RuntimeRefusal);
+  assert.equal(select["selectedIndex"], 0);
+});
+
+test("a count with nothing focused is one scroll of the whole distance, so a scroll that waits for the layout keeps it", async () => {
+  const { page, scrolls } = page_of(null);
+  await arrow_queued(page, { direction: "down", times: 3 });
+  assert.deepEqual(scrolls, [[0, 150]]);
 });
 
 test("page.arrow takes a direction and a count, and refuses anything else", () => {
@@ -238,6 +270,28 @@ test("a mode with the sticky flag keeps running through a mouse press or an unca
   assert.equal(site_mode.name_, undefined, "a mode change, a keymap update and Escape end it through set_");
   site_mode.modes_ = undefined;
   site_mode.on_change_ = () => {};
+});
+
+test("mode.site with toggle leaves the focused field alone when the page has no such mode", async () => {
+  class FakeField {
+    tagName = "TEXTAREA";
+    isContentEditable = false;
+    blurred = false;
+    blur() {
+      this.blurred = true;
+    }
+  }
+  const field = new FakeField();
+  Object.assign(globalThis, { document: { activeElement: field, body: {} }, HTMLElement: FakeField, HTMLInputElement: class {}, window: { frameElement: null } });
+  site_mode.modes_ = {};
+  await mode_site.run({ name: "arrow", toggle: true }, false);
+  assert.equal(field.blurred, false);
+  site_mode.modes_ = { arrow: { label: "ARROW", tree: {}, sticky: true } };
+  site_mode.on_change_ = () => {};
+  await mode_site.run({ name: "arrow", toggle: true }, false);
+  assert.equal(field.blurred, true, "with the mode there, the start blurs the field");
+  site_mode.set_();
+  site_mode.modes_ = undefined;
 });
 
 test("mode.site with toggle starts the mode the first time and ends it the second", async () => {
