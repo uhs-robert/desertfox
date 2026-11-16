@@ -70,12 +70,18 @@ function compiled() {
   return compiled;
 }
 
-test("the media section holds the media keys and, of normal mode, only f, : and the hint group", () => {
+test("the media section holds the media keys and, of normal mode, only f, : and the hint group minus its normal-only keys", () => {
   const media = compiled().modes.media!;
   for (const key of ["F", "h", "l", "0", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";", "?"]) assert.ok(media.children[key], key);
   const normal = compiled().modes.normal!;
   const shared = Object.keys(media.children).filter((key) => normal.children[key] && JSON.stringify(normal.children[key]) === JSON.stringify(media.children[key]));
-  assert.deepEqual(shared.sort(), [":", ";", "<A-?>", "<C-[>", "<Escape>", "f"].sort());
+  assert.deepEqual(shared.sort(), [":", "<A-?>", "<C-[>", "<Escape>", "f"].sort());
+  // `;fF` and `;fe` run normal-mode commands, so the media copy of the `;` group lacks them and the rest matches.
+  const group = (mode: typeof media) => (mode.children[";"] as { children: Record<string, unknown> }).children;
+  const without_normal_only = (children: Record<string, unknown>) => Object.keys(children).filter((key) => key !== "f");
+  assert.deepEqual(without_normal_only(group(media)), without_normal_only(group(normal)));
+  const focus_keys = (mode: typeof media) => Object.keys((group(mode).f as { children: Record<string, unknown> }).children);
+  assert.deepEqual(focus_keys(normal).filter((key) => !focus_keys(media).includes(key)).sort(), ["F", "e"]);
   for (const key of ["g", "d", "x", "/", "o", "t", "<C-v>", "G", "n"]) assert.equal(media.children[key], undefined, key);
 });
 

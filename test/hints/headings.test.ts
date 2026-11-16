@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { heading_level, is_heading, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
+import { is_heading } from "../../src/content/hints/heading_match.ts";
+import { heading_level, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;

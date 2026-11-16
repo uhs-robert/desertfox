@@ -142,7 +142,7 @@ test("the ;f modifier focuses without clicking, and ;ff ;fF ;fs ;fe ;fh are expl
   for (const [key, filter] of [["l", "links"], ["i", "inputs"], ["b", "buttons"], ["a", "every"], ["t", "prose"], ["m", "media"], ["I", "images"]] as const) {
     assert.deepEqual([args_at(compiled, ";", "f", key)?.action, args_at(compiled, ";", "f", key)?.filter], ["focus", filter], key);
   }
-  assert.deepEqual([args_at(compiled, ";", "f", "f")?.action, args_at(compiled, ";", "f", "f")?.filter], [undefined, "frames"]);
+  assert.deepEqual([args_at(compiled, ";", "f", "f")?.action, args_at(compiled, ";", "f", "f")?.filter], ["focus", "frames"]);
   assert.deepEqual([args_at(compiled, ";", "f", "s")?.action, args_at(compiled, ";", "f", "s")?.filter], ["focus", "scrollable"]);
   assert.deepEqual([args_at(compiled, ";", "f", "h")?.action, args_at(compiled, ";", "f", "h")?.filter], ["focus", "headings"]);
   const command_at = (...keys: string[]) => {
@@ -153,6 +153,29 @@ test("the ;f modifier focuses without clicking, and ;ff ;fF ;fs ;fe ;fh are expl
   assert.equal(command_at("f", "e"), "page.focus_input");
   assert.equal(args_at(compiled, ";", "s")?.filter, "swipeable");
   assert.equal(node_at(compiled, ";", "w"), undefined);
+});
+
+test(";of, ;hf and ;xf are hand-bound frame keys with their own action", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  for (const [key, action] of [["o", "inspect"], ["h", "hover"], ["x", "delete"]] as const) {
+    assert.deepEqual([args_at(compiled, ";", key, "f")?.action, args_at(compiled, ";", key, "f")?.filter], [action, "frames"], key);
+  }
+  for (const key of ["r", "B", "n", "2", "g", "G", ":"]) assert.equal(node_at(compiled, ";", key, "f"), undefined, key);
+});
+
+test("a user key on ;f skips the Focus modifier and its five default keys, and derives nothing from them", () => {
+  const { warnings, compiled } = compile_config({
+    config: { ...empty_config(), keymap: { normal: { ";f": { id: "hint.run", args: { filter: "frames" } } } } },
+    default_keymap: DEFAULT_KEYMAP,
+    get_command: (id) => registry.get(id),
+    enum_sources: { search_engines: ["site"], containers: [] },
+  });
+  // One warning for the modifier and one for each of ;ff ;fF ;fs ;fe ;fh. None for a variant such as ;Bff.
+  assert.equal(warnings.length, 6, warnings.join("\n"));
+  assert.equal(warnings.filter((warning) => /;[rBnxog2G:h]ff/.test(warning)).length, 0, warnings.join("\n"));
+  assert.equal(node_at(compiled, ";", "B", "f", "f"), undefined);
+  assert.equal(node_at(compiled, ";", "x", "f", "f"), undefined);
 });
 
 test("the ;o modifier derives an inspect variant of the filter keys and none of the keys with their own action", () => {
