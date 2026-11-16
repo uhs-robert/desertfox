@@ -87,7 +87,7 @@ Site checked (ChatGPT or Claude web): ChatGPT, 2026-11-15, default settings. Onl
 | --- | --- | --- | --- | --- |
 | 1. Mode on load (focus, mode) | | | | |
 | 2. Leave with `Escape` | | | | |
-| 3. Scroll (side panel and chat) | | fail: cannot scroll the chat, cannot focus the side panel | fail: scrolls the chat, cannot focus the side panel (no key path) | pass: the `;;` focus hint shows about 900 labels, the right one focuses a scroll area and then it scrolls, many labels in the right area still miss, a near miss does not focus |
+| 3. Scroll (side panel and chat) | pass: focuses and scrolls the side panel and the chat by keys with no click, the focus command shows only the two scrollable areas | fail: cannot scroll the chat, cannot focus the side panel | fail: scrolls the chat, cannot focus the side panel (no key path) | pass: the `;;` focus hint shows about 900 labels, the right one focuses a scroll area and then it scrolls, a pick even inside the right area can miss, and a miss does not focus |
 | 3. Hints | | | | |
 | 3. Activate | | | | |
 | 3. `Escape` out of hints | | | | |
@@ -99,7 +99,7 @@ Site checked (ChatGPT or Claude web): claude.ai, 2026-11-15, default settings. O
 | --- | --- | --- | --- | --- |
 | 1. Mode on load (focus, mode) | | | | |
 | 2. Leave with `Escape` | | | | |
-| 3. Scroll (side panel and chat) | | fail: cannot scroll the chat, cannot focus the side panel | fail: scrolls the chat, cannot focus the side panel (no key path) | pass: the `;;` focus hint shows hundreds of labels, the right one focuses a scroll area and then it scrolls, many labels in the right area still miss, a near miss does not focus |
+| 3. Scroll (side panel and chat) | pass: focuses and scrolls the side panel and the chat by keys with no click, the focus command shows only the two scrollable areas | fail: cannot scroll the chat, cannot focus the side panel | fail: scrolls the chat, cannot focus the side panel (no key path) | pass: the `;;` focus hint shows hundreds of labels, the right one focuses a scroll area and then it scrolls, a pick even inside the right area can miss, and a miss does not focus |
 | 3. Hints | | | | |
 | 3. Activate | | | | |
 | 3. `Escape` out of hints | | | | |
