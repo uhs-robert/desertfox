@@ -116,6 +116,8 @@ export type Field = {
 export type SessionDeps = {
   send: (message: ChangeSetting | ListSettings) => Promise<unknown>;
   engines: string[];
+  // Fills the `{key:name}` marks of the setting prose with the keys of the live keymap.
+  resolve_keys: (text: string) => string;
   // Called with the name of a field that changed, or undefined when any field may have.
   on_change: (name: string | undefined) => void;
 };
@@ -132,9 +134,9 @@ export function create_settings_session(deps: SessionDeps) {
     row,
     control: control_of(row, deps.engines),
     group: group_of(row.name),
-    doc: SETTING_DOCS[row.name as keyof typeof SETTING_DOCS] ?? "",
+    doc: deps.resolve_keys(SETTING_DOCS[row.name as keyof typeof SETTING_DOCS] ?? ""),
     label: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.label ?? row.name,
-    summary: SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.summary ?? "",
+    summary: deps.resolve_keys(SETTING_HELP[row.name as keyof typeof SETTING_HELP]?.summary ?? ""),
   });
 
   function take_row(name: string, row: SettingListRow): void {

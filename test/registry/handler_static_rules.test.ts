@@ -206,6 +206,7 @@ const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
   "src/background/favicon_saver.ts": { count: 1, why: "a redrawn icon that is too large, turned into a skipped save by the saver, not a command handler" },
   "src/background/keymap_message.ts": { count: 1, why: "a message reply for the keys page, turned into { ok: false } by `failure`, not a command handler" },
   "src/background/snippets.ts": { count: 1, why: "inside the snippet code that runs in the page, where RuntimeRefusal does not exist" },
+  "src/shared/key_docs.ts": { count: 1, why: "a settings doc that names an action missing from the binding table: a typo in our own prose, caught by the doc scan test, not a command handler" },
   "src/shared/page_bundle_tag.ts": { count: 1, why: "a bundle tag that failed to load, turned into the could-not-load refusal by the bundle loader, not a command handler" },
   "src/content/run_content.ts": { count: 1, why: "a bundle command without a bundle: a registry bug, not a state of the page" },
 };

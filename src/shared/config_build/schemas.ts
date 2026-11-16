@@ -3,6 +3,9 @@
 
 import type { CommandMeta } from "../command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
+import { DEFAULT_KEYMAP } from "../../background/default_keymap.ts";
+import { resolve_key_docs } from "../key_docs.ts";
+import { compile_keymap } from "../keys/compiler.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../settings_docs.ts";
 import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
 import { MAX_BIND_STEPS } from "../table_constants.ts";
@@ -139,17 +142,27 @@ function value_schema(row: SettingRow): Schema {
 }
 
 // The long text leans on the summary for its subject, so an editor tooltip without the summary starts mid-thought.
-function setting_schema(name: SettingName): Schema {
+function setting_schema(name: SettingName, keys: (text: string) => string): Schema {
   const row: SettingRow = SETTINGS_TABLE[name];
-  return { ...value_schema(row), ...("default" in row && { default: row.default }), description: `${SETTING_HELP[name].summary} ${SETTING_DOCS[name]}` };
+  return { ...value_schema(row), ...("default" in row && { default: row.default }), description: keys(`${SETTING_HELP[name].summary} ${SETTING_DOCS[name]}`) };
 }
 
-export function settings_schema(): Schema {
+// An editor has no live keymap, so the prose names the keys the add-on ships with.
+function default_key_docs(commands: CommandMeta[]): (text: string) => string {
+  const { compiled } = compile_keymap(DEFAULT_KEYMAP, {}, (id) => {
+    const command = commands.find((candidate) => candidate.id === id);
+    return command && { runs_in: "content" as const, label: command.label, count: command.count ?? "ignore", params: command.params ?? [] };
+  });
+  return (text) => resolve_key_docs(text, compiled, commands, true);
+}
+
+export function settings_schema(commands: CommandMeta[]): Schema {
+  const keys = default_key_docs(commands);
   return {
     $schema: DRAFT,
     title: "DesertFox settings",
     type: "object",
-    properties: Object.fromEntries((Object.keys(SETTINGS_TABLE) as SettingName[]).map((name) => [name, setting_schema(name)])),
+    properties: Object.fromEntries((Object.keys(SETTINGS_TABLE) as SettingName[]).map((name) => [name, setting_schema(name, keys)])),
     additionalProperties: false,
   };
 }
@@ -189,6 +202,6 @@ export function build_schemas(commands: CommandMeta[]): Record<DataKind, Schema>
       patternProperties: { [QUICKMARK_KEY.source]: { type: "string", minLength: 1, maxLength: MAX_QUICKMARK_URL_CHARS, description: "The address `go<key>` and `gn<key>` open" } },
       additionalProperties: false,
     },
-    settings: settings_schema(),
+    settings: settings_schema(commands),
   };
 }
