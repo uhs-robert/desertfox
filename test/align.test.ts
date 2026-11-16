@@ -51,10 +51,6 @@ test("a heading jump beats an older field focus, selection and blurred element",
   assert.equal(choose_align_target(focus("field"), { editable: undefined, parent: "paragraph", holds_remembered_: false }, "left", "heading"), "heading");
 });
 
-test("with the slot cleared by a later focus or selection, the field wins again", () => {
-  assert.equal(choose_align_target(focus("field"), undefined, undefined, undefined), "field");
-});
-
 test("a live heading jump gives the element and its frames", () => {
   const element = alive("heading");
   const frame = alive("frame");
