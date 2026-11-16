@@ -125,6 +125,18 @@ test("set offers the setting names, then the values the setting lists", () => {
   assert.deepEqual(rows("unset which_key_border "), []);
 });
 
+test("set font_family and font_family_mono offer the installed fonts, quoted when they hold a space", () => {
+  const with_fonts = create_completer(create_word_lookup([...COMMANDS, SET, UNSET], {}), [...COMMANDS, SET, UNSET], {}, SOURCES, "normal", undefined, [], undefined, ["Fira Code", "Hack"]);
+  const names = (text: string) => with_fonts(text, text.length).rows.map((row) => row.name);
+  assert.deepEqual(names("set font_family "), ["Fira Code", "Hack"]);
+  assert.deepEqual(names("set font_family_mono ha"), ["Hack"]);
+  assert.equal(with_fonts("set font_family fi", 18).rows[0]?.insert, '"Fira Code" ');
+  assert.deepEqual(names("set font_scale "), []);
+  assert.deepEqual(names("set theme ").includes("Hack"), false);
+  const without = create_completer(create_word_lookup([...COMMANDS, SET, UNSET], {}), [...COMMANDS, SET, UNSET], {}, SOURCES);
+  assert.deepEqual(without("set font_family ", 16).rows, []);
+});
+
 const WHOLE_TEXT_COMMANDS: CommandMeta[] = [
   { id: "help.open", name: "help", label: "Help", intent: "Help.", params: [{ name: "name", type: "string", rest: true, main: true, default: "", values: ["Quick Start", "Commands"] }] },
   { id: "tab.switch", name: "tab", label: "Switch tab", intent: "Switch tab.", params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }] },

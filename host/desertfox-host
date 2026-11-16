@@ -2,7 +2,7 @@
 """Native-messaging host for the DesertFox Firefox extension.
 
 Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
-in the same framing to stdout and exits. It has six verbs and no others:
+in the same framing to stdout and exits. It has seven verbs and no others:
 
   {"cmd": "read_config"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
@@ -17,6 +17,8 @@ in the same framing to stdout and exits. It has six verbs and no others:
          {"ok": true, ..., "done": true, "changed": true, "text": "<edited text>"}  (`text` only when `changed`)
   {"cmd": "open_firefox_page", "page": "settings"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "page": "settings"}
+  {"cmd": "list_fonts"}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "fonts": ["Cantarell", "DejaVu Sans", ...]}
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
@@ -24,7 +26,8 @@ file there, autoconfig.toml. It never edits the user's own files, and it parses 
 `self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
 reply ever carries. `open_firefox_page` asks the Firefox that started the host to open one page of a fixed table (see
-`open_firefox_page`). Stdout carries only protocol bytes.
+`open_firefox_page`). `list_fonts` runs fontconfig's `fc-list` and answers the installed family names (see
+`list_fonts`). Stdout carries only protocol bytes.
 """
 import contextlib
 import fcntl
@@ -44,6 +47,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 
@@ -1096,6 +1100,44 @@ def open_firefox_page(request, parent_pid=None, proc_root="/proc", environ=None)
     return {"page": page}
 
 
+FC_LIST_COMMAND = "fc-list"
+FC_LIST_TIMEOUT_S = 5
+MAX_FONT_NAMES = 2000
+# The limits of `parse_font_family` in src/shared/theme/font_family.ts, for one name: the extension refuses any other name, so the list never offers one.
+MAX_FONT_NAME_LENGTH = 200
+REFUSED_FONT_CHARS = set("\"'\\<>{};,")
+REFUSED_FONT_TEXT = re.compile(r"/\*|var\(|url\(|!\s*important", re.IGNORECASE)
+
+
+def is_usable_font_name(name):
+    if not name or len(name) > MAX_FONT_NAME_LENGTH or REFUSED_FONT_TEXT.search(name):
+        return False
+    return not any(char in REFUSED_FONT_CHARS or unicodedata.category(char) == "Cc" for char in name)
+
+
+def list_fonts(request, command=None):
+    """The installed font family names: one `fc-list` run, deduplicated, sorted, cut to MAX_FONT_NAMES.
+
+    The request has no fields, and the program and its arguments are fixed. A name the extension's font parser would
+    refuse is dropped here, so a hostile font file cannot put text in the list that it then rejects or mishandles."""
+    checked_fields(request, set(), "list_fonts")
+    argv = [command or FC_LIST_COMMAND, "--format", "%{family[0]}\n"]
+    try:
+        process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, close_fds=True)
+    except OSError as error:
+        raise HostError(f"cannot start {argv[0]} (fontconfig is not installed?): {error.strerror or error}") from error
+    try:
+        output, _ = process.communicate(timeout=FC_LIST_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        raise HostError(f"{argv[0]} did not finish within {FC_LIST_TIMEOUT_S} s") from None
+    if process.returncode != 0:
+        raise HostError(f"{argv[0]} failed with exit {process.returncode}")
+    names = {" ".join(line.split()) for line in output.decode("utf-8", errors="replace").splitlines()}
+    return {"fonts": sorted(name for name in names if is_usable_font_name(name))[:MAX_FONT_NAMES]}
+
+
 def handle(request):
     if not isinstance(request, dict):
         raise HostError("the request must be a JSON object")
@@ -1112,6 +1154,8 @@ def handle(request):
         return editor_collect(request)
     if cmd == "open_firefox_page":
         return open_firefox_page(request)
+    if cmd == "list_fonts":
+        return list_fonts(request)
     raise HostError(f"unknown cmd: {cmd!r}")
 
 

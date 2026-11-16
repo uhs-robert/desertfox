@@ -125,6 +125,8 @@ export type CmdlineOpened = {
   command_aliases: Record<string, string>;
   // The names of the theme files and imported themes that are not built-in, which `set theme` offers after the generated built-in list.
   theme_names: string[];
+  // The font names `set font_family` and `set font_family_mono` offer, ready from the background's cache.
+  font_names: string[];
   // The commands with a card on the help page, which are the built-in ones. A snippet has none.
   help_ids: string[];
   // The `cmdline_prompt` setting. Absent keeps the page's own default.
@@ -374,6 +376,11 @@ export type ListSettings = {
   type: "list_settings";
 };
 
+// From an extension page (the settings page): asks for the font names (`string[]`). The background answers from its cache and then reads the host's fonts again and probes, for the next ask.
+export type ListFontNames = {
+  type: "list_font_names";
+};
+
 // `kind` is the row kind in `settings_table.ts`. `allowed` is the typed choice list of an enum or enum list, or the values the command line suggests. `value` is absent for a setting with no default that nothing sets.
 export type SettingListRow = {
   name: string;
@@ -541,7 +548,7 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ListImportedThemes | ChangeImportedThemes | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListFontNames | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ListImportedThemes | ChangeImportedThemes | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };

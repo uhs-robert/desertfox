@@ -118,6 +118,12 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
         throw error;
       }
     },
+    // The installed font family names, from the host's `fc-list`. A host from before the verb refuses with `unknown cmd`.
+    list_fonts: async (): Promise<string[]> => {
+      const { fonts } = await call({ cmd: "list_fonts" });
+      if (!Array.isArray(fonts) || fonts.some((name) => typeof name !== "string")) throw new NativeHostError("bad_reply", "The DesertFox native host sent no font list. Update it with :native.update.");
+      return fonts as string[];
+    },
     // Mirrors the saved edits (TOML text) into autoconfig.toml. The host writes no other file.
     write_autoconfig: async (toml: string): Promise<void> => {
       await call({ cmd: "write_autoconfig", toml });
