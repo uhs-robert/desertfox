@@ -103,7 +103,7 @@ export type SiteRuleLayers = {
 // The row the popup writes for a pattern: off and nothing else.
 const is_popup_row = (pattern: string) => (row: SiteRuleRow): boolean => {
   const { off, keys, values } = site_row_columns(row);
-  return row.site === pattern && off === true && keys === undefined && values === undefined && row.bind === undefined;
+  return row.site === pattern && off === true && keys === undefined && values === undefined && row.bind === undefined && row.keymap === undefined;
 };
 
 const columns_at = (rows: readonly SiteRuleRow[], url: string): ResolvedSiteColumns<SiteRowKeys> =>
