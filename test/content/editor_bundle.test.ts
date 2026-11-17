@@ -73,6 +73,7 @@ globals.browser = {
     onMessage: { addListener: (fn: typeof listener) => (listener = fn) },
   },
 };
+globals.location = { href: "https://a.test/page" };
 globals.getSelection = () => ({ selectAllChildren: (field: FakeEditableDiv) => (selected = field) });
 globals.document = { activeElement: null, execCommand: (command: string, _ui: boolean, text?: string) => (typed.push(`${command}:${text ?? ""}`), accepts) };
 await import("../../src/content/editor/main.ts");

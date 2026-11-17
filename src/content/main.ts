@@ -279,6 +279,8 @@ let was_all_off = false;
 let grab_step_px: number = DEFAULT_GRAB_STEP_PX;
 
 function install_matcher(reply: PageKeymap | undefined): void {
+  // The same answer as the last one, which only an address change inside one row asks for. Installing again would end a running site mode.
+  if (matcher_installed && reply === page_reply) return;
   page_reply = reply;
   site_mode.name_ = undefined;
   site_mode.modes_ = reply?.site_modes;
@@ -337,8 +339,15 @@ function install_tree(): void {
   key_flow.set_matcher_(create_matcher(tree, frees && ((token) => !overlay?.tree[token] && is_freed(frees, token))), keymap?.modes.browser);
 }
 
+let last_reply: { text: string; keymap: PageKeymap } | undefined;
+
 function read_page_keymap(): Promise<PageKeymap | undefined> {
-  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
+  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()), url: location.href } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => {
+    if (reply === undefined) return undefined;
+    // The same text gives the same object, so `install_matcher` can tell an unchanged answer.
+    if (reply !== last_reply?.text) last_reply = { text: reply, keymap: JSON.parse(reply) as PageKeymap };
+    return last_reply.keymap;
+  });
 }
 
 // The media mode of this frame came from another frame (a step, or the join reply of a late frame), not from its own fullscreen or a ;M pick. The background then knows that the report it causes may belong to a hold that already ended.
@@ -454,10 +463,22 @@ function start(): void {
       if (message.mode || bundles.has_handler_("ui.frame_watch")) void bundles.run_command_("ui.frame_watch", "ui", { on: !!message.mode }, "", false);
       refresh_mode_indicator();
     }
-    else if (message.type === "tree_updated") void ask_keymap();
+    else if (message.type === "tree_updated") {
+      // A keymap update installs even an identical answer: it ends a running site mode.
+      last_reply = undefined;
+      void ask_keymap();
+    }
   });
 
   void ask_keymap();
+
+  // The ask carries `location.href`, so an in-place address change (pushState, history traversal, a hash change) needs only a new ask. An answer identical to the last one installs nothing.
+  let asked_address = location.href;
+  (window as unknown as { navigation?: EventTarget }).navigation?.addEventListener("currententrychange", () => {
+    if (location.href === asked_address) return;
+    asked_address = location.href;
+    void ask_keymap();
+  });
 }
 
 start_content_once(start, window, window === window.top || document.hasFocus());

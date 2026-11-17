@@ -10,7 +10,7 @@ export type QualityLevel = { label: string; height: number; active: boolean };
 export type QualityAnswer = { levels: QualityLevel[]; chosen?: string; skipped?: boolean; toggled?: boolean; captions?: "on" | "off" };
 
 // What each frame pushes to the background when the bundle runs in it, so the background picks one player to act on. `ready` means the player lists its levels. `has_video` means the frame holds a video element (open shadow roots included) or a known player. The background answers a report that has a video with the `media_quality` rule for the frame's address (`max`, `min`, `auto`, a height as text or `off`), and a report without one with nothing.
-export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean; has_video: boolean };
+export type QualityReport = { type: "quality_report"; player: boolean; ready: boolean; has_video: boolean; url?: string };
 
 // What the probe sends when its frame holds a video, and the address it saw it at. The background then loads the `quality` bundle into that frame.
 // The answer to it is whether the bundle was injected.

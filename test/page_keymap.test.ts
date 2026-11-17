@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONFIG_STATUS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { create_media_quality } from "../src/background/media_quality.ts";
-import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
@@ -664,4 +664,41 @@ test("the list-page rows bind j and k to page.item on their result lists and lea
     assert.ok(off.site_rules!.length < compiled.site_rules!.length, name);
   }
   assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["tildes"] }), "https://tildes.net/", "j"), undefined);
+});
+
+// A request names the page's address now, which stands in for `sender.url`: that stays the load address after a pushState.
+test("a request that names its address is matched on it, and the load address answers when it names none", () => {
+  const sender = { url: "https://a.test/web", frameId: 0, tab: { id: 7, url: "https://a.test/web" } };
+  const located = sender_at(sender, "https://a.test/images");
+  assert.deepEqual(rule_addresses_of(located), ["https://a.test/images"]);
+  assert.deepEqual(rule_addresses_of(sender_at(sender, undefined)), ["https://a.test/web"]);
+  assert.deepEqual(rule_addresses_of(sender_at(sender, 5)), ["https://a.test/web"]);
+  assert.deepEqual(rule_addresses_of(sender_at({ ...sender, frameId: 3 }, "https://a.test/images")), ["https://a.test/images", "https://a.test/web"]);
+});
+
+test("a request that names an address of another origin keeps the load address, as an about:blank frame that reports its parent's address", () => {
+  const blank = { url: "about:blank", frameId: 2, tab: { id: 7, url: "https://a.test/web" } };
+  assert.deepEqual(rule_addresses_of(sender_at(blank, "https://a.test/web")), ["about:blank", "https://a.test/web"]);
+  const page = { url: "https://a.test/web", frameId: 0 };
+  assert.deepEqual(rule_addresses_of(sender_at(page, "https://b.test/web")), ["https://a.test/web"]);
+  assert.deepEqual(rule_addresses_of(sender_at(page, "not a url")), ["https://a.test/web"]);
+  assert.deepEqual(rule_addresses_of(sender_at(page, "https://a.test/images#x")), ["https://a.test/images#x"]);
+});
+
+test("the row for the new address decides the tree: off on one address, the keys back on the other", async () => {
+  const compiled = compile([{ site: "https://a.test/off*" }]);
+  assert.equal((await ask(compiled, "https://a.test/off"))?.all_off, true);
+  assert.notEqual((await ask(compiled, "https://a.test/web"))?.all_off, true);
+});
+
+test("an older reply that lands after a newer ask began is dropped, across a burst of three asks", async () => {
+  const pending: ((reply: string) => void)[] = [];
+  const installed: string[] = [];
+  const run = create_keymap_asks(() => new Promise<string>((resolve) => pending.push(resolve)), (reply) => installed.push(String(reply)), 0);
+  const asks = [run(), run(), run()];
+  pending[2]!("c");
+  pending[0]!("a");
+  pending[1]!("b");
+  await Promise.all(asks);
+  assert.deepEqual(installed, ["c"]);
 });
