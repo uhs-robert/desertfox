@@ -184,7 +184,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, double-click, focus, inspect in DevTools, or focus a frame.
 - Drag and drop: `;Gg` grabs an element and moves it with `h` `j` `k` `l`, `;gg` grabs one and drops it on a target you pick, and `;s` swipes a carousel.
 - Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
-- Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`. On a page that loads more as you scroll, `]]` loads more when the page shows at least three stacked items and has no next-page control.
+- Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`. On a page that loads more as you scroll, `]]` loads more when the page shows at least three stacked items and has no next-page control: it clicks a load-more button below the list, or scrolls to the end of a list that fills the page.
 - Press `Alt+l` for the arrow mode, where `h` `j` `k` `l` press the arrow keys on the focused control. `Escape` ends it.
 
 </details>

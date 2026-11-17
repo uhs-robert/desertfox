@@ -44,7 +44,7 @@ function describe(binding: BindingTable[string], registry: Lookup): string {
 function setting_notes(row: SiteRuleRow): string[] {
   return [
     row.focus_on_load ? `When the page loads, the cursor goes to the first match of ${code(row.focus_on_load)}, in place of a text box.` : "",
-    row.escape_to_page ? "Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays, unless you entered insert mode with the insert key, which Escape still ends." : "",
+    row.escape_to_page ? "Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays. Insert mode entered with the insert key while no text box has focus still ends on Escape." : "",
     row.editable_remove?.length ? `${row.editable_remove.map((selector) => code(selector)).join(", ")} does not count as a text box${row.editable_remove_unsized ? " while it has no width" : ""}.` : "",
   ].filter(Boolean);
 }
