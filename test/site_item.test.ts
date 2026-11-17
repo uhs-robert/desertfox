@@ -172,19 +172,19 @@ test("move_item gives an item with no link of its own tabindex -1 before it focu
   assert.deepEqual(log, ["tabindex=-1 on 0", "focus item 0"]);
 });
 
-test("down scrolls 50 px per count while the current item runs past the bottom of the view, and then moves on", () => {
+test("down scrolls 50 px per count while the current item runs past the bottom of the view, redrawing its box, and then moves on", () => {
   const long = fake_page([box(0, 100, 100, 900), box(0, 1040)], true, 0);
   move_item(long.page, { selector: "li", direction: "down", times: 2 });
-  assert.deepEqual([long.scrolls, long.shown, long.log], [[[0, 100]], [], []]);
+  assert.deepEqual([long.scrolls, long.shown, long.log], [[[0, 100]], ["0"], []]);
   const read = fake_page([box(0, -400, 100, 900), box(0, 540)], true, 0);
   move_item(read.page, { selector: "li", direction: "down" });
   assert.deepEqual([read.scrolls, read.shown], [[], ["1"]]);
 });
 
-test("up scrolls while the current item runs past the top of the view, and then moves on", () => {
+test("up scrolls while the current item runs past the top of the view, redrawing its box, and then moves on", () => {
   const long = fake_page([box(0, -300, 100, 900), box(0, -400, 100, 50)], true, 0);
   move_item(long.page, { selector: "li", direction: "up", times: 3 });
-  assert.deepEqual([long.scrolls, long.shown], [[[0, -150]], []]);
+  assert.deepEqual([long.scrolls, long.shown], [[[0, -150]], ["0"]]);
   const fits = fake_page([box(0, 0), box(0, 60)], true, 1);
   move_item(fits.page, { selector: "li", direction: "up" });
   assert.deepEqual([fits.scrolls, fits.shown], [[], ["0"]]);

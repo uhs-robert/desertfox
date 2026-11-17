@@ -69,8 +69,8 @@ export type ItemPage = EndPage & {
   toast: (message: string) => void;
   // The page scroll of the plain keys, for a page where no item matches.
   scroll_by: (dx: number, dy: number) => void;
-  // Draws the box around the item.
-  highlight: (item: Element) => void;
+  // Draws the box around the item, which follows the focus among the items the selector matches.
+  highlight: (item: Element, selector: string) => void;
 };
 
 const SCROLL_PX = 50;
@@ -111,8 +111,11 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
   if (items.length === 0) return scroll();
   const vertical = direction === "down" || direction === "up";
-  // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction.
-  if (vertical && place.on_item && (direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) return scroll();
+  // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction. The box goes back on the item, since a focus move may have cleared it.
+  if (vertical && place.on_item && (direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) {
+    page.highlight(items[place.index]!, args.selector);
+    return scroll();
+  }
   const pick = pick_item(boxes, place, direction, steps);
   // At the last item down and up scroll on, so the page below the results stays reachable. Left and right say they are at the end.
   if ("end" in pick) return vertical ? scroll() : page.toast(`No ${direction === "right" ? "next" : "previous"} item`);
@@ -125,5 +128,5 @@ function land_on(page: ItemPage, item: Element, args: ItemArgs): void {
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args };
-  page.highlight(item);
+  page.highlight(item, args.selector);
 }

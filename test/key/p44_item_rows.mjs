@@ -1,15 +1,16 @@
-// The shipped result-page rows (google here) on a test address with the site pattern swapped: j and k focus the result links one by one, Enter opens one, a count walks several, and the box DesertFox draws follows the item and clears on blur, Escape, a mode change and the item leaving the page.
+// The shipped result-page rows (google here) on a test address with the site pattern swapped: j and k focus the result links one by one, Enter opens one, a count walks several, and the box DesertFox draws follows the item and clears on blur, Escape, a click, a mode change and the item leaving the page. A page script that moves the focus (a stand-in loader) keeps the box, which follows the focus to the result the page picks.
 // The box sits in a closed shadow root. The extension's own world reads it with openOrClosedShadowRoot.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
+import { click_element } from "./native_click.mjs";
 
 export const areas = ["keys", "config", "bundles"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 const ITEMS = 12;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep, rdp }) {
   let config_dir;
   await setup("load the shipped google row for the item_ pages the hackernews row for the hn_ pages and the ddg row for the ddg_ pages and the ddg_images row for the img_ pages and the google_videos row for the gvid_ pages and the ddg_videos row for the dvid_ pages", async () => {
     const dir = config_dir = config_copy();
@@ -27,13 +28,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  // The stand-in results: a block per result with a title link (an h3 inside the anchor) and an address and snippet beside it, as Google's result blocks have. A People also ask question sits among them, with an h3 link but outside any result block, and the row must skip it.
+  // The stand-in results: a block per result with a title link (an h3 inside the anchor) and an address and snippet beside it, as Google's result blocks have. The h3 has no margin, so the content fits the block and the box, which covers what pokes out, matches the block. A People also ask question sits among them, with an h3 link but outside any result block, and the row must skip it.
   const open_results = async (id, first_height = 60) => {
     await open_page("controls", `item_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const search = document.createElement("div");
       search.id = "search";
-      search.innerHTML = ${JSON.stringify(Array.from({ length: ITEMS }, (_, index) => `<div class="MjjYud" style="height:${index === 0 ? first_height : 60}px;margin:0 0 40px 20px;width:300px"><a id="r${index}" href="#r${index}" style="display:block"><h3>result ${index}</h3></a><span>example.org snippet ${index}</span></div>` + (index === 1 ? '<div class="related-question-pair"><a id="paa" href="#paa"><h3>a question</h3></a></div>' : "")).join(""))};
+      search.innerHTML = ${JSON.stringify(Array.from({ length: ITEMS }, (_, index) => `<div class="MjjYud" style="height:${index === 0 ? first_height : 60}px;margin:0 0 40px 20px;width:300px"><a id="r${index}" href="#r${index}" style="display:block"><h3 style="margin:0">result ${index}</h3></a><span>example.org snippet ${index}</span></div>` + (index === 1 ? '<div class="related-question-pair"><a id="paa" href="#paa"><h3>a question</h3></a></div>' : "")).join(""))};
       document.body.prepend(search);
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -443,6 +444,148 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_badge("SPY");
     await load_config_dir(config_dir);
     await expect_badge("NORMAL");
+  });
+
+  // A stand-in for Google's loading bar: its script focuses a progressbar when a load starts, then hands the focus to a result. in_active_tab runs as a script, so the box reads these moves as the page's, not the user's.
+  const steal_focus = () => in_active_tab(`(() => {
+    let loader = document.getElementById("loader");
+    if (!loader) {
+      loader = Object.assign(document.createElement("div"), { id: "loader", tabIndex: -1, textContent: "Loading..." });
+      loader.setAttribute("role", "progressbar");
+      document.body.append(loader);
+    }
+    loader.focus({ preventScroll: true });
+    return document.activeElement === loader;
+  })()`);
+  const page_focuses = (id) => in_active_tab(`document.getElementById(${JSON.stringify(id)}).focus(); 0`);
+  const item_rect_of = (id) => in_active_tab(`(() => { const r = document.getElementById(${JSON.stringify(id)}).closest(".MjjYud").getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
+  const expect_box_stays_on_item_of = async (id, what) => {
+    const drawn = await box();
+    expect(drawn !== null && near(drawn, await item_rect_of(id)), `${what}: the box is ${JSON.stringify(drawn)}`);
+  };
+  // Shorter than the grace a page-made focus move gets, so a box gone by then was cleared at once.
+  const AT_ONCE_MS = 400;
+
+  await run_case("a page script that moves the focus to a loader keeps the box, and the box follows the focus to the result the page picks", async () => {
+    await open_results("loader");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await sleep(300);
+    await expect_box_stays_on_item_of("r0", "the box left the result when the loader took the focus");
+    await page_focuses("r3");
+    await expect_box_on_focus("the box on the result the page focused");
+  });
+
+  await run_case("a page script that takes the focus and gives it to no result clears the box after about a second", async () => {
+    await open_results("loader_gone");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await sleep(300);
+    await expect_box_stays_on_item_of("r0", "the box cleared before the grace ran out");
+    await poll_until("the box to clear after the grace", async () => (await box()) === null, { timeout_ms: 2000 });
+  });
+
+  await run_case("Escape while the loader holds the focus clears the box at once", async () => {
+    await open_results("loader_escape");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await press_keys("-k", "Escape");
+    await sleep(AT_ONCE_MS);
+    expect((await box()) === null, "the box outlived Escape");
+  });
+
+  await run_case("a click beside the results clears the box at once", async () => {
+    await open_results("click_away");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    await click_element(rdp, in_active_tab, "search", 400, 30);
+    await sleep(AT_ONCE_MS);
+    expect((await box()) === null, "the box outlived a click elsewhere");
+  });
+
+  await run_case("a result the page removes while the loader holds the focus takes the box with it", async () => {
+    await open_results("loader_removed");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await in_active_tab(`document.getElementById("r0").closest(".MjjYud").remove(); 0`);
+    await sleep(AT_ONCE_MS);
+    expect((await box()) === null, "the box outlived its removed result");
+  });
+
+  await run_case("j pressed during a load moves the box, and the result the page focuses after the load takes it", async () => {
+    await open_results("loader_rapid");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await press_keys("j");
+    await expect_focus("r1");
+    await expect_box_on_focus("the box on the second result");
+    expect(await steal_focus(), "the loader did not take the focus again");
+    await page_focuses("r4");
+    await expect_box_on_focus("the box on the result the page focused after the load");
+    await press_keys("jj");
+    await expect_focus("r6");
+    await expect_box_on_focus("the box on the result two below");
+  });
+
+  await run_case("once the box is gone, a page focus move onto a result draws nothing, after Escape and after the row turns off", async () => {
+    await open_results("cleared_timers");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    await press_keys("-k", "Escape");
+    await expect_no_box("the box to clear on Escape");
+    await page_focuses("r3");
+    await sleep(AT_ONCE_MS);
+    expect((await box()) === null, "a box came back after Escape when the page moved the focus");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the result after the focused one");
+    await push_to("off_cleared");
+    await expect_badge("IGNORE");
+    await expect_no_box("the box to clear when the row turned off");
+    await page_focuses("r6");
+    await sleep(AT_ONCE_MS);
+    expect((await box()) === null, "a box came back in the off row when the page moved the focus");
+    await push_to("item_cleared_timers");
+    await expect_badge("NORMAL");
+  });
+
+  await run_case("after Escape, j on a tall result that only scrolls draws the box on it again", async () => {
+    await open_results("tall_redraw", 3000);
+    await press_keys("j");
+    await expect_box_on_focus("the box on the tall result");
+    await press_keys("-k", "Escape");
+    await expect_no_box("the box to clear on Escape");
+    const before = await in_active_tab("scrollY");
+    await press_keys("j");
+    await poll_until("j to scroll 50 px", async () => (await in_active_tab("scrollY")) === before + 50);
+    await poll_until("the box back on the tall result", async () => { const drawn = await box(); return drawn !== null && near(drawn, await item_rect_of("r0")); });
+  });
+
+  await run_case("the box covers a part of the result that grows past it, but not a part a clipping box inside it hides", async () => {
+    await open_results("overflow");
+    await in_active_tab(`(() => {
+      const clip = Object.assign(document.createElement("div"), { style: "overflow:hidden;width:100px;height:10px" });
+      clip.append(Object.assign(document.createElement("div"), { style: "width:900px;height:10px" }));
+      document.getElementById("r1").closest(".MjjYud").append(clip);
+      return 0;
+    })()`);
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    // As a hover zoom does after the box is drawn: a child that pokes out past the right and bottom edges.
+    await in_active_tab(`(() => { document.getElementById("r0").closest(".MjjYud").append(Object.assign(document.createElement("div"), { id: "zoomed", style: "position:relative;left:250px;width:100px;height:20px;top:20px" })); return 0; })()`);
+    await poll_until("the box to cover the zoomed part", async () => {
+      const drawn = await box();
+      const [item, zoomed] = await in_active_tab(`[document.getElementById("r0").closest(".MjjYud"), document.getElementById("zoomed")].map((element) => { const r = element.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; })`);
+      const union = { left: Math.min(item.left, zoomed.left), top: Math.min(item.top, zoomed.top), width: Math.max(item.right, zoomed.right) - Math.min(item.left, zoomed.left), height: Math.max(item.bottom, zoomed.bottom) - Math.min(item.top, zoomed.top) };
+      return drawn !== null && union.width > item.right - item.left && near(drawn, union);
+    });
+    await press_keys("j");
+    await expect_focus("r1");
+    await poll_until("the box on the second result, not on its clipped wide row", async () => { const drawn = await box(); return drawn !== null && near(drawn, await item_rect_of("r1")); });
   });
 
   await run_case("on a page with no result row, j scrolls and no box shows", async () => {
