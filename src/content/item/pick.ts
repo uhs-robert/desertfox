@@ -10,22 +10,22 @@ const middle = (low: number, high: number) => (low + high) / 2;
 // Two boxes share a row when they overlap vertically by more than half the shorter one, so a justified grid with ragged tops still reads as rows.
 const same_row = (a: Box, b: Box): boolean => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > Math.min(a.bottom - a.top, b.bottom - b.top) / 2;
 
-// One step to the nearest item ahead. Down and up look at other rows only, left and right at any item whose height overlaps. Items whose span across the direction overlaps the current item's come first, so a masonry tile goes to the tile in its own column and a left-aligned list of unequal widths goes to the next line. Among them the nearest row or column is every item within half the current item's length along the direction of the nearest one, and the one that overlaps the current item most across picks from it. With no overlap, the centre distance along plus across decides.
+// One step to the nearest item ahead. Down and up look at other rows only, left and right at any item whose height overlaps. Items whose span across the direction overlaps the current item's come first, so a masonry tile goes to the tile in its own column and a left-aligned list of unequal widths goes to the next line. Among them the nearest one sets the row or column, which is every item that shares its extent along the direction. The one that overlaps the current item most across wins, and a tie goes to the nearer. With none overlapping, the smallest gap across stands in for the overlap.
 export function step_from(boxes: readonly Box[], from: number, direction: ItemDirection): number | undefined {
   const here = boxes[from]!;
   const sideways = direction === "left" || direction === "right";
   const sign = direction === "right" || direction === "down" ? 1 : -1;
-  const along = (box: Box) => (sideways ? middle(box.left, box.right) : middle(box.top, box.bottom));
-  const span = (box: Box) => (sideways ? [box.top, box.bottom] : [box.left, box.right]) as [number, number];
-  const overlap_across = (box: Box) => Math.min(span(box)[1], span(here)[1]) - Math.max(span(box)[0], span(here)[0]);
+  const extent = (box: Box, across: boolean): [number, number] => (sideways !== across ? [box.left, box.right] : [box.top, box.bottom]);
+  const along = (box: Box) => middle(...extent(box, false));
+  const overlap = (a: Box, b: Box, across: boolean) => Math.min(extent(a, across)[1], extent(b, across)[1]) - Math.max(extent(a, across)[0], extent(b, across)[0]);
   const along_gap = (index: number) => Math.abs(along(boxes[index]!) - along(here));
-  const ahead = boxes.map((_, index) => index).filter((index) => sign * (along(boxes[index]!) - along(here)) > 0 && (sideways ? overlap_across(boxes[index]!) > 0 : !same_row(here, boxes[index]!)));
-  const aligned = ahead.filter((index) => overlap_across(boxes[index]!) > 0);
-  const off_centre = (index: number) => along_gap(index) + Math.abs(middle(...span(boxes[index]!)) - middle(...span(here)));
-  if (aligned.length === 0) return ahead.sort((a, b) => off_centre(a) - off_centre(b))[0];
-  const nearest = Math.min(...aligned.map(along_gap));
-  const length_along = sideways ? here.right - here.left : here.bottom - here.top;
-  return aligned.filter((index) => along_gap(index) - nearest <= length_along / 2).sort((a, b) => overlap_across(boxes[b]!) - overlap_across(boxes[a]!))[0];
+  const ahead = boxes.map((_, index) => index).filter((index) => sign * (along(boxes[index]!) - along(here)) > 0 && (sideways ? overlap(boxes[index]!, here, true) > 0 : !same_row(here, boxes[index]!)));
+  const aligned = ahead.filter((index) => overlap(boxes[index]!, here, true) > 0);
+  const pool = aligned.length > 0 ? aligned : ahead;
+  const nearest = boxes[pool.sort((a, b) => along_gap(a) - along_gap(b))[0]!]!;
+  // The row is the items that share the nearest one's extent along the direction, as same_row reads it for rows.
+  const in_row = pool.filter((index) => overlap(boxes[index]!, nearest, false) > Math.min(...[boxes[index]!, nearest].map((box) => extent(box, false)[1] - extent(box, false)[0])) / 2);
+  return in_row.sort((a, b) => overlap(boxes[b]!, here, true) - overlap(boxes[a]!, here, true) || along_gap(a) - along_gap(b))[0];
 }
 
 export type ItemPick = { index: number } | { end: true };
