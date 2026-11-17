@@ -16,7 +16,7 @@ import { history_row } from "./history_cache.ts";
 import { one_line, SKIPPED_SCHEMES, with_usage, usage_by_url, history_items } from "./completion_rank.ts";
 import type { HistoryNode, OpenSettings, RankInputs, Usage } from "./completion_rank.ts";
 import type { RankSource } from "../shared/rank_port.ts";
-import { rank_history_rows } from "./rank_service.ts";
+import { rank_usage_for } from "./rank_service.ts";
 import { browser_register_store } from "./register_store.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { refused_as, warn_and_go } from "../shared/swallow.ts";
@@ -227,8 +227,11 @@ const FALLBACK_HISTORY_ROWS = 1000;
 // Before the rank Worker's history fill ends, the newest 1,000 come from the browser, so a line never waits. `startTime: 0` reaches all history, since the default is the last day.
 export const fallback_history = async (): Promise<HistoryNode[]> => (await browser.history.search({ text: "", startTime: 0, maxResults: FALLBACK_HISTORY_ROWS })).flatMap((visit) => history_row(visit) ?? []);
 
-// A copy of the Worker's rows, for a handler that picks from the whole history and the bookmark list's use boost.
-const search_history = async (): Promise<readonly HistoryNode[]> => (await rank_history_rows()) ?? (await fallback_history());
+// The boost of each address, asked of the Worker so the 20000 rows stay there. Before its fill ends the newest 1000 rows give it.
+export async function bookmark_usage(urls: readonly string[]): Promise<Usage> {
+  const boosts = await rank_usage_for(urls);
+  return boosts ? new Map(boosts) : usage_by_url(history_items(await fallback_history()));
+}
 
 export const browser_complete_items_deps = {
   query_tabs: ((window_id) => browser.tabs.query(window_id === undefined ? {} : { windowId: window_id })) as TabQuery,
@@ -237,10 +240,10 @@ export const browser_complete_items_deps = {
   folders: async (): Promise<FolderNode[]> => folder_nodes(await browser.bookmarks.getTree()),
   // A private line reads no history, so its rows rank by text alone. The `bookmark` command passes the privacy of its tab, so its Enter ranks as the list does.
   bookmark_view: async (is_private: boolean): Promise<BookmarkView> => {
-    const [roots, history] = await Promise.all([browser.bookmarks.getTree(), is_private ? [] : refused_as(search_history(), [])]);
-    return bookmark_view(roots, usage_by_url(history_items(history)));
+    const roots = await browser.bookmarks.getTree();
+    const usage = is_private ? new Map() : await refused_as(bookmark_usage(bookmark_items(flatten_bookmarks(roots)).map((item) => item.url)), new Map());
+    return bookmark_view(roots, usage);
   },
-  search_history,
   containers: (): Promise<ContainerMarks> => read_containers(() => browser.contextualIdentities.query({})),
   sessions: (): Promise<SessionItem[]> => make_session_store(browser_session_storage).items(),
   registers: (is_private: boolean): Promise<RegisterItem[]> => browser_register_store.items(is_private),

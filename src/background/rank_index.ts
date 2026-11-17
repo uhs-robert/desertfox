@@ -2,10 +2,13 @@
 // Pure: `rank_worker.ts` wires it to the Worker's messages, and the tests drive it directly. It reads the browser only through questions to the background.
 
 import { create_history_cache, HISTORY_CACHE_MAX } from "./history_cache.ts";
-import type { HistoryRow, Visit } from "./history_cache.ts";
-import { reads_history, snapshot_of } from "./completion_rank.ts";
+import type { Visit } from "./history_cache.ts";
+import { history_items, reads_history, snapshot_of, usage_by_url } from "./completion_rank.ts";
 import type { HistoryNode, RankInputs, Snapshot } from "./completion_rank.ts";
 import type { RankedReply, RankRequest, RankSource } from "../shared/rank_port.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
+import { pick_entry } from "../shared/folder_pick.ts";
+import type { HistoryItem } from "../shared/messages.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
 // The history events, in the order Firefox fired them.
@@ -22,7 +25,13 @@ export type ToWorker =
   | { type: "inputs"; line: number; inputs: RankInputs }
   | { type: "rank"; line: number; request: RankRequest }
   | { type: "close"; line: number }
-  | { type: "history_rows"; id: number };
+  // The boost of each listed address that the history holds.
+  | { type: "usage_for"; id: number; urls: string[] }
+  // Enter on `history <text>`: the one row the typed text means, or why it means none.
+  | { type: "pick_history"; id: number; text: string };
+
+// A refusal crosses as its text, because an error object does not keep its class through the Worker's message.
+export type PickedHistory = { row: HistoryItem } | { refusal: string };
 
 export type FromWorker =
   | { type: "ask"; id: number; question: Question }
@@ -30,7 +39,8 @@ export type FromWorker =
   // A line's snapshot came from the fallback rows and the fill has ended: its page should ask again.
   | { type: "stale"; line: number }
   // Undefined while the fill has not ended.
-  | { type: "history_rows"; id: number; rows: HistoryRow[] | undefined };
+  // The answer to `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, and when a pick threw something other than a refusal. A `usage_for` that throws ends the Worker instead, and the service answers its caller undefined.
+  | { type: "reply"; id: number; value: [string, number][] | PickedHistory | undefined };
 
 type Entry = { partial: boolean; built: Promise<Snapshot> };
 type Line = { inputs: Map<RankSource, RankInputs>; snapshots: Map<RankSource, Entry> };
@@ -98,6 +108,8 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
 
   void history.start();
 
+  const reply = (id: number, value: [string, number][] | PickedHistory | undefined) => post({ type: "reply", id, value });
+
   return {
     receive: (message: ToWorker) => {
       if (message.type === "history") {
@@ -117,7 +129,19 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
         line.snapshots.delete(message.inputs.source);
       } else if (message.type === "rank") void rank_and_answer(message.line, message.request);
       else if (message.type === "close") lines.delete(message.line);
-      else post({ type: "history_rows", id: message.id, rows: history.read() as HistoryRow[] | undefined });
+      else if (message.type === "usage_for") {
+        const rows = history.read();
+        const wanted = new Set(message.urls);
+        reply(message.id, rows && [...usage_by_url(history_items(rows.filter((row) => wanted.has(row.url))))]);
+      } else if (message.type === "pick_history") {
+        const rows = history.read();
+        try {
+          reply(message.id, rows && { row: pick_entry(history_items(rows), message.text, "history entry") });
+        } catch (error) {
+          // Any other error answers undefined, so the background picks over the browser's rows. The warning is the only trace of a bug that happens in the Worker alone.
+          reply(message.id, error instanceof RuntimeRefusal ? { refusal: error.message } : warn_and_go("pick")(error));
+        }
+      }
     },
   };
 }
