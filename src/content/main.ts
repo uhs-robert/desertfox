@@ -280,7 +280,9 @@ let grab_step_px: number = DEFAULT_GRAB_STEP_PX;
 
 function install_matcher(reply: PageKeymap | undefined): void {
   // The same answer as the last one, which only an address change inside one row asks for. Installing again would end a running site mode.
-  if (matcher_installed && reply === page_reply) return;
+  const text = reply && reply_text.get(reply);
+  if (matcher_installed && text !== undefined && text === installed_text) return;
+  installed_text = text;
   page_reply = reply;
   site_mode.name_ = undefined;
   site_mode.modes_ = reply?.site_modes;
@@ -339,14 +341,16 @@ function install_tree(): void {
   key_flow.set_matcher_(create_matcher(tree, frees && ((token) => !overlay?.tree[token] && is_freed(frees, token))), keymap?.modes.browser);
 }
 
-let last_reply: { text: string; keymap: PageKeymap } | undefined;
+// The answer text of each parsed reply, and of the one installed. An address change asks again and gets the same text from the newest ask, however an overtaken ask resolved meanwhile.
+const reply_text = new WeakMap<PageKeymap, string>();
+let installed_text: string | undefined;
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {
   return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()), url: location.href } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => {
     if (reply === undefined) return undefined;
-    // The same text gives the same object, so `install_matcher` can tell an unchanged answer.
-    if (reply !== last_reply?.text) last_reply = { text: reply, keymap: JSON.parse(reply) as PageKeymap };
-    return last_reply.keymap;
+    const keymap = JSON.parse(reply) as PageKeymap;
+    reply_text.set(keymap, reply);
+    return keymap;
   });
 }
 
@@ -465,7 +469,7 @@ function start(): void {
     }
     else if (message.type === "tree_updated") {
       // A keymap update installs even an identical answer: it ends a running site mode.
-      last_reply = undefined;
+      installed_text = undefined;
       void ask_keymap();
     }
   });

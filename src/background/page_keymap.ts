@@ -25,7 +25,7 @@ const origin_of = (address: string | undefined): string | undefined => {
     return undefined;
   }
 };
-export const sender_at = <S extends { url?: string | undefined }>(sender: S, url: unknown): S => (typeof url === "string" && origin_of(url) === origin_of(sender.url) && origin_of(url) !== "null" ? { ...sender, url } : sender);
+export const sender_at = <S extends { url?: string | undefined }>(sender: S, url: unknown): S => (typeof url === "string" && origin_of(url) !== undefined && origin_of(url) !== "null" && origin_of(url) === origin_of(sender.url) ? { ...sender, url } : sender);
 
 // A value about the whole tab, such as its zoom, follows the top page, so every frame resolves it against the top frame's address. A value about one frame's own content resolves against `[sender.url]`.
 export const top_frame_address_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): string | undefined =>

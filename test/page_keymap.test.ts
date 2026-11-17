@@ -682,6 +682,7 @@ test("a request that names an address of another origin keeps the load address, 
   const page = { url: "https://a.test/web", frameId: 0 };
   assert.deepEqual(rule_addresses_of(sender_at(page, "https://b.test/web")), ["https://a.test/web"]);
   assert.deepEqual(rule_addresses_of(sender_at(page, "not a url")), ["https://a.test/web"]);
+  assert.equal(sender_at<{ url?: string }>({}, "not a url").url, undefined);
   assert.deepEqual(rule_addresses_of(sender_at(page, "https://a.test/images#x")), ["https://a.test/images#x"]);
 });
 
