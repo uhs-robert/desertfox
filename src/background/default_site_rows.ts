@@ -97,6 +97,11 @@ const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 // A Google image tile is a div with a picture button (focusable) and a caption link.
 const GOOGLE_IMAGE_TILES = grid_binds('div[data-attrid="images universal"]', '[role="button"]');
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
+const LOBSTERS_ITEMS = item_binds("ol.stories > li.story", "a.u-url");
+const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-title");
+const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
+const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
+const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
@@ -123,6 +128,20 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "hackernews", row: { site: "https://news.ycombinator.com/*", bind: HACKERNEWS_ITEMS } },
   { name: "wikipedia", row: { site: "https://*.wikipedia.org/w/index.php?*search=*", bind: WIKIPEDIA_ITEMS } },
   { name: "wikipedia", row: { site: "https://*.wikipedia.org/wiki/Special:Search*", bind: WIKIPEDIA_ITEMS } },
+  // Lobsters has no keys of its own. A story page holds one story header, so the rows cover the story lists only.
+  { name: "lobsters", row: { site: "https://lobste.rs/", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/newest*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/active*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/t/*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/search*", bind: LOBSTERS_ITEMS } },
+  { name: "archwiki", row: { site: "https://wiki.archlinux.org/index.php?*search=*", bind: WIKIPEDIA_ITEMS } },
+  // Startpage's knowledge panel is also a `div.result`, so the item needs a title link.
+  { name: "startpage", row: { site: "https://www.startpage.com/sp/search*", bind: STARTPAGE_ITEMS } },
+  { name: "arxiv", row: { site: "https://arxiv.org/search/*", bind: ARXIV_ITEMS } },
+  // A question page holds no post summary, so the pattern may cover every /questions address.
+  { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", bind: STACKOVERFLOW_ITEMS } },
+  // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
+  { name: "tildes", row: { site: "https://tildes.net/*", bind: TILDES_ITEMS } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

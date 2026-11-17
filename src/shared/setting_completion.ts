@@ -197,7 +197,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": true,
-    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"google_images\", \"ddg_images\", \"ddg\", \"kagi\", \"brave\", \"google\", \"bing\", \"hackernews\" and \"wikipedia\" with no repeat",
+    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"google_images\", \"ddg_images\", \"ddg\", \"kagi\", \"brave\", \"google\", \"bing\", \"hackernews\", \"wikipedia\", \"lobsters\", \"archwiki\", \"startpage\", \"arxiv\", \"stackoverflow\" and \"tildes\" with no repeat",
     "values": [
       "sheets",
       "maps",
@@ -210,7 +210,13 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
       "google",
       "bing",
       "hackernews",
-      "wikipedia"
+      "wikipedia",
+      "lobsters",
+      "archwiki",
+      "startpage",
+      "arxiv",
+      "stackoverflow",
+      "tildes"
     ]
   },
   {
