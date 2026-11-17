@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 import { player_box } from "../../src/content/player_box.ts";
 import { word_range_at, element_address, has_usable_address, is_inside_link, is_media, perform, takes_typing } from "../../src/content/hints/actions.ts";
 import type { HintAction } from "../../src/content/hints/actions.ts";
@@ -247,12 +248,6 @@ test("caret and visual hand the element to the caret start and do nothing else",
 
 function box_fixture(attributes: Record<string, string>) {
   const calls: string[] = [];
-  const outline = { value: "", priority: "" };
-  const style = {
-    getPropertyValue: () => outline.value,
-    getPropertyPriority: () => outline.priority,
-    setProperty: (_name: string, value: string, priority = "") => { outline.value = value; outline.priority = priority; calls.push(`outline ${value}`); },
-  };
   const element = {
     localName: "div",
     click: () => {},
@@ -260,29 +255,48 @@ function box_fixture(attributes: Record<string, string>) {
     focus: () => calls.push("focus"),
     tabIndex: Number(attributes.tabindex ?? -1),
     setAttribute: (name: string, value: string) => { attributes[name] = value; calls.push(`set ${name}=${value}`); },
-    style,
   };
-  return { element, calls, outline, attributes };
+  return { element, calls, attributes };
 }
 
-test("focus gives a box without tabindex tabindex=-1 before it focuses, and flashes an outline that then goes away", async (context) => {
-  context.mock.timers.enable({ apis: ["setTimeout"] });
+const NO_DEPS = { open_link_: () => {}, copy: () => {}, strip_: (address: string) => address, image_action: () => Promise.resolve(), start_mode_: () => {}, inspect_: () => Promise.resolve() };
+
+test("focus gives a box without tabindex tabindex=-1 before it focuses and leaves the page's style alone", () => {
   const page = box_fixture({});
-  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, strip_: (address: string) => address, image_action: () => Promise.resolve(), start_mode_: () => {}, inspect_: () => Promise.resolve() });
-  assert.deepEqual(page.calls.slice(0, 3), ["set tabindex=-1", "focus", "outline 2px solid currentColor"]);
-  assert.equal(page.outline.priority, "important");
-  context.mock.timers.tick(5000);
-  assert.equal(page.outline.value, "");
+  perform("focus", page.element as never, NO_DEPS);
+  assert.deepEqual(page.calls, ["set tabindex=-1", "focus"]);
 });
 
-test("focus keeps a tabindex the page set and restores an outline the page set", (context) => {
-  context.mock.timers.enable({ apis: ["setTimeout"] });
+test("focus keeps a tabindex the page set", () => {
   const page = box_fixture({ tabindex: "0" });
-  page.outline.value = "1px dotted red";
-  perform("focus", page.element as never, { open_link_: () => {}, copy: () => {}, strip_: (address: string) => address, image_action: () => Promise.resolve(), start_mode_: () => {}, inspect_: () => Promise.resolve() });
+  perform("focus", page.element as never, NO_DEPS);
   assert.equal(page.attributes.tabindex, "0");
-  context.mock.timers.tick(5000);
-  assert.equal(page.outline.value, "1px dotted red");
+});
+
+// The element reads a different computed look once focused when the page restyles `:focus`.
+function marked_fixture(restyles_on_focus: boolean, context: TestContext) {
+  const page = box_fixture({});
+  let focused = false;
+  const doc = { defaultView: { getComputedStyle: () => ({ getPropertyValue: () => (focused && restyles_on_focus ? "ring" : "none") }) } };
+  const before = (globalThis as Record<string, unknown>).document;
+  (globalThis as Record<string, unknown>).document = doc;
+  context.after(() => ((globalThis as Record<string, unknown>).document = before));
+  Object.assign(page.element, { ownerDocument: doc, focus: () => { focused = true; page.calls.push("focus"); } });
+  return page;
+}
+
+test("focus draws the mark when the page style shows no focus", (context) => {
+  const page = marked_fixture(false, context);
+  const marked: unknown[] = [];
+  perform("focus", page.element as never, { ...NO_DEPS, mark_: (target) => marked.push(target) });
+  assert.deepEqual(marked, [page.element]);
+});
+
+test("focus draws no mark when the page style already shows the focus", (context) => {
+  const page = marked_fixture(true, context);
+  const marked: unknown[] = [];
+  perform("focus", page.element as never, { ...NO_DEPS, mark_: (target) => marked.push(target) });
+  assert.deepEqual(marked, []);
 });
 
 test("focus on a box that is focusable already leaves its tabindex alone", () => {
@@ -292,17 +306,6 @@ test("focus on a box that is focusable already leaves its tabindex alone", () =>
   assert.equal("tabindex" in link.attributes, false);
 });
 
-test("focus twice inside the flash still restores the original outline", (context) => {
-  context.mock.timers.enable({ apis: ["setTimeout"] });
-  const page = box_fixture({});
-  page.outline.value = "1px dotted red";
-  const deps = { open_link_: () => {}, copy: () => {}, strip_: (address: string) => address, image_action: () => Promise.resolve(), start_mode_: () => {}, inspect_: () => Promise.resolve() };
-  perform("focus", page.element as never, deps);
-  context.mock.timers.tick(300);
-  perform("focus", page.element as never, deps);
-  context.mock.timers.tick(5000);
-  assert.equal(page.outline.value, "1px dotted red");
-});
 
 const ENTER = ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"];
 const LEAVE = ["pointerout", "pointerleave", "mouseout", "mouseleave"];

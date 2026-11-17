@@ -15,6 +15,11 @@ if (!item_window.desertfox_item_ready && host) {
   const overlay = create_item_overlay(() => host.get_mode() === "normal");
   const page = { doc: document, view: window, focused: host.focused_, toast: host.show_toast_, scroll_by: host.scroll_by_, highlight: overlay.show };
   host.register_handler_("page.item", (args) => move_item(page, args as unknown as ItemArgs));
+  // The shared focus mark, asked for by the hints bundle after a focus move. The focus can have left by the time this bundle loads, and then there is nothing to mark.
+  host.register_handler_("item.mark", (args) => {
+    const element = args.element as Element;
+    if (element.isConnected && element.matches(":focus")) overlay.show(element);
+  });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }
