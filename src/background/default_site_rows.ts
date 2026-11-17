@@ -111,14 +111,14 @@ const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
 const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
 // Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll. The count goes to every step: `current` ignores it and the key goes out that many times.
-const drive_key = (guard: string, key: string, key_code: number): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard }, { id: "page.send_key", args: { key, key_code } }];
+const drive_key = (guard: string, key: string, key_code: number, intent: string): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard, intent }, { id: "page.send_key", args: { key, key_code } }];
 // A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
 const DRIVE_BIND: BindingTable = {
-  j: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40),
-  k: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38),
+  j: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40, "Move to the file below with Drive's own ArrowDown key (scrolls the page when no file shows)"),
+  k: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38, "Move to the file above with Drive's own ArrowUp key (scrolls the page when no file shows)"),
   ...end_binds(DRIVE_ANY_ITEM, undefined),
-  h: drive_key(DRIVE_GRID_ITEM, "ArrowLeft", 37),
-  l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39),
+  h: drive_key(DRIVE_GRID_ITEM, "ArrowLeft", 37, "Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view)"),
+  l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39, "Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view)"),
 };
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
