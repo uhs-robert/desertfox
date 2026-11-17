@@ -40,9 +40,8 @@ export type FromWorker =
   // A line's snapshot came from the fallback rows and the fill has ended: its page should ask again.
   | { type: "stale"; line: number }
   // Undefined while the fill has not ended.
-  | { type: "history_rows"; id: number; rows: HistoryRow[] | undefined }
-  // The answer to `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, as for `history_rows`, and when a pick threw something other than a refusal. A `usage_for` that throws ends the Worker instead, and the service answers its caller undefined.
-  | { type: "reply"; id: number; value: [string, number][] | PickedHistory | undefined };
+  // The answer to `history_rows` (`HistoryRow[]`), `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, as for `history_rows`, and when a pick threw something other than a refusal. A `usage_for` that throws ends the Worker instead, and the service answers its caller undefined.
+  | { type: "reply"; id: number; value: HistoryRow[] | [string, number][] | PickedHistory | undefined };
 
 type Entry = { partial: boolean; built: Promise<Snapshot> };
 type Line = { inputs: Map<RankSource, RankInputs>; snapshots: Map<RankSource, Entry> };
@@ -110,24 +109,7 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
 
   void history.start();
 
-  const usage_for = (id: number, urls: readonly string[]) => {
-    const rows = history.read();
-    const wanted = new Set(urls);
-    post({ type: "reply", id, value: rows && [...usage_by_url(history_items(rows.filter((row) => wanted.has(row.url))))] });
-  };
-
-  const pick = (id: number, text: string) => {
-    const rows = history.read();
-    let value: PickedHistory | undefined;
-    try {
-      if (rows) value = { row: pick_entry(history_items(rows), text, "history entry") };
-    } catch (error) {
-      // Any other error answers undefined, so the background picks over the browser's rows. The warning is the only trace of a bug that happens in the Worker alone.
-      if (error instanceof RuntimeRefusal) value = { refusal: error.message };
-      else warn_and_go("rank_index.pick")(error);
-    }
-    post({ type: "reply", id, value });
-  };
+  const reply = (id: number, value: HistoryRow[] | [string, number][] | PickedHistory | undefined) => post({ type: "reply", id, value });
 
   return {
     receive: (message: ToWorker) => {
@@ -148,9 +130,20 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
         line.snapshots.delete(message.inputs.source);
       } else if (message.type === "rank") void rank_and_answer(message.line, message.request);
       else if (message.type === "close") lines.delete(message.line);
-      else if (message.type === "usage_for") usage_for(message.id, message.urls);
-      else if (message.type === "pick_history") pick(message.id, message.text);
-      else post({ type: "history_rows", id: message.id, rows: history.read() as HistoryRow[] | undefined });
+      else if (message.type === "usage_for") {
+        const rows = history.read();
+        const wanted = new Set(message.urls);
+        reply(message.id, rows && [...usage_by_url(history_items(rows.filter((row) => wanted.has(row.url))))]);
+      } else if (message.type === "pick_history") {
+        const rows = history.read();
+        try {
+          reply(message.id, rows && { row: pick_entry(history_items(rows), message.text, "history entry") });
+        } catch (error) {
+          // Any other error answers undefined, so the background picks over the browser's rows. The warning is the only trace of a bug that happens in the Worker alone.
+          reply(message.id, error instanceof RuntimeRefusal ? { refusal: error.message } : warn_and_go("pick")(error));
+        }
+      }
+      else reply(message.id, history.read() as HistoryRow[] | undefined);
     },
   };
 }

@@ -119,8 +119,8 @@ export function create_rank_service(deps: RankServiceDeps) {
 
   const from_worker = (message: FromWorker) => {
     if (message.type === "ask") void answer_question(message.id, message.question);
-    else if (message.type === "history_rows" || message.type === "reply") {
-      replies_waiting.get(message.id)?.(message.type === "reply" ? message.value : message.rows);
+    else if (message.type === "reply") {
+      replies_waiting.get(message.id)?.(message.value);
       replies_waiting.delete(message.id);
     } else {
       const line = lines.get(message.line);
