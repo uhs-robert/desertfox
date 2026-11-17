@@ -449,9 +449,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 16);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 30);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -583,7 +583,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 13);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 27);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
@@ -615,4 +615,53 @@ test("the image row gives hjkl to the tiles on the DuckDuckGo image vertical and
   assert.match((await item_args_at(with_defaults({ default_site_rows_off: ["google_images"] }), "https://www.google.com/search?q=cats&udm=2", "j"))!.selector, /MjjYud/);
   const off = with_defaults({ default_site_rows_off: ["ddg_images"] });
   assert.match((await item_args_at(off, "https://duckduckgo.com/?q=cats&iax=images", "j"))!.selector, /data-testid/);
+});
+
+test("the list-page rows bind j and k to page.item on their result lists and leave story, question and other-host pages alone", async () => {
+  const compiled = with_defaults({});
+  const walks: [string, string][] = [
+    ["https://lobste.rs/", "ol.stories > li.story"],
+    ["https://lobste.rs/newest", "ol.stories > li.story"],
+    ["https://lobste.rs/newest/page/2", "ol.stories > li.story"],
+    ["https://lobste.rs/page/2", "ol.stories > li.story"],
+    ["https://lobste.rs/recent", "ol.stories > li.story"],
+    ["https://lobste.rs/recent/page/2", "ol.stories > li.story"],
+    ["https://lobste.rs/top/1w", "ol.stories > li.story"],
+    ["https://lobste.rs/domains/github.com", "ol.stories > li.story"],
+    ["https://lobste.rs/active", "ol.stories > li.story"],
+    ["https://lobste.rs/t/programming", "ol.stories > li.story"],
+    ["https://lobste.rs/search?q=rust&what=stories", "ol.stories > li.story"],
+    ["https://wiki.archlinux.org/index.php?search=pacman&fulltext=1", "li.mw-search-result"],
+    ["https://wiki.archlinux.org/index.php?title=Special%3ASearch&search=pacman", "li.mw-search-result"],
+    ["https://www.startpage.com/sp/search?query=cats", "div.result:has(a.result-title)"],
+    ["https://arxiv.org/search/?query=cats&searchtype=all", "li.arxiv-result"],
+    ["https://stackoverflow.com/questions", "div.s-post-summary"],
+    ["https://stackoverflow.com/questions/tagged/rust", "div.s-post-summary"],
+    ["https://tildes.net/", "article.topic"],
+    ["https://tildes.net/~comp", "article.topic"],
+  ];
+  for (const [url, selector] of walks) {
+    for (const key of ["j", "k"]) assert.equal((await item_args_at(compiled, url, key))?.selector, selector, `${key} on ${url}`);
+    assert.equal(await item_args_at(compiled, url, "h"), undefined, `h on ${url}`);
+  }
+  const plain = [
+    "https://lobste.rs/s/abc123/some_story",
+    "https://lobste.rs/s/abc123/some_story/comments",
+    "https://lobste.rs/u/someone",
+    "https://wiki.archlinux.org/title/Pacman",
+    "https://wiki.archlinux.org/index.php?title=Pacman&action=history",
+    "https://www.startpage.com/",
+    "https://arxiv.org/abs/2101.00001",
+    "https://stackoverflow.com/",
+    "https://stackoverflow.com/users/1/someone",
+    "https://unix.stackexchange.com/questions",
+    "https://example.test/questions",
+    "https://example.test/search/",
+  ];
+  for (const url of plain) assert.equal(await item_args_at(compiled, url, "j"), undefined, `j is plain scroll on ${url}`);
+  for (const name of ["lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes"]) {
+    const off = with_defaults({ default_site_rows_off: [name] });
+    assert.ok(off.site_rules!.length < compiled.site_rules!.length, name);
+  }
+  assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["tildes"] }), "https://tildes.net/", "j"), undefined);
 });
