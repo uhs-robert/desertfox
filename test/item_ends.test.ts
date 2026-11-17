@@ -129,3 +129,24 @@ test("an end item the page dropped is not focused, and the next read lands on th
   await follow_end(page, () => [(reads++ === 0 ? stale : fresh) as unknown as Element], true, (item) => landed.push((item as unknown as Row).index));
   assert.deepEqual(landed, [1]);
 });
+
+test("on a page that scrolls itself and grows after the last item landed, the last item lands again after the scroll to the new bottom", async () => {
+  let clock = 0;
+  let top = 0;
+  let height = 2000;
+  const page_scroller = {
+    get scrollTop() {
+      return top;
+    },
+    get scrollHeight() {
+      return height;
+    },
+    clientHeight: 800,
+    scrollTo: ({ top: wanted }: { top: number }) => void (top = Math.min(wanted, height - 800)),
+  };
+  const result = { index: 9, isConnected: true, parentElement: null, getAttribute: () => null, closest: () => null };
+  const landed: number[] = [];
+  const page: EndPage = { doc: { scrollingElement: page_scroller } as unknown as EndPage["doc"], overflow_y_: () => "visible", wait_: async (ms) => void (clock += ms), now_: () => clock, watch_user_: () => ({ left_: () => false, stop_: () => {} }) };
+  await follow_end(page, () => (landed.length > 0 && (height = 2600), [result as unknown as Element]), true, (item) => landed.push((item as unknown as Row).index));
+  assert.deepEqual([landed, top], [[9, 9], 1800]);
+});

@@ -51,6 +51,8 @@ export async function follow_end(page: EndPage, read_items: () => Element[], to_
       if (scroller.scrollHeight !== height) {
         height = scroller.scrollHeight;
         changed_at = now;
+        // The scroll below can take the landed item out of view (a page that grows under its last result), so the same item lands again and comes back into view.
+        landed = undefined;
         scroller.scrollTo({ top: to_last ? height : 0, behavior: "instant" });
       }
       // Right after a scroll the items are the ones drawn before it, and landing on one would scroll the list back to it. The page may also have dropped the item while this waited.
