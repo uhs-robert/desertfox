@@ -68,7 +68,7 @@ test("the start is the focused item, else the last item while on screen, else th
 });
 
 // A page of fake items. `focus` records which element took the focus and with which options.
-function fake_page(rects: Box[], on_screen = true, focused_index = -1) {
+function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: number[] = []) {
   const log: string[] = [];
   const shown: string[] = [];
   const toasts: string[] = [];
@@ -76,7 +76,8 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1) {
     const link = { tabIndex: 0, setAttribute: () => {}, focus: () => log.push(`focus link ${index}`) };
     const element = {
       tabIndex: -1,
-      checkVisibility: () => true,
+      // A CSS-hidden item passes a bare checkVisibility(), so the handler must ask for the visibility property.
+      checkVisibility: (options?: { visibilityProperty?: boolean; opacityProperty?: boolean }) => !(hidden.includes(index) && options?.visibilityProperty && options?.opacityProperty),
       getClientRects: () => [rect],
       getBoundingClientRect: () => rect,
       contains: (node: unknown) => node === element,
@@ -147,6 +148,15 @@ test("left and right keep their notice at the end and do not scroll", () => {
   const { page, scrolls, toasts } = fake_page([box(0, 0), box(110, 0)], true, 1);
   move_item(page, { selector: "li", direction: "right" });
   assert.deepEqual([scrolls, toasts], [[], ["No next item"]]);
+});
+
+test("a CSS-hidden item in the middle is skipped in both directions", () => {
+  const down = fake_page([box(0, 0), box(0, 60), box(0, 120)], true, 0, [1]);
+  move_item(down.page, { selector: "li", direction: "down" });
+  assert.deepEqual(down.shown, ["2"]);
+  const up = fake_page([box(0, 0), box(0, 60), box(0, 120)], true, 2, [1]);
+  move_item(up.page, { selector: "li", direction: "up" });
+  assert.deepEqual(up.shown, ["0"]);
 });
 
 test("with no item on the page the key scrolls by 50 px per count in its direction and shows no notice", () => {

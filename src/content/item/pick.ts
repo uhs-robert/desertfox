@@ -78,7 +78,7 @@ function focus_target(item: Element, link_selector: string | undefined): HTMLEle
 export function move_item(page: ItemPage, args: ItemArgs): void {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
-  const items = Array.from(page.doc.querySelectorAll(args.selector)).filter((element) => element.checkVisibility() && element.getClientRects().length > 0);
+  const items = Array.from(page.doc.querySelectorAll(args.selector)).filter((element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && element.getClientRects().length > 0);
   const steps = args.times ?? 1;
   const scroll = () => page.scroll_by(...(SCROLL[args.direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
