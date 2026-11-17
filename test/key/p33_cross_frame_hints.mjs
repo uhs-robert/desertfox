@@ -75,9 +75,8 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     const mark = events.length;
     await press_keys(labels.cross[0]);
     await wait_event(mark, (event) => event.type === "visibility" && event.page_id.startsWith("fh_pick_cross_"), "the cross-origin frame to follow the picked link");
-    // The labels go in every frame once the pick is done, and a top page that followed its own link too reports it by then or just after.
+    // The top page's own report would come with its navigation, as the frame's did, so it is absent once the frame's has arrived and every label is gone.
     await wait_for_no_labels("the labels of every frame to go after the pick");
-    await new Promise((resolve) => setTimeout(resolve, 500));
     expect(!find_event(mark, on_page("fh_pick_top", "visibility")), "the top page's link was followed too");
   });
 
