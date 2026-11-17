@@ -47,6 +47,23 @@ test("down prefers an item that overlaps across, even when one in the next colum
   assert.equal(step_from(apart, 0, "down"), 2);
 });
 
+test("down takes the tile directly below, not a ragged neighbour that overlaps by a few pixels", () => {
+  const ragged = [box(0, 0, 100, 80), box(95, 100, 200, 80), box(0, 106, 100, 80)];
+  assert.equal(step_from(ragged, 0, "down"), 2);
+});
+
+test("candidates within half the item length along share a row, and the larger overlap across wins", () => {
+  // Both start about a line below, 1 px apart along. The second overlaps more across.
+  const near = [box(0, 0, 100, 40), box(60, 60, 100, 40), box(0, 61, 100, 40)];
+  assert.equal(step_from(near, 0, "down"), 2);
+});
+
+test("left and right reach a column whose tiles each cover less than half the item's height", () => {
+  const split = [box(200, 300, 100, 100), box(100, 140, 100, 200), box(100, 350, 100, 200), box(0, 280, 100, 140)];
+  assert.equal(step_from(split, 0, "left"), 2);
+  assert.equal(step_from(split, 2, "left"), 3);
+});
+
 test("a list of titles with unequal widths still goes to the next one down", () => {
   const titles = [box(0, 0, 300, 20), box(0, 50, 100, 20), box(0, 100, 250, 20)];
   assert.equal(step_from(titles, 0, "down"), 1);
