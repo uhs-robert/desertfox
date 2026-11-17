@@ -176,6 +176,17 @@ define("page.send_key", {
   bundle: "site_actions",
 });
 
+// Meant for site rows: a row binds a key to this command for a control that a site's script opens only on a click, not on Enter. It lives in the hints bundle, which already holds the hint click. The site_actions bundle has no room for it.
+define("page.click", {
+  label: "Click on page",
+  intent: "Click the first shown element a CSS selector finds. It sends the pointer and mouse events of a hint click, so a control that opens only on a click opens. It refuses when nothing shown matches.",
+  params: [{ name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Click the first shown element this CSS selector finds." }],
+  bridge: false,
+  runs_in: "content",
+  modes: ["normal"],
+  bundle: "hints",
+});
+
 // Meant for the arrow mode, which binds h, j, k and l to it. Firefox ignores a script's arrow keys on its own controls, so the handler moves each native control through the DOM and sends a keydown to the rest.
 define("page.arrow", {
   label: "Arrow on the focused control",

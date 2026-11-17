@@ -6,6 +6,7 @@ import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { move_item, pick_item, place_of, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
+import { click_first_shown } from "../src/content/hints/click_first.ts";
 
 const box = (left: number, top: number, width = 100, height = 40): Box => ({ left, top, right: left + width, bottom: top + height });
 const list = [box(0, 0), box(0, 60), box(0, 120), box(0, 180)];
@@ -318,4 +319,15 @@ test("current focuses the item a move starts from, the first one in view when no
   const none = fake_page(list);
   move_item(none.page, { selector: "none", direction: "current" });
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
+});
+
+test("page.click clicks the first shown match, and refuses a bad selector or no shown match", () => {
+  const clicked: string[] = [];
+  const page = (names: string[]) => ({ querySelectorAll: (selector: string) => (selector === "[" ? (() => { throw new SyntaxError("bad"); })() : names) });
+  const shown = (name: string) => !name.startsWith("hidden");
+  assert.equal(click_first_shown(page(["hidden copy", "shown", "second"]), ".go", shown, (name) => clicked.push(name)), undefined);
+  assert.deepEqual(clicked, ["shown"]);
+  assert.equal(click_first_shown(page(["hidden copy"]), ".go", shown, (name) => clicked.push(name)), "Nothing shown on the page matches .go");
+  assert.equal(click_first_shown(page([]), "[", shown, (name) => clicked.push(name)), "[ is not a valid CSS selector");
+  assert.deepEqual(clicked, ["shown"]);
 });

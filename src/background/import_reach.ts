@@ -19,7 +19,7 @@ export const ROW_CAP = 12;
 // Commands by what they reach. A test checks that each id is a registered command and that no registered `settings.*`, `native.*` or `permissions.*` command is missing.
 const GROUP_PREFIXES: readonly (readonly [KeyGroup, string])[] = [["settings", "settings."], ["host", "native."], ["host", "permissions."]];
 const GROUP_IDS: Record<KeyGroup, readonly string[]> = {
-  clipboard_or_page: ["page.clipboard", "page.send_key", "open.clipboard"],
+  clipboard_or_page: ["page.clipboard", "page.send_key", "page.click", "open.clipboard"],
   settings: ["settings.set", "settings.toggle", "settings.unset"],
   host: ["native.install", "native.update", "permissions.grant", "text.edit_external", "browser.open_firefox_page", "config.reload", "debug.restart"],
 };
@@ -82,8 +82,8 @@ function consent_use(step: BoundInvocation, modifier_sets_value: boolean): KeyRo
   return plain_false ? "change" : "switch_on";
 }
 
-// A clipboard row reads the clipboard or presses keys on a page, or only writes the clipboard (copy, cut). Reads and key presses rank first.
-const reads_or_presses = (id: string, args: Record<string, unknown>, clipboard: boolean): boolean => clipboard || id === "open.clipboard" || id === "page.send_key" || (id === "page.clipboard" && args.action === "paste");
+// A clipboard row reads the clipboard, presses keys or clicks on a page, or only writes the clipboard (copy, cut). Reads, key presses and clicks rank first.
+const reads_or_presses = (id: string, args: Record<string, unknown>, clipboard: boolean): boolean => clipboard || id === "open.clipboard" || id === "page.send_key" || id === "page.click" || (id === "page.clipboard" && args.action === "paste");
 
 export function import_reach(config: MergedConfig, commands: CommandMeta[]): ImportReach {
   const meta = new Map(commands.map((command) => [command.id, command]));
