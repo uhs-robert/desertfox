@@ -37,14 +37,18 @@ export const normalize = (text: string): string => text.toLowerCase().replace(/\
 const escape_pattern = (pattern: string): string => pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
-
 const has_cjk = new RegExp(`[${CJK}]`, "u");
 
-// A whole-word match, so 'next' does not hit the '#nextjs' tag. Letters of any script count as word letters, except kana and kanji, which have no spaces between words ("次へ進む").
+// Kana and kanji have no spaces, so a text with them is capped by characters, not words. "次のページへ" is 6, a sentence that holds the word is longer.
+const MAX_CJK_CHARS = 12;
+
+// A whole-word match, so 'next' does not hit the '#nextjs' tag. Letters of any script count as word letters, so 次へ does not hit 目次へ. Only a CJK pattern may run straight into kana after it ("次へ進む"), as there is no space to end the word.
 function matches_pattern(text: string, pattern: string): boolean {
-  if (pattern.length <= MAX_WHOLE_TEXT_PATTERN && !has_cjk.test(pattern)) return text === pattern;
-  const word = new RegExp(`(?:(?<![\\p{L}\\p{N}])|(?<=[${CJK}]))${escape_pattern(pattern)}(?:(?![\\p{L}\\p{N}])|(?=[${CJK}]))`, "u");
-  return text.split(" ").length <= MAX_WORDS && word.test(text);
+  const cjk_pattern = has_cjk.test(pattern);
+  if (pattern.length <= MAX_WHOLE_TEXT_PATTERN && !cjk_pattern) return text === pattern;
+  const length_ok = has_cjk.test(text) ? text.length <= MAX_CJK_CHARS : text.split(" ").length <= MAX_WORDS;
+  const after = cjk_pattern ? `(?:(?![\\p{L}\\p{N}])|(?=[${CJK}]))` : "(?![\\p{L}\\p{N}])";
+  return length_ok && new RegExp(`(?<![\\p{L}\\p{N}])${escape_pattern(pattern)}${after}`, "u").test(text);
 }
 
 export type TextItem = { texts: readonly string[]; is_link: boolean };
@@ -97,9 +101,9 @@ export const in_carousel = <N>(reader: PageReader<N>, node: N): boolean =>
       reader.children_(box).some(reader.scrolls_sideways_),
   );
 
-// A player's own controls: a near box that holds the video and is no taller than the screen. YouTube's "Next" plays the next video.
+// A player's own controls: a near box that holds the video and is no taller than the screen. YouTube's "Next" plays the next video. The page body is no player, however short the page.
 const in_player = <N>(reader: PageReader<N>, node: N): boolean =>
-  [...ancestors(reader, node, 6)].some((box) => (reader.box_(box)?.h ?? Infinity) <= reader.view_().h && descendants(reader, box).some((inner) => /^(video|audio)$/.test(reader.tag_(inner))));
+  [...ancestors(reader, node, 6)].some((box) => reader.tag_(box) !== "body" && reader.tag_(box) !== "html" && (reader.box_(box)?.h ?? Infinity) <= reader.view_().h && descendants(reader, box).some((inner) => /^(video|audio)$/.test(reader.tag_(inner))));
 
 // An item of a repeated block reads as its tag and first class, so siblings built from one template share it.
 export const signature = <N>(reader: PageReader<N>, node: N): string => `${reader.tag_(node)}.${(reader.attr_(node, "class") ?? "").trim().split(/\s+/)[0]}`;

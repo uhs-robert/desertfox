@@ -24,6 +24,14 @@ test("a word beside kana or kanji still matches, as those scripts have no spaces
   assert.equal(best([link("次へ進む")]), 0);
 });
 
+test("a CJK next word is not found inside a longer word or a long sentence", () => {
+  const patterns = ["次へ", "次のページ"];
+  assert.equal(best([link("目次へ")], patterns), -1);
+  assert.equal(best([link("目次へ戻る")], patterns), -1);
+  assert.equal(best([link("目次へ戻る"), link("次のページへ")], patterns), 1);
+  assert.equal(best([link("次へ進むには会員登録が必要です。詳細は利用規約をご確認ください")], patterns), -1);
+});
+
 test("every match is ranked, so a caller can pass over a skipped one", () => {
   assert.deepEqual(rank_by_text([link("home"), link("next page"), link("next")], NEXT), [2, 1]);
 });
@@ -64,4 +72,12 @@ test("an arrow beside a sideways track is a carousel control, not the next page"
   const controls = [{ node: arrow, texts: ["Next"], is_link: false }, { node: pager, texts: ["Next"], is_link: true }];
   assert.equal(pick_next_control(reader, controls, NEXT), pager);
   assert.equal(pick_next_control(reader, controls.slice(0, 1), NEXT), undefined);
+});
+
+test("a short page with an audio element is no player, so its pager still counts", () => {
+  const pager: SavedNode = { t: "a", a: { href: "?page=2" }, r: [500, 600, 60, 30], s: "Next" };
+  const root: SavedNode = { t: "body", r: [0, 0, 1366, 800], c: [{ t: "audio", r: [0, 0, 300, 30] }, pager] };
+  for (const child of root.c!) child.up = root;
+  const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 800 }, root });
+  assert.equal(pick_next_control(reader, [{ node: pager, texts: ["Next"], is_link: true }], NEXT), pager);
 });

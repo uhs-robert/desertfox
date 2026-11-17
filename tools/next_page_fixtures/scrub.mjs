@@ -22,7 +22,8 @@ export function scrub_href(href) {
   return absolute.startsWith(base) && !href.startsWith(base) ? absolute.slice(base.length) : absolute;
 }
 
-const EMAIL = /[^\s@<>"'()\/:=?&;,]+@[^\s@<>"'()\/:=?&;,]+\.[^\s@<>"'()\/:=?&;,]+/g;
+// The @ may be percent-encoded, as a query string writes it. Masking runs after the address is scrubbed.
+const EMAIL = /[^\s@<>"'()\/:=?&;,]+(?:@|%40)[^\s@<>"'()\/:=?&;,]+\.[^\s@<>"'()\/:=?&;,]+/gi;
 export const mask_emails = (text) => text.replace(EMAIL, "email@scrub.invalid");
 
 export function scrub_page(node) {
