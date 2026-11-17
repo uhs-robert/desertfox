@@ -149,5 +149,5 @@ export const EDITOR_JOBS_STORAGE_KEY = "desertfox_editor_jobs";
 // Prefix of one `storage.session` key per tab whose command line draws in the top frame for a subframe. The value is that subframe's id, and a command run from the line acts there. Replaced by the next line, removed when the tab closes or the frame navigates.
 export const CMDLINE_TARGET_STORAGE_PREFIX = "desertfox_cmdline_target_";
 
-// The font names the font settings offer (`font_names.ts`): `{ host, names }`, the last answer of the host's `list_fonts` and the merge of it with the canvas probe. A cache that refills when absent or malformed.
+// The font names the font settings offer (`font_names.ts`): `{ host, names }`, the last answer of the host's `list_fonts` and the names in use, which are the host list when the host answers and the probe list otherwise. A cache that refills when absent or malformed.
 export const FONT_NAMES_STORAGE_KEY = "desertfox_font_names";
