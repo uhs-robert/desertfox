@@ -258,3 +258,30 @@ test("the shipped image row binds hjkl to page.item", () => {
     }
   }
 });
+
+test("first and last go to the ends of the page whatever has focus, skip hidden items, and do nothing with no item", () => {
+  const middle = fake_page(list, true, 2);
+  move_item(middle.page, { selector: "li", link: "a.t", direction: "first" });
+  move_item(middle.page, { selector: "li", link: "a.t", direction: "last", times: 3 });
+  assert.deepEqual(middle.shown, ["0", "3"]);
+  assert.deepEqual(middle.log, ["focus link 0", "focus link 3"]);
+  const hidden_ends = fake_page(list, true, -1, [0, 3]);
+  move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "first" });
+  move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "last" });
+  assert.deepEqual(hidden_ends.shown, ["1", "2"]);
+  const none = fake_page(list);
+  move_item(none.page, { selector: "none", direction: "last" });
+  assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
+});
+
+test("every shipped page.item row binds gg and G to its first and last item, guarded by its own item selector", () => {
+  const item_rows = DEFAULT_SITE_ROWS.filter(({ row }) => Object.values(row.bind ?? {}).some((binding) => JSON.stringify(binding).includes('"id":"page.item"')));
+  assert.ok(item_rows.length >= 15, `${item_rows.length} page.item rows`);
+  for (const { name, row } of item_rows) {
+    const selector = (row.bind!["j"] as unknown as { args: { selector: string } }).args.selector;
+    for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
+      const bind = row.bind![key] as unknown as { id: string; args: { selector: string; direction: string }; when_present?: string };
+      assert.deepEqual({ id: bind.id, direction: bind.args.direction, selector: bind.args.selector, when_present: bind.when_present }, { id: "page.item", direction, selector, when_present: selector }, `${name} ${row.site} ${key}`);
+    }
+  }
+});

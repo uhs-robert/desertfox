@@ -1,5 +1,6 @@
 import type { ContentToBackground, Mode, Outcome, RunResponse, TreeLeaf } from "../shared/index.ts";
 import { counted_invocations } from "./run_content.ts";
+import { is_shown } from "./shown.ts";
 
 // A leaf with a background step goes to the router whole: it reads the active tab at each step, so a step after tab.next runs in the new tab.
 // A leaf of content steps runs here and shows its own failure.
@@ -37,6 +38,16 @@ const is_inside = (focused: Element, selector: string): boolean => {
   }
 };
 
-// The leaf a key runs under a site row's focus guard: the bind itself, or the leaf it replaced, or nothing when it replaced none. Body counts as no focus, so a bind aimed at the page's main widget also runs before the user has focused it.
-export const leaf_for_focus = (leaf: TreeLeaf, focused: Element | null, body: Element | null): TreeLeaf | undefined =>
-  leaf.when_focus === undefined || focused === null || focused === body || is_inside(focused, leaf.when_focus) ? leaf : leaf.otherwise && leaf_for_focus(leaf.otherwise, focused, body);
+const shows_match = (root: ParentNode, selector: string): boolean => {
+  try {
+    return Array.from(root.querySelectorAll(selector)).some(is_shown);
+  } catch {
+    return false;
+  }
+};
+
+// The leaf a key runs under a site row bind's guards: the first leaf of the `otherwise` chain whose guards hold, which is a choice of a choice list or the leaf the bind replaced, or nothing when none holds. Body counts as no focus, so a bind aimed at the page's main widget also runs before the user has focused it.
+export const leaf_for_page = (leaf: TreeLeaf, focused: Element | null, body: Element | null, root: ParentNode): TreeLeaf | undefined =>
+  (leaf.when_focus === undefined || focused === null || focused === body || is_inside(focused, leaf.when_focus)) && (leaf.when_present === undefined || shows_match(root, leaf.when_present))
+    ? leaf
+    : leaf.otherwise && leaf_for_page(leaf.otherwise, focused, body, root);

@@ -18,6 +18,19 @@ const KEY_RULE_NAMES = ["pass", "only"] as const;
 
 const leaf_text = (leaf: TreeLeaf): string => leaf.label ?? leaf.intent ?? leaf.steps.map((step) => step.invocation.id).join(", ");
 
+const guard_text = (leaf: TreeLeaf): string | undefined => [leaf.when_present && `while the page shows ${leaf.when_present}`, leaf.when_focus && `while the focus is in ${leaf.when_focus}`].filter(Boolean).join(" and ") || undefined;
+
+// A bind as its chain of choices reads: each choice with its guards, until one with no guard. A chain that ends on a guard falls back to the key as the keymap has it.
+function bind_text(leaf: TreeLeaf): string {
+  const parts: string[] = [];
+  for (let choice: TreeLeaf | undefined = leaf; choice; choice = choice.otherwise) {
+    const guard = guard_text(choice);
+    parts.push(guard ? `${leaf_text(choice)} ${guard}` : leaf_text(choice));
+    if (!guard) return parts.join(", else ");
+  }
+  return [...parts, "the key without the row"].join(", else ");
+}
+
 // The keymap's own meaning of a key sequence: a binding's label, a group's name, or nothing. A shorter key that is a binding on the way (`h` for `hq`) is what the sequence loses, so its label counts.
 function keymap_meaning(normal: TreeNode | undefined, tokens: readonly string[]): string | undefined {
   let node: TreeNode | undefined = normal;
@@ -64,7 +77,9 @@ function node_at(root: TreeNode | undefined, tokens: readonly string[]): TreeNod
 function dead_bind(key: string, { tokens, leaf }: SiteBind, earlier: boolean, page: PageState): string | undefined {
   if (page.all_off) return "off for this page";
   if (earlier) return EARLIER_ROW;
-  if (node_at(page.tree, tokens) === leaf) return undefined;
+  // The page tree holds a copy of a guarded bind, with the leaf it replaced at the end of its chain, so the steps tell the bind.
+  const node = node_at(page.tree, tokens);
+  if (node?.kind === "leaf" && node.steps === leaf.steps) return undefined;
   const shorter = hiding_bind(Object.values(page.columns.bind ?? {}), { tokens, leaf });
   if (shorter) return `${shorter.tokens.join("")} is a complete bind and hides longer keys under it`;
   if (page.columns.keys !== undefined) return "pass" in page.columns.keys ? "freed by pass" : "dropped by only";
@@ -75,7 +90,7 @@ function bind_changes(binds: Readonly<Record<string, SiteBind>> | undefined, nor
   return Object.entries(binds ?? {}).map(([key, bind]) => {
     const replaces = keymap_meaning(normal, bind.tokens);
     const reason = dead(key, bind);
-    return { keys: bind.tokens.join(""), action: leaf_text(bind.leaf), ...tag, ...(replaces === undefined ? {} : { replaces }), ...(reason === undefined ? {} : { dead: reason }) };
+    return { keys: bind.tokens.join(""), action: bind_text(bind.leaf), ...tag, ...(replaces === undefined ? {} : { replaces }), ...(reason === undefined ? {} : { dead: reason }) };
   });
 }
 

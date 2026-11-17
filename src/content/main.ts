@@ -25,7 +25,7 @@ import { page_mode } from "./page_mode.ts";
 import { fullscreen_step, takes_media_step } from "./mode_state.ts";
 import { site_mode } from "./site_mode.ts";
 import { run_content_steps, run_in_order } from "./run_content.ts";
-import { holds_keys_after, leaf_for_focus, run_leaf } from "./run_leaf.ts";
+import { holds_keys_after, leaf_for_page, run_leaf } from "./run_leaf.ts";
 import { answer_park, focus_page_content, start_content_once } from "./handlers/focus.ts";
 import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
@@ -76,7 +76,7 @@ const key_flow = create_key_flow({
   get_mode_: page_mode.get_mode_,
   take_pass_next_: page_mode.take_pass_next_,
   run_leaf_: (bound_leaf, count, repeat) => {
-    const leaf = leaf_for_focus(bound_leaf, document.activeElement, document.body);
+    const leaf = leaf_for_page(bound_leaf, document.activeElement, document.body, document);
     if (!leaf) return;
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();

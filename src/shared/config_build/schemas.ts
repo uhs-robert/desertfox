@@ -8,7 +8,7 @@ import { resolve_key_docs } from "../key_docs.ts";
 import { compile_keymap } from "../keys/compiler.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../settings_docs.ts";
 import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
-import { MAX_BIND_STEPS } from "../table_constants.ts";
+import { MAX_BIND_CHOICES, MAX_BIND_STEPS } from "../table_constants.ts";
 import { SETTINGS_TABLE, SITE_KEYMAP_MODES, type SettingName, type SettingRow } from "../settings_table.ts";
 import { ENGINE_KEYWORD } from "../engines/resolve.ts";
 import { KEYMAP_MODES } from "./merge.ts";
@@ -72,18 +72,20 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
 const WHEN_FOCUS: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while nothing has focus or the focused element sits on or inside a match, and the key runs the binding it replaced otherwise" };
+const WHEN_PRESENT: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while the page shows a match, and the key runs the next choice or the binding it replaced otherwise" };
 
 // The formats of a keymap binding, plus the invocation table `{ id, args }` that the build stores and a saved edit exports.
 const BIND_STEP: Schema = {
-  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS }, required: ["id"], additionalProperties: false }],
+  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS, when_present: WHEN_PRESENT }, required: ["id"], additionalProperties: false }],
 };
 const BIND_STEPS: Schema = { type: "array", minItems: 1, maxItems: MAX_BIND_STEPS, items: BIND_STEP };
+const BIND_RUN: Schema = { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS, when_present: WHEN_PRESENT }, required: ["run"], additionalProperties: false };
 
 const BINDINGS_SCHEMA: Schema = {
   type: "object",
   minProperties: 1,
   additionalProperties: {
-    anyOf: [BIND_STEP, BIND_STEPS, { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS }, required: ["run"], additionalProperties: false }],
+    anyOf: [BIND_STEP, BIND_STEPS, BIND_RUN, { type: "array", minItems: 1, maxItems: MAX_BIND_CHOICES, items: { anyOf: [BIND_RUN, BIND_STEPS] }, description: "Choices, each guarded by when_present or when_focus: the first whose guards hold runs, else the binding it replaced" }],
   },
 };
 

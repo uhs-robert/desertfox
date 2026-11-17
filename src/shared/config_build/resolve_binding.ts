@@ -1,14 +1,15 @@
 // Turns one binding as a config file writes it into invocations. The keymap and the site rows share it, and so does the compile, which resolves a text bind that a browser edit set.
 
 import { intent_problem, label_problem } from "../keys/index.ts";
-import type { BoundInvocation } from "../invocation.ts";
+import { is_choice_list, type BoundInvocation } from "../invocation.ts";
+import type { BindRun } from "../settings_table.ts";
 import type { EnumSources } from "../registry/check_args.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
 import type { Registry } from "../registry/index.ts";
 
 type Step = string | BoundInvocation;
 
-export function is_labeled_binding(entry: unknown): entry is { run: Step | readonly Step[]; label?: string; intent?: string; when_focus?: string } {
+export function is_labeled_binding(entry: unknown): entry is BindRun {
   return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 
@@ -26,8 +27,12 @@ export function make_entry_resolver(registry: Registry, sources: EnumSources, pr
     const parsed = run.map((step) => resolve_step(step, where));
     return parsed.every((binding) => binding !== undefined) ? parsed : undefined;
   };
-  // The label, the intent and the focus guard sit on the first invocation, as the compiler reads them there.
+  // The label, the intent and the guards sit on the first invocation, as the compiler reads them there.
   return (entry: unknown, where: string): BoundInvocation | BoundInvocation[] | undefined => {
+    if (is_choice_list(entry)) {
+      problems.push(`${where}: a list of choices works only in a site row bind`);
+      return undefined;
+    }
     if (!is_labeled_binding(entry)) return resolve_run(entry as Step | readonly Step[], where);
     const binding = resolve_run(entry.run, where);
     if (!binding) return undefined;
@@ -40,6 +45,16 @@ export function make_entry_resolver(registry: Registry, sources: EnumSources, pr
       if (entry.intent !== undefined) [binding].flat()[0]!.intent = entry.intent;
     }
     if (entry.when_focus !== undefined) [binding].flat()[0]!.when_focus = entry.when_focus;
+    if (entry.when_present !== undefined) [binding].flat()[0]!.when_present = entry.when_present;
     return binding;
   };
 }
+
+// A site row bind also takes a choice list. It keeps each choice as its own list of steps, so the steps of one choice stay apart from the next.
+export const site_bind_resolver =
+  (resolve_entry: ReturnType<typeof make_entry_resolver>) =>
+  (entry: unknown, where: string): BoundInvocation | BoundInvocation[] | BoundInvocation[][] | undefined => {
+    if (!is_choice_list(entry)) return resolve_entry(entry, where);
+    const choices = entry.map((choice, index) => resolve_entry(choice, `${where}, choice ${index + 1}`));
+    return choices.every((choice) => choice !== undefined) ? choices.map((choice) => [choice].flat()) : undefined;
+  };

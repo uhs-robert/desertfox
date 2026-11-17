@@ -20,7 +20,7 @@ import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
 import type { Registry } from "../shared/registry/index.ts";
-import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
+import { make_entry_resolver, site_bind_resolver } from "../shared/config_build/resolve_binding.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
@@ -68,7 +68,7 @@ export function config_entry_resolver(registry: Registry, config: Pick<MergedCon
 // A browser edit saves a bind as typed, so its text resolves here with the parser of the config build. A bad step is a warning and drops that bind.
 function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, warnings: string[]): Settings["site_rules"] {
   if (input.registry === undefined) return rows;
-  const resolve_entry = config_entry_resolver(input.registry, input.config, warnings);
+  const resolve_entry = site_bind_resolver(config_entry_resolver(input.registry, input.config, warnings));
   const resolve_table = (table: BindingTable, scope: string, site: string): never => {
     const resolved: Record<string, unknown> = {};
     for (const [sequence, entry] of Object.entries(table)) {
