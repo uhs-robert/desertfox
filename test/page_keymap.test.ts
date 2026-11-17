@@ -449,9 +449,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 26);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 30);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -583,7 +583,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 23);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 27);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
@@ -623,6 +623,11 @@ test("the list-page rows bind j and k to page.item on their result lists and lea
     ["https://lobste.rs/", "ol.stories > li.story"],
     ["https://lobste.rs/newest", "ol.stories > li.story"],
     ["https://lobste.rs/newest/page/2", "ol.stories > li.story"],
+    ["https://lobste.rs/page/2", "ol.stories > li.story"],
+    ["https://lobste.rs/recent", "ol.stories > li.story"],
+    ["https://lobste.rs/recent/page/2", "ol.stories > li.story"],
+    ["https://lobste.rs/top/1w", "ol.stories > li.story"],
+    ["https://lobste.rs/domains/github.com", "ol.stories > li.story"],
     ["https://lobste.rs/active", "ol.stories > li.story"],
     ["https://lobste.rs/t/programming", "ol.stories > li.story"],
     ["https://lobste.rs/search?q=rust&what=stories", "ol.stories > li.story"],
