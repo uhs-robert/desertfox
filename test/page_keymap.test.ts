@@ -445,7 +445,7 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
   const leaf = with_defaults({}).modes.insert?.children["<A-Escape>"];
   assert.equal(leaf?.kind, "leaf");
   const invocation = leaf?.kind === "leaf" ? leaf.steps[0]!.invocation : undefined;
-  assert.deepEqual([invocation?.id, invocation?.args], ["page.send_key", { key: "Escape", key_code: 27, target: "", times: 1, ctrl: false, shift: false, alt: false, meta: false, keypress: false, focus: false, until_stable: false }]);
+  assert.deepEqual([invocation?.id, invocation?.args], ["page.send_key", { key: "Escape", key_code: 27, target: "", times: 1, ctrl: false, shift: false, alt: false, meta: false, keypress: false, focus: false }]);
 });
 
 test("default_site_rows_off turns off both sheets rows", async () => {
@@ -705,7 +705,7 @@ test("an older reply that lands after a newer ask began is dropped, across a bur
   assert.deepEqual(installed, ["c"]);
 });
 
-test("the drive row focuses the current file, then sends Drive's own key to it, and leaves list h and l to the plain scroll", async () => {
+test("the drive row focuses the current file and sends Drive's own key to it, binds gg and G to the item ends, and leaves list h and l to the plain scroll", async () => {
   const compiled = with_defaults({});
   const drive = "https://drive.google.com/drive/my-drive";
   const list = '[role="grid"] [role="row"][data-id]';
@@ -717,12 +717,17 @@ test("the drive row focuses the current file, then sends Drive's own key to it, 
     assert.equal(node?.kind, "leaf", key);
     return node as TreeLeaf;
   };
-  // Drive ignores a sent Home and End, so gg and G press the arrow until the focus stops moving.
-  for (const [key, guard, sent, until_stable] of [["j", `${grid}, ${list}`, "ArrowDown", false], ["k", `${grid}, ${list}`, "ArrowUp", false], ["gg", `${grid}, ${list}`, "ArrowUp", true], ["G", `${grid}, ${list}`, "ArrowDown", true], ["h", grid, "ArrowLeft", false], ["l", grid, "ArrowRight", false]] as const) {
+  for (const [key, guard, sent] of [["j", `${grid}, ${list}`, "ArrowDown"], ["k", `${grid}, ${list}`, "ArrowUp"], ["h", grid, "ArrowLeft"], ["l", grid, "ArrowRight"]] as const) {
     const leaf = await leaf_at(key);
     assert.equal(leaf.when_present, guard, key);
-    const args = leaf.steps.map((step) => step.invocation.args as { selector?: string; direction?: string; key?: string; target?: string; until_stable?: boolean });
-    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), args[0]?.selector, args[0]?.direction, args[1]?.key, args[1]?.target, args[1]?.until_stable], [["page.item", "page.send_key"], guard, "current", sent, "", until_stable], key);
+    const args = leaf.steps.map((step) => step.invocation.args as { selector?: string; direction?: string; key?: string; target?: string });
+    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), args[0]?.selector, args[0]?.direction, args[1]?.key, args[1]?.target], [["page.item", "page.send_key"], guard, "current", sent, ""], key);
+  }
+  // Drive ignores a sent Home and End, so gg and G go to the ends through page.item, which scrolls Drive's panel.
+  for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
+    const leaf = await leaf_at(key);
+    assert.equal(leaf.when_present, `${grid}, ${list}`, key);
+    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), leaf.steps[0]?.invocation.args?.direction], [["page.item"], direction], key);
   }
   // A guard that fails falls through to the plain key: h and l scroll sideways in the list view.
   assert.equal((await leaf_at("h")).otherwise?.steps[0]?.invocation.id, "scroll.pixels");

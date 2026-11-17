@@ -1,9 +1,8 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
-import { SEND_KEY_MAX_TIMES, UNTIL_STABLE_FIRST_PAUSE_MS, UNTIL_STABLE_MAX_PRESSES, UNTIL_STABLE_STALL_MS, UNTIL_STABLE_YIELD_EVERY } from "../../shared/send_key_limit.ts";
-import type { UserLeft } from "../user_left.ts";
+import { SEND_KEY_MAX_TIMES } from "../../shared/send_key_limit.ts";
 import { keep_chain } from "../../shared/swallow.ts";
 
-export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean; focus?: boolean; until_stable?: boolean };
+export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean; focus?: boolean };
 
 // What the handler needs from the page, so a test can pass a fake.
 export type KeyTargetDocument = { querySelector(selector: string): EventTarget | null; activeElement: EventTarget | null };
@@ -62,38 +61,7 @@ export function queued_in_page<T>(task: () => Promise<T>): Promise<T> {
 export const refused_times = (times: number, id: string): Promise<never> | undefined =>
   times > SEND_KEY_MAX_TIMES ? Promise.reject(new RuntimeRefusal(`A count of ${times} is over the limit of ${SEND_KEY_MAX_TIMES} for ${id}`)) : undefined;
 
-
-// A page that draws only the items near the view replaces an item's element as it scrolls, so a focused item counts by its data-id where it has one.
-const focus_mark = (doc: KeyTargetDocument): unknown => (doc.activeElement as Element | null)?.getAttribute("data-id") || doc.activeElement;
-
-// The pause before the next press: none while the focus moves, a growing one while it stalls. A timer and not the next frame, because a hidden tab draws no frames.
-export const pause_for = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event, watch_user: () => UserLeft, wait: (ms: number) => Promise<void>, now = Date.now): Promise<void> {
-  // Presses until the focus stops moving: the end of a list that only the page's own keys can reach. The user's next key, click or wheel, or a hidden tab, ends the run. The watch starts here and not in the queue, so a key typed while the run waits for its turn counts.
-  if (args.until_stable) {
-    const user = watch_user();
-    return queued_in_page(async () => {
-      let moved_at = now();
-      let pause = 0;
-      try {
-        for (let press = 0; press < UNTIL_STABLE_MAX_PRESSES && !user.left_(); press++) {
-          const before = focus_mark(doc);
-          send_key(doc, args, make_event);
-          if (focus_mark(doc) === before) {
-            if (now() - moved_at >= UNTIL_STABLE_STALL_MS) break;
-            await wait((pause = pause * 2 || UNTIL_STABLE_FIRST_PAUSE_MS));
-            // A page that moves the focus late, after a fetch or a frame, counts as moving again.
-            if (focus_mark(doc) === before) continue;
-          } else if (press % UNTIL_STABLE_YIELD_EVERY === UNTIL_STABLE_YIELD_EVERY - 1) await wait(0);
-          moved_at = now();
-          pause = 0;
-        }
-      } finally {
-        user.stop_();
-      }
-    });
-  }
+export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): Promise<void> {
   const times = args.times ?? 1;
   return (
     refused_times(times, "page.send_key") ??

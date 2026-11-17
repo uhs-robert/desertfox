@@ -130,13 +130,23 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
       setAttribute: (name: string, value: string) => log.push(`${name}=${value} on ${index}`),
       focus: () => log.push(`focus item ${index}`),
       scrollIntoView: (options: { block: string }) => log.push(`scroll ${index} ${options.block}`),
+      isConnected: true,
+      parentElement: null,
+      getAttribute: () => null,
+      closest: () => null,
     };
     return element;
   };
   const items = rects.map(make);
   const scrolls: number[][] = [];
+  let clock = 0;
+  const page_scroller = { scrollTop: 0, scrollHeight: 2000, clientHeight: 800, parentElement: null, scrollTo: () => {} };
   const page = {
-    doc: { querySelectorAll: (selector: string) => (selector === "none" ? [] : items) },
+    doc: { querySelectorAll: (selector: string) => (selector === "none" ? [] : items), scrollingElement: page_scroller },
+    overflow_y_: () => "visible",
+    wait_: async (ms: number) => void (clock += ms),
+    now_: () => clock,
+    watch_user_: () => ({ left_: () => false, stop_: () => {} }),
     view: { innerHeight: 800, innerWidth: on_screen ? 800 : 50 },
     focused: () => items[focused_index] ?? null,
     toast: (message: string) => toasts.push(message),
@@ -261,18 +271,18 @@ test("the shipped image row binds hjkl to page.item", () => {
   }
 });
 
-test("first and last go to the ends of the page whatever has focus, skip hidden items, and do nothing with no item", () => {
+test("first and last go to the ends of the page whatever has focus, skip hidden items, and do nothing with no item", async () => {
   const middle = fake_page(list, true, 2);
-  move_item(middle.page, { selector: "li", link: "a.t", direction: "first" });
-  move_item(middle.page, { selector: "li", link: "a.t", direction: "last", times: 3 });
+  await move_item(middle.page, { selector: "li", link: "a.t", direction: "first" });
+  await move_item(middle.page, { selector: "li", link: "a.t", direction: "last", times: 3 });
   assert.deepEqual(middle.shown, ["0", "3"]);
   assert.deepEqual(middle.log, ["focus link 0", "focus link 3"]);
   const hidden_ends = fake_page(list, true, -1, [0, 3]);
-  move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "first" });
-  move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "last" });
+  await move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "first" });
+  await move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "last" });
   assert.deepEqual(hidden_ends.shown, ["1", "2"]);
   const none = fake_page(list);
-  move_item(none.page, { selector: "none", direction: "last" });
+  await move_item(none.page, { selector: "none", direction: "last" });
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
 });
 
