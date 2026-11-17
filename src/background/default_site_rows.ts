@@ -141,20 +141,21 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   // The Google image rows sit before the `google` row, which matches the same address (a pattern cannot exclude udm=2). The two patterns end the udm value at an ampersand or at the end, so udm=28 stays out.
   { name: "google_images", row: { site: "https://www.google.com/search*udm=2&*", bind: GOOGLE_IMAGE_TILES } },
   { name: "google_images", row: { site: "https://www.google.com/search*udm=2", bind: GOOGLE_IMAGE_TILES } },
-  // Each vertical row below sits before the `google` row for the same reason. Videos is udm=7 from the tab bar and udm=vids from an old tbm=vid address. Books and Forums keep the web row, whose blocks fit them.
+  // Each vertical row below sits before the `google` row for the same reason. Videos is udm=7 from the tab bar and udm=vids, where Google sends an old tbm=vid address. Books and Forums keep the web row, whose blocks fit them.
   { name: "google_videos", row: { site: "https://www.google.com/search*udm=7&*", bind: GOOGLE_VIDEO_ITEMS } },
   { name: "google_videos", row: { site: "https://www.google.com/search*udm=7", bind: GOOGLE_VIDEO_ITEMS } },
   { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids&*", bind: GOOGLE_VIDEO_ITEMS } },
   { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids", bind: GOOGLE_VIDEO_ITEMS } },
   { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws&*", bind: GOOGLE_NEWS_ITEMS } },
   { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws", bind: GOOGLE_NEWS_ITEMS } },
-  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids*", bind: GOOGLE_SHORT_VIDEO_TILES } },
+  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids&*", bind: GOOGLE_SHORT_VIDEO_TILES } },
+  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids", bind: GOOGLE_SHORT_VIDEO_TILES } },
   { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28&*", bind: GOOGLE_SHOPPING_TILES } },
   { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28", bind: GOOGLE_SHOPPING_TILES } },
   // The vertical rows sit before the `ddg` row. The first row that binds a key decides it, so on the image vertical (iax=images), for one, its row wins over `ddg`, which matches the same address. Shopping is all ads, so it has no row.
   { name: "ddg_images", row: { site: "https://duckduckgo.com/?*iax=images*", bind: DDG_IMAGE_TILES } },
   { name: "ddg_videos", row: { site: "https://duckduckgo.com/?*iax=videos*", bind: DDG_VIDEO_TILES } },
-  { name: "ddg_news", row: { site: "https://duckduckgo.com/?*ia=news*", bind: DDG_NEWS_ITEMS } },
+  { name: "ddg_news", row: { site: "https://duckduckgo.com/?*iar=news*", bind: DDG_NEWS_ITEMS } },
   // DuckDuckGo's own j and k stop at the last result and never reach the More results button, so j and k walk the results through `page.item`. The ad blocks are `article[data-testid="ad"]`, so they stay out.
   // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. The image, video and news verticals have their own rows above.
   { name: "ddg", row: { site: "https://duckduckgo.com/?*", bind: DDG_ITEMS } },

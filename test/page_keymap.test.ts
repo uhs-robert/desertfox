@@ -450,9 +450,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 42);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 43);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -584,7 +584,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 39);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 40);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
@@ -646,10 +646,10 @@ test("the search vertical rows win over the web rows on their tabs only, and eac
     assert.ok(rows.every((args) => args?.selector === selector), url);
   }
   // A udm value that only starts like a vertical's keeps the web row, and so do the Books and Forums tabs.
-  for (const url of ["https://www.google.com/search?q=cats&udm=72", "https://www.google.com/search?q=cats&udm=280", "https://www.google.com/search?q=cats&udm=books", "https://www.google.com/search?q=cats&udm=forums", "https://www.google.com/search?q=cats&tbm=nwsx"]) {
+  for (const url of ["https://www.google.com/search?q=cats&udm=72", "https://www.google.com/search?q=cats&udm=280", "https://www.google.com/search?q=cats&udm=short_vids2", "https://www.google.com/search?q=cats&udm=books", "https://www.google.com/search?q=cats&udm=forums", "https://www.google.com/search?q=cats&tbm=nwsx"]) {
     assert.equal((await item_args_at(compiled, url, "j"))?.selector, "#search div.MjjYud:has(a > h3)", url);
   }
-  for (const url of ["https://duckduckgo.com/?q=cats&ia=web", "https://duckduckgo.com/?q=cats&iar=news"]) assert.equal((await item_args_at(compiled, url, "j"))?.selector, 'article[data-testid="result"]', url);
+  for (const url of ["https://duckduckgo.com/?q=cats&ia=web", "https://duckduckgo.com/?q=cats&ia=news"]) assert.equal((await item_args_at(compiled, url, "j"))?.selector, 'article[data-testid="result"]', url);
   const fallbacks: [string, string, string][] = [
     ["google_videos", "https://www.google.com/search?q=cats&udm=7", "#search div.MjjYud:has(a > h3)"],
     ["google_news", "https://www.google.com/search?q=cats&tbm=nws", "#search div.MjjYud:has(a > h3)"],
