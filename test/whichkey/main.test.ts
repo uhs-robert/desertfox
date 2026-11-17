@@ -7,6 +7,7 @@ test("help.whichkey asks for the keys of the mode the host reports", async () =>
   const asked: unknown[] = [];
   let mode = "caret";
   Object.assign(globalThis, {
+    location: { href: "https://a.test/page" },
     window: { addEventListener: () => {}, desertfox_host: { register_handler_: (id: string, run: BundleHandler) => handlers.set(id, run), get_mode: () => mode } },
     browser: { runtime: { sendMessage: (message: unknown) => (asked.push(message), new Promise(() => {})) } },
   });
@@ -17,9 +18,9 @@ test("help.whichkey asks for the keys of the mode the host reports", async () =>
   mode = "visual";
   handlers.get("help.whichkey")!({});
   assert.deepEqual(asked, [
-    { type: "list_keys", mode: "caret", prefix: [] },
+    { type: "list_keys", mode: "caret", prefix: [], url: "https://a.test/page" },
     { type: "read_repeat_preview" },
-    { type: "list_keys", mode: "visual", prefix: [] },
+    { type: "list_keys", mode: "visual", prefix: [], url: "https://a.test/page" },
     { type: "read_repeat_preview" },
   ]);
 });

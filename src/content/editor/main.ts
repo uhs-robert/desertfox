@@ -96,7 +96,7 @@ async function open_in_editor(field: Element, text: string, through_clipboard: b
   const token = crypto.randomUUID();
   // Registered before the send, because a quick editor can end before the answer to the send arrives.
   open_edits.set(token, { field, original: text, through_clipboard });
-  const request: EditorOpen = { type: "editor_open", token, text, insert: args.insert === true, ...(typeof args.ext === "string" ? { ext: args.ext } : {}) };
+  const request: EditorOpen = { type: "editor_open", token, text, insert: args.insert === true, url: location.href, ...(typeof args.ext === "string" ? { ext: args.ext } : {}) };
   const answer = (await browser.runtime.sendMessage(request).catch((error: unknown) => ({ ok: false, message: String(error) }))) as EditorAnswer;
   if (!answer.ok) {
     open_edits.delete(token);

@@ -38,7 +38,7 @@ const erase = (): void => {
 const session = create_which_key_session(
   async (mode, typed) => {
     const ask = <Answer>(message: ListKeys | ReadRepeatPreview) => browser.runtime.sendMessage(message) as Promise<Answer>;
-    const [panel, repeat] = await Promise.all([ask<WhichKeyPanel>({ type: "list_keys", mode, prefix: typed }), refused_as(ask<string | undefined>({ type: "read_repeat_preview" }), undefined)]);
+    const [panel, repeat] = await Promise.all([ask<WhichKeyPanel>({ type: "list_keys", mode, prefix: typed, url: location.href }), refused_as(ask<string | undefined>({ type: "read_repeat_preview" }), undefined)]);
     return repeat === undefined ? panel : { ...panel, repeat };
   },
   draw,
