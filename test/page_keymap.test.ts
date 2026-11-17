@@ -9,6 +9,7 @@ import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { DEFAULT_SITE_ROW_NAMES } from "../src/shared/table_constants.ts";
+import type { TreeLeaf, TreeNode } from "../src/shared/prefix_tree.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
@@ -704,30 +705,26 @@ test("an older reply that lands after a newer ask began is dropped, across a bur
   assert.deepEqual(installed, ["c"]);
 });
 
-test("the drive row walks the files with page.item, and h and l choose by the view the page shows, the list first, with h clicking the parent folder crumb", async () => {
+test("the drive row focuses the current file, then sends Drive's own key to it, and leaves list h and l to the plain scroll", async () => {
   const compiled = with_defaults({});
   const drive = "https://drive.google.com/drive/my-drive";
-  const choices = async (key: string) => {
-    const chain: { when_present: string | undefined; ids: string[]; direction: unknown }[] = [];
-    let leaf = (await ask(compiled, drive))!.keymap.modes.normal?.children[key];
-    while (leaf?.kind === "leaf") {
-      chain.push({ when_present: leaf.when_present, ids: leaf.steps.map((step) => step.invocation.id), direction: (leaf.steps[0]!.invocation.args as { direction?: unknown } | undefined)?.direction });
-      leaf = leaf.otherwise;
-    }
-    return chain;
-  };
   const list = '[role="grid"] [role="row"][data-id]';
   const grid = '[role="grid"] [role="gridcell"][data-id]';
-  const parent = '[role="navigation"] [role="list"] > [role="listitem"]:nth-last-child(2) [role="link"]';
-  const h = await choices("h");
-  assert.deepEqual(h.slice(0, 2), [{ when_present: `body:has(${list}) ${parent}`, ids: ["page.click"], direction: undefined }, { when_present: grid, ids: ["page.item"], direction: "left" }]);
-  // No choice may go back through the history: on a root page h falls through to the plain scroll.
-  assert.ok(h.every((choice) => !choice.ids.includes("page.back")));
-  assert.deepEqual((await choices("l")).slice(0, 2), [{ when_present: list, ids: ["page.item", "page.send_key"], direction: "current" }, { when_present: grid, ids: ["page.item"], direction: "right" }]);
-  // l opens the focused file of either view, so it runs current on the j and k selector.
-  const l_leaf = (await ask(compiled, drive))!.keymap.modes.normal?.children["l"];
-  assert.equal(l_leaf?.kind === "leaf" && (l_leaf.steps[0]!.invocation.args as { selector?: string }).selector, `${grid}, ${list}`);
-  for (const key of ["j", "k"]) assert.equal((await item_args_at(compiled, drive, key))?.selector, `${grid}, ${list}`);
+  const leaf_at = async (key: string) => {
+    // gg sits under the g branch.
+    let node: TreeNode | undefined = (await ask(compiled, drive))!.keymap.modes.normal;
+    for (const token of key) node = node?.kind === "branch" ? node.children[token] : undefined;
+    assert.equal(node?.kind, "leaf", key);
+    return node as TreeLeaf;
+  };
+  for (const [key, guard, sent] of [["j", `${grid}, ${list}`, "ArrowDown"], ["k", `${grid}, ${list}`, "ArrowUp"], ["gg", `${grid}, ${list}`, "Home"], ["G", `${grid}, ${list}`, "End"], ["h", grid, "ArrowLeft"], ["l", grid, "ArrowRight"]] as const) {
+    const leaf = await leaf_at(key);
+    assert.equal(leaf.when_present, guard, key);
+    const args = leaf.steps.map((step) => step.invocation.args as { selector?: string; direction?: string; key?: string; target?: string });
+    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), args[0]?.selector, args[0]?.direction, args[1]?.key, args[1]?.target], [["page.item", "page.send_key"], guard, "current", sent, ""], key);
+  }
+  // A guard that fails falls through to the plain key: h and l scroll sideways in the list view.
+  assert.equal((await leaf_at("h")).otherwise?.steps[0]?.invocation.id, "scroll.pixels");
   for (const url of ["https://docs.google.com/document/d/abc/edit", "https://drive.google.com/file/d/abc/view"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
   assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["drive"] }), drive, "j"), undefined);
 });

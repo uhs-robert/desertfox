@@ -276,13 +276,13 @@ test("first and last go to the ends of the page whatever has focus, skip hidden 
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
 });
 
-test("every shipped page.item bind table binds gg and G to its first and last item, guarded by its own item selector", () => {
+test("every shipped page.item bind table that moves binds gg and G to its first and last item, guarded by its own item selector", () => {
   type Step = { id?: string; args?: { selector?: string; direction?: string }; when_present?: string };
   const steps_of = (binding: unknown): Step[] => [binding].flat(2) as Step[];
   let tables = 0;
   for (const { name, row } of DEFAULT_SITE_ROWS) {
     for (const { scope, table } of bind_tables_of(row as SiteRuleRow)) {
-      const moves = Object.values(table).flatMap(steps_of).filter((step) => step.id === "page.item" && step.args?.direction !== "first" && step.args?.direction !== "last");
+      const moves = Object.values(table).flatMap(steps_of).filter((step) => step.id === "page.item" && !["first", "last", "current"].includes(step.args?.direction ?? ""));
       if (moves.length === 0) continue;
       tables++;
       const selectors = new Set(moves.map((step) => step.args?.selector));

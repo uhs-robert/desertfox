@@ -1,4 +1,4 @@
-// The shipped drive row on a test address with the site pattern swapped, against a stand-in for Drive's file views as read on a live page. Both views are a role=grid: the grid view puts every file in one role=row as a role=gridcell, the list view is a table with one role=row per file. Each file has a data-id, and so do parts inside it. A breadcrumb in a navigation ends with the current folder after a link to the parent. A view toggle keeps the focus after it flips the view, as Drive's does.
+// The shipped drive row on a test address with the site pattern swapped, against a stand-in for Drive's file views as read on a live page. Both views are a role=grid: the grid view puts every file in one role=row as a role=gridcell, the list view is a table with one role=row per file. Each file has a data-id, and so do parts inside it. As on Drive, the files scroll in an inner panel that draws only the files near the view, and a key handler on the page moves the selection on the arrow, Home and End keys sent to a file, scrolls the panel and draws the files it needs. A view toggle keeps the focus after it flips the view.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
@@ -6,9 +6,9 @@ import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 export const areas = ["keys", "config", "bundles"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
-const FILES = 7;
+const FILES = 60;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect }) {
   await setup("load the shipped drive row on the drive_ test pages", async () => {
     const dir = config_copy();
     const lines = [];
@@ -21,32 +21,63 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  // Enter on a focused file sets the hash to opened-<id>, as Drive's own key handler opens it, and a click on the parent crumb sets it to parent. Grid files are g0.., list files f0... A layout names the views the page holds: "grid", "list", "list+hidden_grid" (a grid left in the page under display:none) or "both" (a grid above a list). A folder page has a breadcrumb with a parent, a root page only a title.
-  const open_drive = async (id, layout, { folder = false } = {}) => {
+  // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. The page is wide, so the document scrolls sideways.
+  const open_drive = async (id, view) => {
     await open_page("controls", `drive_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const root = document.createElement("div");
+      root.style.width = "3000px";
       document.body.prepend(root);
+      let view = ${JSON.stringify(view)};
+      let selected = -1;
+      const per_line = () => (view === "grid" ? 3 : 1);
+      const line_px = () => (view === "grid" ? 70 : 30);
+      const prefix = () => (view === "grid" ? "g" : "f");
       const thumb = (index) => '<div data-id="x' + index + '"></div>';
-      const cell = (index) => '<div role="gridcell" style="display:inline-block;width:100px;height:60px;margin:0 10px 10px 0" data-id="x' + index + '" data-target="doc" id="g' + index + '" tabindex="' + (index === 0 ? 0 : -1) + '">' + thumb(index) + 'file ' + index + '</div>';
-      const row = (index) => '<tr role="row" style="height:30px" data-id="x' + index + '" data-target="doc" id="f' + index + '" tabindex="' + (index === 0 ? 0 : -1) + '"><td>' + thumb(index) + 'file ' + index + '</td></tr>';
-      const many = (make) => Array.from({ length: ${FILES} }, (_, index) => make(index)).join("");
-      const grid = (hidden) => '<div style="width:340px' + (hidden ? ";display:none" : "") + '"><div role="grid"><div role="row">' + many(cell) + '</div></div></div>';
-      const list = () => '<table role="grid"><thead><tr role="row" id="head"><th>name</th></tr></thead><tbody>' + many(row) + '</tbody></table>';
-      const crumbs = ${folder} ? '<div role="list"><div role="listitem"><div role="button" tabindex="0">...</div></div><div role="listitem"><div role="link" data-id="p" data-target="folder" id="parent" tabindex="-1">parent</div></div><div role="listitem"><button>here</button></div></div>' : "";
-      const draw = (layout) => {
-        const views = { grid: grid(false), list: list(), "list+hidden_grid": grid(true) + list(), both: grid(false) + list() };
-        root.innerHTML = '<nav role="navigation"><div role="heading" aria-level="2">title</div>' + crumbs + '</nav><div role="radiogroup"><button role="radio" id="toggle">toggle view</button></div>' + views[layout];
-        const toggle = document.getElementById("toggle");
-        const flip = () => draw(layout === "grid" ? "list" : "grid");
-        toggle.onclick = flip;
-        toggle.onkeydown = (event) => { if (event.key === "Enter") flip(); };
-        for (const element of root.querySelectorAll('[role="gridcell"], tr[data-id]')) element.onkeydown = (event) => { if (event.key === "Enter") location.hash = "opened-" + element.id; };
-        // Drive opens a crumb on a click only, and ignores Enter on it.
-        const parent = document.getElementById("parent");
-        if (parent) parent.onclick = () => { location.hash = "parent"; };
+      const file = (index) => view === "grid"
+        ? '<div role="gridcell" style="display:inline-block;width:100px;height:60px;margin:0 10px 10px 0;vertical-align:top" data-id="x' + index + '" id="g' + index + '" tabindex="' + (index === Math.max(selected, 0) ? 0 : -1) + '">' + thumb(index) + 'file ' + index + '</div>'
+        : '<tr role="row" style="height:30px" data-id="x' + index + '" id="f' + index + '" tabindex="' + (index === Math.max(selected, 0) ? 0 : -1) + '"><td>' + thumb(index) + 'file ' + index + '</td></tr>';
+      const lines = () => Math.ceil(${FILES} / per_line());
+      root.innerHTML = '<div role="radiogroup"><button role="radio" id="toggle">toggle view</button></div><div id="panel" style="height:300px;width:360px;overflow-y:auto"></div>';
+      const panel = document.getElementById("panel");
+      const draw = () => {
+        const first_line = Math.max(0, Math.floor(panel.scrollTop / line_px()) - 2);
+        const last_line = Math.min(lines(), Math.ceil((panel.scrollTop + 300) / line_px()) + 2);
+        const files = [];
+        for (let index = first_line * per_line(); index < Math.min(${FILES}, last_line * per_line()); index++) files.push(file(index));
+        const above = first_line * line_px();
+        const below = (lines() - last_line) * line_px();
+        panel.innerHTML = view === "grid"
+          ? '<div role="grid"><div style="height:' + above + 'px"></div><div role="row">' + files.join("") + '</div><div style="height:' + below + 'px"></div></div>'
+          : '<table role="grid" style="border-spacing:0"><thead><tr role="row"><th>name</th></tr></thead><tbody><tr style="height:' + above + 'px"></tr>' + files.join("") + '<tr style="height:' + below + 'px"></tr></tbody></table>';
+        document.getElementById(prefix() + selected)?.focus({ preventScroll: true });
       };
-      draw(${JSON.stringify(layout)});
+      panel.addEventListener("scroll", draw);
+      const select = (index) => {
+        selected = Math.max(0, Math.min(${FILES} - 1, index));
+        const top = Math.floor(selected / per_line()) * line_px();
+        if (top < panel.scrollTop) panel.scrollTop = top;
+        else if (top + line_px() > panel.scrollTop + 300) panel.scrollTop = top + line_px() - 300;
+        draw();
+      };
+      const flip = () => { view = view === "grid" ? "list" : "grid"; selected = -1; panel.scrollTop = 0; draw(); };
+      const toggle = document.getElementById("toggle");
+      toggle.onclick = flip;
+      toggle.onkeydown = (event) => { if (event.key === "Enter") flip(); };
+      // Drive reads the keys on the page and acts on the file the event comes from.
+      const steps = { ArrowDown: () => per_line(), ArrowUp: () => -per_line(), ArrowLeft: () => -1, ArrowRight: () => 1 };
+      document.addEventListener("keydown", (event) => {
+        const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
+        if (!target) return;
+        const index = Number(target.id.slice(1));
+        if (event.key === "Enter") location.hash = "opened-" + target.id;
+        else if (event.key === "Home") select(0);
+        else if (event.key === "End") select(${FILES} - 1);
+        else if (steps[event.key]) select(index + steps[event.key]());
+        else return;
+        event.preventDefault();
+      });
+      draw();
       location.hash = "before";
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -55,88 +86,74 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   };
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
   const expect_focus = (wanted) => poll_until(`focus on ${wanted}`, async () => (await focused()) === wanted);
-  const expect_hash = (wanted) => poll_until(`the hash ${wanted}`, async () => (await in_active_tab("location.hash")) === `#${wanted}`);
+  const panel_top = () => in_active_tab(`document.getElementById("panel").scrollTop`);
   const view_of = () => in_active_tab(`document.querySelector('[role="gridcell"]') !== null ? "grid" : "list"`);
 
-  await run_case("grid view in a folder: j takes the focus into the files from nowhere, and h and l step along the row", async () => {
-    await open_drive("grid", "grid", { folder: true });
+  await run_case("list view: j takes the focus into the files from nowhere and moves down, and k moves up", async () => {
+    await open_drive("list", "list");
     await press_keys("j");
-    await expect_focus("g0");
-    await press_keys("l");
-    await expect_focus("g1");
-    await press_keys("h");
-    await expect_focus("g0");
+    await expect_focus("f1");
     await press_keys("j");
-    await expect_focus("g3");
+    await expect_focus("f2");
+    await press_keys("k");
+    await expect_focus("f1");
   });
 
-  await run_case("gg and G go to the first and last file", async () => {
-    await open_drive("ends", "grid");
+  await run_case("list view: j walks past the drawn rows, and the panel scrolls to draw more", async () => {
+    await open_drive("list_far", "list");
+    await press_keys("j");
+    await expect_focus("f1");
+    for (let press = 0; press < 18; press++) await press_keys("j");
+    await expect_focus("f19");
+    expect((await panel_top()) > 0, "the panel did not scroll");
+    await press_keys("15j");
+    await expect_focus("f34");
+  });
+
+  await run_case("list view: G reaches the last file and gg the first, past the drawn rows", async () => {
+    await open_drive("list_ends", "list");
+    await press_keys("G");
+    await expect_focus(`f${FILES - 1}`);
+    expect((await panel_top()) > 0, "the panel did not scroll to the end");
+    await press_keys("gg");
+    await expect_focus("f0");
+    await poll_until("the panel to scroll to the top", async () => (await panel_top()) === 0);
+  });
+
+  await run_case("list view: h and l keep the plain sideways scroll and leave the files alone", async () => {
+    await open_drive("list_hl", "list");
+    await press_keys("j");
+    await expect_focus("f1");
+    await press_keys("l");
+    await poll_until("l to scroll the page right", async () => (await in_active_tab("scrollX")) > 0);
+    await press_keys("h");
+    await poll_until("h to scroll the page back", async () => (await in_active_tab("scrollX")) === 0);
+    expect((await focused()) === "f1", "h or l moved the focus");
+    expect((await in_active_tab("location.hash")) === "#before", "h or l opened a file");
+  });
+
+  await run_case("grid view: h and l step along a line, j steps a line, and G and gg reach the ends", async () => {
+    await open_drive("grid", "grid");
+    await press_keys("l");
+    await expect_focus("g1");
+    await press_keys("l");
+    await expect_focus("g2");
+    await press_keys("h");
+    await expect_focus("g1");
+    await press_keys("j");
+    await expect_focus("g4");
     await press_keys("G");
     await expect_focus(`g${FILES - 1}`);
     await press_keys("gg");
     await expect_focus("g0");
   });
 
-  await run_case("grid view with the focus on the view toggle: l moves into the files and does not flip the view", async () => {
+  await run_case("grid view with the focus on the view toggle: j moves into the files and does not flip the view", async () => {
     await open_drive("toggle", "grid");
     await in_active_tab(`document.getElementById("toggle").focus()`);
-    await press_keys("l");
-    await expect_focus("g0");
+    await press_keys("j");
+    await expect_focus("g3");
     expect((await view_of()) === "grid", "the view flipped");
-  });
-
-  await run_case("list view in a folder: j and k walk the rows, l opens the focused row and h opens the parent folder", async () => {
-    await open_drive("list", "list", { folder: true });
-    await press_keys("jj");
-    await expect_focus("f1");
-    await press_keys("l");
-    await expect_hash("opened-f1");
-    await press_keys("h");
-    await expect_hash("parent");
-  });
-
-  await run_case("list view on a root page: h does not go back through the history", async () => {
-    await open_drive("list_root", "list");
-    await press_keys("h");
-    // j runs after h, so once it lands h has run too.
-    await press_keys("j");
-    await expect_focus("f0");
-    // Back runs in the background and can land after j, so the check waits for it. Back would leave #before for the address before it.
-    await sleep(400);
-    expect((await in_active_tab("location.hash")) === "#before", "h changed the address");
-  });
-
-  await run_case("list view with the focus on the view toggle: l opens a row and does not flip the view", async () => {
-    await open_drive("list_toggle", "list");
-    await in_active_tab(`document.getElementById("toggle").focus()`);
-    await press_keys("l");
-    await expect_hash("opened-f0");
-    expect((await view_of()) === "list", "the view flipped");
-  });
-
-  await run_case("list view with nothing focused: l opens the first row", async () => {
-    await open_drive("list_none", "list");
-    await press_keys("l");
-    await expect_hash("opened-f0");
-  });
-
-  await run_case("a hidden leftover grid does not turn the list keys into grid keys", async () => {
-    await open_drive("leftover", "list+hidden_grid", { folder: true });
-    await press_keys("l");
-    await expect_hash("opened-f0");
-    await press_keys("h");
-    await expect_hash("parent");
-  });
-
-  await run_case("cards above a list: l opens the focused card, not a list row, and h opens the parent folder", async () => {
-    await open_drive("both", "both", { folder: true });
-    await press_keys("j");
-    await expect_focus("g0");
-    await press_keys("l");
-    await expect_hash("opened-g0");
-    await press_keys("h");
-    await expect_hash("parent");
   });
 
   await run_case("on a page with no file list, gg and G scroll as usual", async () => {

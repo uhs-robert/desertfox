@@ -105,20 +105,22 @@ const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-t
 const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
-// Drive keeps its selection on the focused file, so j, k, gg and G walk the files through `page.item`, which takes the focus into the list when it sits elsewhere (on the view toggle, or nowhere on Home). The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Drive scrolls its file list in an inner panel and draws only the rows near the view, so a move through `page.item` stops at the last drawn row and gg and G stop short of the ends. Drive's own arrow, Home and End keys move its selection, scroll the panel and draw more rows, so each key focuses the current file with `page.item` and then sends Drive's key to it. `current` takes the focus into the files from the view toggle or from nowhere, so the key never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
 const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
-// The breadcrumb ends with the current folder, so the crumb before it is the parent. Drive opens a crumb on a click only, not on Enter. A root page (My Drive, Home, Recent and the like) shows a title and no crumb list, so nothing matches there. Deep paths fold the middle crumbs into one button, and the parent stays a link next to the current folder.
-const DRIVE_PARENT_FOLDER = '[role="navigation"] [role="list"] > [role="listitem"]:nth-last-child(2) [role="link"]';
-// A grid has files left and right, so h and l step along the row. A list has one file per row, so h opens the parent folder and l opens the focused file. The list choice comes first: a page that shows both views gets the list keys, and a hidden leftover view never counts. On a root page in list view no choice holds, and h falls through to the plain scroll left, which does nothing on Drive: h never leaves Drive through the history. l runs `current` on the j and k selector, so it opens the focused file in either view and presses Enter on a file, never on the view toggle.
-const guarded = (guard: string, first: BoundInvocation, ...rest: BoundInvocation[]): BoundInvocation[] => [{ ...first, when_present: guard }, ...rest];
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
-const DRIVE_HL: BindingTable = {
-  h: [guarded(`body:has(${DRIVE_LIST_ITEM}) ${DRIVE_PARENT_FOLDER}`, { id: "page.click", args: { selector: DRIVE_PARENT_FOLDER } }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "left"))],
-  l: [guarded(DRIVE_LIST_ITEM, item_step(DRIVE_ANY_ITEM, undefined, "current"), { id: "page.send_key", args: { key: "Enter", key_code: 13 } }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "right"))],
+// Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll. The count goes to every step: `current` ignores it and the key goes out that many times.
+const drive_key = (guard: string, key: string, key_code: number): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard }, { id: "page.send_key", args: { key, key_code } }];
+// A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
+const DRIVE_BIND: BindingTable = {
+  j: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40),
+  k: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38),
+  gg: drive_key(DRIVE_ANY_ITEM, "Home", 36),
+  G: drive_key(DRIVE_ANY_ITEM, "End", 35),
+  h: drive_key(DRIVE_GRID_ITEM, "ArrowLeft", 37),
+  l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39),
 };
-const DRIVE_BIND: BindingTable = { ...item_binds(DRIVE_ANY_ITEM), ...DRIVE_HL };
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
