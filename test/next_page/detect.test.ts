@@ -19,6 +19,11 @@ test("a link beats a button, then the shorter text wins, then the earlier item",
   assert.equal(best([link("next"), link("next")]), 0);
 });
 
+test("a word beside kana or kanji still matches, as those scripts have no spaces between words", () => {
+  assert.equal(best([link("次のページへ")], ["次のページ"]), 0);
+  assert.equal(best([link("次へ進む")]), 0);
+});
+
 test("every match is ranked, so a caller can pass over a skipped one", () => {
   assert.deepEqual(rank_by_text([link("home"), link("next page"), link("next")], NEXT), [2, 1]);
 });
@@ -45,7 +50,7 @@ test("any of the texts of an item can match, and blank patterns are ignored", ()
 });
 
 test("a load text is a whole load word, with counts dropped and one noun allowed", () => {
-  for (const text of ["More results", "LOAD MORE STORIES", "Еще 20 материалов", "Mostrar mais conteúdos", "もっと見る"]) assert.ok(is_load_text(text), text);
+  for (const text of ["More results", "LOAD MORE STORIES", "Еще 20 материалов", "Mostrar mais conteúdos", "もっと見る", "Voir plus d’articles"]) assert.ok(is_load_text(text), text);
   for (const text of ["Read more about the release", "Show more comments from people you follow", "Next"]) assert.ok(!is_load_text(text), text);
 });
 

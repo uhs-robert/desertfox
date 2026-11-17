@@ -8,3 +8,5 @@ Saved pages for the `]]` detector (`src/content/next_page/detect.ts` and `load_m
 To add or refresh a page, run `node tools/next_page_fixtures/capture.mjs <name> <url>` (it needs `firefox` on the path and network), then set its label by hand from what the page shows, never from what the detector answers. Sites change, so a refreshed page can need a new label. `node tools/next_page_fixtures/scrub.mjs` strips the tracking parameters from every saved page again.
 
 On `youtube_watch`, the player's Next button has the box it has when the player controls show. At capture they were hidden.
+
+The capture saves each text as `textContent`, while the live `]]` reads `innerText`, so whitespace and hidden text can differ from what the suite sees.

@@ -29,17 +29,22 @@ export type LoadStep = <N>(reader: PageReader<N>) => NextPageAction<N>;
 // A longer text is a sentence that happens to hold the word ("Read more about the next release"). Five, not four, for "Go to next search page".
 const MAX_WORDS = 5;
 
-// A pattern this short is an arrow or a bracket. As a word it would hit every sentence, so it must be the whole text.
+// A pattern this short is an arrow or a bracket (two kana or kanji are a word, though). As a word it would hit every sentence, so it must be the whole text.
 const MAX_WHOLE_TEXT_PATTERN = 2;
 
 export const normalize = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
 
 const escape_pattern = (pattern: string): string => pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// A whole-word match, so 'next' does not hit the '#nextjs' tag. Letters of any script count as word letters.
+const CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
+
+const has_cjk = new RegExp(`[${CJK}]`, "u");
+
+// A whole-word match, so 'next' does not hit the '#nextjs' tag. Letters of any script count as word letters, except kana and kanji, which have no spaces between words ("次へ進む").
 function matches_pattern(text: string, pattern: string): boolean {
-  if (pattern.length <= MAX_WHOLE_TEXT_PATTERN) return text === pattern;
-  return text.split(" ").length <= MAX_WORDS && new RegExp(`(^|[^\\p{L}\\p{N}])${escape_pattern(pattern)}($|[^\\p{L}\\p{N}])`, "u").test(text);
+  if (pattern.length <= MAX_WHOLE_TEXT_PATTERN && !has_cjk.test(pattern)) return text === pattern;
+  const word = new RegExp(`(?:(?<![\\p{L}\\p{N}])|(?<=[${CJK}]))${escape_pattern(pattern)}(?:(?![\\p{L}\\p{N}])|(?=[${CJK}]))`, "u");
+  return text.split(" ").length <= MAX_WORDS && word.test(text);
 }
 
 export type TextItem = { texts: readonly string[]; is_link: boolean };

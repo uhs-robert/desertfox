@@ -14,8 +14,8 @@ const LOAD_WORDS = new Set([
   "mostra altro", "carica altri", "altri articoli", "meer laden", "toon meer", "więcej", "pokaż więcej", "daha fazla",
 ]);
 
-// Counts and punctuation drop out, so "Еще 20 материалов" reads as "еще материалов".
-const strip_counts = (text: string): string => text.replace(/[^\p{L}\p{M}' ]+/gu, " ").replace(/\s+/g, " ").trim();
+// Counts and punctuation drop out, so "Еще 20 материалов" reads as "еще материалов". A typographic apostrophe becomes a plain one, as the words use ("Voir plus d’articles").
+const strip_counts = (text: string): string => text.replace(/’/g, "'").replace(/[^\p{L}\p{M}' ]+/gu, " ").replace(/\s+/g, " ").trim();
 
 // The whole text is a load word, or a load word and one noun ("load more stories", "mostrar mais conteúdos").
 export function is_load_text(text: string): boolean {
