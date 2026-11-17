@@ -8,6 +8,7 @@ The code map. Read a folder's README before you change or research code in it.
 - [`content/`](content/README.md): the content script. Captures keys, tracks the mode and loads the bundles.
   - [`content/caret/`](content/caret/README.md): caret and visual mode.
   - [`content/grab/`](content/grab/README.md): keyboard drag, `;gg` and `;Gg`.
+  - [`content/item/`](content/item/README.md): the `item` bundle: `page.item`, j and k through result items.
   - [`content/hints/`](content/hints/README.md): link hints and the page headings list.
   - [`content/whichkey/`](content/whichkey/README.md): the which-key panel.
   - [`content/handlers/`](content/handlers/README.md): the content-side handler for each command group.

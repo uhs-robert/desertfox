@@ -79,6 +79,16 @@ const ARROW_MODE: SiteModeTable[string] = {
   },
 };
 
+// Result pages that j and k walk item by item through `page.item`. Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
+const item_binds = (selector: string, link?: string): BindingTable => ({
+  j: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "down" } },
+  k: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "up" } },
+});
+const GOOGLE_ITEMS = item_binds("#search a:has(> h3)");
+const BING_ITEMS = item_binds("li.b_algo", "h2 a");
+const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
+const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
+
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
   { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
@@ -91,6 +101,13 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "kagi", row: { site: "https://kagi.com/search*", pass: "j k" } },
   // Brave moves its highlight on arrow keys only, so j and k send them to the focused element.
   { name: "brave", row: { site: "https://search.brave.com/search*", bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } }, k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } } } } },
+  // Google result pages on www.google.com only, as the Maps rows. The title links of the web results are the items, so People also ask and the sidebar stay out.
+  { name: "google", row: { site: "https://www.google.com/search*", bind: GOOGLE_ITEMS } },
+  { name: "bing", row: { site: "https://www.bing.com/search*", bind: BING_ITEMS } },
+  // Hacker News has no keys of its own. A comment has no title link, so it takes the focus itself.
+  { name: "hackernews", row: { site: "https://news.ycombinator.com/*", bind: HACKERNEWS_ITEMS } },
+  { name: "wikipedia", row: { site: "https://*.wikipedia.org/w/index.php?*search=*", bind: WIKIPEDIA_ITEMS } },
+  { name: "wikipedia", row: { site: "https://*.wikipedia.org/wiki/Special:Search*", bind: WIKIPEDIA_ITEMS } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

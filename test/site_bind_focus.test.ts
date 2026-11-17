@@ -126,7 +126,7 @@ test("the shipped maps rows send arrows to the map behind a guard that falls bac
     assert.equal((tree.children["j"] as TreeLeaf).otherwise?.steps[0]?.invocation.id, default_j);
     assert.equal((await page_keymap_for(storage_of(with_defaults({})), [url]))!.site_values?.focus_on_load, MAP, `${url} hands the load focus to the map`);
   }
-  for (const url of ["https://www.google.com/search?q=maps", "https://www.google.de/maps", "https://maps.example.org/maps"]) {
+  for (const url of ["https://www.google.de/maps", "https://maps.example.org/maps"]) {
     const node: TreeNode | undefined = (await page_tree(with_defaults({}), url)).children["j"];
     assert.equal(node?.kind === "leaf" && node.steps[0]?.invocation.id, default_j, url);
   }
@@ -138,4 +138,26 @@ test("default_site_rows_off = maps gives Maps the plain keys and leaves the shee
   assert.equal(node.steps[0]?.invocation.id, (DEFAULT_KEYMAP.normal!["j"] as { id: string }).id);
   const sheets = (await page_tree(with_defaults({ default_site_rows_off: ["maps"] }), "https://docs.google.com/spreadsheets/d/abc/edit")).children["j"] as TreeLeaf;
   assert.equal(sheets.steps[0]?.invocation.id, "page.send_key");
+});
+
+test("the result page rows bind j and k to page.item on their addresses, and default_site_rows_off hands the keys back", async () => {
+  const addresses: Record<string, string[]> = {
+    google: ["https://www.google.com/search?q=cats"],
+    bing: ["https://www.bing.com/search?q=cats"],
+    hackernews: ["https://news.ycombinator.com/", "https://news.ycombinator.com/item?id=1"],
+    wikipedia: ["https://en.wikipedia.org/w/index.php?search=cats", "https://en.wikipedia.org/w/index.php?fulltext=1&search=cats", "https://en.wikipedia.org/w/index.php?title=Special:Search&limit=20&offset=20&profile=default&search=cats", "https://de.wikipedia.org/wiki/Special:Search?search=cats"],
+  };
+  for (const [name, urls] of Object.entries(addresses)) {
+    for (const url of urls) {
+      for (const key of ["j", "k"]) {
+        const on = (await page_tree(with_defaults({}), url)).children[key] as TreeLeaf;
+        assert.equal(on.steps[0]?.invocation.id, "page.item", `${url} ${key}`);
+        const off = (await page_tree(with_defaults({ default_site_rows_off: [name] }), url)).children[key] as TreeLeaf;
+        assert.notEqual(off.steps[0]?.invocation.id, "page.item", `${url} ${key} with ${name} off`);
+      }
+    }
+  }
+  for (const url of ["https://old.reddit.com/", "https://en.wikipedia.org/wiki/Cat", "https://en.wikipedia.org/w/index.php?title=Cat&action=edit"]) {
+    assert.notEqual(((await page_tree(with_defaults({}), url)).children["j"] as TreeLeaf).steps[0]?.invocation.id, "page.item", url);
+  }
 });

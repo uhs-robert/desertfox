@@ -34,7 +34,7 @@ export const area_rules = [
   { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
   { globs: ["src/content/hints/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
-  { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles"] },
+  { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/content/item/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles", "keys"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules,extension_page}.ts", "src/content/{bundle_host,bundles}.ts", "src/content/text/**", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/shared/page_bundle_tag.ts"], areas: ["bundles", "help", "newtab"] },
   { globs: ["src/shared/{icons,key_caps,page_base}.*"], areas: ["help", "newtab"] },

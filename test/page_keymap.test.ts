@@ -449,9 +449,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "ddg", "kagi", "brave"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 8);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 13);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -580,5 +580,5 @@ test("the search rows: ddg and kagi pass j and k, brave binds them to arrow keys
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 5);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 10);
 });

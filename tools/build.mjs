@@ -87,6 +87,7 @@ const minified_entries = {
   editor: "src/content/editor/main.ts",
   site_actions: "src/content/site_actions/main.ts",
   grab: "src/content/grab/main.ts",
+  item: "src/content/item/main.ts",
   // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
   media: "src/content/media/main.ts",
   // Injected the same way, for each quality request and into each frame whose probe found a video (background/quality_levels.ts).
