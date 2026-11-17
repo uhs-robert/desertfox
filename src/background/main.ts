@@ -28,7 +28,7 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { strip_patterns_for } from "./strip_patterns.ts";
-import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, read_keymap_reply } from "./page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -211,6 +211,7 @@ const frame_cue = create_frame_cue({
 });
 // A frame that navigates is a new document: the line opened for the old one must not aim at it.
 browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdline.forget_target_frame(tabId, frameId).catch(warn_and_go("cmdline.forget_target_frame")));
+
 
 const previous_tabs = shared_previous_tabs();
 const last_used_tabs = shared_last_used_tabs();
@@ -401,7 +402,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === "quality_report") {
     quality_reports.receive(sender.tab?.id, sender.frameId, request);
-    return rule_for_report(request, { is_disabled: read_disabled, value_for_frame: () => media_quality_reply(browser.storage.local, sender.url) });
+    return rule_for_report(request, { is_disabled: read_disabled, value_for_frame: () => media_quality_reply(browser.storage.local, sender_at(sender, request.url).url) });
   }
   if (request?.type === "quality_probe") return media_quality.probe_reported(sender.tab?.id, sender.frameId, request.address);
   if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
@@ -427,7 +428,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const tab_id = sender.tab.id;
     const frame_id = sender.frameId;
     const stamp = external_editor.navigation_stamp(tab_id);
-    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender))), sender.tab?.incognito === true, stamp));
+    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender_at(sender, request.url)))), sender.tab?.incognito === true, stamp));
   }
   if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
   if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(warn_and_go("jump_leave.leave"));
@@ -446,10 +447,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
   if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
   if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender.url);
+  if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender_at(sender, request.url).url);
   if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
   if (request?.type === "read_keymap") {
-    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));
+    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender_at(sender, request.url)), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));
     return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
   }
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
@@ -471,13 +472,14 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "list_keys") {
     const tab = sender.tab;
     const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
+    const located = sender_at(sender, request.url);
     return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, {
       availability: {
         page,
         requirement_of: requirement_lookup(config),
         site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
       },
-      addresses: rule_addresses_of(sender),
+      addresses: rule_addresses_of(located),
       registers: () => browser_register_store.items(tab?.incognito === true),
       marks: () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true),
       quickmarks: () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true),

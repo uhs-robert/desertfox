@@ -17,6 +17,9 @@ type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 export const rule_addresses_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): (string | undefined)[] =>
   sender.frameId === 0 ? [sender.url] : [sender.url, sender.tab?.url];
 
+// The sender as the page's address now. A request that names its address (`location.href`) is matched on it, because `sender.url` stays the address the document loaded at. A request without one, from an old sender, keeps `sender.url`.
+export const sender_at = <S extends { url?: string | undefined }>(sender: S, url: unknown): S => (typeof url === "string" ? { ...sender, url } : sender);
+
 // A value about the whole tab, such as its zoom, follows the top page, so every frame resolves it against the top frame's address. A value about one frame's own content resolves against `[sender.url]`.
 export const top_frame_address_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): string | undefined =>
   sender.frameId === 0 ? sender.url : sender.tab?.url;

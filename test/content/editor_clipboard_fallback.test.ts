@@ -78,6 +78,7 @@ globals.HTMLInputElement = FakeHTMLInputElement;
 globals.HTMLTextAreaElement = FakeHTMLTextAreaElement;
 globals.KeyboardEvent = FakeKeyboardEvent;
 globals.document = page_document;
+globals.location = { href: "https://a.test/page" };
 Object.defineProperty(globalThis, "navigator", {
   configurable: true,
   value: {
