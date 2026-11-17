@@ -11,10 +11,10 @@ const ITEMS = 12;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   let config_dir;
-  await setup("load the shipped google row for the item_ pages the hackernews row for the hn_ pages and the ddg row for the ddg_ pages and the ddg_images row for the img_ pages", async () => {
+  await setup("load the shipped google row for the item_ pages the hackernews row for the hn_ pages and the ddg row for the ddg_ pages and the ddg_images row for the img_ pages and the google_videos row for the gvid_ pages and the ddg_videos row for the dvid_ pages", async () => {
     const dir = config_dir = config_copy();
     const lines = [];
-    for (const [name, id] of [["google", "item"], ["hackernews", "hn"], ["ddg", "ddg"], ["ddg_images", "img"]]) {
+    for (const [name, id] of [["google", "item"], ["hackernews", "hn"], ["ddg", "ddg"], ["ddg_images", "img"], ["google_videos", "gvid"], ["ddg_videos", "dvid"]]) {
       const shipped = DEFAULT_SITE_ROWS.find((entry) => entry.name === name)?.row;
       if (!shipped) throw new Error(`no shipped site row named ${name}`);
       const { site: _site, ...columns } = shipped;
@@ -300,6 +300,60 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("h");
     await sleep(300);
     expect((await focused()) === "only" && (await in_active_tab("scrollX")) === 0, "h moved the focus or scrolled");
+  });
+
+  // The Google Videos shape: every video sits in one result block, each in its own data-hveid block inside the block's own data-hveid. The box must sit on one video, never on the block.
+  await run_case("on google videos, j walks the videos one by one inside the one result block and the box spans a single video", async () => {
+    await open_page("controls", "gvid_list", { new_tab: true });
+    await in_active_tab(`(() => {
+      const column = document.createElement("div");
+      column.id = "center_col";
+      column.innerHTML = '<div id="search"><div class="MjjYud"><div data-hveid="group">' + [0, 1, 2, 3].map((index) => '<div><div data-hveid="v' + index + '" id="video' + index + '" style="height:80px;width:300px;margin-bottom:30px"><div><a id="v' + index + '" href="#v' + index + '"><h3>video ' + index + '</h3></a><span>youtube.com snippet</span></div></div></div>').join("") + '</div></div></div>';
+      document.body.prepend(column);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("v0");
+    await expect_box_on("video0", "the box on the first video alone");
+    await press_keys("j");
+    await expect_focus("v1");
+    await expect_box_on("video1", "the box on the second video alone");
+    await press_keys("G");
+    await expect_focus("v3");
+    await press_keys("k");
+    await expect_focus("v2");
+    await press_keys("-k", "Return");
+    await poll_until("the address to name the third video", async () => (await in_active_tab("location.hash")) === "#v2");
+  });
+
+  // The DuckDuckGo Videos shape: a grid of links, each around an article, so the link is the item and takes the focus itself.
+  await run_case("on ddg videos, hjkl walk the grid of video links and Enter opens one", async () => {
+    await open_page("controls", "dvid_grid", { new_tab: true });
+    await in_active_tab(`(() => {
+      const videos = document.createElement("div");
+      videos.dataset.testid = "zci-videos";
+      videos.innerHTML = '<ol style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,200px);gap:12px">' + [0, 1, 2, 3, 4, 5].map((index) => '<li><a id="d' + index + '" href="#d' + index + '" style="display:block"><article style="height:100px">video ' + index + '</article></a></li>').join("") + '</ol>';
+      document.body.prepend(videos);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("d0");
+    await press_keys("l");
+    await expect_focus("d1");
+    await press_keys("j");
+    await expect_focus("d4");
+    await press_keys("h");
+    await expect_focus("d3");
+    await press_keys("k");
+    await expect_focus("d0");
+    await press_keys("G");
+    await expect_focus("d5");
+    await press_keys("-k", "Return");
+    await poll_until("the address to name the last video", async () => (await in_active_tab("location.hash")) === "#d5");
   });
 
   // A page of one site that lists both result shapes: ddg articles and image tiles. Which one j walks depends on the row the address matches.
