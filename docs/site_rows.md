@@ -32,7 +32,7 @@ Addresses: `https://docs.google.com/spreadsheets/*`, `https://docs.google.com/a/
 | `V` | Start the visual mode |
 | `G` | Go to column A of the last row with data |
 
-- Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays.
+- Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays, unless you entered insert mode with the insert key, which Escape still ends.
 - `#waffle-rich-text-editor` does not count as a text box while it has no width.
 
 Keys left to the page: `<C-a>` `<C-x>` `<C-v>`.
