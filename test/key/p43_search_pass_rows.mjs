@@ -1,4 +1,4 @@
-// The shipped search rows on a test address with the site pattern swapped: ddg and kagi pass j and k to the page, brave turns them into arrow keys.
+// The shipped search rows on a test address with the site pattern swapped: kagi passes j and k to the page, brave turns them into arrow keys.
 // The stand-in page records every keydown that reaches it, with whether the browser made it (`trusted`), so a passed key and a sent arrow show apart.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -7,10 +7,10 @@ import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 export const areas = ["keys", "config"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
-const ENGINES = ["ddg", "kagi", "brave"];
+const ENGINES = ["kagi", "brave"];
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("load the shipped ddg, kagi and brave rows for the search_ pages", async () => {
+  await setup("load the shipped kagi and brave rows for the search_ pages", async () => {
     const dir = config_copy();
     const lines = [];
     for (const name of ENGINES) {
@@ -48,22 +48,20 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await keys()) === "", `j reached the page: ${await keys()}`);
   });
 
-  for (const name of ["ddg", "kagi"]) {
-    await run_case(`on ${name}, j and k reach the page as the browser's own keys`, async () => {
-      await open_search(name);
-      await press_keys("jkj");
-      await expect_keys("j,k,j,");
-    });
-  }
+  await run_case("on kagi, j and k reach the page as the browser's own keys", async () => {
+    await open_search("kagi");
+    await press_keys("jkj");
+    await expect_keys("j,k,j,");
+  });
 
-  await run_case("on ddg, h and l stay DesertFox's and do not reach the page", async () => {
-    await open_search("ddg");
+  await run_case("on kagi, h and l stay DesertFox's and do not reach the page", async () => {
+    await open_search("kagi");
     await press_keys("hl", "j");
     await expect_keys("j,");
   });
 
-  await run_case("on ddg, h and l scroll the page sideways", async () => {
-    await open_search("ddg");
+  await run_case("on kagi, h and l scroll the page sideways", async () => {
+    await open_search("kagi");
     await press_keys("l");
     await poll_until("l scrolled right", async () => (await in_active_tab("scrollX")) > 0);
     await press_keys("h");

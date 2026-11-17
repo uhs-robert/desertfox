@@ -84,7 +84,9 @@ const item_binds = (selector: string, link?: string): BindingTable => ({
   j: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "down" } },
   k: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "up" } },
 });
-const GOOGLE_ITEMS = item_binds("#search a:has(> h3)");
+// A result is the block that holds a title link, so the box spans site, address, title and snippet. `.MjjYud` is a generated class, but the block is its own nesting level in every layout read, and when the class changes the selector matches nothing and j and k scroll as usual.
+const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)");
+const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="result-title-a"]');
 const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
@@ -95,13 +97,14 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "maps", row: { site: "https://www.google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "arrow", row: { site: "<all_urls>", modes: { arrow: ARROW_MODE } } },
-  // These engines move their own result highlight on j and k, so the keys go to the page. h, l, v and ' stay ours.
-  // DuckDuckGo's results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep their own j and k scroll.
-  { name: "ddg", row: { site: "https://duckduckgo.com/?*", pass: "j k" } },
+  // DuckDuckGo's own j and k stop at the last result and never reach the More results button, so j and k walk the results through `page.item`. The ad blocks are `article[data-testid="ad"]`, so they stay out.
+  // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. A vertical with no `result` article (images) scrolls.
+  { name: "ddg", row: { site: "https://duckduckgo.com/?*", bind: DDG_ITEMS } },
+  // Kagi moves its own result highlight on j and k, so the keys go to the page. h, l, v and ' stay ours.
   { name: "kagi", row: { site: "https://kagi.com/search*", pass: "j k" } },
   // Brave moves its highlight on arrow keys only, so j and k send them to the focused element.
   { name: "brave", row: { site: "https://search.brave.com/search*", bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } }, k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } } } } },
-  // Google result pages on www.google.com only, as the Maps rows. The title links of the web results are the items, so People also ask and the sidebar stay out.
+  // Google result pages on www.google.com only, as the Maps rows. The result blocks that hold a title link are the items, so People also ask and the sidebar stay out.
   { name: "google", row: { site: "https://www.google.com/search*", bind: GOOGLE_ITEMS } },
   { name: "bing", row: { site: "https://www.bing.com/search*", bind: BING_ITEMS } },
   // Hacker News has no keys of its own. A comment has no title link, so it takes the focus itself.

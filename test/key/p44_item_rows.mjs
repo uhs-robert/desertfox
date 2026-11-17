@@ -10,10 +10,10 @@ const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Arr
 const ITEMS = 12;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("load the shipped google row for the item_ pages and the hackernews row for the hn_ pages", async () => {
+  await setup("load the shipped google row for the item_ pages the hackernews row for the hn_ pages and the ddg row for the ddg_ pages", async () => {
     const dir = config_copy();
     const lines = [];
-    for (const [name, id] of [["google", "item"], ["hackernews", "hn"]]) {
+    for (const [name, id] of [["google", "item"], ["hackernews", "hn"], ["ddg", "ddg"]]) {
       const shipped = DEFAULT_SITE_ROWS.find((entry) => entry.name === name)?.row;
       if (!shipped) throw new Error(`no shipped site row named ${name}`);
       const { site: _site, ...columns } = shipped;
@@ -23,13 +23,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  // The stand-in results: a block of tall links, each with an h3 as Google's title links have.
+  // The stand-in results: a block per result with a title link (an h3 inside the anchor) and an address and snippet beside it, as Google's result blocks have. A People also ask question sits among them, with an h3 link but outside any result block, and the row must skip it.
   const open_results = async (id, first_height = 60) => {
     await open_page("controls", `item_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const search = document.createElement("div");
       search.id = "search";
-      search.innerHTML = ${JSON.stringify(Array.from({ length: ITEMS }, (_, index) => `<a id="r${index}" href="#r${index}" style="display:block;height:${index === 0 ? first_height : 60}px;margin:0 0 40px 20px;width:300px"><h3>result ${index}</h3></a>`).join(""))};
+      search.innerHTML = ${JSON.stringify(Array.from({ length: ITEMS }, (_, index) => `<div class="MjjYud" style="height:${index === 0 ? first_height : 60}px;margin:0 0 40px 20px;width:300px"><a id="r${index}" href="#r${index}" style="display:block"><h3>result ${index}</h3></a><span>example.org snippet ${index}</span></div>` + (index === 1 ? '<div class="related-question-pair"><a id="paa" href="#paa"><h3>a question</h3></a></div>' : "")).join(""))};
       document.body.prepend(search);
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -48,7 +48,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     return null;
   })()`;
   const box = () => in_active_tab(READ_BOX);
-  const link_rect = () => in_active_tab(`(() => { const r = document.activeElement.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
+  const link_rect = () => in_active_tab(`(() => { const r = (document.activeElement.closest(".MjjYud") ?? document.activeElement).getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
   const near = (a, b) => ["left", "top", "width", "height"].every((key) => Math.abs(a[key] - b[key]) < 1.5);
   const expect_box_on_focus = (what) => poll_until(what, async () => { const drawn = await box(); return drawn !== null && near(drawn, await link_rect()); });
   const expect_box_on = (id, what) => poll_until(what, async () => { const drawn = await box(); return drawn !== null && near(drawn, await in_active_tab(`(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`)); });
@@ -125,7 +125,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_box_on_focus("the box on the first result");
     await in_active_tab("window.scrollBy(0, 30); 0");
     await expect_box_on_focus("the box after a scroll");
-    await in_active_tab(`(() => { document.getElementById("r0").style.marginLeft = "120px"; window.dispatchEvent(new Event("resize")); return 0; })()`);
+    await in_active_tab(`(() => { document.getElementById("r0").closest(".MjjYud").style.marginLeft = "120px"; window.dispatchEvent(new Event("resize")); return 0; })()`);
     await expect_box_on_focus("the box after a resize");
   });
 
@@ -133,7 +133,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_results("shift");
     await press_keys("j");
     await expect_box_on_focus("the box on the first result");
-    await in_active_tab(`document.getElementById("r0").style.marginLeft = "150px"; 0`);
+    await in_active_tab(`document.getElementById("r0").closest(".MjjYud").style.marginLeft = "150px"; 0`);
     await expect_box_on_focus("the box after the shift");
   });
 
@@ -171,7 +171,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_results("removed");
     await press_keys("j");
     await expect_box_on_focus("the box on the first result");
-    await in_active_tab(`document.getElementById("r0").remove(); 0`);
+    await in_active_tab(`document.getElementById("r0").closest(".MjjYud").remove(); 0`);
     await expect_no_box("the box to clear when its result is gone");
   });
 
@@ -201,6 +201,27 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("comment");
     expect((await in_active_tab(`document.getElementById("comment").getAttribute("tabindex")`)) === "-1", "the comment row has no tabindex -1");
     await expect_box_on("comment", "the box on the comment row");
+  });
+
+  // A DuckDuckGo shaped list: result articles with a title link, and an ad article with the same link that must be skipped.
+  await run_case("on ddg, j walks the result articles and skips the ad, and past the last result it scrolls on", async () => {
+    await open_page("controls", "ddg_list", { new_tab: true });
+    await in_active_tab(`(() => {
+      const list = document.createElement("ol");
+      list.innerHTML = '<li><article data-testid="ad"><a data-testid="result-title-a" id="ad" href="#ad">ad</a></article></li>' + [0, 1, 2].map((index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a><p>snippet</p></article></li>').join("");
+      document.body.prepend(list);
+      document.activeElement?.blur();
+      return true;
+    })()`);
+    await press_keys("jj");
+    await expect_focus("d1");
+    await in_active_tab(`document.getElementById("d1").closest("article").id = "a1"; 0`);
+    await expect_box_on("a1", "the box on the whole result article");
+    await press_keys("j");
+    await expect_focus("d2");
+    const before = await in_active_tab("scrollY");
+    await press_keys("j");
+    await poll_until("j to scroll on from the last result", async () => (await in_active_tab("scrollY")) === before + 50);
   });
 
   await run_case("on a page with no result row, j scrolls and no box shows", async () => {

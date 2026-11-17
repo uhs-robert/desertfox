@@ -564,18 +564,21 @@ test("a site row auto under a global max answers auto, which the rule treats as 
   assert.equal(await media_quality_reply(storage_of(compiled), "https://b.test/"), "max");
 });
 
-test("the search rows: ddg and kagi pass j and k, brave binds them to arrow keys, and each row compiles on its engine only", async () => {
+test("the search rows: kagi passes j and k, ddg binds them to page.item, brave binds them to arrow keys, and each row compiles on its engine only", async () => {
   const compiled = with_defaults({});
   const names = compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name);
   for (const name of ["ddg", "kagi", "brave"]) assert.ok(names?.includes(name), `${name} row missing from the compiled rows`);
-  for (const url of ["https://duckduckgo.com/?q=cats", "https://kagi.com/search?q=cats"]) {
+  for (const url of ["https://kagi.com/search?q=cats"]) {
     const reply = (await ask(compiled, url))!;
     assert.equal(reply.keymap.modes.normal?.children.j, undefined, `j still bound on ${url}`);
     assert.equal(reply.keymap.modes.normal?.children.k, undefined, `k still bound on ${url}`);
     assert.notEqual(reply.keymap.modes.normal?.children.h, undefined, `h freed on ${url}`);
   }
-  assert.equal(await key_at(compiled, "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=cats", "j"), undefined);
-  for (const url of ["https://duckduckgo.com/settings", "https://duckduckgo.com/duckduckgo-help-pages/"]) assert.notEqual(await key_at(compiled, url, "j"), undefined, `j freed on ${url}`);
+  for (const url of ["https://duckduckgo.com/?q=cats", "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=cats"]) {
+    for (const key of ["j", "k"]) assert.equal(await key_at(compiled, url, key), "page.item", `${key} on ${url}`);
+    assert.notEqual((await ask(compiled, url))!.keymap.modes.normal?.children.h, undefined, `h freed on ${url}`);
+  }
+  for (const url of ["https://duckduckgo.com/settings", "https://duckduckgo.com/duckduckgo-help-pages/"]) assert.notEqual(await key_at(compiled, url, "j"), "page.item", `j is plain scroll on ${url}`);
   const brave = "https://search.brave.com/search?q=cats";
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
