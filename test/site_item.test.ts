@@ -39,6 +39,14 @@ test("down and up in a masonry grid stay in the column", () => {
   assert.equal(step_from(masonry, 4, "up"), 3);
 });
 
+test("down prefers an item that overlaps across, even when one in the next column is nearer along", () => {
+  const columns = [box(0, 0, 100, 200), box(110, 100, 100, 60), box(0, 210, 100, 200)];
+  assert.equal(step_from(columns, 0, "down"), 2);
+  // With nothing overlapping, the centre distance across decides.
+  const apart = [box(0, 0, 100, 40), box(300, 60, 100, 40), box(120, 140, 100, 40)];
+  assert.equal(step_from(apart, 0, "down"), 2);
+});
+
 test("a list of titles with unequal widths still goes to the next one down", () => {
   const titles = [box(0, 0, 300, 20), box(0, 50, 100, 20), box(0, 100, 250, 20)];
   assert.equal(step_from(titles, 0, "down"), 1);
