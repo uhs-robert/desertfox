@@ -147,8 +147,9 @@ function entries_for_mode(
       }
       const normalized = parsed.tokens.join("");
       // A keymap binding replaces no other binding, so it has nothing to run when focus is elsewhere. The skip comes before the default keys it extends are dropped.
-      if (binding !== null && [binding].flat()[0]?.when_focus !== undefined) {
-        warnings.push(`${mode}: skipped "${sequence}": when_focus works only in a site row bind`);
+      const guard = binding === null ? undefined : ([binding].flat()[0]?.when_focus !== undefined ? "when_focus" : [binding].flat()[0]?.when_present !== undefined ? "when_present" : undefined);
+      if (guard !== undefined) {
+        warnings.push(`${mode}: skipped "${sequence}": ${guard} works only in a site row bind`);
         continue;
       }
       if (binding === null) {
@@ -229,6 +230,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
   let label: string | undefined;
   let intent: string | undefined;
   let when_focus: string | undefined;
+  let when_present: string | undefined;
   for (const invocation of invocations) {
     const info = resolve(invocation.id);
     if (!info) {
@@ -248,6 +250,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
       intent = invocation.intent;
       when_focus = invocation.when_focus;
+      when_present = invocation.when_present;
       label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
@@ -257,14 +260,14 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, when_present: _when_present, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count, ...(info.bundle && { bundle: info.bundle }) });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label, intent, when_focus };
+  return { steps, label, intent, when_focus, when_present };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
@@ -353,7 +356,7 @@ function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: P
       warnings.push(...step_warnings.map((warning) => `site_rules: ${scope}bind ${warning.replace(`${mode}: `, "")}`));
       continue;
     }
-    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), ...(resolved.when_focus === undefined ? {} : { when_focus: resolved.when_focus }), steps: resolved.steps } };
+    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), ...(resolved.when_focus === undefined ? {} : { when_focus: resolved.when_focus }), ...(resolved.when_present === undefined ? {} : { when_present: resolved.when_present }), steps: resolved.steps } };
   }
   return binds;
 }

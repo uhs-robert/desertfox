@@ -24,7 +24,7 @@ export const top_frame_address_of = (sender: { frameId?: number | undefined; url
 export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 
 // The page's columns of the site table, for the page's key handling and for which-key alike.
-export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses));
+export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses), chain_site_binds);
 
 // The rows that fit the page, in table order.
 export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
@@ -68,7 +68,15 @@ export async function media_quality_is_idle(storage: KeymapStorage): Promise<boo
 export const hiding_bind = (all: readonly SiteBind[], { tokens }: SiteBind): SiteBind | undefined => all.find((other) => other.tokens.length < tokens.length && other.tokens.every((token, index) => tokens[index] === token));
 
 // A guarded bind keeps the leaf it replaces, so the key falls through to it when focus is elsewhere. A replaced branch is not kept: falling through to it means waiting for more keys after the key already ran.
-const with_otherwise = (leaf: TreeLeaf, replaced: TreeNode | undefined): TreeLeaf => (leaf.when_focus !== undefined && replaced?.kind === "leaf" ? { ...leaf, otherwise: replaced } : leaf);
+// A leaf that already has a fallback (a later row's bind, see `chain_site_binds`) passes the replaced leaf down to the end of its chain.
+const guarded = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || leaf.when_present !== undefined;
+const with_otherwise = (leaf: TreeLeaf, replaced: TreeNode | undefined): TreeLeaf => (!guarded(leaf) || replaced?.kind !== "leaf" ? leaf : { ...leaf, otherwise: leaf.otherwise ? with_otherwise(leaf.otherwise, replaced) : replaced });
+
+// Two rows of one page that bind a key: while the earlier bind has a `when_present` guard, the later bind is its fallback, so two rows can split one key by what the page holds. An unguarded earlier bind decides alone, as everywhere else.
+export const chain_site_binds = (earlier: SiteBind, later: SiteBind): SiteBind => {
+  const chained = (leaf: TreeLeaf): TreeLeaf => (leaf.when_present === undefined ? leaf : { ...leaf, otherwise: leaf.otherwise ? chained(leaf.otherwise) : later.leaf });
+  return { ...earlier, leaf: chained(earlier.leaf) };
+};
 
 // A bound key replaces whatever the tree holds at that key. A key under a leaf of the tree turns the leaf into a branch, and a bind that is a prefix of tree keys replaces the whole subtree. Copies the path and never mutates the input.
 export function graft_binds(root: TreeBranch | undefined, binds: Readonly<Record<string, SiteBind>>): TreeBranch {

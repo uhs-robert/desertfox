@@ -1,4 +1,5 @@
-export type ItemDirection = "down" | "up" | "left" | "right";
+export type MoveDirection = "down" | "up" | "left" | "right";
+export type ItemDirection = MoveDirection | "first" | "last";
 export type ItemArgs = { selector: string; link?: string; direction: ItemDirection; times?: number };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
@@ -11,7 +12,7 @@ const middle = (low: number, high: number) => (low + high) / 2;
 const same_row = (a: Box, b: Box): boolean => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > Math.min(a.bottom - a.top, b.bottom - b.top) / 2;
 
 // One step to the nearest item ahead. Down and up look at other rows only, left and right at any item whose height overlaps. Items whose span across the direction overlaps the current item's come first, so a masonry tile goes to the tile in its own column and a left-aligned list of unequal widths goes to the next line. Among them the nearest one sets the row or column, which is every item that shares its extent along the direction. The one that overlaps the current item most across wins, and a tie goes to the nearer. With none overlapping, the smallest gap across stands in for the overlap.
-export function step_from(boxes: readonly Box[], from: number, direction: ItemDirection): number | undefined {
+export function step_from(boxes: readonly Box[], from: number, direction: MoveDirection): number | undefined {
   const here = boxes[from]!;
   const sideways = direction === "left" || direction === "right";
   const sign = direction === "right" || direction === "down" ? 1 : -1;
@@ -31,7 +32,7 @@ export function step_from(boxes: readonly Box[], from: number, direction: ItemDi
 export type ItemPick = { index: number } | { end: true };
 
 // A count that runs past the last item stops on it. A first step with nowhere to go is the stop the user sees as a toast.
-export function pick_item(boxes: readonly Box[], place: Place, direction: ItemDirection, steps: number): ItemPick {
+export function pick_item(boxes: readonly Box[], place: Place, direction: MoveDirection, steps: number): ItemPick {
   // From no item, forward lands on the first one in view and backward on the one before it, as `page.focus_field` does.
   let index: number | undefined = place.on_item ? place.index : place.index - +(direction === "up" || direction === "left");
   if (!boxes[index]) return { end: true };
@@ -69,7 +70,7 @@ export type ItemPage = {
 };
 
 const SCROLL_PX = 50;
-const SCROLL = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as const;
+const SCROLL: Record<MoveDirection, readonly [number, number]> = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as const;
 
 let last_move: { item_: WeakRef<Element>; args_: ItemArgs } | undefined;
 
@@ -93,18 +94,21 @@ export function move_item(page: ItemPage, args: ItemArgs): void {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
   const items = Array.from(page.doc.querySelectorAll(args.selector)).filter((element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && element.getClientRects().length > 0);
+  // The ends ignore where the focus is. With no item they do nothing: a row guards them with `when_present`, so the plain keys run then.
+  if (args.direction === "first" || args.direction === "last") return items.length === 0 ? undefined : land_on(page, items.at(args.direction === "first" ? 0 : -1)!, args);
+  const direction = args.direction;
   const steps = args.times ?? 1;
-  const scroll = () => page.scroll_by(...(SCROLL[args.direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
+  const scroll = () => page.scroll_by(...(SCROLL[direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
   if (items.length === 0) return scroll();
   const boxes = items.map((item) => item.getBoundingClientRect());
   const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight);
-  const vertical = args.direction === "down" || args.direction === "up";
+  const vertical = direction === "down" || direction === "up";
   // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction.
-  if (vertical && place.on_item && (args.direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) return scroll();
-  const pick = pick_item(boxes, place, args.direction, steps);
+  if (vertical && place.on_item && (direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) return scroll();
+  const pick = pick_item(boxes, place, direction, steps);
   // At the last item down and up scroll on, so the page below the results stays reachable. Left and right say they are at the end.
-  if ("end" in pick) return vertical ? scroll() : page.toast(`No ${args.direction === "right" ? "next" : "previous"} item`);
+  if ("end" in pick) return vertical ? scroll() : page.toast(`No ${direction === "right" ? "next" : "previous"} item`);
   land_on(page, items[pick.index]!, args);
 }
 

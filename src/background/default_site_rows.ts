@@ -80,9 +80,16 @@ const ARROW_MODE: SiteModeTable[string] = {
 };
 
 // Result pages that j and k walk item by item through `page.item`. Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
+// gg and G go to the first and last item. With no item on the page they run the plain keys, which `when_present` leaves them.
+const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
+const end_binds = (selector: string, link?: string): BindingTable => ({
+  gg: { ...item_step(selector, link, "first"), when_present: selector },
+  G: { ...item_step(selector, link, "last"), when_present: selector },
+});
 const item_binds = (selector: string, link?: string): BindingTable => ({
-  j: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "down" } },
-  k: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "up" } },
+  j: item_step(selector, link, "down"),
+  k: item_step(selector, link, "up"),
+  ...end_binds(selector, link),
 });
 // A result is the block that holds a title link, so the box spans site, address, title and snippet. `.MjjYud` is a generated class, but the block is its own nesting level in every layout read, and when the class changes the selector matches nothing and j and k scroll as usual.
 const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)");
@@ -91,7 +98,7 @@ const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
 const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 // An image grid has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
-const grid_binds = (selector: string, link: string): BindingTable => Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, { id: "page.item", args: { selector, link, direction } } satisfies BoundInvocation]));
+const grid_binds = (selector: string, link: string): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction)])), ...end_binds(selector, link) });
 // The tile is a figure, which holds the picture and its caption link.
 const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 // A Google image tile is a div with a picture button (focusable) and a caption link.
@@ -103,12 +110,20 @@ const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
 
-// Drive moves its selection on arrow keys, so hjkl send them. Enter stays native. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
-const DRIVE_BIND: BindingTable = {
-  h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } },
-  j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } },
-  k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } },
-  l: { id: "page.send_key", args: { key: "ArrowRight", key_code: 39 } },
+// Drive keeps its selection on the focused file, so j, k, gg and G walk the files through `page.item`, which also takes the focus when it is elsewhere (on the view toggle, or nowhere on Home). The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Roles read from Drive's markup, not checked on a live page: the grid view lists files as role=option in a role=listbox, the list view as role=row in a role=grid.
+const DRIVE_GRID_ITEM = '[role="listbox"] [role="option"][data-id]';
+const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
+const DRIVE_ITEMS = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
+// A grid has files to the left and right, so h and l step along the row. A list has one file per row, so h goes back and l opens the focused file, as Enter does. Each view's pair sits in its own row: the earlier row guards its keys, and the later row answers when the guard fails.
+const DRIVE_GRID_BIND: BindingTable = {
+  ...item_binds(DRIVE_ITEMS),
+  h: { ...item_step(DRIVE_ITEMS, undefined, "left"), when_present: DRIVE_GRID_ITEM },
+  l: { ...item_step(DRIVE_ITEMS, undefined, "right"), when_present: DRIVE_GRID_ITEM },
+};
+const DRIVE_LIST_BIND: BindingTable = {
+  h: { id: "page.back", when_present: DRIVE_LIST_ITEM },
+  l: { id: "page.send_key", args: { key: "Enter", key_code: 13 }, when_present: DRIVE_LIST_ITEM },
 };
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
@@ -154,7 +169,8 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", bind: STACKOVERFLOW_ITEMS } },
   // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
   { name: "tildes", row: { site: "https://tildes.net/*", bind: TILDES_ITEMS } },
-  { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_BIND } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_GRID_BIND } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_LIST_BIND } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

@@ -258,3 +258,14 @@ test("the shipped image row binds hjkl to page.item", () => {
     }
   }
 });
+
+test("first and last go to the ends of the page whatever has focus, and do nothing with no item", () => {
+  const middle = fake_page(list, true, 2);
+  move_item(middle.page, { selector: "li", link: "a.t", direction: "first" });
+  move_item(middle.page, { selector: "li", link: "a.t", direction: "last" });
+  assert.deepEqual(middle.shown, ["0", "3"]);
+  assert.deepEqual(middle.log, ["focus link 0", "focus link 3"]);
+  const none = fake_page(list);
+  move_item(none.page, { selector: "none", direction: "last" });
+  assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
+});

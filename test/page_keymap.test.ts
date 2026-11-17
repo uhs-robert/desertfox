@@ -392,15 +392,29 @@ test("the shipped sheets rows bind hjkl to the arrow keys on both address forms 
   }
 });
 
-test("the drive row binds hjkl to the arrow keys on Drive folder pages and on no docs editor or file preview", async () => {
+test("the drive row walks files with j, k, gg and G, hl by view, and covers no docs editor or file preview", async () => {
   const compiled = with_defaults({});
+  const leaf_of = async (url: string, key: string) => {
+    const leaf = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+    return leaf?.kind === "leaf" ? leaf : undefined;
+  };
   for (const url of ["https://drive.google.com/drive/my-drive", "https://drive.google.com/drive/u/1/my-drive", "https://drive.google.com/drive/folders/abc", "https://drive.google.com/drive/shared-with-me", "https://drive.google.com/drive/recent"]) {
-    assert.deepEqual(await Promise.all(["h", "j", "k", "l"].map((key) => key_at(compiled, url, key))), ["ArrowLeft", "ArrowDown", "ArrowUp", "ArrowRight"], url);
+    assert.deepEqual(await Promise.all(["j", "k", "gg", "G"].map(async (key) => (await item_args_at(compiled, url, key))?.direction)), ["down", "up", "first", "last"], url);
+    // The grid keys come first and their fallback is the list keys, then the plain key the bind replaced.
+    const h = (await leaf_of(url, "h"))!;
+    assert.deepEqual([h.steps[0]!.invocation.id, (h.steps[0]!.invocation.args as { direction: string }).direction], ["page.item", "left"]);
+    assert.match(h.when_present!, /listbox/);
+    assert.equal(h.otherwise?.steps[0]?.invocation.id, "page.back");
+    assert.match(h.otherwise!.when_present!, /grid/);
+    assert.equal(h.otherwise!.otherwise?.steps[0]?.invocation.id, "scroll.lines");
+    const l = (await leaf_of(url, "l"))!;
+    assert.equal((l.steps[0]!.invocation.args as { direction: string }).direction, "right");
+    assert.deepEqual([l.otherwise?.steps[0]?.invocation.id, (l.otherwise?.steps[0]?.invocation.args as { key: string }).key], ["page.send_key", "Enter"]);
   }
   for (const url of ["https://docs.google.com/document/d/abc/edit", "https://docs.google.com/presentation/d/abc/edit", "https://drive.google.com/file/d/abc/view", "https://drive.google.com/", "https://example.org/drive/my-drive"]) {
-    assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown", url);
+    assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
   }
-  assert.notEqual(await key_at(with_defaults({ default_site_rows_off: ["drive"] }), "https://drive.google.com/drive/my-drive", "j"), "ArrowDown");
+  assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["drive"] }), "https://drive.google.com/drive/my-drive", "j"), undefined);
 });
 
 test("the shipped sheets rows bind gg and Ctrl+hjkl to Ctrl keys and free Ctrl+A and Ctrl+X", async () => {
@@ -460,7 +474,7 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
   assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 31);
 });
@@ -594,7 +608,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 28);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 29);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {

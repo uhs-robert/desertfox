@@ -8,7 +8,7 @@ import type { Registry } from "../registry/index.ts";
 
 type Step = string | BoundInvocation;
 
-export function is_labeled_binding(entry: unknown): entry is { run: Step | readonly Step[]; label?: string; intent?: string; when_focus?: string } {
+export function is_labeled_binding(entry: unknown): entry is { run: Step | readonly Step[]; label?: string; intent?: string; when_focus?: string; when_present?: string } {
   return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
 }
 
@@ -40,6 +40,7 @@ export function make_entry_resolver(registry: Registry, sources: EnumSources, pr
       if (entry.intent !== undefined) [binding].flat()[0]!.intent = entry.intent;
     }
     if (entry.when_focus !== undefined) [binding].flat()[0]!.when_focus = entry.when_focus;
+    if (entry.when_present !== undefined) [binding].flat()[0]!.when_present = entry.when_present;
     return binding;
   };
 }

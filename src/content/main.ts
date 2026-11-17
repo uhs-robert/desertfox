@@ -76,7 +76,7 @@ const key_flow = create_key_flow({
   get_mode_: page_mode.get_mode_,
   take_pass_next_: page_mode.take_pass_next_,
   run_leaf_: (bound_leaf, count, repeat) => {
-    const leaf = leaf_for_focus(bound_leaf, document.activeElement, document.body);
+    const leaf = leaf_for_focus(bound_leaf, document.activeElement, document.body, document);
     if (!leaf) return;
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();

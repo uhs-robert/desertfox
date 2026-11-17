@@ -38,5 +38,13 @@ const is_inside = (focused: Element, selector: string): boolean => {
 };
 
 // The leaf a key runs under a site row's focus guard: the bind itself, or the leaf it replaced, or nothing when it replaced none. Body counts as no focus, so a bind aimed at the page's main widget also runs before the user has focused it.
-export const leaf_for_focus = (leaf: TreeLeaf, focused: Element | null, body: Element | null): TreeLeaf | undefined =>
-  leaf.when_focus === undefined || focused === null || focused === body || is_inside(focused, leaf.when_focus) ? leaf : leaf.otherwise && leaf_for_focus(leaf.otherwise, focused, body);
+// A `when_present` guard holds while the page has a match. With no document it holds for none, so a caller that has no page keeps the leaf's fallback.
+const is_present = (doc: Pick<Document, "querySelector"> | undefined, selector: string): boolean => {
+  try {
+    return doc?.querySelector(selector) != null;
+  } catch {
+    return false;
+  }
+};
+export const leaf_for_focus = (leaf: TreeLeaf, focused: Element | null, body: Element | null, doc?: Pick<Document, "querySelector">): TreeLeaf | undefined =>
+  (leaf.when_focus === undefined || focused === null || focused === body || is_inside(focused, leaf.when_focus)) && (leaf.when_present === undefined || is_present(doc, leaf.when_present)) ? leaf : leaf.otherwise && leaf_for_focus(leaf.otherwise, focused, body, doc);

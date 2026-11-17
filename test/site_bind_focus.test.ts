@@ -13,7 +13,11 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { build_commands_file } from "../src/shared/registry/index.ts";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
-import type { CompiledKeymap, TreeLeaf, TreeNode } from "../src/shared/prefix_tree.ts";
+import type {
+  CompiledKeymap,
+  TreeLeaf,
+  TreeNode,
+} from "../src/shared/prefix_tree.ts";
 import { SETTING_SPECS } from "../src/shared/settings_schema.ts";
 import { build_config } from "../tools/build-config/build_config.ts";
 import { make_tmp_dir } from "./support/tmp_dir.ts";
@@ -22,121 +26,304 @@ const MAP = 'div[role="application"][tabindex="0"]';
 const MAPS = "https://www.google.com/maps/@42.36,-71.06,15z";
 
 // A stand-in element: `matches` answers for the one selector it carries.
-const element = (matching: string | undefined): Element => ({ matches: (selector: string) => selector === matching, closest: (selector: string) => (selector === matching ? element(matching) : null) }) as unknown as Element;
+const element = (matching: string | undefined): Element =>
+  ({
+    matches: (selector: string) => selector === matching,
+    closest: (selector: string) =>
+      selector === matching ? element(matching) : null,
+  }) as unknown as Element;
 const body = element(undefined);
-const leaf = (id: string, extra: Partial<TreeLeaf> = {}): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }], ...extra });
+const leaf = (id: string, extra: Partial<TreeLeaf> = {}): TreeLeaf => ({
+  kind: "leaf",
+  steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }],
+  ...extra,
+});
 
 test("the guard runs the bind with no focus, with body focused and with a matching element focused", () => {
-  const guarded = leaf("page.send_key", { when_focus: MAP, otherwise: leaf("scroll.lines") });
-  for (const focused of [null, body, element(MAP)]) assert.equal(leaf_for_focus(guarded, focused, body), guarded);
+  const guarded = leaf("page.send_key", {
+    when_focus: MAP,
+    otherwise: leaf("scroll.lines"),
+  });
+  for (const focused of [null, body, element(MAP)])
+    assert.equal(leaf_for_focus(guarded, focused, body), guarded);
 });
 
 test("the guard runs the replaced leaf when another element has focus, and nothing when the bind replaced none", () => {
   const otherwise = leaf("scroll.lines");
-  assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: MAP, otherwise }), element("#panel"), body), otherwise);
-  assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: MAP }), element("#panel"), body), undefined);
+  assert.equal(
+    leaf_for_focus(
+      leaf("page.send_key", { when_focus: MAP, otherwise }),
+      element("#panel"),
+      body,
+    ),
+    otherwise,
+  );
+  assert.equal(
+    leaf_for_focus(
+      leaf("page.send_key", { when_focus: MAP }),
+      element("#panel"),
+      body,
+    ),
+    undefined,
+  );
 });
 
 test("focus on an element inside a matching element counts as a match", () => {
-  const inside = { matches: () => false, closest: (selector: string) => (selector === MAP ? element(MAP) : null) } as unknown as Element;
-  const guarded = leaf("page.send_key", { when_focus: MAP, otherwise: leaf("scroll.lines") });
+  const inside = {
+    matches: () => false,
+    closest: (selector: string) => (selector === MAP ? element(MAP) : null),
+  } as unknown as Element;
+  const guarded = leaf("page.send_key", {
+    when_focus: MAP,
+    otherwise: leaf("scroll.lines"),
+  });
   assert.equal(leaf_for_focus(guarded, inside, body), guarded);
 });
 
 test("a leaf with no guard runs whatever has focus, and a selector that does not parse falls through", () => {
   const plain = leaf("scroll.lines");
   assert.equal(leaf_for_focus(plain, element("#panel"), body), plain);
-  const throwing = { matches: () => { throw new SyntaxError("bad selector"); }, closest: () => { throw new SyntaxError("bad selector"); } } as unknown as Element;
+  const throwing = {
+    matches: () => {
+      throw new SyntaxError("bad selector");
+    },
+    closest: () => {
+      throw new SyntaxError("bad selector");
+    },
+  } as unknown as Element;
   const otherwise = leaf("scroll.lines");
-  assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: "[[", otherwise }), throwing, body), otherwise);
+  assert.equal(
+    leaf_for_focus(
+      leaf("page.send_key", { when_focus: "[[", otherwise }),
+      throwing,
+      body,
+    ),
+    otherwise,
+  );
 });
 
-const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
-const storage_of = (stored: unknown) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) }) as never;
-const page_tree = async (compiled: CompiledKeymap, url: string) => (await page_keymap_for(storage_of(compiled), [url]))!.keymap.modes.normal!;
+const resolve = () => ({
+  runs_in: "content" as const,
+  label: "x",
+  count: "ignore" as const,
+});
+const storage_of = (stored: unknown) =>
+  ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) }) as never;
+const page_tree = async (compiled: CompiledKeymap, url: string) =>
+  (await page_keymap_for(storage_of(compiled), [url]))!.keymap.modes.normal!;
 
 test("a guarded bind keeps the leaf it replaced, a guarded bind over a branch keeps none, and an unguarded bind keeps none", async () => {
-  const keymap = { normal: { j: { id: "a.j" }, gg: { id: "a.gg" }, k: { id: "a.k" } } };
-  const bind = { j: { id: "b.j", when_focus: MAP }, g: { id: "b.g", when_focus: MAP }, k: { id: "b.k" } };
-  const { compiled } = compile_keymap(keymap, { site_rules: [{ site: "https://a.test/*", bind }] }, resolve);
+  const keymap = {
+    normal: { j: { id: "a.j" }, gg: { id: "a.gg" }, k: { id: "a.k" } },
+  };
+  const bind = {
+    j: { id: "b.j", when_focus: MAP },
+    g: { id: "b.g", when_focus: MAP },
+    k: { id: "b.k" },
+  };
+  const { compiled } = compile_keymap(
+    keymap,
+    { site_rules: [{ site: "https://a.test/*", bind }] },
+    resolve,
+  );
   const tree = await page_tree(compiled, "https://a.test/");
   const child = (token: string) => tree.children[token] as TreeLeaf;
   assert.equal(child("j").when_focus, MAP);
   assert.equal(child("j").otherwise?.steps[0]?.invocation.id, "a.j");
-  assert.equal(child("j").steps[0]?.invocation.when_focus, undefined, "the guard sits on the leaf, not in the args the router runs");
+  assert.equal(
+    child("j").steps[0]?.invocation.when_focus,
+    undefined,
+    "the guard sits on the leaf, not in the args the router runs",
+  );
   assert.equal(child("g").otherwise, undefined);
   assert.equal("otherwise" in child("k"), false);
 });
 
 test("a count and a key sequence reach the fallback: 5j falls through with its count, and gg is untouched", async () => {
   const keymap = { normal: { j: { id: "a.j" }, gg: { id: "a.gg" } } };
-  const { compiled } = compile_keymap(keymap, { site_rules: [{ site: "https://a.test/*", bind: { j: { id: "b.j", when_focus: MAP } } }] }, resolve);
-  const matcher = create_matcher({ ...compiled, modes: { ...compiled.modes, normal: await page_tree(compiled, "https://a.test/") } });
+  const { compiled } = compile_keymap(
+    keymap,
+    {
+      site_rules: [
+        {
+          site: "https://a.test/*",
+          bind: { j: { id: "b.j", when_focus: MAP } },
+        },
+      ],
+    },
+    resolve,
+  );
+  const matcher = create_matcher({
+    ...compiled,
+    modes: {
+      ...compiled.modes,
+      normal: await page_tree(compiled, "https://a.test/"),
+    },
+  });
   matcher.feed("normal", "5");
   const counted = matcher.feed("normal", "j");
   assert.equal(counted.kind_, "match");
   if (counted.kind_ !== "match") return;
   assert.equal(counted.count, 5);
-  assert.equal(leaf_for_focus(counted.leaf, element("#panel"), body)?.steps[0]?.invocation.id, "a.j");
+  assert.equal(
+    leaf_for_focus(counted.leaf, element("#panel"), body)?.steps[0]?.invocation
+      .id,
+    "a.j",
+  );
   matcher.feed("normal", "g");
   const sequence = matcher.feed("normal", "g");
-  assert.equal(sequence.kind_ === "match" && sequence.leaf.steps[0]?.invocation.id, "a.gg");
+  assert.equal(
+    sequence.kind_ === "match" && sequence.leaf.steps[0]?.invocation.id,
+    "a.gg",
+  );
 });
 
 test("a keymap binding with when_focus is skipped with a warning, since it replaces nothing", () => {
-  const { compiled, warnings } = compile_keymap({ normal: { j: { id: "a.j", when_focus: MAP } } }, {}, resolve);
+  const { compiled, warnings } = compile_keymap(
+    { normal: { j: { id: "a.j", when_focus: MAP } } },
+    {},
+    resolve,
+  );
   assert.equal(compiled.modes.normal?.children["j"], undefined);
   assert.match(warnings.join("\n"), /when_focus works only in a site row bind/);
 });
 
 test("a keymap entry with when_focus is skipped before it can drop the default key it extends", () => {
-  const { compiled, warnings } = compile_keymap({ normal: { j: { id: "a.j" }, jx: { id: "a.jx", when_focus: MAP } } }, {}, resolve, { engine_labels: {} }, { normal: { j: { id: "a.j" } } });
-  assert.equal((compiled.modes.normal?.children["j"] as TreeLeaf | undefined)?.steps[0]?.invocation.id, "a.j");
-  assert.match(warnings.join("\n"), /"jx": when_focus works only in a site row bind/);
+  const { compiled, warnings } = compile_keymap(
+    { normal: { j: { id: "a.j" }, jx: { id: "a.jx", when_focus: MAP } } },
+    {},
+    resolve,
+    { engine_labels: {} },
+    { normal: { j: { id: "a.j" } } },
+  );
+  assert.equal(
+    (compiled.modes.normal?.children["j"] as TreeLeaf | undefined)?.steps[0]
+      ?.invocation.id,
+    "a.j",
+  );
+  assert.match(
+    warnings.join("\n"),
+    /"jx": when_focus works only in a site row bind/,
+  );
 });
 
 test("a site row takes when_focus on a run table and on an invocation table, and refuses one that is not text", () => {
   const dir = make_tmp_dir("desertfox-focus-");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "settings.toml"), `[[site_rules]]\nsite = "https://a.test/*"\nbind = { j = { run = "tab.next", when_focus = "#map" }, k = { id = "tab.prev", when_focus = "#map" } }\n`);
-  const bind = (build_config(dir, build_commands_file(registry).commands).settings.site_rules?.[0] as { bind: Record<string, unknown> }).bind;
+  writeFileSync(
+    join(dir, "settings.toml"),
+    `[[site_rules]]\nsite = "https://a.test/*"\nbind = { j = { run = "tab.next", when_focus = "#map" }, k = { id = "tab.prev", when_focus = "#map" } }\n`,
+  );
+  const bind = (
+    build_config(dir, build_commands_file(registry).commands).settings
+      .site_rules?.[0] as { bind: Record<string, unknown> }
+  ).bind;
   assert.deepEqual(bind.j, { id: "tab.next", when_focus: "#map" });
   assert.deepEqual(bind.k, { id: "tab.prev", when_focus: "#map" });
-  assert.equal(SETTING_SPECS.site_rules.check([{ site: "https://a.test/*", bind: { j: { run: "tab.next", when_focus: "#map" } } }]), true);
-  assert.equal(SETTING_SPECS.site_rules.check([{ site: "https://a.test/*", bind: { j: { run: "tab.next", when_focus: 3 } } }]), false);
+  assert.equal(
+    SETTING_SPECS.site_rules.check([
+      {
+        site: "https://a.test/*",
+        bind: { j: { run: "tab.next", when_focus: "#map" } },
+      },
+    ]),
+    true,
+  );
+  assert.equal(
+    SETTING_SPECS.site_rules.check([
+      {
+        site: "https://a.test/*",
+        bind: { j: { run: "tab.next", when_focus: 3 } },
+      },
+    ]),
+    false,
+  );
 });
 
 function with_defaults(settings: Record<string, unknown>) {
-  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
+  const { compiled, warnings } = compile_config({
+    config: { ...empty_config(), settings: settings as never },
+    default_keymap: DEFAULT_KEYMAP,
+    default_site_rows: DEFAULT_SITE_ROWS,
+    get_command: (id) => registry.get(id),
+    enum_sources: {},
+  });
   assert.deepEqual(warnings, []);
   return compiled;
 }
 
 test("the shipped maps rows send arrows to the map behind a guard that falls back to the plain keys", async () => {
   const default_j = (DEFAULT_KEYMAP.normal!["j"] as { id: string }).id;
-  for (const url of [MAPS, "https://google.com/maps/place/Boston", "https://www.google.com/maps"]) {
+  for (const url of [
+    MAPS,
+    "https://google.com/maps/place/Boston",
+    "https://www.google.com/maps",
+  ]) {
     const tree = await page_tree(with_defaults({}), url);
-    for (const [key, arrow] of [["h", "ArrowLeft"], ["j", "ArrowDown"], ["k", "ArrowUp"], ["l", "ArrowRight"]] as const) {
+    for (const [key, arrow] of [
+      ["h", "ArrowLeft"],
+      ["j", "ArrowDown"],
+      ["k", "ArrowUp"],
+      ["l", "ArrowRight"],
+    ] as const) {
       const node = tree.children[key] as TreeLeaf;
-      const { key: sent, key_code, target } = node.steps[0]?.invocation.args ?? {};
-      assert.deepEqual({ sent, key_code, target }, { sent: arrow, key_code: { h: 37, j: 40, k: 38, l: 39 }[key], target: MAP }, `${url} ${key}`);
+      const {
+        key: sent,
+        key_code,
+        target,
+      } = node.steps[0]?.invocation.args ?? {};
+      assert.deepEqual(
+        { sent, key_code, target },
+        {
+          sent: arrow,
+          key_code: { h: 37, j: 40, k: 38, l: 39 }[key],
+          target: MAP,
+        },
+        `${url} ${key}`,
+      );
       assert.equal(node.when_focus, MAP);
       assert.ok(node.otherwise, `${url} ${key} falls back`);
     }
-    assert.equal((tree.children["j"] as TreeLeaf).otherwise?.steps[0]?.invocation.id, default_j);
-    assert.equal((await page_keymap_for(storage_of(with_defaults({})), [url]))!.site_values?.focus_on_load, MAP, `${url} hands the load focus to the map`);
+    assert.equal(
+      (tree.children["j"] as TreeLeaf).otherwise?.steps[0]?.invocation.id,
+      default_j,
+    );
+    assert.equal(
+      (await page_keymap_for(storage_of(with_defaults({})), [url]))!.site_values
+        ?.focus_on_load,
+      MAP,
+      `${url} hands the load focus to the map`,
+    );
   }
-  for (const url of ["https://www.google.de/maps", "https://maps.example.org/maps"]) {
-    const node: TreeNode | undefined = (await page_tree(with_defaults({}), url)).children["j"];
-    assert.equal(node?.kind === "leaf" && node.steps[0]?.invocation.id, default_j, url);
+  for (const url of [
+    "https://www.google.de/maps",
+    "https://maps.example.org/maps",
+  ]) {
+    const node: TreeNode | undefined = (await page_tree(with_defaults({}), url))
+      .children["j"];
+    assert.equal(
+      node?.kind === "leaf" && node.steps[0]?.invocation.id,
+      default_j,
+      url,
+    );
   }
 });
 
 test("default_site_rows_off = maps gives Maps the plain keys and leaves the sheets rows on", async () => {
-  const node = (await page_tree(with_defaults({ default_site_rows_off: ["maps"] }), MAPS)).children["j"] as TreeLeaf;
+  const node = (
+    await page_tree(with_defaults({ default_site_rows_off: ["maps"] }), MAPS)
+  ).children["j"] as TreeLeaf;
   assert.equal(node.when_focus, undefined);
-  assert.equal(node.steps[0]?.invocation.id, (DEFAULT_KEYMAP.normal!["j"] as { id: string }).id);
-  const sheets = (await page_tree(with_defaults({ default_site_rows_off: ["maps"] }), "https://docs.google.com/spreadsheets/d/abc/edit")).children["j"] as TreeLeaf;
+  assert.equal(
+    node.steps[0]?.invocation.id,
+    (DEFAULT_KEYMAP.normal!["j"] as { id: string }).id,
+  );
+  const sheets = (
+    await page_tree(
+      with_defaults({ default_site_rows_off: ["maps"] }),
+      "https://docs.google.com/spreadsheets/d/abc/edit",
+    )
+  ).children["j"] as TreeLeaf;
   assert.equal(sheets.steps[0]?.invocation.id, "page.send_key");
 });
 
@@ -144,20 +331,195 @@ test("the result page rows bind j and k to page.item on their addresses, and def
   const addresses: Record<string, string[]> = {
     google: ["https://www.google.com/search?q=cats"],
     bing: ["https://www.bing.com/search?q=cats"],
-    hackernews: ["https://news.ycombinator.com/", "https://news.ycombinator.com/item?id=1"],
-    wikipedia: ["https://en.wikipedia.org/w/index.php?search=cats", "https://en.wikipedia.org/w/index.php?fulltext=1&search=cats", "https://en.wikipedia.org/w/index.php?title=Special:Search&limit=20&offset=20&profile=default&search=cats", "https://de.wikipedia.org/wiki/Special:Search?search=cats"],
+    hackernews: [
+      "https://news.ycombinator.com/",
+      "https://news.ycombinator.com/item?id=1",
+    ],
+    wikipedia: [
+      "https://en.wikipedia.org/w/index.php?search=cats",
+      "https://en.wikipedia.org/w/index.php?fulltext=1&search=cats",
+      "https://en.wikipedia.org/w/index.php?title=Special:Search&limit=20&offset=20&profile=default&search=cats",
+      "https://de.wikipedia.org/wiki/Special:Search?search=cats",
+    ],
   };
   for (const [name, urls] of Object.entries(addresses)) {
     for (const url of urls) {
       for (const key of ["j", "k"]) {
-        const on = (await page_tree(with_defaults({}), url)).children[key] as TreeLeaf;
+        const on = (await page_tree(with_defaults({}), url)).children[
+          key
+        ] as TreeLeaf;
         assert.equal(on.steps[0]?.invocation.id, "page.item", `${url} ${key}`);
-        const off = (await page_tree(with_defaults({ default_site_rows_off: [name] }), url)).children[key] as TreeLeaf;
-        assert.notEqual(off.steps[0]?.invocation.id, "page.item", `${url} ${key} with ${name} off`);
+        const off = (
+          await page_tree(with_defaults({ default_site_rows_off: [name] }), url)
+        ).children[key] as TreeLeaf;
+        assert.notEqual(
+          off.steps[0]?.invocation.id,
+          "page.item",
+          `${url} ${key} with ${name} off`,
+        );
       }
     }
   }
-  for (const url of ["https://old.reddit.com/", "https://en.wikipedia.org/wiki/Cat", "https://en.wikipedia.org/w/index.php?title=Cat&action=edit"]) {
-    assert.notEqual(((await page_tree(with_defaults({}), url)).children["j"] as TreeLeaf).steps[0]?.invocation.id, "page.item", url);
+  for (const url of [
+    "https://old.reddit.com/",
+    "https://en.wikipedia.org/wiki/Cat",
+    "https://en.wikipedia.org/w/index.php?title=Cat&action=edit",
+  ]) {
+    assert.notEqual(
+      ((await page_tree(with_defaults({}), url)).children["j"] as TreeLeaf)
+        .steps[0]?.invocation.id,
+      "page.item",
+      url,
+    );
   }
+});
+
+const GRID = '[role="listbox"] [role="option"]';
+const page_with = (present: string[]) => ({
+  querySelector: (selector: string) => (present.includes(selector) ? {} : null),
+});
+
+test("a when_present bind runs while the page holds a match, else the leaf it replaced runs, down a chain", () => {
+  const scroll = leaf("scroll.lines");
+  const list_leaf = leaf("page.back", {
+    when_present: "LIST",
+    otherwise: scroll,
+  });
+  const grid_leaf = leaf("page.item", {
+    when_present: GRID,
+    otherwise: list_leaf,
+  });
+  assert.equal(
+    leaf_for_focus(grid_leaf, null, body, page_with([GRID])),
+    grid_leaf,
+  );
+  assert.equal(
+    leaf_for_focus(grid_leaf, null, body, page_with(["LIST"])),
+    list_leaf,
+  );
+  assert.equal(leaf_for_focus(grid_leaf, null, body, page_with([])), scroll);
+  assert.equal(leaf_for_focus(grid_leaf, null, body, undefined), scroll);
+  assert.equal(
+    leaf_for_focus(
+      leaf("page.item", { when_present: "[[", otherwise: scroll }),
+      null,
+      body,
+      {
+        querySelector: () => {
+          throw new SyntaxError("bad");
+        },
+      },
+    ),
+    scroll,
+  );
+});
+
+test("when_present and when_focus must both hold", () => {
+  const otherwise = leaf("scroll.lines");
+  const both = leaf("page.send_key", {
+    when_focus: MAP,
+    when_present: "X",
+    otherwise,
+  });
+  assert.equal(
+    leaf_for_focus(both, element(MAP), body, page_with(["X"])),
+    both,
+  );
+  assert.equal(
+    leaf_for_focus(both, element(MAP), body, page_with([])),
+    otherwise,
+  );
+  assert.equal(
+    leaf_for_focus(both, element("#panel"), body, page_with(["X"])),
+    otherwise,
+  );
+});
+
+test("two rows that bind a key chain when the earlier bind has when_present, and the replaced leaf ends the chain", async () => {
+  const keymap = { normal: { h: { id: "a.h" } } };
+  const site_rules = [
+    {
+      site: "https://a.test/*",
+      bind: { h: { id: "grid.h", when_present: "GRID" } },
+    },
+    {
+      site: "https://a.test/*",
+      bind: { h: { id: "list.h", when_present: "LIST" } },
+    },
+    { site: "https://a.test/*", bind: { h: { id: "never.h" } } },
+  ];
+  const { compiled } = compile_keymap(keymap, { site_rules }, resolve);
+  const h = (await page_tree(compiled, "https://a.test/")).children
+    .h as TreeLeaf;
+  assert.deepEqual(
+    [h.steps[0]!.invocation.id, h.when_present],
+    ["grid.h", "GRID"],
+  );
+  assert.deepEqual(
+    [h.otherwise?.steps[0]?.invocation.id, h.otherwise?.when_present],
+    ["list.h", "LIST"],
+  );
+  assert.equal(h.otherwise?.steps[0]?.invocation.args, undefined);
+  assert.deepEqual(
+    [h.otherwise?.otherwise?.steps[0]?.invocation.id],
+    ["never.h"],
+  );
+  assert.equal(
+    h.otherwise?.otherwise?.otherwise?.steps[0]?.invocation.id,
+    "a.h",
+  );
+});
+
+test("an earlier bind without a guard still decides the key alone", async () => {
+  const { compiled } = compile_keymap(
+    { normal: { h: { id: "a.h" } } },
+    {
+      site_rules: [
+        { site: "https://a.test/*", bind: { h: { id: "first.h" } } },
+        {
+          site: "https://a.test/*",
+          bind: { h: { id: "second.h", when_present: "X" } },
+        },
+      ],
+    },
+    resolve,
+  );
+  const h = (await page_tree(compiled, "https://a.test/")).children
+    .h as TreeLeaf;
+  assert.equal(h.steps[0]!.invocation.id, "first.h");
+  assert.equal(h.otherwise, undefined);
+});
+
+test("a site row takes when_present from the config build and a keymap entry with it is skipped", () => {
+  const dir = make_tmp_dir("desertfox-present-");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "settings.toml"),
+    `[[site_rules]]\nsite = "https://a.test/*"\nbind = { j = { run = "tab.next", when_present = "#list" }, k = { id = "tab.prev", when_present = "#list" } }\n`,
+  );
+  const bind = (
+    build_config(dir, build_commands_file(registry).commands).settings
+      .site_rules?.[0] as { bind: Record<string, unknown> }
+  ).bind;
+  assert.deepEqual(bind.j, { id: "tab.next", when_present: "#list" });
+  assert.deepEqual(bind.k, { id: "tab.prev", when_present: "#list" });
+  assert.equal(
+    SETTING_SPECS.site_rules.check([
+      {
+        site: "https://a.test/*",
+        bind: { j: { run: "tab.next", when_present: 3 } },
+      },
+    ]),
+    false,
+  );
+  const { compiled, warnings } = compile_keymap(
+    { normal: { j: { id: "a.j", when_present: "X" } } },
+    {},
+    resolve,
+  );
+  assert.equal(compiled.modes.normal?.children.j, undefined);
+  assert.match(
+    warnings.join("\n"),
+    /when_present works only in a site row bind/,
+  );
 });

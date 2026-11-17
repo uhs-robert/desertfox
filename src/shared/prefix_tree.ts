@@ -36,6 +36,8 @@ export type TreeLeaf = {
   intent?: string;
   // A site row bind's focus guard (`when_focus` in `invocation.ts`), and the leaf it replaced, which runs when focus is elsewhere. Without `otherwise` a key whose guard fails does nothing.
   when_focus?: string;
+  // The same for a bind that runs only while the page holds a match of this selector (`when_present`).
+  when_present?: string;
   otherwise?: TreeLeaf;
   steps: LeafStep[];
 };

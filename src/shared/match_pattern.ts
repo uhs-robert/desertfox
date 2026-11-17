@@ -95,14 +95,15 @@ export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bi
 export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; keymap?: Record<string, Record<string, Bind>>; modes?: Record<string, SiteModeColumn<Bind>>; values: Record<string, unknown> };
 
 // `rows` are the rows that match the page, in table order.
-export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteColumns<Keys, Bind>[]): ResolvedSiteColumns<Keys, Bind> {
+// `chain` lets a bind that guards itself keep a later row's bind for the same key as its fallback, instead of hiding it.
+export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteColumns<Keys, Bind>[], chain?: (earlier: Bind, later: Bind) => Bind): ResolvedSiteColumns<Keys, Bind> {
   const resolved: ResolvedSiteColumns<Keys, Bind> = { values: {} };
   for (const row of rows) {
     if (resolved.off === undefined && row.off !== undefined) resolved.off = row.off;
     if (resolved.keys === undefined && row.keys !== undefined) resolved.keys = row.keys;
     for (const [key, binding] of Object.entries(row.bind ?? {})) {
       resolved.bind ??= {};
-      if (!Object.hasOwn(resolved.bind, key)) resolved.bind[key] = binding;
+      resolved.bind[key] = Object.hasOwn(resolved.bind, key) ? (chain?.(resolved.bind[key] as Bind, binding) ?? resolved.bind[key]) as Bind : binding;
     }
     for (const [mode, binds] of Object.entries(row.keymap ?? {})) {
       for (const [key, binding] of Object.entries(binds)) {
