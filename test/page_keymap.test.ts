@@ -449,9 +449,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 13);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 16);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -583,5 +583,36 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 10);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 13);
+});
+
+const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
+  const leaf = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+  const step = leaf?.kind === "leaf" ? leaf.steps[0] : undefined;
+  return step?.invocation.id === "page.item" ? (step.invocation.args as { selector: string; direction: string }) : undefined;
+};
+
+test("the image row gives hjkl to the tiles on the DuckDuckGo image vertical and wins over the web row there", async () => {
+  const compiled = with_defaults({});
+  for (const url of ["https://duckduckgo.com/?q=cats&iax=images&ia=images", "https://duckduckgo.com/?iax=images&ia=images&q=cats"]) {
+    const rows = await Promise.all(["h", "j", "k", "l"].map((key) => item_args_at(compiled, url, key)));
+    assert.deepEqual(rows.map((args) => args?.direction), ["left", "down", "up", "right"], url);
+    assert.ok(rows.every((args) => args?.selector === "figure"), `the tile selector on ${url}`);
+  }
+  // The web results keep their articles and no h or l.
+  assert.match((await item_args_at(compiled, "https://duckduckgo.com/?q=cats&ia=web", "j"))!.selector, /data-testid/);
+  assert.equal(await item_args_at(compiled, "https://duckduckgo.com/?q=cats", "l"), undefined);
+  // The Google image tab wins over the web row at either end of the udm value, and udm=28 or a web search keeps the web row.
+  for (const url of ["https://www.google.com/search?q=cats&udm=2", "https://www.google.com/search?udm=2&q=cats"]) {
+    const rows = await Promise.all(["h", "j", "k", "l"].map((key) => item_args_at(compiled, url, key)));
+    assert.deepEqual(rows.map((args) => args?.direction), ["left", "down", "up", "right"], url);
+    assert.ok(rows.every((args) => args?.selector === 'div[data-attrid="images universal"]'), url);
+  }
+  for (const url of ["https://www.google.com/search?q=cats", "https://www.google.com/search?q=cats&udm=28"]) {
+    assert.match((await item_args_at(compiled, url, "j"))!.selector, /MjjYud/, url);
+    assert.equal(await item_args_at(compiled, url, "h"), undefined, url);
+  }
+  assert.match((await item_args_at(with_defaults({ default_site_rows_off: ["google_images"] }), "https://www.google.com/search?q=cats&udm=2", "j"))!.selector, /MjjYud/);
+  const off = with_defaults({ default_site_rows_off: ["ddg_images"] });
+  assert.match((await item_args_at(off, "https://duckduckgo.com/?q=cats&iax=images", "j"))!.selector, /data-testid/);
 });

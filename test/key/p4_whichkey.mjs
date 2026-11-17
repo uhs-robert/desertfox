@@ -3,8 +3,19 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["whichkey", "help"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, hint_label_count }) {
+export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, wait_cmdline, hint_label_count }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
+
+  // The status and the compiled keymap are written in one call, but an open page installs the new keymap later: it asks after a tree_updated message, and nothing in the page shows when that reply came. A fresh page asks for the keymap as it starts, and its tree_read event is the proof that it holds the stored one, so each change ends in a new tab on the "wk" page id.
+  const effective_settings = () => evaluate_in_background(rdp, extension_id, `browser.storage.local.get("desertfox_config_status").then((got) => got.desertfox_config_status?.settings ?? {})`);
+  const change_temp = async (line, landed) => {
+    await run_line(line);
+    await poll_until(`"${line}" to land`, async () => landed(await effective_settings()), { timeout_ms: 8000 });
+    await wait_cmdline((state) => !state.open, "the command line to close");
+    await open_page("page", "wk", { new_tab: true });
+  };
+  // A panel delay no loaded machine overruns between the keys of one typed sequence. The cases that prove no panel wait it out after the sequence finished.
+  const LONG_DELAY_MS = 1000;
 
   await open_page("page", "wk", { new_tab: true });
 
@@ -23,26 +34,30 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
 
   await run_case("gg typed at once shows no panel", async () => {
     // The page scrolls first, so gg has a scroll to report: that proves the sequence finished. The timer then runs out with no panel.
-    await scroll_delta_by_press("wk", ["j"]);
-    const mark = events.length;
-    await press_keys("gg");
-    await wait_event(mark, scroll_of("wk"), "gg to scroll to the top");
-    await sleep(which_key_delay_ms + 200);
-    expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a finished sequence");
+    // The delay is long so that a slow gap between the two g keys on a loaded machine cannot run the timer out.
+    await change_temp(`:set -t which_key_delay_ms ${LONG_DELAY_MS}`, (settings) => settings.which_key_delay_ms === LONG_DELAY_MS);
+    try {
+      await scroll_delta_by_press("wk", ["j"]);
+      const mark = events.length;
+      await press_keys("gg");
+      await wait_event(mark, scroll_of("wk"), "gg to scroll to the top");
+      await sleep(LONG_DELAY_MS + 300);
+      expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a finished sequence");
+    } finally {
+      await change_temp(":unset -t which_key_delay_ms", (settings) => settings.which_key_delay_ms === which_key_delay_ms);
+    }
   });
 
   await run_case("a prefix on the skip list waits past the delay and shows no panel", async () => {
-    await run_line(":set -t which_key_skip g");
+    await change_temp(":set -t which_key_skip g", (settings) => String(settings.which_key_skip ?? "").includes("g"));
     try {
-      await sleep(500);
       const mark = events.length;
       await press_keys("g");
       await sleep(which_key_delay_ms + 400);
       expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a skipped prefix");
       await press_keys("-k", "Escape");
     } finally {
-      await run_line(":unset -t which_key_skip");
-      await sleep(500);
+      await change_temp(":unset -t which_key_skip", (settings) => !String(settings.which_key_skip ?? "").includes("g"));
     }
   });
 

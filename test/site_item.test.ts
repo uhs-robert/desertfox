@@ -31,6 +31,49 @@ test("left and right stay on the row", () => {
   assert.equal(step_from(grid, 3, "left"), undefined);
 });
 
+// Seven masonry columns of uneven height: down from the top of column 1 must stay in column 1 even when a tile in column 2 starts nearer.
+test("down and up in a masonry grid stay in the column", () => {
+  const masonry = [box(0, 0, 100, 200), box(110, 0, 100, 90), box(0, 210, 100, 100), box(110, 100, 100, 90), box(110, 200, 100, 150)];
+  assert.equal(step_from(masonry, 0, "down"), 2);
+  assert.equal(step_from(masonry, 1, "down"), 3);
+  assert.equal(step_from(masonry, 4, "up"), 3);
+});
+
+test("down prefers an item that overlaps across, even when one in the next column is nearer along", () => {
+  const columns = [box(0, 0, 100, 200), box(110, 100, 100, 60), box(0, 210, 100, 200)];
+  assert.equal(step_from(columns, 0, "down"), 2);
+  // With nothing overlapping, the nearest row still decides first and the smaller gap across wins in it.
+  const apart = [box(0, 0, 100, 40), box(300, 60, 100, 40), box(120, 64, 100, 40)];
+  assert.equal(step_from(apart, 0, "down"), 2);
+});
+
+test("down takes the tile directly below, not a ragged neighbour that overlaps by a few pixels", () => {
+  const ragged = [box(0, 0, 100, 80), box(95, 100, 200, 80), box(0, 106, 100, 80)];
+  assert.equal(step_from(ragged, 0, "down"), 2);
+});
+
+test("candidates within half the item length along share a row, and the larger overlap across wins", () => {
+  // Both start about a line below, 1 px apart along. The second overlaps more across.
+  const near = [box(0, 0, 100, 40), box(60, 60, 100, 40), box(0, 61, 100, 40)];
+  assert.equal(step_from(near, 0, "down"), 2);
+});
+
+test("left and right reach a column whose tiles each cover less than half the item's height", () => {
+  const split = [box(200, 300, 100, 100), box(100, 140, 100, 200), box(100, 350, 100, 200), box(0, 280, 100, 140)];
+  assert.equal(step_from(split, 0, "left"), 2);
+  assert.equal(step_from(split, 2, "left"), 3);
+});
+
+test("up from a tall item takes the short item just above, not the one above that", () => {
+  const stack = [box(0, 0, 100, 40), box(0, 60, 100, 40), box(0, 120, 100, 400)];
+  assert.equal(step_from(stack, 2, "up"), 1);
+});
+
+test("left from a wide item takes its neighbour, not the one beyond", () => {
+  const strip = [box(0, 0, 40, 100), box(60, 0, 40, 100), box(120, 0, 400, 100)];
+  assert.equal(step_from(strip, 2, "left"), 1);
+});
+
 test("a list of titles with unequal widths still goes to the next one down", () => {
   const titles = [box(0, 0, 300, 20), box(0, 50, 100, 20), box(0, 100, 250, 20)];
   assert.equal(step_from(titles, 0, "down"), 1);
@@ -202,4 +245,16 @@ test("the shipped result rows bind j and k to page.item", () => {
     }
   }
   assert.ok(!DEFAULT_SITE_ROWS.some((entry) => (entry.name as string) === "oldreddit"));
+});
+
+test("the shipped image row binds hjkl to page.item", () => {
+  for (const name of ["ddg_images", "google_images"]) {
+    const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
+    assert.ok(rows.length > 0, name);
+    for (const { row } of rows) {
+      const directions = ["h", "j", "k", "l"].map((key) => (row.bind?.[key] as { id: string; args: { direction: string } }).args.direction);
+      assert.deepEqual(directions, ["left", "down", "up", "right"], name);
+      assert.match(JSON.stringify(row.bind?.h), /"id":"page.item"/, name);
+    }
+  }
 });
