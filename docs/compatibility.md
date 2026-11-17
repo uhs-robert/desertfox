@@ -30,6 +30,8 @@ Site extras that the site's own keys already cover, such as YouTube play and vol
 
 The rig cannot log in, so sites behind a login are checked by hand.
 
+The site integration cells were updated on 2026-11-17 to match the rows that ship today. The result cells and their dates are unchanged.
+
 ## Sites
 
 | Site | DesertFox | Site integration | Vimium | Vimium C | Tridactyl | Notes |
@@ -50,11 +52,11 @@ The rig cannot log in, so sites behind a login are checked by hand.
 | Local page with a frame from another site | ✅ R | No: generic code, see [Frames from other sites](#frames-from-other-sites). A: `test/key/p6_frame_hybrid.mjs` | ⚠️ R | ✅ R | ❌ R | The page has a frame on another origin that takes the focus on load. DesertFox rig run 2026-11-14 on main `97b99348`, the rivals on the pinned versions above. DesertFox: `j` scrolls the page from load, `f` labels the frame's button, a hint into it enters frame mode, and `Escape` then `gF` leaves it. Vimium: `j` does nothing until `gF` returns focus to the page, and the other steps pass. Vimium C: every step passes. Tridactyl: `j` does nothing, no hint reaches the frame, and no default key leaves it. |
 | Google Search | ✅ R | Yes: row `google` in `src/background/default_site_rows.ts` binds `j` and `k` to `page.item` on result pages. A: `test/key/p44_item_rows.mjs` | ✅ R | ✅ R | ✅ R | |
 | Amazon | ✅ R H | No | ✅ R H | ✅ R H | ✅ H | The rig now gets past Amazon's interstitial page. Earlier runs often stopped there, so the marks came from the hand check alone. The rig scored Tridactyl's link check blocked in all 3 passes. Later runs that record the click showed Tridactyl open a different link than the one it labeled. The hand check passed, so the cell keeps the hand check. |
-| Stack Overflow | ✅ R | No | ✅ R | ✅ R | ✅ R | |
+| Stack Overflow | ✅ R | Yes: row `stackoverflow` in `src/background/default_site_rows.ts` binds `j` and `k` to `page.item` on question lists. A: `test/key/p44_item_rows.mjs` | ✅ R | ✅ R | ✅ R | |
 | MDN | ✅ R | No | ✅ R | ✅ R | ✅ R | |
 | Firefox PDF viewer | n/a | No | n/a | n/a | n/a | Firefox limit: it runs no extension content script in its PDF viewer, so hints do not work for any tool. Scroll works through the viewer's own `j`. Sources: [`design.md`](design.md) and "Keys in PDF files" in [`firefox-behavior.md`](firefox-behavior.md). |
 | YouTube video embedded in another site | ✅ R | Yes: the YouTube media code | ✅ R | ✅ R | ✅ R | The rig loads the live player into a local fixture page. Hint and activation checks target the link beside the player. The rig found no hints for Tridactyl there, so its hints and activation are not scored. |
-| Google Drive (login) | ✅ H | No | ❌ H | ✅ H | ✅ H | Vimium: cannot select items to act on. Source check: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
+| Google Drive (login) | ✅ H | Yes: row `drive` in `src/background/default_site_rows.ts` moves through files with Drive's own arrow keys and binds `gg` and `G` to the first and last file. A: `test/key/p45_drive_rows.mjs` | ❌ H | ✅ H | ✅ H | Vimium: cannot select items to act on. Source check: Vimium has hint rules for Drive and the Docs file list, and no key rules. |
 | Gmail (login) | ✅ H | No | ❌ H | ❌ H | ✅ H | Vimium and Vimium C: no key works in Gmail. Vimium excludes `mail.google.com` by default ([`lib/settings.js`, v2.4.2](https://github.com/philc/vimium/blob/v2.4.2/lib/settings.js#L42)). Its documented fix is a pass-keys rule in its settings, which this table does not count because it scores default settings ([Disabling Vimium](https://github.com/philc/vimium/wiki/Disabling-Vimium)). |
 | Discord (login) | ✅ H | No | ⚠️ H | ✅ H | ✅ H | Vimium: hints miss the channel list, so choosing a channel needs a click. |
 | ChatGPT (login) | ✅ H | No | ❌ H | ❌ H | ✅ H | Only DesertFox has a built-in command to focus a scrollable area, and it shows only the two scrollable areas. Vimium: cannot scroll the chat and cannot focus the side panel. Vimium C: scrolls the chat, and the side panel has no key path. Tridactyl: its focus hint (`;;`) shows about 900 labels, the scroll areas are reached only through a label, a pick even inside the right area can miss, and a miss does not focus. |
@@ -70,7 +72,7 @@ Hints reach into the parked frame, so `f` labels the page and that frame. A clic
 
 These are code reads, not runs. The full text is in "Table rows from source" in [`tools/measure/rivals/README.md`](../tools/measure/rivals/README.md).
 
-- Vimium has hint rules for Google Drive and the Docs file list and no per-site key rules. DesertFox ships key rows for Google Sheets, Google Maps, an arrow-key mode and the DuckDuckGo, Kagi and Brave result pages.
+- Vimium has hint rules for Google Drive and the Docs file list and no per-site key rules. DesertFox ships key rows for Google Sheets, Google Maps, Google Drive, an arrow-key mode and result pages and lists on Google, DuckDuckGo, Bing, Kagi, Brave, Wikipedia, Hacker News, Lobsters, Stack Overflow and more. [`site_rows.md`](site_rows.md) lists them all.
 - Vimium C has no per-site rule table.
 - Tridactyl treats `role=application` elements, which Google Sheets uses, as handling their own keys and stops capturing there. The rule is generic, with no `hjkl` and no clipboard keys.
 - Tridactyl 1.25.1's manifest sets no `all_frames`, so its script loads in the top page only and no key works while focus is in a frame. Its hints skip frames from other sites: `getAllDocumentFrames` and `getElemsBySelector` in [`src/lib/dom.ts`](https://github.com/tridactyl/tridactyl/blob/1.25.1/src/lib/dom.ts) read each iframe's `contentDocument` and drop the frame when that read fails, and `:hint -c` uses the same function.

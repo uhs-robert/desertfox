@@ -1,12 +1,14 @@
-// Regenerates the block between the markers of docs/keymap.md from the default keymap.
+// Regenerates the block between the markers of docs/keymap.md from the default keymap, and of docs/site_rows.md from the default site rows.
 // Usage: node tools/gen-keymap-docs.ts --write | --check [--doc path]
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { render } from "./keymap_docs/render.ts";
+import { render_site_rows } from "./keymap_docs/render_site_rows.ts";
 import { splice } from "./keymap_docs/splice.ts";
 
 const root = new URL("../", import.meta.url);
@@ -20,15 +22,24 @@ if (write === check) {
   process.exit(2);
 }
 
-const current = readFileSync(doc_path, "utf8");
-const next = splice(current, render(DEFAULT_KEYMAP, registry));
+const docs = [
+  { path: doc_path, block: render(DEFAULT_KEYMAP, registry), what: "keymap tables" },
+  // --doc points at a copy of keymap.md, so a run with it leaves the site rows doc alone.
+  ...(doc_flag >= 0 ? [] : [{ path: fileURLToPath(new URL("docs/site_rows.md", root)), block: render_site_rows(DEFAULT_SITE_ROWS, DEFAULT_KEYMAP, registry), what: "site row tables" }]),
+];
 
-if (next === current) process.exit(0);
-if (write) {
-  writeFileSync(doc_path, next);
-} else {
+let stale = false;
+for (const { path, block, what } of docs) {
+  const current = readFileSync(path, "utf8");
+  const next = splice(current, block);
+  if (next === current) continue;
+  if (write) {
+    writeFileSync(path, next);
+    continue;
+  }
   const current_lines = current.split("\n");
   const first_diff = next.split("\n").findIndex((line, at) => line !== current_lines[at]);
-  console.error(`the generated keymap tables are stale (first difference at line ${first_diff + 1}); run \`just docs-gen\``);
-  process.exit(1);
+  console.error(`the generated ${what} are stale (first difference at line ${first_diff + 1}); run \`just docs-gen\``);
+  stale = true;
 }
+if (stale) process.exit(1);

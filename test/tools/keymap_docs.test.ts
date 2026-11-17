@@ -3,10 +3,14 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
+import { SETTING_DOCS } from "../../src/shared/settings_docs.ts";
+import { DEFAULT_SITE_ROW_NAMES } from "../../src/shared/table_constants.ts";
 import type { CommandDef } from "../../src/shared/command.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { render } from "../../tools/keymap_docs/render.ts";
+import { render_site_rows } from "../../tools/keymap_docs/render_site_rows.ts";
 import { BEGIN_MARKER, cell, code, END_MARKER, splice } from "../../tools/keymap_docs/splice.ts";
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -61,4 +65,17 @@ test("render fails when the keymap has a mode it has no place for", () => {
 test("docs/keymap.md is current", () => {
   const doc = read("docs/keymap.md");
   assert.equal(splice(doc, render(DEFAULT_KEYMAP, registry)), doc, "run `just docs-gen`");
+});
+
+test("docs/site_rows.md is current", () => {
+  const doc = read("docs/site_rows.md");
+  assert.equal(splice(doc, render_site_rows(DEFAULT_SITE_ROWS, DEFAULT_KEYMAP, registry)), doc, "run `just docs-gen`");
+});
+
+test("docs/site_rows.md lists every shipped row name and the setting text names it too", () => {
+  const doc = read("docs/site_rows.md");
+  for (const name of DEFAULT_SITE_ROW_NAMES) {
+    assert.ok(doc.includes(`### \`${name}\``), `site_rows.md lacks ${name}`);
+    assert.ok(SETTING_DOCS.default_site_rows_off.includes(`\`${name}\``), `default_site_rows_off text lacks ${name}`);
+  }
 });
