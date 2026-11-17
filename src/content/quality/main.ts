@@ -16,9 +16,9 @@ const quality_window = window as unknown as QualityWindow;
 function report(): QualityReport {
   try {
     const driver = probe();
-    return { type: "quality_report", player: Boolean(driver), ready: (driver?.levels().length ?? 0) > 0, has_video: has_media() };
+    return { type: "quality_report", player: Boolean(driver), ready: (driver?.levels().length ?? 0) > 0, has_video: has_media(), url: location.href };
   } catch {
-    return { type: "quality_report", player: false, ready: false, has_video: false };
+    return { type: "quality_report", player: false, ready: false, has_video: false, url: location.href };
   }
 }
 

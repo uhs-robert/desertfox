@@ -62,6 +62,8 @@ export type ListKeys = {
   type: "list_keys";
   mode: Mode;
   prefix: string[];
+  // The page's address now (`location.href`). `sender.url` stays the address the document loaded at, so rows match against this.
+  url: string;
 };
 
 // Asks what `.` would repeat, for the which-key panel footer. The answer is the step as text, or undefined when there is none, the setting is off or the tab is private.
@@ -279,7 +281,8 @@ export type RegisterYank = { type: "register_yank"; name: string; text: string }
 export type RegisterRequest = RegisterRead | RegisterWrite | RegisterYank;
 
 // From the `editor` bundle: the focused field's text to edit outside the browser. `token` names this page's pending edit, `ext` is the command's own extension (else the background resolves the site's `editor_ext`). The answer is `EditorAnswer`.
-export type EditorOpen = { type: "editor_open"; token: string; text: string; ext?: string; insert: boolean };
+// `url` is the page address now, as in `ListKeys`.
+export type EditorOpen = { type: "editor_open"; token: string; text: string; ext?: string; insert: boolean; url?: string };
 export type EditorAnswer = { ok: true } | { ok: false; message: string };
 
 // From the content script when a leaf of content commands ends: the steps and how they ended. The background checks it like any page message,
@@ -304,6 +307,8 @@ export type ReadKeymap = {
   type: "read_keymap";
   // Set on a frame's first ask only, when it starts in normal mode with no editable focus: only such a frame may join a hold. A re-ask, or a frame in another mode, must not be written into one.
   join: boolean;
+  // The page address now, as in `ListKeys`. A re-ask after an in-place address change (pushState, history traversal, a hash change) matches the rows of the new address.
+  url: string;
 };
 
 // Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
@@ -342,6 +347,8 @@ export type InspectPick = {
 // From the `hints` bundle when `hint.run` starts. The answer holds the frame's `hint_add` and `hint_remove`, each only when it is not empty, resolved against the frame's own address.
 export type ReadHintSelectors = {
   type: "read_hint_selectors";
+  // The page address now, as in `ListKeys`.
+  url: string;
 };
 
 // From the page and hints bundles before a copy of a web address. The answer is the `strip_tracking_params` names to drop, empty when the site's `strip_tracking` is off, resolved against `address`, the address of the frame holding what is copied.
