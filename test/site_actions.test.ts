@@ -6,7 +6,10 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { SEND_KEY_MAX_TIMES } from "../src/shared/send_key_limit.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
-import { KEY_PAIR_GAP_MS, queued_in_page, send_key, send_key_queued } from "../src/content/site_actions/send_key.ts";
+import { KEY_PAIR_GAP_MS, pause_after_press, queued_in_page, send_key, send_key_queued } from "../src/content/site_actions/send_key.ts";
+import { UNTIL_STABLE_MAX_PRESSES, UNTIL_STABLE_RETRIES } from "../src/shared/send_key_limit.ts";
+
+const no_keys = () => 0;
 
 type Sent = { type: string; init: KeyboardEventInit };
 
@@ -109,9 +112,9 @@ test("queued sends keep the gap between pairs and the order of calls, a count an
     const page = fake_page({ "#e": "editor" }, null);
     const sent_at: { key: string | undefined; time: number }[] = [];
     const make_event = (type: string, init: KeyboardEventInit) => (type === "keydown" && sent_at.push({ key: init.key, time: Date.now() }), page.make_event(type, init));
-    const call = (key: string) => send_key_queued(page.doc, { key, key_code: 1, target: "#e" }, make_event);
+    const call = (key: string) => send_key_queued(page.doc, { key, key_code: 1, target: "#e" }, make_event, no_keys, pause_after_press);
     // One call with times 3 and a second call that follows at once.
-    const done = Promise.all([send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e", times: 3 }, make_event), call("b")]);
+    const done = Promise.all([send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e", times: 3 }, make_event, no_keys, pause_after_press), call("b")]);
     for (let step = 0; step < 20; step++) {
       mock.timers.tick(KEY_PAIR_GAP_MS / 2);
       await new Promise((resolve) => setImmediate(resolve));
@@ -127,8 +130,8 @@ test("queued sends keep the gap between pairs and the order of calls, a count an
 
 test("a refused queued call rejects alone and the next call still sends", async () => {
   const page = fake_page({}, "focused");
-  await assert.rejects(send_key_queued(page.doc, { key: "a", key_code: 1, target: "#gone" }, page.make_event), RuntimeRefusal);
-  await send_key_queued(page.doc, { key: "a", key_code: 1 }, page.make_event);
+  await assert.rejects(send_key_queued(page.doc, { key: "a", key_code: 1, target: "#gone" }, page.make_event, no_keys, pause_after_press), RuntimeRefusal);
+  await send_key_queued(page.doc, { key: "a", key_code: 1 }, page.make_event, no_keys, pause_after_press);
   assert.equal(page.log.length, 2);
 });
 
@@ -136,7 +139,7 @@ test("a backward clock jump does not stall the queue", async () => {
   mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000_000 });
   try {
     const page = fake_page({ "#e": "editor" }, null);
-    const call = () => send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e" }, page.make_event);
+    const call = () => send_key_queued(page.doc, { key: "a", key_code: 1, target: "#e" }, page.make_event, no_keys, pause_after_press);
     // The queue state is shared with earlier tests, so every call may wait one gap.
     const finish = async (pending: Promise<void>) => {
       await new Promise((resolve) => setImmediate(resolve));
@@ -165,7 +168,7 @@ test("a count over the limit is refused by the handler after args_for_count fill
   assert.ok(checked.ok);
   const page = fake_page({}, "focused");
   const [args] = args_for_count(checked.args as never, 9999, { param: "times" });
-  await assert.rejects(send_key_queued(page.doc, args as never, page.make_event), /over the limit of 99 for page.send_key/);
+  await assert.rejects(send_key_queued(page.doc, args as never, page.make_event, no_keys, pause_after_press), /over the limit of 99 for page.send_key/);
   assert.equal(page.log.length, 0);
   assert.equal(SEND_KEY_MAX_TIMES, 99);
 });
@@ -246,7 +249,7 @@ test("a clipboard action queued behind a count of key pairs runs after the last 
     const clip = clipboard_page(true);
     const execute = clip.doc.execCommand;
     clip.doc.execCommand = (command: string) => (order.push(command), execute(command));
-    const done = Promise.all([send_key_queued(page.doc, { key: "l", key_code: 39, target: "#e", times: 2 }, make_event), queued_in_page(() => clipboard_action(clip.doc, { action: "cut", target: "#e" }, async () => undefined))]);
+    const done = Promise.all([send_key_queued(page.doc, { key: "l", key_code: 39, target: "#e", times: 2 }, make_event, no_keys, pause_after_press), queued_in_page(() => clipboard_action(clip.doc, { action: "cut", target: "#e" }, async () => undefined))]);
     for (let step = 0; step < 20; step++) {
       mock.timers.tick(KEY_PAIR_GAP_MS / 2);
       await new Promise((resolve) => setImmediate(resolve));
@@ -256,4 +259,52 @@ test("a clipboard action queued behind a count of key pairs runs after the last 
   } finally {
     mock.timers.reset();
   }
+});
+
+// A list of `length` items that a page key handler walks: ArrowDown and ArrowUp move the focus one item, and stop at the ends. `on_press` runs after each press, as a user would type during the run.
+function walked_list(length: number, start: number, on_press: (presses: number) => void = () => {}) {
+  let at = start;
+  let presses = 0;
+  const item = (index: number) => ({ getAttribute: (name: string) => (name === "data-id" ? `x${index}` : null), dispatchEvent: (event: Event) => {
+    const { type, init } = event as unknown as Sent;
+    if (type === "keydown") {
+      presses++;
+      at = Math.max(0, Math.min(length - 1, at + (init.key === "ArrowDown" ? 1 : -1)));
+      on_press(presses);
+    }
+    return true;
+  } });
+  // A fresh element per read, as a page that draws only the items near the view replaces them.
+  const doc = { querySelector: () => null, get activeElement() { return item(at) as unknown as EventTarget; } };
+  const make_event = (type: string, init: KeyboardEventInit) => ({ type, init }) as unknown as Event;
+  return { doc, make_event, at: () => at, presses: () => presses };
+}
+
+test("until_stable presses until the focused item stops changing, by its data-id, and then tries a few more presses", async () => {
+  const down = walked_list(40, 0);
+  await send_key_queued(down.doc, { key: "ArrowDown", key_code: 40, until_stable: true }, down.make_event, no_keys, async () => {});
+  assert.deepEqual([down.at(), down.presses()], [39, 39 + UNTIL_STABLE_RETRIES + 1]);
+  const up = walked_list(40, 25);
+  await send_key_queued(up.doc, { key: "ArrowUp", key_code: 38, until_stable: true, times: 7 }, up.make_event, no_keys, async () => {});
+  // A count does not limit the run.
+  assert.equal(up.at(), 0);
+});
+
+test("until_stable stops at the press cap on a list that never ends", async () => {
+  const endless = walked_list(UNTIL_STABLE_MAX_PRESSES * 2, 0);
+  await send_key_queued(endless.doc, { key: "ArrowDown", key_code: 40, until_stable: true }, endless.make_event, no_keys, async () => {});
+  assert.equal(endless.presses(), UNTIL_STABLE_MAX_PRESSES);
+});
+
+test("until_stable stops at the next key the user presses", async () => {
+  let user_keys = 0;
+  const list = walked_list(100, 0, (presses) => void (presses === 5 && user_keys++));
+  await send_key_queued(list.doc, { key: "ArrowDown", key_code: 40, until_stable: true }, list.make_event, () => user_keys, async () => {});
+  assert.equal(list.presses(), 5);
+});
+
+test("until_stable is a flag of page.send_key that the validator checks", () => {
+  const command = registry.get("page.send_key")!;
+  assert.equal(check_args(command, { key: "ArrowDown", key_code: 40, until_stable: true }).ok, true);
+  assert.equal(check_args(command, { key: "ArrowDown", key_code: 40, until_stable: "yes" }).ok, false);
 });

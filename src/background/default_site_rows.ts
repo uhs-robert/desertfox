@@ -105,19 +105,20 @@ const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-t
 const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
-// Drive scrolls its file list in an inner panel and draws only the rows near the view, so a move through `page.item` stops at the last drawn row and gg and G stop short of the ends. Drive's own arrow, Home and End keys move its selection, scroll the panel and draw more rows, so each key focuses the current file with `page.item` and then sends Drive's key to it. `current` takes the focus into the files from the view toggle or from nowhere, so the key never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Drive scrolls its file list in an inner panel and draws only the rows near the view, so a move through `page.item` stops at the last drawn row and gg and G stop short of the ends. Drive's own arrow keys move its selection, scroll the panel and draw more rows, so each key focuses the current file with `page.item` and then sends Drive's key to it. `current` takes the focus into the files from the view toggle or from nowhere, so the key never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
 const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
 // Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll. The count goes to every step: `current` ignores it and the key goes out that many times.
-const drive_key = (guard: string, key: string, key_code: number): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard }, { id: "page.send_key", args: { key, key_code } }];
+const drive_key = (guard: string, key: string, key_code: number, until_stable = false): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard }, { id: "page.send_key", args: { key, key_code, ...(until_stable ? { until_stable } : {}) } }];
 // A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
 const DRIVE_BIND: BindingTable = {
   j: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40),
   k: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38),
-  gg: drive_key(DRIVE_ANY_ITEM, "Home", 36),
-  G: drive_key(DRIVE_ANY_ITEM, "End", 35),
+  // Drive ignores a sent Home and End, so gg and G press the arrow until the selection stops at the end.
+  gg: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38, true),
+  G: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40, true),
   h: drive_key(DRIVE_GRID_ITEM, "ArrowLeft", 37),
   l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39),
 };

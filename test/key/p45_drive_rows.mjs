@@ -1,4 +1,4 @@
-// The shipped drive row on a test address with the site pattern swapped, against a stand-in for Drive's file views as read on a live page. Both views are a role=grid: the grid view puts every file in one role=row as a role=gridcell, the list view is a table with one role=row per file. Each file has a data-id, and so do parts inside it. As on Drive, the files scroll in an inner panel that draws only the files near the view, and a key handler on the page moves the selection on the arrow, Home and End keys sent to a file, scrolls the panel and draws the files it needs. A view toggle keeps the focus after it flips the view.
+// The shipped drive row on a test address with the site pattern swapped, against a stand-in for Drive's file views as read on a live page. Both views are a role=grid: the grid view puts every file in one role=row as a role=gridcell, the list view is a table with one role=row per file. Each file has a data-id, and so do parts inside it. As on Drive, the files scroll in an inner panel that draws only the files near the view, and a key handler on the page moves the selection on the arrow keys sent to a file, scrolls the panel and draws the files it needs. Like Drive, it ignores Home and End. A view toggle keeps the focus after it flips the view.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
@@ -8,7 +8,7 @@ export const areas = ["keys", "config", "bundles"];
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 const FILES = 60;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   await setup("load the shipped drive row on the drive_ test pages", async () => {
     const dir = config_copy();
     const lines = [];
@@ -21,8 +21,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. The page is wide, so the document scrolls sideways.
-  const open_drive = async (id, view) => {
+  // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. A long list (`files`) gives a G time to be cancelled. The page is wide, so the document scrolls sideways.
+  const open_drive = async (id, view, files = FILES) => {
     await open_page("controls", `drive_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const root = document.createElement("div");
@@ -37,14 +37,14 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       const file = (index) => view === "grid"
         ? '<div role="gridcell" style="display:inline-block;width:100px;height:60px;margin:0 10px 10px 0;vertical-align:top" data-id="x' + index + '" id="g' + index + '" tabindex="' + (index === Math.max(selected, 0) ? 0 : -1) + '">' + thumb(index) + 'file ' + index + '</div>'
         : '<tr role="row" style="height:30px" data-id="x' + index + '" id="f' + index + '" tabindex="' + (index === Math.max(selected, 0) ? 0 : -1) + '"><td>' + thumb(index) + 'file ' + index + '</td></tr>';
-      const lines = () => Math.ceil(${FILES} / per_line());
+      const lines = () => Math.ceil(${files} / per_line());
       root.innerHTML = '<div role="radiogroup"><button role="radio" id="toggle">toggle view</button></div><div id="panel" style="height:300px;width:360px;overflow-y:auto"></div>';
       const panel = document.getElementById("panel");
       const draw = () => {
         const first_line = Math.max(0, Math.floor(panel.scrollTop / line_px()) - 2);
         const last_line = Math.min(lines(), Math.ceil((panel.scrollTop + 300) / line_px()) + 2);
         const files = [];
-        for (let index = first_line * per_line(); index < Math.min(${FILES}, last_line * per_line()); index++) files.push(file(index));
+        for (let index = first_line * per_line(); index < Math.min(${files}, last_line * per_line()); index++) files.push(file(index));
         const above = first_line * line_px();
         const below = (lines() - last_line) * line_px();
         panel.innerHTML = view === "grid"
@@ -54,7 +54,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       };
       panel.addEventListener("scroll", draw);
       const select = (index) => {
-        selected = Math.max(0, Math.min(${FILES} - 1, index));
+        selected = Math.max(0, Math.min(${files} - 1, index));
+        panel.dataset.selected = String(selected);
         const top = Math.floor(selected / per_line()) * line_px();
         if (top < panel.scrollTop) panel.scrollTop = top;
         else if (top + line_px() > panel.scrollTop + 300) panel.scrollTop = top + line_px() - 300;
@@ -64,15 +65,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       const toggle = document.getElementById("toggle");
       toggle.onclick = flip;
       toggle.onkeydown = (event) => { if (event.key === "Enter") flip(); };
-      // Drive reads the keys on the page and acts on the file the event comes from.
+      // Drive reads the keys on the page and acts on the file the event comes from, or on its selection when the focus left the files.
       const steps = { ArrowDown: () => per_line(), ArrowUp: () => -per_line(), ArrowLeft: () => -1, ArrowRight: () => 1 };
       document.addEventListener("keydown", (event) => {
         const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
-        if (!target) return;
-        const index = Number(target.id.slice(1));
-        if (event.key === "Enter") location.hash = "opened-" + target.id;
-        else if (event.key === "Home") select(0);
-        else if (event.key === "End") select(${FILES} - 1);
+        if (!target && selected < 0) return;
+        const index = target ? Number(target.id.slice(1)) : selected;
+        if (event.key === "Enter") location.hash = "opened-" + (target?.id ?? "");
         else if (steps[event.key]) select(index + steps[event.key]());
         else return;
         event.preventDefault();
@@ -118,6 +117,20 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("gg");
     await expect_focus("f0");
     await poll_until("the panel to scroll to the top", async () => (await panel_top()) === 0);
+  });
+
+  // Escape also blurs the file, and the stand-in, like a page that keeps its selection, goes on moving it from there, so only a cancelled run stops.
+  await run_case("list view: Escape during G stops the run where it is", async () => {
+    await open_drive("list_cancel", "list", 400);
+    const selected = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.selected ?? -1`));
+    await press_keys("G");
+    await poll_until("G to pass the drawn rows", async () => (await selected()) > 20);
+    await press_keys("-k", "Escape");
+    await sleep(200);
+    const stopped = await selected();
+    await sleep(300);
+    expect((await selected()) === stopped, `the run went on after Escape, from ${stopped}`);
+    expect(stopped < 399, "the run reached the end before Escape");
   });
 
   await run_case("list view: h and l keep the plain sideways scroll and leave the files alone", async () => {

@@ -1,8 +1,8 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
-import { SEND_KEY_MAX_TIMES } from "../../shared/send_key_limit.ts";
+import { SEND_KEY_MAX_TIMES, UNTIL_STABLE_MAX_PRESSES, UNTIL_STABLE_PAUSE_MS, UNTIL_STABLE_RETRIES } from "../../shared/send_key_limit.ts";
 import { keep_chain } from "../../shared/swallow.ts";
 
-export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean; focus?: boolean };
+export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean; focus?: boolean; until_stable?: boolean };
 
 // What the handler needs from the page, so a test can pass a fake.
 export type KeyTargetDocument = { querySelector(selector: string): EventTarget | null; activeElement: EventTarget | null };
@@ -61,7 +61,26 @@ export function queued_in_page<T>(task: () => Promise<T>): Promise<T> {
 export const refused_times = (times: number, id: string): Promise<never> | undefined =>
   times > SEND_KEY_MAX_TIMES ? Promise.reject(new RuntimeRefusal(`A count of ${times} is over the limit of ${SEND_KEY_MAX_TIMES} for ${id}`)) : undefined;
 
-export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event): Promise<void> {
+
+// A page that draws only the items near the view replaces an item's element as it scrolls, so a focused item counts by its data-id where it has one.
+const focus_mark = (doc: KeyTargetDocument): unknown => (doc.activeElement as Element | null)?.getAttribute("data-id") || doc.activeElement;
+
+// The pause after each press, so the page can move its selection, scroll and draw. A timer and not the next frame, because a hidden tab draws no frames and the run would stall there.
+export const pause_after_press = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, UNTIL_STABLE_PAUSE_MS));
+
+export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event, pressed_keys: () => number, wait: () => Promise<void>): Promise<void> {
+  // Presses until the focus stops moving: the end of a list that only the page's own keys can reach. Any key the user presses ends the run.
+  if (args.until_stable)
+    return queued_in_page(async () => {
+      const keys_at_start = pressed_keys();
+      let unchanged = 0;
+      for (let press = 0; press < UNTIL_STABLE_MAX_PRESSES && unchanged <= UNTIL_STABLE_RETRIES && pressed_keys() === keys_at_start; press++) {
+        const before = focus_mark(doc);
+        send_key(doc, args, make_event);
+        await wait();
+        unchanged = focus_mark(doc) === before ? unchanged + 1 : 0;
+      }
+    });
   const times = args.times ?? 1;
   return (
     refused_times(times, "page.send_key") ??
