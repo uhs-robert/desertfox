@@ -3,6 +3,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
+import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { move_item, pick_item, place_of, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 
@@ -274,14 +275,25 @@ test("first and last go to the ends of the page whatever has focus, skip hidden 
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
 });
 
-test("every shipped page.item row binds gg and G to its first and last item, guarded by its own item selector", () => {
-  const item_rows = DEFAULT_SITE_ROWS.filter(({ row }) => Object.values(row.bind ?? {}).some((binding) => JSON.stringify(binding).includes('"id":"page.item"')));
-  assert.ok(item_rows.length >= 15, `${item_rows.length} page.item rows`);
-  for (const { name, row } of item_rows) {
-    const selector = (row.bind!["j"] as unknown as { args: { selector: string } }).args.selector;
-    for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
-      const bind = row.bind![key] as unknown as { id: string; args: { selector: string; direction: string }; when_present?: string };
-      assert.deepEqual({ id: bind.id, direction: bind.args.direction, selector: bind.args.selector, when_present: bind.when_present }, { id: "page.item", direction, selector, when_present: selector }, `${name} ${row.site} ${key}`);
+test("every shipped page.item bind table binds gg and G to its first and last item, guarded by its own item selector", () => {
+  type Step = { id?: string; args?: { selector?: string; direction?: string }; when_present?: string };
+  const steps_of = (binding: unknown): Step[] => [binding].flat(2) as Step[];
+  let tables = 0;
+  for (const { name, row } of DEFAULT_SITE_ROWS) {
+    for (const { scope, table } of bind_tables_of(row as SiteRuleRow)) {
+      const moves = Object.values(table).flatMap(steps_of).filter((step) => step.id === "page.item" && step.args?.direction !== "first" && step.args?.direction !== "last");
+      if (moves.length === 0) continue;
+      tables++;
+      const selectors = new Set(moves.map((step) => step.args?.selector));
+      for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
+        const [bind] = steps_of(table[key]);
+        const where = `${name} ${row.site} ${scope}${key}`;
+        assert.equal(bind?.id, "page.item", `${where} is not bound to page.item`);
+        assert.equal(bind?.args?.direction, direction, where);
+        assert.ok(selectors.has(bind?.args?.selector), `${where} moves through ${bind?.args?.selector}, not the table's items`);
+        assert.equal(bind?.when_present, bind?.args?.selector, `${where} is not guarded by its item selector`);
+      }
     }
   }
+  assert.ok(tables >= 15, `${tables} page.item bind tables`);
 });

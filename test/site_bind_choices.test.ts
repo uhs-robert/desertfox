@@ -159,3 +159,13 @@ test("the compile checks every choice: a later choice gets its defaults and jump
   const { warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: [{ site: "https://a.test/*", bind: { G: bad } }] } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.match(warnings.join("\n"), /skipped bind "G" of "https:\/\/a.test\/\*": direction expects one of/);
 });
+
+test("a user choice list whose guards all fail falls back to the keymap binding, not to the shipped row's bind", async () => {
+  const default_j = (DEFAULT_KEYMAP.normal!["j"] as { id: string }).id;
+  const google = "https://www.google.com/search?q=cats";
+  const user_j = [[{ id: "tab.next", when_present: GRID }], [{ id: "tab.prev", when_present: LIST }]];
+  const j = (await page_tree(compiled_with({ site_rules: [{ site: "https://www.google.com/*", bind: { j: user_j } }] }), google)).children["j"] as TreeLeaf;
+  assert.deepEqual([id_of(j), id_of(j.otherwise), id_of(j.otherwise?.otherwise)], ["tab.next", "tab.prev", default_j]);
+  assert.equal(id_of(leaf_for_page(j, null, body, page_root())), default_j);
+  assert.notEqual(default_j, "page.item");
+});
