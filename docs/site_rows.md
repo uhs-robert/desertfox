@@ -1,6 +1,6 @@
 # Site rows
 
-DesertFox ships site rows: keys and settings for sites that need them. Each row has a name and the addresses it covers. The tables list what each row gives. A key listed under a row does that on those sites in place of its usual action. Open the Site Rules view on the help page to see the rows that fit the page you are on.
+DesertFox ships site rows: keys and a few page settings for sites that need them. Each row has a name and the addresses it covers. The tables list the keys each row gives, with the guard that limits a key, and the notes list the page settings a row changes. A key listed under a row does that on those sites in place of its usual action. Open the Site Rules view on the help page to see the rows that fit the page you are on.
 
 An item is one entry of a list: a search result, a story, a file or an image tile. DesertFox draws a box around the item it moves to, and Enter opens its link.
 
@@ -30,7 +30,10 @@ Addresses: `https://docs.google.com/spreadsheets/*`, `https://docs.google.com/a/
 | `y` | Copy in the page |
 | `v` | Start the visual mode |
 | `V` | Start the visual mode |
-| `G` | Go to column A of the last row with data, then press Home in the page |
+| `G` | Go to column A of the last row with data |
+
+- Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays.
+- `#waffle-rich-text-editor` does not count as a text box while it has no width.
 
 Keys left to the page: `<C-a>` `<C-x>` `<C-v>`.
 
@@ -49,7 +52,7 @@ Start it with `v` or `V`.
 | `<C-j>` | Press Ctrl+Shift+ArrowDown in the page |
 | `<C-k>` | Press Ctrl+Shift+ArrowUp in the page |
 | `<C-l>` | Press Ctrl+Shift+ArrowRight in the page |
-| `G` | Extend the selection to the last row with data, then press Shift+Home in the page |
+| `G` | Extend the selection to the last row with data |
 | `x` | End the mode, then cut in the page |
 | `y` | End the mode, then copy in the page |
 | `p` | End the mode, then paste in the page |
@@ -60,10 +63,12 @@ Addresses: `https://www.google.com/maps*`, `https://google.com/maps*`
 
 | Key | What it does |
 | --- | --- |
-| `h` | Press ArrowLeft in the page |
-| `j` | Press ArrowDown in the page |
-| `k` | Press ArrowUp in the page |
-| `l` | Press ArrowRight in the page |
+| `h` | Press ArrowLeft in the page (only while nothing has focus or the focus is on the part this row names) |
+| `j` | Press ArrowDown in the page (only while nothing has focus or the focus is on the part this row names) |
+| `k` | Press ArrowUp in the page (only while nothing has focus or the focus is on the part this row names) |
+| `l` | Press ArrowRight in the page (only while nothing has focus or the focus is on the part this row names) |
+
+- When the page loads, the cursor goes to the first match of `div[role="application"][tabindex="0"]`, in place of a text box.
 
 ### `arrow`
 
@@ -91,8 +96,8 @@ Addresses: `https://www.google.com/search*udm=2&*`, `https://www.google.com/sear
 | `j` | Go to item below |
 | `k` | Go to item above |
 | `l` | Go to item on the right |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `ddg_images`
 
@@ -104,8 +109,8 @@ Addresses: `https://duckduckgo.com/?*iax=images*`
 | `j` | Go to item below |
 | `k` | Go to item above |
 | `l` | Go to item on the right |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `ddg`
 
@@ -115,8 +120,8 @@ Addresses: `https://duckduckgo.com/?*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `kagi`
 
@@ -141,8 +146,8 @@ Addresses: `https://www.google.com/search*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `bing`
 
@@ -152,8 +157,8 @@ Addresses: `https://www.bing.com/search*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `hackernews`
 
@@ -163,8 +168,8 @@ Addresses: `https://news.ycombinator.com/*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `wikipedia`
 
@@ -174,8 +179,8 @@ Addresses: `https://*.wikipedia.org/w/index.php?*search=*`, `https://*.wikipedia
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `lobsters`
 
@@ -185,8 +190,8 @@ Addresses: `https://lobste.rs/`, `https://lobste.rs/newest*`, `https://lobste.rs
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `archwiki`
 
@@ -196,8 +201,8 @@ Addresses: `https://wiki.archlinux.org/index.php?*search=*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `startpage`
 
@@ -207,8 +212,8 @@ Addresses: `https://www.startpage.com/sp/search*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `arxiv`
 
@@ -218,8 +223,8 @@ Addresses: `https://arxiv.org/search/*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `stackoverflow`
 
@@ -229,8 +234,8 @@ Addresses: `https://stackoverflow.com/questions*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `tildes`
 
@@ -240,8 +245,8 @@ Addresses: `https://tildes.net/*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `drive`
 
@@ -249,18 +254,18 @@ Addresses: `https://drive.google.com/drive/*`
 
 | Key | What it does |
 | --- | --- |
-| `j` | Go to the current item, then press ArrowDown in the page (the plain key on a page with no item) |
-| `k` | Go to the current item, then press ArrowUp in the page (the plain key on a page with no item) |
-| `gg` | Go to first item (the plain key on a page with no item) |
-| `G` | Go to last item (the plain key on a page with no item) |
-| `h` | Go to the current item, then press ArrowLeft in the page (the plain key on a page with no item) |
-| `l` | Go to the current item, then press ArrowRight in the page (the plain key on a page with no item) |
+| `j` | Move to the file below with Drive's own ArrowDown key (scrolls the page when no file shows) |
+| `k` | Move to the file above with Drive's own ArrowUp key (scrolls the page when no file shows) |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+| `h` | Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view) |
+| `l` | Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view) |
 
 <!-- END generated -->
 
 ## Turn a row off
 
-Add the row name to the `default_site_rows_off` setting. For example, `:set default_site_rows_off drive` turns the Drive row off. The setting turns off every row of that name, so `sheets` covers both Sheets address forms. The names are the headings above.
+The `default_site_rows_off` setting holds the whole list, so `:set` replaces it. List every row to turn off. For example, `:set default_site_rows_off drive maps` turns off Drive and Maps, and turns every other row back on. The setting turns off every row of that name, so `sheets` covers both Sheets address forms. The names are the headings above.
 
 ## Override a row
 

@@ -74,8 +74,10 @@ test("docs/site_rows.md is current", () => {
 
 test("docs/site_rows.md lists every shipped row name and the setting text names it too", () => {
   const doc = read("docs/site_rows.md");
+  // The first sentence is generated from the names, so only the hand-written prose after it can drift.
+  const prose = SETTING_DOCS.default_site_rows_off.slice(SETTING_DOCS.default_site_rows_off.indexOf(". ") + 2);
   for (const name of DEFAULT_SITE_ROW_NAMES) {
     assert.ok(doc.includes(`### \`${name}\``), `site_rows.md lacks ${name}`);
-    assert.ok(SETTING_DOCS.default_site_rows_off.includes(`\`${name}\``), `default_site_rows_off text lacks ${name}`);
+    assert.ok(prose.includes(`\`${name}\``), `default_site_rows_off text lacks ${name}`);
   }
 });

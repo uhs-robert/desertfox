@@ -1,6 +1,7 @@
 // Renders the generated block of docs/site_rows.md: one section per shipped site row name, with its address patterns and the keys it gives.
 
 import type { CommandDef } from "../../src/shared/command.ts";
+import type { SiteRuleRow } from "../../src/shared/match_pattern.ts";
 import type { DefaultSiteRow } from "../../src/background/default_site_rows.ts";
 import type { BindingTable, SiteModeTable } from "../../src/shared/settings_table.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
@@ -29,10 +30,23 @@ const lower_first_step = (step: BoundInvocation, command: CommandDef | undefined
   return text.charAt(0).toLowerCase() + text.slice(1);
 };
 
+// A step's own `intent` speaks for the whole bind and owns any guard wording.
 function describe(binding: BindingTable[string], registry: Lookup): string {
   const steps = [binding].flat() as BoundInvocation[];
+  const first = steps[0] as BoundInvocation;
+  if (first.intent) return describe_step(first, registry.get(first.id));
   const text = steps.map((step, at) => (at === 0 ? describe_step : lower_first_step)(step, registry.get(step.id))).join(", then ");
-  return (steps[0] as BoundInvocation).when_present ? `${text} (the plain key on a page with no item)` : text;
+  const guards = [first.when_focus ? "only while nothing has focus or the focus is on the part this row names" : "", first.when_present ? "scrolls the page when no item shows" : ""].filter(Boolean);
+  return guards.length > 0 ? `${text} (${guards.join("; ")})` : text;
+}
+
+// The settings a row changes besides its keys, in plain words.
+function setting_notes(row: SiteRuleRow): string[] {
+  return [
+    row.focus_on_load ? `When the page loads, the cursor goes to the first match of ${code(row.focus_on_load)}, in place of a text box.` : "",
+    row.escape_to_page ? "Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays." : "",
+    row.editable_remove?.length ? `${row.editable_remove.map((selector) => code(selector)).join(", ")} does not count as a text box${row.editable_remove_unsized ? " while it has no width" : ""}.` : "",
+  ].filter(Boolean);
 }
 
 function key_table(bind: BindingTable, registry: Lookup): string {
@@ -64,6 +78,7 @@ export function render_site_rows(rows: readonly DefaultSiteRow[], keymap: Keymap
     const first = own[0]!;
     const parts = [`### ${code(name)}`, `Addresses: ${patterns.map((pattern) => code(pattern)).join(", ")}`];
     if (first.bind && Object.keys(first.bind).length > 0) parts.push(key_table(first.bind, registry));
+    parts.push(...setting_notes(first).map((note) => `- ${note}`).join("\n").split("\n\n").filter(Boolean));
     if (first.pass) parts.push(`Keys left to the page: ${first.pass.split(" ").map((key) => code(key)).join(" ")}.`);
     for (const [mode_name, mode] of Object.entries(first.modes ?? {})) parts.push(mode_section(mode_name, mode, first.bind, keymap, registry));
     return parts.join("\n\n");
