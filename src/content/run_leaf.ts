@@ -29,25 +29,17 @@ export async function run_leaf(
 // `capture` is a param name, never empty, so its truth is its presence.
 export const holds_keys_after = (leaf: TreeLeaf, in_field: boolean): boolean => !in_field && (leaf.steps.some((step) => step.jump) || leaf.steps.every((step) => step.capture));
 
-// Focus on an element inside the guarded one counts, such as a control inside a map. A selector that does not parse matches nothing, so the key falls through.
-const is_inside = (focused: Element, selector: string): boolean => {
+// A selector that does not parse matches nothing, so the key falls through.
+const matches_safely = (read: () => boolean): boolean => {
   try {
-    return focused.closest(selector) !== null;
+    return read();
   } catch {
     return false;
   }
 };
 
-const shows_match = (root: ParentNode, selector: string): boolean => {
-  try {
-    return Array.from(root.querySelectorAll(selector)).some(is_shown);
-  } catch {
-    return false;
-  }
-};
-
-// The leaf a key runs under a site row bind's guards: the first leaf of the `otherwise` chain whose guards hold, which is a choice of a choice list or the leaf the bind replaced, or nothing when none holds. Body counts as no focus, so a bind aimed at the page's main widget also runs before the user has focused it.
+// The leaf a key runs under a site row bind's guards: the first leaf of the `otherwise` chain whose guards hold, which is a choice of a choice list or the leaf the bind replaced, or nothing when none holds. Focus on an element inside a `when_focus` match counts, such as a control inside a map. Body counts as no focus, so a bind aimed at the page's main widget also runs before the user has focused it.
 export const leaf_for_page = (leaf: TreeLeaf, focused: Element | null, body: Element | null, root: ParentNode): TreeLeaf | undefined =>
-  (leaf.when_focus === undefined || focused === null || focused === body || is_inside(focused, leaf.when_focus)) && (leaf.when_present === undefined || shows_match(root, leaf.when_present))
+  (!leaf.when_focus || !focused || focused === body || matches_safely(() => !!focused.closest(leaf.when_focus!))) && (!leaf.when_present || matches_safely(() => Array.from(root.querySelectorAll(leaf.when_present!)).some(is_shown)))
     ? leaf
     : leaf.otherwise && leaf_for_page(leaf.otherwise, focused, body, root);
