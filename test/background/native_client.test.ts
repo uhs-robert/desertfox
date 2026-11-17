@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { create_native_client, NativeHostError } from "../../src/background/native_client.ts";
+import { create_native_client, missing_host_as_undefined, NativeHostError } from "../../src/background/native_client.ts";
 import type { NativeFailure } from "../../src/background/native_client.ts";
 
 const client_with = (reply: () => Promise<unknown>, permitted = true) => {
@@ -151,4 +151,15 @@ test("list_fonts refuses a reply with no list of names", async () => {
 test("list_fonts on a host from before the verb is a host failure the caller can swallow", async () => {
   const { client } = client_with(async () => ({ ok: false, error: "unknown cmd: 'list_fonts'" }));
   assert.equal(await failure_of(() => client.list_fonts()), "host_failed");
+});
+
+test("a missing host reads as undefined for the font list and any other failure goes on", async () => {
+  for (const reply of [() => Promise.reject(new Error("No such native application x")), async () => ({ ok: false, error: "unknown cmd: 'list_fonts'" })]) {
+    const { client } = client_with(reply);
+    assert.equal(await client.list_fonts().catch(missing_host_as_undefined), undefined);
+  }
+  const { client: no_permission } = client_with(async () => ({ ok: true, fonts: [] }), false);
+  assert.equal(await no_permission.list_fonts().catch(missing_host_as_undefined), undefined);
+  const { client: failing } = client_with(async () => ({ ok: false, error: "fc-list did not finish within 5 s" }));
+  await assert.rejects(failing.list_fonts().catch(missing_host_as_undefined), /did not finish/);
 });

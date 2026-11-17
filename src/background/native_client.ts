@@ -131,6 +131,13 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
   };
 }
 
+// A host that cannot list fonts at all: not installed, no permission, or too old to know the verb. Any other failure is a call that went wrong.
+// The `.catch` handler of `list_fonts`: a missing host reads as undefined, and any other failure goes on.
+export function missing_host_as_undefined(error: unknown): undefined {
+  if (error instanceof NativeHostError && (error.failure === "host_missing" || error.failure === "no_permission" || error.failure === "host_outdated" || /unknown cmd/.test(error.message))) return undefined;
+  throw error;
+}
+
 export const browser_native_deps = (): NativeDeps => ({
   has_permission: () => browser.permissions.contains({ permissions: [NATIVE_PERMISSION] }),
   send: (message) => browser.runtime.sendNativeMessage(NATIVE_HOST_NAME, message),
