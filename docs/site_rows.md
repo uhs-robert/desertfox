@@ -8,7 +8,7 @@ Generated from `src/background/default_site_rows.ts`. Do not edit between the ma
 
 <!-- BEGIN generated -->
 
-Shipped rows: 19 (`sheets`, `maps`, `arrow`, `google_images`, `ddg_images`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `drive`).
+Shipped rows: 25 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `drive`).
 
 ### `sheets`
 
@@ -99,6 +99,56 @@ Addresses: `https://www.google.com/search*udm=2&*`, `https://www.google.com/sear
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
 
+### `google_videos`
+
+Addresses: `https://www.google.com/search*udm=7&*`, `https://www.google.com/search*udm=7`, `https://www.google.com/search*udm=vids&*`, `https://www.google.com/search*udm=vids`
+
+| Key | What it does |
+| --- | --- |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `google_news`
+
+Addresses: `https://www.google.com/search*tbm=nws&*`, `https://www.google.com/search*tbm=nws`
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `google_short_videos`
+
+Addresses: `https://www.google.com/search*udm=short_vids&*`, `https://www.google.com/search*udm=short_vids`
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `google_shopping`
+
+Addresses: `https://www.google.com/search*udm=28&*`, `https://www.google.com/search*udm=28`
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
 ### `ddg_images`
 
 Addresses: `https://duckduckgo.com/?*iax=images*`
@@ -109,6 +159,30 @@ Addresses: `https://duckduckgo.com/?*iax=images*`
 | `j` | Go to item below |
 | `k` | Go to item above |
 | `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `ddg_videos`
+
+Addresses: `https://duckduckgo.com/?*iax=videos*`
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `ddg_news`
+
+Addresses: `https://duckduckgo.com/?*iar=news*`
+
+| Key | What it does |
+| --- | --- |
+| `j` | Go to item below |
+| `k` | Go to item above |
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
 
