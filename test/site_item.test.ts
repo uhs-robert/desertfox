@@ -31,6 +31,14 @@ test("left and right stay on the row", () => {
   assert.equal(step_from(grid, 3, "left"), undefined);
 });
 
+// Seven masonry columns of uneven height: down from the top of column 1 must stay in column 1 even when a tile in column 2 starts nearer.
+test("down and up in a masonry grid stay in the column", () => {
+  const masonry = [box(0, 0, 100, 200), box(110, 0, 100, 90), box(0, 210, 100, 100), box(110, 100, 100, 90), box(110, 200, 100, 150)];
+  assert.equal(step_from(masonry, 0, "down"), 2);
+  assert.equal(step_from(masonry, 1, "down"), 3);
+  assert.equal(step_from(masonry, 4, "up"), 3);
+});
+
 test("a list of titles with unequal widths still goes to the next one down", () => {
   const titles = [box(0, 0, 300, 20), box(0, 50, 100, 20), box(0, 100, 250, 20)];
   assert.equal(step_from(titles, 0, "down"), 1);
@@ -205,7 +213,7 @@ test("the shipped result rows bind j and k to page.item", () => {
 });
 
 test("the shipped image row binds hjkl to page.item", () => {
-  for (const name of ["ddg_images"]) {
+  for (const name of ["ddg_images", "google_images"]) {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {

@@ -10,14 +10,14 @@ const middle = (low: number, high: number) => (low + high) / 2;
 // Two boxes share a row when they overlap vertically by more than half the shorter one, so a justified grid with ragged tops still reads as rows.
 const same_row = (a: Box, b: Box): boolean => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > Math.min(a.bottom - a.top, b.bottom - b.top) / 2;
 
-// One step to the nearest item ahead, by the distance along the direction plus an eighth of the distance across it. Down and up look at other rows only, left and right at the same row only.
+// One step to the nearest item ahead, by the distance along the direction plus the distance across it. Across counts in full so a masonry grid with columns of uneven height goes to the tile in its own column, not a nearer one in the next. Down and up look at other rows only, left and right at the same row only.
 export function step_from(boxes: readonly Box[], from: number, direction: ItemDirection): number | undefined {
   const here = boxes[from]!;
   const sideways = direction === "left" || direction === "right";
   const sign = direction === "right" || direction === "down" ? 1 : -1;
   const along = (box: Box) => (sideways ? middle(box.left, box.right) : middle(box.top, box.bottom));
   const across = (box: Box) => (sideways ? middle(box.top, box.bottom) : middle(box.left, box.right));
-  const cost = (index: number) => Math.abs(along(boxes[index]!) - along(here)) + Math.abs(across(boxes[index]!) - across(here)) / 8;
+  const cost = (index: number) => Math.abs(along(boxes[index]!) - along(here)) + Math.abs(across(boxes[index]!) - across(here));
   const ahead = boxes.map((_, index) => index).filter((index) => sign * (along(boxes[index]!) - along(here)) > 0 && same_row(here, boxes[index]!) === sideways);
   return ahead.sort((a, b) => cost(a) - cost(b))[0];
 }
