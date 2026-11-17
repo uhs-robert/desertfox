@@ -121,6 +121,9 @@ test("the arrow of an ad post's gallery is skipped even when it is the only ad i
   const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 1000 }, root });
   const controls = [{ node: arrow, texts: ["Next page"], is_link: false }];
   assert.equal(pick_next_control(reader, controls, NEXT), undefined);
+  ad.t = "x-load-post";
+  ad.a = { class: "load-more pagination-header" };
+  assert.equal(pick_next_control(reader, controls, NEXT), arrow);
   ad.t = "div";
   delete ad.a;
   assert.equal(pick_next_control(reader, controls, NEXT), arrow);
