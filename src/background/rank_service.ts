@@ -5,8 +5,8 @@
 import type { Asker } from "./complete_items.ts";
 import { no_inputs } from "./completion_rank.ts";
 import type { HistoryNode, RankInputs } from "./completion_rank.ts";
-import type { HistoryRow, Visit } from "./history_cache.ts";
-import type { FromWorker, HistoryEvent, Question, ToWorker } from "./rank_index.ts";
+import type { Visit } from "./history_cache.ts";
+import type { FromWorker, HistoryEvent, PickedHistory, Question, ToWorker } from "./rank_index.ts";
 import { RANK_PORT_NAME, RANKED_ROWS } from "../shared/rank_port.ts";
 import type { RankPush, RankRequest, RankSource } from "../shared/rank_port.ts";
 import { refused_as, warn_and_go } from "../shared/swallow.ts";
@@ -47,7 +47,7 @@ export type RankServiceDeps = {
 const RESTART_FIRST_MS = 250;
 const RESTART_MAX_MS = 30_000;
 const STABLE_MS = 5000;
-// A handler that reads the history falls back to the plain search when the Worker does not answer in time.
+// A request that reads the history falls back to the plain search when the Worker does not answer in time.
 const HISTORY_ROWS_WAIT_MS = 2000;
 const MAX_WORD_LENGTH = 1000;
 const MAX_OVER_FETCH = 10_000;
@@ -81,8 +81,9 @@ export function create_rank_service(deps: RankServiceDeps) {
   let worker_started_at = 0;
   let failures = 0;
   let restart_timer: unknown;
-  let next_rows_id = 0;
-  const rows_waiting = new Map<number, (rows: HistoryRow[] | undefined) => void>();
+  let next_reply_id = 0;
+  // The requests that read the history (`usage_for`, `pick_history`) wait here by id for the Worker's one reply.
+  const replies_waiting = new Map<number, (value: unknown) => void>();
   let next_line = 0;
   const lines = new Map<number, Line>();
 
@@ -118,9 +119,9 @@ export function create_rank_service(deps: RankServiceDeps) {
 
   const from_worker = (message: FromWorker) => {
     if (message.type === "ask") void answer_question(message.id, message.question);
-    else if (message.type === "history_rows") {
-      rows_waiting.get(message.id)?.(message.rows);
-      rows_waiting.delete(message.id);
+    else if (message.type === "reply") {
+      replies_waiting.get(message.id)?.(message.value);
+      replies_waiting.delete(message.id);
     } else {
       const line = lines.get(message.line);
       if (!line) return;
@@ -162,11 +163,28 @@ export function create_rank_service(deps: RankServiceDeps) {
   const lost = () => {
     worker?.terminate();
     worker = undefined;
-    for (const resolve of rows_waiting.values()) resolve(undefined);
-    rows_waiting.clear();
+    for (const resolve of replies_waiting.values()) resolve(undefined);
+    replies_waiting.clear();
     failures = deps.now() - worker_started_at < STABLE_MS ? failures + 1 : 0;
     const delay = failures === 0 ? 0 : Math.min(RESTART_MAX_MS, RESTART_FIRST_MS * 2 ** (failures - 1));
     restart_timer = deps.set_timer(start, delay);
+  };
+
+  // The reply, or undefined while no Worker runs, when the Worker fails first or when it does not answer in time.
+  const ask_worker = <Reply>(message: (id: number) => ToWorker): Promise<Reply | undefined> => {
+    if (!worker) return Promise.resolve(undefined);
+    const id = ++next_reply_id;
+    return new Promise((resolve) => {
+      const timer = deps.set_timer(() => {
+        replies_waiting.delete(id);
+        resolve(undefined);
+      }, HISTORY_ROWS_WAIT_MS);
+      replies_waiting.set(id, (value) => {
+        deps.clear_timer(timer);
+        resolve(value as Reply | undefined);
+      });
+      post(message(id));
+    });
   };
 
   const history_event = (event: HistoryEvent) => post({ type: "history", event });
@@ -198,21 +216,10 @@ export function create_rank_service(deps: RankServiceDeps) {
     title_changed: ({ url, title }: { url: string; title: string }) => history_event({ kind: "title", url, title }),
     visit_removed: ({ allHistory, urls }: { allHistory: boolean; urls: readonly string[] }) => history_event({ kind: "removed", allHistory, urls: [...urls] }),
     // A copy of the Worker's rows, newest first, or undefined while its fill runs or when it does not answer.
-    history_rows: (): Promise<HistoryRow[] | undefined> => {
-      if (!worker) return Promise.resolve(undefined);
-      const id = ++next_rows_id;
-      return new Promise((resolve) => {
-        const timer = deps.set_timer(() => {
-          rows_waiting.delete(id);
-          resolve(undefined);
-        }, HISTORY_ROWS_WAIT_MS);
-        rows_waiting.set(id, (rows) => {
-          deps.clear_timer(timer);
-          resolve(rows);
-        });
-        post({ type: "history_rows", id });
-      });
-    },
+    // The use boost of each of these addresses that the history holds, or undefined while the fill runs, when the Worker fails and when it is silent for 2 s.
+    usage_for: (urls: readonly string[]): Promise<[string, number][] | undefined> => ask_worker((id) => ({ type: "usage_for", id, urls: [...urls] })),
+    // What `pick_entry` gives over the Worker's rows, or undefined while the fill runs, when the Worker fails and when it is silent for 2 s.
+    pick_history: (text: string): Promise<PickedHistory | undefined> => ask_worker((id) => ({ type: "pick_history", id, text })),
     // A line's port. The opener check runs once, at connect: the marker clears when the tab navigates, which also ends the frame and its port.
     connect: (port: RankPort) => {
       if (port.name !== RANK_PORT_NAME) return;
@@ -248,7 +255,8 @@ export function start_rank_service(deps: RankServiceDeps): RankService {
   return running;
 }
 
-export const rank_history_rows = async (): Promise<HistoryRow[] | undefined> => running?.history_rows();
+export const rank_usage_for = async (urls: readonly string[]): Promise<[string, number][] | undefined> => running?.usage_for(urls);
+export const rank_pick_history = async (text: string): Promise<PickedHistory | undefined> => running?.pick_history(text);
 
 export function browser_rank_service_deps(from_services: Pick<RankServiceDeps, "inputs" | "is_opener" | "fallback" | "listed">): RankServiceDeps {
   const worker_url = browser.runtime.getURL("rank_worker.js");

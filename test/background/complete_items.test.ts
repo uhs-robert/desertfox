@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_usage, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import { anything_items, history_items, history_list, OPEN_TAB_BOOST, open_items, reads_history, site_items, usage_boost, usage_by_url } from "../../src/background/completion_rank.ts";
 import type { HistoryNode, OpenSettings } from "../../src/background/completion_rank.ts";
 import type { RankSource } from "../../src/shared/rank_port.ts";
@@ -95,7 +95,6 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
     search_engines: async () => ENGINES,
     page_of: async () => page,
     line_frame_url: async () => frame_url,
-    search_history,
     open_settings: async () => open,
     history_list_max: async () => list_max,
     closed_tabs: async () => closed,
@@ -198,7 +197,6 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     search_engines: async () => ENGINES,
     page_of: async () => undefined,
     line_frame_url: async () => undefined,
-    search_history: async () => [],
     open_settings: async () => ({ sources: ["bookmarks", "history"], history_max: 10 }),
     history_list_max: async () => 20,
     closed_tabs: async () => [],
@@ -791,20 +789,6 @@ test("an error in the history_max mapper is not swallowed with the read", async 
   await assert.rejects(service.rank_inputs("anything", NORMAL_LINE), /mapper bug/);
 });
 
-test("the browser reader answers the 1000-row search while no rank Worker holds the history", async () => {
-  const searches: { maxResults: number }[] = [];
-  const rows = [{ url: "https://a.test/", title: "A", lastVisitTime: 2 }];
-  (globalThis as { browser?: unknown }).browser = { history: { search: async (query: { maxResults: number }) => (searches.push(query), rows) } };
-  const { browser_complete_items_deps } = await import("../../src/background/complete_items.ts");
-  try {
-    // The browser's rows take the Worker's shape, so the usage reads the same fields from both.
-    assert.deepEqual(await browser_complete_items_deps.search_history(), [{ url: "https://a.test/", title: "A", last_visit: 2, visit_count: 1 }]);
-    assert.deepEqual(searches.map((query) => query.maxResults), [1000]);
-  } finally {
-    delete (globalThis as { browser?: unknown }).browser;
-  }
-});
-
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = 1000 * DAY;
 
@@ -909,4 +893,14 @@ test("the quality_levels kind asks for the tab of the line, and nothing for a st
 test("closed_tab_rows never lists a private tab, which getRecentlyClosed returns while its window is open", () => {
   const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/" } }];
   assert.deepEqual(closed_tab_rows(sessions).map((row) => row.session_id), ["2"]);
+});
+
+test("the bookmark use boost reads the browser's newest rows while no rank Worker answers", async () => {
+  const when = Date.now();
+  (globalThis as { browser?: unknown }).browser = { history: { search: async () => [{ url: "https://daily.test/", title: "Daily", visitCount: 40, lastVisitTime: when }] } };
+  try {
+    assert.deepEqual(await bookmark_usage(["https://daily.test/", "https://other.test/"]), usage_by_url(history_items([{ url: "https://daily.test/", title: "Daily", visit_count: 40, last_visit: when }])));
+  } finally {
+    delete (globalThis as { browser?: unknown }).browser;
+  }
 });
