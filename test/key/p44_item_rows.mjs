@@ -308,7 +308,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await in_active_tab(`(() => {
       const column = document.createElement("div");
       column.id = "center_col";
-      column.innerHTML = '<div id="search"><div class="MjjYud"><div data-hveid="group">' + [0, 1, 2, 3].map((index) => '<div><div data-hveid="v' + index + '" id="video' + index + '" style="height:80px;width:300px;margin-bottom:30px"><div><a id="v' + index + '" href="#v' + index + '"><h3>video ' + index + '</h3></a><span>youtube.com snippet</span></div></div></div>').join("") + '</div></div></div>';
+      const block = (indexes) => '<div class="MjjYud"><div data-hveid="group">' + indexes.map((index) => '<div><div data-hveid="v' + index + '" id="video' + index + '" style="height:80px;width:300px;margin-bottom:30px"><div><a id="v' + index + '" href="#v' + index + '"><h3>video ' + index + '</h3></a><span>youtube.com snippet</span></div></div></div>').join("") + '</div></div>';
+      column.innerHTML = '<div id="search">' + block([0, 1, 2, 3]) + '</div><div id="next_page">' + block([4, 5]) + '</div>';
       document.body.prepend(column);
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -321,11 +322,14 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("v1");
     await expect_box_on("video1", "the box on the second video alone");
     await press_keys("G");
-    await expect_focus("v3");
+    await expect_focus("v5");
+    await expect_box_on("video5", "the box on the last video, in the next-page block below #search");
     await press_keys("k");
-    await expect_focus("v2");
+    await expect_focus("v4");
+    await press_keys("k");
+    await expect_focus("v3");
     await press_keys("-k", "Return");
-    await poll_until("the address to name the third video", async () => (await in_active_tab("location.hash")) === "#v2");
+    await poll_until("the address to name the fourth video", async () => (await in_active_tab("location.hash")) === "#v3");
   });
 
   // The DuckDuckGo Videos shape: a grid of links, each around an article, so the link is the item and takes the focus itself.
