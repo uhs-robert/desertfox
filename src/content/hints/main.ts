@@ -273,7 +273,10 @@ let starting = 0;
 // To the background, which passes it on. Nothing waits for the answer.
 const send_across = (message: Exclude<HintFramesMessage, { type: "hint_frames_collect" | "hint_frames_labels" }>) => void best_effort(browser.runtime.sendMessage(message));
 
-const deps = { open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_mode_, inspect_ };
+// The item bundle draws the mark, so the first one loads it. It checks the focus is still there when it runs, so a blur in between leaves no mark.
+const mark_focus = (element: Element): void => void page.desertfox_host.run_command_("item.mark", "item", { element });
+
+const deps = { mark_: mark_focus, open_link_, copy: (text: string, what?: string) => copy_to_clipboard(text, undefined, what), strip_: (address: string) => strip_tracking(address, strip_patterns), image_action, start_mode_, inspect_ };
 
 function register(host: PageHostApi): void {
   let session: Session | undefined;
@@ -499,13 +502,13 @@ function register(host: PageHostApi): void {
   }
 
   host.register_handler_("page.focus_field", (args): Outcome => {
-    const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number);
+    const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number, "control", mark_focus);
     if (message !== undefined) return { ok: false, message };
     mark_text_entry({ id: "page.focus_field", args: { direction: args.direction, steps: args.steps } });
     return done;
   });
   host.register_handler_("page.focus_link", (args): Outcome => {
-    const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number, "link");
+    const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number, "link", mark_focus);
     return message === undefined ? done : { ok: false, message };
   });
   host.register_handler_("page.heading", (args): Outcome => {

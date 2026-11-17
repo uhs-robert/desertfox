@@ -1,6 +1,8 @@
 // The form control or link that `page.focus_field` (`]i`, `[i`) and `page.focus_link` (`]l`, `[l`) move to. The pick is pure and the page reads sit apart, so tests run on plain lists.
 
 import { deepest_focused_element } from "../editable.ts";
+import { focus_and_mark } from "./actions.ts";
+import type { MarkFocus } from "./actions.ts";
 import { collect, window_of } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { keep_present_found } from "./headings.ts";
@@ -56,7 +58,7 @@ function reveal({ element, frames }: Found): void {
   for (const target of [element, ...[...frames].reverse()]) if (!is_fully_in_view(target)) target.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
 }
 
-export function focus_field(root: ParentNode, last_blurred: Element | undefined, direction: FieldDirection, steps: number, kind: FieldKind = "control"): string | undefined {
+export function focus_field(root: ParentNode, last_blurred: Element | undefined, direction: FieldDirection, steps: number, kind: FieldKind = "control", mark_?: MarkFocus): string | undefined {
   const { selector, noun } = KINDS[kind];
   // An inert element takes no focus, so a pick of one would leave the walk where it started.
   const found = keep_present_found(collect(root, { selector })).filter((item) => !item.element.closest("[inert]"));
@@ -65,7 +67,7 @@ export function focus_field(root: ParentNode, last_blurred: Element | undefined,
   const pick = pick_field(found.length, place, direction, steps);
   if ("end" in pick) return direction === "next" ? `No next ${noun}` : `No previous ${noun}`;
   const target = found[pick.index]!;
-  (target.element as HTMLElement).focus({ preventScroll: true });
+  focus_and_mark(target.element as HTMLElement, { preventScroll: true }, mark_);
   reveal(target);
   return undefined;
 }
