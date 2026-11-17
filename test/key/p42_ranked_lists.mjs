@@ -18,7 +18,21 @@ const install_probe = (frame_window) => {
   const document = frame_window.document;
   const keys = [];
   const draws = [];
-  const publish = () => document.documentElement.setAttribute("data-latency-probe", JSON.stringify({ keys, draws }));
+  // The longest gap between 10 idle frames, taken before any key: the code under test cannot move it, so it measures the machine alone.
+  const probe = { baseline_ms: null };
+  const publish = () => document.documentElement.setAttribute("data-latency-probe", JSON.stringify({ keys, draws, baseline_ms: probe.baseline_ms }));
+  let gaps = [];
+  let previous_frame = null;
+  const time_idle_frame = (now) => {
+    if (previous_frame !== null) gaps.push(now - previous_frame);
+    previous_frame = now;
+    if (gaps.length < 10) frame_window.requestAnimationFrame(time_idle_frame);
+    else {
+      probe.baseline_ms = Math.max(...gaps);
+      publish();
+    }
+  };
+  frame_window.requestAnimationFrame(time_idle_frame);
   frame_window.addEventListener(
     "keydown",
     (event) => {
@@ -42,7 +56,7 @@ const read_probe = (frame_window) => JSON.parse(frame_window.document.documentEl
 
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, on_teardown, expect, press_keys, settle_focus, wait_cmdline, close_cmdline, open_cmdline, url_of, events, wait_event }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, on_teardown, expect, press_keys, poll_until, settle_focus, wait_cmdline, close_cmdline, open_cmdline, url_of, events, wait_event }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const target = url_of("page", "p42_target");
   const shows_target_only = (line) => line.rows === 1 && line.row_texts[0].includes(TARGET_TITLE) && line.note !== "loading";
@@ -95,6 +109,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, on_teardow
     await wait_cmdline((line) => line.value === "open " && line.note !== "loading", "the open list for an empty word");
     const [installed] = await evaluate_in_page_frames(rdp, "cmdline.html", install_probe.toString());
     expect(installed === true, "the latency probe did not install in the line's frame");
+    await poll_until("the idle frame baseline", async () => (await evaluate_in_page_frames(rdp, "cmdline.html", read_probe.toString()))[0]?.baseline_ms != null);
     // An unselective word: every key ranks all the seeded rows, and most of them hit.
     const burst = "zebra seed quartz";
     await press_keys(burst);
@@ -106,10 +121,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, on_teardow
     expect(frames.length === burst.length && landed, `the probe missed keys or the final draw: ${JSON.stringify(probe)}`);
     const rows_ms = landed.at - last_key;
     console.log(`p42 latency: ${frames.length} keys, keydown to next frame median ${median(frames).toFixed(1)} ms, max ${Math.max(...frames).toFixed(1)} ms; last keydown to its rows drawn ${rows_ms.toFixed(1)} ms; ${probe.draws.length} list draws`);
-    // The bounds scale with the typical key of this very run, so a slow machine lifts them and a stalled thread or a lost answer still breaks them. The floors keep a fast run from a tiny bound.
-    const typical_ms = median(frames);
-    const frame_bound_ms = Math.max(250, typical_ms * 8);
-    const rows_bound_ms = Math.max(1000, typical_ms * 40);
+    // The bounds scale with the idle frame gap measured before the burst, which the code under test cannot move: a regression that stalls every key must not lift its own bound. The floors keep an idle machine at the old limits.
+    const frame_bound_ms = Math.max(250, probe.baseline_ms * 15);
+    const rows_bound_ms = Math.max(1000, probe.baseline_ms * 50);
     expect(Math.max(...frames) < frame_bound_ms, `a key took ${Math.max(...frames)} ms to draw, bound ${frame_bound_ms} ms`);
     expect(rows_ms < rows_bound_ms, `the last word's rows took ${rows_ms} ms, bound ${rows_bound_ms} ms`);
     await close_cmdline();

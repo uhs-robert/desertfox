@@ -6,11 +6,11 @@ export const areas = ["whichkey", "help"];
 export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, wait_cmdline, hint_label_count }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
-  // A temp setting has landed once the session store holds it, so the test waits on that and not on a fixed sleep.
-  const temp_settings = () => evaluate_in_background(rdp, extension_id, `(async () => (await browser.storage.session.get("desertfox_temp_settings")).desertfox_temp_settings ?? {})()`);
+  // The page reads the compiled keymap, which the background writes after the temp edit. desertfox_config_status holds the effective settings, so the wait reads that and not the session store.
+  const effective_settings = () => evaluate_in_background(rdp, extension_id, `browser.storage.local.get("desertfox_config_status").then((got) => got.desertfox_config_status?.settings ?? {})`);
   const change_temp = async (line, landed) => {
     await run_line(line);
-    await poll_until(`"${line}" to land`, async () => landed(await temp_settings()), { timeout_ms: 8000 });
+    await poll_until(`"${line}" to land`, async () => landed(await effective_settings()), { timeout_ms: 8000 });
     await wait_cmdline((state) => !state.open, "the command line to close");
     await settle_focus();
   };
@@ -35,7 +35,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
   await run_case("gg typed at once shows no panel", async () => {
     // The page scrolls first, so gg has a scroll to report: that proves the sequence finished. The timer then runs out with no panel.
     // The delay is long so that a slow gap between the two g keys on a loaded machine cannot run the timer out.
-    await change_temp(`:set -t which_key_delay_ms ${LONG_DELAY_MS}`, (temp) => temp.which_key_delay_ms === LONG_DELAY_MS);
+    await change_temp(`:set -t which_key_delay_ms ${LONG_DELAY_MS}`, (settings) => settings.which_key_delay_ms === LONG_DELAY_MS);
     try {
       await scroll_delta_by_press("wk", ["j"]);
       const mark = events.length;
@@ -44,12 +44,12 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
       await sleep(LONG_DELAY_MS + 300);
       expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a finished sequence");
     } finally {
-      await change_temp(":unset -t which_key_delay_ms", (temp) => temp.which_key_delay_ms === undefined);
+      await change_temp(":unset -t which_key_delay_ms", (settings) => settings.which_key_delay_ms === which_key_delay_ms);
     }
   });
 
   await run_case("a prefix on the skip list waits past the delay and shows no panel", async () => {
-    await change_temp(":set -t which_key_skip g", (temp) => temp.which_key_skip !== undefined);
+    await change_temp(":set -t which_key_skip g", (settings) => String(settings.which_key_skip ?? "").includes("g"));
     try {
       const mark = events.length;
       await press_keys("g");
@@ -57,7 +57,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
       expect(whichkey_events(mark, "wk").length === 0, "a panel showed for a skipped prefix");
       await press_keys("-k", "Escape");
     } finally {
-      await change_temp(":unset -t which_key_skip", (temp) => temp.which_key_skip === undefined);
+      await change_temp(":unset -t which_key_skip", (settings) => !String(settings.which_key_skip ?? "").includes("g"));
     }
   });
 
