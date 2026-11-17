@@ -82,15 +82,32 @@ test("a short page with an audio element is no player, so its pager still counts
   assert.equal(pick_next_control(reader, [{ node: pager, texts: ["Next"], is_link: true }], NEXT), pager);
 });
 
-test("a wide code block beside a Next link is no carousel track, but a track of cards is", () => {
+const link_among = (children: SavedNode[], pager: SavedNode, texts = "Next") => {
+  const root: SavedNode = { t: "body", r: [0, 0, 1366, 800], c: children };
+  const wire = (node: SavedNode) => node.c?.forEach((child) => ((child.up = node), wire(child)));
+  wire(root);
+  const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 800 }, root });
+  return pick_next_control(reader, [{ node: pager, texts: [texts], is_link: true }], NEXT);
+};
+
+test("a sideways track is a carousel whatever its children, but a code block is not", () => {
   const pager: SavedNode = { t: "a", a: { href: "?page=2" }, r: [500, 600, 60, 30], s: "Next" };
-  const run = (track: SavedNode) => {
-    const root: SavedNode = { t: "body", r: [0, 0, 1366, 800], c: [track, pager] };
-    for (const child of root.c!) child.up = root;
-    for (const child of track.c ?? []) child.up = track;
-    const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 800 }, root });
-    return pick_next_control(reader, [{ node: pager, texts: ["Next"], is_link: true }], NEXT);
-  };
-  assert.equal(run({ t: "pre", r: [0, 100, 600, 200], x: 1, c: [{ t: "code", r: [0, 100, 900, 200] }] }), pager);
-  assert.equal(run({ t: "div", r: [0, 100, 600, 200], x: 1, c: [{ t: "div", r: [0, 100, 200, 200] }, { t: "div", r: [200, 100, 200, 200] }] }), undefined);
+  const spans = Array.from({ length: 6 }, (_, at) => ({ t: "span", r: [at * 100, 100, 100, 20] }) as SavedNode);
+  assert.equal(link_among([{ t: "pre", r: [0, 100, 600, 200], x: 1, c: spans }, pager], pager), pager);
+  assert.equal(link_among([{ t: "table", r: [0, 100, 600, 200], x: 1 }, pager], pager), pager);
+  const cards = [{ t: "div", r: [0, 100, 200, 200] }, { t: "div", r: [200, 100, 200, 200] }] as SavedNode[];
+  assert.equal(link_among([{ t: "div", r: [0, 100, 600, 200], x: 1, c: cards }, pager], pager), undefined);
+});
+
+test("a menu scroller with one inner track keeps its arrow from being the next page", () => {
+  const arrow: SavedNode = { t: "a", a: { href: "/menu2" }, r: [1300, 20, 40, 30], s: "次へ" };
+  const track: SavedNode = { t: "ul", r: [0, 20, 1200, 30], c: [{ t: "li", r: [0, 20, 100, 30] }] };
+  assert.equal(link_among([{ t: "div", r: [0, 20, 1250, 30], x: 1, c: [track] }, arrow], arrow, "次へ"), undefined);
+});
+
+test("a pager in a nav of stacked items is still followed", () => {
+  const pager: SavedNode = { t: "a", a: { href: "?page=3" }, r: [10, 260, 120, 30], s: "Next" };
+  const item = (y: number, c: SavedNode[] = []) => ({ t: "li", r: [10, y, 120, 30], c }) as SavedNode;
+  const nav: SavedNode = { t: "nav", r: [0, 100, 200, 200], c: [{ t: "ul", r: [10, 200, 120, 100], c: [item(200), item(230), item(260, [pager])] }] };
+  assert.equal(link_among([nav], pager), pager);
 });

@@ -91,6 +91,9 @@ export function descendants<N>(reader: PageReader<N>, node: N): N[] {
 
 const CAROUSEL_CLASS = /carousel|swiper|slider|slick|glide|splide|scroller|flickity/i;
 
+// A code block or a table scrolls sideways because its content is wide, not because it is a track of cards.
+const is_wide_content = <N>(reader: PageReader<N>, node: N): boolean => [node, ...ancestors(reader, node)].some((at) => /^(pre|table)$/.test(reader.tag_(at)));
+
 // A carousel by its role or class, a sideways scroller, or a box beside one (the arrows of a track sit next to it).
 export const in_carousel = <N>(reader: PageReader<N>, node: N): boolean =>
   [...ancestors(reader, node, 3)].some(
@@ -98,7 +101,7 @@ export const in_carousel = <N>(reader: PageReader<N>, node: N): boolean =>
       normalize(reader.attr_(box, "aria-roledescription") ?? "").includes("carousel") ||
       CAROUSEL_CLASS.test(reader.attr_(box, "class") ?? "") ||
       reader.scrolls_sideways_(box) ||
-      reader.children_(box).some((sibling) => reader.scrolls_sideways_(sibling) && reader.children_(sibling).length >= 2),
+      reader.children_(box).some((sibling) => reader.scrolls_sideways_(sibling) && !is_wide_content(reader, sibling)),
   );
 
 // A player's own controls: a near box that holds the video and is no taller than the screen. YouTube's "Next" plays the next video. The page body is no player, however short the page.
