@@ -146,3 +146,17 @@ test("a strip_tracking row shows as a column, and an earlier row shadows a later
   assert.deepEqual(view.rows.map((row) => row.columns.filter(({ name }) => name === "strip_tracking")), [[{ name: "strip_tracking", value: "false", shadowed: false }], [{ name: "strip_tracking", value: "true", shadowed: true }]]);
   assert.deepEqual(site_rules_view(compiled_with({ strip_tracking: false, site_rules: [{ site: "https://b.test/*", strip_tracking: true }] }), "https://b.test/").rows[0]!.columns, [{ name: "strip_tracking", value: "true", shadowed: false }]);
 });
+
+test("a keymap bind is tagged with its keymap mode, reads what it replaces in that mode, and is shadowed per mode", () => {
+  const FIND = { id: "find.open" };
+  const view = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", keymap: { visual: { x: FIND, y: FIND } } }, { site: "https://a.test/*", keymap: { visual: { x: FIND }, caret: { x: FIND } } }] }), "https://a.test/");
+  const [first, second] = view.rows;
+  assert.deepEqual(first!.changes.map(({ keys, mode, keymap_mode, dead }) => [keys, mode, keymap_mode, dead]), [["x", undefined, "visual", undefined], ["y", undefined, "visual", undefined]]);
+  assert.ok(first!.changes.find(({ keys }) => keys === "y")!.replaces, "y is bound in the default visual tree");
+  assert.deepEqual(second!.changes.map(({ keys, keymap_mode, dead }) => [keys, keymap_mode, dead]), [["x", "visual", "an earlier row decides it"], ["x", "caret", undefined]]);
+});
+
+test("a keymap bind on a page that is off is dead", () => {
+  const view = site_rules_view(compiled_with({ default_site_rows_off: ["sheets", "arrow"], site_rules: [{ site: "https://a.test/*", off: true, keymap: { visual: { x: { id: "find.open" } } } }] }), "https://a.test/");
+  assert.equal(view.rows[0]!.changes.find(({ keymap_mode }) => keymap_mode === "visual")!.dead, "off for this page");
+});

@@ -62,11 +62,12 @@ export type TreeNode = TreeLeaf | TreeBranch;
 // One `site_rules` row with its columns (see `SiteColumns` in `match_pattern.ts`). `keys` holds parsed key sequences, one token array each. The background prunes the normal tree with them for each page, so the stored keymap does not grow a tree per rule.
 // `off` is set from `off` or a row with nothing but `site`. The background also treats a page as all off when its key rule leaves no normal binding.
 // `modes` holds each site mode with its own binds, compiled as `bind` is. A page grafts them on its own, never on the stored tree.
+// `keymap` holds the binds of the keymap modes other than normal (visual, visual_line, caret), compiled as `bind` is. The normal-mode binds of a row, from `bind` and `keymap.normal`, are all in `bind`.
 // `bind` maps a normalized key sequence to its tokens and compiled leaf. The background grafts the merged binds onto the normal tree before it prunes.
 export type SiteBind = { tokens: string[]; leaf: TreeLeaf };
 // `site` is the pattern as written, `origin` says whether the user or DesertFox wrote the row, and `name` is the shipped row's name (set only for `default`). The site rules view reads them, so it lists exactly the rows the keys use.
 export type SiteRuleSource = { origin: "user" } | { origin: "default"; name: string };
-export type SiteRule = SiteRuleSource & { site: string; regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; modes?: Record<string, { label: string; bind: Record<string, SiteBind> }>; values?: Readonly<Record<string, unknown>> };
+export type SiteRule = SiteRuleSource & { site: string; regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; keymap?: Record<string, Record<string, SiteBind>>; modes?: Record<string, { label: string; bind: Record<string, SiteBind> }>; values?: Readonly<Record<string, unknown>> };
 
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;

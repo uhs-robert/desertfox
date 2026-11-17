@@ -78,9 +78,10 @@ function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, 
     return resolved as never;
   };
   return rows.map((row) => {
-    if (row.bind === undefined && row.modes === undefined) return row;
+    if (row.bind === undefined && row.keymap === undefined && row.modes === undefined) return row;
+    const keymap = row.keymap && Object.fromEntries(Object.entries(row.keymap).map(([mode, table]) => [mode, resolve_table(table, `keymap "${mode}" `, row.site)]));
     const modes = row.modes && Object.fromEntries(Object.entries(row.modes).map(([name, mode]) => [name, { ...mode, bind: resolve_table(mode.bind, `mode "${name}" `, row.site) }]));
-    return { ...row, ...(row.bind && { bind: resolve_table(row.bind, "", row.site) }), ...(modes && { modes }) };
+    return { ...row, ...(row.bind && { bind: resolve_table(row.bind, "", row.site) }), ...(keymap && { keymap }), ...(modes && { modes }) };
   });
 }
 
@@ -152,22 +153,23 @@ export function compile_config(input: CompileInput): CompileOutput {
   }
   for (const rule of compiled.site_rules ?? []) {
     const { site } = rule;
-    check_site_binds(rule.bind, "", site, input, warnings);
-    for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, site, input, warnings);
+    check_site_binds(rule.bind, "", "normal", site, input, warnings);
+    for (const [mode, binds] of Object.entries(rule.keymap ?? {})) check_site_binds(binds, `keymap "${mode}" `, mode, site, input, warnings);
+    for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, "normal", site, input, warnings);
   }
   warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
   return { compiled, theme: { dark: theme.dark, light: theme.light, ...stored_font(input.config.settings) }, warnings: [...resolve_warnings, ...warnings] };
 }
 
-// Checks the binds of a site row or one of its modes, and drops the bad ones in place. A mode lays over normal mode, so its binds run in normal mode.
-function check_site_binds(binds: Record<string, SiteBind> | undefined, scope: string, site: string, input: CompileInput, warnings: string[]): void {
+// Checks the binds of a site row, one of its keymap modes or one of its site modes, and drops the bad ones in place. `mode` is the keymap mode the commands must fit: a site mode lays over normal mode, so its binds run in normal mode.
+function check_site_binds(binds: Record<string, SiteBind> | undefined, scope: string, mode: string, site: string, input: CompileInput, warnings: string[]): void {
   for (const [key, { tokens, leaf }] of Object.entries(binds ?? {})) {
     const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
     if (waits_for_key) warnings.push(`site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
     // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
     const node_warnings: string[] = [];
-    const kept = !waits_for_key && keep_node(leaf, tokens, "normal", input, node_warnings);
-    warnings.push(...node_warnings.map((warning) => warning.replace(/^normal: skipped "[^"]*"/, `site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}"`)));
+    const kept = !waits_for_key && keep_node(leaf, tokens, mode, input, node_warnings);
+    warnings.push(...node_warnings.map((warning) => warning.replace(new RegExp(`^${mode}: skipped "[^"]*"`), `site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}"`)));
     if (waits_for_key || !kept) delete binds![key];
   }
 }
@@ -187,7 +189,7 @@ function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | und
   };
   if (normal) walk(normal, []);
   for (const rule of rules) {
-    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) check("site_rules", tokens, leaf);
+    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.keymap ?? {}).flatMap((binds) => Object.values(binds)), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) check("site_rules", tokens, leaf);
   }
 }
 

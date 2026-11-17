@@ -214,7 +214,7 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
 
   // The settings check covers the shape of each bind. Each step gets the checks of a keymap entry.
   for (const row of merged.settings.site_rules ?? []) {
-    for (const { scope, table } of bind_tables_of(row)) {
+    for (const { scope, keymap_mode, table } of bind_tables_of(row)) {
       for (const [sequence, entry] of Object.entries(table)) {
         for (const step of [entry].flat() as unknown[]) {
           // Text here failed to parse, and resolve_bindings already reported it.
@@ -229,7 +229,7 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
             problems.push(`${prefix}: a bind cannot wait for a key press`);
             continue;
           }
-          for (const message of check_invocation(binding, registry, engine_names, "normal")) problems.push(`${prefix}: ${message}`);
+          for (const message of check_invocation(binding, registry, engine_names, keymap_mode)) problems.push(`${prefix}: ${message}`);
         }
       }
     }

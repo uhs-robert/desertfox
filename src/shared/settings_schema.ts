@@ -6,7 +6,7 @@
 import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
 import { parse_sequence } from "./keys/notation.ts";
 import { MAX_BIND_STEPS } from "./table_constants.ts";
-import { SETTINGS_TABLE, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
+import { SETTINGS_TABLE, SITE_KEYMAP_MODES, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { parse_font_family } from "./theme/font_family.ts";
 import { DESKTOP_THEME } from "./theme/roles.ts";
@@ -78,6 +78,11 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
       if (modes_problem === undefined) continue;
       return `has a field "${field}" that ${modes_problem}`;
     }
+    if (rule.value === "mode_bindings") {
+      const mode_problem = mode_bindings_problem(field_value);
+      if (mode_problem === undefined) continue;
+      return `has a field "${field}" that ${mode_problem}`;
+    }
     if (is_text(field_value) && (rule.value !== "web_url" || is_web_url(field_value))) continue;
     if (rule.optional) return `has an empty or non-text "${field}"`;
     return rule.value === "web_url" ? `needs an http or https "${field}"` : `needs a non-empty "${field}"`;
@@ -85,6 +90,8 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
   for (const [name, spec] of Object.entries(columns)) {
     if (value[name] !== undefined && !spec.check(value[name])) return `has a field "${name}" that is not ${spec.expectation}`;
   }
+  const clash = bind_keymap_clash(value);
+  if (clash !== undefined) return `binds "${clash}" in both "bind" and "keymap.normal", and a key may be in only one of them`;
   const present = exclusive.filter((field) => value[field] !== undefined);
   return present.length > 1 ? `sets both ${join_words(present.map((field) => `"${field}"`), "and")}, and only one may be set` : undefined;
 }
@@ -120,6 +127,26 @@ function bindings_problem(value: unknown): string | undefined {
     if (problem !== undefined) return `binds "${key}" to something that ${problem}`;
   }
   return undefined;
+}
+
+// One table of binds per keymap mode, each following the rules of the `bind` column. Only the modes a site row can bind are accepted.
+function mode_bindings_problem(value: unknown): string | undefined {
+  if (!is_table(value) || Object.keys(value).length === 0) return "is not a table of keymap modes to binds";
+  for (const [mode, table] of Object.entries(value)) {
+    if (!(SITE_KEYMAP_MODES as readonly string[]).includes(mode)) return `names the mode "${mode}", which a site row cannot bind (use ${join_words(SITE_KEYMAP_MODES.map((name) => `"${name}"`), "or")})`;
+    const problem = bindings_problem(table);
+    if (problem !== undefined) return `has the mode "${mode}" whose table ${problem}`;
+  }
+  return undefined;
+}
+
+// `bind` is the short form of `keymap.normal`, so a key in both is a mistake. Keys are compared as the keymap reads them, so `<c-a>` and `<C-a>` meet. Whether each table is valid is checked before this runs, so a table that is not valid is skipped.
+function bind_keymap_clash(row: Record<string, unknown>): string | undefined {
+  const normal = is_table(row.keymap) ? row.keymap.normal : undefined;
+  if (!is_table(row.bind) || !is_table(normal)) return undefined;
+  const written = new Map<string, string>();
+  for (const key of Object.keys(row.bind)) written.set(parse_sequence(key).tokens?.join("") ?? key, key);
+  return Object.keys(normal).find((key) => written.has(parse_sequence(key).tokens?.join("") ?? key));
 }
 
 // The rule of the editor schema's ONE_LINE_TEXT: not blank, no control character.
@@ -167,7 +194,7 @@ export function table_list_rule(fields: TableFields, exclusive: readonly string[
     }
     return undefined;
   };
-  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "site_modes" ? " of modes that each have a label plus a bind" : value === "boolean" ? " of true or false" : "");
+  const optional_kind = (value: string): string => (value === "keys" ? " of key sequences" : value === "bindings" ? " of keys to commands" : value === "site_modes" ? " of modes that each have a label plus a bind" : value === "mode_bindings" ? " of binds per mode" : value === "boolean" ? " of true or false" : "");
   const field_words = Object.entries(fields).map(([field, rule]) => {
     const kind = rule.value === "web_url" ? "an http or https " : rule.value === "keys" ? "key sequences in " : "";
     return rule.optional ? `an optional "${field}"${optional_kind(rule.value)}` : `${kind}"${field}"`;
