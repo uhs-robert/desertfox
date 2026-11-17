@@ -1,9 +1,11 @@
 // Key test cases of ]] and [[ (page.follow). run.mjs calls run_cases with its helpers.
 export const areas = ["hints"];
 
-export async function run_cases({ run_case, press_keys, open_page, wait_event, events }) {
+export async function run_cases({ run_case, press_keys, open_page, wait_event, events, in_active_tab, in_background, poll_until }) {
   const BRACKET_RIGHT_TWICE = ["-k", "bracketright", "-k", "bracketright"];
   const BRACKET_LEFT_TWICE = ["-k", "bracketleft", "-k", "bracketleft"];
+  // The toast text sits in a closed shadow root, on the host at the toast layer (LAYERS.toast).
+  const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
   const loaded = (page_id) => (event) => event.type === "tree_read" && event.page_id === page_id;
 
   await run_case("]] and [[ follow the rel links of the page, ahead of a link whose text matches", async () => {
@@ -26,5 +28,37 @@ export async function run_cases({ run_case, press_keys, open_page, wait_event, e
     mark = events.length;
     await press_keys(...BRACKET_LEFT_TWICE);
     await wait_event(mark, loaded("follow_text_prev"), "the previous page after [[");
+  });
+
+  await run_case("]] with no next page clicks the load control after the list", async () => {
+    await open_page("follow_load", "follow_load", { new_tab: false });
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, (event) => event.type === "loaded" && event.page_id === "follow_load", "the items the load control added");
+  });
+
+  await run_case("]] with no next page and no load control scrolls an endless list to its end", async () => {
+    await open_page("follow_load", "follow_load_scroll", { new_tab: false });
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, (event) => event.type === "loaded" && event.page_id === "follow_load_scroll", "the items the page added at its end");
+  });
+
+  await run_case("]] says so when the scroll loads nothing", async () => {
+    await open_page("follow_load", "follow_load_dead", { new_tab: false });
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "follow_load_dead", "the Nothing loaded toast", 10000);
+    await poll_until("the toast to say Nothing loaded", async () => (await toast_text()) === "Nothing loaded");
+  });
+
+  await run_case("a load click on a link that leaves the page records the page in the jump list", async () => {
+    await in_background(`browser.storage.session.remove("desertfox_jumps")`);
+    await open_page("follow_load", "follow_load_link", { new_tab: false });
+    await in_active_tab(`(() => { const link = document.createElement("a"); link.href = "/page?id=follow_load_left"; link.textContent = "Load more"; document.getElementById("load").replaceWith(link); return true; })()`);
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, loaded("follow_load_left"), "the page the load link opens");
+    await poll_until("the page left in the jump list", async () => JSON.stringify(await in_background(`browser.storage.session.get("desertfox_jumps")`)).includes("id=follow_load_link"));
   });
 }

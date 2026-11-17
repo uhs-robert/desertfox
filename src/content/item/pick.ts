@@ -71,7 +71,15 @@ export type ItemPage = {
 const SCROLL_PX = 50;
 const SCROLL = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as const;
 
-let last_item: WeakRef<Element> | undefined;
+let last_move: { item_: WeakRef<Element>; args_: ItemArgs } | undefined;
+
+// What `]]` reads of the last move, to carry the box onto the first item a load adds. `item_` is gone once the page dropped the item and nothing else holds it.
+export type ItemCursor = { item_: Element | undefined; selector_: string; shown_: boolean; land_: (item: Element) => void };
+
+export function read_cursor(page: ItemPage, shown_: boolean): ItemCursor | undefined {
+  const args = last_move?.args_;
+  return args && { item_: last_move!.item_.deref(), selector_: args.selector, shown_, land_: (item) => land_on(page, item, args) };
+}
 
 // A row that names a link and finds none in an item (a comment among stories) focuses the item itself. An item that is not focusable takes tabindex -1, so a script can focus it and the tab order stays as it was.
 function focus_target(item: Element, link_selector: string | undefined): HTMLElement {
@@ -90,17 +98,21 @@ export function move_item(page: ItemPage, args: ItemArgs): void {
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
   if (items.length === 0) return scroll();
   const boxes = items.map((item) => item.getBoundingClientRect());
-  const place = place_of(items, page.focused(), last_item?.deref(), boxes, page.view.innerHeight);
+  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight);
   const vertical = args.direction === "down" || args.direction === "up";
   // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction.
   if (vertical && place.on_item && (args.direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) return scroll();
   const pick = pick_item(boxes, place, args.direction, steps);
   // At the last item down and up scroll on, so the page below the results stays reachable. Left and right say they are at the end.
   if ("end" in pick) return vertical ? scroll() : page.toast(`No ${args.direction === "right" ? "next" : "previous"} item`);
-  const item = items[pick.index]!;
+  land_on(page, items[pick.index]!, args);
+}
+
+// Focuses the item, brings it into view and draws the box. `]]` lands here too, on the first item a load added.
+function land_on(page: ItemPage, item: Element, args: ItemArgs): void {
   focus_target(item, args.link || undefined).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
-  last_item = new WeakRef(item);
+  last_move = { item_: new WeakRef(item), args_: args };
   page.highlight(item);
 }

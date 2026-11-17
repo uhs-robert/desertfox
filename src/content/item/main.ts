@@ -1,8 +1,8 @@
 // The `item` bundle: the handler of `page.item`, which site rows bind to j and k on result pages. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { move_item } from "./pick.ts";
-import type { ItemArgs } from "./pick.ts";
+import { move_item, read_cursor } from "./pick.ts";
+import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 
 type ItemWindow = { desertfox_host?: PageHostApi; desertfox_item_ready?: true };
@@ -13,5 +13,8 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const overlay = create_item_overlay(() => host.get_mode() === "normal");
-  host.register_handler_("page.item", (args) => move_item({ doc: document, view: window, focused: host.focused_, toast: host.show_toast_, scroll_by: host.scroll_by_, highlight: overlay.show }, args as unknown as ItemArgs));
+  const page = { doc: document, view: window, focused: host.focused_, toast: host.show_toast_, scroll_by: host.scroll_by_, highlight: overlay.show };
+  host.register_handler_("page.item", (args) => move_item(page, args as unknown as ItemArgs));
+  // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
+  host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }

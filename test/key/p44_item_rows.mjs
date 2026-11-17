@@ -224,6 +224,34 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("j to scroll on from the last result", async () => (await in_active_tab("scrollY")) === before + 50);
   });
 
+  // The More results button loads in two steps, a spinner first and the results 300 ms later, and drops the first result as a virtualized list does, so the old count is no longer the index of the first new result.
+  await run_case("on ddg, after ]] loads more results the box moves to the first new one", async () => {
+    await open_page("controls", "ddg_more", { new_tab: true });
+    await in_active_tab(`(() => {
+      const result = (index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a><p>snippet</p></article></li>';
+      const list = document.createElement("ol");
+      list.innerHTML = [0, 1, 2, 3].map(result).join("");
+      const more = document.createElement("button");
+      more.textContent = "More results";
+      more.addEventListener("click", () => {
+        list.firstElementChild.remove();
+        const spinner = document.createElement("div");
+        spinner.textContent = "loading";
+        more.before(spinner);
+        setTimeout(() => (spinner.remove(), list.insertAdjacentHTML("beforeend", [4, 5, 6].map(result).join(""))), 300);
+      });
+      document.body.prepend(list, more);
+      document.activeElement?.blur();
+      return true;
+    })()`);
+    await press_keys("jj");
+    await expect_focus("d1");
+    await press_keys("-k", "bracketright", "-k", "bracketright");
+    await expect_focus("d4");
+    await in_active_tab(`document.getElementById("d4").closest("article").id = "a4"; 0`);
+    await expect_box_on("a4", "the box on the first new result");
+  });
+
   // A DuckDuckGo images shaped grid: rows of figures with a caption link, widths that differ from row to row, as its justified layout has.
   await run_case("on ddg images, h and l step along a row of tiles and j and k go to the tile below and above", async () => {
     await open_page("controls", "img_grid", { new_tab: true });
