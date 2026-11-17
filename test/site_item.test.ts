@@ -42,8 +42,8 @@ test("down and up in a masonry grid stay in the column", () => {
 test("down prefers an item that overlaps across, even when one in the next column is nearer along", () => {
   const columns = [box(0, 0, 100, 200), box(110, 100, 100, 60), box(0, 210, 100, 200)];
   assert.equal(step_from(columns, 0, "down"), 2);
-  // With nothing overlapping, the centre distance across decides.
-  const apart = [box(0, 0, 100, 40), box(300, 60, 100, 40), box(120, 140, 100, 40)];
+  // With nothing overlapping, the nearest row still decides first and the smaller gap across wins in it.
+  const apart = [box(0, 0, 100, 40), box(300, 60, 100, 40), box(120, 64, 100, 40)];
   assert.equal(step_from(apart, 0, "down"), 2);
 });
 
@@ -62,6 +62,16 @@ test("left and right reach a column whose tiles each cover less than half the it
   const split = [box(200, 300, 100, 100), box(100, 140, 100, 200), box(100, 350, 100, 200), box(0, 280, 100, 140)];
   assert.equal(step_from(split, 0, "left"), 2);
   assert.equal(step_from(split, 2, "left"), 3);
+});
+
+test("up from a tall item takes the short item just above, not the one above that", () => {
+  const stack = [box(0, 0, 100, 40), box(0, 60, 100, 40), box(0, 120, 100, 400)];
+  assert.equal(step_from(stack, 2, "up"), 1);
+});
+
+test("left from a wide item takes its neighbour, not the one beyond", () => {
+  const strip = [box(0, 0, 40, 100), box(60, 0, 40, 100), box(120, 0, 400, 100)];
+  assert.equal(step_from(strip, 2, "left"), 1);
 });
 
 test("a list of titles with unequal widths still goes to the next one down", () => {
