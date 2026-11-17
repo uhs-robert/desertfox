@@ -4,8 +4,9 @@
 // 17 KB budget and neither needs it.
 
 import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
+import { is_choice_list, is_run_table } from "./invocation.ts";
 import { parse_sequence } from "./keys/notation.ts";
-import { MAX_BIND_STEPS } from "./table_constants.ts";
+import { MAX_BIND_CHOICES, MAX_BIND_STEPS } from "./table_constants.ts";
 import { SETTINGS_TABLE, SITE_KEYMAP_MODES, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { parse_font_family } from "./theme/font_family.ts";
@@ -100,31 +101,61 @@ function table_problem(fields: TableFields, exclusive: readonly string[], column
 function bind_steps_problem(steps: unknown): string | undefined {
   const list = Array.isArray(steps) ? steps : [steps];
   if (list.length === 0 || list.length > MAX_BIND_STEPS) return `has ${list.length === 0 ? "no step" : `more than ${MAX_BIND_STEPS} steps`}`;
-  for (const step of list) {
+  for (const [index, step] of list.entries()) {
     if (is_text(step)) continue;
+    if (is_run_table(step)) return 'mixes choices ({ run } tables) with steps, and a list holds only one kind';
     if (!is_table(step) || !is_text(step.id)) return 'has a step that is neither a command string nor a table with an "id"';
-    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", "label", "intent", "when_focus"].includes(name));
+    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", ...BIND_TEXT_FIELDS].includes(name));
     if (unknown_field !== undefined) return `has a step with the unknown field "${unknown_field}"`;
     if ((step.args !== undefined && !is_table(step.args)) || (step.prompt !== undefined && !is_table(step.prompt))) return 'has a step with "args" or "prompt" that is not a table';
-    if ([step.label, step.intent, step.when_focus].some((text) => text !== undefined && typeof text !== "string")) return 'has a step with a "label", "intent" or "when_focus" that is not text';
+    if (BIND_TEXT_FIELDS.some((name) => step[name] !== undefined && typeof step[name] !== "string")) return `has a step with ${TEXT_FIELDS_PHRASE} that is not text`;
+    // A guard guards the whole bind and is read from its first step only, so on a later step it would be ignored.
+    const guard = index === 0 ? undefined : GUARD_FIELDS.find((name) => step[name] !== undefined);
+    if (guard !== undefined) return `has "${guard}" on step ${index + 1}, but only the first step can carry a guard (for choices, write a list of { run, ${guard} } tables)`;
   }
   return undefined;
 }
 
-// Whether each key is valid notation and each value is a binding as the keymap writes it: a command string, a list of steps, a `{ run, label, intent, when_focus }` table, or an invocation table `{ id, args }`, which is what the build stores. Whether the command exists and takes the args is the compiler's check, with the registry validator.
+const GUARD_FIELDS = ["when_focus", "when_present"];
+const BIND_TEXT_FIELDS = ["label", "intent", ...GUARD_FIELDS];
+const TEXT_FIELDS_PHRASE = 'a "label", "intent", "when_focus" or "when_present"';
+
+// A choice's guards, on its `run` table or on its first step as the build stores it.
+const has_guard = (choice: unknown): boolean => {
+  const fields = is_run_table(choice) ? choice : Array.isArray(choice) && is_table(choice[0]) ? choice[0] : {};
+  return GUARD_FIELDS.some((name) => fields[name] !== undefined);
+};
+
+// What is wrong with one binding, worded to follow `binds "<key>" `.
+function binding_problem(binding: unknown): string | undefined {
+  if (is_choice_list(binding)) {
+    if (binding.length > MAX_BIND_CHOICES) return `to more than ${MAX_BIND_CHOICES} choices`;
+    for (const [index, choice] of binding.entries()) {
+      if (is_choice_list(choice)) return `in choice ${index + 1} to another list of choices`;
+      const problem = binding_problem(choice);
+      if (problem !== undefined) return `in choice ${index + 1} ${problem}`;
+      // The first choice whose guards hold runs, so a choice without a guard ends the list.
+      if (index < binding.length - 1 && !has_guard(choice)) return `in choice ${index + 1} with no "when_present" or "when_focus", so the choices after it never run`;
+    }
+    return undefined;
+  }
+  if (is_run_table(binding)) {
+    const unknown_field = Object.keys(binding).find((name) => !["run", ...BIND_TEXT_FIELDS].includes(name));
+    if (unknown_field !== undefined) return `with the unknown field "${unknown_field}"`;
+    if (BIND_TEXT_FIELDS.some((name) => binding[name] !== undefined && typeof binding[name] !== "string")) return `with ${TEXT_FIELDS_PHRASE} that is not text`;
+  }
+  const problem = bind_steps_problem(is_run_table(binding) ? binding.run : binding);
+  return problem === undefined ? undefined : `to something that ${problem}`;
+}
+
+// Whether each key is valid notation and each value is a binding as the keymap writes it: a command string, a list of steps, a `{ run, label, intent, when_focus, when_present }` table, or an invocation table `{ id, args }`, which is what the build stores. A site row bind may also be a list of choices. Whether the command exists and takes the args is the compiler's check, with the registry validator.
 function bindings_problem(value: unknown): string | undefined {
   if (!is_table(value) || Object.keys(value).length === 0) return "is not a table of keys to commands";
   for (const [key, binding] of Object.entries(value)) {
     const { error } = parse_sequence(key);
     if (error !== undefined) return `binds "${key}", which ${error}`;
-    const labeled = is_table(binding) && "run" in binding;
-    if (labeled) {
-      const unknown_field = Object.keys(binding).find((name) => !["run", "label", "intent", "when_focus"].includes(name));
-      if (unknown_field !== undefined) return `binds "${key}" with the unknown field "${unknown_field}"`;
-      if ([binding.label, binding.intent, binding.when_focus].some((text) => text !== undefined && typeof text !== "string")) return `binds "${key}" with a "label", "intent" or "when_focus" that is not text`;
-    }
-    const problem = bind_steps_problem(labeled ? binding.run : binding);
-    if (problem !== undefined) return `binds "${key}" to something that ${problem}`;
+    const problem = binding_problem(binding);
+    if (problem !== undefined) return `binds "${key}" ${problem}`;
   }
   return undefined;
 }

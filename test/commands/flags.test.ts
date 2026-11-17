@@ -64,11 +64,13 @@ test("only page.reload decides `.` by its args", () => {
 
 test("only these commands record a jump, and the open commands only with where here", () => {
   const flagged = registry.list().filter((command) => command.jumps !== undefined);
-  assert.deepEqual(flagged.map((command) => command.id).sort(), ["find.next", "find.prev", "heading.go", "mark.jump", "mark.step", "open.anything", "open.clipboard", "open.search", "open.url", "page.follow", "page.heading", "scroll.to"]);
+  assert.deepEqual(flagged.map((command) => command.id).sort(), ["find.next", "find.prev", "heading.go", "mark.jump", "mark.step", "open.anything", "open.clipboard", "open.search", "open.url", "page.follow", "page.heading", "page.item", "scroll.to"]);
   for (const id of ["open.url", "open.search", "open.anything", "open.clipboard", "page.follow"]) {
     const jumps = registry.get(id)!.jumps as (args: Record<string, unknown>) => boolean;
     assert.deepEqual(["here", "tab", "background", "window"].map((where) => jumps({ where })), [true, false, false, false], id);
   }
+  const item_jumps = registry.get("page.item")!.jumps as (args: Record<string, unknown>) => boolean;
+  assert.deepEqual(["down", "up", "left", "right", "first", "last"].map((direction) => item_jumps({ direction })), [false, false, false, false, true, true], "page.item jumps only to the ends, as gg and G do");
   const mark_jumps = registry.get("mark.jump")!.jumps as (args: Record<string, unknown>) => boolean;
   assert.deepEqual(["a", "'", "A"].map((key) => mark_jumps({ key })), [true, true, false], "the router leaves global marks to global_mark_jump.ts");
 });

@@ -60,8 +60,8 @@ function split_at_cap<T>(ranked: Ranked<T>): ReachList<T> {
 // A param that takes a register name, which reads the system clipboard for `+`.
 const takes_clipboard_register = (param: ParamDef | undefined, value: unknown): boolean => value === CLIPBOARD_REGISTER && param?.pattern !== undefined && new RegExp(param.pattern).test(CLIPBOARD_REGISTER);
 
-// A step that is not an object cannot come out of the build, but the walk skips it instead of trusting that.
-const steps_of = (binding: unknown): BoundInvocation[] => [binding].flat().filter((step): step is BoundInvocation => typeof step === "object" && step !== null && typeof (step as BoundInvocation).id === "string");
+// A step that is not an object cannot come out of the build, but the walk skips it instead of trusting that. A site bind's choice list holds a list of steps per choice, so it flattens one more level, and every choice is listed.
+const steps_of = (binding: unknown): BoundInvocation[] => [binding].flat(2).filter((step): step is BoundInvocation => typeof step === "object" && step !== null && typeof (step as BoundInvocation).id === "string");
 
 // The reach of a build that failed: the problems show instead, and the commit refuses.
 export const no_reach = (): ImportReach => ({ addresses: { rows: [], rest: [] }, keys: { clipboard_or_page: { rows: [], rest: [] }, settings: { rows: [], rest: [] }, host: { rows: [], rest: [] } }, site_rows: 0 });

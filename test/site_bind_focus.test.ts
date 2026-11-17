@@ -8,7 +8,7 @@ import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
-import { leaf_for_focus } from "../src/content/run_leaf.ts";
+import { leaf_for_page } from "../src/content/run_leaf.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { build_commands_file } from "../src/shared/registry/index.ts";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
@@ -24,31 +24,33 @@ const MAPS = "https://www.google.com/maps/@42.36,-71.06,15z";
 // A stand-in element: `matches` answers for the one selector it carries.
 const element = (matching: string | undefined): Element => ({ matches: (selector: string) => selector === matching, closest: (selector: string) => (selector === matching ? element(matching) : null) }) as unknown as Element;
 const body = element(undefined);
+// A document that shows no match for any selector.
+const NO_ROOT = { querySelectorAll: () => [] } as unknown as ParentNode;
 const leaf = (id: string, extra: Partial<TreeLeaf> = {}): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id }, runs_in: "content", count_rule: "ignore" }], ...extra });
 
 test("the guard runs the bind with no focus, with body focused and with a matching element focused", () => {
   const guarded = leaf("page.send_key", { when_focus: MAP, otherwise: leaf("scroll.lines") });
-  for (const focused of [null, body, element(MAP)]) assert.equal(leaf_for_focus(guarded, focused, body), guarded);
+  for (const focused of [null, body, element(MAP)]) assert.equal(leaf_for_page(guarded, focused, body, NO_ROOT), guarded);
 });
 
 test("the guard runs the replaced leaf when another element has focus, and nothing when the bind replaced none", () => {
   const otherwise = leaf("scroll.lines");
-  assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: MAP, otherwise }), element("#panel"), body), otherwise);
-  assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: MAP }), element("#panel"), body), undefined);
+  assert.equal(leaf_for_page(leaf("page.send_key", { when_focus: MAP, otherwise }), element("#panel"), body, NO_ROOT), otherwise);
+  assert.equal(leaf_for_page(leaf("page.send_key", { when_focus: MAP }), element("#panel"), body, NO_ROOT), undefined);
 });
 
 test("focus on an element inside a matching element counts as a match", () => {
   const inside = { matches: () => false, closest: (selector: string) => (selector === MAP ? element(MAP) : null) } as unknown as Element;
   const guarded = leaf("page.send_key", { when_focus: MAP, otherwise: leaf("scroll.lines") });
-  assert.equal(leaf_for_focus(guarded, inside, body), guarded);
+  assert.equal(leaf_for_page(guarded, inside, body, NO_ROOT), guarded);
 });
 
 test("a leaf with no guard runs whatever has focus, and a selector that does not parse falls through", () => {
   const plain = leaf("scroll.lines");
-  assert.equal(leaf_for_focus(plain, element("#panel"), body), plain);
+  assert.equal(leaf_for_page(plain, element("#panel"), body, NO_ROOT), plain);
   const throwing = { matches: () => { throw new SyntaxError("bad selector"); }, closest: () => { throw new SyntaxError("bad selector"); } } as unknown as Element;
   const otherwise = leaf("scroll.lines");
-  assert.equal(leaf_for_focus(leaf("page.send_key", { when_focus: "[[", otherwise }), throwing, body), otherwise);
+  assert.equal(leaf_for_page(leaf("page.send_key", { when_focus: "[[", otherwise }), throwing, body, NO_ROOT), otherwise);
 });
 
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
@@ -77,7 +79,7 @@ test("a count and a key sequence reach the fallback: 5j falls through with its c
   assert.equal(counted.kind_, "match");
   if (counted.kind_ !== "match") return;
   assert.equal(counted.count, 5);
-  assert.equal(leaf_for_focus(counted.leaf, element("#panel"), body)?.steps[0]?.invocation.id, "a.j");
+  assert.equal(leaf_for_page(counted.leaf, element("#panel"), body, NO_ROOT)?.steps[0]?.invocation.id, "a.j");
   matcher.feed("normal", "g");
   const sequence = matcher.feed("normal", "g");
   assert.equal(sequence.kind_ === "match" && sequence.leaf.steps[0]?.invocation.id, "a.gg");

@@ -26,8 +26,15 @@ export type Prompt = {
 // `intent` replaces the hover text of the which-key row, which is the command intent otherwise. It follows `label`: on a binding of several invocations only the first one counts, and modifier variants do not inherit it.
 // `variant_label` is the label of the variants a modifier derives from this key, which name the target and leave the action to the modifier's group title. It falls back to `label`.
 // `when_focus` is a CSS selector. It makes a site row bind run only while nothing has focus or the focused element sits on or inside an element it matches. Otherwise the key runs the binding the bind replaced. Like `label`, only the first invocation's counts.
+// `when_present` is a CSS selector too. The bind runs only while the page shows an element it matches, and falls through like `when_focus` otherwise. A bind with both runs only while both hold.
 // `site_search` is set by the key compiler for a `site_keys` key: its letter, and the engines to pick from by page, in order. `args.engine` holds the first one, so the compile-time check has an engine to check.
-export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string; intent?: string; variant_label?: string; when_focus?: string; site_search?: { letter: string; engines: string[] } };
+export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string; intent?: string; variant_label?: string; when_focus?: string; when_present?: string; site_search?: { letter: string; engines: string[] } };
 
 // One invocation, or an array that runs in order.
 export type KeyBinding = BoundInvocation | BoundInvocation[];
+
+// A binding written as a `{ run, label, intent, when_focus, when_present }` table.
+export const is_run_table = (value: unknown): value is Record<string, unknown> & { run: unknown } => typeof value === "object" && value !== null && !Array.isArray(value) && "run" in value;
+
+// A site row bind that lists guarded choices: the `{ run, when_present, when_focus }` tables a file writes, or the step lists the build stores for them. A list of steps holds neither.
+export const is_choice_list = (binding: unknown): binding is readonly unknown[] => Array.isArray(binding) && binding.length > 0 && binding.every((choice) => Array.isArray(choice) || is_run_table(choice));

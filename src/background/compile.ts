@@ -20,7 +20,7 @@ import { load_theme, local_theme_problem } from "../shared/theme/load.ts";
 import type { StoredTheme } from "../shared/theme/apply.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
 import type { Registry } from "../shared/registry/index.ts";
-import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
+import { make_entry_resolver, site_bind_resolver } from "../shared/config_build/resolve_binding.ts";
 import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
@@ -68,7 +68,7 @@ export function config_entry_resolver(registry: Registry, config: Pick<MergedCon
 // A browser edit saves a bind as typed, so its text resolves here with the parser of the config build. A bad step is a warning and drops that bind.
 function with_resolved_binds(rows: Settings["site_rules"], input: CompileInput, warnings: string[]): Settings["site_rules"] {
   if (input.registry === undefined) return rows;
-  const resolve_entry = config_entry_resolver(input.registry, input.config, warnings);
+  const resolve_entry = site_bind_resolver(config_entry_resolver(input.registry, input.config, warnings));
   const resolve_table = (table: BindingTable, scope: string, site: string): never => {
     const resolved: Record<string, unknown> = {};
     for (const [sequence, entry] of Object.entries(table)) {
@@ -165,15 +165,19 @@ export function compile_config(input: CompileInput): CompileOutput {
 function check_site_binds(binds: Record<string, SiteBind> | undefined, column_scope: string, mode: string, site: string, input: CompileInput, warnings: string[]): void {
   for (const [key, site_bind] of Object.entries(binds ?? {})) {
     const { tokens, leaf } = site_bind;
-    const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
+    const choices = choices_of(leaf);
+    const waits_for_key = choices.some((choice) => choice.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args)));
     if (waits_for_key) warnings.push(`site_rules: ${column_scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
     // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
     const node_warnings: string[] = [];
-    const kept = !waits_for_key && keep_node(leaf, tokens, mode, input, node_warnings);
+    const kept = !waits_for_key && choices.every((choice) => keep_node(choice, tokens, mode, input, node_warnings));
     warnings.push(...node_warnings.map((warning) => warning.replace(new RegExp(`^${mode}: skipped "[^"]*"`), `site_rules: ${column_scope}skipped bind "${tokens.join("")}" of "${site}"`)));
     if (waits_for_key || !kept) delete binds![key];
   }
 }
+
+// The leaves of a bind: itself, then each further choice of a choice list. The compile runs before the graft, so no replaced leaf sits on the chain yet.
+const choices_of = (leaf: TreeLeaf): TreeLeaf[] => (leaf.otherwise ? [leaf, ...choices_of(leaf.otherwise)] : [leaf]);
 
 // A `mode.site` bind that names a mode no site row defines does nothing on any page. Rows merge by mode name across sites, so the check is over every row, and it only warns. The keymap's normal mode is checked too, because a key there can start a mode as well.
 function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | undefined, warnings: string[]): void {
@@ -190,7 +194,7 @@ function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | und
   };
   if (normal) walk(normal, []);
   for (const rule of rules) {
-    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.keymap ?? {}).flatMap((binds) => Object.values(binds)), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) check("site_rules", tokens, leaf);
+    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.keymap ?? {}).flatMap((binds) => Object.values(binds)), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) for (const choice of choices_of(leaf)) check("site_rules", tokens, choice);
   }
 }
 

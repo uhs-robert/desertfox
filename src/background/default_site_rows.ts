@@ -80,10 +80,13 @@ const ARROW_MODE: SiteModeTable[string] = {
 };
 
 // Result pages that j and k walk item by item through `page.item`. Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
-const item_binds = (selector: string, link?: string): BindingTable => ({
-  j: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "down" } },
-  k: { id: "page.item", args: { selector, ...(link ? { link } : {}), direction: "up" } },
+const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
+// gg and G go to the first and last item. `page.item` does nothing for them on a page that shows no item, so `when_present` hands those pages the plain scroll to the top and bottom.
+const end_binds = (selector: string, link: string | undefined): BindingTable => ({
+  gg: { ...item_step(selector, link, "first"), when_present: selector },
+  G: { ...item_step(selector, link, "last"), when_present: selector },
 });
+const item_binds = (selector: string, link?: string): BindingTable => ({ j: item_step(selector, link, "down"), k: item_step(selector, link, "up"), ...end_binds(selector, link) });
 // A result is the block that holds a title link, so the box spans site, address, title and snippet. `.MjjYud` is a generated class, but the block is its own nesting level in every layout read, and when the class changes the selector matches nothing and j and k scroll as usual.
 const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)");
 const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="result-title-a"]');
@@ -91,7 +94,7 @@ const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
 const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 // An image grid has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
-const grid_binds = (selector: string, link: string): BindingTable => Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, { id: "page.item", args: { selector, link, direction } } satisfies BoundInvocation]));
+const grid_binds = (selector: string, link: string): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction)])), ...end_binds(selector, link) });
 // The tile is a figure, which holds the picture and its caption link.
 const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 // A Google image tile is a div with a picture button (focusable) and a caption link.

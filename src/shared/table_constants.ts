@@ -10,3 +10,6 @@ export const DEFAULT_SITE_ROW_NAMES = ["sheets", "maps", "arrow", "google_images
 
 // The most steps one site bind may chain. A bind runs every step in a burst, so the cap keeps a typo from sending hundreds.
 export const MAX_BIND_STEPS = 20;
+
+// The most choices one site bind may list. Each key press tests the guards in turn, so the list stays short.
+export const MAX_BIND_CHOICES = 8;

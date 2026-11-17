@@ -1,0 +1,2 @@
+// An element the user can see: rendered with a box, and not hidden by `visibility` or a zero opacity. `page.item` moves only to such items, and a bind's `when_present` guard counts only such matches, so a guard never runs a move that finds nothing.
+export const is_shown = (element: Element): boolean => element.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && element.getClientRects().length > 0;
