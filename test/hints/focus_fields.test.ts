@@ -16,11 +16,13 @@ type Fake = {
   hidden?: boolean;
   shadow?: Fake[];
   frame?: Fake[];
+  frame_doc?: true;
 };
 
 const VIEW_HEIGHT = 600;
 const events: string[] = [];
-const view = { innerHeight: VIEW_HEIGHT, innerWidth: 800, getComputedStyle: () => ({ position: "static", display: "block", overflowX: "visible", overflowY: "visible" }) };
+const view = { innerHeight: VIEW_HEIGHT, innerWidth: 800, getComputedStyle: () => ({ getPropertyValue: () => "none", position: "static", display: "block", overflowX: "visible", overflowY: "visible" }) };
+const page_document: { defaultView: typeof view; activeElement?: unknown } = { defaultView: view };
 
 // Matches the one-tag selectors of FORM_CONTROLS: `tag:not([a=b]):not([disabled])` and `[contenteditable="v"]`.
 function matches_selector(fake: Fake, selector: string): boolean {
@@ -55,7 +57,7 @@ function realize(fake: Fake): Element {
     parentElement: null,
     clientLeft: 0,
     clientTop: 0,
-    ownerDocument: { defaultView: view },
+    ownerDocument: fake.frame_doc ? { defaultView: view } : page_document,
     closest: (selector: string) => (selector === "[inert]" && fake.inert ? element : null),
     matches: (selector: string) => matches_selector(fake, selector),
     querySelectorAll: () => [],
@@ -73,7 +75,8 @@ function realize(fake: Fake): Element {
 const page = (fakes: Fake[], active: Fake | null = null) => {
   const elements = fakes.map(realize);
   const by_name = new Map(elements.map((element) => [(element as unknown as { name: string }).name, element]));
-  (globalThis as Record<string, unknown>).document = { activeElement: active ? by_name.get(active.name) : null };
+  page_document.activeElement = active ? by_name.get(active.name) : null;
+  (globalThis as Record<string, unknown>).document = page_document;
   return { root: { querySelectorAll: () => elements } as unknown as ParentNode, by_name };
 };
 
@@ -256,4 +259,28 @@ test("an inert link or control is skipped, so the walk moves past it", () => {
   events.length = 0;
   assert.equal(focus_field(page(fields, fields[0]).root, undefined, "next", 1), undefined);
   assert.deepEqual(events, ["focus c"]);
+});
+
+test("the mark is asked for when focus changes nothing the page shows, and only then", () => {
+  const marked: unknown[] = [];
+  const { root, by_name } = page([field("a"), field("b")]);
+  assert.equal(focus_field(root, undefined, "next", 1, "control", (element) => marked.push(element)), undefined);
+  assert.deepEqual(marked, [by_name.get("a")]);
+  // The page restyles the element once it has the focus.
+  let looks = 0;
+  Object.assign(view, { getComputedStyle: () => ({ getPropertyValue: () => String(looks++) }) });
+  marked.length = 0;
+  focus_field(root, undefined, "next", 1, "control", (element) => marked.push(element));
+  Object.assign(view, { getComputedStyle: () => ({ getPropertyValue: () => "none" }) });
+  assert.deepEqual(marked, []);
+});
+
+test("no mark for an element in a frame or at the end of the list", () => {
+  const marked: unknown[] = [];
+  const { root } = page([field("framed", { frame_doc: true })]);
+  focus_field(root, undefined, "next", 1, "control", (element) => marked.push(element));
+  const last = field("last");
+  const { root: end } = page([last], last);
+  assert.equal(focus_field(end, undefined, "next", 1, "control", (element) => marked.push(element)), "No next form control");
+  assert.deepEqual(marked, []);
 });

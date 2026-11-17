@@ -29,6 +29,8 @@ export type ActionDeps = {
   start_mode_: (target: Element, mode: ModeAction) => void | Promise<unknown>;
   // Sends the element to the Inspector through the devtools page. A failed outcome carries the toast text.
   inspect_: (target: Element) => Promise<unknown>;
+  // Draws the shared focus mark on an element that took the focus. Absent in tests of the other actions.
+  mark_?: MarkFocus;
 };
 
 type Target = Pick<HTMLElement, "click" | "focus" | "remove"> & { dispatchEvent?: (event: Event) => boolean; getBoundingClientRect?: () => { left: number; top: number; width: number; height: number } } & { tabIndex?: number; setAttribute?: (name: string, value: string) => void; style?: CSSStyleDeclaration } & { textContent?: string | null; href?: unknown; localName: string; type?: unknown; isContentEditable?: boolean } & { currentSrc?: string; src?: string; getAttribute?: (name: string) => string | null; ownerDocument?: Document; baseURI?: string };
@@ -194,33 +196,37 @@ function double_click_like_a_mouse(target: Target, pointer_from: Target | undefi
   select_word_at(target, center_of(target));
 }
 
-const FLASH_MS = 700;
+export type MarkFocus = (target: Element) => void;
 
-// The outline an element had before its flash, and the timer that puts it back. A second focus inside the flash must not save the flash as the old outline.
-const flashes = new WeakMap<object, { previous: readonly [string, string]; timer: ReturnType<typeof setTimeout> }>();
+// What a person sees of focus: the page restyles these on `:focus` when it draws its own ring. The border is read by its longhands, because the computed `border` shorthand is empty when the sides differ.
+const FOCUS_LOOK = ["outline", "box-shadow", "border-color", "border-width", "border-style", "background-color", "color"];
+
+// Computed style is live, so the look is copied to a string before the focus moves.
+const look_of = (target: Element): string => {
+  const style = target.ownerDocument.defaultView!.getComputedStyle(target);
+  return FOCUS_LOOK.map((name) => style.getPropertyValue(name)).join("|");
+};
+
+// The page's own style may already show the focus (a native ring, or a color or border change), so the mark comes only when focus changed nothing visible. An element in a frame has coordinates the mark cannot place.
+export function focus_and_mark(target: HTMLElement, options: FocusOptions, mark_?: MarkFocus): void {
+  const markable = mark_ && target.ownerDocument === document;
+  const before = markable ? look_of(target) : "";
+  target.focus(options);
+  // A page that transitions its focus style still reads the old look right after the focus, but it shows the style soon, so a running animation counts as a visible change.
+  if (markable && look_of(target) === before && !target.getAnimations?.().length) mark_(target);
+}
 
 // A box that is not focusable (tabIndex below 0) cannot take focus. tabindex=-1 lets a script focus it and leaves the tab order alone. A link, a button or a page tabindex stays as it is.
 // The one place the extension tells the background that it is about to focus a frame, so the frame's first focus is not parked. It goes before the focus. A frame that sends it marks itself. The top frame cannot name a frame of another site, so its mark covers the next first focus of any frame.
 export const enter_frame = (toast: boolean): void => void best_effort(browser.runtime.sendMessage({ type: "frame_cue", toast } satisfies FrameCue));
 
-function focus_target(target: Target, toast = false): void {
+function focus_target(target: Target, toast = false, mark_?: MarkFocus): void {
   if (is_frame_element(target)) enter_frame(toast);
   if (!takes_typing(target) && (target.tabIndex ?? 0) < 0) target.setAttribute?.("tabindex", "-1");
-  target.focus();
+  // A field shows its own caret.
+  focus_and_mark(target as unknown as HTMLElement, {}, takes_typing(target) ? undefined : mark_);
   // Gecko leaves the focus outside a frame of another site on the element's focus(). Its window's focus() is one of the few calls another site allows, and it enters the frame.
   if (is_frame_element(target)) (target as unknown as HTMLIFrameElement).contentWindow?.focus();
-  if (takes_typing(target) || !target.style) return;
-  // Shows which element took the focus. The old inline outline comes back after a moment.
-  const { style } = target;
-  const pending = flashes.get(target);
-  if (pending) clearTimeout(pending.timer);
-  const previous = pending?.previous ?? ([style.getPropertyValue("outline"), style.getPropertyPriority("outline")] as const);
-  style.setProperty("outline", "2px solid currentColor", "important");
-  const timer = setTimeout(() => {
-    style.setProperty("outline", previous[0], previous[1]);
-    flashes.delete(target);
-  }, FLASH_MS);
-  flashes.set(target, { previous, timer });
 }
 
 // play() and requestFullscreen() need the user activation of the pick keydown. A refusal becomes a failed outcome, because a rejected promise from an action reads as a page that went away and cancels silently.
@@ -261,7 +267,7 @@ export function perform(action: HintAction, target: Target, deps: ActionDeps, wi
   if (action === "delete") return target.remove();
   if (action === "focus") {
     // Only `;ff` says where the keys went: a click or a `here` pick on a frame is a gesture the user can see.
-    focus_target(target, true);
+    focus_target(target, true, deps.mark_);
     return;
   }
   if (action === "hover") return hover(target);

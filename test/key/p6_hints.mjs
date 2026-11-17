@@ -139,7 +139,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect(focused === "search", `the focus is on ${focused}, not the search field the page chose`);
   });
 
-  const outline_and_tabindex = async () => await in_active_tab(`[document.getElementById("panel").style.outline, document.getElementById("panel").getAttribute("tabindex")]`);
+  const panel_tabindex = async () => await in_active_tab(`document.getElementById("panel").getAttribute("tabindex")`);
 
   await run_case(";fs focuses a scroll box, then j scrolls the box and not the page", async () => {
     // The only scroll box is the side panel, so it gets the label "a". The page root is left out.
@@ -147,14 +147,14 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await press_keys(";fs");
     await wait_for_labels(";fs");
     await press_keys("a");
-    await poll_until("the box to get its outline", async () => (await in_active_tab(`getComputedStyle(document.getElementById("panel")).outlineStyle`)) === "solid");
+    await poll_until("the box to take the focus", async () => (await in_active_tab(`document.activeElement.id`)) === "panel");
     const mark = events.length;
     await press_keys("j");
     const moved = await wait_event(mark, (event) => event.type === "panel_scroll" && event.page_id === "p6_scrollbox", "the panel to scroll after j");
     expect(moved.top > 0, `the panel is at ${moved.top} after j`);
     // The fixture reports a page scroll 150 ms after it settles.
     await expect_absent(mark, "p6_scrollbox", (event) => event.type === "scroll" && event.page_id === "p6_scrollbox", "the page scrolled with the panel", { report_delay_ms: scroll_report_wait_ms });
-    await poll_until("the outline flash to end", async () => { const [outline, tabindex] = await outline_and_tabindex(); return outline === "" && tabindex === "-1"; }).catch(async (error) => { const [outline, tabindex] = await outline_and_tabindex(); throw new Error(`after the flash: inline outline "${outline}", tabindex ${tabindex} (${error.message})`); });
+    expect((await panel_tabindex()) === "-1", "the focused box has no tabindex=-1");
   });
 
   await run_case(";fs focuses a scroll box inside a shadow root, then j scrolls that box and not the page", async () => {
