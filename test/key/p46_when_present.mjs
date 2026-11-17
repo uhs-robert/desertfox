@@ -47,6 +47,17 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("r0");
   });
 
+  await run_case("gg records the place it leaves, so <C-o> scrolls back there", async () => {
+    await open_results("jump");
+    await in_active_tab("window.scrollTo(0, 3000); 0");
+    await poll_until("the page to scroll down", async () => (await in_active_tab("scrollY")) === 3000);
+    await press_keys("gg");
+    await expect_focus("r0");
+    await poll_until("gg to bring the first result into view", async () => (await in_active_tab("scrollY")) < 3000);
+    await press_keys("-M", "ctrl", "o", "-m", "ctrl");
+    await poll_until("<C-o> to go back to where gg left", async () => (await in_active_tab("scrollY")) === 3000);
+  });
+
   await run_case("on a matched page with no result, G and gg scroll to the bottom and the top", async () => {
     await open_page("controls", "ends_empty", { new_tab: true });
     await press_keys("G");

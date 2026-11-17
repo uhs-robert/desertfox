@@ -193,7 +193,7 @@ define("page.arrow", {
 // Meant for site rows on result lists, where a row names the item selector and binds j and k. Enter on the focused link then opens it, as the browser does.
 define("page.item", {
   label: "Move through items",
-  intent: "Focus the next item that a CSS selector names. It draws a box around the item, which is a search result on a results page. Down and up go to the nearest item below or above, left and right to the nearest on the same row, so one bind set serves a list and a grid. It starts from the item that holds the focus, else the last item it moved to while that is on screen, else the first item in view. A count prefix moves that many items. Down and up scroll 50 px per count instead while the item runs past the view edge and at the last item, and with no item on the page they scroll as the plain keys do. Left and right show a notice at the last item. First and last go to the first and last item on the page, whatever has focus, and do nothing on a page with no item. Escape clears the box.",
+  intent: "Focus the next item that a CSS selector names. It draws a box around the item, which is a search result on a results page. Down and up go to the nearest item below or above, left and right to the nearest on the same row, so one bind set serves a list and a grid. It starts from the item that holds the focus, else the last item it moved to while that is on screen, else the first item in view. A count prefix moves that many items. Down and up scroll 50 px per count instead while the item runs past the view edge and at the last item, and with no item on the page they scroll as the plain keys do. Left and right show a notice at the last item. First and last go to the first and last item on the page, whatever has focus, ignore a count, record the place they leave in the jump list, and do nothing on a page with no item. Escape clears the box.",
   params: [
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Move through the elements this CSS selector finds." },
     { name: "link", type: "string", optional: true, description: "Focus the element this CSS selector finds in the item." },
@@ -203,6 +203,8 @@ define("page.item", {
   bridge: false,
   runs_in: "content",
   count: { param: "times" },
+  // The ends replace gg and G on the result rows, which record the place they leave, so `<C-o>` and `''` come back.
+  jumps: (args) => args.direction === "first" || args.direction === "last",
   bundle: "item",
 });
 
