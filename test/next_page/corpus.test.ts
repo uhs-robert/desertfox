@@ -29,7 +29,7 @@ test("every saved page has a label and every label a saved page", () => {
 
 test("the corpus covers each next-pass fix and the soft pages", () => {
   const covered = new Set(Object.values(labels).map((label) => label.covers));
-  for (const fix of ["whole word", "media player", "list item", "word cap", "japanese", "pointer div"]) assert.ok(covered.has(fix), fix);
+  for (const fix of ["whole word", "media player", "list item", "word cap", "japanese", "pointer div", "ad carousel"]) assert.ok(covered.has(fix), fix);
   assert.equal(Object.values(labels).filter((label) => label.soft).length, 7);
 });
 

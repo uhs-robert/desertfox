@@ -139,11 +139,18 @@ function in_list_item<N>(reader: PageReader<N>, node: N): boolean {
   return false;
 }
 
+// A paid post, by the tag or class a feed gives it. Matched on the whole tag or class word only, so a pager whose class merely holds "ad" is never skipped.
+const AD_TAG = /(^|-)ad-post$/;
+const AD_CLASS = /(^|\s)promotedlink(\s|$)/;
+
+// The arrows of an ad's gallery act on that ad. The list-item skip misses an ad when the feed has fewer than three of them stacked in one batch.
+const in_ad = <N>(reader: PageReader<N>, node: N): boolean => [...ancestors(reader, node)].some((at) => AD_TAG.test(reader.tag_(at)) || AD_CLASS.test(reader.attr_(at, "class") ?? ""));
+
 // The best control by text that acts on the page, or undefined.
 export function pick_next_control<N>(reader: PageReader<N>, controls: readonly Control<N>[], patterns: readonly string[]): N | undefined {
   for (const index of rank_by_text(controls, patterns)) {
     const { node } = controls[index]!;
-    if (!in_carousel(reader, node) && !in_player(reader, node) && !in_list_item(reader, node)) return node;
+    if (!in_carousel(reader, node) && !in_player(reader, node) && !in_ad(reader, node) && !in_list_item(reader, node)) return node;
   }
   return undefined;
 }
