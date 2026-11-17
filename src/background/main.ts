@@ -80,6 +80,7 @@ import { accept_hint_timing } from "./timing_log.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { answer_sessions_transfer } from "./sessions_transfer.ts";
 import { create_font_names } from "./font_names.ts";
+import { missing_host_as_undefined } from "./native_client.ts";
 import { canvas_measure } from "../shared/font_candidates.ts";
 import { create_settings_messages } from "./settings_message.ts";
 import { is_extension_page } from "./extension_page.ts";
@@ -183,7 +184,7 @@ wire_repeat({
   run_batch: (invocations, ctx) =>
     router.run({ invocations, mode: ctx.mode, frame_id: ctx.frame_id, ...(ctx.tab_id === undefined ? {} : { sender_tab_id: ctx.tab_id }), ...(ctx.from_page && { from_page: true }) }),
 });
-const font_names = create_font_names({ storage: browser.storage.local, host_fonts: () => refused_as(native_host.list_fonts(), undefined), measure: canvas_measure });
+const font_names = create_font_names({ storage: browser.storage.local, host_fonts: () => native_host.list_fonts().catch(missing_host_as_undefined), measure: canvas_measure });
 const cmdline = create_cmdline_service({
   storage: browser.storage.local,
   tickets: browser.storage.session,

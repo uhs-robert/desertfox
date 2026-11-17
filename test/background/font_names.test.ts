@@ -6,7 +6,7 @@ import type { MeasureWidth } from "../../src/shared/font_candidates.ts";
 
 const has_hack: MeasureWidth = (font) => (font.includes('"Hack"') ? 99 : 50);
 
-function make(options: { host?: string[] | undefined; measure?: (() => MeasureWidth | undefined) | undefined; stored?: unknown } = {}) {
+function make(options: { host?: string[] | undefined; host_error?: Error; measure?: (() => MeasureWidth | undefined) | undefined; stored?: unknown } = {}) {
   const store: Record<string, unknown> = options.stored === undefined ? {} : { [FONT_NAMES_STORAGE_KEY]: options.stored };
   let host_calls = 0;
   const service = create_font_names({
@@ -14,7 +14,11 @@ function make(options: { host?: string[] | undefined; measure?: (() => MeasureWi
       get: async (key) => (typeof key === "string" && key in store ? { [key]: structuredClone(store[key]) } : {}),
       set: async (values) => void Object.assign(store, structuredClone(values)),
     },
-    host_fonts: async () => (host_calls++, options.host),
+    host_fonts: async () => {
+      host_calls++;
+      if (options.host_error) throw options.host_error;
+      return options.host;
+    },
     measure: options.measure ?? (() => has_hack),
   });
   return { service, store, host_calls: () => host_calls };
@@ -76,4 +80,42 @@ test("a malformed cache reads as absent", async () => {
 test("with no canvas the list is the host's alone", async () => {
   const { service } = make({ host: ["Cantarell"], measure: () => undefined });
   assert.deepEqual(await service.refresh(), ["Cantarell"]);
+});
+
+test("a failed host call keeps the cached host list", async () => {
+  const { service, store } = make({ host_error: new Error("timeout"), stored: { host: ["Cantarell"], names: ["Cantarell"] } });
+  assert.deepEqual(await service.refresh(), ["Cantarell"]);
+  assert.deepEqual(store[FONT_NAMES_STORAGE_KEY], { host: ["Cantarell"], names: ["Cantarell"] });
+});
+
+test("a failed host call with no cached host list gives the probe list", async () => {
+  const { service } = make({ host_error: new Error("timeout"), stored: { host: [], names: ["Old"] } });
+  assert.deepEqual(await service.refresh(), ["Hack"]);
+});
+
+test("a missing host replaces a cached host list with the probe list", async () => {
+  const { service } = make({ host: undefined, stored: { host: ["Cantarell"], names: ["Cantarell"] } });
+  assert.deepEqual(await service.refresh(), ["Hack"]);
+});
+
+test("of two overlapping refreshes only the newest writes", async () => {
+  const releases: (() => void)[] = [];
+  const answers = [["Stale"], ["Fresh"]];
+  const store: Record<string, unknown> = {};
+  let call = 0;
+  const service = create_font_names({
+    storage: { get: async (key) => (typeof key === "string" && key in store ? { [key]: store[key] } : {}), set: async (values) => void Object.assign(store, values) },
+    host_fonts: () => {
+      const mine = call++;
+      return new Promise((resolve) => releases.push(() => resolve(answers[mine]!)));
+    },
+    measure: () => has_hack,
+  });
+  const first = service.refresh();
+  const second = service.refresh();
+  releases[1]!();
+  await second;
+  releases[0]!();
+  await first;
+  assert.deepEqual((store[FONT_NAMES_STORAGE_KEY] as { names: string[] }).names, ["Fresh"]);
 });
