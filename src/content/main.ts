@@ -1,7 +1,7 @@
 // Content script entry: a capture listener on keydown, the keymap from
 // the background, and the modes. Runs in every frame. A subframe starts on its first focus.
 
-import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageKeymap, ReadKeymap, RunResponse } from "../shared/index.ts";
+import type { BackgroundToContent, CompiledKeymap, ContentToBackground, Mode, ModeIndicator, PageAddress, PageKeymap, ReadKeymap, RunResponse } from "../shared/index.ts";
 import { DEFAULT_MODE_INDICATOR, is_freed } from "../shared/index.ts";
 import { KEY_TEST_BUILD } from "../shared/key_test_build.ts";
 import { create_matcher, event_to_token, physical_token } from "../shared/keys/index.ts";
@@ -275,6 +275,8 @@ let was_all_off = false;
 let grab_step_px: number = DEFAULT_GRAB_STEP_PX;
 
 function install_matcher(reply: PageKeymap | undefined): void {
+  // The same answer as the last one, which only an address change inside one row asks for. Installing again would end a running site mode.
+  if (matcher_installed && reply === page_reply) return;
   page_reply = reply;
   site_mode.name_ = undefined;
   site_mode.modes_ = reply?.site_modes;
@@ -333,8 +335,15 @@ function install_tree(): void {
   key_flow.set_matcher_(create_matcher(tree, frees && ((token) => !overlay?.tree[token] && is_freed(frees, token))), keymap?.modes.browser);
 }
 
+let last_reply: { text: string; keymap: PageKeymap } | undefined;
+
 function read_page_keymap(): Promise<PageKeymap | undefined> {
-  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => (reply === undefined ? undefined : (JSON.parse(reply) as PageKeymap)));
+  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()) } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => {
+    if (reply === undefined) return undefined;
+    // The same text gives the same object, so `install_matcher` can tell an unchanged answer.
+    if (reply !== last_reply?.text) last_reply = { text: reply, keymap: JSON.parse(reply) as PageKeymap };
+    return last_reply.keymap;
+  });
 }
 
 // The media mode of this frame came from another frame (a step, or the join reply of a late frame), not from its own fullscreen or a ;M pick. The background then knows that the report it causes may belong to a hold that already ended.
@@ -450,10 +459,24 @@ function start(): void {
       if (message.mode || bundles.has_handler_("ui.frame_watch")) void bundles.run_command_("ui.frame_watch", "ui", { on: !!message.mode }, "", false);
       refresh_mode_indicator();
     }
-    else if (message.type === "tree_updated") void ask_keymap();
+    else if (message.type === "tree_updated") {
+      // A keymap update installs even an identical answer: it ends a running site mode.
+      last_reply = undefined;
+      void ask_keymap();
+    }
   });
 
   void ask_keymap();
+
+  // `sender.url` stays the load address, so the background learns each new one first and the ask after it matches rows against it.
+  let reported_address = location.href;
+  (window as unknown as { navigation?: EventTarget }).navigation?.addEventListener("currententrychange", () => {
+    const url = location.href;
+    if (url === reported_address) return;
+    reported_address = url;
+    const ask = () => void ask_keymap();
+    (browser.runtime.sendMessage({ type: "page_address", url } satisfies PageAddress) as Promise<unknown>).then(ask, ask);
+  });
 }
 
 start_content_once(start, window, window === window.top || document.hasFocus());

@@ -11,6 +11,7 @@ import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { DEFAULT_SITE_ROW_NAMES } from "../src/shared/table_constants.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
+import { create_page_addresses } from "../src/background/page_address.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
@@ -664,4 +665,69 @@ test("the list-page rows bind j and k to page.item on their result lists and lea
     assert.ok(off.site_rules!.length < compiled.site_rules!.length, name);
   }
   assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["tildes"] }), "https://tildes.net/", "j"), undefined);
+});
+
+// The frame's reported address stands in for `sender.url`, which stays the load address after a pushState.
+const session_of = () => {
+  const stored: Record<string, unknown> = {};
+  return {
+    stored,
+    get: async (keys: string | string[] | null) => (keys === null ? { ...stored } : Object.fromEntries((Array.isArray(keys) ? keys : [keys]).filter((key) => key in stored).map((key) => [key, stored[key]]))),
+    set: async (items: Record<string, unknown>) => void Object.assign(stored, items),
+    remove: async (keys: string | string[]) => void (Array.isArray(keys) ? keys : [keys]).forEach((key) => delete stored[key]),
+  };
+};
+
+test("a frame that reported a new address matches rows against it, and the load address answers until then", async () => {
+  const addresses = create_page_addresses(session_of() as never);
+  const sender = { url: "https://a.test/web", frameId: 0, tab: { id: 7, url: "https://a.test/web" } };
+  assert.equal((await addresses.located(sender)).url, "https://a.test/web");
+  await addresses.report(7, 0, sender.url, "https://a.test/images");
+  const located = await addresses.located(sender);
+  assert.equal(located.url, "https://a.test/images");
+  assert.deepEqual(rule_addresses_of(located), ["https://a.test/images"]);
+  assert.deepEqual(rule_addresses_of(await addresses.located({ ...sender, frameId: 3 })), ["https://a.test/web", "https://a.test/web"]);
+});
+
+test("a report belongs to the document that sent it, so a document loaded at another address ignores it", async () => {
+  const addresses = create_page_addresses(session_of() as never);
+  await addresses.report(7, 0, "https://a.test/web", "https://a.test/images");
+  const next_document = { url: "https://a.test/other", frameId: 0, tab: { id: 7 } };
+  assert.equal((await addresses.located(next_document)).url, "https://a.test/other");
+});
+
+test("a report for the same load address comes back after a reload only if the frame was not forgotten", async () => {
+  const addresses = create_page_addresses(session_of() as never);
+  const sender = { url: "https://a.test/web", frameId: 0, tab: { id: 7 } };
+  await addresses.report(7, 0, sender.url, "https://a.test/images");
+  await addresses.forget_frame(7, 0);
+  assert.equal((await addresses.located(sender)).url, "https://a.test/web");
+});
+
+test("forgetting a tab drops its frames and no other tab, tab 1 apart from tab 11", async () => {
+  const addresses = create_page_addresses(session_of() as never);
+  const frame = (tab_id: number) => ({ url: "https://a.test/web", frameId: 0, tab: { id: tab_id } });
+  await addresses.report(1, 0, "https://a.test/web", "https://a.test/one");
+  await addresses.report(11, 0, "https://a.test/web", "https://a.test/eleven");
+  await addresses.forget_tab(1);
+  assert.equal((await addresses.located(frame(1))).url, "https://a.test/web");
+  assert.equal((await addresses.located(frame(11))).url, "https://a.test/eleven");
+});
+
+test("the row for the new address decides the tree: off on one address, the keys back on the other", async () => {
+  const compiled = compile([{ site: "https://a.test/off*" }]);
+  assert.equal((await ask(compiled, "https://a.test/off"))?.all_off, true);
+  assert.notEqual((await ask(compiled, "https://a.test/web"))?.all_off, true);
+});
+
+test("an older reply that lands after a newer ask began is dropped, across a burst of three asks", async () => {
+  const pending: ((reply: string) => void)[] = [];
+  const installed: string[] = [];
+  const run = create_keymap_asks(() => new Promise<string>((resolve) => pending.push(resolve)), (reply) => installed.push(String(reply)), 0);
+  const asks = [run(), run(), run()];
+  pending[2]!("c");
+  pending[0]!("a");
+  pending[1]!("b");
+  await Promise.all(asks);
+  assert.deepEqual(installed, ["c"]);
 });

@@ -19,6 +19,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       const { site: _site, ...columns } = shipped;
       lines.push("", "[[site_rules]]", `site = "*://127.0.0.1/*?id=${id}_*"`, ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`));
     }
+    // The rows the address-change cases need: one that turns the page off and one with a site mode that has a label.
+    lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=off_*"', "off = true");
+    lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=mode_*"', 'bind = { v = "mode.site spy" }', 'modes.spy = { label = "SPY", bind = { x = { id = "mode.site", args = { name = "off" } } } }');
     appendFileSync(join(dir, "settings.toml"), [...lines, ""].join("\n"));
     await load_config_dir(dir);
   });
@@ -296,6 +299,81 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("h");
     await sleep(300);
     expect((await focused()) === "only" && (await in_active_tab("scrollX")) === 0, "h moved the focus or scrolled");
+  });
+
+  // A page of one site that lists both result shapes: ddg articles and image tiles. Which one j walks depends on the row the address matches.
+  const open_both_shapes = async (id) => {
+    await open_page("controls", id, { new_tab: true });
+    await in_active_tab(`(() => {
+      const list = document.createElement("ol");
+      list.innerHTML = [0, 1].map((index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a></article></li>').join("") + '<li style="display:flex;gap:10px"><figure style="margin:0;width:120px;height:80px"><a id="t0" href="#t0">tile</a></figure></li>';
+      document.body.prepend(list);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+  };
+  const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
+  const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
+  const push_to = (id) => in_active_tab(`history.pushState({}, "", location.pathname + "?id=${id}"); 0`);
+  const blur_and_top = () => in_active_tab("document.activeElement?.blur(); window.scrollTo(0, 0); 0");
+
+  await run_case("a pushState from the ddg row to the images row switches the row, and history.back switches it back", async () => {
+    await open_both_shapes("ddg_spa");
+    await press_keys("j");
+    await expect_focus("d0");
+    await push_to("img_spa");
+    // The reply lands a moment after the address change.
+    await sleep(500);
+    await blur_and_top();
+    await press_keys("j");
+    await expect_focus("t0");
+    await in_active_tab("history.back(); 0");
+    await sleep(500);
+    await blur_and_top();
+    await press_keys("j");
+    await expect_focus("d0");
+  });
+
+  await run_case("a hash-only change keeps the row", async () => {
+    await open_both_shapes("ddg_hash");
+    await in_active_tab('location.hash = "#later"; 0');
+    await sleep(300);
+    await blur_and_top();
+    await press_keys("j");
+    await expect_focus("d0");
+  });
+
+  await run_case("a pushState into an off row enters ignore mode and a pushState out of it returns to normal", async () => {
+    await open_page("controls", "item_spa_off", { new_tab: true });
+    await expect_badge("NORMAL");
+    await push_to("off_spa");
+    await expect_badge("IGNORE");
+    await push_to("item_spa_off");
+    await expect_badge("NORMAL");
+  });
+
+  await run_case("a step within one row keeps the running site mode, and a step to another row ends it", async () => {
+    await open_page("controls", "mode_spa", { new_tab: true });
+    await press_keys("v");
+    await expect_badge("SPY");
+    await push_to("mode_spa2");
+    await in_active_tab('location.hash = "#same"; 0');
+    await sleep(500);
+    expect((await badge()) === "SPY", `the site mode ended on a step within its row, the badge is ${await badge()}`);
+    await push_to("plain_spa");
+    await expect_badge("NORMAL");
+    await push_to("mode_spa");
+  });
+
+  await run_case("a burst of address changes ends on the row of the last address", async () => {
+    await open_both_shapes("ddg_burst");
+    await in_active_tab(`(() => { for (let step = 0; step < 6; step++) history.pushState({}, "", location.pathname + "?id=" + (step % 2 ? "ddg" : "img") + "_burst" + step); history.pushState({}, "", location.pathname + "?id=ddg_burst"); return 0; })()`);
+    // The last push is a ddg address.
+    await sleep(500);
+    await blur_and_top();
+    await press_keys("j");
+    await expect_focus("d0");
   });
 
   await run_case("on a page with no result row, j scrolls and no box shows", async () => {
