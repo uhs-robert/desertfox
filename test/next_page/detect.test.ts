@@ -111,3 +111,17 @@ test("a pager in a nav of stacked items is still followed", () => {
   const nav: SavedNode = { t: "nav", r: [0, 100, 200, 200], c: [{ t: "ul", r: [10, 200, 120, 100], c: [item(200), item(230), item(260, [pager])] }] };
   assert.equal(link_among([nav], pager), pager);
 });
+
+test("the arrow of an ad post's gallery is skipped even when it is the only ad in its list", () => {
+  const arrow: SavedNode = { t: "button", a: { "aria-label": "Next page" }, r: [900, 300, 40, 40] };
+  const ad: SavedNode = { t: "shreddit-ad-post", a: { class: "promotedlink" }, r: [0, 200, 700, 500], c: [arrow] };
+  const feed: SavedNode = { t: "div", r: [0, 100, 1000, 900], c: [ad, { t: "article", a: { class: "post" }, r: [0, 750, 700, 150] }] };
+  const root: SavedNode = { t: "body", r: [0, 0, 1366, 1000], c: [feed] };
+  for (const node of [root, feed, ad]) for (const child of node.c ?? []) child.up = node;
+  const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 1000 }, root });
+  const controls = [{ node: arrow, texts: ["Next page"], is_link: false }];
+  assert.equal(pick_next_control(reader, controls, NEXT), undefined);
+  ad.t = "div";
+  delete ad.a;
+  assert.equal(pick_next_control(reader, controls, NEXT), arrow);
+});
