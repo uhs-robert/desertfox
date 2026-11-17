@@ -10,10 +10,10 @@ const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Arr
 const ITEMS = 12;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("load the shipped google row for the item_ pages the hackernews row for the hn_ pages and the ddg row for the ddg_ pages", async () => {
+  await setup("load the shipped google row for the item_ pages the hackernews row for the hn_ pages and the ddg row for the ddg_ pages and the ddg_images row for the img_ pages", async () => {
     const dir = config_copy();
     const lines = [];
-    for (const [name, id] of [["google", "item"], ["hackernews", "hn"], ["ddg", "ddg"]]) {
+    for (const [name, id] of [["google", "item"], ["hackernews", "hn"], ["ddg", "ddg"], ["ddg_images", "img"]]) {
       const shipped = DEFAULT_SITE_ROWS.find((entry) => entry.name === name)?.row;
       if (!shipped) throw new Error(`no shipped site row named ${name}`);
       const { site: _site, ...columns } = shipped;
@@ -222,6 +222,52 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     const before = await in_active_tab("scrollY");
     await press_keys("j");
     await poll_until("j to scroll on from the last result", async () => (await in_active_tab("scrollY")) === before + 50);
+  });
+
+  // A DuckDuckGo images shaped grid: rows of figures with a caption link, widths that differ from row to row, as its justified layout has.
+  await run_case("on ddg images, h and l step along a row of tiles and j and k go to the tile below and above", async () => {
+    await open_page("controls", "img_grid", { new_tab: true });
+    await in_active_tab(`(() => {
+      const widths = [[200, 120, 160], [150, 190, 140], [180, 130, 170]];
+      const grid = document.createElement("ol");
+      grid.style.cssText = "list-style:none;margin:0;padding:0";
+      grid.innerHTML = widths.map((row, r) => '<li style="display:flex;gap:10px;margin-bottom:20px">' + row.map((width, c) => '<figure style="margin:0;width:' + width + 'px;height:80px"><a id="t' + r + c + '" href="#t' + r + c + '">tile ' + r + c + '</a></figure>').join("") + '</li>').join("");
+      document.body.prepend(grid);
+      document.activeElement?.blur();
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("t00");
+    await press_keys("l");
+    await expect_focus("t01");
+    await press_keys("j");
+    await expect_focus("t11");
+    await press_keys("h");
+    await expect_focus("t10");
+    await press_keys("k");
+    await expect_focus("t00");
+    await press_keys("2l");
+    await expect_focus("t02");
+    await press_keys("j");
+    await expect_focus("t12");
+    await press_keys("-k", "Return");
+    await poll_until("the address to name the tile", async () => (await in_active_tab("location.hash")) === "#t12");
+  });
+
+  await run_case("on ddg images, h at the start of a row says there is no previous tile and does not scroll", async () => {
+    await open_page("controls", "img_edge", { new_tab: true });
+    await in_active_tab(`(() => {
+      const grid = document.createElement("div");
+      grid.innerHTML = '<figure style="width:200px;height:80px"><a id="only" href="#only">only</a></figure>';
+      document.body.prepend(grid);
+      document.activeElement?.blur();
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("only");
+    await press_keys("h");
+    await sleep(300);
+    expect((await focused()) === "only" && (await in_active_tab("scrollX")) === 0, "h moved the focus or scrolled");
   });
 
   await run_case("on a page with no result row, j scrolls and no box shows", async () => {

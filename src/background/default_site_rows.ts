@@ -89,6 +89,11 @@ const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)")
 const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="result-title-a"]');
 const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
+const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
+// An image grid has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
+const grid_binds = (selector: string, link: string): BindingTable => Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, { id: "page.item", args: { selector, link, direction } } satisfies BoundInvocation]));
+// The tile is a figure, which holds the picture and its caption link.
+const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
@@ -97,6 +102,8 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "maps", row: { site: "https://www.google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "arrow", row: { site: "<all_urls>", modes: { arrow: ARROW_MODE } } },
+  // The image row sits before the `ddg` row. The first row that binds a key decides it, so on the image vertical (iax=images) this row wins over `ddg`, which matches the same address.
+  { name: "ddg_images", row: { site: "https://duckduckgo.com/?*iax=images*", bind: DDG_IMAGE_TILES } },
   // DuckDuckGo's own j and k stop at the last result and never reach the More results button, so j and k walk the results through `page.item`. The ad blocks are `article[data-testid="ad"]`, so they stay out.
   // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. A vertical with no `result` article (images) scrolls.
   { name: "ddg", row: { site: "https://duckduckgo.com/?*", bind: DDG_ITEMS } },
