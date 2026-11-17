@@ -106,6 +106,8 @@ test("a choice list states what is wrong with it", () => {
   const many = Array.from({ length: MAX_BIND_CHOICES + 1 }, () => `{ run = "page.back", when_present = "${GRID}" }`).join(", ");
   assert.match(problems_of(`h = [${many}]`), new RegExp(`binds "h" to more than ${MAX_BIND_CHOICES} choices`));
   assert.equal(problems_of(`h = [{ run = "page.back", when_present = "${GRID}" }, { run = "tab.next" }]`), "", "the last choice needs no guard");
+  assert.match(problems_of(`h = [{ id = "page.back", when_present = "${GRID}" }, { id = "tab.next", when_present = "${LIST}" }]`), /binds "h" to something that has "when_present" on step 2, but only the first step can carry a guard/);
+  assert.match(problems_of(`h = { run = ["page.back", { id = "tab.next", when_focus = "${PANEL}" }] }`), /has "when_focus" on step 2/);
   assert.equal(SETTING_SPECS.site_rules.check([{ site: "https://a.test/*", bind: { h: [[[{ id: "page.back", when_present: GRID }]]] } }]), false, "a choice cannot be a list of choices");
 });
 
