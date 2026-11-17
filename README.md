@@ -184,7 +184,8 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Do more with a label: the `;` keys copy a link, a picture, an element's text, its CSS selector or its HTML, download a file, hover, double-click, focus, inspect in DevTools, or focus a frame.
 - Drag and drop: `;Gg` grabs an element and moves it with `h` `j` `k` `l`, `;gg` grabs one and drops it on a target you pick, and `;s` swipes a carousel.
 - Scroll with `j` and `k`, jump with `gg` and `G`, and go back and forward with `H` and `L`.
-- Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`.
+- Jump between headings with `sh`, and to the next or previous page with `]]` and `[[`. On a page that loads more as you scroll, `]]` loads more.
+- Press `Alt+l` for the arrow mode, where `h` `j` `k` `l` press the arrow keys on the focused control. `Escape` ends it.
 
 </details>
 
@@ -242,7 +243,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 <details>
 <summary><b>🎨 Make it yours</b></summary>
 
-- Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site.
+- Per-site rules: turn DesertFox off on a site, give some keys back to the page, bind keys for one site, or set zoom and other settings per site. DesertFox already ships rows for Google Sheets, Maps and Drive, and for result lists on Google, DuckDuckGo, Bing, Hacker News, Wikipedia and more, where `j` and `k` step through the results and `gg` and `G` go to the first and last. Add a row name to `default_site_rows_off` to turn one off. [docs/site_rows.md](docs/site_rows.md) lists them all.
 - Change settings in the browser with `:set` or on the settings page.
 - Keep your keys, search engines and settings in TOML files. Edit them on the settings page or import a zip. With the native host, you can also keep them in `~/.config/desertfox/` and apply an edit with `config.reload`. DesertFox checks them and applies an edit with no restart.
 - Add your own commands as snippets (JavaScript files from your own config folder, or an import you accept).
@@ -262,6 +263,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - [docs/design.md](docs/design.md): architecture, scope and what is not yet built.
 - [docs/keymap.md](docs/keymap.md): every default key.
+- [docs/site_rows.md](docs/site_rows.md): the keys DesertFox adds on named sites.
 - [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
 - [src/README.md](src/README.md): a code map for contributors.
 

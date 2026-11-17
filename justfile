@@ -1,7 +1,7 @@
 default:
     @just --list
 
-# Regenerate the binding tables in docs/keymap.md from the default keymap.
+# Regenerate the binding tables in docs/keymap.md from the default keymap and the site row tables in docs/site_rows.md from the default site rows.
 docs-gen: install_deps
     npm run --silent docs:gen
 
@@ -33,7 +33,7 @@ build: install_deps
 build-key-test: install_deps
     KEY_TEST_BUILD=1 node tools/build.mjs
 
-# Check docs/keymap.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, lint for floating and misused promises, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
+# Check docs/keymap.md, docs/site_rows.md, src/shared/themes.ts, src/shared/default_settings.ts and src/shared/setting_completion.ts are current, lint for floating and misused promises, then run the unit tests from TypeScript source by Node's type stripping, and the Python host tests. `just test-all` runs this beside `just key-test`.
 test: install_deps
     #!/usr/bin/env bash
     set -euo pipefail
