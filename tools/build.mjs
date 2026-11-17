@@ -35,8 +35,8 @@ const MAX_BYTES = {
   "site_actions.js": 4 * 1024,
   // 4.5 KB: page.item, the box it draws around a result (search-site-rows), and the last move that ]] reads to put the box on the first item a load added. The bundle loads on the first j or k on a result page.
   "item.js": 4.5 * 1024,
-  // 18 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content, and the move of the item box to the first item a load added. The bundle loads on the first ]] or [[.
-  "next_page.js": 18 * 1024,
+  // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added. The bundle loads on the first ]] or [[.
+  "next_page.js": 18.5 * 1024,
   // 6.5 KB: the thumb press point, the per-drag step keys (`[` and `]`), the swipe fling (`snap_scroll`, `start_fling`) and the start step read from `grab_step_px`.
   "grab.js": 6.5 * 1024,
   // 59 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings, and the three newtab_weather settings. `set theme` also offers the theme files and imports of the config, which the page gets when the line opens.

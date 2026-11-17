@@ -14,6 +14,8 @@ function fake_page(count: number) {
       get isConnected() {
         return items.includes(item as unknown as Element);
       },
+      matches: () => true,
+      querySelector: () => null,
       compareDocumentPosition: (other: Element) => {
         const [here, there] = [items.indexOf(item as unknown as Element), items.indexOf(other)];
         return here === -1 || there === -1 ? 1 : there > here ? 4 : 2;
@@ -22,14 +24,20 @@ function fake_page(count: number) {
     return item as unknown as Element;
   };
   items.push(...Array.from({ length: count }, (_, at) => make(`old${at}`)));
-  let on_added = () => {};
+  let on_added = (_added: readonly Element[]) => {};
+  // An element that holds no item, as a spinner or an ad.
+  const spinner = { matches: () => false, querySelector: () => null } as unknown as Element;
   const page = {
     items,
-    // Appends new items and fires the page's watch, as a load does.
+    // Appends new items and fires the page's watch, as a load does. With no names it adds a spinner.
     add: (...names: string[]) => {
-      items.push(...names.map(make));
-      on_added();
+      const added = names.map(make);
+      items.push(...added);
+      on_added(added.length > 0 ? added : [spinner]);
     },
+    // Items the browser hides, as one that fades in from opacity 0.
+    hidden: new Set<string>(),
+    reads: 0,
     remove: (...names: string[]) => names.forEach((name) => items.splice(items.findIndex((item) => (item as unknown as { name: string }).name === name), 1)),
     named: (name: string) => items.find((item) => (item as unknown as { name: string }).name === name)!,
     landed: [] as string[],
@@ -40,7 +48,7 @@ function fake_page(count: number) {
   };
   const cursor = (): ItemCursor | undefined => page.current && { item_: page.current, selector_: "li", shown_: page.shown, land_: (item) => void page.landed.push((item as unknown as { name: string }).name) };
   const deps: ItemAfterLoadDeps = {
-    items_: () => [...items],
+    items_: () => (page.reads++, items.filter((item) => !page.hidden.has((item as unknown as { name: string }).name))),
     watch_: { start_: (added) => ((on_added = added), () => (on_added = () => {})), page_height_: () => 0 },
     cursor_: () => Promise.resolve(cursor()),
     in_normal_mode_: () => page.mode === "normal",
@@ -140,4 +148,32 @@ test("a load that adds no item leaves the box at the end of the wait", async (t)
   t.mock.timers.tick(LOAD_WAIT_MS);
   await done;
   assert.deepEqual(page.landed, []);
+});
+
+test("an addition that holds no item does not read the item list", async () => {
+  const { page, deps, cursor } = fake_page(3);
+  page.current = page.named("old0");
+  const done = move_box_after_load(cursor(), deps);
+  const reads_at_start = page.reads;
+  page.add();
+  page.add();
+  await settle();
+  assert.equal(page.reads, reads_at_start, "a batch with no item read the list");
+  page.add("new0");
+  await done;
+  assert.deepEqual(page.landed, ["new0"]);
+});
+
+test("an item that fades in after its batch takes the box at the end of the wait", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { page, deps, cursor } = fake_page(3);
+  page.current = page.named("old2");
+  const done = move_box_after_load(cursor(), deps);
+  page.hidden.add("new0");
+  page.add("new0");
+  await settle();
+  page.hidden.delete("new0");
+  t.mock.timers.tick(LOAD_WAIT_MS);
+  await done;
+  assert.deepEqual(page.landed, ["new0"]);
 });

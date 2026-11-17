@@ -10,7 +10,7 @@ import { arm_leave_watch } from "../page/leave_watch.ts";
 import { can_open_elsewhere, find_next_page } from "./follow_links.ts";
 import type { FollowDirection } from "./follow_links.ts";
 import { find_load_more } from "./load_more.ts";
-import { dom_content_watch, wait_for_new_content } from "./load_outcome.ts";
+import { create_load_step, dom_content_watch } from "./load_outcome.ts";
 import { move_box_after_load } from "./item_after_load.ts";
 import type { ItemCursor } from "../item/pick.ts";
 
@@ -35,6 +35,11 @@ function scroll_past(last_item: Element): void {
   window.scrollBy(0, innerHeight);
 }
 
+// A refused open answers the background's failed Outcome. A click answers nothing.
+const outcome_of = (result: unknown): Outcome => (result && typeof result === "object" && "ok" in result ? (result as Outcome) : { ok: true });
+
+const start_load = create_load_step();
+
 // The item bundle loads on the first `page.item` key, so before that no box shows and nothing needs it loaded.
 const read_item_cursor = (host: PageHostApi): Promise<ItemCursor | undefined> =>
   new Promise((resolve) => {
@@ -50,22 +55,24 @@ async function follow_page(host: PageHostApi, direction: FollowDirection, place:
   const found = find_next_page(document, direction, await read_patterns(direction), direction === "next" && place === "here" ? find_load_more : undefined);
   if (found.action === "none") return { ok: false, message: direction === "next" ? "No next page link" : "No previous page link" };
   const target = found.target as HTMLElement;
+  if (found.action === "follow" && place !== "here" && !can_open_elsewhere(target)) return { ok: false, message: "That page link cannot open in another tab" };
+  // The user acts now, so an address change a follow or a load click makes is a move for the jump list. A load click on a link can leave the page. A scroll is a jump of its own, and an address the list rewrites as it loads is no move.
+  arm_leave_watch(host).quiet_(found.action === "scroll");
   if (found.action === "follow") {
-    if (place !== "here" && !can_open_elsewhere(target)) return { ok: false, message: "That page link cannot open in another tab" };
-    // The user acts now, so the address change the follow makes is a move for the jump list.
-    arm_leave_watch(host).quiet_(false);
-    if (target.localName === "link") {
-      if (place === "here") window.location.assign((target as HTMLLinkElement).href);
-      else await open_link_((target as HTMLLinkElement).href, place);
-    } else await follow_like_a_hint(place, target, open_link_);
+    if (target.localName !== "link") return outcome_of(await follow_like_a_hint(place, target, open_link_));
+    if (place === "here") window.location.assign((target as HTMLLinkElement).href);
+    else await open_link_((target as HTMLLinkElement).href, place);
     return { ok: true };
   }
-  const loaded = wait_for_new_content(dom_content_watch(document));
-  void move_box_after_load(await read_item_cursor(host), { items_: visible_items, watch_: dom_content_watch(document), cursor_: () => read_item_cursor(host), in_normal_mode_: () => host.get_mode() === "normal" });
-  if (found.action === "click") void follow_like_a_hint("here", target, open_link_);
-  else scroll_past(target);
+  const cursor = await read_item_cursor(host);
+  // The box wait reads the old items before the click, which can add the new ones at once.
+  const act_ = () => {
+    void move_box_after_load(cursor, { items_: visible_items, watch_: dom_content_watch(document), cursor_: () => read_item_cursor(host), in_normal_mode_: () => host.get_mode() === "normal" });
+    if (found.action === "click") void follow_like_a_hint("here", target, open_link_);
+    else scroll_past(target);
+  };
   // The answer does not wait for the load, so the keys typed after `]]` run at once.
-  void loaded.then((arrived) => arrived || host.show_toast_("Nothing loaded"));
+  start_load({ watch_: dom_content_watch(document), page_: window, act_, nothing_loaded_: () => host.show_toast_("Nothing loaded") });
   return { ok: true };
 }
 

@@ -5,8 +5,8 @@ import { LAYER_ATTRIBUTE } from "../../shared/layers.ts";
 // A page that loads more answers within this, or the user sees nothing happen.
 export const LOAD_WAIT_MS = 3000;
 
-// `start_` calls `on_added` for each added element of the page and returns the stop.
-export type ContentWatch = { start_: (on_added: () => void) => () => void; page_height_: () => number };
+// `start_` calls `on_added` with the elements of the page that each batch of changes added, and returns the stop.
+export type ContentWatch = { start_: (on_added: (added: readonly Element[]) => void) => () => void; page_height_: () => number };
 
 export function wait_for_new_content(watch: ContentWatch, within_ms = LOAD_WAIT_MS): Promise<boolean> {
   const height_before = watch.page_height_();
@@ -35,10 +35,32 @@ const is_page_content = (node: Node): boolean => node.nodeType === Node.ELEMENT_
 export const dom_content_watch = (doc: Document): ContentWatch => ({
   start_: (on_added) => {
     const observer = new MutationObserver((records) => {
-      if (records.some((record) => Array.from(record.addedNodes).some(is_page_content))) on_added();
+      const added = records.flatMap((record) => Array.from(record.addedNodes).filter(is_page_content)) as Element[];
+      if (added.length > 0) on_added(added);
     });
     observer.observe(doc.documentElement, { childList: true, subtree: true });
     return () => observer.disconnect();
   },
   page_height_: () => doc.documentElement.scrollHeight,
 });
+
+// One load at a time in a document: a `]]` while a load is pending would click the busy control again or scroll past the items still on their way.
+// `act_` clicks or scrolls. `nothing_loaded_` runs when the wait ends with nothing added, but not when the page went away first: a page that the cache brings back on Back resumes its timer, and its toast would be stale.
+export type LoadStepDeps = { watch_: ContentWatch; page_: EventTarget; act_: () => void; nothing_loaded_: () => void };
+
+export function create_load_step() {
+  let pending = false;
+  // Answers false, and does nothing, while a load is pending.
+  return (deps: LoadStepDeps): boolean => {
+    if (pending) return false;
+    pending = true;
+    const loaded = wait_for_new_content(deps.watch_);
+    const left = new Promise<undefined>((resolve) => deps.page_.addEventListener("pagehide", () => resolve(undefined), { once: true }));
+    deps.act_();
+    void Promise.race([loaded, left]).then((arrived) => {
+      pending = false;
+      if (arrived === false) deps.nothing_loaded_();
+    });
+    return true;
+  };
+}
