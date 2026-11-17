@@ -6,13 +6,13 @@ export const areas = ["whichkey", "help"];
 export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, wait_cmdline, hint_label_count }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
-  // The page reads the compiled keymap, which the background writes after the temp edit. desertfox_config_status holds the effective settings, so the wait reads that and not the session store.
+  // The status and the compiled keymap are written in one call, but an open page installs the new keymap later: it asks after a tree_updated message, and nothing in the page shows when that reply came. A fresh page asks for the keymap as it starts, and its tree_read event is the proof that it holds the stored one, so each change ends in a new tab on the "wk" page id.
   const effective_settings = () => evaluate_in_background(rdp, extension_id, `browser.storage.local.get("desertfox_config_status").then((got) => got.desertfox_config_status?.settings ?? {})`);
   const change_temp = async (line, landed) => {
     await run_line(line);
     await poll_until(`"${line}" to land`, async () => landed(await effective_settings()), { timeout_ms: 8000 });
     await wait_cmdline((state) => !state.open, "the command line to close");
-    await settle_focus();
+    await open_page("page", "wk", { new_tab: true });
   };
   // A panel delay no loaded machine overruns between the keys of one typed sequence. The cases that prove no panel wait it out after the sequence finished.
   const LONG_DELAY_MS = 1000;
