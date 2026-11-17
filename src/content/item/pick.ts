@@ -80,11 +80,17 @@ export function move_item(page: ItemPage, args: ItemArgs): void {
   // A box the browser hides or that has no size cannot be moved to.
   const items = Array.from(page.doc.querySelectorAll(args.selector)).filter((element) => element.checkVisibility() && element.getClientRects().length > 0);
   const steps = args.times ?? 1;
+  const scroll = () => page.scroll_by(...(SCROLL[args.direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
-  if (items.length === 0) return page.scroll_by(...SCROLL[args.direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]);
+  if (items.length === 0) return scroll();
   const boxes = items.map((item) => item.getBoundingClientRect());
-  const pick = pick_item(boxes, place_of(items, page.focused(), last_item?.deref(), boxes, page.view.innerHeight), args.direction, steps);
-  if ("end" in pick) return page.toast(`No ${args.direction === "down" || args.direction === "right" ? "next" : "previous"} item`);
+  const place = place_of(items, page.focused(), last_item?.deref(), boxes, page.view.innerHeight);
+  const vertical = args.direction === "down" || args.direction === "up";
+  // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction.
+  if (vertical && place.on_item && (args.direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) return scroll();
+  const pick = pick_item(boxes, place, args.direction, steps);
+  // At the last item down and up scroll on, so the page below the results stays reachable. Left and right say they are at the end.
+  if ("end" in pick) return vertical ? scroll() : page.toast(`No ${args.direction === "right" ? "next" : "previous"} item`);
   const item = items[pick.index]!;
   focus_target(item, args.link || undefined).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();

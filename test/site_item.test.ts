@@ -68,30 +68,31 @@ test("the start is the focused item, else the last item while on screen, else th
 });
 
 // A page of fake items. `focus` records which element took the focus and with which options.
-function fake_page(rects: Box[], on_screen = true) {
+function fake_page(rects: Box[], on_screen = true, focused_index = -1) {
   const log: string[] = [];
   const shown: string[] = [];
   const toasts: string[] = [];
   const make = (rect: Box, index: number) => {
     const link = { tabIndex: 0, setAttribute: () => {}, focus: () => log.push(`focus link ${index}`) };
-    return {
+    const element = {
       tabIndex: -1,
       checkVisibility: () => true,
       getClientRects: () => [rect],
       getBoundingClientRect: () => rect,
-      contains: () => false,
+      contains: (node: unknown) => node === element,
       querySelector: (selector: string) => (selector === "a.t" ? link : null),
       setAttribute: (name: string, value: string) => log.push(`${name}=${value} on ${index}`),
       focus: () => log.push(`focus item ${index}`),
       scrollIntoView: (options: { block: string }) => log.push(`scroll ${index} ${options.block}`),
     };
+    return element;
   };
   const items = rects.map(make);
   const scrolls: number[][] = [];
   const page = {
     doc: { querySelectorAll: (selector: string) => (selector === "none" ? [] : items) },
     view: { innerHeight: 800, innerWidth: on_screen ? 800 : 50 },
-    focused: () => null,
+    focused: () => items[focused_index] ?? null,
     toast: (message: string) => toasts.push(message),
     scroll_by: (dx: number, dy: number) => scrolls.push([dx, dy]),
     highlight: (item: unknown) => shown.push(String(items.indexOf(item as (typeof items)[number]))),
@@ -115,11 +116,37 @@ test("move_item gives an item with no link of its own tabindex -1 before it focu
   assert.deepEqual(log, ["tabindex=-1 on 0", "focus item 0"]);
 });
 
-test("move_item toasts at the end", () => {
-  const { page, toasts } = fake_page([box(0, 0)]);
-  move_item(page, { selector: "li", direction: "down" });
-  move_item(page, { selector: "li", direction: "down" });
-  assert.deepEqual(toasts, ["No next item"]);
+test("down scrolls 50 px per count while the current item runs past the bottom of the view, and then moves on", () => {
+  const long = fake_page([box(0, 100, 100, 900), box(0, 1040)], true, 0);
+  move_item(long.page, { selector: "li", direction: "down", times: 2 });
+  assert.deepEqual([long.scrolls, long.shown, long.log], [[[0, 100]], [], []]);
+  const read = fake_page([box(0, -400, 100, 900), box(0, 540)], true, 0);
+  move_item(read.page, { selector: "li", direction: "down" });
+  assert.deepEqual([read.scrolls, read.shown], [[], ["1"]]);
+});
+
+test("up scrolls while the current item runs past the top of the view, and then moves on", () => {
+  const long = fake_page([box(0, -300, 100, 900), box(0, -400, 100, 50)], true, 0);
+  move_item(long.page, { selector: "li", direction: "up", times: 3 });
+  assert.deepEqual([long.scrolls, long.shown], [[[0, -150]], []]);
+  const fits = fake_page([box(0, 0), box(0, 60)], true, 1);
+  move_item(fits.page, { selector: "li", direction: "up" });
+  assert.deepEqual([fits.scrolls, fits.shown], [[], ["0"]]);
+});
+
+test("at the last item down scrolls on and up at the first scrolls back, with no notice", () => {
+  const last = fake_page([box(0, 0), box(0, 60)], true, 1);
+  move_item(last.page, { selector: "li", direction: "down" });
+  assert.deepEqual([last.scrolls, last.toasts, last.shown], [[[0, 50]], [], []]);
+  const first = fake_page([box(0, 0), box(0, 60)], true, 0);
+  move_item(first.page, { selector: "li", direction: "up", times: 2 });
+  assert.deepEqual([first.scrolls, first.toasts], [[[0, -100]], []]);
+});
+
+test("left and right keep their notice at the end and do not scroll", () => {
+  const { page, scrolls, toasts } = fake_page([box(0, 0), box(110, 0)], true, 1);
+  move_item(page, { selector: "li", direction: "right" });
+  assert.deepEqual([scrolls, toasts], [[], ["No next item"]]);
 });
 
 test("with no item on the page the key scrolls by 50 px per count in its direction and shows no notice", () => {

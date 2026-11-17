@@ -24,12 +24,12 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   });
 
   // The stand-in results: a block of tall links, each with an h3 as Google's title links have.
-  const open_results = async (id) => {
+  const open_results = async (id, first_height = 60) => {
     await open_page("controls", `item_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const search = document.createElement("div");
       search.id = "search";
-      search.innerHTML = ${JSON.stringify(Array.from({ length: ITEMS }, (_, index) => `<a id="r${index}" href="#r${index}" style="display:block;height:60px;margin:0 0 40px 20px;width:300px"><h3>result ${index}</h3></a>`).join(""))};
+      search.innerHTML = ${JSON.stringify(Array.from({ length: ITEMS }, (_, index) => `<a id="r${index}" href="#r${index}" style="display:block;height:${index === 0 ? first_height : 60}px;margin:0 0 40px 20px;width:300px"><h3>result ${index}</h3></a>`).join(""))};
       document.body.prepend(search);
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -95,9 +95,28 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_results("end");
     await press_keys("99j");
     await expect_focus(`r${ITEMS - 1}`);
+    const before = await in_active_tab("scrollY");
     await press_keys("j");
-    await sleep(300);
+    await poll_until("j to scroll on past the last result", async () => (await in_active_tab("scrollY")) === before + 50);
     expect((await focused()) === `r${ITEMS - 1}`, `the focus left the last result for ${await focused()}`);
+    await press_keys("2k");
+    await poll_until("k to move back from the last result", async () => (await focused()) === `r${ITEMS - 3}`);
+  });
+
+  await run_case("while a result runs past the bottom of the view j scrolls, and once its end is in view j moves on", async () => {
+    await open_results("tall", 3000);
+    await press_keys("j");
+    await expect_focus("r0");
+    const before = await in_active_tab("scrollY");
+    await press_keys("j");
+    await poll_until("j to scroll 50 px", async () => (await in_active_tab("scrollY")) === before + 50);
+    expect((await focused()) === "r0", `j left the tall result for ${await focused()}`);
+    // 50 presses of 50 px bring the end of the 3000 px result into view.
+    await press_keys("50j");
+    await poll_until("the end of the tall result to come into view", async () => (await in_active_tab("scrollY")) >= before + 50 + 2400);
+    expect((await focused()) === "r0", `the count left the tall result for ${await focused()}`);
+    await press_keys("j");
+    await expect_focus("r1");
   });
 
   await run_case("the box follows a scroll and a resize", async () => {
