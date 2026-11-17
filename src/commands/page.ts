@@ -190,6 +190,22 @@ define("page.arrow", {
   bundle: "site_actions",
 });
 
+// Meant for site rows on result lists, where a row names the item selector and binds j and k. Enter on the focused link then opens it, as the browser does.
+define("page.item", {
+  label: "Move through items",
+  intent: "Focus the next item that a CSS selector names. It draws a box around the item, which is a search result on a results page. Down and up go to the nearest item below or above, left and right to the nearest on the same row, so one bind set serves a list and a grid. It starts from the item that holds the focus, else the last item it moved to while that is on screen, else the first item in view. A count prefix moves that many items. Down and up scroll 50 px per count instead while the item runs past the view edge and at the last item, and with no item on the page they scroll as the plain keys do. Left and right show a notice at the last item. Escape clears the box.",
+  params: [
+    { name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Move through the elements this CSS selector finds." },
+    { name: "link", type: "string", optional: true, description: "Focus the element this CSS selector finds in the item." },
+    { name: "direction", type: "enum", values: ["down", "up", "left", "right"], value_labels: { down: "to item below", up: "to item above", left: "to item on the left", right: "to item on the right" }, description: { down: "Go to the nearest item below.", up: "Go to the nearest item above.", left: "Go to the nearest item on the left.", right: "Go to the nearest item on the right." } },
+    { name: "times", type: "int", default: 1, min: 1, description: "Move this many items." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  count: { param: "times" },
+  bundle: "item",
+});
+
 // Meant for site rows, where a synthetic Ctrl+X or Ctrl+V keydown does not cut or paste: the browser runs a clipboard action only from `execCommand`, so a row binds a key to this command instead.
 define("page.clipboard", {
   label: "Cut, copy or paste in the page",
