@@ -242,3 +242,11 @@ test("a build with a problem returns an empty reach", () => {
   assert.equal(preview.ok && preview.problems.length > 0, true);
   if (preview.ok) assert.equal(preview.reach.keys.clipboard_or_page.rows.length, 0);
 });
+
+test("a site bind's choice list is walked, so a key press or host verb inside any choice is listed", () => {
+  const reach = reach_of({
+    "settings.toml": ["[[site_rules]]", 'site = "a.test"', "[site_rules.bind]", 'zc = [{ run = "tab.next", when_present = "ul" }, { run = ["tab.prev", "page.send_key --key=Enter --key-code=13"], when_present = "ol" }]', 'zn = [{ run = "tab.next", when_present = "ul" }, { run = "native.install" }]'].join("\n"),
+  });
+  assert.deepEqual(runs(reach, "clipboard_or_page").map((line) => line.split(" | ").slice(0, 2).join(" | ")), ["zc | site a.test"]);
+  assert.deepEqual(reach.keys.host.rows.map((row) => row.keys), ["zn"]);
+});
