@@ -3,7 +3,7 @@ import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 
-export const areas = ["keys", "config", "bundles"];
+export const areas = ["keys", "config", "bundles", "hints"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 const FILES = 60;

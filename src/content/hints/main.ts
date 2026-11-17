@@ -514,7 +514,10 @@ function register(host: PageHostApi): void {
     return message === undefined ? done : { ok: false, message };
   });
   host.register_handler_("page.click", (args): Outcome => {
-    const message = click_first_shown(document, args.selector as string, is_shown, (element) => click_like_a_hint(element as HTMLElement));
+    const message = click_first_shown(document, args.selector as string, is_shown, (element) => {
+      arm_leave_watch(host).quiet_(false);
+      click_like_a_hint(element as HTMLElement);
+    });
     return message === undefined ? done : { ok: false, message };
   });
   host.register_handler_("page.heading", (args): Outcome => {
