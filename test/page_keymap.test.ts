@@ -704,7 +704,7 @@ test("an older reply that lands after a newer ask began is dropped, across a bur
   assert.deepEqual(installed, ["c"]);
 });
 
-test("the drive row walks the files with page.item, and h and l choose by the view the page shows, the list first", async () => {
+test("the drive row walks the files with page.item, and h and l choose by the view the page shows, the list first, with h on the parent folder crumb", async () => {
   const compiled = with_defaults({});
   const drive = "https://drive.google.com/drive/my-drive";
   const choices = async (key: string) => {
@@ -717,9 +717,16 @@ test("the drive row walks the files with page.item, and h and l choose by the vi
     return chain;
   };
   const list = '[role="grid"] [role="row"][data-id]';
-  const grid = '[role="listbox"] [role="option"][data-id]';
-  assert.deepEqual((await choices("h")).slice(0, 2), [{ when_present: list, ids: ["page.back"], direction: undefined }, { when_present: grid, ids: ["page.item"], direction: "left" }]);
+  const grid = '[role="grid"] [role="gridcell"][data-id]';
+  const parent = '[role="navigation"] [role="list"] > [role="listitem"]:nth-last-child(2) [role="link"]';
+  const h = await choices("h");
+  assert.deepEqual(h.slice(0, 2), [{ when_present: `body:has(${list}) ${parent}`, ids: ["page.send_key"], direction: undefined }, { when_present: grid, ids: ["page.item"], direction: "left" }]);
+  // No choice may go back through the history: on a root page h falls through to the plain scroll.
+  assert.ok(h.every((choice) => !choice.ids.includes("page.back")));
   assert.deepEqual((await choices("l")).slice(0, 2), [{ when_present: list, ids: ["page.item", "page.send_key"], direction: "current" }, { when_present: grid, ids: ["page.item"], direction: "right" }]);
+  // l opens the focused file of either view, so it runs current on the j and k selector.
+  const l_leaf = (await ask(compiled, drive))!.keymap.modes.normal?.children["l"];
+  assert.equal(l_leaf?.kind === "leaf" && (l_leaf.steps[0]!.invocation.args as { selector?: string }).selector, `${grid}, ${list}`);
   for (const key of ["j", "k"]) assert.equal((await item_args_at(compiled, drive, key))?.selector, `${grid}, ${list}`);
   for (const url of ["https://docs.google.com/document/d/abc/edit", "https://drive.google.com/file/d/abc/view"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
   assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["drive"] }), drive, "j"), undefined);

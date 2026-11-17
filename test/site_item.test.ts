@@ -305,6 +305,16 @@ test("current focuses the item a move starts from, the first one in view when no
   const loose = fake_page(list);
   move_item(loose.page, { selector: "li", link: "a.t", direction: "current" });
   assert.deepEqual([loose.shown, loose.log], [["0"], ["focus link 0"]]);
+  // The focus left the items (on the view toggle), so current returns to the item the last move landed on.
+  const remembered = fake_page(list);
+  move_item(remembered.page, { selector: "li", link: "a.t", direction: "down" });
+  move_item(remembered.page, { selector: "li", link: "a.t", direction: "down" });
+  move_item(remembered.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual(remembered.shown, ["0", "1", "1"]);
+  // With every item above the view the start index runs past the end, and current takes the last item.
+  const above = fake_page(list.map((entry) => ({ ...entry, top: entry.top - 1000, bottom: entry.bottom - 1000 })));
+  move_item(above.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual(above.shown, [String(list.length - 1)]);
   const none = fake_page(list);
   move_item(none.page, { selector: "none", direction: "current" });
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
