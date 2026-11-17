@@ -392,6 +392,17 @@ test("the shipped sheets rows bind hjkl to the arrow keys on both address forms 
   }
 });
 
+test("the drive row binds hjkl to the arrow keys on Drive folder pages and on no docs editor or file preview", async () => {
+  const compiled = with_defaults({});
+  for (const url of ["https://drive.google.com/drive/my-drive", "https://drive.google.com/drive/u/1/my-drive", "https://drive.google.com/drive/folders/abc", "https://drive.google.com/drive/shared-with-me", "https://drive.google.com/drive/recent"]) {
+    assert.deepEqual(await Promise.all(["h", "j", "k", "l"].map((key) => key_at(compiled, url, key))), ["ArrowLeft", "ArrowDown", "ArrowUp", "ArrowRight"], url);
+  }
+  for (const url of ["https://docs.google.com/document/d/abc/edit", "https://docs.google.com/presentation/d/abc/edit", "https://drive.google.com/file/d/abc/view", "https://drive.google.com/", "https://example.org/drive/my-drive"]) {
+    assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown", url);
+  }
+  assert.notEqual(await key_at(with_defaults({ default_site_rows_off: ["drive"] }), "https://drive.google.com/drive/my-drive", "j"), "ArrowDown");
+});
+
 test("the shipped sheets rows bind gg and Ctrl+hjkl to Ctrl keys and free Ctrl+A and Ctrl+X", async () => {
   const compiled = with_defaults({});
   for (const url of [SHEETS, SHEETS_DOMAIN]) {
@@ -449,9 +460,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 30);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 31);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -583,7 +594,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 27);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 28);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {

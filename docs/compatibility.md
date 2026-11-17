@@ -70,7 +70,7 @@ Hints reach into the parked frame, so `f` labels the page and that frame. A clic
 
 These are code reads, not runs. The full text is in "Table rows from source" in [`tools/measure/rivals/README.md`](../tools/measure/rivals/README.md).
 
-- Vimium has hint rules for Google Drive and the Docs file list and no per-site key rules. DesertFox ships key rows for Google Sheets, Google Maps, an arrow-key mode and the DuckDuckGo, Kagi and Brave result pages.
+- Vimium has hint rules for Google Drive and the Docs file list and no per-site key rules. DesertFox ships key rows for Google Sheets, Google Maps, Google Drive, an arrow-key mode and the DuckDuckGo, Kagi and Brave result pages.
 - Vimium C has no per-site rule table.
 - Tridactyl treats `role=application` elements, which Google Sheets uses, as handling their own keys and stops capturing there. The rule is generic, with no `hjkl` and no clipboard keys.
 - Tridactyl 1.25.1's manifest sets no `all_frames`, so its script loads in the top page only and no key works while focus is in a frame. Its hints skip frames from other sites: `getAllDocumentFrames` and `getElemsBySelector` in [`src/lib/dom.ts`](https://github.com/tridactyl/tridactyl/blob/1.25.1/src/lib/dom.ts) read each iframe's `contentDocument` and drop the frame when that read fails, and `:hint -c` uses the same function.

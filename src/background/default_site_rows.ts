@@ -103,6 +103,14 @@ const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
 
+// Drive moves its selection on arrow keys, so hjkl send them. Enter stays native. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+const DRIVE_BIND: BindingTable = {
+  h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } },
+  j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } },
+  k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } },
+  l: { id: "page.send_key", args: { key: "ArrowRight", key_code: 39 } },
+};
+
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
   { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
@@ -146,6 +154,7 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", bind: STACKOVERFLOW_ITEMS } },
   // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
   { name: "tildes", row: { site: "https://tildes.net/*", bind: TILDES_ITEMS } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_BIND } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));
