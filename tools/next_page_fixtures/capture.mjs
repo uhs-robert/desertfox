@@ -8,6 +8,7 @@ import { save_page } from "./scrub.mjs";
 const SAVE = `(() => {
   const KEEP_CLASS = /carousel|swiper|slider|slick|glide|splide|scroller|flickity/i;
   const ATTRS = ["rel", "href", "role", "aria-label", "aria-expanded", "aria-haspopup", "aria-controls", "aria-pressed", "aria-roledescription", "aria-modal", "title", "type", "value", "disabled", "onclick"];
+  const NEVER_WEAK = new Set(["html", "body", "head", "script", "style", "option"]);
   const CONTROL = "a[href], area[href], button, [role=button], [role=link], input, summary";
   const scrolls_sideways = (el, style) => el.clientWidth > 0 && (/auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth + 20 || /hidden|clip/.test(style.overflowX) && el.scrollWidth > 1.5 * el.clientWidth && el.children.length > 0 && el.clientWidth > 150);
   const save = (el) => {
@@ -22,10 +23,12 @@ const SAVE = `(() => {
     const sideways = scrolls_sideways(el, style);
     const pinned = style.position === "fixed" || style.position === "sticky";
     const control = el.matches(CONTROL);
+    const parent = el.parentElement;
+    const pointer = !NEVER_WEAK.has(tag) && !el.hasAttribute("disabled") && el.getAttribute("aria-disabled") !== "true" && style.cursor === "pointer" && (tag === "a" || !parent || getComputedStyle(parent).cursor !== "pointer");
     const rel = /\\b(next|prev)\\b/.test(el.getAttribute("rel") || "");
     const item_size = !hidden && box[2] >= 120 && box[3] >= 24;
     const media = tag === "video" || tag === "audio";
-    if (!kids.length && !control && !rel && !item_size && !sideways && !pinned && !media && tag !== "html" && tag !== "body") return null;
+    if (!kids.length && !control && !(pointer && !hidden) && !rel && !item_size && !sideways && !pinned && !media && tag !== "html" && tag !== "body") return null;
     const node = { t: tag };
     const attrs = {};
     for (const name of ATTRS) { const value = el.getAttribute(name); if (value !== null) attrs[name] = name === "onclick" ? "" : value.slice(0, 160); }
@@ -36,7 +39,8 @@ const SAVE = `(() => {
     if (hidden && box) node.h = 1;
     if (sideways) node.x = 1;
     if (pinned) node.p = 1;
-    if (control) node.s = (el.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 200);
+    if (pointer) node.k = 1;
+    if (control || pointer) node.s = (el.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 200);
     if (kids.length) node.c = kids;
     return node;
   };

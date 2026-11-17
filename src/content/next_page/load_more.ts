@@ -97,19 +97,24 @@ export function find_load_more<N>(reader: PageReader<N>): NextPageAction<N> {
     }
     return branch;
   };
-  // Many controls share one branch (a footer), so each branch is counted once.
-  const counts = new Map<N, number>();
-  const control_count = (node: N) => counts.get(node) ?? counts.set(node, [node, ...descendants(reader, node)].filter(is_actionable).length).get(node)!;
 
   const below = (node: N) => reader.box_(node)!.y - bottom(last);
+  const in_reach = (node: N) => {
+    const box = reader.box_(node);
+    if (!box || box.w === 0) return false;
+    if (box.y < bottom(last) - 4 || box.y > list_end + SEARCH_BELOW_PX) return false;
+    return box.x + box.w >= list_box.x - COLUMN_SLACK_PX && box.x <= list_box.x + list_box.w + COLUMN_SLACK_PX;
+  };
+  // A div or span that a script makes clickable has no role. Only its own pointer cursor and a load word mark it, and it never stands alone as a plain button.
+  const is_weak_load = (node: N) => in_reach(node) && reader.pointer_(node) && texts_of(node).some(is_load_text) && !descendants(reader, node).some(is_actionable);
+  // Tried after `is_actionable`, so it never sees a link or a button.
+  const is_control = (node: N) => is_actionable(node) || is_weak_load(node);
+  // Many controls share one branch (a footer), so each branch is counted once.
+  const counts = new Map<N, number>();
+  const control_count = (node: N) => counts.get(node) ?? counts.set(node, [node, ...descendants(reader, node)].filter(is_control).length).get(node)!;
+
   const candidates = nodes
-    .filter((node) => {
-      const box = reader.box_(node);
-      if (!box || box.w === 0 || !is_actionable(node)) return false;
-      if (box.y < bottom(last) - 4 || box.y > list_end + SEARCH_BELOW_PX) return false;
-      if (box.x + box.w < list_box.x - COLUMN_SLACK_PX || box.x > list_box.x + list_box.w + COLUMN_SLACK_PX) return false;
-      return !inside_item(node) && !in_chrome(node) && !is_toggle(node) && !in_carousel(reader, node) && !in_pinned(node);
-    })
+    .filter((node) => is_control(node) && in_reach(node) && !inside_item(node) && !in_chrome(node) && !is_toggle(node) && !in_carousel(reader, node) && !in_pinned(node))
     .filter((node) => control_count(branch_of(node)) <= MAX_BRANCH_CONTROLS)
     .sort((a, b) => below(a) - below(b));
 

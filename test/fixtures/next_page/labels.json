@@ -26,7 +26,7 @@
  "pt_g1": {"url": "https://g1.globo.com/", "ok": [{"action": "click", "text": "mostrar mais"}], "why": "Mostrar mais conteúdos button"},
  "reddit_gallery": {"url": "https://www.reddit.com/r/MechanicalKeyboards/", "ok": [{"action": "scroll"}], "why": "pure infinite scroll; the Next page arrows of the gallery posts are traps", "covers": "list item"},
  "reddit_new": {"url": "https://www.reddit.com/r/programming/", "ok": [{"action": "scroll"}], "why": "pure infinite scroll"},
- "ru_ria": {"url": "https://ria.ru/world/", "ok": [{"action": "click", "text": "ещ"}], "why": "div.list-more 'Еще 20 материалов', a div with a script click handler", "known_miss": "The control is a div with no role or tabindex; only its pointer cursor marks it, and the snapshot does not record the cursor. The detector does nothing here."},
+ "ru_ria": {"url": "https://ria.ru/world/", "ok": [{"action": "click", "text": "ещ"}], "why": "div.list-more 'Еще 20 материалов', a div with a script click handler and no role; only its pointer cursor marks it", "covers": "pointer div"},
  "stackoverflow_q": {"url": "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array", "ok": [{"action": "none"}], "why": "question; the 'Show N more comments' links under each answer are traps", "soft": true},
  "tildes": {"url": "https://tildes.net/", "ok": [{"action": "follow", "href": "after="}], "why": "Next link"},
  "wikipedia_article": {"url": "https://en.wikipedia.org/wiki/Rust_(programming_language)", "ok": [{"action": "none"}], "why": "article", "soft": true},

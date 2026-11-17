@@ -19,6 +19,7 @@ export const texts_of = (element: Element): string[] => name_candidates(element,
 
 const style_of = (element: Element): CSSStyleDeclaration => element.ownerDocument.defaultView!.getComputedStyle(element);
 
+
 // Boxes are in the coordinates of the element's own document. One reader serves one `]]` press: each box is read once, and the cache goes with the reader.
 export const dom_reader = (doc: Document): PageReader<Element> => {
   const boxes = new Map<Element, Box | undefined>();
@@ -46,6 +47,8 @@ export const dom_reader = (doc: Document): PageReader<Element> => {
     return clientWidth > 0 && ((/auto|scroll/.test(overflowX) && scrollWidth > clientWidth + 20) || (/hidden|clip/.test(overflowX) && scrollWidth > 1.5 * clientWidth && element.children.length > 0 && clientWidth > 150));
   },
   pinned_: (element) => /fixed|sticky/.test(style_of(element).position),
+  // Only where a pointer cursor starts: a child of a clickable card inherits it. The root has no parent, so it never starts one.
+  pointer_: (element) => style_of(element).cursor === "pointer" && style_of(element.parentElement ?? element).cursor !== "pointer",
   view_: () => ({ w: innerWidth, h: innerHeight, page_h: doc.documentElement.scrollHeight }),
   };
 };
