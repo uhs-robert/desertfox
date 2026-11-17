@@ -16,7 +16,7 @@ export const SNIPPET_GLOSS = "A snippet is a small script that changes how a sit
 
 export const REACH_HEADING = "What this import can reach";
 
-export const REACH_WARNING = "Settings, search engines and keys can send what you search and type to another address, read your clipboard and press keys on a page. Check the list below. Import only configs you trust.";
+export const REACH_WARNING = "Settings, search engines and keys can send what you search and type to another address, read your clipboard, press keys and click on a page. Check the list below. Import only configs you trust.";
 
 export const REACH_ADDRESSES_INTRO = "These addresses are added:";
 

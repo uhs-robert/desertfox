@@ -150,7 +150,7 @@ export const click_like_a_hint = (target: Target): void => click_like_a_mouse(ta
 export function follow_like_a_hint(place: Place, target: Target, open_link_: ActionDeps["open_link_"]): void | Promise<unknown> {
   const address = place === "here" ? undefined : element_address(target);
   if (address !== undefined) return open_link_(address, place);
-  click_like_a_hint(target);
+  click_like_a_mouse(target, leave_toward(target));
 }
 
 // A link is no target: its first click would navigate away before the second press. The climb covers the children of a link, across shadow roots, because their click bubbles to it.
