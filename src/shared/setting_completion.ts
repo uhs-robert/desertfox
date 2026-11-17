@@ -197,11 +197,12 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": true,
-    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"ddg_images\", \"ddg\", \"kagi\", \"brave\", \"google\", \"bing\", \"hackernews\" and \"wikipedia\" with no repeat",
+    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"google_images\", \"ddg_images\", \"ddg\", \"kagi\", \"brave\", \"google\", \"bing\", \"hackernews\" and \"wikipedia\" with no repeat",
     "values": [
       "sheets",
       "maps",
       "arrow",
+      "google_images",
       "ddg_images",
       "ddg",
       "kagi",

@@ -94,6 +94,8 @@ const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 const grid_binds = (selector: string, link: string): BindingTable => Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, { id: "page.item", args: { selector, link, direction } } satisfies BoundInvocation]));
 // The tile is a figure, which holds the picture and its caption link.
 const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
+// A Google image tile is a div with a picture button (focusable) and a caption link. The two patterns end the udm value at an ampersand or at the end, so udm=28 stays out.
+const GOOGLE_IMAGE_TILES = grid_binds('div[data-attrid="images universal"]', '[role="button"]');
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
@@ -102,6 +104,9 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "maps", row: { site: "https://www.google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "arrow", row: { site: "<all_urls>", modes: { arrow: ARROW_MODE } } },
+  // The Google image rows sit before the `google` row, which matches the same address (a pattern cannot exclude udm=2).
+  { name: "google_images", row: { site: "https://www.google.com/search*udm=2&*", bind: GOOGLE_IMAGE_TILES } },
+  { name: "google_images", row: { site: "https://www.google.com/search*udm=2", bind: GOOGLE_IMAGE_TILES } },
   // The image row sits before the `ddg` row. The first row that binds a key decides it, so on the image vertical (iax=images) this row wins over `ddg`, which matches the same address.
   { name: "ddg_images", row: { site: "https://duckduckgo.com/?*iax=images*", bind: DDG_IMAGE_TILES } },
   // DuckDuckGo's own j and k stop at the last result and never reach the More results button, so j and k walk the results through `page.item`. The ad blocks are `article[data-testid="ad"]`, so they stay out.
