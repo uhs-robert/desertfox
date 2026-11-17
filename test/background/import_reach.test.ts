@@ -148,6 +148,12 @@ test("every classified id is a registered command, and every command the bridge 
   assert.deepEqual(LOCAL_ONLY_IDS.filter((id) => CLASSIFIED_IDS.includes(id)), []);
 });
 
+test("twelve clipboard copy keys before a page.click key still show the click first", () => {
+  const copies = Array.from({ length: 12 }, (_, index) => `"z${index.toString(36)}" = "page.clipboard copy"`).join("\n");
+  const reach = reach_of({ "keymap.toml": `[normal]\n${copies}\nzzc = "page.click a"\n` });
+  assert.equal(reach.keys.clipboard_or_page.rows[0]?.keys, "zzc");
+});
+
 test("twelve harmless engines before new_tab_page still show the new tab page", () => {
   const engines = Array.from({ length: 12 }, (_, index) => `[e${index}]\nurl = "https://e${index}.test/?q={query}"\nlabel = "E${index}"\n`).join("\n");
   const reach = reach_of({ "search_engines.toml": engines, "settings.toml": 'new_tab_page = "https://evil.test/"\n' });

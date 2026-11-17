@@ -80,7 +80,7 @@ const ARROW_MODE: SiteModeTable[string] = {
 };
 
 // Result pages that j and k walk item by item through `page.item`. Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
-const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
+const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last" | "current"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
 // gg and G go to the first and last item. `page.item` does nothing for them on a page that shows no item, so `when_present` hands those pages the plain scroll to the top and bottom.
 const end_binds = (selector: string, link: string | undefined): BindingTable => ({
   gg: { ...item_step(selector, link, "first"), when_present: selector },
@@ -105,6 +105,21 @@ const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-t
 const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
+// Drive scrolls its file list in an inner panel and draws more rows as it scrolls, so a move through `page.item` stops at the last drawn row. Drive's own arrow keys move its selection, scroll the panel and draw more rows, so j, k, h and l focus the current file with `page.item` and then send Drive's key to it. gg and G go to the ends through `page.item`, which scrolls the panel and follows the end while Drive draws more. `current` takes the focus into the files from the view toggle or from nowhere, so the key never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
+const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
+const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
+const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
+// Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll. The count goes to every step: `current` ignores it and the key goes out that many times.
+const drive_key = (guard: string, key: string, key_code: number): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard }, { id: "page.send_key", args: { key, key_code } }];
+// A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
+const DRIVE_BIND: BindingTable = {
+  j: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40),
+  k: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38),
+  ...end_binds(DRIVE_ANY_ITEM, undefined),
+  h: drive_key(DRIVE_GRID_ITEM, "ArrowLeft", 37),
+  l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39),
+};
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
@@ -149,6 +164,7 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", bind: STACKOVERFLOW_ITEMS } },
   // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
   { name: "tildes", row: { site: "https://tildes.net/*", bind: TILDES_ITEMS } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_BIND } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

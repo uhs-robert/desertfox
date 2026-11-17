@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { watch_user_left } from "../../src/content/next_page/user_left.ts";
-import { fake_events } from "../support/fake_events.ts";
+import { watch_user_left } from "../src/content/user_left.ts";
+import { fake_events } from "./support/fake_events.ts";
 
 test("a hidden tab, a key press, the wheel and a pointer press each mark the user as left", () => {
   const cases: [string, (events: ReturnType<typeof fake_events>) => void][] = [

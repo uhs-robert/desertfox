@@ -6,7 +6,9 @@ import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFrames
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
-import { enter_frame, has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";
+import { click_like_a_hint, enter_frame, has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";
+import { click_first_shown } from "./click_first.ts";
+import { is_shown } from "../shown.ts";
 import type { ModeAction, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
@@ -509,6 +511,13 @@ function register(host: PageHostApi): void {
   });
   host.register_handler_("page.focus_link", (args): Outcome => {
     const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number, "link", mark_focus);
+    return message === undefined ? done : { ok: false, message };
+  });
+  host.register_handler_("page.click", (args): Outcome => {
+    const message = click_first_shown(document, args.selector as string, is_shown, (element) => {
+      arm_leave_watch(host).quiet_(false);
+      click_like_a_hint(element as HTMLElement);
+    });
     return message === undefined ? done : { ok: false, message };
   });
   host.register_handler_("page.heading", (args): Outcome => {

@@ -3,7 +3,7 @@
 import type { ItemCursor } from "../item/pick.ts";
 import { wait_for_new_content } from "./load_outcome.ts";
 import type { ContentWatch } from "./load_outcome.ts";
-import type { UserLeft } from "./user_left.ts";
+import type { UserLeft } from "../user_left.ts";
 
 // Node.DOCUMENT_POSITION_FOLLOWING and _CONTAINED_BY, as numbers so the pure part runs without a DOM.
 const FOLLOWING = 4;

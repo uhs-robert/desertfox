@@ -1,7 +1,9 @@
 import { is_shown } from "../shown.ts";
+import { follow_end } from "./ends.ts";
+import type { EndPage } from "./ends.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
-export type ItemDirection = MoveDirection | "first" | "last";
+export type ItemDirection = MoveDirection | "first" | "last" | "current";
 export type ItemArgs = { selector: string; link?: string; direction: ItemDirection; times?: number };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
@@ -60,7 +62,7 @@ export function place_of(items: readonly Element[], focused: Element | null, las
 }
 
 // What the handler needs from the page, so a test passes fakes.
-export type ItemPage = {
+export type ItemPage = EndPage & {
   doc: Document;
   view: Window;
   focused: () => Element | null;
@@ -92,19 +94,22 @@ function focus_target(item: Element, link_selector: string | undefined): HTMLEle
   return target;
 }
 
-export function move_item(page: ItemPage, args: ItemArgs): void {
+export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
-  const items = Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown);
+  const read_items = () => Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown);
+  const items = read_items();
   const { direction } = args;
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then.
-  if (direction === "first" || direction === "last") return items.length === 0 ? undefined : land_on(page, items.at(direction === "first" ? 0 : -1)!, args);
+  if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item) => land_on(page, item, args));
+  const boxes = items.map((item) => item.getBoundingClientRect());
+  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight);
+  // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.
+  if (direction === "current") return items.length === 0 ? undefined : land_on(page, items[Math.min(place.index, items.length - 1)]!, args);
   const steps = args.times ?? 1;
   const scroll = () => page.scroll_by(...(SCROLL[direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
   if (items.length === 0) return scroll();
-  const boxes = items.map((item) => item.getBoundingClientRect());
-  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight);
   const vertical = direction === "down" || direction === "up";
   // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction.
   if (vertical && place.on_item && (direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) return scroll();

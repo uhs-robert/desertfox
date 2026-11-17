@@ -6,6 +6,7 @@ import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { move_item, pick_item, place_of, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
+import { click_first_shown } from "../src/content/hints/click_first.ts";
 
 const box = (left: number, top: number, width = 100, height = 40): Box => ({ left, top, right: left + width, bottom: top + height });
 const list = [box(0, 0), box(0, 60), box(0, 120), box(0, 180)];
@@ -129,13 +130,23 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
       setAttribute: (name: string, value: string) => log.push(`${name}=${value} on ${index}`),
       focus: () => log.push(`focus item ${index}`),
       scrollIntoView: (options: { block: string }) => log.push(`scroll ${index} ${options.block}`),
+      isConnected: true,
+      parentElement: null,
+      getAttribute: () => null,
+      closest: () => null,
     };
     return element;
   };
   const items = rects.map(make);
   const scrolls: number[][] = [];
+  let clock = 0;
+  const page_scroller = { scrollTop: 0, scrollHeight: 2000, clientHeight: 800, parentElement: null, scrollTo: () => {} };
   const page = {
-    doc: { querySelectorAll: (selector: string) => (selector === "none" ? [] : items) },
+    doc: { querySelectorAll: (selector: string) => (selector === "none" ? [] : items), scrollingElement: page_scroller },
+    overflow_y_: () => "visible",
+    wait_: async (ms: number) => void (clock += ms),
+    now_: () => clock,
+    watch_user_: () => ({ left_: () => false, stop_: () => {} }),
     view: { innerHeight: 800, innerWidth: on_screen ? 800 : 50 },
     focused: () => items[focused_index] ?? null,
     toast: (message: string) => toasts.push(message),
@@ -260,28 +271,28 @@ test("the shipped image row binds hjkl to page.item", () => {
   }
 });
 
-test("first and last go to the ends of the page whatever has focus, skip hidden items, and do nothing with no item", () => {
+test("first and last go to the ends of the page whatever has focus, skip hidden items, and do nothing with no item", async () => {
   const middle = fake_page(list, true, 2);
-  move_item(middle.page, { selector: "li", link: "a.t", direction: "first" });
-  move_item(middle.page, { selector: "li", link: "a.t", direction: "last", times: 3 });
+  await move_item(middle.page, { selector: "li", link: "a.t", direction: "first" });
+  await move_item(middle.page, { selector: "li", link: "a.t", direction: "last", times: 3 });
   assert.deepEqual(middle.shown, ["0", "3"]);
   assert.deepEqual(middle.log, ["focus link 0", "focus link 3"]);
   const hidden_ends = fake_page(list, true, -1, [0, 3]);
-  move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "first" });
-  move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "last" });
+  await move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "first" });
+  await move_item(hidden_ends.page, { selector: "li", link: "a.t", direction: "last" });
   assert.deepEqual(hidden_ends.shown, ["1", "2"]);
   const none = fake_page(list);
-  move_item(none.page, { selector: "none", direction: "last" });
+  await move_item(none.page, { selector: "none", direction: "last" });
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
 });
 
-test("every shipped page.item bind table binds gg and G to its first and last item, guarded by its own item selector", () => {
+test("every shipped page.item bind table that moves binds gg and G to its first and last item, guarded by its own item selector", () => {
   type Step = { id?: string; args?: { selector?: string; direction?: string }; when_present?: string };
   const steps_of = (binding: unknown): Step[] => [binding].flat(2) as Step[];
   let tables = 0;
   for (const { name, row } of DEFAULT_SITE_ROWS) {
     for (const { scope, table } of bind_tables_of(row as SiteRuleRow)) {
-      const moves = Object.values(table).flatMap(steps_of).filter((step) => step.id === "page.item" && step.args?.direction !== "first" && step.args?.direction !== "last");
+      const moves = Object.values(table).flatMap(steps_of).filter((step) => step.id === "page.item" && !["first", "last", "current"].includes(step.args?.direction ?? ""));
       if (moves.length === 0) continue;
       tables++;
       const selectors = new Set(moves.map((step) => step.args?.selector));
@@ -296,4 +307,37 @@ test("every shipped page.item bind table binds gg and G to its first and last it
     }
   }
   assert.ok(tables >= 15, `${tables} page.item bind tables`);
+});
+
+test("current focuses the item a move starts from, the first one in view when none holds the focus, and does nothing with no item", () => {
+  const held = fake_page(list, true, 2);
+  move_item(held.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual([held.shown, held.log, held.scrolls, held.toasts], [["2"], ["focus link 2"], [], []]);
+  const loose = fake_page(list);
+  move_item(loose.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual([loose.shown, loose.log], [["0"], ["focus link 0"]]);
+  // The focus left the items (on the view toggle), so current returns to the item the last move landed on.
+  const remembered = fake_page(list);
+  move_item(remembered.page, { selector: "li", link: "a.t", direction: "down" });
+  move_item(remembered.page, { selector: "li", link: "a.t", direction: "down" });
+  move_item(remembered.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual(remembered.shown, ["0", "1", "1"]);
+  // With every item above the view the start index runs past the end, and current takes the last item.
+  const above = fake_page(list.map((entry) => ({ ...entry, top: entry.top - 1000, bottom: entry.bottom - 1000 })));
+  move_item(above.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual(above.shown, [String(list.length - 1)]);
+  const none = fake_page(list);
+  move_item(none.page, { selector: "none", direction: "current" });
+  assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
+});
+
+test("page.click clicks the first shown match, and refuses a bad selector or no shown match", () => {
+  const clicked: string[] = [];
+  const page = (names: string[]) => ({ querySelectorAll: (selector: string) => (selector === "[" ? (() => { throw new SyntaxError("bad"); })() : names) });
+  const shown = (name: string) => !name.startsWith("hidden");
+  assert.equal(click_first_shown(page(["hidden copy", "shown", "second"]), ".go", shown, (name) => clicked.push(name)), undefined);
+  assert.deepEqual(clicked, ["shown"]);
+  assert.equal(click_first_shown(page(["hidden copy"]), ".go", shown, (name) => clicked.push(name)), "Nothing shown on the page matches .go");
+  assert.equal(click_first_shown(page([]), "[", shown, (name) => clicked.push(name)), "[ is not a valid CSS selector");
+  assert.deepEqual(clicked, ["shown"]);
 });

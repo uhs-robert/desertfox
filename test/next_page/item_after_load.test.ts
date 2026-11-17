@@ -4,7 +4,7 @@ import type { ItemCursor } from "../../src/content/item/pick.ts";
 import { first_item_after, move_box_after_load } from "../../src/content/next_page/item_after_load.ts";
 import type { ItemAfterLoadDeps } from "../../src/content/next_page/item_after_load.ts";
 import { LOAD_WAIT_MS } from "../../src/content/next_page/load_outcome.ts";
-import { watch_user_left } from "../../src/content/next_page/user_left.ts";
+import { watch_user_left } from "../../src/content/user_left.ts";
 import { fake_events } from "../support/fake_events.ts";
 
 // A page of items in document order. An item is on the page while it is in `items`, and a removed item compares as disconnected.

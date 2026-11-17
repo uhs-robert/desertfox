@@ -9,6 +9,7 @@ import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { DEFAULT_SITE_ROW_NAMES } from "../src/shared/table_constants.ts";
+import type { TreeLeaf, TreeNode } from "../src/shared/prefix_tree.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { create_keymap_asks } from "../src/content/ask_keymap.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
@@ -449,9 +450,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 30);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 31);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -583,7 +584,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 27);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 28);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
@@ -702,4 +703,34 @@ test("an older reply that lands after a newer ask began is dropped, across a bur
   pending[1]!("b");
   await Promise.all(asks);
   assert.deepEqual(installed, ["c"]);
+});
+
+test("the drive row focuses the current file and sends Drive's own key to it, binds gg and G to the item ends, and leaves list h and l to the plain scroll", async () => {
+  const compiled = with_defaults({});
+  const drive = "https://drive.google.com/drive/my-drive";
+  const list = '[role="grid"] [role="row"][data-id]';
+  const grid = '[role="grid"] [role="gridcell"][data-id]';
+  const leaf_at = async (key: string) => {
+    // gg sits under the g branch.
+    let node: TreeNode | undefined = (await ask(compiled, drive))!.keymap.modes.normal;
+    for (const token of key) node = node?.kind === "branch" ? node.children[token] : undefined;
+    assert.equal(node?.kind, "leaf", key);
+    return node as TreeLeaf;
+  };
+  for (const [key, guard, sent] of [["j", `${grid}, ${list}`, "ArrowDown"], ["k", `${grid}, ${list}`, "ArrowUp"], ["h", grid, "ArrowLeft"], ["l", grid, "ArrowRight"]] as const) {
+    const leaf = await leaf_at(key);
+    assert.equal(leaf.when_present, guard, key);
+    const args = leaf.steps.map((step) => step.invocation.args as { selector?: string; direction?: string; key?: string; target?: string });
+    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), args[0]?.selector, args[0]?.direction, args[1]?.key, args[1]?.target], [["page.item", "page.send_key"], guard, "current", sent, ""], key);
+  }
+  // Drive ignores a sent Home and End, so gg and G go to the ends through page.item, which scrolls Drive's panel.
+  for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
+    const leaf = await leaf_at(key);
+    assert.equal(leaf.when_present, `${grid}, ${list}`, key);
+    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), leaf.steps[0]?.invocation.args?.direction], [["page.item"], direction], key);
+  }
+  // A guard that fails falls through to the plain key: h and l scroll sideways in the list view.
+  assert.equal((await leaf_at("h")).otherwise?.steps[0]?.invocation.id, "scroll.pixels");
+  for (const url of ["https://docs.google.com/document/d/abc/edit", "https://drive.google.com/file/d/abc/view"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
+  assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["drive"] }), drive, "j"), undefined);
 });

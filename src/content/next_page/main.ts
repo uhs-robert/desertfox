@@ -12,7 +12,7 @@ import type { FollowDirection } from "./follow_links.ts";
 import { find_load_more } from "./load_more.ts";
 import { create_load_step, dom_content_watch } from "./load_outcome.ts";
 import { move_box_after_load } from "./item_after_load.ts";
-import { watch_user_left } from "./user_left.ts";
+import { watch_user_left } from "../user_left.ts";
 import type { ItemCursor } from "../item/pick.ts";
 
 type NextPageWindow = { desertfox_host?: PageHostApi; desertfox_next_page_ready?: true };

@@ -176,6 +176,17 @@ define("page.send_key", {
   bundle: "site_actions",
 });
 
+// Meant for site rows: a row binds a key to this command for a control that a site's script opens only on a click, not on Enter. It lives in the hints bundle, which already holds the hint click. The site_actions bundle has no room for it.
+define("page.click", {
+  label: "Click on page",
+  intent: "Click the first shown element a CSS selector finds. It sends the pointer and mouse events of a hint click, so a control that opens only on a click opens. It refuses when nothing shown matches.",
+  params: [{ name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Click the first shown element this CSS selector finds." }],
+  bridge: false,
+  runs_in: "content",
+  modes: ["normal"],
+  bundle: "hints",
+});
+
 // Meant for the arrow mode, which binds h, j, k and l to it. Firefox ignores a script's arrow keys on its own controls, so the handler moves each native control through the DOM and sends a keydown to the rest.
 define("page.arrow", {
   label: "Arrow on the focused control",
@@ -193,11 +204,11 @@ define("page.arrow", {
 // Meant for site rows on result lists, where a row names the item selector and binds j and k. Enter on the focused link then opens it, as the browser does.
 define("page.item", {
   label: "Move through items",
-  intent: "Focus the next item that a CSS selector names. It draws a box around the item, which is a search result on a results page. Down and up go to the nearest item below or above, left and right to the nearest on the same row, so one bind set serves a list and a grid. It starts from the item that holds the focus, else the last item it moved to while that is on screen, else the first item in view. A count prefix moves that many items. Down and up scroll 50 px per count instead while the item runs past the view edge and at the last item, and with no item on the page they scroll as the plain keys do. Left and right show a notice at the last item. First and last go to the first and last item on the page, whatever has focus, ignore a count, record the place they leave in the jump list, and do nothing on a page with no item. Escape clears the box.",
+  intent: "Focus the next item that a CSS selector names. It draws a box around the item, which is a search result on a results page. Down and up go to the nearest item below or above, left and right to the nearest on the same row, so one bind set serves a list and a grid. It starts from the item that holds the focus, else the last item it moved to while that is on screen, else the first item in view. A count prefix moves that many items. Down and up scroll 50 px per count instead while the item runs past the view edge and at the last item, and with no item on the page they scroll as the plain keys do. Left and right show a notice at the last item. First and last scroll the list to its top or bottom and go to the first and last item, whatever has focus. While the page draws or loads more items they follow the end, until it stays the same for a second or you press a key. They ignore a count, record the place they leave in the jump list, and do nothing on a page with no item. Current focuses the item a move would start from and goes nowhere, and does nothing on a page with no item. Escape clears the box.",
   params: [
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Move through the elements this CSS selector finds." },
     { name: "link", type: "string", optional: true, description: "Focus the element this CSS selector finds in the item." },
-    { name: "direction", type: "enum", values: ["down", "up", "left", "right", "first", "last"], value_labels: { down: "to item below", up: "to item above", left: "to item on the left", right: "to item on the right", first: "to first item", last: "to last item" }, description: { down: "Go to the nearest item below.", up: "Go to the nearest item above.", left: "Go to the nearest item on the left.", right: "Go to the nearest item on the right.", first: "Go to the first item on the page.", last: "Go to the last item on the page." } },
+    { name: "direction", type: "enum", values: ["down", "up", "left", "right", "first", "last", "current"], value_labels: { down: "to item below", up: "to item above", left: "to item on the left", right: "to item on the right", first: "to first item", last: "to last item", current: "to the current item" }, description: { down: "Go to the nearest item below.", up: "Go to the nearest item above.", left: "Go to the nearest item on the left.", right: "Go to the nearest item on the right.", first: "Go to the first item on the page.", last: "Go to the last item on the page.", current: "Focus the item a move starts from, and go nowhere." } },
     { name: "times", type: "int", default: 1, min: 1, description: "Move this many items." },
   ],
   bridge: false,

@@ -174,7 +174,7 @@ test("the reach block holds the exact warning, each group with its intro, the ov
   reach.site_rows = 2;
   const block = reach_block(reach)!;
   assert.equal(block.heading, "What this import can reach");
-  assert.equal(block.warning, "Settings, search engines and keys can send what you search and type to another address, read your clipboard and press keys on a page. Check the list below. Import only configs you trust.");
+  assert.equal(block.warning, "Settings, search engines and keys can send what you search and type to another address, read your clipboard, press keys and click on a page. Check the list below. Import only configs you trust.");
   assert.deepEqual(block.sections.map((section) => section.intro), [
     "These addresses are added:",
     "These keys read your clipboard or act on a page:",
