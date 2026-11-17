@@ -87,10 +87,10 @@ export function matches_any_address(source: string | undefined, addresses: reado
 
 // The site table (`site_rules`) resolves each column on its own: the first matching row that sets a column decides it.
 // `pass` and `only` form one column, the key rule. Each per-site setting is a column of its own in `values`.
-// `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. Its keys are the written sequences in a row, and the normalized sequences once compiled.
-// `modes` is the other merging column: a site mode is decided whole, by the first matching row that has its name.
+// `bind` merges key by key, and so does `keymap`, per mode: for each key, the first matching row that binds it decides. Its keys are the written sequences in a row, and the normalized sequences once compiled.
+// `modes` merges by name: a site mode is decided whole, by the first matching row that has its name.
 export type SiteModeColumn<Bind = unknown> = { label: string; bind: Readonly<Record<string, Bind>>; sticky?: boolean };
-// `keymap` holds the binds of the keymap modes other than normal, merged key by key per mode as `bind` is. `bind` holds the normal-mode binds of both the `bind` and `keymap.normal` fields of a row.
+// `keymap` holds the binds of the keymap modes other than normal. It merges key by key per mode, as `bind` does. `bind` holds the normal-mode binds of both the `bind` and `keymap.normal` fields of a row.
 export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; keymap?: Readonly<Record<string, Readonly<Record<string, Bind>>>>; modes?: Readonly<Record<string, SiteModeColumn<Bind>>>; values?: Readonly<Record<string, unknown>> };
 export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; keymap?: Record<string, Record<string, Bind>>; modes?: Record<string, SiteModeColumn<Bind>>; values: Record<string, unknown> };
 

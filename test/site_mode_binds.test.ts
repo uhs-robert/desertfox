@@ -90,6 +90,11 @@ test("a page that is off gets no mode binds, whether off or by a key rule that f
   assert.equal(id_at(off, "visual", "x"), undefined);
   const later_off = await ask(compile([{ site: SITE, keymap: { visual: { x: FIND } } }, { site: SITE, off: true }]).compiled, PAGE);
   assert.equal(id_at(later_off, "visual", "x"), undefined);
+  // `only` always keeps the escape keys, so only a `pass` of every normal key leaves the page with no normal bind.
+  const every_key = Object.keys(compile([]).compiled.modes.normal!.children).join(" ");
+  const emptied = await ask(compile([{ site: SITE, pass: every_key, keymap: { visual: { x: FIND } } }]).compiled, PAGE);
+  assert.equal(emptied!.all_off, true);
+  assert.equal(id_at(emptied, "visual", "x"), undefined);
 });
 
 test("a command that does not run in the mode is dropped with a warning, and one that does is kept", () => {
@@ -105,6 +110,12 @@ test("a bind that is a prefix of another warns per mode, and the same keys in tw
   const across = compile([{ site: SITE, keymap: { visual: { x: FIND } } }, { site: "https://*.a.test/*", keymap: { visual: { xa: FIND } } }]).warnings;
   assert.ok(across.some((text) => /skipped bind "xa" of "https:\/\/\*\.a\.test\/\*": "x" is already a complete bind of/.test(text)), across.join("\n"));
   assert.deepEqual(compile([{ site: SITE, keymap: { visual: { x: FIND } } }, { site: "https://*.a.test/*", keymap: { caret: { xa: FIND } } }]).warnings, []);
+});
+
+test("one key written two ways in bind and keymap.normal is a clash", () => {
+  const spec = SETTING_SPECS.site_rules;
+  assert.match(spec.explain!([{ site: SITE, bind: { "<C-a>": "tab.next" }, keymap: { normal: { "<C-A>": "tab.prev" } } }]) ?? "", /binds "<C-A>" in both "bind" and "keymap\.normal"/);
+  assert.equal(spec.check([{ site: SITE, bind: { "<C-a>": "tab.next" }, keymap: { normal: { "<C-b>": "tab.prev" } } }]), true);
 });
 
 test("the keymap column accepts the four modes and refuses another mode, an empty table and a bad key", () => {
@@ -164,4 +175,12 @@ test("which-key lists a site-bound key in visual mode on a matching page only, a
   assert.equal((await keys_on(PAGE, "caret")).includes("x"), false);
   assert.equal((await keys_on("https://b.test/", "visual")).includes("x"), false);
   assert.equal((await keys_on("https://off.a.test/", "visual")).includes("x"), false);
+});
+
+test("a bad keymap.normal bind is named by its column in the warning, and a bad bind by bind", () => {
+  const bad_args = { id: "find.open", args: { direction: "sideways" } };
+  const warnings = compile([{ site: SITE, keymap: { normal: { "": FIND, x: bad_args } }, bind: { y: bad_args } }]).warnings;
+  assert.ok(warnings.some((text) => /^site_rules: keymap "normal" skipped bind "": /.test(text)), warnings.join("\n"));
+  assert.ok(warnings.some((text) => /^site_rules: keymap "normal" skipped bind "x" of /.test(text)), warnings.join("\n"));
+  assert.ok(warnings.some((text) => /^site_rules: skipped bind "y" of /.test(text)), warnings.join("\n"));
 });

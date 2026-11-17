@@ -21,7 +21,7 @@ import type { StoredTheme } from "../shared/theme/apply.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
 import type { Registry } from "../shared/registry/index.ts";
 import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
-import { compile_keymap } from "../shared/keys/compiler.ts";
+import { compile_keymap, FROM_KEYMAP_NORMAL } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
@@ -162,8 +162,10 @@ export function compile_config(input: CompileInput): CompileOutput {
 }
 
 // Checks the binds of a site row, one of its keymap modes or one of its site modes, and drops the bad ones in place. `mode` is the keymap mode the commands must fit: a site mode lays over normal mode, so its binds run in normal mode.
-function check_site_binds(binds: Record<string, SiteBind> | undefined, scope: string, mode: string, site: string, input: CompileInput, warnings: string[]): void {
-  for (const [key, { tokens, leaf }] of Object.entries(binds ?? {})) {
+function check_site_binds(binds: Record<string, SiteBind> | undefined, column_scope: string, mode: string, site: string, input: CompileInput, warnings: string[]): void {
+  for (const [key, site_bind] of Object.entries(binds ?? {})) {
+    const { tokens, leaf } = site_bind;
+    const scope = FROM_KEYMAP_NORMAL.has(site_bind) ? `keymap "normal" ` : column_scope;
     const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
     if (waits_for_key) warnings.push(`site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
     // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
