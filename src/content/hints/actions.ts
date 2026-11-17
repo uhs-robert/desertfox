@@ -198,8 +198,8 @@ function double_click_like_a_mouse(target: Target, pointer_from: Target | undefi
 
 export type MarkFocus = (target: Element) => void;
 
-// What a person sees of focus: the page restyles these on `:focus` when it draws its own ring.
-const FOCUS_LOOK = ["outline", "box-shadow", "border", "background-color", "color"];
+// What a person sees of focus: the page restyles these on `:focus` when it draws its own ring. The border is read by its longhands, because the computed `border` shorthand is empty when the sides differ.
+const FOCUS_LOOK = ["outline", "box-shadow", "border-color", "border-width", "border-style", "background-color", "color"];
 
 // Computed style is live, so the look is copied to a string before the focus moves.
 const look_of = (target: Element): string => {
@@ -212,7 +212,8 @@ export function focus_and_mark(target: HTMLElement, options: FocusOptions, mark_
   const markable = mark_ && target.ownerDocument === document;
   const before = markable ? look_of(target) : "";
   target.focus(options);
-  if (markable && look_of(target) === before) mark_(target);
+  // A page that transitions its focus style still reads the old look right after the focus, but it shows the style soon, so a running animation counts as a visible change.
+  if (markable && look_of(target) === before && !target.getAnimations?.().length) mark_(target);
 }
 
 // A box that is not focusable (tabIndex below 0) cannot take focus. tabindex=-1 lets a script focus it and leaves the tab order alone. A link, a button or a page tabindex stays as it is.

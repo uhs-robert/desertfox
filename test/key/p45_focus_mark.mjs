@@ -1,10 +1,22 @@
 // The focus mark: ]l (and the other focus moves) draw the shared box around the focused element when the page hides its own focus style, and draw nothing when the page shows one. The box is the one `page.item` uses, in a closed shadow root that the extension's own world reads with openOrClosedShadowRoot. It must not outlive its target: blur, Escape, a mode change, a removed link, and two quick presses leave one box on the latest link.
 
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
+
 export const areas = ["keys", "hints", "bundles"];
 
 const LINKS = 6;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  await setup("load the shipped ddg row for the fm_ddg pages", async () => {
+    const dir = config_copy();
+    const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "ddg").row;
+    const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=fm_ddg*"', ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`), ""].join("\n"));
+    await load_config_dir(dir);
+  });
+
   const open_links = async (id, focus_css) => {
     await open_page("controls", `fm_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
@@ -128,7 +140,67 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     })()`);
     await sleep(500);
     await press_keys("]l");
+    await poll_until("the framed link to take the focus", async () => (await in_active_tab(`document.getElementById("inner").contentDocument.activeElement?.id ?? ""`)) === "in");
     await sleep(600);
     expect((await boxes()).length === 0, "a box drew for a link in a frame");
+  });
+
+  await run_case("a focus style on one border side counts as visible", async () => {
+    await open_links("border", "a { outline: none; border-bottom: 2px solid transparent; } a:focus { border-bottom-color: red; }");
+    await press_keys("]l");
+    await expect_focus("l0");
+    await sleep(600);
+    expect((await boxes()).length === 0, "the box showed over a border-bottom focus style");
+  });
+
+  await run_case("a focus style that transitions counts as visible", async () => {
+    await open_links("transition", "a { outline: none; background: white; transition: background-color 1s; } a:focus { background: yellow; }");
+    await press_keys("]l");
+    await expect_focus("l0");
+    await sleep(400);
+    expect((await boxes()).length === 0, "the box showed beside a transitioning focus style");
+  });
+
+  await run_case("Tab inside a shadow root clears the mark from the link that lost the focus", async () => {
+    await open_links("shadow", HIDDEN);
+    await in_active_tab(`(() => {
+      for (let index = 0; index < ${LINKS}; index++) document.getElementById("l" + index).remove();
+      const host = document.createElement("div");
+      host.id = "host";
+      host.attachShadow({ mode: "open" }).innerHTML = '<style>a:focus{outline:none}</style><a id="sa" href="#sa" style="display:block;width:200px;height:30px">a</a><a id="sb" href="#sb" style="display:block;width:200px;height:30px">b</a>';
+      document.body.prepend(host);
+      return true;
+    })()`);
+    await press_keys("]l");
+    await poll_until("the box on the first shadow link", async () => (await boxes()).length === 1);
+    await in_active_tab(`document.getElementById("host").shadowRoot.getElementById("sb").focus(); 0`);
+    await expect_no_box("the box to clear when focus moved inside the shadow root");
+  });
+
+  await run_case("j, ]l and ]] on ddg do not move the focus to the first new result", async () => {
+    await open_page("controls", "fm_ddg_more", { new_tab: true });
+    await in_active_tab(`(() => {
+      const style = document.createElement("style");
+      style.textContent = "a:focus { outline: none; }";
+      document.head.append(style);
+      const result = (index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a><p>snippet</p></article></li>';
+      const list = document.createElement("ol");
+      list.innerHTML = [0, 1, 2, 3].map(result).join("");
+      const more = document.createElement("button");
+      more.textContent = "More results";
+      more.addEventListener("click", () => setTimeout(() => list.insertAdjacentHTML("beforeend", [4, 5, 6].map(result).join("")), 300));
+      document.body.prepend(list, more);
+      document.activeElement?.blur();
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("d0");
+    await press_keys("]l");
+    await expect_focus("d1");
+    await press_keys("-k", "bracketright", "-k", "bracketright");
+    await poll_until("the results to load", async () => (await in_active_tab(`!!document.getElementById("d4")`)));
+    await sleep(500);
+    // The click on the load button takes the focus itself. The first new result must not.
+    expect((await in_active_tab("document.activeElement?.id")) !== "d4", "]] moved the focus to the first new result after ]l, with no page.item box shown");
   });
 }

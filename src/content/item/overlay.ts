@@ -23,6 +23,8 @@ export function create_item_overlay(still_wanted: () => boolean) {
   host.style.cssText = `all: initial; position: fixed; z-index: ${LAYERS.hints};`;
   host.attachShadow({ mode: "closed" }).append(style, box);
   let item: Element | undefined;
+  // True while the box is the focus mark of `item.mark`, which is not a `page.item` box.
+  let is_focus_mark = false;
   let stop_following: (() => void) | undefined;
   let watch: ReturnType<typeof setInterval> | undefined;
 
@@ -41,6 +43,7 @@ export function create_item_overlay(still_wanted: () => boolean) {
 
   function clear(): void {
     item = undefined;
+    is_focus_mark = false;
     stop_following?.();
     stop_following = undefined;
     clearInterval(watch);
@@ -50,16 +53,18 @@ export function create_item_overlay(still_wanted: () => boolean) {
 
   return {
     clear,
-    shown_: () => host.isConnected,
-    show: (target: Element): void => {
+    shown_: () => host.isConnected && !is_focus_mark,
+    show: (target: Element, as_focus_mark = false): void => {
       item = target;
+      is_focus_mark = as_focus_mark;
       reposition();
       document.documentElement.append(host);
       if (stop_following) return;
       stop_following = follow_windows([window], reposition);
       window.addEventListener("focusout", on_focusout, true);
       watch = setInterval(() => {
-        if (!still_wanted() || !item?.isConnected) clear();
+        // Focus moving inside a shadow root sends no focusout to the window, so a focus mark rechecks the focus itself.
+        if (!still_wanted() || !item?.isConnected || (is_focus_mark && !item.matches(":focus"))) clear();
         else reposition();
       }, WATCH_MS);
     },

@@ -875,3 +875,11 @@ test("copy strips the tracking of a link address, but not the text of an element
   perform("copy", { localName: "span", textContent: "t?utm=1", click() {}, focus() {}, remove() {} } as never, deps);
   assert.deepEqual(copied, ["https://a.com/p", "t?utm=1"]);
 });
+
+test("focus draws no mark while the page's focus style transitions", (context) => {
+  const page = marked_fixture(false, context);
+  Object.assign(page.element, { getAnimations: () => [{}] });
+  const marked: unknown[] = [];
+  perform("focus", page.element as never, { ...NO_DEPS, mark_: (target) => marked.push(target) });
+  assert.deepEqual(marked, []);
+});
