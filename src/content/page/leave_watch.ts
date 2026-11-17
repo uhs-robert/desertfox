@@ -1,5 +1,5 @@
 // Tells the background where the top page stood when the user left it, for the jump list: as the page hides (`jump_leave`), and as a single-page app changes its address in place (`jump_push`).
-// The `page` and `hints` bundles both arm it, so a page only scrolled with `j` still reports once a hint follow leaves it. The first arm in a document wins and the window holds the watch.
+// The `page`, `hints` and `next_page` bundles all arm it, so a page only scrolled with `j` still reports once a hint follow or `]]` leaves it. The first arm in a document wins and the window holds the watch.
 // Each push or traverse committed within the document also feeds `listen_`, in any frame, for code that must react to it (hint mode ends on it).
 
 import type { JumpLeave, JumpPush } from "../../shared/messages.ts";

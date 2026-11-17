@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { detect_next_page, rank_by_text } from "../../src/content/hints/next_page.ts";
-import { find_load_more } from "../../src/content/hints/load_more.ts";
+import { detect_next_page, rank_by_text } from "../../src/content/next_page/detect.ts";
+import { find_load_more } from "../../src/content/next_page/load_more.ts";
 import { DEFAULT_NEXT_PATTERNS } from "../../src/shared/default_settings.ts";
 import { FIXTURES, read_saved_page, saved_input, saved_reader } from "../support/snapshot_page.ts";
 import type { SavedNode } from "../support/snapshot_page.ts";
@@ -12,8 +12,7 @@ type Label = { url: string; ok: Answer[]; why: string; soft?: true; covers?: str
 
 const labels = JSON.parse(readFileSync(new URL("labels.json", FIXTURES), "utf8")) as Record<string, Label>;
 
-// The next words without 'more', which the load step owns, plus the Japanese words.
-const NEXT_WORDS = [...new Set([...DEFAULT_NEXT_PATTERNS.filter((pattern) => pattern !== "more"), "次へ", "次のページ"])];
+const NEXT_WORDS = DEFAULT_NEXT_PATTERNS;
 
 const fits = (answer: Answer, action: string, target: SavedNode | undefined): boolean =>
   answer.action === action &&

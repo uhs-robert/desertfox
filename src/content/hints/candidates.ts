@@ -13,8 +13,8 @@ import type { PageProbe, Rect } from "./visible.ts";
 export type HintFilter = "drop" | "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "headings" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
-const LINKS = "a[href]";
-const BUTTONS = ["button", '[role="button"]', ...["button", "submit", "reset", "image"].map((type) => `input[type="${type}"]`)].map((selector) => `${selector}:not([disabled])`).join(", ");
+export const LINKS = "a[href]";
+export const BUTTONS = ["button", '[role="button"]', ...["button", "submit", "reset", "image"].map((type) => `input[type="${type}"]`)].map((selector) => `${selector}:not([disabled])`).join(", ");
 const CLICKABLE_BY_ACTION = `${LINKS}, button:not([disabled]), summary, [onclick], [role=button], [role=link], [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=tab], [role=checkbox], [role=switch], [role=option], [role=radio], label[for], ${TEXT_FIELDS}`;
 const CLICKABLE = `${CLICKABLE_BY_ACTION}, [tabindex]:not([tabindex="-1"])`;
 // A roving-tabindex widget keeps one item at tabindex 0 and the rest at -1, so -1 alone says nothing. A click-like role, or a place inside a menu, does.

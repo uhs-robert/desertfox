@@ -115,11 +115,15 @@ export function apply_edits(settings: Partial<Settings>, edits: SettingEdits): P
   return { ...settings, ...edits.saved, ...edits.temp };
 }
 
+// `more` was a next word before `]]` got its load step. A list written then still holds it, and the next pass would take it before the load step looks: the "more" under a comment or a description, not the page's own load control. So it is dropped wherever the list comes from.
+const without_load_word = (patterns: readonly string[]): string[] => patterns.filter((pattern) => pattern.trim().toLowerCase() !== "more");
+
 // The settings in force: the defaults under the config's own values. The two prefix maps merge one level deeper, so a config that sets only `search_prefixes.tab` keeps the default `here`. The key compiler merges them the same way.
 export function effective_settings(settings: Partial<Settings>): Settings {
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
+    next_patterns: without_load_word(settings.next_patterns ?? DEFAULT_SETTINGS.next_patterns),
     search_prefixes: { ...DEFAULT_SETTINGS.search_prefixes, ...settings.search_prefixes },
     container_prefixes: { ...DEFAULT_SETTINGS.container_prefixes, ...settings.container_prefixes },
   };

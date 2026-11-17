@@ -347,7 +347,7 @@ test("the defaults stay the same", () => {
     focus_on_load: "",
     site_rules: [],
     default_site_rows_off: [],
-    next_patterns: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"],
+    next_patterns: ["next", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>", "\u6b21\u3078", "\u6b21\u306e\u30da\u30fc\u30b8"],
     prev_patterns: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"],
     strip_tracking_params: ["utm_*", "fbclid", "gclid", "dclid", "msclkid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "mkt_tok"],
     strip_tracking: true,

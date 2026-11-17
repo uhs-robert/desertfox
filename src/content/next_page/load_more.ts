@@ -1,7 +1,7 @@
 // The load-more step of `]]`, tried when the next pass finds no next page. Structure first: it finds the page's main list and takes the lone control right after its last item. The words only break ties. With no control, it scrolls to the end of the list, but only when that list reaches the end of the page.
 
-import { ancestors, descendants, in_carousel, is_item_size, normalize, signature, stacked_items } from "./next_page.ts";
-import type { NextPageAction, PageReader } from "./next_page.ts";
+import { ancestors, descendants, in_carousel, is_item_size, normalize, signature, stacked_items } from "./detect.ts";
+import type { NextPageAction, PageReader } from "./detect.ts";
 
 const LOAD_WORDS = new Set([
   "more", "load more", "show more", "see more", "view more", "more results", "more stories", "more posts", "more articles", "more news", "more items", "more products", "older posts", "older entries", "older", "show older", "load older",

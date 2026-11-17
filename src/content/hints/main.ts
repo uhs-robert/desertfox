@@ -30,13 +30,11 @@ import { clear_snapshot, go_to_heading, keep_present_found, step_heading, take_s
 import type { HeadingDirection } from "./headings.ts";
 import { all_links, yank_links } from "./yank_links.ts";
 import type { LinkFormat, YankDeps } from "./yank_links.ts";
-import { can_open_elsewhere, find_follow_link } from "./follow_links.ts";
 import { focus_field } from "./focus_fields.ts";
 import type { FieldDirection } from "./focus_fields.ts";
-import type { FollowDirection } from "./follow_links.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../strip_tracking.ts";
-import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
+import { DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
 import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
 import { arm_leave_watch } from "../page/leave_watch.ts";
 import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
@@ -184,27 +182,6 @@ async function read_site_selectors(show_toast: (message: string) => void): Promi
 
 async function read_letters(): Promise<string[]> {
   return clean_letters(await read_setting("hint_letters"));
-}
-
-async function read_patterns(direction: FollowDirection): Promise<string[]> {
-  const name = direction === "next" ? "next_patterns" : "prev_patterns";
-  const chosen = await read_setting(name);
-  return Array.isArray(chosen) && chosen.every((entry) => typeof entry === "string") ? chosen : [...DEFAULT_SETTINGS[name]];
-}
-
-// A `<link>` has no box to click, so it navigates by its address.
-async function follow_page_link(direction: FollowDirection, place: Place): Promise<Outcome> {
-  const link = find_follow_link(document, direction, await read_patterns(direction));
-  if (!link) return { ok: false, message: direction === "next" ? "No next page link" : "No previous page link" };
-  const element = link.element as HTMLLinkElement;
-  if (place !== "here" && !can_open_elsewhere(element)) return { ok: false, message: "That page link cannot open in another tab" };
-  if (element.localName === "link") {
-    if (place === "here") window.location.assign(element.href);
-    else await open_link_(element.href, place);
-    return done;
-  }
-  const result = await perform(place, element, deps);
-  return result && typeof result === "object" && "ok" in result ? (result as Outcome) : done;
 }
 
 // A refused copy answers failed and shows nothing here: the pick's answer carries it to the caller, which shows it once.
@@ -521,7 +498,6 @@ function register(host: PageHostApi): void {
     return "handled";
   }
 
-  host.register_handler_("page.follow", (args) => follow_page_link(args.direction as FollowDirection, args.where as Place));
   host.register_handler_("page.focus_field", (args): Outcome => {
     const message = focus_field(document, host.last_blurred_(), args.direction as FieldDirection, args.steps as number);
     if (message !== undefined) return { ok: false, message };

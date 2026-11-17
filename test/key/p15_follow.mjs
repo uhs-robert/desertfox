@@ -27,4 +27,25 @@ export async function run_cases({ run_case, press_keys, open_page, wait_event, e
     await press_keys(...BRACKET_LEFT_TWICE);
     await wait_event(mark, loaded("follow_text_prev"), "the previous page after [[");
   });
+
+  await run_case("]] with no next page clicks the load control after the list", async () => {
+    await open_page("follow_load", "follow_load", { new_tab: false });
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, (event) => event.type === "loaded" && event.page_id === "follow_load", "the items the load control added");
+  });
+
+  await run_case("]] with no next page and no load control scrolls an endless list to its end", async () => {
+    await open_page("follow_load", "follow_load_scroll", { new_tab: false });
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, (event) => event.type === "loaded" && event.page_id === "follow_load_scroll", "the items the page added at its end");
+  });
+
+  await run_case("]] says so when the scroll loads nothing", async () => {
+    await open_page("follow_load", "follow_load_dead", { new_tab: false });
+    const mark = events.length;
+    await press_keys(...BRACKET_RIGHT_TWICE);
+    await wait_event(mark, (event) => event.type === "toast" && event.page_id === "follow_load_dead", "the Nothing loaded toast", 10000);
+  });
 }

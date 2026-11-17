@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pick_next_control, rank_by_text } from "../../src/content/hints/next_page.ts";
-import { is_load_text } from "../../src/content/hints/load_more.ts";
+import { pick_next_control, rank_by_text } from "../../src/content/next_page/detect.ts";
+import { is_load_text } from "../../src/content/next_page/load_more.ts";
 import { saved_reader } from "../support/snapshot_page.ts";
 import type { SavedNode } from "../support/snapshot_page.ts";
 

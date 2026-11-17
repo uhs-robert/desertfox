@@ -98,14 +98,14 @@ define("page.home", {
   },
 });
 
-// The link search sits in the hints bundle, which loads on the first run. It reads the top page and same-origin frames only: a frame of another site has its own script and the top page cannot see its links.
+// The search sits in the next_page bundle, which loads on the first run. It reads the top page and same-origin frames only: a frame of another site has its own script and the top page cannot see its links.
 define("page.follow", {
   label: "Follow page link",
-  intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the link or button whose text best matches the next_patterns or prev_patterns setting: an earlier pattern wins, then a link over a button, then the shorter text.",
+  intent: "Go to the next or previous page of a series. It takes a link marked rel next or prev first, then the link or button whose text best matches the next_patterns or prev_patterns setting: an earlier pattern wins, then a link over a button, then the shorter text. With no next page, the next page in place clicks a load more control after the main list of the page, or scrolls an endless list to its end, and says so when nothing loaded.",
   params: [{ name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to next page", prev: "to previous page" }, description: { next: "Follow the link to the next page.", prev: "Follow the link to the previous page." } }, WHERE_PARAM],
   bridge: false,
   runs_in: "content",
-  bundle: "hints",
+  bundle: "next_page",
   jumps: (args) => args.where === "here",
 });
 

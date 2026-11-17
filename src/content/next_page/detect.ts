@@ -23,7 +23,7 @@ export type NextPageInput<N> = { rel_links: readonly N[]; controls: readonly Con
 // `follow` goes to another page (a `rel` link or a next word), `click` loads more into this one, `scroll` brings an infinite list to its end.
 export type NextPageAction<N> = { action: "follow" | "click" | "scroll"; target: N } | { action: "none" };
 
-// The step after the next pass. It lives in its own module (`load_more.ts`), so the hints bundle does not carry it.
+// The step after the next pass (`load_more.ts`). A caller passes it only where loading into this page makes sense: `]]` in place.
 export type LoadStep = <N>(reader: PageReader<N>) => NextPageAction<N>;
 
 // A longer text is a sentence that happens to hold the word ("Read more about the next release"). Five, not four, for "Go to next search page".

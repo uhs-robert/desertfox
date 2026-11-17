@@ -141,6 +141,13 @@ function click_like_a_mouse(target: Target, pointer_from: Target | undefined): v
   else dispatch_mouse_event(target, "click", null, undefined, 1);
 }
 
+// What `]]` does with the control it found, like a hint pick of the same place: a link opens elsewhere by its address, anything else gets a click.
+export function follow_like_a_hint(place: Place, target: Target, open_link_: ActionDeps["open_link_"]): void | Promise<unknown> {
+  const address = place === "here" ? undefined : element_address(target);
+  if (address !== undefined) return open_link_(address, place);
+  click_like_a_mouse(target, leave_toward(target));
+}
+
 // A link is no target: its first click would navigate away before the second press. The climb covers the children of a link, across shadow roots, because their click bubbles to it.
 export function is_inside_link(element: Element): boolean {
   for (let up: Element | null = element; up; up = parent_across_shadow(up)) if (up.matches("a[href]")) return true;

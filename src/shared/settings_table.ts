@@ -95,7 +95,7 @@ export const SETTINGS_TABLE = {
   default_site_rows_off: { kind: "enum_list", values: DEFAULT_SITE_ROW_NAMES, default: [] },
   // Matched as lowercase text of a link or button, in order: an earlier entry wins. A 1 or 2 character entry must be the whole text.
   // "back" stays out of the prev list: it would match a "Back to top" footer link on a page with no previous page.
-  next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "more", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>"] },
+  next_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["next", "newer", ">", "\u203a", "\u2192", "\u00bb", "\u226b", ">>", "\u6b21\u3078", "\u6b21\u306e\u30da\u30fc\u30b8"] },
   prev_patterns: { kind: "text_list", expectation: "a list of link texts", default: ["prev", "previous", "older", "<", "\u2039", "\u2190", "\u00ab", "\u226a", "<<"] },
   // A name, or a prefix before a final `*`, compared in lowercase. An empty list turns the stripping off on every site, whatever `strip_tracking` says.
   strip_tracking_params: { kind: "text_list", expectation: "a list of query parameter names", default: ["utm_*", "fbclid", "gclid", "dclid", "msclkid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "mkt_tok"] },
