@@ -100,11 +100,10 @@ export type SiteRuleLayers = {
   effective: readonly SiteRuleRow[];
 };
 
-// The row the popup writes for a pattern: off and nothing else.
-const is_popup_row = (pattern: string) => (row: SiteRuleRow): boolean => {
-  const { off, keys, values } = site_row_columns(row);
-  return row.site === pattern && off === true && keys === undefined && values === undefined && row.bind === undefined && row.keymap === undefined;
-};
+// The row the popup writes for a pattern: off and nothing else. Any other column makes the row the user's,
+// so it checks every key of the row instead of a column list that a new column would slip past.
+const is_popup_row = (pattern: string) => (row: SiteRuleRow): boolean =>
+  row.site === pattern && (row.off === true || row.off === undefined) && Object.entries(row).every(([name, value]) => name === "site" || name === "off" || value === undefined);
 
 const columns_at = (rows: readonly SiteRuleRow[], url: string): ResolvedSiteColumns<SiteRowKeys> =>
   resolve_site_columns(rows.filter((row) => matches_pattern(row.site, url)).map(site_row_columns));

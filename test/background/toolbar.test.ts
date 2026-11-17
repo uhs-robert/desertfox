@@ -4,6 +4,8 @@ import { answer_toolbar_request, create_toolbar, OFF_KEYMAP, plan_site_edit, sit
 import type { ToolbarDeps } from "../../src/background/toolbar.ts";
 import { NO_EDITS } from "../../src/shared/config.ts";
 import type { MergedConfig } from "../../src/shared/config.ts";
+import { PER_SITE_SETTING_NAMES } from "../../src/shared/settings_schema.ts";
+import { SETTINGS_TABLE } from "../../src/shared/settings_table.ts";
 import { create_matcher } from "../../src/shared/keys/matcher.ts";
 
 function fake_toolbar(overrides: Partial<ToolbarDeps> = {}, start_disabled = false) {
@@ -179,6 +181,20 @@ test("disabling a site appends an off row to the list in force, enabling removes
   assert.equal(plan_site_edit({ saved: { site_rules: [with_bind] }, temp: {} }, [], pattern, "enable"), undefined);
   const older = { saved: { site_rules: [{ site: pattern }, { site: pattern, pass: "j" }] }, temp: {} };
   assert.deepEqual(plan_site_edit(older, [], pattern, "enable")?.saved.site_rules, [{ site: pattern, pass: "j" }]);
+});
+
+test("a row with any column besides site and off is the user's, so the popup neither reports it as its own nor removes it", () => {
+  const pattern = "*://*.example.com/*";
+  const url = "https://www.example.com/";
+  const modes_row = { site: pattern, off: true, modes: { menu: { label: "menu", bind: {} } } };
+  const effective = [modes_row];
+  assert.equal(site_state(url, { file: [], saved: effective, effective }).kind, "config");
+  assert.equal(plan_site_edit({ saved: { site_rules: effective }, temp: {} }, [], pattern, "enable"), undefined);
+  const columns = [...Object.keys(SETTINGS_TABLE.site_rules.fields), ...PER_SITE_SETTING_NAMES].filter((name) => name !== "site" && name !== "off");
+  for (const name of [...columns, "unknown_future_column"]) {
+    const row = { site: pattern, off: true, [name]: "x" };
+    assert.equal(plan_site_edit({ saved: { site_rules: [row] }, temp: {} }, [], pattern, "enable"), undefined, name);
+  }
 });
 
 test("the popup messages go to the switch, the edits and the reload, and a bad request is refused", async () => {
