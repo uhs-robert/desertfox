@@ -449,9 +449,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 13);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 14);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -583,5 +583,27 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 10);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 11);
+});
+
+const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
+  const leaf = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+  const step = leaf?.kind === "leaf" ? leaf.steps[0] : undefined;
+  return step?.invocation.id === "page.item" ? (step.invocation.args as { selector: string; direction: string }) : undefined;
+};
+
+test("the image row gives hjkl to the tiles on the DuckDuckGo image vertical and wins over the web row there", async () => {
+  const compiled = with_defaults({});
+  for (const url of ["https://duckduckgo.com/?q=cats&iax=images&ia=images", "https://duckduckgo.com/?iax=images&ia=images&q=cats"]) {
+    const rows = await Promise.all(["h", "j", "k", "l"].map((key) => item_args_at(compiled, url, key)));
+    assert.deepEqual(rows.map((args) => args?.direction), ["left", "down", "up", "right"], url);
+    assert.ok(rows.every((args) => args?.selector === "figure"), `the tile selector on ${url}`);
+  }
+  // The web results keep their articles and no h or l, and the Google image tab keeps the web row, whose selector finds no tile there.
+  assert.match((await item_args_at(compiled, "https://duckduckgo.com/?q=cats&ia=web", "j"))!.selector, /data-testid/);
+  assert.equal(await item_args_at(compiled, "https://duckduckgo.com/?q=cats", "l"), undefined);
+  assert.match((await item_args_at(compiled, "https://www.google.com/search?q=cats&udm=2", "j"))!.selector, /MjjYud/);
+  assert.equal(await item_args_at(compiled, "https://www.google.com/search?q=cats&udm=2", "h"), undefined);
+  const off = with_defaults({ default_site_rows_off: ["ddg_images"] });
+  assert.match((await item_args_at(off, "https://duckduckgo.com/?q=cats&iax=images", "j"))!.selector, /data-testid/);
 });
