@@ -28,6 +28,22 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     });
     return last;
   };
+  // Frames draw their labels as they load, so an exact count is read only once the snapshot stays the same over several reads.
+  const stable_labels = async (what, wanted_total) => {
+    let last_json = "";
+    let same_reads = 0;
+    let snapshot;
+    await poll_until(what, async () => {
+      snapshot = await labels_by_frame();
+      const json = JSON.stringify(snapshot);
+      same_reads = json === last_json ? same_reads + 1 : 0;
+      last_json = json;
+      return total_of(snapshot) >= wanted_total && same_reads >= 3;
+    }, { step_ms: 100, timeout_ms: 10000 }).catch((error) => {
+      throw new Error(`${error.message}; labels per frame at the end: ${last_json}`);
+    });
+    return snapshot;
+  };
   const wait_for_no_labels = (what) => poll_until(what, async () => total_of(await labels_by_frame()) === 0);
   const start_across_frames = async (page_id) => {
     await open_page("frames_hints", page_id, { new_tab: true });
@@ -46,9 +62,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await start_across_frames("fh_labels");
     // The frame below never had the focus, so its content script starts for the hints: proof that it took part.
     await wait_event(mark, on_page("fh_labels_below", "tree_read"), "the frame below the viewport to start its content script");
-    // A frame that labels late still shows here.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const labels = await labels_by_frame();
+    const labels = await stable_labels("the labels of every frame to stop changing", 6);
     // The top page draws the labels of its own link and of the same-origin and about:blank frames, which draw none themselves.
     expect(labels.top.length === 4, `the top page has ${labels.top.length} labels, expected 4 (its link, two in the same-origin frame, one in the about:blank frame)`);
     expect(labels.same.length === 0 && labels.blank.length === 0, `a frame the top page reads drew labels of its own: ${JSON.stringify(labels)}`);
@@ -68,10 +82,10 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     const mark = events.length;
     await press_keys(labels.cross[0]);
     await wait_event(mark, (event) => event.type === "visibility" && event.page_id.startsWith("fh_pick_cross_"), "the cross-origin frame to follow the picked link");
-    // Long enough for a top page that followed its own link too to report it.
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    expect(!find_event(mark, on_page("fh_pick_top", "visibility")), "the top page's link was followed too");
+    // The labels go in every frame once the pick is done, and a top page that followed its own link too reports it by then or just after.
     await wait_for_no_labels("the labels of every frame to go after the pick");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(!find_event(mark, on_page("fh_pick_top", "visibility")), "the top page's link was followed too");
   });
 
   await run_case("without the flag the cross-origin frame gets no labels", async () => {
@@ -92,10 +106,13 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     let shown;
     await poll_until("one label left in the cross-origin frame", async () => shown_of((shown = await shown_by_frame()).cross).length === 1);
     expect(shown.top.filter((label) => !label.hidden).length === 1, `the top page shows ${JSON.stringify(shown.top)}, expected its one match for "one" (in the same-origin frame, which it reads)`);
+    // Each Tab is done when exactly one label is active and it is another one than before: between the relay clearing the old one and marking the new one no label is active, and a second Tab then would skip a frame.
+    const active_of = (by_name) => JSON.stringify(Object.values(by_name).map((frame) => frame.map((label) => label.active)));
+    const one_active = (by_name) => Object.values(by_name).flat().filter((label) => label.active).length === 1;
     for (let tabs = 0; tabs < 4 && !shown.cross.some((label) => label.active); tabs++) {
+      const before = active_of(shown);
       await press_keys("-k", "Tab");
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      shown = await shown_by_frame();
+      await poll_until("Tab to move the active hint", async () => one_active((shown = await shown_by_frame())) && active_of(shown) !== before);
     }
     expect(shown.cross.some((label) => label.active), `Tab never made the cross-origin label active: ${JSON.stringify(shown)}`);
     const mark = events.length;
