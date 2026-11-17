@@ -20,29 +20,22 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
   // Text mode hides the labels outside the matches with display none, and marks the active one with a background.
   const shown_by_frame = () => read_frames(`(label) => ({ text: label.textContent, hidden: label.style.display === "none", active: label.style.background !== "" })`);
   const total_of = (by_name) => Object.values(by_name).flat().length;
-  const wait_for_labels = async (what, wanted_total) => {
+  // With quiet_reads, the snapshot must also stay the same over that many reads 100 ms apart: frames draw as they load, so an exact count is read only after that.
+  const wait_for_labels = async (what, wanted_total, { quiet_reads = 0 } = {}) => {
     let last;
+    let last_json = "";
+    let same_reads = 0;
     // The last snapshot names which frame drew nothing.
-    await poll_until(what, async () => total_of((last = await labels_by_frame())) >= wanted_total).catch((error) => {
+    await poll_until(what, async () => {
+      last = await labels_by_frame();
+      const json = JSON.stringify(last);
+      same_reads = json === last_json ? same_reads + 1 : 0;
+      last_json = json;
+      return total_of(last) >= wanted_total && same_reads >= quiet_reads;
+    }, { step_ms: 100, timeout_ms: quiet_reads ? 10000 : 5000 }).catch((error) => {
       throw new Error(`${error.message}; labels per frame at the end: ${JSON.stringify(last)}`);
     });
     return last;
-  };
-  // Frames draw their labels as they load, so an exact count is read only once the snapshot stays the same over several reads.
-  const stable_labels = async (what, wanted_total) => {
-    let last_json = "";
-    let same_reads = 0;
-    let snapshot;
-    await poll_until(what, async () => {
-      snapshot = await labels_by_frame();
-      const json = JSON.stringify(snapshot);
-      same_reads = json === last_json ? same_reads + 1 : 0;
-      last_json = json;
-      return total_of(snapshot) >= wanted_total && same_reads >= 3;
-    }, { step_ms: 100, timeout_ms: 10000 }).catch((error) => {
-      throw new Error(`${error.message}; labels per frame at the end: ${last_json}`);
-    });
-    return snapshot;
   };
   const wait_for_no_labels = (what) => poll_until(what, async () => total_of(await labels_by_frame()) === 0);
   const start_across_frames = async (page_id) => {
@@ -62,7 +55,7 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await start_across_frames("fh_labels");
     // The frame below never had the focus, so its content script starts for the hints: proof that it took part.
     await wait_event(mark, on_page("fh_labels_below", "tree_read"), "the frame below the viewport to start its content script");
-    const labels = await stable_labels("the labels of every frame to stop changing", 6);
+    const labels = await wait_for_labels("the labels of every frame to stop changing", 6, { quiet_reads: 4 });
     // The top page draws the labels of its own link and of the same-origin and about:blank frames, which draw none themselves.
     expect(labels.top.length === 4, `the top page has ${labels.top.length} labels, expected 4 (its link, two in the same-origin frame, one in the about:blank frame)`);
     expect(labels.same.length === 0 && labels.blank.length === 0, `a frame the top page reads drew labels of its own: ${JSON.stringify(labels)}`);
