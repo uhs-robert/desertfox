@@ -85,7 +85,7 @@ test("the compiler skips a chain over the step cap and a bind that is still text
 test("a failing step in the compile check drops the whole chain", () => {
   const { compiled, warnings } = compile({ a: [{ id: "tab.prev" }, { id: "page.send_key", args: { key: "ArrowDown" } }], b: [{ id: "tab.prev" }] });
   assert.deepEqual(Object.keys(compiled.site_rules![0]!.bind!), ["b"]);
-  assert.ok(warnings.some((warning) => warning.startsWith('site_rules: skipped bind "a" of "https://a.test/*"')), warnings.join("\n"));
+  assert.ok(warnings.some((warning) => warning.startsWith('site_rules: bind or keymap "normal" skipped bind "a" of "https://a.test/*"')), warnings.join("\n"));
 });
 
 test("a label or intent with a control character is a build error in each table form", () => {

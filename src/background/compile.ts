@@ -21,7 +21,7 @@ import type { StoredTheme } from "../shared/theme/apply.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
 import type { Registry } from "../shared/registry/index.ts";
 import { make_entry_resolver } from "../shared/config_build/resolve_binding.ts";
-import { compile_keymap, FROM_KEYMAP_NORMAL } from "../shared/keys/compiler.ts";
+import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
@@ -153,7 +153,7 @@ export function compile_config(input: CompileInput): CompileOutput {
   }
   for (const rule of compiled.site_rules ?? []) {
     const { site } = rule;
-    check_site_binds(rule.bind, "", "normal", site, input, warnings);
+    check_site_binds(rule.bind, `bind or keymap "normal" `, "normal", site, input, warnings);
     for (const [mode, binds] of Object.entries(rule.keymap ?? {})) check_site_binds(binds, `keymap "${mode}" `, mode, site, input, warnings);
     for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, "normal", site, input, warnings);
   }
@@ -165,13 +165,12 @@ export function compile_config(input: CompileInput): CompileOutput {
 function check_site_binds(binds: Record<string, SiteBind> | undefined, column_scope: string, mode: string, site: string, input: CompileInput, warnings: string[]): void {
   for (const [key, site_bind] of Object.entries(binds ?? {})) {
     const { tokens, leaf } = site_bind;
-    const scope = FROM_KEYMAP_NORMAL.has(site_bind) ? `keymap "normal" ` : column_scope;
     const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
-    if (waits_for_key) warnings.push(`site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
+    if (waits_for_key) warnings.push(`site_rules: ${column_scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
     // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
     const node_warnings: string[] = [];
     const kept = !waits_for_key && keep_node(leaf, tokens, mode, input, node_warnings);
-    warnings.push(...node_warnings.map((warning) => warning.replace(new RegExp(`^${mode}: skipped "[^"]*"`), `site_rules: ${scope}skipped bind "${tokens.join("")}" of "${site}"`)));
+    warnings.push(...node_warnings.map((warning) => warning.replace(new RegExp(`^${mode}: skipped "[^"]*"`), `site_rules: ${column_scope}skipped bind "${tokens.join("")}" of "${site}"`)));
     if (waits_for_key || !kept) delete binds![key];
   }
 }

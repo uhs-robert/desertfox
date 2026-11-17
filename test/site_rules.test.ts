@@ -251,7 +251,7 @@ test("compile_config checks bind args with the registry validator", () => {
   const { compiled, warnings } = compile_config({ config, default_keymap: {}, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.deepEqual(Object.keys(compiled.site_rules?.[0]?.bind ?? {}), ["h"]);
   assert.equal(warnings.length, 2);
-  assert.ok(warnings.some((warning) => warning.startsWith('site_rules: skipped bind "j" of "https://a.test/*": ')), warnings.join("\n"));
+  assert.ok(warnings.some((warning) => warning.startsWith('site_rules: bind or keymap "normal" skipped bind "j" of "https://a.test/*": ')), warnings.join("\n"));
   assert.deepEqual(compiled.site_rules?.[0]?.bind?.h?.leaf.steps[0]?.bundle, "site_actions");
 });
 
