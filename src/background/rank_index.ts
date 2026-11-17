@@ -3,9 +3,12 @@
 
 import { create_history_cache, HISTORY_CACHE_MAX } from "./history_cache.ts";
 import type { HistoryRow, Visit } from "./history_cache.ts";
-import { reads_history, snapshot_of } from "./completion_rank.ts";
+import { history_items, reads_history, snapshot_of, usage_by_url } from "./completion_rank.ts";
 import type { HistoryNode, RankInputs, Snapshot } from "./completion_rank.ts";
 import type { RankedReply, RankRequest, RankSource } from "../shared/rank_port.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
+import { pick_by } from "../shared/folder_pick.ts";
+import type { HistoryItem } from "../shared/messages.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
 // The history events, in the order Firefox fired them.
@@ -22,7 +25,14 @@ export type ToWorker =
   | { type: "inputs"; line: number; inputs: RankInputs }
   | { type: "rank"; line: number; request: RankRequest }
   | { type: "close"; line: number }
-  | { type: "history_rows"; id: number };
+  | { type: "history_rows"; id: number }
+  // The boost of each listed address that the history holds.
+  | { type: "usage_for"; id: number; urls: string[] }
+  // Enter on `history <text>`: the one row the typed text means, or why it means none.
+  | { type: "pick_history"; id: number; text: string };
+
+// A refusal crosses as its text, because an error object does not keep its class through the Worker's message.
+export type PickedHistory = { row: HistoryItem } | { refusal: string };
 
 export type FromWorker =
   | { type: "ask"; id: number; question: Question }
@@ -30,7 +40,9 @@ export type FromWorker =
   // A line's snapshot came from the fallback rows and the fill has ended: its page should ask again.
   | { type: "stale"; line: number }
   // Undefined while the fill has not ended.
-  | { type: "history_rows"; id: number; rows: HistoryRow[] | undefined };
+  | { type: "history_rows"; id: number; rows: HistoryRow[] | undefined }
+  // The answer to `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, as for `history_rows`, and when the request threw.
+  | { type: "reply"; id: number; value: [string, number][] | PickedHistory | undefined };
 
 type Entry = { partial: boolean; built: Promise<Snapshot> };
 type Line = { inputs: Map<RankSource, RankInputs>; snapshots: Map<RankSource, Entry> };
@@ -98,6 +110,25 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
 
   void history.start();
 
+  const usage_for = (id: number, urls: readonly string[]) => {
+    const rows = history.read();
+    const wanted = new Set(urls);
+    post({ type: "reply", id, value: rows && [...usage_by_url(history_items(rows.filter((row) => wanted.has(row.url))))] });
+  };
+
+  const pick = (id: number, text: string) => {
+    const rows = history.read();
+    let value: PickedHistory | undefined;
+    try {
+      // The rule of `pick_entry` in `commands/open_target.ts`, which that file cannot give: it reaches the config and the browser, and the Worker loads neither.
+      if (rows) value = { row: pick_by(history_items(rows), text, "history entry", (item) => ({ key: item.url, name: item.title, description: item.url, boost: item.boost }), (item) => `"${item.title}" (${item.url})`, "the address") };
+    } catch (error) {
+      // Any other error answers undefined, and the background picks over its own copy of the rows, which throws it there.
+      if (error instanceof RuntimeRefusal) value = { refusal: error.message };
+    }
+    post({ type: "reply", id, value });
+  };
+
   return {
     receive: (message: ToWorker) => {
       if (message.type === "history") {
@@ -117,6 +148,8 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
         line.snapshots.delete(message.inputs.source);
       } else if (message.type === "rank") void rank_and_answer(message.line, message.request);
       else if (message.type === "close") lines.delete(message.line);
+      else if (message.type === "usage_for") usage_for(message.id, message.urls);
+      else if (message.type === "pick_history") pick(message.id, message.text);
       else post({ type: "history_rows", id: message.id, rows: history.read() as HistoryRow[] | undefined });
     },
   };

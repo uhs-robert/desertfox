@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, bookmark_usage, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
 import { anything_items, history_items, history_list, OPEN_TAB_BOOST, open_items, reads_history, site_items, usage_boost, usage_by_url } from "../../src/background/completion_rank.ts";
 import type { HistoryNode, OpenSettings } from "../../src/background/completion_rank.ts";
 import type { RankSource } from "../../src/shared/rank_port.ts";
@@ -909,4 +909,14 @@ test("the quality_levels kind asks for the tab of the line, and nothing for a st
 test("closed_tab_rows never lists a private tab, which getRecentlyClosed returns while its window is open", () => {
   const sessions = [{ tab: { sessionId: "1", title: "Secret", url: "https://secret.example/", incognito: true } }, { tab: { sessionId: "2", title: "Open", url: "https://open.example/" } }];
   assert.deepEqual(closed_tab_rows(sessions).map((row) => row.session_id), ["2"]);
+});
+
+test("the bookmark use boost reads the browser's newest rows while no rank Worker answers", async () => {
+  const when = Date.now();
+  (globalThis as { browser?: unknown }).browser = { history: { search: async () => [{ url: "https://daily.test/", title: "Daily", visitCount: 40, lastVisitTime: when }] } };
+  try {
+    assert.deepEqual(await bookmark_usage(["https://daily.test/", "https://other.test/"]), usage_by_url(history_items([{ url: "https://daily.test/", title: "Daily", visit_count: 40, last_visit: when }])));
+  } finally {
+    delete (globalThis as { browser?: unknown }).browser;
+  }
 });
