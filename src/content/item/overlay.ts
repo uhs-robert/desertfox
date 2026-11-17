@@ -50,6 +50,7 @@ export function create_item_overlay(still_wanted: () => boolean) {
 
   return {
     clear,
+    shown_: () => host.isConnected,
     show: (target: Element): void => {
       item = target;
       reposition();

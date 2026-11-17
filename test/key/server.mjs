@@ -423,6 +423,19 @@ export function start_server() {
       const links = '<a href="/page?id=follow_text_prev">Previous</a> <a href="/page?id=follow_text_next">Next</a>';
       return response.end(page(`follow_text ${id}`, tall_filler + links));
     }
+    if (url.pathname === "/follow_load") {
+      // A list with a load control right after its last item and no next word on the page. An id ending in `_scroll` has no control and adds items when the reader reaches the end, one ending in `_dead` adds nothing.
+      const mode = id.endsWith("_scroll") ? "scroll" : id.endsWith("_dead") ? "dead" : "button";
+      const items = (from, count) => Array.from({ length: count }, (_, at) => `<li class="item" style="height:80px;width:600px">Item ${from + at}</li>`).join("");
+      const control = mode === "button" ? '<button id="load">Load more</button>' : "";
+      const script = `<script>
+        const list = document.getElementById("list");
+        const add = () => { list.insertAdjacentHTML("beforeend", ${JSON.stringify(items(100, 5))}); send("loaded", { count: list.children.length }); };
+        document.getElementById("load")?.addEventListener("click", add);
+        if (${JSON.stringify(mode)} === "scroll") addEventListener("scroll", () => { if (scrollY + innerHeight >= document.documentElement.scrollHeight - 50) add(); });
+      </script>`;
+      return response.end(page(`follow_load ${id}`, `<ul id="list" style="margin:0;padding:0;list-style:none">${items(1, 30)}</ul>${control}${script}`));
+    }
     if (url.pathname === "/media") {
       // A video in a player box of its own size, under an overlay that catches the pointer as a site's controls do, and a hidden audio.
       const player = '<div id="player" style="position:relative;width:320px;height:180px;background:#222"><video id="video" src="/tone.wav" loop style="width:320px;height:180px"></video><div style="position:absolute;inset:0"></div></div>';
