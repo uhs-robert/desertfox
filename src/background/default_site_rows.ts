@@ -93,12 +93,23 @@ const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="re
 const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
 const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
-// An image grid has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
-const grid_binds = (selector: string, link: string): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction)])), ...end_binds(selector, link) });
+// A grid of tiles has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
+const grid_binds = (selector: string, link?: string): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction)])), ...end_binds(selector, link) });
 // The tile is a figure, which holds the picture and its caption link.
 const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 // A Google image tile is a div with a picture button (focusable) and a caption link.
 const GOOGLE_IMAGE_TILES = grid_binds('div[data-attrid="images universal"]', '[role="button"]');
+// The Videos tab puts every video in one `.MjjYud` block, so the web row's selector boxes them all as one item. Each video is the innermost block with a data-hveid that holds a title link. The next pages load below `#search`, so the selector looks in `#center_col`.
+const GOOGLE_VIDEO_ITEMS = item_binds("#center_col div.MjjYud div[data-hveid]:has(a > h3):not(:has(div[data-hveid] a > h3))", "a:has(> h3)");
+// The News tab opens with a two-by-two grid of top stories above the list, so h and l reach the right column. Only the stories carry data-news-doc-id.
+const GOOGLE_NEWS_ITEMS = grid_binds("#rso [data-news-doc-id]", "a[href]");
+// A short video tile has no h3, so the web row matches nothing there. Its first link is the thumbnail or the caption, which open the same video. The next pages load below `#rso`.
+const GOOGLE_SHORT_VIDEO_TILES = grid_binds("#center_col div.MjjYud:has(a[href])", "a[href]");
+// A Shopping tile holds no link: its role=button opens the product panel on Enter.
+const GOOGLE_SHOPPING_TILES = grid_binds("[data-cid][data-pid]", '[role="button"]');
+// The video tile is a link around an article, so it takes the focus itself.
+const DDG_VIDEO_TILES = grid_binds('[data-testid="zci-videos"] a:has(> article)');
+const DDG_NEWS_ITEMS = item_binds('[data-testid="news-vertical"] li > article', "a:has(h2)");
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
 const LOBSTERS_ITEMS = item_binds("ol.stories > li.story", "a.u-url");
 const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-title");
@@ -130,10 +141,22 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   // The Google image rows sit before the `google` row, which matches the same address (a pattern cannot exclude udm=2). The two patterns end the udm value at an ampersand or at the end, so udm=28 stays out.
   { name: "google_images", row: { site: "https://www.google.com/search*udm=2&*", bind: GOOGLE_IMAGE_TILES } },
   { name: "google_images", row: { site: "https://www.google.com/search*udm=2", bind: GOOGLE_IMAGE_TILES } },
-  // The image row sits before the `ddg` row. The first row that binds a key decides it, so on the image vertical (iax=images) this row wins over `ddg`, which matches the same address.
+  // Each vertical row below sits before the `google` row for the same reason. Videos is udm=7 from the tab bar and udm=vids from an old tbm=vid address. Books and Forums keep the web row, whose blocks fit them.
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=7&*", bind: GOOGLE_VIDEO_ITEMS } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=7", bind: GOOGLE_VIDEO_ITEMS } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids&*", bind: GOOGLE_VIDEO_ITEMS } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids", bind: GOOGLE_VIDEO_ITEMS } },
+  { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws&*", bind: GOOGLE_NEWS_ITEMS } },
+  { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws", bind: GOOGLE_NEWS_ITEMS } },
+  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids*", bind: GOOGLE_SHORT_VIDEO_TILES } },
+  { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28&*", bind: GOOGLE_SHOPPING_TILES } },
+  { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28", bind: GOOGLE_SHOPPING_TILES } },
+  // The vertical rows sit before the `ddg` row. The first row that binds a key decides it, so on the image vertical (iax=images), for one, its row wins over `ddg`, which matches the same address. Shopping is all ads, so it has no row.
   { name: "ddg_images", row: { site: "https://duckduckgo.com/?*iax=images*", bind: DDG_IMAGE_TILES } },
+  { name: "ddg_videos", row: { site: "https://duckduckgo.com/?*iax=videos*", bind: DDG_VIDEO_TILES } },
+  { name: "ddg_news", row: { site: "https://duckduckgo.com/?*ia=news*", bind: DDG_NEWS_ITEMS } },
   // DuckDuckGo's own j and k stop at the last result and never reach the More results button, so j and k walk the results through `page.item`. The ad blocks are `article[data-testid="ad"]`, so they stay out.
-  // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. The image vertical has its own row above.
+  // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. The image, video and news verticals have their own rows above.
   { name: "ddg", row: { site: "https://duckduckgo.com/?*", bind: DDG_ITEMS } },
   // Kagi moves its own result highlight on j and k, so the keys go to the page. h, l, v and ' stay ours.
   { name: "kagi", row: { site: "https://kagi.com/search*", pass: "j k" } },

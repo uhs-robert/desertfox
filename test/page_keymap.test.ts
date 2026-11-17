@@ -450,9 +450,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "ddg_images", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 31);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 42);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -584,7 +584,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 28);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 39);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
@@ -603,19 +603,62 @@ test("the image row gives hjkl to the tiles on the DuckDuckGo image vertical and
   // The web results keep their articles and no h or l.
   assert.match((await item_args_at(compiled, "https://duckduckgo.com/?q=cats&ia=web", "j"))!.selector, /data-testid/);
   assert.equal(await item_args_at(compiled, "https://duckduckgo.com/?q=cats", "l"), undefined);
-  // The Google image tab wins over the web row at either end of the udm value, and udm=28 or a web search keeps the web row.
+  // The Google image tab wins over the web row at either end of the udm value, and udm=21 or a web search keeps the web row.
   for (const url of ["https://www.google.com/search?q=cats&udm=2", "https://www.google.com/search?udm=2&q=cats"]) {
     const rows = await Promise.all(["h", "j", "k", "l"].map((key) => item_args_at(compiled, url, key)));
     assert.deepEqual(rows.map((args) => args?.direction), ["left", "down", "up", "right"], url);
     assert.ok(rows.every((args) => args?.selector === 'div[data-attrid="images universal"]'), url);
   }
-  for (const url of ["https://www.google.com/search?q=cats", "https://www.google.com/search?q=cats&udm=28"]) {
+  for (const url of ["https://www.google.com/search?q=cats", "https://www.google.com/search?q=cats&udm=21"]) {
     assert.match((await item_args_at(compiled, url, "j"))!.selector, /MjjYud/, url);
     assert.equal(await item_args_at(compiled, url, "h"), undefined, url);
   }
   assert.match((await item_args_at(with_defaults({ default_site_rows_off: ["google_images"] }), "https://www.google.com/search?q=cats&udm=2", "j"))!.selector, /MjjYud/);
   const off = with_defaults({ default_site_rows_off: ["ddg_images"] });
   assert.match((await item_args_at(off, "https://duckduckgo.com/?q=cats&iax=images", "j"))!.selector, /data-testid/);
+});
+
+test("the search vertical rows win over the web rows on their tabs only, and each falls back to the web row when turned off", async () => {
+  const compiled = with_defaults({});
+  const GOOGLE_VIDEO = "#center_col div.MjjYud div[data-hveid]:has(a > h3):not(:has(div[data-hveid] a > h3))";
+  const lists: [string, string][] = [
+    ["https://www.google.com/search?q=cats&udm=7", GOOGLE_VIDEO],
+    ["https://www.google.com/search?udm=7&q=cats", GOOGLE_VIDEO],
+    ["https://www.google.com/search?q=cats&udm=vids", GOOGLE_VIDEO],
+    ["https://www.google.com/search?udm=vids&q=cats", GOOGLE_VIDEO],
+    ["https://duckduckgo.com/?q=cats&ia=news&iar=news", '[data-testid="news-vertical"] li > article'],
+  ];
+  for (const [url, selector] of lists) {
+    for (const key of ["j", "k"]) assert.equal((await item_args_at(compiled, url, key))?.selector, selector, `${key} on ${url}`);
+    assert.equal(await item_args_at(compiled, url, "h"), undefined, `h on ${url}`);
+  }
+  const grids: [string, string][] = [
+    ["https://www.google.com/search?q=cats&tbm=nws", "#rso [data-news-doc-id]"],
+    ["https://www.google.com/search?tbm=nws&q=cats", "#rso [data-news-doc-id]"],
+    ["https://www.google.com/search?q=cats&udm=short_vids", "#center_col div.MjjYud:has(a[href])"],
+    ["https://www.google.com/search?q=cats&udm=28", "[data-cid][data-pid]"],
+    ["https://www.google.com/search?udm=28&q=cats", "[data-cid][data-pid]"],
+    ["https://duckduckgo.com/?q=cats&ia=videos&iax=videos", '[data-testid="zci-videos"] a:has(> article)'],
+  ];
+  for (const [url, selector] of grids) {
+    const rows = await Promise.all(["h", "j", "k", "l"].map((key) => item_args_at(compiled, url, key)));
+    assert.deepEqual(rows.map((args) => args?.direction), ["left", "down", "up", "right"], url);
+    assert.ok(rows.every((args) => args?.selector === selector), url);
+  }
+  // A udm value that only starts like a vertical's keeps the web row, and so do the Books and Forums tabs.
+  for (const url of ["https://www.google.com/search?q=cats&udm=72", "https://www.google.com/search?q=cats&udm=280", "https://www.google.com/search?q=cats&udm=books", "https://www.google.com/search?q=cats&udm=forums", "https://www.google.com/search?q=cats&tbm=nwsx"]) {
+    assert.equal((await item_args_at(compiled, url, "j"))?.selector, "#search div.MjjYud:has(a > h3)", url);
+  }
+  for (const url of ["https://duckduckgo.com/?q=cats&ia=web", "https://duckduckgo.com/?q=cats&iar=news"]) assert.equal((await item_args_at(compiled, url, "j"))?.selector, 'article[data-testid="result"]', url);
+  const fallbacks: [string, string, string][] = [
+    ["google_videos", "https://www.google.com/search?q=cats&udm=7", "#search div.MjjYud:has(a > h3)"],
+    ["google_news", "https://www.google.com/search?q=cats&tbm=nws", "#search div.MjjYud:has(a > h3)"],
+    ["google_short_videos", "https://www.google.com/search?q=cats&udm=short_vids", "#search div.MjjYud:has(a > h3)"],
+    ["google_shopping", "https://www.google.com/search?q=cats&udm=28", "#search div.MjjYud:has(a > h3)"],
+    ["ddg_videos", "https://duckduckgo.com/?q=cats&ia=videos&iax=videos", 'article[data-testid="result"]'],
+    ["ddg_news", "https://duckduckgo.com/?q=cats&ia=news&iar=news", 'article[data-testid="result"]'],
+  ];
+  for (const [name, url, selector] of fallbacks) assert.equal((await item_args_at(with_defaults({ default_site_rows_off: [name] }), url, "j"))?.selector, selector, name);
 });
 
 test("the list-page rows bind j and k to page.item on their result lists and leave story, question and other-host pages alone", async () => {

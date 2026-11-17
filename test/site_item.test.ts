@@ -248,7 +248,7 @@ test("page.item is a command of the item bundle", () => {
 });
 
 test("the shipped result rows bind j and k to page.item", () => {
-  for (const name of ["google", "bing", "hackernews", "wikipedia"]) {
+  for (const name of ["google", "google_videos", "ddg_news", "bing", "hackernews", "wikipedia"]) {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {
@@ -260,7 +260,7 @@ test("the shipped result rows bind j and k to page.item", () => {
 });
 
 test("the shipped image row binds hjkl to page.item", () => {
-  for (const name of ["ddg_images", "google_images"]) {
+  for (const name of ["ddg_images", "google_images", "google_news", "google_short_videos", "google_shopping", "ddg_videos"]) {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {
