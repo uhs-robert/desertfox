@@ -38,7 +38,6 @@ export type FromWorker =
   | { type: "ranked"; line: number; reply: RankedReply }
   // A line's snapshot came from the fallback rows and the fill has ended: its page should ask again.
   | { type: "stale"; line: number }
-  // Undefined while the fill has not ended.
   // The answer to `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, and when a pick threw something other than a refusal. A `usage_for` that throws ends the Worker instead, and the service answers its caller undefined.
   | { type: "reply"; id: number; value: [string, number][] | PickedHistory | undefined };
 

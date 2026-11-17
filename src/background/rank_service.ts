@@ -48,7 +48,7 @@ const RESTART_FIRST_MS = 250;
 const RESTART_MAX_MS = 30_000;
 const STABLE_MS = 5000;
 // A request that reads the history falls back to the plain search when the Worker does not answer in time.
-const HISTORY_ROWS_WAIT_MS = 2000;
+const WORKER_REPLY_WAIT_MS = 2000;
 const MAX_WORD_LENGTH = 1000;
 const MAX_OVER_FETCH = 10_000;
 
@@ -178,7 +178,7 @@ export function create_rank_service(deps: RankServiceDeps) {
       const timer = deps.set_timer(() => {
         replies_waiting.delete(id);
         resolve(undefined);
-      }, HISTORY_ROWS_WAIT_MS);
+      }, WORKER_REPLY_WAIT_MS);
       replies_waiting.set(id, (value) => {
         deps.clear_timer(timer);
         resolve(value as Reply | undefined);
@@ -215,7 +215,6 @@ export function create_rank_service(deps: RankServiceDeps) {
       history_event({ kind: "visited", visit: { url: visit.url, title: visit.title, lastVisitTime: visit.lastVisitTime, visitCount: visit.visitCount } }),
     title_changed: ({ url, title }: { url: string; title: string }) => history_event({ kind: "title", url, title }),
     visit_removed: ({ allHistory, urls }: { allHistory: boolean; urls: readonly string[] }) => history_event({ kind: "removed", allHistory, urls: [...urls] }),
-    // A copy of the Worker's rows, newest first, or undefined while its fill runs or when it does not answer.
     // The use boost of each of these addresses that the history holds, or undefined while the fill runs, when the Worker fails and when it is silent for 2 s.
     usage_for: (urls: readonly string[]): Promise<[string, number][] | undefined> => ask_worker((id) => ({ type: "usage_for", id, urls: [...urls] })),
     // What `pick_entry` gives over the Worker's rows, or undefined while the fill runs, when the Worker fails and when it is silent for 2 s.
