@@ -8,7 +8,7 @@ import type { CommandContext, ParamDef } from "../shared/index.ts";
 import type { PageInfo } from "../shared/engines/slots.ts";
 import { openable_url, require_openable, url_target } from "./url_build.ts";
 import type { OwnPages } from "./url_build.ts";
-import { pick_by } from "../shared/folder_pick.ts";
+import { pick_by, pick_entry } from "../shared/folder_pick.ts";
 import type { Pickable } from "../shared/folder_pick.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 
@@ -162,10 +162,5 @@ export async function open_many(ctx: CommandContext, urls: readonly string[], wh
   if (where === "tab" && opened[0] !== undefined) await browser.tabs.update(opened[0], { active: true });
 }
 
-export { pick_by };
+export { pick_by, pick_entry };
 export type { Pickable };
-
-// The boost ranks as in the list, so Enter on a typed word picks the row the list shows first.
-export function pick_entry<Entry extends { title: string; url: string; boost?: number }>(entries: readonly Entry[], text: string, noun: string): Entry {
-  return pick_by(entries, text, noun, (entry) => ({ key: entry.url, name: entry.title, description: entry.url, boost: entry.boost }), (entry) => `"${entry.title}" (${entry.url})`, "the address");
-}

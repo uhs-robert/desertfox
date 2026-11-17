@@ -48,7 +48,8 @@ const MAX_BYTES = {
   "find_worker.js": 2 * 1024,
   // 10.5 KB: the Worker holds the history cache and builds and ranks the rows of `open`, `history` and the finder. It loads once per background start, never in a page.
   // 11 KB: the Worker also answers `usage_for` (the bookmark list's use boosts) and `pick_history` (Enter on `history <text>`), so the background no longer copies the 20000 rows.
-  "rank_worker.js": 11 * 1024,
+  // 11.5 KB: a pick that throws something other than a refusal logs a warning before it answers undefined.
+  "rank_worker.js": 11.5 * 1024,
   "devtools.js": 2 * 1024,
 };
 

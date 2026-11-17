@@ -20,6 +20,11 @@ export function pick_by<Entry>(entries: readonly Entry[], text: string, noun: st
   return match.item;
 }
 
+// The boost ranks as in the list, so Enter on a typed word picks the row the list shows first. The rank Worker runs it too, so it must stay free of the config and the browser.
+export function pick_entry<Entry extends { title: string; url: string; boost?: number }>(entries: readonly Entry[], text: string, noun: string): Entry {
+  return pick_by(entries, text, noun, (entry) => ({ key: entry.url, name: entry.title, description: entry.url, boost: entry.boost }), (entry) => `"${entry.title}" (${entry.url})`, "the address");
+}
+
 // An exact path wins. Other text is a fuzzy match on the path. A path two folders share is refused, because the text cannot say which one is meant.
 export function pick_folder<Folder extends { path: string }>(folders: readonly Folder[], text: string): Folder {
   const typed = text.trim();

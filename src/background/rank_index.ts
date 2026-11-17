@@ -7,7 +7,7 @@ import { history_items, reads_history, snapshot_of, usage_by_url } from "./compl
 import type { HistoryNode, RankInputs, Snapshot } from "./completion_rank.ts";
 import type { RankedReply, RankRequest, RankSource } from "../shared/rank_port.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import { pick_by } from "../shared/folder_pick.ts";
+import { pick_entry } from "../shared/folder_pick.ts";
 import type { HistoryItem } from "../shared/messages.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
@@ -41,7 +41,7 @@ export type FromWorker =
   | { type: "stale"; line: number }
   // Undefined while the fill has not ended.
   | { type: "history_rows"; id: number; rows: HistoryRow[] | undefined }
-  // The answer to `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, as for `history_rows`, and when the request threw.
+  // The answer to `usage_for` (`[string, number][]`) or `pick_history` (`PickedHistory`). Undefined while the fill has not ended, as for `history_rows`, and when a pick threw something other than a refusal. A `usage_for` that throws ends the Worker instead, and the service answers its caller undefined.
   | { type: "reply"; id: number; value: [string, number][] | PickedHistory | undefined };
 
 type Entry = { partial: boolean; built: Promise<Snapshot> };
@@ -120,11 +120,11 @@ export function create_rank_index(post: (message: FromWorker) => void, max = HIS
     const rows = history.read();
     let value: PickedHistory | undefined;
     try {
-      // The rule of `pick_entry` in `commands/open_target.ts`, which that file cannot give: it reaches the config and the browser, and the Worker loads neither.
-      if (rows) value = { row: pick_by(history_items(rows), text, "history entry", (item) => ({ key: item.url, name: item.title, description: item.url, boost: item.boost }), (item) => `"${item.title}" (${item.url})`, "the address") };
+      if (rows) value = { row: pick_entry(history_items(rows), text, "history entry") };
     } catch (error) {
-      // Any other error answers undefined, and the background picks over its own copy of the rows, which throws it there.
+      // Any other error answers undefined, so the background picks over the browser's rows. The warning is the only trace of a bug that happens in the Worker alone.
       if (error instanceof RuntimeRefusal) value = { refusal: error.message };
+      else warn_and_go("rank_index.pick")(error);
     }
     post({ type: "reply", id, value });
   };
