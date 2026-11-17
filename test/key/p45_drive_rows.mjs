@@ -21,7 +21,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  // Enter on a focused file sets the hash to opened-<id>, as Drive's own key handler opens it, and Enter on the parent crumb sets it to parent. Grid files are g0.., list files f0... A layout names the views the page holds: "grid", "list", "list+hidden_grid" (a grid left in the page under display:none) or "both" (a grid above a list). A folder page has a breadcrumb with a parent, a root page only a title.
+  // Enter on a focused file sets the hash to opened-<id>, as Drive's own key handler opens it, and a click on the parent crumb sets it to parent. Grid files are g0.., list files f0... A layout names the views the page holds: "grid", "list", "list+hidden_grid" (a grid left in the page under display:none) or "both" (a grid above a list). A folder page has a breadcrumb with a parent, a root page only a title.
   const open_drive = async (id, layout, { folder = false } = {}) => {
     await open_page("controls", `drive_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
@@ -41,7 +41,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
         const flip = () => draw(layout === "grid" ? "list" : "grid");
         toggle.onclick = flip;
         toggle.onkeydown = (event) => { if (event.key === "Enter") flip(); };
-        for (const element of root.querySelectorAll('[role="gridcell"], tr[data-id], #parent')) element.onkeydown = (event) => { if (event.key === "Enter") location.hash = element.id === "parent" ? "parent" : "opened-" + element.id; };
+        for (const element of root.querySelectorAll('[role="gridcell"], tr[data-id]')) element.onkeydown = (event) => { if (event.key === "Enter") location.hash = "opened-" + element.id; };
+        // Drive opens a crumb on a click only, and ignores Enter on it.
+        const parent = document.getElementById("parent");
+        if (parent) parent.onclick = () => { location.hash = "parent"; };
       };
       draw(${JSON.stringify(layout)});
       location.hash = "before";

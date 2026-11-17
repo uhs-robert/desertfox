@@ -704,7 +704,7 @@ test("an older reply that lands after a newer ask began is dropped, across a bur
   assert.deepEqual(installed, ["c"]);
 });
 
-test("the drive row walks the files with page.item, and h and l choose by the view the page shows, the list first, with h on the parent folder crumb", async () => {
+test("the drive row walks the files with page.item, and h and l choose by the view the page shows, the list first, with h clicking the parent folder crumb", async () => {
   const compiled = with_defaults({});
   const drive = "https://drive.google.com/drive/my-drive";
   const choices = async (key: string) => {
@@ -720,7 +720,7 @@ test("the drive row walks the files with page.item, and h and l choose by the vi
   const grid = '[role="grid"] [role="gridcell"][data-id]';
   const parent = '[role="navigation"] [role="list"] > [role="listitem"]:nth-last-child(2) [role="link"]';
   const h = await choices("h");
-  assert.deepEqual(h.slice(0, 2), [{ when_present: `body:has(${list}) ${parent}`, ids: ["page.send_key"], direction: undefined }, { when_present: grid, ids: ["page.item"], direction: "left" }]);
+  assert.deepEqual(h.slice(0, 2), [{ when_present: `body:has(${list}) ${parent}`, ids: ["page.click"], direction: undefined }, { when_present: grid, ids: ["page.item"], direction: "left" }]);
   // No choice may go back through the history: on a root page h falls through to the plain scroll.
   assert.ok(h.every((choice) => !choice.ids.includes("page.back")));
   assert.deepEqual((await choices("l")).slice(0, 2), [{ when_present: list, ids: ["page.item", "page.send_key"], direction: "current" }, { when_present: grid, ids: ["page.item"], direction: "right" }]);

@@ -109,13 +109,13 @@ const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
 const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
-// The breadcrumb ends with the current folder, so the crumb before it is the parent. A root page (My Drive, Home, Recent and the like) shows a title and no crumb list, so nothing matches there. Deep paths fold the middle crumbs into one button, and the parent stays a link next to the current folder.
+// The breadcrumb ends with the current folder, so the crumb before it is the parent. Drive opens a crumb on a click only, not on Enter. A root page (My Drive, Home, Recent and the like) shows a title and no crumb list, so nothing matches there. Deep paths fold the middle crumbs into one button, and the parent stays a link next to the current folder.
 const DRIVE_PARENT_FOLDER = '[role="navigation"] [role="list"] > [role="listitem"]:nth-last-child(2) [role="link"]';
 // A grid has files left and right, so h and l step along the row. A list has one file per row, so h opens the parent folder and l opens the focused file. The list choice comes first: a page that shows both views gets the list keys, and a hidden leftover view never counts. On a root page in list view no choice holds, and h falls through to the plain scroll left, which does nothing on Drive: h never leaves Drive through the history. l runs `current` on the j and k selector, so it opens the focused file in either view and presses Enter on a file, never on the view toggle.
 const guarded = (guard: string, first: BoundInvocation, ...rest: BoundInvocation[]): BoundInvocation[] => [{ ...first, when_present: guard }, ...rest];
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
 const DRIVE_HL: BindingTable = {
-  h: [guarded(`body:has(${DRIVE_LIST_ITEM}) ${DRIVE_PARENT_FOLDER}`, { id: "page.send_key", args: { key: "Enter", key_code: 13, target: DRIVE_PARENT_FOLDER, focus: true } }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "left"))],
+  h: [guarded(`body:has(${DRIVE_LIST_ITEM}) ${DRIVE_PARENT_FOLDER}`, { id: "page.click", args: { selector: DRIVE_PARENT_FOLDER } }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "left"))],
   l: [guarded(DRIVE_LIST_ITEM, item_step(DRIVE_ANY_ITEM, undefined, "current"), { id: "page.send_key", args: { key: "Enter", key_code: 13 } }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "right"))],
 };
 const DRIVE_BIND: BindingTable = { ...item_binds(DRIVE_ANY_ITEM), ...DRIVE_HL };
