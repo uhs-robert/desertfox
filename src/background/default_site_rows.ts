@@ -133,6 +133,10 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "lobsters", row: { site: "https://lobste.rs/newest*", bind: LOBSTERS_ITEMS } },
   { name: "lobsters", row: { site: "https://lobste.rs/active*", bind: LOBSTERS_ITEMS } },
   { name: "lobsters", row: { site: "https://lobste.rs/t/*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/page/*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/recent*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/top*", bind: LOBSTERS_ITEMS } },
+  { name: "lobsters", row: { site: "https://lobste.rs/domains/*", bind: LOBSTERS_ITEMS } },
   { name: "lobsters", row: { site: "https://lobste.rs/search*", bind: LOBSTERS_ITEMS } },
   { name: "archwiki", row: { site: "https://wiki.archlinux.org/index.php?*search=*", bind: WIKIPEDIA_ITEMS } },
   // Startpage's knowledge panel is also a `div.result`, so the item needs a title link.
