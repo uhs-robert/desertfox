@@ -177,10 +177,10 @@ test("which-key lists a site-bound key in visual mode on a matching page only, a
   assert.equal((await keys_on("https://off.a.test/", "visual")).includes("x"), false);
 });
 
-test("a bad keymap.normal bind is named by its column in the warning, and a bad bind by bind", () => {
+test("a bad keymap.normal bind is named by its column at build and by both columns at runtime", () => {
   const bad_args = { id: "find.open", args: { direction: "sideways" } };
   const warnings = compile([{ site: SITE, keymap: { normal: { "": FIND, x: bad_args } }, bind: { y: bad_args } }]).warnings;
   assert.ok(warnings.some((text) => /^site_rules: keymap "normal" skipped bind "": /.test(text)), warnings.join("\n"));
-  assert.ok(warnings.some((text) => /^site_rules: keymap "normal" skipped bind "x" of /.test(text)), warnings.join("\n"));
-  assert.ok(warnings.some((text) => /^site_rules: skipped bind "y" of /.test(text)), warnings.join("\n"));
+  assert.ok(warnings.some((text) => /^site_rules: bind or keymap "normal" skipped bind "x" of /.test(text)), warnings.join("\n"));
+  assert.ok(warnings.some((text) => /^site_rules: bind or keymap "normal" skipped bind "y" of /.test(text)), warnings.join("\n"));
 });

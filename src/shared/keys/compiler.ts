@@ -402,16 +402,12 @@ export function compile_site_rules(rules: Settings["site_rules"], resolve: Resol
   return rows.map(({ rule }) => rule);
 }
 
-// `keymap.normal` binds merge into the `bind` column, so the binds that came from it are remembered to name the column in a later warning.
-export const FROM_KEYMAP_NORMAL = new WeakSet<SiteBind>();
-
 function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[], row_sources: readonly SiteRuleSource[]): { site: string; rule: SiteRule }[] {
   return rules.flatMap((row, index): { site: string; rule: SiteRule }[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];
     const { keys, bind, keymap, modes, ...columns } = site_row_columns(row);
     const from_keymap = compile_binds((row.keymap?.normal ?? {}) as BindingTable, resolve, settings, sources, warnings, `keymap "normal" `);
-    Object.values(from_keymap).forEach((site_bind) => FROM_KEYMAP_NORMAL.add(site_bind));
     const compiled_bind = bind === undefined ? {} : { bind: { ...from_keymap, ...compile_binds((row.bind ?? {}) as BindingTable, resolve, settings, sources, warnings) } };
     const compiled_keymap = keymap === undefined ? {} : { keymap: Object.fromEntries(Object.entries(keymap).map(([mode, table]) => [mode, compile_binds(table as BindingTable, resolve, settings, sources, warnings, `keymap "${mode}" `, mode as KeymapMode)])) };
     const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, ...(mode.sticky && { sticky: true }), bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
