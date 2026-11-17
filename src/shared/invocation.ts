@@ -33,7 +33,8 @@ export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string; in
 // One invocation, or an array that runs in order.
 export type KeyBinding = BoundInvocation | BoundInvocation[];
 
-const is_run_table = (value: unknown): boolean => typeof value === "object" && value !== null && !Array.isArray(value) && "run" in value;
+// A binding written as a `{ run, label, intent, when_focus, when_present }` table.
+export const is_run_table = (value: unknown): value is Record<string, unknown> & { run: unknown } => typeof value === "object" && value !== null && !Array.isArray(value) && "run" in value;
 
 // A site row bind that lists guarded choices: the `{ run, when_present, when_focus }` tables a file writes, or the step lists the build stores for them. A list of steps holds neither.
 export const is_choice_list = (binding: unknown): binding is readonly unknown[] => Array.isArray(binding) && binding.length > 0 && binding.every((choice) => Array.isArray(choice) || is_run_table(choice));

@@ -1,7 +1,7 @@
 // Turns one binding as a config file writes it into invocations. The keymap and the site rows share it, and so does the compile, which resolves a text bind that a browser edit set.
 
 import { intent_problem, label_problem } from "../keys/index.ts";
-import { is_choice_list, type BoundInvocation } from "../invocation.ts";
+import { is_choice_list, is_run_table, type BoundInvocation } from "../invocation.ts";
 import type { BindRun } from "../settings_table.ts";
 import type { EnumSources } from "../registry/check_args.ts";
 import { parse_binding } from "../registry/parse_binding.ts";
@@ -9,9 +9,7 @@ import type { Registry } from "../registry/index.ts";
 
 type Step = string | BoundInvocation;
 
-export function is_labeled_binding(entry: unknown): entry is BindRun {
-  return typeof entry === "object" && entry !== null && !Array.isArray(entry) && "run" in entry;
-}
+export const is_labeled_binding = (entry: unknown): entry is BindRun => is_run_table(entry);
 
 // Each problem goes to `problems` with `where` in front, and the entry then resolves to undefined.
 export function make_entry_resolver(registry: Registry, sources: EnumSources, problems: string[]) {

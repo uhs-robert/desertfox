@@ -4,7 +4,7 @@
 // 17 KB budget and neither needs it.
 
 import { BUILT_IN_PAGE, is_web_url } from "./config.ts";
-import { is_choice_list } from "./invocation.ts";
+import { is_choice_list, is_run_table } from "./invocation.ts";
 import { parse_sequence } from "./keys/notation.ts";
 import { MAX_BIND_CHOICES, MAX_BIND_STEPS } from "./table_constants.ts";
 import { SETTINGS_TABLE, SITE_KEYMAP_MODES, type PerSiteName, type SettingName, type SettingRow } from "./settings_table.ts";
@@ -119,7 +119,6 @@ function bind_steps_problem(steps: unknown): string | undefined {
 const GUARD_FIELDS = ["when_focus", "when_present"];
 const BIND_TEXT_FIELDS = ["label", "intent", ...GUARD_FIELDS];
 const TEXT_FIELDS_PHRASE = 'a "label", "intent", "when_focus" or "when_present"';
-const is_run_table = (value: unknown): value is Record<string, unknown> => is_table(value) && "run" in value;
 
 // A choice's guards, on its `run` table or on its first step as the build stores it.
 const has_guard = (choice: unknown): boolean => {
