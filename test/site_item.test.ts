@@ -297,3 +297,15 @@ test("every shipped page.item bind table binds gg and G to its first and last it
   }
   assert.ok(tables >= 15, `${tables} page.item bind tables`);
 });
+
+test("current focuses the item a move starts from, the first one in view when none holds the focus, and does nothing with no item", () => {
+  const held = fake_page(list, true, 2);
+  move_item(held.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual([held.shown, held.log, held.scrolls, held.toasts], [["2"], ["focus link 2"], [], []]);
+  const loose = fake_page(list);
+  move_item(loose.page, { selector: "li", link: "a.t", direction: "current" });
+  assert.deepEqual([loose.shown, loose.log], [["0"], ["focus link 0"]]);
+  const none = fake_page(list);
+  move_item(none.page, { selector: "none", direction: "current" });
+  assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
+});

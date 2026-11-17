@@ -80,7 +80,7 @@ const ARROW_MODE: SiteModeTable[string] = {
 };
 
 // Result pages that j and k walk item by item through `page.item`. Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
-const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
+const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last" | "current"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
 // gg and G go to the first and last item. `page.item` does nothing for them on a page that shows no item, so `when_present` hands those pages the plain scroll to the top and bottom.
 const end_binds = (selector: string, link: string | undefined): BindingTable => ({
   gg: { ...item_step(selector, link, "first"), when_present: selector },
@@ -105,6 +105,17 @@ const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-t
 const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
+// Drive keeps its selection on the focused file, so j, k, gg and G walk the files through `page.item`, which takes the focus into the list when it sits elsewhere (on the view toggle, or nowhere on Home). The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Roles read from Drive's markup, not checked on a live page: the grid view lists files as role=option in a role=listbox, the list view as role=row in a role=grid.
+const DRIVE_GRID_ITEM = '[role="listbox"] [role="option"][data-id]';
+const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
+// A grid has files left and right, so h and l step along the row. A list has one file per row, so h goes back and l opens the focused file. The list choice comes first: a page that shows both views gets the list keys, and a hidden leftover view never counts. `current` takes the focus into the list first, so l presses Enter on a file and never on the view toggle.
+const guarded = (guard: string, first: BoundInvocation, ...rest: BoundInvocation[]): BoundInvocation[] => [{ ...first, when_present: guard }, ...rest];
+const DRIVE_HL: BindingTable = {
+  h: [guarded(DRIVE_LIST_ITEM, { id: "page.back" }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "left"))],
+  l: [guarded(DRIVE_LIST_ITEM, item_step(DRIVE_LIST_ITEM, undefined, "current"), { id: "page.send_key", args: { key: "Enter", key_code: 13 } }), guarded(DRIVE_GRID_ITEM, item_step(DRIVE_GRID_ITEM, undefined, "right"))],
+};
+const DRIVE_BIND: BindingTable = { ...item_binds(`${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`), ...DRIVE_HL };
 
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
@@ -149,6 +160,7 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", bind: STACKOVERFLOW_ITEMS } },
   // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
   { name: "tildes", row: { site: "https://tildes.net/*", bind: TILDES_ITEMS } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_BIND } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));
