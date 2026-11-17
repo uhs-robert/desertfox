@@ -1,5 +1,6 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
-import { SEND_KEY_MAX_TIMES, UNTIL_STABLE_MAX_PRESSES, UNTIL_STABLE_PAUSE_MS, UNTIL_STABLE_RETRIES } from "../../shared/send_key_limit.ts";
+import { SEND_KEY_MAX_TIMES, UNTIL_STABLE_FIRST_PAUSE_MS, UNTIL_STABLE_MAX_PRESSES, UNTIL_STABLE_STALL_MS, UNTIL_STABLE_YIELD_EVERY } from "../../shared/send_key_limit.ts";
+import type { UserLeft } from "../user_left.ts";
 import { keep_chain } from "../../shared/swallow.ts";
 
 export type SendKeyArgs = { key: string; key_code: number; target?: string; times?: number; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; keypress?: boolean; focus?: boolean; until_stable?: boolean };
@@ -65,22 +66,34 @@ export const refused_times = (times: number, id: string): Promise<never> | undef
 // A page that draws only the items near the view replaces an item's element as it scrolls, so a focused item counts by its data-id where it has one.
 const focus_mark = (doc: KeyTargetDocument): unknown => (doc.activeElement as Element | null)?.getAttribute("data-id") || doc.activeElement;
 
-// The pause after each press, so the page can move its selection, scroll and draw. A timer and not the next frame, because a hidden tab draws no frames and the run would stall there.
-export const pause_after_press = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, UNTIL_STABLE_PAUSE_MS));
+// The pause before the next press: none while the focus moves, a growing one while it stalls. A timer and not the next frame, because a hidden tab draws no frames.
+export const pause_for = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event, pressed_keys: () => number, wait: () => Promise<void>): Promise<void> {
-  // Presses until the focus stops moving: the end of a list that only the page's own keys can reach. Any key the user presses ends the run.
-  if (args.until_stable)
+export function send_key_queued(doc: KeyTargetDocument, args: SendKeyArgs, make_event: (type: string, init: KeyboardEventInit) => Event, watch_user: () => UserLeft, wait: (ms: number) => Promise<void>, now = Date.now): Promise<void> {
+  // Presses until the focus stops moving: the end of a list that only the page's own keys can reach. The user's next key, click or wheel, or a hidden tab, ends the run. The watch starts here and not in the queue, so a key typed while the run waits for its turn counts.
+  if (args.until_stable) {
+    const user = watch_user();
     return queued_in_page(async () => {
-      const keys_at_start = pressed_keys();
-      let unchanged = 0;
-      for (let press = 0; press < UNTIL_STABLE_MAX_PRESSES && unchanged <= UNTIL_STABLE_RETRIES && pressed_keys() === keys_at_start; press++) {
-        const before = focus_mark(doc);
-        send_key(doc, args, make_event);
-        await wait();
-        unchanged = focus_mark(doc) === before ? unchanged + 1 : 0;
+      let moved_at = now();
+      let pause = 0;
+      try {
+        for (let press = 0; press < UNTIL_STABLE_MAX_PRESSES && !user.left_(); press++) {
+          const before = focus_mark(doc);
+          send_key(doc, args, make_event);
+          if (focus_mark(doc) === before) {
+            if (now() - moved_at >= UNTIL_STABLE_STALL_MS) break;
+            await wait((pause = pause * 2 || UNTIL_STABLE_FIRST_PAUSE_MS));
+            // A page that moves the focus late, after a fetch or a frame, counts as moving again.
+            if (focus_mark(doc) === before) continue;
+          } else if (press % UNTIL_STABLE_YIELD_EVERY === UNTIL_STABLE_YIELD_EVERY - 1) await wait(0);
+          moved_at = now();
+          pause = 0;
+        }
+      } finally {
+        user.stop_();
       }
     });
+  }
   const times = args.times ?? 1;
   return (
     refused_times(times, "page.send_key") ??

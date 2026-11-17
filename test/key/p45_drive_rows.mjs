@@ -21,8 +21,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await load_config_dir(dir);
   });
 
-  // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. A long list (`files`) gives a G time to be cancelled. The page is wide, so the document scrolls sideways.
-  const open_drive = async (id, view, files = FILES) => {
+  // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. With `fetch_every`, a move down past each block of that many files waits 300 ms, as Drive fetches the next part of a long list, and keys during the wait do nothing. The page is wide, so the document scrolls sideways.
+  const open_drive = async (id, view, files = FILES, fetch_every = 0) => {
     await open_page("controls", `drive_${id}`, { new_tab: true });
     await in_active_tab(`(() => {
       const root = document.createElement("div");
@@ -66,13 +66,18 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       toggle.onclick = flip;
       toggle.onkeydown = (event) => { if (event.key === "Enter") flip(); };
       // Drive reads the keys on the page and acts on the file the event comes from, or on its selection when the focus left the files.
+      let fetching = false;
       const steps = { ArrowDown: () => per_line(), ArrowUp: () => -per_line(), ArrowLeft: () => -1, ArrowRight: () => 1 };
       document.addEventListener("keydown", (event) => {
         const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
         if (event.key === "Enter") location.hash = "opened-" + (target?.id ?? "");
-        else if (steps[event.key]) select(index + steps[event.key]());
+        else if (fetching) {}
+        else if (${fetch_every} > 0 && event.key === "ArrowDown" && (index + 1) % ${fetch_every} === 0) {
+          fetching = true;
+          setTimeout(() => { fetching = false; select(index + 1); }, 300);
+        } else if (steps[event.key]) select(index + steps[event.key]());
         else return;
         event.preventDefault();
       });
@@ -119,16 +124,23 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("the panel to scroll to the top", async () => (await panel_top()) === 0);
   });
 
+  await run_case("list view: G waits out the pauses of a list that loads in parts and reaches the last file", async () => {
+    await open_drive("list_fetch", "list", 250, 100);
+    await press_keys("G");
+    await expect_focus("f249");
+  });
+
   // Escape also blurs the file, and the stand-in, like a page that keeps its selection, goes on moving it from there, so only a cancelled run stops.
   await run_case("list view: Escape during G stops the run where it is", async () => {
-    await open_drive("list_cancel", "list", 400);
+    await open_drive("list_cancel", "list", 2000, 100);
     const selected = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.selected ?? -1`));
     await press_keys("G");
     await poll_until("G to pass the drawn rows", async () => (await selected()) > 20);
     await press_keys("-k", "Escape");
-    await sleep(200);
+    // A move the stand-in had begun before Escape lands within its 300 ms fetch.
+    await sleep(500);
     const stopped = await selected();
-    await sleep(300);
+    await sleep(500);
     expect((await selected()) === stopped, `the run went on after Escape, from ${stopped}`);
     expect(stopped < 399, "the run reached the end before Escape");
   });

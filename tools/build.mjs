@@ -33,7 +33,8 @@ const MAX_BYTES = {
   "quality.js": 5 * 1024,
   // 2.5 KB: the probe queues a report asked for while another is out. It is the only script the media_quality rule injects into every frame, so it stays small. The names of the plain HTML elements, which the custom-element search for a video in shadow roots leaves out, are most of it.
   "quality_probe.js": 2.5 * 1024,
-  "site_actions.js": 4 * 1024,
+  // 4.5 KB: the until_stable run of page.send_key paces its presses by focus movement and stops on a stall time or when the user leaves (`user_left.ts`), for Drive's gg and G. The bundle loads on the first press of a site row key.
+  "site_actions.js": 4.5 * 1024,
   // 4.5 KB: page.item, the box it draws around a result (search-site-rows), and the last move that ]] reads to put the box on the first item a load added. The bundle loads on the first j or k on a result page.
   "item.js": 4.5 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.

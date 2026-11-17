@@ -32,6 +32,8 @@ export const area_rules = [
   // The top frame draws the line, which-key and toasts for a focused subframe, which p6_frames tests.
   { globs: ["src/{content,shared}/relay.ts", "src/background/frame_cue.ts"], areas: ["hints", "cmdline", "whichkey", "ui"] },
   { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
+  // The user-left watch serves the next_page load wait and the until_stable run of page.send_key.
+  { globs: ["src/content/user_left.ts"], areas: ["hints", "engines", "bundles", "keys"] },
   { globs: ["src/content/hints/**", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/content/item/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles", "keys"] },
