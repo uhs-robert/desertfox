@@ -1,0 +1,37 @@
+// After `]]` loads more on a page with a `page.item` row, the box moves to the first item the load added.
+
+import type { ItemCursor } from "../item/pick.ts";
+import { wait_for_new_content } from "./load_outcome.ts";
+import type { ContentWatch } from "./load_outcome.ts";
+
+// Node.DOCUMENT_POSITION_FOLLOWING and _CONTAINED_BY, as numbers so the pure part runs without a DOM.
+const FOLLOWING = 4;
+const CONTAINED_BY = 16;
+
+// The first item after the last old item still on the page, in document order. Not the old count as an index: a page that drops or virtualizes the items above shifts every index.
+export function first_item_after(old_items: readonly Element[], items: readonly Element[]): Element | undefined {
+  const anchor = old_items.findLast((item) => item.isConnected);
+  return anchor && items.find((item) => (anchor.compareDocumentPosition(item) & (FOLLOWING | CONTAINED_BY)) === FOLLOWING);
+}
+
+export type ItemAfterLoadDeps = {
+  // The items of a row selector that the box can land on, in document order.
+  items_: (selector: string) => Element[];
+  // Fires on each addition to the page. Its height is not read.
+  watch_: ContentWatch;
+  cursor_: () => Promise<ItemCursor | undefined>;
+  in_normal_mode_: () => boolean;
+};
+
+// Call it before the click or scroll, with the cursor read then. It waits up to the load wait for an item to follow the old last one, which can come after a spinner or other first additions.
+// It leaves the box where it is when the user moved it to another item, left normal mode, or no item came.
+export async function move_box_after_load(before: ItemCursor | undefined, deps: ItemAfterLoadDeps): Promise<void> {
+  if (!before?.shown_ || !before.item_) return;
+  const old_items = deps.items_(before.selector_);
+  const first_new = () => first_item_after(old_items, deps.items_(before.selector_));
+  const until_new_item: ContentWatch = { start_: (on_added) => deps.watch_.start_(() => first_new() && on_added()), page_height_: () => 0 };
+  if (!(await wait_for_new_content(until_new_item))) return;
+  const now = await deps.cursor_();
+  const target = first_new();
+  if (now?.item_ === before.item_ && deps.in_normal_mode_() && target) now.land_(target);
+}

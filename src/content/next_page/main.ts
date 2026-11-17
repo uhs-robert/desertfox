@@ -11,8 +11,11 @@ import { can_open_elsewhere, find_next_page } from "./follow_links.ts";
 import type { FollowDirection } from "./follow_links.ts";
 import { find_load_more } from "./load_more.ts";
 import { dom_content_watch, wait_for_new_content } from "./load_outcome.ts";
+import { move_box_after_load } from "./item_after_load.ts";
+import type { ItemCursor } from "../item/pick.ts";
 
 type NextPageWindow = { desertfox_host?: PageHostApi; desertfox_next_page_ready?: true };
+type ItemWindow = { desertfox_item_ready?: true };
 const next_page = window as unknown as NextPageWindow;
 
 async function read_patterns(direction: FollowDirection): Promise<readonly string[]> {
@@ -32,6 +35,16 @@ function scroll_past(last_item: Element): void {
   window.scrollBy(0, innerHeight);
 }
 
+// The item bundle loads on the first `page.item` key, so before that no box shows and nothing needs it loaded.
+const read_item_cursor = (host: PageHostApi): Promise<ItemCursor | undefined> =>
+  new Promise((resolve) => {
+    if (!(window as ItemWindow).desertfox_item_ready) return resolve(undefined);
+    void host.run_command_("item.cursor", "item", { take: resolve }).then(() => resolve(undefined));
+  });
+
+// The same filter as `page.item`: a box the browser hides or that has no size cannot take the focus.
+const visible_items = (selector: string): Element[] => Array.from(document.querySelectorAll(selector)).filter((element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && element.getClientRects().length > 0);
+
 // The load step only changes this page, so it runs for `]]` in place only. A `<link>` has no box to click, so it navigates by its address.
 async function follow_page(host: PageHostApi, direction: FollowDirection, place: Place): Promise<Outcome> {
   const found = find_next_page(document, direction, await read_patterns(direction), direction === "next" && place === "here" ? find_load_more : undefined);
@@ -48,6 +61,7 @@ async function follow_page(host: PageHostApi, direction: FollowDirection, place:
     return { ok: true };
   }
   const loaded = wait_for_new_content(dom_content_watch(document));
+  void move_box_after_load(await read_item_cursor(host), { items_: visible_items, watch_: dom_content_watch(document), cursor_: () => read_item_cursor(host), in_normal_mode_: () => host.get_mode() === "normal" });
   if (found.action === "click") void follow_like_a_hint("here", target, open_link_);
   else scroll_past(target);
   // The answer does not wait for the load, so the keys typed after `]]` run at once.
