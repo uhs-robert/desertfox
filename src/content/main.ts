@@ -142,12 +142,16 @@ function cancel(event: Event): void {
   event.stopImmediatePropagation();
 }
 
+// Counts the keys a person pressed, bound or not. The content script takes a bound key before any bundle listener sees it, so a load that waits on the user reads this count.
+let pressed_keys = 0;
+
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   cancelled_keys.saw_keydown_(event.code);
   if (!event.isTrusted || event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
+  if (!event.repeat) pressed_keys++;
   // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
   follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
@@ -341,7 +345,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, pressed_keys_: () => pressed_keys, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);

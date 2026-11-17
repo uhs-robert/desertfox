@@ -13,6 +13,8 @@ export type PageReader<N> = {
   box_: (node: N) => Box | undefined;
   scrolls_sideways_: (node: N) => boolean;
   pinned_: (node: N) => boolean;
+  // Where a pointer cursor starts (the same rule as a hint's click sign), for a control that has no role.
+  pointer_: (node: N) => boolean;
   view_: () => { w: number; h: number; page_h: number };
 };
 

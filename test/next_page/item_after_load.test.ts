@@ -4,6 +4,8 @@ import type { ItemCursor } from "../../src/content/item/pick.ts";
 import { first_item_after, move_box_after_load } from "../../src/content/next_page/item_after_load.ts";
 import type { ItemAfterLoadDeps } from "../../src/content/next_page/item_after_load.ts";
 import { LOAD_WAIT_MS } from "../../src/content/next_page/load_outcome.ts";
+import { watch_user_left } from "../../src/content/next_page/user_left.ts";
+import { fake_events } from "../support/fake_events.ts";
 
 // A page of items in document order. An item is on the page while it is in `items`, and a removed item compares as disconnected.
 function fake_page(count: number) {
@@ -24,6 +26,7 @@ function fake_page(count: number) {
     return item as unknown as Element;
   };
   items.push(...Array.from({ length: count }, (_, at) => make(`old${at}`)));
+  const events = fake_events();
   let on_added = (_added: readonly Element[]) => {};
   // An element that holds no item, as a spinner or an ad.
   const spinner = { matches: () => false, querySelector: () => null } as unknown as Element;
@@ -52,8 +55,9 @@ function fake_page(count: number) {
     watch_: { start_: (added) => ((on_added = added), () => (on_added = () => {})), page_height_: () => 0 },
     cursor_: () => Promise.resolve(cursor()),
     in_normal_mode_: () => page.mode === "normal",
+    watch_user_left_: () => watch_user_left(events.doc, events.win, events.pressed_keys),
   };
-  return { page, deps, cursor };
+  return { page, deps, cursor, events };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -176,4 +180,85 @@ test("an item that fades in after its batch takes the box at the end of the wait
   t.mock.timers.tick(LOAD_WAIT_MS);
   await done;
   assert.deepEqual(page.landed, ["new0"]);
+});
+
+const SIGNALS: [string, (events: ReturnType<typeof fake_events>) => void][] = [
+  ["the tab is hidden", (events) => events.hide()],
+  ["a key press the content script took (a bound key)", (events) => events.press()],
+  ["the wheel", (events) => events.fire("win", "wheel")],
+  ["a pointer press", (events) => events.fire("win", "pointerdown")],
+];
+
+for (const [name, signal] of SIGNALS) {
+  test(`${name} before the load arrives keeps the box where it is`, async () => {
+    const { page, deps, cursor, events } = fake_page(3);
+    page.current = page.named("old2");
+    const done = move_box_after_load(cursor(), deps);
+    signal(events);
+    page.add("new0");
+    await done;
+    assert.deepEqual(page.landed, []);
+    assert.equal(events.listeners(), 0, "a listener outlived the load");
+  });
+
+  test(`${name} after the item arrived but before the box moves keeps the box where it is`, async () => {
+    const { page, deps, cursor, events } = fake_page(3);
+    page.current = page.named("old2");
+    const slow_cursor = () => new Promise<ItemCursor | undefined>((resolve) => setImmediate(() => resolve(cursor())));
+    const done = move_box_after_load(cursor(), { ...deps, cursor_: slow_cursor });
+    page.add("new0");
+    await Promise.resolve();
+    signal(events);
+    await done;
+    assert.deepEqual(page.landed, []);
+    assert.equal(events.listeners(), 0);
+  });
+}
+
+test("a scroll, a window blur and untrusted input do not cancel the move", async () => {
+  const { page, deps, cursor, events } = fake_page(3);
+  page.current = page.named("old2");
+  const done = move_box_after_load(cursor(), deps);
+  events.fire("win", "scroll");
+  events.fire("win", "blur");
+  events.fire("win", "wheel", {}, false);
+  page.add("new0");
+  await done;
+  assert.deepEqual(page.landed, ["new0"]);
+});
+
+test("signals before the load starts or after it ends do not cancel a later load", async () => {
+  const { page, deps, cursor, events } = fake_page(3);
+  page.current = page.named("old2");
+  events.press();
+  events.hide();
+  events.show();
+  const first = move_box_after_load(cursor(), deps);
+  page.add("new0");
+  await first;
+  assert.deepEqual(page.landed, ["new0"]);
+  assert.equal(events.listeners(), 0);
+  events.fire("win", "wheel");
+  page.current = page.named("new0");
+  const second = move_box_after_load(cursor(), deps);
+  page.add("new1");
+  await second;
+  assert.deepEqual(page.landed, ["new0", "new1"]);
+});
+
+test("the listeners go when the wait times out with nothing loaded", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { page, deps, cursor, events } = fake_page(3);
+  page.current = page.named("old2");
+  const done = move_box_after_load(cursor(), deps);
+  assert.ok(events.listeners() > 0);
+  t.mock.timers.tick(LOAD_WAIT_MS);
+  await done;
+  assert.equal(events.listeners(), 0);
+});
+
+test("with no box shown, no listener is added", async () => {
+  const { deps, events } = fake_page(3);
+  await move_box_after_load(undefined, deps);
+  assert.equal(events.listeners(), 0);
 });

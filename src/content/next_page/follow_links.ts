@@ -46,6 +46,8 @@ export const dom_reader = (doc: Document): PageReader<Element> => {
     return clientWidth > 0 && ((/auto|scroll/.test(overflowX) && scrollWidth > clientWidth + 20) || (/hidden|clip/.test(overflowX) && scrollWidth > 1.5 * clientWidth && element.children.length > 0 && clientWidth > 150));
   },
   pinned_: (element) => /fixed|sticky/.test(style_of(element).position),
+  // Only where a pointer cursor starts: a child of a clickable card inherits it. The root has no parent, so it never starts one.
+  pointer_: (element) => style_of(element).cursor === "pointer" && style_of(element.parentElement ?? element).cursor !== "pointer",
   view_: () => ({ w: innerWidth, h: innerHeight, page_h: doc.documentElement.scrollHeight }),
   };
 };
