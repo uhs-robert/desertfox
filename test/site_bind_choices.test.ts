@@ -147,3 +147,13 @@ test("the site rules view lists each choice with its guard, and a guarded bind s
   const [open] = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { h: stored_choices(false) } }] }), "https://a.test/").rows;
   assert.match(open!.changes.find(({ keys }) => keys === "h")!.action, /, else Back$/);
 });
+
+test("the compile checks every choice: a later choice gets its defaults and jump flag, and a bad one drops the bind", async () => {
+  const gg = [[{ id: "page.item", args: { selector: "li.tile", direction: "first" }, when_present: GRID }], [{ id: "page.item", args: { selector: "tr.row", direction: "last" }, when_present: LIST }]];
+  const tree = await page_tree(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { G: gg } }] }), "https://a.test/");
+  const second = (tree.children["G"] as TreeLeaf).otherwise!.steps[0]!;
+  assert.deepEqual([second.invocation.args?.times, second.jump], [1, true]);
+  const bad = [[{ id: "tab.next", when_present: GRID }], [{ id: "page.item", args: { selector: "tr.row", direction: "sideways" } }]];
+  const { warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: [{ site: "https://a.test/*", bind: { G: bad } }] } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
+  assert.match(warnings.join("\n"), /skipped bind "G" of "https:\/\/a.test\/\*": direction expects one of/);
+});

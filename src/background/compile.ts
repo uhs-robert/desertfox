@@ -165,15 +165,19 @@ export function compile_config(input: CompileInput): CompileOutput {
 function check_site_binds(binds: Record<string, SiteBind> | undefined, column_scope: string, mode: string, site: string, input: CompileInput, warnings: string[]): void {
   for (const [key, site_bind] of Object.entries(binds ?? {})) {
     const { tokens, leaf } = site_bind;
-    const waits_for_key = leaf.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args));
+    const choices = choices_of(leaf);
+    const waits_for_key = choices.some((choice) => choice.steps.some((step) => captured_key_param(input.get_command(step.invocation.id) ?? {}, step.invocation.args)));
     if (waits_for_key) warnings.push(`site_rules: ${column_scope}skipped bind "${tokens.join("")}" of "${site}": a bind cannot wait for a key press`);
     // keep_node words its warnings for a keymap entry, so they are renamed to name the site row.
     const node_warnings: string[] = [];
-    const kept = !waits_for_key && keep_node(leaf, tokens, mode, input, node_warnings);
+    const kept = !waits_for_key && choices.every((choice) => keep_node(choice, tokens, mode, input, node_warnings));
     warnings.push(...node_warnings.map((warning) => warning.replace(new RegExp(`^${mode}: skipped "[^"]*"`), `site_rules: ${column_scope}skipped bind "${tokens.join("")}" of "${site}"`)));
     if (waits_for_key || !kept) delete binds![key];
   }
 }
+
+// The leaves of a bind: itself, then each further choice of a choice list. The compile runs before the graft, so no replaced leaf sits on the chain yet.
+const choices_of = (leaf: TreeLeaf): TreeLeaf[] => (leaf.otherwise ? [leaf, ...choices_of(leaf.otherwise)] : [leaf]);
 
 // A `mode.site` bind that names a mode no site row defines does nothing on any page. Rows merge by mode name across sites, so the check is over every row, and it only warns. The keymap's normal mode is checked too, because a key there can start a mode as well.
 function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | undefined, warnings: string[]): void {
@@ -190,7 +194,7 @@ function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | und
   };
   if (normal) walk(normal, []);
   for (const rule of rules) {
-    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.keymap ?? {}).flatMap((binds) => Object.values(binds)), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) check("site_rules", tokens, leaf);
+    for (const { tokens, leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.keymap ?? {}).flatMap((binds) => Object.values(binds)), ...Object.values(rule.modes ?? {}).flatMap((mode) => Object.values(mode.bind))]) for (const choice of choices_of(leaf)) check("site_rules", tokens, choice);
   }
 }
 
