@@ -9,7 +9,7 @@ import { compile_keymap } from "../keys/compiler.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../settings_docs.ts";
 import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
 import { MAX_BIND_STEPS } from "../table_constants.ts";
-import { SETTINGS_TABLE, type SettingName, type SettingRow } from "../settings_table.ts";
+import { SETTINGS_TABLE, SITE_KEYMAP_MODES, type SettingName, type SettingRow } from "../settings_table.ts";
 import { ENGINE_KEYWORD } from "../engines/resolve.ts";
 import { KEYMAP_MODES } from "./merge.ts";
 import type { DataKind } from "./source_files.ts";
@@ -95,12 +95,20 @@ const SITE_MODES_SCHEMA: Schema = {
   additionalProperties: { type: "object", properties: { label: ONE_LINE_TEXT, bind: BINDINGS_SCHEMA, sticky: { type: "boolean" } }, required: ["label", "bind"], additionalProperties: false },
 };
 
+// A table of binds per keymap mode a site row can bind.
+const MODE_BINDINGS_SCHEMA: Schema = {
+  type: "object",
+  minProperties: 1,
+  properties: Object.fromEntries(SITE_KEYMAP_MODES.map((mode) => [mode, BINDINGS_SCHEMA])),
+  additionalProperties: false,
+};
+
 type TableFields = Extract<SettingRow, { kind: "table_list" }>["fields"];
 
 // `columns` holds the schema of each extra column a row may set: the per-site settings of a site table.
 function table_list_schema(fields: TableFields, exclusive: readonly string[] | undefined, columns: Record<string, Schema>): Schema {
   // A JSON Schema `pattern` has no case flag, so it refuses an upper-case scheme that the check takes.
-  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : value === "bindings" ? BINDINGS_SCHEMA : value === "site_modes" ? SITE_MODES_SCHEMA : non_empty_text);
+  const field_schema = (value: TableFields[string]["value"]): Schema => (value === "web_url" ? { type: "string", pattern: "^https?://\\S+$" } : value === "boolean" ? { type: "boolean" } : value === "bindings" ? BINDINGS_SCHEMA : value === "site_modes" ? SITE_MODES_SCHEMA : value === "mode_bindings" ? MODE_BINDINGS_SCHEMA : non_empty_text);
   return {
     type: "array",
     items: {

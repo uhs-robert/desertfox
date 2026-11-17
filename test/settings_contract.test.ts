@@ -33,7 +33,7 @@ const EXPECTATIONS: Record<string, string> = {
   editable_remove_unsized: "true or false",
   escape_to_page: "true or false",
   scroll_selector: "a CSS selector, or empty for none",
-  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands, an optional "modes" of modes that each have a label plus a bind and any per-site setting',
+  site_rules: 'a list of tables with "site", an optional "off" of true or false, an optional "pass" of key sequences, an optional "only" of key sequences, an optional "bind" of keys to commands, an optional "keymap" of binds per mode, an optional "modes" of modes that each have a label plus a bind and any per-site setting',
   default_site_rows_off: 'a list of "sheets", "maps", "arrow", "ddg", "kagi", "brave", "google", "bing", "hackernews" and "wikipedia" with no repeat',
   next_patterns: "a list of link texts",
   prev_patterns: "a list of link texts",

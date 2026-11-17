@@ -342,7 +342,7 @@ const table_of = (class_name: string, heads: string[], rows: (HTMLElement | stri
 // Columns are name and value pairs, so a per-site setting added later shows with no code here.
 const columns_table = (columns: RuleColumn[]): HTMLElement => table_of("desertfox-help-columns", ["option", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadowed ? "an earlier rule decides this" : ""]), columns.map(({ shadowed }) => shadowed));
 const changes_table = (changes: KeyChange[]): HTMLElement =>
-  table_of("desertfox-help-changes", ["key", "mode", "does", "was", ""], changes.map(({ keys, mode, action, replaces, dead }) => [el("kbd", undefined, keys), mode ?? "", action, replaces ?? "", dead ?? ""]), changes.map(({ dead }) => dead !== undefined));
+  table_of("desertfox-help-changes", ["key", "mode", "does", "was", ""], changes.map(({ keys, mode, keymap_mode, action, replaces, dead }) => [el("kbd", undefined, keys), mode ?? (keymap_mode === undefined ? "" : `keymap ${keymap_mode}`), action, replaces ?? "", dead ?? ""]), changes.map(({ dead }) => dead !== undefined));
 
 function site_rule_row(row: SiteRuleRowView): HTMLElement {
   const source = row.origin === "default" ? `Built-in rule ${row.name}` : "Your rule";

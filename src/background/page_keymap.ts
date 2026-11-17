@@ -93,6 +93,11 @@ export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSit
   return is_empty_tree(pruned) ? { tree: normal, all_off: true } : { tree: pruned, all_off: false, frees: frees_of(columns.keys) };
 }
 
+// The trees of the other keymap modes with the page's binds for them. Like `modes.<name>`, they skip a page that is off, and `pass` and `only` do not reach them: those prune the normal tree. A mode with no tree of its own starts from an empty one. The page reply and which-key both read them here.
+export function keymap_mode_trees_for(modes: CompiledKeymap["modes"], columns: PageSiteColumns): CompiledKeymap["modes"] {
+  return Object.fromEntries(Object.entries(columns.keymap ?? {}).map(([mode, binds]) => [mode, graft_binds(modes[mode as keyof CompiledKeymap["modes"]], binds)]));
+}
+
 // Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a mode bind survives a key rule. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.
 function site_modes_for(tree: TreeBranch | undefined, modes: Readonly<Record<string, SiteModeColumn<SiteBind>>>): Record<string, PageSiteMode> {
   return Object.fromEntries(
@@ -143,7 +148,8 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
   const with_values = site_values ? { site_values } : {};
   const { tree } = page_tree;
   const with_modes = columns.modes && !page_tree.all_off ? { site_modes: site_modes_for(tree, columns.modes) } : {};
-  const modes = tree === undefined || tree === keymap.modes.normal ? keymap_without_rules.modes : { ...keymap_without_rules.modes, normal: tree };
+  const normal_modes = tree === undefined || tree === keymap.modes.normal ? keymap_without_rules.modes : { ...keymap_without_rules.modes, normal: tree };
+  const modes = page_tree.all_off ? normal_modes : { ...normal_modes, ...keymap_mode_trees_for(keymap.modes, columns) };
   return { keymap: { ...keymap_without_rules, modes }, all_off: page_tree.all_off, ..."frees" in page_tree && { frees: page_tree.frees }, ...with_modes, ...with_values };
 }
 

@@ -2,7 +2,7 @@
 // Snippets use them to name the sites they run on, so a URL is parsed, never sliced with a regex:
 // "https://evil.com?x=@a.example.com/" must not pass for the host a.example.com.
 
-import type { BindingTable, Settings } from "./settings_table.ts";
+import type { BindingTable, Settings, SiteKeymapMode } from "./settings_table.ts";
 
 const PATTERN_PARTS = /^(\*|https?|file|ftp):\/\/([^/]*)(\/.*)$/;
 
@@ -90,8 +90,9 @@ export function matches_any_address(source: string | undefined, addresses: reado
 // `bind` is the one column that merges key by key: for each key, the first matching row that binds it decides. Its keys are the written sequences in a row, and the normalized sequences once compiled.
 // `modes` is the other merging column: a site mode is decided whole, by the first matching row that has its name.
 export type SiteModeColumn<Bind = unknown> = { label: string; bind: Readonly<Record<string, Bind>>; sticky?: boolean };
-export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; modes?: Readonly<Record<string, SiteModeColumn<Bind>>>; values?: Readonly<Record<string, unknown>> };
-export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; modes?: Record<string, SiteModeColumn<Bind>>; values: Record<string, unknown> };
+// `keymap` holds the binds of the keymap modes other than normal, merged key by key per mode as `bind` is. `bind` holds the normal-mode binds of both the `bind` and `keymap.normal` fields of a row.
+export type SiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Readonly<Record<string, Bind>>; keymap?: Readonly<Record<string, Readonly<Record<string, Bind>>>>; modes?: Readonly<Record<string, SiteModeColumn<Bind>>>; values?: Readonly<Record<string, unknown>> };
+export type ResolvedSiteColumns<Keys, Bind = unknown> = { off?: boolean; keys?: Keys; bind?: Record<string, Bind>; keymap?: Record<string, Record<string, Bind>>; modes?: Record<string, SiteModeColumn<Bind>>; values: Record<string, unknown> };
 
 // `rows` are the rows that match the page, in table order.
 export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteColumns<Keys, Bind>[]): ResolvedSiteColumns<Keys, Bind> {
@@ -103,6 +104,13 @@ export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteCo
       resolved.bind ??= {};
       if (!Object.hasOwn(resolved.bind, key)) resolved.bind[key] = binding;
     }
+    for (const [mode, binds] of Object.entries(row.keymap ?? {})) {
+      for (const [key, binding] of Object.entries(binds)) {
+        resolved.keymap ??= {};
+        const merged = (resolved.keymap[mode] ??= {});
+        if (!Object.hasOwn(merged, key)) merged[key] = binding;
+      }
+    }
     for (const [name, mode] of Object.entries(row.modes ?? {})) {
       resolved.modes ??= {};
       if (!Object.hasOwn(resolved.modes, name)) resolved.modes[name] = mode;
@@ -113,21 +121,25 @@ export function resolve_site_columns<Keys, Bind = unknown>(rows: readonly SiteCo
 }
 
 export type SiteRuleRow = Settings["site_rules"][number];
-// Every bind table a row holds: its own and one per mode. `scope` is the words a problem puts before "bind".
-export const bind_tables_of = (row: SiteRuleRow): { scope: string; table: BindingTable }[] => [
-  ...(row.bind === undefined ? [] : [{ scope: "", table: row.bind }]),
-  ...Object.entries(row.modes ?? {}).map(([name, mode]) => ({ scope: `mode "${name}" `, table: mode.bind })),
+// Every bind table a row holds: its own, one per keymap mode and one per site mode. `scope` is the words a problem puts before "bind". `keymap_mode` is the keymap mode whose commands the binds must fit: a site mode lays over normal mode.
+export const bind_tables_of = (row: SiteRuleRow): { scope: string; keymap_mode: SiteKeymapMode; table: BindingTable }[] => [
+  ...(row.bind === undefined ? [] : [{ scope: "", keymap_mode: "normal" as const, table: row.bind }]),
+  ...(Object.entries(row.keymap ?? {}) as [SiteKeymapMode, BindingTable][]).map(([mode, table]) => ({ scope: `keymap "${mode}" `, keymap_mode: mode, table })),
+  ...Object.entries(row.modes ?? {}).map(([name, mode]) => ({ scope: `mode "${name}" `, keymap_mode: "normal" as const, table: mode.bind })),
 ];
 
 export type SiteRowKeys = { pass: string } | { only: string };
 
-const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only", "bind", "modes"]);
+const SITE_ROW_FIELDS = new Set(["site", "off", "pass", "only", "bind", "keymap", "modes"]);
 
 // A row's columns, with an unset column left out. A row that sets nothing but `site` is off: older configs and the popup wrote that shape.
 export function site_row_columns(row: SiteRuleRow): SiteColumns<SiteRowKeys> {
   const values = Object.fromEntries(Object.entries(row).filter(([field, value]) => !SITE_ROW_FIELDS.has(field) && value !== undefined));
   const keys: SiteRowKeys | undefined = row.pass !== undefined ? { pass: row.pass } : row.only !== undefined ? { only: row.only } : undefined;
   const has_values = Object.keys(values).length > 0;
-  const off = row.off ?? (keys === undefined && !has_values && row.bind === undefined && row.modes === undefined ? true : undefined);
-  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(row.bind === undefined ? {} : { bind: row.bind }), ...(row.modes === undefined ? {} : { modes: row.modes }), ...(has_values ? { values } : {}) };
+  const { normal, ...other_modes } = row.keymap ?? {};
+  const bind = row.bind === undefined && normal === undefined ? undefined : { ...normal, ...row.bind };
+  const keymap = Object.keys(other_modes).length === 0 ? undefined : other_modes;
+  const off = row.off ?? (keys === undefined && !has_values && bind === undefined && keymap === undefined && row.modes === undefined ? true : undefined);
+  return { ...(off === undefined ? {} : { off }), ...(keys === undefined ? {} : { keys }), ...(bind === undefined ? {} : { bind }), ...(keymap === undefined ? {} : { keymap }), ...(row.modes === undefined ? {} : { modes: row.modes }), ...(has_values ? { values } : {}) };
 }

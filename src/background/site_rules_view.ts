@@ -7,8 +7,8 @@ import { hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, ty
 // One column a row sets, shown as text. `shadowed` means an earlier matching row already decides it.
 export type RuleColumn = { name: string; value: string; shadowed: boolean };
 
-// One key a row changes. `mode` names the site mode a bind belongs to. `replaces` is what the key does in the keymap without the row, absent when the key is free there. `dead` is why the change does not reach the page, absent when it does.
-export type KeyChange = { keys: string; action: string; mode?: string; replaces?: string; dead?: string };
+// One key a row changes. `mode` names the site mode a bind belongs to. `keymap_mode` names the keymap mode of a bind that is not in normal mode (visual, visual_line, caret), so a site mode named `visual` cannot be mistaken for visual mode. `replaces` is what the key does in the keymap without the row, absent when the key is free there. `dead` is why the change does not reach the page, absent when it does.
+export type KeyChange = { keys: string; action: string; mode?: string; keymap_mode?: string; replaces?: string; dead?: string };
 
 export type SiteRuleRowView = { origin: SiteRule["origin"]; name?: string; site: string; columns: RuleColumn[]; changes: KeyChange[] };
 
@@ -37,6 +37,7 @@ function shadowing(earlier: PageSiteColumns) {
     off: earlier.off !== undefined,
     keys: earlier.keys !== undefined,
     bind: (key: string) => earlier.bind !== undefined && Object.hasOwn(earlier.bind, key),
+    keymap: (mode: string, key: string) => earlier.keymap?.[mode] !== undefined && Object.hasOwn(earlier.keymap[mode], key),
     mode: (name: string) => earlier.modes !== undefined && Object.hasOwn(earlier.modes, name),
     value: (name: string) => Object.hasOwn(earlier.values, name),
   };
@@ -70,15 +71,15 @@ function dead_bind(key: string, { tokens, leaf }: SiteBind, earlier: boolean, pa
   return `${key} is replaced by another bind`;
 }
 
-function bind_changes(binds: Readonly<Record<string, SiteBind>> | undefined, normal: TreeNode | undefined, dead: (key: string, bind: SiteBind) => string | undefined, mode?: string): KeyChange[] {
+function bind_changes(binds: Readonly<Record<string, SiteBind>> | undefined, normal: TreeNode | undefined, dead: (key: string, bind: SiteBind) => string | undefined, tag: Pick<KeyChange, "mode" | "keymap_mode"> = {}): KeyChange[] {
   return Object.entries(binds ?? {}).map(([key, bind]) => {
     const replaces = keymap_meaning(normal, bind.tokens);
     const reason = dead(key, bind);
-    return { keys: bind.tokens.join(""), action: leaf_text(bind.leaf), ...(mode === undefined ? {} : { mode }), ...(replaces === undefined ? {} : { replaces }), ...(reason === undefined ? {} : { dead: reason }) };
+    return { keys: bind.tokens.join(""), action: leaf_text(bind.leaf), ...tag, ...(replaces === undefined ? {} : { replaces }), ...(reason === undefined ? {} : { dead: reason }) };
   });
 }
 
-function row_view(rule: SiteRule, earlier: PageSiteColumns, page: PageState, normal: TreeNode | undefined): SiteRuleRowView {
+function row_view(rule: SiteRule, earlier: PageSiteColumns, page: PageState, normal: TreeNode | undefined, keymap: CompiledKeymap | undefined): SiteRuleRowView {
   const shadowed = shadowing(earlier);
   const columns: RuleColumn[] = [];
   const changes: KeyChange[] = [];
@@ -101,7 +102,13 @@ function row_view(rule: SiteRule, earlier: PageSiteColumns, page: PageState, nor
     // A mode lays over the page tree, so what a mode key replaces is read there, after pass and only.
     const hides = (bind: SiteBind) => hiding_bind(Object.values(mode.bind), bind);
     const dead = (_key: string, bind: SiteBind) => (page.all_off ? "off for this page" : shadowed.mode(name) ? EARLIER_ROW : hides(bind) ? `${hides(bind)!.tokens.join("")} is a complete bind and hides longer keys under it` : undefined);
-    changes.push(...bind_changes(mode.bind, page.tree, dead, name));
+    changes.push(...bind_changes(mode.bind, page.tree, dead, { mode: name }));
+  }
+  for (const [keymap_mode, binds] of Object.entries(rule.keymap ?? {})) {
+    // The other keymap modes meet no key rule, so a key's meaning and its hiding come from that mode's own tree and binds.
+    const hides = (bind: SiteBind) => hiding_bind(Object.values(page.columns.keymap?.[keymap_mode] ?? {}), bind);
+    const dead = (key: string, bind: SiteBind) => (page.all_off ? "off for this page" : shadowed.keymap(keymap_mode, key) ? EARLIER_ROW : hides(bind) ? `${hides(bind)!.tokens.join("")} is a complete bind and hides longer keys under it` : undefined);
+    changes.push(...bind_changes(binds, keymap?.modes[keymap_mode as keyof CompiledKeymap["modes"]], dead, { keymap_mode }));
   }
   return { origin: rule.origin, ...(rule.origin === "default" ? { name: rule.name } : {}), site: rule.site, columns, changes };
 }
@@ -111,5 +118,5 @@ export function site_rules_view(keymap: CompiledKeymap | undefined, address: str
   const matching = site_rules_matching(keymap, [address]);
   const normal = keymap?.modes.normal;
   const page = page_state(keymap, address);
-  return { address, rows: matching.map((rule, index) => row_view(rule, resolve_site_columns(matching.slice(0, index)) as PageSiteColumns, page, normal)) };
+  return { address, rows: matching.map((rule, index) => row_view(rule, resolve_site_columns(matching.slice(0, index)) as PageSiteColumns, page, normal, keymap)) };
 }
