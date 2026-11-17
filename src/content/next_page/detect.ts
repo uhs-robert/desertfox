@@ -98,7 +98,7 @@ export const in_carousel = <N>(reader: PageReader<N>, node: N): boolean =>
       normalize(reader.attr_(box, "aria-roledescription") ?? "").includes("carousel") ||
       CAROUSEL_CLASS.test(reader.attr_(box, "class") ?? "") ||
       reader.scrolls_sideways_(box) ||
-      reader.children_(box).some(reader.scrolls_sideways_),
+      reader.children_(box).some((sibling) => reader.scrolls_sideways_(sibling) && reader.children_(sibling).length >= 2),
   );
 
 // A player's own controls: a near box that holds the video and is no taller than the screen. YouTube's "Next" plays the next video. The page body is no player, however short the page.
@@ -123,8 +123,8 @@ const is_navigation = <N>(reader: PageReader<N>, node: N): boolean => reader.tag
 // A control inside one item of a list (a post's gallery arrow, a comment's menu) acts on that item, not on the page.
 // The climb stops at a navigation box, which pages put their pager in. An item taller than two screens is a page section (a shop's pager sits in one of a stack of sections).
 function in_list_item<N>(reader: PageReader<N>, node: N): boolean {
+  if ([...ancestors(reader, node)].some((at) => is_navigation(reader, at))) return false;
   for (const item of ancestors(reader, node)) {
-    if (is_navigation(reader, item)) return false;
     const list = reader.parent_(item);
     const box = reader.box_(item);
     if (list === null || !is_item_size(box) || box.h > 2 * reader.view_().h) continue;

@@ -28,7 +28,7 @@ const SAVE = `(() => {
     if (!kids.length && !control && !rel && !item_size && !sideways && !pinned && !media && tag !== "html" && tag !== "body") return null;
     const node = { t: tag };
     const attrs = {};
-    for (const name of ATTRS) { const value = el.getAttribute(name); if (value !== null) attrs[name] = value.slice(0, 160); }
+    for (const name of ATTRS) { const value = el.getAttribute(name); if (value !== null) attrs[name] = name === "onclick" ? "" : value.slice(0, 160); }
     const classes = (typeof el.className === "string" ? el.className : "").trim().split(/\\s+/).filter(Boolean).filter((name, index) => index === 0 || KEEP_CLASS.test(name));
     if (classes.length) attrs.class = classes.join(" ");
     if (Object.keys(attrs).length) node.a = attrs;

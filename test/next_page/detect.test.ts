@@ -64,7 +64,7 @@ test("a load text is a whole load word, with counts dropped and one noun allowed
 
 test("an arrow beside a sideways track is a carousel control, not the next page", () => {
   const arrow: SavedNode = { t: "button", a: { "aria-label": "Next" }, r: [900, 300, 40, 40] };
-  const track: SavedNode = { t: "div", r: [0, 200, 880, 240], x: 1 };
+  const track: SavedNode = { t: "div", r: [0, 200, 880, 240], x: 1, c: [{ t: "div", r: [0, 200, 400, 240] }, { t: "div", r: [400, 200, 400, 240] }] };
   const pager: SavedNode = { t: "a", a: { href: "?page=2" }, r: [500, 2000, 60, 30], s: "Next" };
   const root: SavedNode = { t: "body", r: [0, 0, 1366, 2100], c: [{ t: "section", r: [0, 200, 1366, 240], c: [track, arrow] }, pager] };
   for (const node of [root, ...root.c!, track, arrow]) for (const child of node.c ?? []) child.up = node;
@@ -80,4 +80,17 @@ test("a short page with an audio element is no player, so its pager still counts
   for (const child of root.c!) child.up = root;
   const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 800 }, root });
   assert.equal(pick_next_control(reader, [{ node: pager, texts: ["Next"], is_link: true }], NEXT), pager);
+});
+
+test("a wide code block beside a Next link is no carousel track, but a track of cards is", () => {
+  const pager: SavedNode = { t: "a", a: { href: "?page=2" }, r: [500, 600, 60, 30], s: "Next" };
+  const run = (track: SavedNode) => {
+    const root: SavedNode = { t: "body", r: [0, 0, 1366, 800], c: [track, pager] };
+    for (const child of root.c!) child.up = root;
+    for (const child of track.c ?? []) child.up = track;
+    const reader = saved_reader({ view: { w: 1366, h: 900, doc_h: 800 }, root });
+    return pick_next_control(reader, [{ node: pager, texts: ["Next"], is_link: true }], NEXT);
+  };
+  assert.equal(run({ t: "pre", r: [0, 100, 600, 200], x: 1, c: [{ t: "code", r: [0, 100, 900, 200] }] }), pager);
+  assert.equal(run({ t: "div", r: [0, 100, 600, 200], x: 1, c: [{ t: "div", r: [0, 100, 200, 200] }, { t: "div", r: [200, 100, 200, 200] }] }), undefined);
 });

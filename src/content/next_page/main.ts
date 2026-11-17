@@ -60,8 +60,8 @@ async function follow_page(host: PageHostApi, direction: FollowDirection, place:
   arm_leave_watch(host).quiet_(found.action === "scroll");
   if (found.action === "follow") {
     if (target.localName !== "link") return outcome_of(await follow_like_a_hint(place, target, open_link_));
-    if (place === "here") window.location.assign((target as HTMLLinkElement).href);
-    else await open_link_((target as HTMLLinkElement).href, place);
+    if (place !== "here") return outcome_of(await open_link_((target as HTMLLinkElement).href, place));
+    window.location.assign((target as HTMLLinkElement).href);
     return { ok: true };
   }
   const cursor = await read_item_cursor(host);
