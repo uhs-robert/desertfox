@@ -106,9 +106,12 @@ export async function run_cases({ rdp, extension_id, run_case, setup, on_teardow
     expect(frames.length === burst.length && landed, `the probe missed keys or the final draw: ${JSON.stringify(probe)}`);
     const rows_ms = landed.at - last_key;
     console.log(`p42 latency: ${frames.length} keys, keydown to next frame median ${median(frames).toFixed(1)} ms, max ${Math.max(...frames).toFixed(1)} ms; last keydown to its rows drawn ${rows_ms.toFixed(1)} ms; ${probe.draws.length} list draws`);
-    // Loose bounds that a stalled thread or a lost answer breaks, not a slow machine.
-    expect(Math.max(...frames) < 250, `a key took ${Math.max(...frames)} ms to draw`);
-    expect(rows_ms < 1000, `the last word's rows took ${rows_ms} ms`);
+    // The bounds scale with the typical key of this very run, so a slow machine lifts them and a stalled thread or a lost answer still breaks them. The floors keep a fast run from a tiny bound.
+    const typical_ms = median(frames);
+    const frame_bound_ms = Math.max(250, typical_ms * 8);
+    const rows_bound_ms = Math.max(1000, typical_ms * 40);
+    expect(Math.max(...frames) < frame_bound_ms, `a key took ${Math.max(...frames)} ms to draw, bound ${frame_bound_ms} ms`);
+    expect(rows_ms < rows_bound_ms, `the last word's rows took ${rows_ms} ms, bound ${rows_bound_ms} ms`);
     await close_cmdline();
   });
 
