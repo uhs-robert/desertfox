@@ -74,8 +74,8 @@ export type ItemPage = EndPage & {
   highlight: (item: Element, selector: string) => void;
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
-  // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, and a selector for the box to follow a page script's focus by.
-  derived?: { items_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string };
+  // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, and a fresh read when the list grew past its end.
+  derived?: { items_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean };
 };
 
 const SCROLL_PX = 50;
@@ -125,6 +125,8 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   const scroll = () => page.scroll_by(...(SCROLL[direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
   if (items.length === 0) return scroll();
+  // The finder's list can start screens below: the first press lands only on an item in view. From no item the place is the first item not above the view.
+  if (!args.selector && !place.on_item && !((boxes[place.index]?.top ?? Infinity) < page.view.innerHeight)) return scroll();
   const vertical = direction === "down" || direction === "up";
   // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction. The box goes back on the item, since a focus move may have cleared it.
   const held = boxes[place.index];
@@ -134,6 +136,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
     return scroll();
   }
   const pick = pick_item(boxes, place, direction, steps);
+  if ("end" in pick && direction === "down" && !args.selector && page.derived?.grew_()) return move_item(page, args);
   // At the last item down and up scroll on, so the page below the results stays reachable. Left and right say they are at the end.
   if ("end" in pick) return vertical ? scroll() : page.toast(`No ${direction === "right" ? "next" : "previous"} item`);
   land_on(page, items[pick.index]!, args);

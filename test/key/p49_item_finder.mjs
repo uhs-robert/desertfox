@@ -26,12 +26,6 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       return true;
     })()`);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
-  // A loaded machine can run the finder past its time budget on the first press, which answers none and scrolls. So the first press repeats, once the none answer is old, until a card has the focus. The press only repeats while no card holds it.
-  const press_j_until_a_card_has_focus = () =>
-    poll_until("a card to take the focus", async () => {
-      if (!(await focused()).startsWith("f")) await press_keys("j");
-      return (await focused()).startsWith("f");
-    }, { timeout_ms: 8000 });
   const expect_focus = (wanted) => poll_until(`focus on ${wanted}`, async () => (await focused()) === wanted);
   const READ_BOX = `(() => {
     for (const child of document.documentElement.children) {
@@ -45,38 +39,35 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const card_rect = (id) => in_active_tab(`(() => { const r = document.getElementById(${JSON.stringify(id)}).closest(".card").getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
   const near = (a, b) => ["left", "top", "width", "height"].every((key) => Math.abs(a[key] - b[key]) < 1.5);
 
-  // The helper may press j more than once on a loaded machine, so each case reads which card took the focus and counts from there.
-  const index_of_focus = async () => Number((await focused()).slice(1));
-
   await run_case("j focuses the title link of a card, j goes on to the next and k goes back", async () => {
     await open_page("page", "finder_walk", { new_tab: true });
     await add_cards();
-    await press_j_until_a_card_has_focus();
-    const first = await index_of_focus();
     await press_keys("j");
-    await expect_focus(`f${first + 1}`);
+    await expect_focus("f0");
+    await press_keys("j");
+    await expect_focus("f1");
     await press_keys("k");
-    await expect_focus(`f${first}`);
+    await expect_focus("f0");
   });
 
   await run_case("the box sits on the card and moves with it", async () => {
     await open_page("page", "finder_box", { new_tab: true });
     await add_cards();
-    await press_j_until_a_card_has_focus();
-    const first = await index_of_focus();
-    const box_on = (index) => poll_until(`the box on card ${index}`, async () => { const drawn = await in_active_tab(READ_BOX); return drawn !== null && near(drawn, await card_rect(`f${index}`)); });
-    await box_on(first);
     await press_keys("j");
-    await box_on(first + 1);
+    await expect_focus("f0");
+    const box_on = (index) => poll_until(`the box on card ${index}`, async () => { const drawn = await in_active_tab(READ_BOX); return drawn !== null && near(drawn, await card_rect(`f${index}`)); });
+    await box_on(0);
+    await press_keys("j");
+    await box_on(1);
   });
 
   await run_case("Enter opens the focused link", async () => {
     await open_page("page", "finder_enter", { new_tab: true });
     await add_cards();
-    await press_j_until_a_card_has_focus();
-    const id = await focused();
+    await press_keys("j");
+    await expect_focus("f0");
     await press_keys("-k", "Return");
-    await poll_until("the address to name the focused card", async () => (await in_active_tab("location.hash")) === `#${id}`);
+    await poll_until("the address to name the focused card", async () => (await in_active_tab("location.hash")) === "#f0");
   });
 
   await run_case("a page with no list scrolls on j and moves no focus", async () => {
@@ -94,6 +85,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     // The none answer stands for half a second, so the list comes after that.
     await sleep(1000);
     await add_cards();
-    await press_j_until_a_card_has_focus();
+    await press_keys("j");
+    await expect_focus("f0");
   });
 }
