@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { disabled_after_click, site_card, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { disabled_after_click, site_card, SUPPORT_URL, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
@@ -9,7 +9,7 @@ const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
 test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
-  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "reload_config", "warnings"]);
+  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "support", "reload_config", "warnings"]);
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
   assert.equal(row({ ...base, disabled: true }, "power").label, "DesertFox is off");
   assert.equal(row({ ...base, disabled: true }, "power").on, false);
@@ -41,6 +41,13 @@ test("a rule on the page shows its summary and links to the settings page", () =
 test("reload config greys out without the native host", () => {
   assert.equal(row({ ...base, has_native_host: false }, "reload_config").enabled, false);
   assert.equal(row({ ...base, has_native_host: false }, "reload_config").detail, "needs the native host");
+});
+
+test("the support row follows Help and links to GitHub Sponsors", () => {
+  assert.equal(row(base, "support").label, "Support DesertFox");
+  assert.equal(row(base, "support").kind, "link");
+  assert.equal(row(base, "support").enabled, true);
+  assert.equal(SUPPORT_URL, "https://github.com/sponsors/uhs-robert");
 });
 
 test("the warnings row counts", () => {

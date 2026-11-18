@@ -12,6 +12,8 @@ export const SITE_RULES_HASH = "#section=settings/general";
 // The Warnings heading on Home, where the count points.
 export const WARNINGS_HASH = "#section=home/warnings";
 
+export const SUPPORT_URL = "https://github.com/sponsors/uhs-robert";
+
 export type PopupInputs = {
   disabled: boolean;
   site: SiteState;
@@ -21,7 +23,7 @@ export type PopupInputs = {
 };
 
 export type PopupRow = {
-  id: "power" | "settings" | "home" | "site" | "rule" | "reload_config" | "warnings";
+  id: "power" | "settings" | "home" | "support" | "site" | "rule" | "reload_config" | "warnings";
   kind: "switch" | "link" | "action";
   label: string;
   // A greyed row says why in `detail`.
@@ -67,6 +69,7 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
   rows.push(
     { id: "settings", kind: "link", label: "Settings", enabled: true },
     { id: "home", kind: "link", label: "Help", enabled: true },
+    { id: "support", kind: "link", label: "Support DesertFox", enabled: true },
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }
       : { id: "reload_config", kind: "action", label: "Reload config", detail: "needs the native host", enabled: false },

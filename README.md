@@ -259,6 +259,10 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - A plain key such as `J` is lost when it lands on a tab that has not started loading. [docs/firefox-behavior.md](docs/firefox-behavior.md#working-around-the-limits) has the PDF viewer setup and the tab switch detail.
 - Keyboard drag sends synthetic input. A page that accepts only real mouse input ignores it, and a drag cannot leave its frame, tab or window.
 
+## 💛 Support
+
+DesertFox is free. If it saves you time, you can sponsor its development on [GitHub Sponsors](https://github.com/sponsors/uhs-robert). The toolbar popup has the same link. Nothing in the add-on asks for it.
+
 ## 🧭 Docs
 
 - [docs/design.md](docs/design.md): architecture, scope and what is not yet built.
