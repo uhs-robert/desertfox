@@ -290,6 +290,10 @@ test("a short heading link to a fragment of this page or with an empty address i
   assert.equal(find_items(saved_reader(short_heading_entries("h3", () => ""))).items.length, 0);
 });
 
+test("a short h3 link with a malformed address goes to another page and does not throw", () => {
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", () => "http://"))).items.length, 10);
+});
+
 test("a short h3 link to this page with a fragment, absolute or path-relative, is a section name", () => {
   assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `https://page.test/#part-${index}`))).items.length, 0);
   assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `/#part-${index}`))).items.length, 0);

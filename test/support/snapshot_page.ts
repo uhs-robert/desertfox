@@ -42,7 +42,7 @@ export function saved_reader(page: SavedPage): PageReader<SavedNode> {
     pinned_: (node) => node.p === 1,
     same_page_: (node) => {
       const own = page.url ?? "https://page.test/";
-      return new URL(node.a?.href ?? "", own).href.split("#")[0] === own.split("#")[0];
+      return URL.parse(node.a?.href ?? "", own)?.href.split("#")[0] === own.split("#")[0];
     },
     pointer_: (node) => node.k === 1,
     view_: () => ({ w: page.view.w, h: page.view.h, page_h: page.view.doc_h }),
