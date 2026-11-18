@@ -39,6 +39,7 @@ const MIN_PROSE_PARAGRAPH = 40;
 const PROSE_AROUND_CHARS = 5000;
 
 const HEADING = /^h[1-6]$/;
+const DEEP_HEADING = /^h[3-6]$/;
 
 export type FinderClock = { now_: () => number; budget_ms_: number };
 
@@ -56,12 +57,12 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   // A tile that is itself a link holds no other.
   const links_of = (item: N): N[] => (is_link(item) ? [item] : descendants(reader, item, is_link));
   const link_text = once((link: N): number => reader.text_(link).trim().length);
-  const in_heading = (link: N, item: N): boolean => {
+  const in_heading = (link: N, item: N, kind = HEADING): boolean => {
     for (const at of ancestors(reader, link)) {
       if (at === item) break;
-      if (HEADING.test(reader.tag_(at))) return true;
+      if (kind.test(reader.tag_(at))) return true;
     }
-    return HEADING.test(reader.tag_(link)) || descendants(reader, link).some((inner) => HEADING.test(reader.tag_(inner)));
+    return kind.test(reader.tag_(link)) || descendants(reader, link).some((inner) => kind.test(reader.tag_(inner)));
   };
   // A link that no heading holds names its item only from the top part of the item, so the cross references in the body of a long entry do not.
   // Both have a box: a link that names an item is shown, and so is an item.
@@ -74,8 +75,10 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     if (out_of_time()) return undefined;
     const links = links_of(item);
     const headed = links.filter((link) => in_heading(link, item));
-    const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN;
-    // A short heading that links is the name of a section (a manual's "Syntax"), so its item is no card.
+    // A short link in an h3 to h6 that goes to another page (a comment's author handle) names its item too. A section name's heading links to a fragment of this page (a manual's "Syntax"), and so does an empty address.
+    const to_other_page = (link: N) => /^[^#\s]/.test(reader.attr_(link, "href")!.trim());
+    const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN || (to_other_page(link) && in_heading(link, item, DEEP_HEADING));
+    // A short heading that links is the name of a section, so its item is no card.
     if (headed.length > 0 && !headed.some(long_enough)) return undefined;
     // A title under a picture (a video thumbnail) starts low in its tile, and links where the picture links.
     // An empty, "#" or script address goes nowhere, so two links that share it share no target.
