@@ -7,7 +7,7 @@ const page_hash = (id: (typeof PAGES)[number]["id"]) => PAGES.find((page) => pag
 
 export const HOME_HASH = page_hash("home");
 export const SETTINGS_HASH = page_hash("settings");
-// The `site_rules` row on the settings page carries the id `settings-site-rules`. A test keeps the slug in step with the page, which this file cannot import.
+// The settings page draws an empty anchor with the id `settings-site-rules` at the top of the General rows, because the rows load after the route lands. A test keeps the slug in step with the page, which this file cannot import.
 export const SITE_RULES_HASH = "#section=settings/site-rules";
 // The Warnings heading on Home, where the count points.
 export const WARNINGS_HASH = "#section=home/warnings";
