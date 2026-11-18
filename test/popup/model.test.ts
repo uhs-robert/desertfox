@@ -9,7 +9,7 @@ const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
 test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
-  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "reload_config", "warnings", "version"]);
+  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "reload_config", "warnings"]);
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
   assert.equal(row({ ...base, disabled: true }, "power").label, "DesertFox is off");
   assert.equal(row({ ...base, disabled: true }, "power").on, false);
@@ -43,9 +43,8 @@ test("reload config greys out without the native host", () => {
   assert.equal(row({ ...base, has_native_host: false }, "reload_config").detail, "needs the native host");
 });
 
-test("the warnings row counts and the version row shows the manifest version", () => {
+test("the warnings row counts", () => {
   assert.equal(row(base, "warnings").label, "Warnings (2)");
-  assert.equal(row(base, "version").label, "Version 1.2.3");
 });
 
 test("the links land on Home, Settings and the Warnings heading", () => {

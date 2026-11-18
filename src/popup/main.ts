@@ -87,17 +87,18 @@ function header_element(version: string, disabled: boolean): HTMLElement {
 }
 
 function power_element(row: PopupRow): HTMLElement {
-  const group = element("div", "desertfox-popup-segments");
-  group.setAttribute("role", "radiogroup");
-  group.setAttribute("aria-label", row.label);
+  const group = element("fieldset", "desertfox-popup-segments");
+  group.append(element("legend", "desertfox-popup-legend", "DesertFox"));
   for (const [name, is_on] of [["On", true], ["Off", false]] as const) {
-    const segment = element("button", "desertfox-popup-segment", name) as HTMLButtonElement;
-    segment.type = "button";
-    segment.setAttribute("role", "radio");
-    segment.setAttribute("aria-checked", String(row.on === is_on));
-    // The chosen segment is the current state, so a click on it changes nothing.
-    if (row.on !== is_on) segment.addEventListener("click", () => void act(row));
-    group.append(segment);
+    const label = element("label", "desertfox-popup-segment");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "power";
+    radio.checked = row.on === is_on;
+    // The chosen segment is the current state, so only the other one fires a change.
+    radio.addEventListener("change", () => void act(row));
+    label.append(radio, element("span", "desertfox-popup-segment-text", name));
+    group.append(label);
   }
   return group;
 }
@@ -129,13 +130,16 @@ async function draw(): Promise<void> {
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
   const elements = [header_element(inputs.version, inputs.disabled), power_element(by_id("power")), card_element(rows, inputs)];
-  for (const id of ["settings", "home", "reload_config", "warnings"] as const) elements.push(row_button(by_id(id), id === "reload_config" ? "" : "desertfox-popup-link"));
+  for (const id of ["settings", "home", "reload_config", "warnings"] as const) elements.push(row_button(by_id(id), "desertfox-popup-link"));
   if (notice !== "") {
     const line = element("div", "desertfox-popup-notice", notice);
     line.setAttribute("role", "status");
     elements.push(line);
   }
+  // A redraw replaces the radios, so a keyboard user keeps the focus on the group.
+  const had_focus = document.activeElement instanceof HTMLInputElement && document.activeElement.name === "power";
   root.replaceChildren(...elements);
+  if (had_focus) root.querySelector<HTMLInputElement>("input[name=power]:checked")?.focus();
 }
 
 follow_theme(":root, .desertfox-popup");
