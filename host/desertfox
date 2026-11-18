@@ -27,10 +27,9 @@ The mail reads need --app thunderbird and the DesertBird share settings, all off
   desertfox --app thunderbird mail read <id> [--json]                    needs bridge_share_headers and bridge_share_bodies
   desertfox --app thunderbird mail attachments <id> [--json]             needs bridge_share_attachments
 
-Sender text (from, to, subject, content type, the body, attachment names and types) prints only between
+Outside text (folder names and paths, from, to, subject, content type, the body, attachment names and types) prints only between
 `<<<UNTRUSTED mail <what> nonce=<n>>>>` and `<<<END <n>>>>`, with a new random nonce for each print, so a reader can
-tell where text from outside starts and ends. With --json the envelope lines wrap the JSON. `folders` carries no
-sender text and prints bare. A reply that dropped rows or cut the body says `truncated`.
+tell where text from outside starts and ends. With --json the envelope lines wrap the JSON. A reply that dropped rows or cut the body says `truncated`.
 
 `run` joins its arguments into the one command line the `:` line takes. A single argument is used as it is, so
 `desertfox run "scroll.lines 3"` works. Several arguments are quoted for the line, so `desertfox run tab.switch "my tab"`
@@ -370,11 +369,12 @@ def mail_folders(words):
     reply = ask({"verb": "folders"})
     if reply.get("ok") is not True:
         return fail(reply.get("message") or "the bridge did not list the folders")
+    # Feed titles, newsgroups and shared IMAP folders let third parties name folders, so the list is outside text too.
     if words:
-        print(json.dumps(without_ok(reply), indent=2))
+        print_untrusted("folders", json.dumps(without_ok(reply), indent=2))
         return EXIT_DONE
-    for folder in reply.get("folders", []):
-        print("\t".join(one_line(folder.get(name, "")) for name in ("id", "unread", "total", "account", "path")))
+    rows = ("\t".join(one_line(folder.get(name, "")) for name in ("id", "unread", "total", "account", "path")) + "\n" for folder in reply.get("folders", []))
+    print_untrusted("folders", "".join(rows))
     note_truncated(reply)
     return EXIT_DONE
 
