@@ -155,3 +155,22 @@ test("a kept link that left the page or its item is looked up again", () => {
   assert.equal(row.link_of_(first as unknown as Element), link as unknown as Element);
   assert.equal(state.finds, 4);
 });
+
+test("a second timeout in a row stands like a none answer, so a held j on a slow page does not run the finder on every press", () => {
+  const { state, row } = setup([]);
+  state.fails = "timeout";
+  row.items_();
+  row.items_();
+  row.items_();
+  assert.equal(state.finds, 2);
+  state.clock += NONE_RECHECK_MS;
+  state.fails = "";
+  state.answer = [item("a")];
+  assert.deepEqual(names(row.items_()), ["a"]);
+  // A run that finishes starts the count again, so the next lone timeout is not kept.
+  state.url = "https://a.test/next";
+  state.fails = "timeout";
+  row.items_();
+  row.items_();
+  assert.equal(state.finds, 5);
+});
