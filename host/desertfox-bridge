@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Bridge host for the DesertFox Firefox extension.
+"""Bridge host for the DesertFox Firefox extension and the DesertBird Thunderbird extension.
 
-Firefox starts it over `connectNative` and keeps it alive while the extension holds the port. Frames are a 4-byte
+The app starts it over `connectNative` and keeps it alive while the extension holds the port. One script serves both
+apps through two manifests, and each app's host keeps to its own runtime folder (see APPS): $XDG_RUNTIME_DIR/desertfox
+for Firefox, $XDG_RUNTIME_DIR/desertbird for Thunderbird. The paths below name the Firefox folder. Frames are a 4-byte
 native-endian length and UTF-8 JSON, both ways. The host takes the lock first, then says {"ready": true,
 "host_version": 1, "release_version": "0.1.22"} once. It takes three verbs from the extension and no others:
 
@@ -135,11 +137,36 @@ def log(text):
     sys.stderr.flush()
 
 
-def runtime_paths():
+# One script serves both apps, each through its own manifest. Each app gets its own runtime folder, so its lock, socket
+# and state never meet the other's. The Firefox folder keeps its name from before Thunderbird, so an update leaves a
+# running Firefox bridge and the scripts that read its folder working. The tab verbs, tab events and the tab caches
+# under ~/.cache/desertfox belong to Firefox alone, so a Thunderbird host never prunes or deletes Firefox's images.
+APPS = {
+    "firefox": {"folder": "desertfox", "manifest": "desertfox_bridge", "extension_id": "desertfox@uhs-robert", "serves_tabs": True},
+    "thunderbird": {"folder": "desertbird", "manifest": "desertbird_bridge", "extension_id": "desertbird@uhs-robert", "serves_tabs": False},
+}
+
+
+def app_from_argv(argv):
+    """The app that started this host. Firefox and Thunderbird pass the manifest path, then the extension id. With no
+    arguments (a run by hand) it is Firefox, as before Thunderbird. A name or id the host does not know, or a manifest
+    and id that name different apps, raises ValueError: guessing would put one app's host on the other's socket."""
+    if not argv:
+        return "firefox"
+    manifest_name = os.path.basename(argv[0])
+    by_manifest = [name for name, app in APPS.items() if manifest_name == app["manifest"] + ".json"]
+    if not by_manifest:
+        raise ValueError("unknown manifest %r" % manifest_name)
+    if len(argv) > 1 and argv[1] != APPS[by_manifest[0]]["extension_id"]:
+        raise ValueError("extension %r does not match manifest %r" % (argv[1], manifest_name))
+    return by_manifest[0]
+
+
+def runtime_paths(app):
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
     if not os.path.isabs(runtime_dir):
         raise OSError("XDG_RUNTIME_DIR is not set to an absolute path")
-    folder = os.path.join(runtime_dir, "desertfox")
+    folder = os.path.join(runtime_dir, APPS[app]["folder"])
     return {name: os.path.join(folder, name) for name in ("state.json", "theme.json", "bridge.sock", "bridge.lock")} | {"folder": folder}
 
 
@@ -231,8 +258,9 @@ class ThemeKeeper:
 class BridgeState:
     """The latest mode, shared between the port thread that writes it and the socket threads that read it."""
 
-    def __init__(self, state_path, pid, start):
+    def __init__(self, state_path, pid, start, app="firefox"):
         self.state_path = state_path
+        self.app = app
         self.pid = pid
         self.start = start
         self.seq = 0
@@ -523,8 +551,9 @@ class ExtensionLink:
     """The host's way to ask the extension something. Each request gets an id, and the reply that carries the id wakes the
     one connection thread that is waiting for it, so two clients never see each other's answers."""
 
-    def __init__(self, stdout):
+    def __init__(self, stdout, serves_tabs=True):
         self.stdout = stdout
+        self.serves_tabs = serves_tabs
         self.write_guard = threading.Lock()
         self.pending_guard = threading.Condition()
         self.pending = {}
@@ -572,7 +601,8 @@ class ExtensionLink:
         try:
             if not waiting.done.wait(timeout_s):
                 return {"ok": False, "message": "the extension did not answer in time"}
-            forget_caches_if_sharing_off(waiting.reply)
+            if self.serves_tabs:
+                forget_caches_if_sharing_off(waiting.reply)
             return waiting.reply
         finally:
             self.forget(waiting)
@@ -933,6 +963,8 @@ def answer(request, state, link, limiter):
             return RATE_LIMITED
         return list_result(link.ask("list", {}, REQUEST_TIMEOUT_S))
     if verb in TAB_VERBS:
+        if not APPS[state.app]["serves_tabs"]:
+            return {"ok": False, "message": "tab verbs need --app firefox"}
         problem = tab_request_problem(verb, request)
         if problem:
             return {"ok": False, "message": problem}
@@ -1083,7 +1115,7 @@ def serve(stdin, link, state, hub):
         verb = message.get("verb") if isinstance(message, dict) else None
         if verb == "reply":
             link.answered(message)
-        elif verb == "event":
+        elif verb == "event" and APPS[state.app]["serves_tabs"]:
             take_event(message, hub)
         elif verb == "mode":
             take_mode(message, state, hub)
@@ -1100,9 +1132,10 @@ def remove_quietly(path):
         pass
 
 
-def main():
+def main(argv):
     try:
-        paths = runtime_paths()
+        app = app_from_argv(argv)
+        paths = runtime_paths(app)
         pid = os.getpid()
         start = process_start(pid)
         os.makedirs(paths["folder"], mode=0o700, exist_ok=True)
@@ -1126,11 +1159,13 @@ def main():
         # A write that a dead host cut short leaves its temp file. theme.json stays: it is the one file that outlives a host.
         for leftover in glob.glob(os.path.join(paths["folder"], ".state.*.tmp")):
             remove_quietly(leftover)
-        prune_thumbnails(())
-        prune_cache(favicon_dir(), ())
+        serves_tabs = APPS[app]["serves_tabs"]
+        if serves_tabs:
+            prune_thumbnails(())
+            prune_cache(favicon_dir(), ())
         listener = bind_socket(paths["bridge.sock"])
-        state = BridgeState(paths["state.json"], pid, start)
-        link = ExtensionLink(sys.stdout.buffer)
+        state = BridgeState(paths["state.json"], pid, start, app)
+        link = ExtensionLink(sys.stdout.buffer, serves_tabs)
         hub = EventHub()
         threading.Thread(target=accept_loop, args=(listener, state, link, hub), daemon=True).start()
         serve(sys.stdin.buffer, link, state, hub)
@@ -1158,4 +1193,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

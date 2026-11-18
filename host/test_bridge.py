@@ -1,4 +1,5 @@
 """Tests of the bridge host: the lock, the socket, the state file, the port lifecycle and bad input. Real processes, a temporary XDG_RUNTIME_DIR."""
+import fcntl
 import json
 import os
 import select
@@ -17,6 +18,10 @@ import unittest.mock
 from host_under_test import load_host
 
 HOST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desertfox-bridge")
+
+# The arguments Firefox and Thunderbird pass a native host: the manifest path, then the extension id.
+FIREFOX_ARGV = ("/home/u/.mozilla/native-messaging-hosts/desertfox_bridge.json", "desertfox@uhs-robert")
+THUNDERBIRD_ARGV = ("/home/u/.mozilla/native-messaging-hosts/desertbird_bridge.json", "desertbird@uhs-robert")
 
 MODE = {"verb": "mode", "id": "insert", "label": "INSERT", "tab_id": 17, "window_id": 3, "private": False}
 PRIVATE_MODE = {"verb": "mode", "id": "normal", "label": "NORMAL", "private": True}
@@ -46,11 +51,11 @@ def frame(message):
 class Host:
     """A bridge host process. With wait_ready False the constructor returns at once, for a host that is meant to wait for the lock."""
 
-    def __init__(self, runtime_dir, wait_ready=True, cache_home=None):
+    def __init__(self, runtime_dir, wait_ready=True, cache_home=None, argv=()):
         env = dict(os.environ, XDG_RUNTIME_DIR=runtime_dir)
         # Never the real cache: a host that starts without one prunes whatever cache_home holds.
         env["XDG_CACHE_HOME"] = cache_home if cache_home is not None else os.path.join(runtime_dir, "cache")
-        self.process = subprocess.Popen([sys.executable, HOST_PATH], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, bufsize=0)
+        self.process = subprocess.Popen([sys.executable, HOST_PATH, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, bufsize=0)
         self.ready = self.read_ready() if wait_ready else None
 
     def read_frame(self):
@@ -125,8 +130,8 @@ class BridgeTestCase(unittest.TestCase):
         self.hosts = []
         self.addCleanup(lambda: [host.kill() for host in self.hosts])
 
-    def start(self, wait_ready=True):
-        host = Host(self.runtime, wait_ready, self.cache_home)
+    def start(self, wait_ready=True, argv=()):
+        host = Host(self.runtime, wait_ready, self.cache_home, argv)
         self.hosts.append(host)
         return host
 
@@ -154,11 +159,11 @@ class BridgeTestCase(unittest.TestCase):
             time.sleep(0.01)
         self.fail("%s was not deleted" % path)
 
-    def ask(self, request, raw=None):
+    def ask(self, request, raw=None, socket_path=None):
         """One request line on a new connection, the decoded reply line."""
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(liveness_s())
-            client.connect(self.socket_path)
+            client.connect(socket_path or self.socket_path)
             client.sendall(raw if raw is not None else json.dumps(request).encode() + b"\n")
             data = b""
             while not data.endswith(b"\n"):
@@ -1065,6 +1070,166 @@ class LinkTest(unittest.TestCase):
         link.say_ready()
         self.assertEqual(link.ask("run", {"command": "x"}, 1), {"ok": False, "message": "the extension is not connected"})
         self.assertEqual(link.pending, {})
+
+
+class AppFromArgvTest(unittest.TestCase):
+    def setUp(self):
+        self.module = load_host("desertfox-bridge")
+
+    def test_each_manifest_and_its_own_extension_pick_its_app(self):
+        self.assertEqual(self.module.app_from_argv(list(FIREFOX_ARGV)), "firefox")
+        self.assertEqual(self.module.app_from_argv(list(THUNDERBIRD_ARGV)), "thunderbird")
+        self.assertEqual(self.module.app_from_argv([THUNDERBIRD_ARGV[0]]), "thunderbird")
+
+    def test_no_arguments_is_firefox_as_before(self):
+        self.assertEqual(self.module.app_from_argv([]), "firefox")
+
+    def test_an_unknown_or_crossed_value_is_refused_never_guessed(self):
+        for argv in (
+            ["/x/other_bridge.json", "desertfox@uhs-robert"],
+            ["/x/desertfox_bridge", "desertfox@uhs-robert"],
+            [""],
+            [FIREFOX_ARGV[0], "desertbird@uhs-robert"],
+            [THUNDERBIRD_ARGV[0], "desertfox@uhs-robert"],
+            [THUNDERBIRD_ARGV[0], "someone@else"],
+            [THUNDERBIRD_ARGV[0], ""],
+        ):
+            with self.assertRaises(ValueError, msg=argv):
+                self.module.app_from_argv(argv)
+
+    def test_the_firefox_paths_are_the_ones_shipped_before_thunderbird(self):
+        with unittest.mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/run/user/1"}):
+            paths = self.module.runtime_paths("firefox")
+            self.assertEqual(paths["folder"], "/run/user/1/desertfox")
+            self.assertEqual(paths["bridge.sock"], "/run/user/1/desertfox/bridge.sock")
+            self.assertEqual(paths["bridge.lock"], "/run/user/1/desertfox/bridge.lock")
+            self.assertEqual(self.module.runtime_paths("thunderbird")["folder"], "/run/user/1/desertbird")
+
+
+class TwoAppsTest(BridgeTestCase):
+    """A Firefox host and a Thunderbird host from one script, each in its own runtime folder."""
+
+    def setUp(self):
+        super().setUp()
+        self.bird_dir = os.path.join(self.runtime, "desertbird")
+        self.bird_socket = os.path.join(self.bird_dir, "bridge.sock")
+        self.bird_lock = os.path.join(self.bird_dir, "bridge.lock")
+        self.bird_state = os.path.join(self.bird_dir, "state.json")
+
+    def pid_on(self, socket_path, host, mode):
+        """Sends a mode to the host and returns the pid the state verb on `socket_path` names, once that mode shows."""
+        host.send(mode)
+        deadline = time.monotonic() + liveness_s()
+        while time.monotonic() < deadline:
+            state = self.ask({"verb": "state"}, socket_path=socket_path)["state"]
+            if state and state["mode"]["id"] == mode["id"]:
+                return state["host"]["pid"]
+            time.sleep(0.01)
+        self.fail("the mode never showed on %s" % socket_path)
+
+    def assert_lock_held(self, path):
+        descriptor = os.open(path, os.O_RDWR)
+        try:
+            with self.assertRaises(BlockingIOError, msg=path):
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(descriptor)
+
+    def test_a_thunderbird_host_keeps_to_its_own_folder(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        self.assertEqual(host.ready, {"ready": True, "host_version": 1, "release_version": "dev"})
+        self.assertEqual(self.pid_on(self.bird_socket, host, MODE), host.process.pid)
+        with open(self.bird_state, encoding="utf-8") as state_file:
+            self.assertEqual(json.load(state_file)["mode"]["id"], "insert")
+        self.assertFalse(os.path.exists(self.state_dir), "a Thunderbird host makes nothing in the Firefox folder")
+        self.assertEqual(stat.S_IMODE(os.stat(self.bird_dir).st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(os.stat(self.bird_socket).st_mode), 0o600)
+        host.close_stdin()
+        self.assertEqual(host.wait(), 0)
+        self.assertEqual(sorted(os.listdir(self.bird_dir)), ["bridge.lock"])
+
+    def test_a_firefox_host_started_by_firefox_uses_the_shipped_folder(self):
+        host = self.start(argv=FIREFOX_ARGV)
+        self.assertEqual(self.pid_on(self.socket_path, host, MODE), host.process.pid)
+        self.assertFalse(os.path.exists(self.bird_dir))
+
+    def test_both_hosts_start_at_once_and_neither_waits_on_the_other(self):
+        started = time.monotonic()
+        firefox = self.start(wait_ready=False, argv=FIREFOX_ARGV)
+        thunderbird = self.start(wait_ready=False, argv=THUNDERBIRD_ARGV)
+        self.assertEqual(firefox.read_ready()["ready"], True)
+        self.assertEqual(thunderbird.read_ready()["ready"], True)
+        self.assertLess(time.monotonic() - started, scaled_s(2.5), "a host that waited on the other's lock would take 3 s")
+        self.assertEqual(self.pid_on(self.socket_path, firefox, MODE), firefox.process.pid)
+        self.assertEqual(self.pid_on(self.bird_socket, thunderbird, dict(MODE, id="normal", label="NORMAL")), thunderbird.process.pid)
+        self.assert_lock_held(self.lock_path)
+        self.assert_lock_held(self.bird_lock)
+
+    def test_a_second_thunderbird_host_exits_and_leaves_both_running_hosts_alone(self):
+        firefox = self.start(argv=FIREFOX_ARGV)
+        thunderbird = self.start(argv=THUNDERBIRD_ARGV)
+        self.pid_on(self.socket_path, firefox, MODE)
+        firefox_socket = os.stat(self.socket_path).st_ino
+        bird_socket = os.stat(self.bird_socket).st_ino
+        second = self.start(wait_ready=False, argv=THUNDERBIRD_ARGV)
+        self.assertEqual(second.process.wait(timeout=liveness_s()), 1)
+        self.assertEqual(second.process.stdout.read(), b"", "the second host must not say ready")
+        self.assertIn(b"another bridge host", second.process.stderr.read())
+        self.assertEqual((os.stat(self.socket_path).st_ino, os.stat(self.bird_socket).st_ino), (firefox_socket, bird_socket))
+        self.assertEqual(self.ask({"verb": "state"})["state"]["host"]["pid"], firefox.process.pid)
+        self.assertEqual(self.pid_on(self.bird_socket, thunderbird, MODE), thunderbird.process.pid)
+
+    def test_a_dead_hosts_socket_is_replaced_without_touching_the_other_apps_live_socket(self):
+        for dead_argv, dead_socket, live_argv, live_socket in (
+            (THUNDERBIRD_ARGV, self.bird_socket, FIREFOX_ARGV, self.socket_path),
+            (FIREFOX_ARGV, self.socket_path, THUNDERBIRD_ARGV, self.bird_socket),
+        ):
+            with self.subTest(dead=dead_argv[1]):
+                live = self.start(argv=live_argv)
+                dead = self.start(argv=dead_argv)
+                dead.process.kill()
+                dead.process.wait()
+                self.assertTrue(os.path.exists(dead_socket), "a killed host leaves its socket behind")
+                live_inode = os.stat(live_socket).st_ino
+                replacement = self.start(argv=dead_argv)
+                self.assertEqual(self.pid_on(dead_socket, replacement, MODE), replacement.process.pid)
+                self.assertEqual(os.stat(live_socket).st_ino, live_inode)
+                self.assertEqual(self.pid_on(live_socket, live, MODE), live.process.pid)
+                for host in (live, replacement):
+                    host.close_stdin()
+                    self.assertEqual(host.wait(), 0)
+
+    def test_unknown_or_crossed_arguments_start_no_host_and_leave_a_running_one_alone(self):
+        firefox = self.start(argv=FIREFOX_ARGV)
+        inode = os.stat(self.socket_path).st_ino
+        for argv in (("/x/other_bridge.json", "desertfox@uhs-robert"), (FIREFOX_ARGV[0], "desertbird@uhs-robert"), (THUNDERBIRD_ARGV[0], "desertfox@uhs-robert")):
+            with self.subTest(argv=argv):
+                refused = self.start(wait_ready=False, argv=argv)
+                started = time.monotonic()
+                self.assertEqual(refused.process.wait(timeout=liveness_s()), 1)
+                self.assertLess(time.monotonic() - started, scaled_s(2.5), "it stops before it takes any lock")
+                self.assertEqual(refused.process.stdout.read(), b"")
+                self.assertIn(b"cannot start", refused.process.stderr.read())
+        self.assertFalse(os.path.exists(self.bird_dir))
+        self.assertEqual(os.stat(self.socket_path).st_ino, inode)
+        self.assertEqual(self.pid_on(self.socket_path, firefox, MODE), firefox.process.pid)
+
+    def test_a_thunderbird_host_has_no_tab_verbs_and_never_touches_the_firefox_tab_caches(self):
+        old_thumbnail = os.path.join(self.cache_home, "desertfox", "bridge-thumbs", "a" * 64 + ".jpg")
+        os.makedirs(os.path.dirname(old_thumbnail))
+        with open(old_thumbnail, "wb") as image:
+            image.write(b"\xff\xd8")
+        month_ago = time.time() - 30 * 24 * 3600
+        os.utime(old_thumbnail, (month_ago, month_ago))
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        for request in ({"verb": "tabs"}, {"verb": "capture"}, {"verb": "close", "tab_id": 1}):
+            self.assertEqual(self.ask(request, socket_path=self.bird_socket), {"ok": False, "message": "tab verbs need --app firefox"})
+        host.send({"verb": "event", "event": "tabs_off"})
+        # Messages are taken in order, so once this mode shows the event before it was handled.
+        self.pid_on(self.bird_socket, host, MODE)
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+        self.assertTrue(os.path.exists(old_thumbnail), "neither the start prune nor tabs_off may delete a Firefox image")
 
 
 class AcceptErrorTest(BridgeTestCase):

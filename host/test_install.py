@@ -137,6 +137,10 @@ class InstallCase(unittest.TestCase):
     def bridge_manifest_path(self):
         return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertfox_bridge.json")
 
+    @property
+    def thunderbird_manifest_path(self):
+        return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertbird_bridge.json")
+
     def home_files(self):
         found = []
         for base, _, names in os.walk(self.home):
@@ -177,6 +181,31 @@ class ReleaseChannelTest(InstallCase):
         self.assertEqual(manifest["path"], self.bridge_path)
         self.assertEqual(manifest["type"], "stdio")
         self.assertEqual(manifest["allowed_extensions"], ["desertfox@uhs-robert"])
+
+    def test_the_thunderbird_manifest_starts_the_same_bridge_for_desertbird_only(self):
+        self.serve_release()
+        done = self.run_install(*self.release_args())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(self.thunderbird_manifest_path) as file:
+            manifest = json.load(file)
+        self.assertEqual(manifest, {
+            "name": "desertbird_bridge", "description": "DesertBird bridge to a desktop shell", "path": self.bridge_path,
+            "type": "stdio", "allowed_extensions": ["desertbird@uhs-robert"],
+        })
+        for path in (self.manifest_path, self.bridge_manifest_path):
+            with open(path) as file:
+                self.assertEqual(json.load(file)["allowed_extensions"], ["desertfox@uhs-robert"], "Thunderbird gets no Firefox manifest")
+        self.assertIn("Return to Firefox or Thunderbird", done.stdout)
+
+    def test_the_manifests_match_what_self_update_writes(self):
+        # The updater counts an install as current only when its manifests match these bytes, so a drift here makes every update rewrite them.
+        self.serve_release()
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
+        updater = load_host()
+        scripts = {name: os.path.join(os.path.dirname(self.host_path), name) for name in updater.UPDATE_SCRIPTS}
+        for name in updater.MANIFESTS:
+            with open(os.path.join(os.path.dirname(self.manifest_path), name + ".json"), "rb") as file:
+                self.assertEqual(file.read(), updater.manifest_bytes(name, scripts), name)
 
     def test_the_command_line_is_installed_and_linked_into_local_bin(self):
         self.serve_release()
@@ -270,7 +299,7 @@ class ReleaseChannelTest(InstallCase):
         self.serve_release()
         self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
         self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
-        self.assertEqual(len(self.home_files()), 6)
+        self.assertEqual(len(self.home_files()), 7)
 
 
 class MainChannelTest(InstallCase):
@@ -282,6 +311,7 @@ class MainChannelTest(InstallCase):
         self.assertEqual(self.curl_urls(), [f"{MAIN_BASE}/{name}" for name in ("desertfox-host", "desertfox-bridge", "desertfox")])
         self.assertTrue(os.path.isfile(self.manifest_path))
         self.assertTrue(os.path.isfile(self.bridge_manifest_path))
+        self.assertTrue(os.path.isfile(self.thunderbird_manifest_path))
 
     def test_channel_flag_overrides_a_version(self):
         self.serve_main()

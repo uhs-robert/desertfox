@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs the DesertFox native-messaging host for Firefox on Linux.
+# Installs the DesertFox native-messaging hosts on Linux, for Firefox and for the DesertBird Thunderbird extension.
 #
 #   install.sh <version> --sha256 desertfox-host=<hex> --sha256 desertfox-bridge=<hex> --sha256 desertfox=<hex>
 #   install.sh main
@@ -11,13 +11,14 @@
 # ignores the hashes.
 # Installs two hosts, the config host and the bridge host, and the `desertfox` command line for the bridge. Writes only
 # $XDG_DATA_HOME/desertfox/desertfox-host, desertfox-bridge and desertfox (default ~/.local/share/desertfox),
-# ~/.mozilla/native-messaging-hosts/desertfox_host.json and desertfox_bridge.json, the symlink ~/.local/bin/desertfox,
-# and the lock file update.lock in the data folder. While it writes, it holds that lock, which the host's self_update takes too, so an install
+# ~/.mozilla/native-messaging-hosts/desertfox_host.json, desertfox_bridge.json and desertbird_bridge.json (the
+# Thunderbird one), the symlink ~/.local/bin/desertfox, and the lock file update.lock in the data folder. While it writes, it holds that lock, which the host's self_update takes too, so an install
 # and an update never stage the same .new files at once. A second one fails with "update running".
 set -eu
 
 repo="uhs-robert/desertfox"
 extension_id="desertfox@uhs-robert"
+thunderbird_extension_id="desertbird@uhs-robert"
 
 fail() {
     echo "desertfox install: $*" >&2
@@ -102,10 +103,13 @@ main() {
 
     mkdir -p "$data_dir" "$manifest_dir"
     take_update_lock
-    install_host desertfox-host desertfox_host "DesertFox config files and saved edits"
-    install_host desertfox-bridge desertfox_bridge "DesertFox bridge to a desktop shell"
+    install_host desertfox-host
+    install_manifest desertfox_host desertfox-host "DesertFox config files and saved edits" "$extension_id"
+    install_host desertfox-bridge
+    install_manifest desertfox_bridge desertfox-bridge "DesertFox bridge to a desktop shell" "$extension_id"
+    install_manifest desertbird_bridge desertfox-bridge "DesertBird bridge to a desktop shell" "$thunderbird_extension_id"
     install_cli
-    echo "Return to Firefox and press the permission button on the DesertFox page."
+    echo "Return to Firefox or Thunderbird and press the permission button on the extension's page."
 }
 
 # Holds the lock on file descriptor 9 until this script exits, so the lock spans the staging and the renames. The file
@@ -159,16 +163,24 @@ fetch_host() {
     head -n 1 "$work_dir/$script" | grep -q '^#!.*python3' || fail "the downloaded $script is not a host script. Nothing was installed."
 }
 
-# Writes one fetched host and its native-messaging manifest.
+# Writes one fetched host.
 install_host() {
     script="$1"
-    name="$2"
-    description="$3"
     host_path="$data_dir/$script"
-    manifest_path="$manifest_dir/$name.json"
     cp "$work_dir/$script" "$host_path.new"
     chmod 755 "$host_path.new"
     mv -f "$host_path.new" "$host_path"
+    echo "Installed the host at $host_path"
+}
+
+# Writes one native-messaging manifest that starts an installed host for one extension. The bridge host has two, one
+# per app, and tells the apps apart by the manifest name the app passes it.
+install_manifest() {
+    name="$1"
+    host_path="$data_dir/$2"
+    description="$3"
+    allowed_id="$4"
+    manifest_path="$manifest_dir/$name.json"
     python3 -I -c '
 import json, sys
 manifest = {
@@ -179,9 +191,8 @@ manifest = {
     "allowed_extensions": [sys.argv[3]],
 }
 print(json.dumps(manifest, indent=2))
-    ' "$name" "$host_path" "$extension_id" "$description" >"$manifest_path.new"
+    ' "$name" "$host_path" "$allowed_id" "$description" >"$manifest_path.new"
     mv -f "$manifest_path.new" "$manifest_path"
-    echo "Installed the host at $host_path"
     echo "Installed the manifest at $manifest_path"
 }
 

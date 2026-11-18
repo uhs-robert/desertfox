@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Command line for the DesertFox bridge host. Python 3.9+, stdlib only.
 
+  desertfox [--app firefox|thunderbird] <verb> ...
+
   desertfox run [--tab <id>] <command> [args...]   run one command in the focused Firefox window, or in a tab
   desertfox list [--json]             the commands the bridge allows, with their params
   desertfox state [--json]            the mode the bridge last saw
@@ -21,9 +23,10 @@ The tab commands need `bridge_share_tabs` on in DesertFox, and never see a priva
 `desertfox run "scroll.lines 3"` works. Several arguments are quoted for the line, so `desertfox run tab.switch "my tab"`
 keeps the space.
 
-It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock, one JSON line out and one line back, or for `events` the lines
-of the stream. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the
-bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
+It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock for Firefox or $XDG_RUNTIME_DIR/desertbird/bridge.sock for
+Thunderbird, one JSON line out and one line back, or for `events` the lines of the stream. Without --app it takes the
+bridge that is running, Firefox when neither is, and refuses with exit 2 when both are. It prints plain text, errors to
+stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
 `-h` or `--help` after a verb prints the usage and sends nothing. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
 behind, so a caller that wants the stream for good runs it again.
 """
@@ -50,7 +53,8 @@ LOCK_RETRY_S = 5
 # The same shape as THEME_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
 THEME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
-USAGE = """usage: desertfox run [--tab <id>] <command> [args...]
+USAGE = """usage: desertfox [--app firefox|thunderbird] <verb> ...
+       desertfox run [--tab <id>] <command> [args...]
        desertfox list [--json]
        desertfox state [--json]
        desertfox events
@@ -70,15 +74,71 @@ class NoListener(BridgeDown):
     """Nothing listens at the socket: the host is not running, or is about to start."""
 
 
-def bridge_folder():
+# The runtime folder of each app's bridge host, the same names as APPS in desertfox-bridge.
+APP_FOLDERS = {"firefox": "desertfox", "thunderbird": "desertbird"}
+# The app whose bridge this run talks to, set once by main.
+app = "firefox"
+
+
+def bridge_folder(app_name=None):
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
     if not os.path.isabs(runtime_dir):
         raise BridgeDown("XDG_RUNTIME_DIR is not set, so there is no bridge socket")
-    return os.path.join(runtime_dir, "desertfox")
+    return os.path.join(runtime_dir, APP_FOLDERS[app_name or app])
 
 
-def socket_path():
-    return os.path.join(bridge_folder(), "bridge.sock")
+def socket_path(app_name=None):
+    return os.path.join(bridge_folder(app_name), "bridge.sock")
+
+
+def has_socket_file(app_name):
+    try:
+        return os.path.exists(socket_path(app_name))
+    except BridgeDown:
+        return False
+
+
+def is_listening(app_name):
+    """True when a host accepts a connection on the app's socket. A leftover socket file of a dead host does not count."""
+    try:
+        path = socket_path(app_name)
+    except BridgeDown:
+        return False
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+        probe.settimeout(1)
+        try:
+            probe.connect(path)
+            return True
+        except OSError:
+            return False
+
+
+def take_app(argv):
+    """(the app named by a leading --app, the other words). The option counts only in front of the verb, so a run
+    argument that looks like it is left alone."""
+    if argv and argv[0] == "--app":
+        if len(argv) < 2:
+            raise Usage("--app needs a value: firefox or thunderbird")
+        named, rest = argv[1], argv[2:]
+    elif argv and argv[0].startswith("--app="):
+        named, rest = argv[0][len("--app="):], argv[1:]
+    else:
+        return None, argv
+    if named not in APP_FOLDERS:
+        raise Usage("--app is firefox or thunderbird, not '%s'" % named)
+    return named, rest
+
+
+def running_app():
+    """The app of the one bridge that is running, Firefox when none is. Both running is a usage error, because a call
+    meant for one app must never land in the other."""
+    # Only two socket files call for a probe: a lone one is used as it is, so a Firefox-only setup works as before.
+    running = [name for name in APP_FOLDERS if has_socket_file(name)]
+    if len(running) > 1:
+        running = [name for name in running if is_listening(name)]
+    if len(running) > 1:
+        raise Usage("both the Firefox and the Thunderbird bridge are running. Pick one with --app firefox or --app thunderbird")
+    return running[0] if running else "firefox"
 
 
 def connected(request, timeout_s):
@@ -92,7 +152,7 @@ def connected(request, timeout_s):
         return connection
     except (FileNotFoundError, ConnectionRefusedError):
         connection.close()
-        raise NoListener("the bridge is not running (no listener at %s). Turn on the bridge setting in DesertFox." % path)
+        raise NoListener("the bridge is not running (no listener at %s). Turn on the bridge setting in %s." % (path, "DesertBird" if app == "thunderbird" else "DesertFox"))
     except OSError as error:
         connection.close()
         raise BridgeDown("cannot talk to the bridge: %s" % error)
@@ -384,6 +444,11 @@ def do_events(words):
 
 
 def main(argv):
+    global app
+    try:
+        named_app, argv = take_app(argv)
+    except Usage as error:
+        return fail("%s\n%s" % (error, USAGE), EXIT_USAGE)
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
         return EXIT_DONE if argv else EXIT_USAGE
@@ -392,6 +457,7 @@ def main(argv):
         print(USAGE)
         return EXIT_DONE
     try:
+        app = named_app or running_app()
         if verb == "run":
             return do_run(rest)
         if verb in ("list", "state"):
