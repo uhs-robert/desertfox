@@ -628,6 +628,13 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const gap = '<div style="height:60px"></div>';
       return response.end(page(`headings_end ${id}`, `<h2 id="a">A</h2><div style="height:3000px"></div><h2 id="b">B</h2>${gap}<h2 id="c">C</h2>${gap}<h2 id="d">D</h2>${gap}`));
     }
+    if (url.pathname === "/article") {
+      // In block order: the title, p1, p2, the h2 "sec", p3. The banner, nav and footer paragraphs are page chrome and get no stop. The filler lets p3 reach the top.
+      const text = (name) => `<p id="${name}" style="min-height:700px;margin:0">Paragraph ${name} holds enough running text to be a stop for the brace keys.</p>`;
+      const chrome = (tag, name) => `<${tag}><p id="${name}">This paragraph sits in page chrome and is long enough to count if it were not.</p></${tag}>`;
+      const body = `${chrome("header", "banner")}${chrome("nav", "menu")}${text("p1")}${text("p2")}<h2 id="sec" style="margin:0">Section</h2>${text("p3")}<div style="height:3000px"></div>${chrome("footer", "foot")}`;
+      return response.end(page(`article ${id}`, body));
+    }
     if (url.pathname === "/headings_many") {
       // Sixty headings, more than the panel shows. "Section 59" is the last row, so its label is below the panel's edge.
       const sections = Array.from({ length: 60 }, (_, index) => `<h2 id="section_${index}">Section ${index}</h2><div style="height:200px"></div>`).join("");

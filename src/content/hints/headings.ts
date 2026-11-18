@@ -96,7 +96,23 @@ function keep_for_align(element: Element, frames: readonly Element[]): void {
   document.addEventListener("selectionchange", clear);
 }
 
-export type HeadingDirection = "next" | "prev" | "first" | "last";
+export type HeadingDirection = "next" | "prev" | "first" | "last" | "next_block" | "prev_block";
+
+// The block set of `{` and `}`: headings plus the elements that hold running text.
+const BLOCKS = `${HEADINGS}, p, pre, blockquote`;
+const TEXT_BLOCKS = new Set(["p", "pre", "blockquote"]);
+// A one-line caption or a stub like "Skip to content" is no stop.
+const MIN_BLOCK_CHARS = 40;
+// The page frame around the text. A `header` is the page banner unless an article, aside, main, nav or section holds it, so an article keeps its own title header.
+const CHROME = "nav, footer, aside, form, dialog, header:not(:is(article, aside, main, nav, section) header), [role=navigation], [role=banner], [role=contentinfo], [role=complementary], [role=search]";
+
+// A blockquote that holds paragraphs counts once, as the blockquote, so a text block inside another one is no stop of its own.
+export function is_block(element: Element): boolean {
+  if (element.closest(CHROME)) return false;
+  if (!TEXT_BLOCKS.has(element.localName)) return is_heading(element);
+  if (element.parentElement?.closest("blockquote")) return false;
+  return rendered_text(element).replace(/\s+/g, " ").length >= MIN_BLOCK_CHARS;
+}
 
 // A heading whose top is within this many pixels of the view top is the one the last jump put there, so the next move passes it.
 const AT_TOP_SLACK = 1;
@@ -115,7 +131,18 @@ export function pick_heading_step(tops: readonly number[], direction: HeadingDir
   return Math.min(Math.max(index, 0), tops.length - 1);
 }
 
-const NO_HEADING: Record<HeadingDirection, string> = { next: "No next heading", prev: "No previous heading", first: "No headings", last: "No headings" };
+// `}` and `{` step the way `]h` and `[h` do, over a different set.
+export const step_of = (direction: HeadingDirection): "next" | "prev" | "first" | "last" =>
+  direction === "next_block" ? "next" : direction === "prev_block" ? "prev" : direction;
+
+export const NO_HEADING: Record<HeadingDirection, string> = {
+  next: "No next heading",
+  prev: "No previous heading",
+  first: "No headings",
+  last: "No headings",
+  next_block: "No next section",
+  prev_block: "No previous section",
+};
 
 // The view-top rule alone gets stuck on a heading near the page end, which cannot scroll to the top, so it would be picked again and again.
 // The last jump target is the start while it is still on screen. A weak reference, so a page can still drop the heading.
@@ -126,12 +153,14 @@ const top_in_view = ({ element, frames }: Found): number => [element, ...frames]
 
 // Returns the notice when there is no heading that way.
 export function step_heading(direction: HeadingDirection, steps: number): string | undefined {
-  const found = keep_present_found(collect(document, { selector: HEADINGS, test: is_heading }));
+  const by_block = direction === "next_block" || direction === "prev_block";
+  const found = keep_present_found(collect(document, by_block ? { selector: BLOCKS, test: is_block } : { selector: HEADINGS, test: is_heading }));
+  if (by_block && found.length === 0) return "No sections";
   const tops = found.map(top_in_view);
   const remembered = last_heading?.deref();
   const at = remembered === undefined ? -1 : found.findIndex(({ element }) => element === remembered);
   const on_screen = at !== -1 && tops[at]! >= -AT_TOP_SLACK && tops[at]! < window.innerHeight;
-  const index = pick_heading_step(tops, direction, steps, on_screen ? at : undefined);
+  const index = pick_heading_step(tops, step_of(direction), steps, on_screen ? at : undefined);
   if (index === undefined) return NO_HEADING[direction];
   const { element, frames } = found[index]!;
   scroll_to_top(element, frames);

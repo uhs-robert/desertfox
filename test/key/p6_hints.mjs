@@ -478,6 +478,23 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("A at the top again", async () => Math.abs(await top_of("a")) <= 2);
   });
 
+  await run_case("} and { jump paragraph and heading on an article, skip page chrome, stop with a notice at the end, and j still scrolls", async () => {
+    await open_page("article", "p6_article", { new_tab: true });
+    await press_keys("2}");
+    await poll_until("p1 at the top", async () => Math.abs(await top_of("p1")) <= 2);
+    await press_keys("}");
+    await poll_until("p2 at the top", async () => Math.abs(await top_of("p2")) <= 2);
+    await press_keys("{");
+    await poll_until("p1 at the top again", async () => Math.abs(await top_of("p1")) <= 2);
+    await press_keys("2}");
+    await poll_until("the h2 at the top", async () => Math.abs(await top_of("sec")) <= 2);
+    await press_keys("9}");
+    await poll_until("p3 at the top, the footer paragraph skipped", async () => Math.abs(await top_of("p3")) <= 2);
+    await press_keys("}");
+    await poll_until("the notice past the last section", async () => (await toast_text()).includes("No next section"));
+    expect((await scroll_delta_by_press("p6_article", ["j"])) > 0, "j did not scroll the article");
+  });
+
   await run_case("sh jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
     await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
     await open_headings_line(3);

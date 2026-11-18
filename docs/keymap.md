@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 494 (normal 263, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 496 (normal 265, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -54,6 +54,8 @@ bound: 494 (normal 263, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `[i` | `page.focus_field --prev` | Previous form control |
 | `]h` | `page.heading --next` | Next heading |
 | `[h` | `page.heading --prev` | Previous heading |
+| `}` | `page.heading --next-block` | Next paragraph |
+| `{` | `page.heading --prev-block` | Previous paragraph |
 | `]H` | `page.heading --last` | Last heading |
 | `[H` | `page.heading --first` | First heading |
 | `]'` | `mark.step --next` | Next mark |

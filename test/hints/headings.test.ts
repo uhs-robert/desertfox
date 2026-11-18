@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { load } from "cheerio";
 import { test } from "node:test";
 import { is_heading } from "../../src/content/hints/heading_match.ts";
-import { heading_level, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top } from "../../src/content/hints/headings.ts";
+import { NO_HEADING, heading_level, is_block, step_of, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top, step_heading } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
@@ -161,4 +162,94 @@ test("a count before first or last passes the check and is ignored", async () =>
   await import("../../src/background/command_modules.ts");
   const command = registry.get("page.heading")!;
   for (const direction of ["first", "last"]) assert.equal(check_args(command, { direction, steps: 3 }).ok, true, direction);
+});
+
+// A real parsed fragment, so `closest` and the CHROME selector run as the browser runs them.
+function block_in(html: string, id: string): Element {
+  const $ = load(`<body>${html}</body>`);
+  const wrap = (node: ReturnType<typeof $>): Element => {
+    const element = node[0]!;
+    const text = node.text();
+    return {
+      localName: (element as unknown as { name: string }).name,
+      textContent: text,
+      innerText: text,
+      getAttribute: (name: string) => node.attr(name) ?? null,
+      closest: (selector: string) => {
+        const found = node.closest(selector);
+        return found.length === 0 ? null : wrap(found);
+      },
+      get parentElement() {
+        const parent = node.parent();
+        return parent.length === 0 || parent[0]!.type !== "tag" || (parent[0] as unknown as { name: string }).name === "body" ? null : wrap(parent);
+      },
+    } as unknown as Element;
+  };
+  return wrap($(`#${id}`));
+}
+const LONG = "Enough running text to pass the forty character rule.";
+
+test("a text block needs 40 characters of rendered text, a heading needs none", () => {
+  const text = (tag: string, chars: number) => block_in(`<${tag} id="t">${"x".repeat(chars)}</${tag}>`, "t");
+  assert.equal(is_block(text("p", 40)), true);
+  assert.equal(is_block(text("p", 39)), false);
+  assert.equal(is_block(text("pre", 40)), true);
+  assert.equal(is_block(text("blockquote", 39)), false);
+  assert.equal(is_block(text("h2", 3)), true);
+  assert.equal(is_block(text("h2", 0)), false);
+});
+
+test("a block in each kind of page chrome is no stop, a heading included", () => {
+  const chrome = [
+    "<nav>%</nav>",
+    "<footer>%</footer>",
+    "<aside>%</aside>",
+    "<form>%</form>",
+    "<dialog>%</dialog>",
+    "<header>%</header>",
+    '<div role="navigation">%</div>',
+    '<div role="banner">%</div>',
+    '<div role="contentinfo">%</div>',
+    '<div role="complementary">%</div>',
+    '<div role="search">%</div>',
+  ];
+  for (const wrapper of chrome) {
+    assert.equal(is_block(block_in(wrapper.replace("%", `<p id="t">${LONG}</p>`), "t")), false, wrapper);
+    assert.equal(is_block(block_in(wrapper.replace("%", '<h2 id="t">Title</h2>'), "t")), false, wrapper);
+  }
+  assert.equal(is_block(block_in(`<main><p id="t">${LONG}</p></main>`, "t")), true);
+});
+
+test("a header is the page banner only where no article, aside, main, nav or section holds it", () => {
+  assert.equal(is_block(block_in(`<header><p id="t">${LONG}</p></header>`, "t")), false);
+  for (const holder of ["article", "main", "section"]) {
+    assert.equal(is_block(block_in(`<${holder}><header><h1 id="t">Title</h1></header></${holder}>`, "t")), true, holder);
+  }
+});
+
+test("a paragraph inside a blockquote is no stop, so the blockquote counts once", () => {
+  const quote = `<blockquote id="q"><p id="p">${LONG}</p></blockquote><h3 id="h">Title</h3>`;
+  assert.equal(is_block(block_in(quote, "p")), false);
+  assert.equal(is_block(block_in(quote, "q")), true);
+  assert.equal(is_block(block_in(`<blockquote><h3 id="h">Title</h3></blockquote>`, "h")), true);
+});
+
+test("the block directions step as next and prev, the heading directions as themselves", () => {
+  assert.equal(step_of("next_block"), "next");
+  assert.equal(step_of("prev_block"), "prev");
+  for (const direction of ["next", "prev", "first", "last"] as const) assert.equal(step_of(direction), direction);
+});
+
+test("the notices name the section at the ends and on a page with none", () => {
+  assert.equal(NO_HEADING.next_block, "No next section");
+  assert.equal(NO_HEADING.prev_block, "No previous section");
+  const real = globalThis.document;
+  Object.defineProperty(globalThis, "document", { value: { querySelectorAll: () => [] }, configurable: true });
+  try {
+    assert.equal(step_heading("next_block", 1), "No sections");
+    assert.equal(step_heading("prev_block", 2), "No sections");
+    assert.equal(step_heading("next", 1), "No next heading");
+  } finally {
+    Object.defineProperty(globalThis, "document", { value: real, configurable: true });
+  }
 });
