@@ -10,7 +10,7 @@ import { spelling_of } from "./edit_layers.ts";
 import type { KeymapEdits } from "./edit_layers.ts";
 import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
-import type { Prompt } from "../shared/invocation.ts";
+import type { KeyBinding, Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
@@ -25,7 +25,7 @@ import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
-import { item_finder_row } from "./item_finder_row.ts";
+import { hold_back_rows, item_finder_row } from "./item_finder_row.ts";
 import { without_hover } from "./item_hover.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
@@ -123,7 +123,9 @@ export function compile_config(input: CompileInput): CompileOutput {
   const hover = input.config.settings.item_hover ?? DEFAULT_SETTINGS.item_hover;
   const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off).map((entry) => (hover ? entry : { ...entry, row: without_hover(entry.row) }));
   // The finder row comes last, so a row that binds j and k for a site decides them first and the finder runs only where no row matches.
-  const finder_rows = (input.config.settings.item_finder ?? DEFAULT_SETTINGS.item_finder) ? [item_finder_row(hover)] : [];
+  // A row that binds or passes j or k keeps the plain j, k, h and l it does not decide, through a hold-back row before the finder row.
+  const finder_on = input.config.settings.item_finder ?? DEFAULT_SETTINGS.item_finder;
+  const finder_rows = finder_on ? [...hold_back_rows([...user_rows, ...default_rows.map(({ row }) => row)], keymap.normal, (binding) => is_plain_bind(binding, input)), item_finder_row(hover)] : [];
   const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
   const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
@@ -164,6 +166,13 @@ export function compile_config(input: CompileInput): CompileOutput {
   }
   warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
   return { compiled, theme: { dark: theme.dark, light: theme.light, ...stored_font(input.config.settings) }, warnings: [...resolve_warnings, ...warnings] };
+}
+
+// A normal-mode binding a site row takes as it is: one step, no prompt, no key to wait for, and args that pass the check. Any other entry compiles only in the keymap, so a hold-back row skips it and the finder keeps the key.
+function is_plain_bind(binding: KeyBinding, input: CompileInput): boolean {
+  if (Array.isArray(binding) || binding.prompt) return false;
+  const command = input.get_command(binding.id);
+  return command === undefined || (mode_problem("normal", command) === undefined && captured_key_param(command, binding.args) === undefined && check_args(command, binding.args, input.enum_sources).ok);
 }
 
 // Checks the binds of a site row, one of its keymap modes or one of its site modes, and drops the bad ones in place. `mode` is the keymap mode the commands must fit: a site mode lays over normal mode, so its binds run in normal mode.
