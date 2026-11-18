@@ -40,6 +40,7 @@ export const dom_reader = (doc: Document): PageReader<Element> => {
       const { clientWidth, scrollWidth } = element;
       return clientWidth > 0 && ((/auto|scroll/.test(overflowX) && scrollWidth > clientWidth + 20) || (/hidden|clip/.test(overflowX) && scrollWidth > 1.5 * clientWidth && element.children.length > 0 && clientWidth > 150));
     }),
+    same_page_: (link) => `${(link as HTMLAnchorElement).href}`.split("#")[0] === location.href.split("#")[0],
     pinned_: once((element) => /fixed|sticky/.test(style_of(element).position)),
     text_length_: once((element) => (element.textContent ?? "").trim().length),
     view_: () => ({ w: innerWidth, h: innerHeight, page_h: doc.documentElement.scrollHeight }),
