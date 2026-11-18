@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_derived_row, NONE_RECHECK_MS, OVERRUN_PAUSE_MS } from "../src/content/item/derived.ts";
+import { create_derived_row, list_tail, NONE_RECHECK_MS, OVERRUN_PAUSE_MS } from "../src/content/item/derived.ts";
 import { FINDER_BUDGET_MS, LONG_BUDGET_MS } from "../src/content/item/finder.ts";
 import type { Found } from "../src/content/item/finder.ts";
 
@@ -254,4 +254,40 @@ test("two overruns put the address on the short budget only for a while, then th
   state.clock += OVERRUN_PAUSE_MS;
   row.items_();
   assert.deepEqual(state.budgets, [LONG_BUDGET_MS, LONG_BUDGET_MS, FINDER_BUDGET_MS, LONG_BUDGET_MS]);
+});
+
+// A frame of elements as far as `list_tail` reads them: the parent link, the next sibling and the parent's last child. `relink` rebuilds the sibling links after the children change.
+type Tree = { name: string; parentElement: Tree | null; nextElementSibling: Tree | null; lastElementChild: Tree | null; kids: Tree[] };
+const tree = (name: string, parentElement: Tree | null = null): Tree => ({ name, parentElement, nextElementSibling: null, lastElementChild: null, kids: [] });
+function relink(parent: Tree) {
+  parent.kids.forEach((kid, at) => ((kid.parentElement = parent), (kid.nextElementSibling = parent.kids[at + 1] ?? null)));
+  parent.lastElementChild = parent.kids.at(-1) ?? null;
+}
+const tail_of = (items: Tree[]) => list_tail(items as unknown as Element[]);
+
+test("a load that replaces the trailing form in the items' parent changes the tail, and a page that did not change keeps it", () => {
+  const frame = tree("frame");
+  const articles = [0, 1, 2].map((at) => tree(`article ${at}`));
+  frame.kids = [...articles.flatMap((article, at) => [article, tree(`div ${at}`)]), tree("form")];
+  relink(frame);
+  // The tail is compared by identity, as `grew_` does.
+  const differs = (a: unknown[], b: unknown[]) => a.some((entry, at) => entry !== b[at]);
+  const before = tail_of(articles);
+  assert.ok(!differs(tail_of(articles), before));
+  // Page two replaces the form with its own items and a new form, in the same parent.
+  const next = [3, 4].map((at) => tree(`article ${at}`));
+  frame.kids = [...frame.kids.slice(0, -1), ...next.flatMap((article, at) => [article, tree(`div ${at + 3}`)]), tree("form")];
+  relink(frame);
+  assert.ok(differs(tail_of(articles), before));
+});
+
+test("the follow selector is the tag and first class, and the class alone when the kept items mix tags", () => {
+  (globalThis as { CSS?: unknown }).CSS = { escape: (text: string) => text };
+  const shaped = (name: string, localName: string) => ({ ...item(name), localName, classList: ["story"] });
+  const same = setup([shaped("a", "div"), shaped("b", "div")] as Fake[]);
+  same.row.items_();
+  assert.equal(same.row.selector_(), "div.story");
+  const mixed = setup([shaped("a", "div"), shaped("b", "article")] as Fake[]);
+  mixed.row.items_();
+  assert.equal(mixed.row.selector_(), ".story");
 });

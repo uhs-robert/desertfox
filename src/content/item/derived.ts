@@ -24,8 +24,11 @@ export type DerivedDeps = {
 // `grew_` reads the page again when something new follows the last item, and says whether it did. A move at the end of the list asks it. `grid_` says whether the kept answer is a grid.
 export type DerivedRow = { items_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean };
 
-// The tag and first class that the finder grouped the items by, as a selector. It only has to find the item a focus sits in (`closest`), so a page that reuses the class elsewhere gets a box on that element when a script moves the focus there.
-const item_selector = (item: Element | undefined): string => (item ? item.localName + (item.classList[0] ? `.${CSS.escape(item.classList[0])}` : "") : "");
+// The tag and first class that the finder grouped the items by, as a selector. It only has to find the item a focus sits in (`closest`), so a page that reuses the class elsewhere gets a box on that element when a script moves the focus there. Items of more than one tag (batches that draw one template in two tags) give the class alone.
+const item_selector = (items: readonly Element[] = []): string => {
+  const [item] = items;
+  return item ? (items.some((other) => other.localName !== item.localName) ? "" : item.localName) + (item.classList[0] ? `.${CSS.escape(item.classList[0])}` : "") : "";
+};
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   let kept: { found: Found<Element>; url: string; at: number; tail: unknown[] } | undefined;
@@ -73,7 +76,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
       if (link && !(item.contains(link) && deps.is_shown_(link))) kept = undefined;
       return read()?.links.get(item);
     },
-    selector_: () => item_selector(kept?.found.items[0]),
+    selector_: () => item_selector(kept?.found.items),
     grid_: () => kept?.found.kind === "grid",
     grew_: () => !!kept?.found.items[0] && deps.tail_(kept.found.items).some((next, at) => next !== kept!.tail[at]) && !(kept = undefined),
   };
@@ -83,12 +86,17 @@ const after = (element: Element | null | undefined) => element?.nextElementSibli
 
 const now_ = () => performance.now();
 
+// New items go after the last one, into a new batch after its parent, or into the parent in place of its last child (a load-more form that the load replaces).
+export const list_tail = (items: readonly Element[]): unknown[] => {
+  const parent = items.at(-1)?.parentElement;
+  return [after(items.at(-1)), after(parent), parent?.lastElementChild];
+};
+
 export const live_derived_row = (): DerivedRow =>
   create_derived_row({
     find_: (budget_ms_) => find_items(dom_reader(document), { now_, budget_ms_ }),
     url_: () => location.href,
     now_,
     is_shown_: is_shown,
-    // New items go after the last one, or into a new batch after its parent.
-    tail_: (items) => [after(items.at(-1)), after(items.at(-1)?.parentElement)],
+    tail_: list_tail,
   });

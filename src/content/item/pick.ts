@@ -143,6 +143,9 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
   const vertical = direction === "down" || direction === "up";
   // The finder binds h and l on every page: off a grid they keep their sideways scroll.
   if (!args.selector && !vertical && !page.derived?.grid_()) return scroll();
+  // A down press on the finder's list asks whether a load added items to walk on to. With every kept item above the view the press asks before it scrolls.
+  const grew = () => direction === "down" && !args.selector && page.derived?.grew_();
+  if (place.index === items.length && grew()) return move_item(page, args);
   // The finder's list can start screens below: the first press lands only on an item in view. From no item the place is the first item not above the view.
   if (!args.selector && !place.on_item && !((boxes[place.index]?.top ?? Infinity) < page.view.innerHeight)) return scroll();
   // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction. The box goes back on the item, since a focus move may have cleared it.
@@ -153,7 +156,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
     return scroll();
   }
   const pick = pick_item(boxes, place, direction, steps);
-  if ("end" in pick && direction === "down" && !args.selector && page.derived?.grew_()) return move_item(page, args);
+  if ("end" in pick && grew()) return move_item(page, args);
   // At the last item down and up scroll on, so the page below the results stays reachable. Left and right say they are at the end.
   if ("end" in pick) return vertical ? scroll() : page.toast(`No ${direction === "right" ? "next" : "previous"} item`);
   land_on(page, items[pick.index]!, args);

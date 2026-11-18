@@ -42,7 +42,8 @@ const MAX_BYTES = {
   // 15 KB: the hover of the boxed tile (`hover.ts`): the pointer events a resting mouse sends, the 300 ms wait, and the undo.
   // 15.5 KB: the page reader reads each tag and attribute once, and the derived row picks a read budget by address.
   // 15.75 KB: gg and G on the finder row (the in-view landing and the scroll fallback) and the check for a grown list.
-  "item.js": 15.75 * 1024,
+  // 16 KB: a load that nests its batch inside the first one's container, and the tail check that sees a form replaced in place.
+  "item.js": 16 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.

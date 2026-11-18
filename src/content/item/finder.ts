@@ -96,7 +96,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const chrome = once((node: N) => in_chrome(reader, node));
   // Only groups that stack in three rows and whose items mostly hold a title link can be lists. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
   const groups = list_groups(reader, scope, rules).filter((group) => !chrome(group.parent));
-  const lists = merge_batches(reader, groups).filter((group) => stacked_items(reader, group.items) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+  const lists = merge_batches(reader, nest_batches(reader, groups)).filter((group) => stacked_items(reader, group.items) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
   if (out_of_time()) return { ...none<N>(), timed_out_: true };
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
@@ -144,6 +144,25 @@ function record_box<N>(reader: PageReader<N>, child: N, siblings: readonly N[], 
     if (next_box) bottom = Math.max(bottom, next_box.y + next_box.h);
   }
   return { ...box, h: bottom - box.y };
+}
+
+// A load that puts its batch in a container inside the first one's (a frame that replaces the load-more form) adds that batch to the first group, and so does each later load nested one level deeper. The container must come after the group's last item, as a load-more frame does, so a block in the middle of a list or a section of cards joins nothing. The batch can use another tag for the same template (a feed whose first page is divs and whose later pages are articles), so only the first class is compared, and a classless item has none.
+function nest_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[] {
+  const homes = new Map<N, Group<N>[]>();
+  const kind_of_group = (group: Group<N>) => signature(reader, group.items[0]!).replace(/^[^.]*\./, "");
+  return groups.filter((group) => {
+    const kind = kind_of_group(group);
+    const outer = reader.parent_(group.parent)!;
+    const siblings = reader.children_(outer);
+    const host = homes.get(outer)?.find((peer) => kind && kind_of_group(peer) === kind && siblings.indexOf(group.parent) > siblings.indexOf(peer.items.at(-1)!));
+    if (host) {
+      host.items.push(...group.items);
+      host.boxes.push(...group.boxes);
+      host.area += group.area;
+    }
+    homes.set(group.parent, [...(homes.get(group.parent) ?? []), host ?? group]);
+    return !host;
+  });
 }
 
 // Blocks of one kind under sibling parents (a feed that loads in batches, a front page of sections) read as one group. Parents that share a grandparent merge first, then those that share a great-grandparent.

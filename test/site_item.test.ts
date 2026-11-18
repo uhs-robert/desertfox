@@ -461,6 +461,20 @@ test("down at the end of the derived row asks it to read the page again once, an
   assert.deepEqual(still_scrolls, [[0, 50]]);
 });
 
+test("down with every kept item above the view asks the derived row first, and lands on the item a load added", () => {
+  const above = list.map((entry) => ({ ...entry, top: entry.top - 1000, bottom: entry.bottom - 1000 }));
+  const { page, log, scrolls, add } = fake_page(above);
+  let asked = 0;
+  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => (asked++ === 0 ? (add(box(0, 240)), true) : false), grid_: () => false };
+  move_item(page, { direction: "down" });
+  assert.deepEqual([log.at(-1), scrolls, asked], ["focus item 4", [], 1]);
+  // A page that did not grow still scrolls on.
+  const { page: still, scrolls: still_scrolls } = fake_page(above);
+  still.derived = { items_: () => still.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  move_item(still, { direction: "down" });
+  assert.deepEqual(still_scrolls, [[0, 50]]);
+});
+
 // The real derived row over the fake page, with a footer node that follows the list.
 function real_derived_page(focused_index: number) {
   const fake = fake_page(list, true, focused_index);
