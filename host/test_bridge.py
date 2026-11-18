@@ -1276,6 +1276,83 @@ class ThunderbirdLinkTest(BridgeTestCase):
         self.fail("the Thunderbird host never showed mode %s" % mode_id)
 
 
+class MailReadTest(BridgeTestCase):
+    """The mail reads: on the Thunderbird socket only, fields checked before the add-on, replies passed through."""
+
+    def setUp(self):
+        super().setUp()
+        self.bird_socket = os.path.join(self.runtime, "desertbird", "bridge.sock")
+
+    def read(self, host, request, reply):
+        """Sends one read, answers it as the add-on with `reply`, and returns (what the add-on got, what the client got)."""
+        client = Client(self.bird_socket, request)
+        sent = host.read_request(what=request["verb"])
+        host.send(dict(reply, verb="reply", request_id=sent["request_id"]))
+        return sent, client.result()
+
+    def test_each_read_goes_to_the_add_on_with_only_its_fields_and_the_reply_comes_back_as_it_was(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        cases = [
+            ({"verb": "folders", "extra": 1}, {}, {"ok": True, "folders": [{"id": "f1", "name": "Inbox", "path": "/INBOX", "account": "a1", "unread": 2, "total": 9}]}),
+            ({"verb": "messages", "folder": "f1", "limit": 200, "unread_only": True, "path": "/etc"}, {"folder": "f1", "limit": 200, "unread_only": True},
+             {"ok": True, "messages": [{"id": 4, "from": "a@b", "subject": "Hi", "date": "2026-11-17T08:00:00Z", "folder": "f1", "read": False, "flagged": False}], "truncated": False}),
+            ({"verb": "messages", "folder": "x" * 1024}, {"folder": "x" * 1024}, {"ok": True, "messages": [], "truncated": False}),
+            ({"verb": "message", "id": 4}, {"id": 4},
+             {"ok": True, "message": {"id": 4, "from": "a@b", "to": ["c@d"], "subject": "Hi", "date": "2026-11-17T08:00:00Z", "content_type": "text/html", "body": "text", "untrusted": True, "html_stripped": True, "truncated": False}}),
+            ({"verb": "attachments", "id": 4}, {"id": 4}, {"ok": True, "attachments": [{"part": "1.2", "name": "a.pdf", "size": 10, "content_type": "application/pdf"}]}),
+            ({"verb": "message", "id": 5}, {"id": 5}, {"ok": False, "message": "the body is encrypted"}),
+        ]
+        for request, fields, reply in cases:
+            with self.subTest(request=request["verb"]):
+                sent, result = self.read(host, request, reply)
+                self.assertEqual(sent, dict(fields, verb=request["verb"], request_id=sent["request_id"]))
+                self.assertEqual(result, reply)
+
+    def test_a_read_of_the_wrong_shape_is_refused_and_never_reaches_the_add_on(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        for request in (
+            {"verb": "messages"}, {"verb": "messages", "folder": ""}, {"verb": "messages", "folder": "x" * 1025}, {"verb": "messages", "folder": 3},
+            {"verb": "messages", "folder": "f1", "limit": 0}, {"verb": "messages", "folder": "f1", "limit": 201},
+            {"verb": "messages", "folder": "f1", "limit": True}, {"verb": "messages", "folder": "f1", "limit": "5"},
+            {"verb": "messages", "folder": "f1", "unread_only": "yes"},
+            {"verb": "message"}, {"verb": "message", "id": "4"}, {"verb": "message", "id": True}, {"verb": "message", "id": 1.5},
+            {"verb": "attachments", "id": None},
+        ):
+            with self.subTest(request=request):
+                reply = self.ask(request, socket_path=self.bird_socket)
+                self.assertIs(reply["ok"], False)
+                self.assertIsInstance(reply["message"], str)
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_the_firefox_socket_refuses_every_read(self):
+        host = self.start(argv=FIREFOX_ARGV)
+        for request in ({"verb": "folders"}, {"verb": "messages", "folder": "f1"}, {"verb": "message", "id": 4}, {"verb": "attachments", "id": 4}):
+            self.assertEqual(self.ask(request), {"ok": False, "message": "mail reads need --app thunderbird"})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_reads_share_the_rate_limit(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        for _ in range(10):
+            self.read(host, {"verb": "folders"}, {"ok": True, "folders": []})
+        self.assertEqual(self.ask({"verb": "message", "id": 1}, socket_path=self.bird_socket), {"ok": False, "message": "rate limit: too many requests, slow down"})
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def test_a_reply_near_the_cap_passes_whole_and_one_over_it_is_dropped(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        body = "b" * (1024 * 1024 - 4096)
+        sent, result = self.read(host, {"verb": "message", "id": 4}, {"ok": True, "message": {"id": 4, "body": body}})
+        self.assertEqual(result["message"]["body"], body)
+        client = Client(self.bird_socket, {"verb": "message", "id": 5})
+        request_id = host.read_request(what="message")["request_id"]
+        host.send({"verb": "reply", "request_id": request_id, "ok": True, "message": {"id": 5, "body": "b" * (1024 * 1024)}})
+        # The host skipped the oversized frame unread, so the request still waits and the next reply answers it.
+        host.send({"verb": "reply", "request_id": request_id, "ok": False, "message": "too large"})
+        self.assertEqual(client.result(), {"ok": False, "message": "too large"})
+
+
 class AcceptErrorTest(BridgeTestCase):
     def test_a_transient_accept_error_does_not_end_the_server(self):
         import errno
