@@ -1,28 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_derived_row, list_tail, NONE_RECHECK_MS, OVERRUN_PAUSE_MS } from "../src/content/item/derived.ts";
+import { create_derived_row, in_view_, list_tail, NONE_RECHECK_MS, OVERRUN_PAUSE_MS } from "../src/content/item/derived.ts";
 import { FINDER_BUDGET_MS, LONG_BUDGET_MS } from "../src/content/item/finder.ts";
-import type { Found } from "../src/content/item/finder.ts";
+import type { Found, Region } from "../src/content/item/finder.ts";
 
-type Fake = { name: string; isConnected: boolean; shown: boolean; contains: (node: unknown) => boolean };
+type Fake = { name: string; isConnected: boolean; shown: boolean; area?: number; covered?: boolean; contains: (node: unknown) => boolean };
 type FakeLink = { name: string; isConnected: boolean; shown: boolean };
 
 // A page whose items the test can hide, drop and bring back, and a finder that counts how often it is asked. `answer` is what the finder gives next unless `fails` says it runs out of time or throws, and `tail` is what follows the last item of the list.
 function setup(initial: Fake[]) {
-  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[] } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [] };
+  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[]; others: Fake[][] } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [], others: [] };
   const link = { name: "link", isConnected: true, shown: true };
   const row = create_derived_row({
     find_: (budget_ms) => {
       state.finds++;
       state.budgets.push(budget_ms);
       if (state.fails === "throw") throw new Error("finder bug");
-      if (state.fails === "timeout") return { kind: "none", items: [], links: new Map(), timed_out_: true };
-      const items = state.answer as unknown as Element[];
-      return { kind: items.length > 0 ? "list" : "none", items, links: new Map(state.answer.map((entry) => [entry, state.links.get(entry) ?? link])) } as unknown as Found<Element>;
+      if (state.fails === "timeout") return { kind: "none", items: [], links: new Map(), regions: [], timed_out_: true };
+      const region_of = (entries: Fake[]) => ({ kind: entries.length > 0 ? "list" : "none", items: entries, links: new Map(entries.map((entry) => [entry, state.links.get(entry) ?? link])) });
+      const regions = [state.answer, ...state.others].filter((entries) => entries.length > 0).map(region_of);
+      return { ...region_of(state.answer), regions } as unknown as Found<Element>;
     },
     url_: () => state.url,
     now_: () => state.clock,
     is_shown_: (element) => (element as unknown as Fake).shown,
+    // A shown item is in view with the area it says, or 1. A covered one is shown and still counts for nothing (a fixed header over it, `pointer-events: none`).
+    in_view_: (element) => ((element as unknown as Fake).shown && !(element as unknown as Fake).covered ? ((element as unknown as Fake).area ?? 1) : 0),
     tail_: () => state.tail,
   });
   return { state, row, link };
@@ -52,6 +55,7 @@ test("the page is read again when no item of the answer shows", () => {
   const { state, row } = setup([item("a"), item("b")]);
   row.items_();
   state.answer.forEach((entry) => (entry.shown = false));
+  state.clock += NONE_RECHECK_MS;
   const fresh = [item("x"), item("y")];
   state.answer = fresh;
   assert.deepEqual(names(row.items_()), ["x", "y"]);
@@ -290,4 +294,261 @@ test("the follow selector is the tag and first class, and the class alone when t
   const mixed = setup([shaped("a", "div"), shaped("b", "article")] as Fake[]);
   mixed.row.items_();
   assert.equal(mixed.row.selector_(), ".story");
+});
+
+// Lists on one page: `state.answer` is the largest, `state.others` the rest. `leave` takes a list out of the view and `enter` puts it in.
+const leave = (list: Fake[]) => list.forEach((entry) => (entry.shown = false));
+const enter = (list: Fake[]) => list.forEach((entry) => (entry.shown = true));
+
+test("the first press takes the list with the most area in view, not the largest list", () => {
+  const mix = [item("m1"), item("m2")];
+  const related = [item("r1"), item("r2"), item("r3")];
+  leave(related);
+  const { state, row } = setup(related);
+  state.others = [mix];
+  assert.deepEqual(names(row.items_()), ["m1", "m2"]);
+  assert.equal(state.finds, 1);
+});
+
+test("equal areas in view go to the largest list, which the finder gives first", () => {
+  const { state, row } = setup([item("big")]);
+  state.others = [[item("small")]];
+  assert.deepEqual(names(row.items_()), ["big"]);
+});
+
+test("a list that loads after the first press does not take the active list while it shows", () => {
+  const mix = [item("m1"), item("m2")];
+  const { state, row } = setup(mix);
+  assert.deepEqual(names(row.items_()), ["m1", "m2"]);
+  const related = [item("r1"), item("r2"), item("r3")];
+  related.forEach((entry) => (entry.area = 50));
+  state.answer = related;
+  state.others = [mix];
+  // A read of the page at the end of the active list sees both lists, and the active one stays.
+  state.tail = ["more"];
+  assert.equal(row.grew_(), true);
+  assert.deepEqual(names(row.items_()), ["m1", "m2"]);
+  assert.equal(state.finds, 2);
+});
+
+test("a list that loads late does not steal the list that holds the view through the reads of a held j", () => {
+  const comments = [item("c1")];
+  const { state, row } = setup(comments);
+  row.items_();
+  const related = [item("r1")];
+  related[0]!.area = 99;
+  state.answer = related;
+  state.others = [comments];
+  for (let press = 0; press < 5; press++) {
+    state.clock += NONE_RECHECK_MS * 10;
+    assert.deepEqual(names(row.items_()), ["c1"]);
+  }
+  assert.equal(state.finds, 1);
+});
+
+test("the active list hands over on the next press after it leaves the view, and scrolling alone changes nothing", () => {
+  const mix = [item("m1"), item("m2")];
+  const comments = [item("c1"), item("c2")];
+  leave(comments);
+  const { state, row } = setup(mix);
+  state.others = [comments];
+  row.items_();
+  // The user scrolls: the view changes, and no press reads anything.
+  leave(mix);
+  enter(comments);
+  assert.equal(state.finds, 1);
+  assert.deepEqual(names(row.items_()), ["c1", "c2"]);
+  assert.equal(state.finds, 2);
+  // It stays on comments while they show, though the mix is shown again and larger.
+  enter(mix);
+  mix.forEach((entry) => (entry.area = 100));
+  assert.deepEqual(names(row.items_()), ["c1", "c2"]);
+});
+
+test("the end of a list that grew keeps the list, and does not cross into another list in view", () => {
+  const feed = [item("f1"), item("f2")];
+  const rail = [item("r1"), item("r2")];
+  const { state, row } = setup(feed);
+  state.others = [rail];
+  assert.deepEqual(names(row.items_()), ["f1", "f2"]);
+  rail.forEach((entry) => (entry.area = 500));
+  state.tail = ["more"];
+  state.answer = [...feed, item("f3")];
+  assert.equal(row.grew_(), true);
+  assert.deepEqual(names(row.items_()), ["f1", "f2", "f3"]);
+});
+
+test("with no list in view the active list stays, and the page is read again with the short budget once the answer is old", () => {
+  const mix = [item("m1")];
+  const { state, row } = setup(mix);
+  row.items_();
+  leave(mix);
+  assert.deepEqual(row.items_(), []);
+  assert.equal(state.finds, 1);
+  const late = [item("late")];
+  state.answer = late;
+  state.clock += NONE_RECHECK_MS;
+  assert.deepEqual(names(row.items_()), ["late"]);
+  assert.deepEqual(state.budgets, [LONG_BUDGET_MS, FINDER_BUDGET_MS]);
+});
+
+test("a read that times out with no list in view keeps the active list", () => {
+  const mix = [item("m1")];
+  const { state, row } = setup(mix);
+  row.items_();
+  leave(mix);
+  state.fails = "timeout";
+  state.clock += NONE_RECHECK_MS;
+  assert.deepEqual(row.items_(), []);
+  state.fails = "";
+  enter(mix);
+  assert.deepEqual(names(row.items_()), ["m1"]);
+  assert.equal(state.finds, 2);
+});
+
+test("a cached answer does not outlive the removal of its list, though other lists of it remain", () => {
+  const mix = [item("m1"), item("m2")];
+  const related = [item("r1"), item("r2")];
+  const { state, row } = setup(mix);
+  state.others = [related];
+  assert.deepEqual(names(row.items_()), ["m1", "m2"]);
+  // The page drops the mix panel (a new video loads).
+  mix.forEach((entry) => (entry.isConnected = false));
+  state.answer = related;
+  state.others = [];
+  assert.deepEqual(names(row.items_()), ["r1", "r2"]);
+  assert.equal(state.finds, 2);
+});
+
+test("a list removed from the DOM is not served from the cache when its answer is the only one", () => {
+  const mix = [item("m1")];
+  const { state, row } = setup(mix);
+  row.items_();
+  mix[0]!.isConnected = false;
+  state.answer = [];
+  assert.deepEqual(row.items_(), []);
+  assert.equal(state.finds, 2);
+});
+
+test("after a read the active list is the one the user was on when it is still on the page", () => {
+  const mix = [item("m1")];
+  const related = [item("r1")];
+  const { state, row } = setup(mix);
+  state.others = [related];
+  row.items_();
+  leave(mix);
+  enter(related);
+  assert.deepEqual(names(row.items_()), ["r1"]);
+  state.url = "https://a.test/?next";
+  state.answer = [item("n1")];
+  state.others = [];
+  assert.deepEqual(names(row.items_()), ["n1"]);
+});
+
+test("the link, the selector and the grid answer follow the active list", () => {
+  (globalThis as { CSS?: unknown }).CSS = { escape: (text: string) => text };
+  const shaped = (name: string, class_name: string) => ({ ...item(name), localName: "li", classList: [class_name] });
+  const mix = [shaped("m1", "mix")] as Fake[];
+  const comments = [shaped("c1", "comment")] as Fake[];
+  leave(mix);
+  const { state, row } = setup(comments);
+  state.others = [mix];
+  row.items_();
+  assert.equal(row.selector_(), "li.comment");
+  leave(comments);
+  enter(mix);
+  assert.deepEqual(names(row.items_()), ["m1"]);
+  assert.equal(row.selector_(), "li.mix");
+});
+
+test("a list that loaded since the last read competes at the hand-over", () => {
+  const mix = [item("m1")];
+  const related = [item("r1")];
+  const { state, row } = setup(mix);
+  state.others = [related];
+  row.items_();
+  // The comments load while the user looks at the mix panel, and the user then scrolls to them, beside the related column.
+  const comments = [item("c1")];
+  comments[0]!.area = 500;
+  state.others = [related, comments];
+  leave(mix);
+  assert.deepEqual(names(row.items_()), ["c1"]);
+});
+
+test("a list the user handed over to stays active when it grows, and the old list does not come back", () => {
+  const mix = [item("m1")];
+  const related = [item("r1"), item("r2")];
+  const { state, row } = setup(mix);
+  state.others = [related];
+  row.items_();
+  leave(mix);
+  assert.deepEqual(names(row.items_()), ["r1", "r2"]);
+  enter(mix);
+  state.tail = ["more"];
+  related.push(item("r3"));
+  assert.equal(row.grew_(), true);
+  assert.deepEqual(names(row.items_()), ["r1", "r2", "r3"]);
+});
+
+test("an item that shows but is covered counts for nothing, so another list in view takes over and a lone list stays", () => {
+  const feed = [item("f1")];
+  feed[0]!.covered = true;
+  const rail = [item("r1")];
+  const { state, row } = setup(feed);
+  state.others = [rail];
+  assert.deepEqual(names(row.items_()), ["r1"]);
+  const lone = setup([item("a")]);
+  lone.state.answer[0]!.covered = true;
+  assert.deepEqual(names(lone.row.items_()), ["a"]);
+  assert.deepEqual(names(lone.row.items_()), ["a"]);
+  assert.equal(lone.state.finds, 1);
+});
+
+test("an end command keeps its list while its own scroll brings another into view, and the next key press hands over", () => {
+  const feed = [item("f1"), item("f2")];
+  const rail = [item("r1")];
+  const { state, row } = setup(feed);
+  state.others = [rail];
+  row.items_();
+  const out_of_view = () => feed.forEach((entry) => (entry.covered = true));
+  out_of_view();
+  state.tail = ["more"];
+  feed.push(item("f3"));
+  out_of_view();
+  assert.equal(row.grew_(), true);
+  assert.deepEqual(names(row.items_(true)), ["f1", "f2", "f3"]);
+  assert.deepEqual(names(row.items_()), ["r1"]);
+});
+
+// The live in-view area over fake rectangles and a fake hit test.
+type Probe = { rect: { left: number; top: number; right: number; bottom: number }; hit: (x: number, y: number) => unknown };
+function probed(entry: Probe, in_shadow = false): Element {
+  const element = { getBoundingClientRect: () => entry.rect, contains: (node: unknown) => node === element, getRootNode: () => ({ elementFromPoint: (x: number, y: number) => (in_shadow ? entry.hit(x, y) : null) }) };
+  Object.assign(globalThis, { innerWidth: 1000, innerHeight: 800, document: { elementFromPoint: (x: number, y: number) => entry.hit(x, y) } });
+  if (!in_shadow) element.getRootNode = () => (globalThis as unknown as { document: Document }).document as never;
+  return element as unknown as Element;
+}
+
+test("the in-view area is the rectangle clipped to the view, probed at the middle of what shows", () => {
+  const self = {};
+  const under_header = probed({ rect: { left: 0, top: -100, right: 500, bottom: 300 }, hit: (_x, y) => (y < 56 ? "masthead" : null) });
+  assert.equal(in_view_(under_header), 0);
+  const card: Probe = { rect: { left: 10, top: 700, right: 410, bottom: 900 }, hit: () => self };
+  const element = probed(card);
+  card.hit = () => element;
+  assert.equal(in_view_(element), 400 * 100);
+  // A rounded corner falls through to the parent at the corner and not at the middle.
+  const rounded: Probe = { rect: { left: 0, top: 100, right: 300, bottom: 200 }, hit: () => null };
+  const round_element = probed(rounded);
+  rounded.hit = (x, y) => (x < 5 && y < 105 ? "parent" : round_element);
+  assert.equal(in_view_(round_element), 300 * 100);
+  const above = probed({ rect: { left: 0, top: -300, right: 300, bottom: -10 }, hit: () => null });
+  assert.equal(in_view_(above), 0);
+});
+
+test("an item inside a shadow root is probed through its own root", () => {
+  const card: Probe = { rect: { left: 0, top: 0, right: 200, bottom: 100 }, hit: () => null };
+  const element = probed(card, true);
+  card.hit = () => element;
+  assert.equal(in_view_(element), 200 * 100);
 });

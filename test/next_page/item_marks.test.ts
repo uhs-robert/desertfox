@@ -9,7 +9,7 @@ import { FIXTURES, read_saved_page, saved_reader } from "../support/snapshot_pag
 import type { SavedNode, SavedPage } from "../support/snapshot_page.ts";
 
 // `article` is the phase 3 kind: until then the finder answers `none` on an article, and the label keeps the kind it will have.
-type Finder_label = { kind: FinderKind | "article"; min?: number; max?: number; known_miss?: string };
+type Finder_label = { kind: FinderKind | "article"; min?: number; max?: number; regions?: number; known_miss?: string };
 type Result = { marks: number; covered: number; picked: number };
 
 const labels = JSON.parse(readFileSync(new URL("labels.json", FIXTURES), "utf8")) as Record<string, { finder?: Finder_label }>;
@@ -81,6 +81,13 @@ for (const [name, label] of Object.entries(labels).filter(([, entry]) => entry.f
     assert.deepEqual(failures, []);
   });
 }
+
+// A label with no `regions` says the page has one list, or none when it answers none. The others name the lists the finder keeps besides the first, which the derived row switches between.
+test("the finder keeps the lists that the labels count, the largest first", () => {
+  const counts = Object.entries(labels).filter(([, label]) => label.finder).map(([name, label]) => [name, finder_on(name).regions.length, label.finder!.regions ?? (label.finder!.kind === "none" ? 0 : 1)]);
+  assert.deepEqual(counts.filter(([, found, label]) => found !== label), []);
+  for (const name of saved) assert.deepEqual(finder_on(name).regions[0]?.items ?? [], finder_on(name).items);
+});
 
 test("a finder that picks every link covers the marks but fails the precision check", () => {
   const fooled = saved.filter((name) => {
