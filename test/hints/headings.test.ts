@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { load } from "cheerio";
 import { test } from "node:test";
 import { is_heading } from "../../src/content/hints/heading_match.ts";
-import { NO_HEADING, covering_inset, heading_level, is_block, step_of, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top, step_heading } from "../../src/content/hints/headings.ts";
+import { NO_HEADING, covering_inset, scroll_room, heading_level, is_block, step_of, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top, step_heading } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
+
+// `scroll_to_top` reads the page's own margin and padding. A plain page sets none.
+const page_styles: Record<string, string> = {};
+Object.defineProperty(globalThis, "getComputedStyle", { value: (element: { id?: string }) => ({ scrollMarginTop: page_styles[`margin ${element.id}`] ?? "0px", scrollPaddingTop: page_styles[`padding ${element.id}`] ?? "auto" }), configurable: true });
 
 test("a heading with its text in a child counts, an empty one or one stripped of its role does not", () => {
   assert.equal(is_heading(heading({ localName: "h2" })), true);
@@ -279,12 +283,12 @@ test("a bar over a third of the view or with no height below the top is not a he
 
 test("scroll_to_top leaves the inset as scroll margin for the jump and restores the margin", () => {
   const margins: string[] = [];
-  const style = { scrollMarginTop: "4px" };
+  const style = { scrollMarginTop: "" };
   const target = { style, scrollIntoView: () => margins.push(style.scrollMarginTop) } as unknown as Element;
   scroll_to_top(target, []);
   scroll_to_top(target, [], 98);
-  assert.deepEqual(margins, ["0px", "98px"]);
-  assert.equal(style.scrollMarginTop, "4px");
+  assert.deepEqual(margins, ["", "98px"]);
+  assert.equal(style.scrollMarginTop, "");
 });
 
 test("scroll_to_top jumps again with the taller bar the second read finds, and not for the same or a smaller one", () => {
@@ -292,9 +296,35 @@ test("scroll_to_top jumps again with the taller bar the second read finds, and n
   const style = { scrollMarginTop: "" };
   const target = { style, scrollIntoView: () => margins.push(style.scrollMarginTop) } as unknown as Element;
   scroll_to_top(target, [], 0, () => 98);
-  assert.deepEqual(margins, ["0px", "98px"]);
+  assert.deepEqual(margins, ["", "98px"]);
   margins.length = 0;
   scroll_to_top(target, [], 98, () => 98);
   scroll_to_top(target, [], 98, () => 50);
   assert.deepEqual(margins, ["98px", "98px"]);
+});
+
+test("the room is the bar less the scroll padding, and never below the page's own margin", () => {
+  assert.equal(scroll_room(70, 0, 0), 70);
+  assert.equal(scroll_room(70, 0, 70), 0);
+  assert.equal(scroll_room(70, 0, 30), 40);
+  assert.equal(scroll_room(0, 50, 0), 50);
+  assert.equal(scroll_room(30, 50, 0), 50);
+  assert.equal(scroll_room(98, 50, 0), 98);
+});
+
+test("scroll_to_top counts the scroller padding in the margin and keeps the page margin", () => {
+  const margins: string[] = [];
+  const style = { scrollMarginTop: "" };
+  const holder = { id: "holder", parentElement: null };
+  const target = { id: "target", parentElement: holder, style, scrollIntoView: () => margins.push(style.scrollMarginTop) } as unknown as Element;
+  page_styles["padding holder"] = "70px";
+  scroll_to_top(target, [], 70);
+  assert.deepEqual(margins, [""]);
+  delete page_styles["padding holder"];
+  page_styles["margin target"] = "50px";
+  margins.length = 0;
+  scroll_to_top(target, [], 0);
+  scroll_to_top(target, [], 98);
+  assert.deepEqual(margins, ["", "98px"]);
+  delete page_styles["margin target"];
 });
