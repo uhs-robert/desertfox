@@ -144,10 +144,10 @@ def log(text):
 # and state never meet the other's. The Firefox folder keeps its name from before Thunderbird, so an update leaves a
 # running Firefox bridge and the scripts that read its folder working. The tab verbs, tab events and the tab caches
 # under ~/.cache/desertfox belong to Firefox alone, so a Thunderbird host never prunes or deletes Firefox's images. The
-# mail reads belong to Thunderbird alone.
+# mail reads belong to Thunderbird alone. DesertBird answers no theme frame, so a Thunderbird host neither takes nor replays one.
 APPS = {
-    "firefox": {"folder": "desertfox", "manifest": "desertfox_bridge", "extension_id": "desertfox@uhs-robert", "serves_tabs": True, "serves_mail": False},
-    "thunderbird": {"folder": "desertbird", "manifest": "desertbird_bridge", "extension_id": "desertbird@uhs-robert", "serves_tabs": False, "serves_mail": True},
+    "firefox": {"folder": "desertfox", "manifest": "desertfox_bridge", "extension_id": "desertfox@uhs-robert", "serves_tabs": True, "serves_mail": False, "takes_theme": True},
+    "thunderbird": {"folder": "desertbird", "manifest": "desertbird_bridge", "extension_id": "desertbird@uhs-robert", "serves_tabs": False, "serves_mail": True, "takes_theme": False},
 }
 
 
@@ -982,6 +982,8 @@ def answer(request, state, link, limiter):
         if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
             return {"ok": False, "message": "run needs a command text"}
         tab_id = request.get("tab_id")
+        if "tab_id" in request and not APPS[state.app]["serves_tabs"]:
+            return {"ok": False, "message": "tab verbs need --app firefox"}
         if "tab_id" in request and not is_int(tab_id):
             return {"ok": False, "message": "tab_id is a whole number"}
         if not limiter.admit():
@@ -989,6 +991,8 @@ def answer(request, state, link, limiter):
         fields = {"command": command, "tab_id": tab_id} if "tab_id" in request else {"command": command}
         return run_result(link.ask("run", fields, REQUEST_TIMEOUT_S))
     if verb == "theme":
+        if not APPS[state.app]["takes_theme"]:
+            return {"ok": False, "message": "theme needs --app firefox"}
         theme = request.get("theme")
         if not (isinstance(theme, str) and THEME_PATTERN.fullmatch(theme)):
             return {"ok": False, "message": "theme needs a theme name of letters, digits, _ and -, at most 64 characters"}
@@ -1154,7 +1158,10 @@ def take_mode(message, state, hub):
 
 
 def serve(stdin, link, state, hub):
-    state.theme.say_ready(link)
+    if APPS[state.app]["takes_theme"]:
+        state.theme.say_ready(link)
+    else:
+        link.say_ready()
     while True:
         message = read_message(stdin)
         verb = message.get("verb") if isinstance(message, dict) else None

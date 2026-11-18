@@ -1258,6 +1258,19 @@ class ThunderbirdLinkTest(BridgeTestCase):
         state = self.wait_for_bird_state("visual")
         self.assertEqual((state["firefox"], state["mode"]), ({"window_id": 3, "private": False}, {"id": "visual", "label": "VISUAL", "tab_id": 7}))
 
+    def test_theme_and_a_run_in_a_tab_are_refused_and_never_reach_the_add_on(self):
+        theme_file = os.path.join(self.runtime, "desertbird", "theme.json")
+        os.makedirs(os.path.dirname(theme_file))
+        with open(theme_file, "w", encoding="utf-8") as kept:
+            json.dump({"theme": "oasis_dune"}, kept)
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        self.assertEqual(self.ask({"verb": "theme", "theme": "gruvbox"}, socket_path=self.bird_socket), {"ok": False, "message": "theme needs --app firefox"})
+        self.assertEqual(self.ask({"verb": "run", "command": "msg.next", "tab_id": 17}, socket_path=self.bird_socket), {"ok": False, "message": "tab verbs need --app firefox"})
+        with self.assertRaises(AssertionError, msg="no theme replay after ready and no request"):
+            host.read_request(timeout=0.3)
+        with open(theme_file, encoding="utf-8") as kept:
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"}, "a refused push writes nothing")
+
     def test_state_is_answered_by_the_host_and_never_sent_to_the_add_on(self):
         host = self.start(argv=THUNDERBIRD_ARGV)
         self.assertEqual(self.ask({"verb": "state"}, socket_path=self.bird_socket), {"ok": True, "state": None})

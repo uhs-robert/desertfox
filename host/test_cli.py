@@ -395,10 +395,14 @@ class AppTest(unittest.TestCase):
         self.assertEqual(len(firefox.requests), 1)
         self.assertEqual(firefox.probes + thunderbird.probes, 0, "a named app needs no probe")
 
-    def test_without_app_the_only_running_bridge_is_used(self):
-        thunderbird = self.serve("thunderbird", {"ok": True})
-        self.assertEqual(self.cli("run", "msg.next").returncode, 0)
-        self.assertEqual(thunderbird.requests, [{"verb": "run", "command": "msg.next"}])
+    def test_without_app_a_lone_thunderbird_bridge_is_never_used(self):
+        thunderbird = self.serve("thunderbird")
+        self.assertEqual(self.cli("run", "tab.next").returncode, 3)
+        self.assertEqual(self.cli("events").returncode, 3)
+        self.assertEqual(self.cli("theme", "oasis_dune").returncode, 0, "with Firefox down the name is kept for Firefox")
+        with open(os.path.join(self.runtime, "desertfox", "theme.json"), encoding="utf-8") as kept:
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
+        self.assertEqual(thunderbird.requests, [])
 
     def test_without_app_and_no_bridge_it_is_firefox_as_before(self):
         done = self.cli("run", "tab.next")
@@ -433,11 +437,13 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.cli("run", "--app", "thunderbird").returncode, 0)
         self.assertEqual(bridge.requests, [{"verb": "run", "command": "--app thunderbird"}])
 
-    def test_theme_without_a_bridge_keeps_the_name_in_the_named_apps_folder(self):
-        self.assertEqual(self.cli("--app", "thunderbird", "theme", "oasis_dune").returncode, 0)
-        with open(os.path.join(self.runtime, "desertbird", "theme.json"), encoding="utf-8") as kept:
-            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
-        self.assertFalse(os.path.exists(os.path.join(self.runtime, "desertfox", "theme.json")))
+    def test_theme_for_thunderbird_is_a_usage_error_that_writes_and_sends_nothing(self):
+        thunderbird = self.serve("thunderbird")
+        done = self.cli("--app", "thunderbird", "theme", "oasis_dune")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("theme needs --app firefox", done.stderr)
+        self.assertEqual(thunderbird.requests, [])
+        self.assertEqual(os.listdir(os.path.join(self.runtime, "desertbird")), ["bridge.sock"])
 
     def test_the_cli_reaches_a_restarted_thunderbird_host_and_never_the_firefox_one(self):
         firefox = test_bridge.Host(self.runtime, argv=test_bridge.FIREFOX_ARGV)
