@@ -79,16 +79,30 @@ export function pick_heading(rows: readonly HeadingItem[], typed: string): numbe
 // The scroll margin makes `scrollIntoView` leave the room in any scroller, which `scrollBy` on the window does not do for a scrolling div.
 // A bar that sticks only once the layout runs (or below the top edge) is missed by the first read, so `reread_inset` reads again after the jump and the jump repeats once for a taller bar.
 export function scroll_to_top(element: Element, frames: readonly Element[], inset = 0, reread_inset: () => number = () => 0): void {
-  const jump = (room: number) => {
+  const jump = (bar: number) => {
     const { style } = element as HTMLElement;
+    const page_margin = parseFloat(getComputedStyle(element).scrollMarginTop) || 0;
+    const room = scroll_room(bar, page_margin, scroll_padding_above(element));
     const kept = style.scrollMarginTop;
-    style.scrollMarginTop = `${room}px`;
+    if (room !== page_margin) style.scrollMarginTop = `${room}px`;
     for (const target of [element, ...[...frames].reverse()]) target.scrollIntoView({ block: "start", behavior: "instant" });
     style.scrollMarginTop = kept;
   };
   jump(inset);
   const covering = reread_inset();
   if (covering > inset) jump(covering);
+}
+
+// The browser leaves margin plus the scroller's padding above the target. The page may set either for its own bar, so the room never drops below the page's margin and the padding counts toward the bar.
+export const scroll_room = (bar: number, page_margin: number, padding: number): number => Math.max(bar - padding, page_margin);
+
+// The first `scroll-padding-top` set on the target or above it: a close enough stand-in for the scroller, which `scrollIntoView` reads it from.
+function scroll_padding_above(element: Element): number {
+  for (let at: Element | null = element.parentElement; at; at = at.parentElement) {
+    const padding = parseFloat(getComputedStyle(at).scrollPaddingTop);
+    if (padding > 0) return padding;
+  }
+  return 0;
 }
 
 // A bar taller than this share of the view is a wall or an overlay, not a header, and the scroll stays as it is.
