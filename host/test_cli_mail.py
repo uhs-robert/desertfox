@@ -38,7 +38,7 @@ MESSAGE = {
 }
 
 
-class MailCliTest(unittest.TestCase):
+class MailCliCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="dfm")
         self.addCleanup(self.temp.cleanup)
@@ -51,10 +51,18 @@ class MailCliTest(unittest.TestCase):
         self.addCleanup(bridge.close)
         return bridge
 
-    def mail(self, *args, app=("--app", "thunderbird")):
+    def mail(self, *args, app=("--app", "thunderbird"), stdin=""):
         env = dict(os.environ, XDG_RUNTIME_DIR=self.runtime)
-        return subprocess.run([sys.executable, CLI_PATH, *app, "mail", *args], capture_output=True, text=True, env=env, timeout=20)
+        return subprocess.run([sys.executable, CLI_PATH, *app, "mail", *args], capture_output=True, text=True, env=env, timeout=20, input=stdin)
 
+    def body_file(self, data):
+        path = os.path.join(self.runtime, "body.txt")
+        with open(path, "wb") as body:
+            body.write(data)
+        return path
+
+
+class MailCliTest(MailCliCase):
     def test_mail_without_app_thunderbird_is_a_usage_error_that_sends_nothing(self):
         firefox = self.serve(folder="desertfox")
         thunderbird = self.serve()
@@ -177,6 +185,138 @@ class MailCliTest(unittest.TestCase):
         thread.join(20)
         self.assertEqual(done["result"].returncode, 0)
         self.assertTrue(envelope(done["result"].stdout)[1].endswith("\n\nHi,\nlunch at noon?"))
+
+
+
+class MailWriteCliTest(MailCliCase):
+    """`mail draft`, `mail archive`, `mail trash` and `mail move`."""
+
+    def test_a_draft_takes_its_body_from_stdin_and_prints_no_mail_text(self):
+        bridge = self.serve({"ok": True})
+        body = "Hi Ann,\n\nlunch at noon? \u20ac\n"
+        done = self.mail("draft", "--to", "ann@example.org", "--subject", "Lunch", "--body-file", "-", stdin=body)
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "draft saved\n", ""))
+        self.assertEqual(bridge.requests, [{"verb": "draft", "to": ["ann@example.org"], "subject": "Lunch", "body": body}])
+
+    def test_a_draft_takes_its_body_from_a_file_and_every_option(self):
+        bridge = self.serve({"ok": True})
+        path = self.body_file("line one\nline two".encode())
+        done = self.mail("draft", "--to", "a@x.org", "--to=b@x.org", "--cc", "c@x.org", "--subject=Re: plan", "--from", "me@x.org", "--reply-to", "42", "--body-file", path)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(bridge.requests, [{"verb": "draft", "to": ["a@x.org", "b@x.org"], "cc": ["c@x.org"], "subject": "Re: plan", "from": "me@x.org", "reply_to_id": 42, "body": "line one\nline two"}])
+
+    def test_a_reply_draft_may_leave_out_to(self):
+        bridge = self.serve({"ok": True})
+        self.assertEqual(self.mail("draft", "--reply-to", "42", "--subject", "Re: Lunch", "--body-file", "-", stdin="yes").returncode, 0)
+        self.assertEqual(bridge.requests[0]["to"], [])
+
+    def test_a_body_at_the_cap_goes_as_utf_8_so_it_fits_the_host_request_cap(self):
+        cli = load_script("desertfox")
+        # Four UTF-8 bytes each and twelve as a JSON escape pair: escaped, this body alone would pass the 192 KiB cap.
+        body = "\U0001f600" * (cli.MAX_BODY_BYTES // 4)
+        line = cli.request_line({"verb": "draft", "to": ["a@b"], "subject": "s", "body": body})
+        self.assertLess(len(line), cli.MAX_BODY_BYTES + 100)
+        self.assertEqual(json.loads(line)["body"], body)
+        # An argument that is not UTF-8 arrives as a lone surrogate, which only the escaped form can carry.
+        self.assertEqual(json.loads(cli.request_line({"subject": "\udcff"}))["subject"], "\udcff")
+
+    def test_a_refusal_prints_the_add_on_text_on_stderr_and_exits_one(self):
+        replies = [{"ok": False, "message": text} for text in ("off", "bad address", "denied", "timed out", "busy", "no such message", "moved 1 of 2")]
+        self.serve(*replies)
+        runs = [("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), ("draft", "--to", "x", "--subject", "s", "--body-file", "-"),
+                ("archive", "1"), ("trash", "1", "2"), ("move", "f1", "1"), ("archive", "3"), ("move", "f1", "1", "2")]
+        for args, refusal in zip(runs, replies):
+            done = self.mail(*args, stdin="body")
+            self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", "desertfox: %s\n" % refusal["message"]), args)
+
+    def test_each_act_sends_its_ids_and_prints_the_count(self):
+        bridge = self.serve({"ok": True, "count": 2}, {"ok": True, "count": 1}, {"ok": True, "count": 3})
+        self.assertEqual(self.mail("archive", "4", "5").stdout, "archived 2 messages\n")
+        self.assertEqual(self.mail("trash", "4").stdout, "moved 1 message to Trash\n")
+        self.assertEqual(self.mail("move", "imap://a1/Done", "4", "5", "6").stdout, "moved 3 messages\n")
+        self.assertEqual(bridge.requests, [
+            {"verb": "act", "action": "archive", "ids": [4, 5]},
+            {"verb": "act", "action": "trash", "ids": [4]},
+            {"verb": "act", "action": "move", "ids": [4, 5, 6], "folder": "imap://a1/Done"},
+        ])
+
+    def test_bad_write_usage_exits_two_and_sends_nothing(self):
+        bridge = self.serve()
+        path = self.body_file(b"body")
+        for args, stdin in (
+            (("draft", "--subject", "s", "--body-file", path), ""),
+            (("draft", "--to", "a@b", "--body-file", path), ""),
+            (("draft", "--to", "a@b", "--subject", "s"), "body on stdin but no --body-file"),
+            (("draft", "--to", "a@b", "--subject", "s", "--body-file", path, "the body as an argument"), ""),
+            (("draft", "--to", "a@b", "--subject", "s", "--subject", "t", "--body-file", path), ""),
+            (("draft", "--to", "a@b", "--subject", "s", "--reply-to", "x", "--body-file", path), ""),
+            (("draft", "--to", "a@b", "--subject", "s", "--body-file"), ""),
+            (("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), "b" * (64 * 1024 + 1)),
+            (("draft", "--to", "a@b", "--subject", "s", "--body-file", self.body_file(b"\xff\xfe")), ""),
+            (("archive",), ""), (("trash", "x"), ""), (("archive", "1", "1"), ""), (("archive", *map(str, range(51))), ""),
+            (("move",), ""), (("move", "f1"), ""), (("frob", "1"), ""),
+        ):
+            done = self.mail(*args, stdin=stdin)
+            self.assertEqual(done.returncode, 2, args)
+            self.assertIn("usage:", done.stderr)
+        self.assertEqual(bridge.requests, [])
+
+    def test_writes_without_app_thunderbird_are_usage_errors_that_send_nothing(self):
+        firefox = self.serve(folder="desertfox")
+        for args in (("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), ("archive", "1"), ("trash", "1"), ("move", "f1", "1")):
+            for app in ((), ("--app", "firefox")):
+                done = self.mail(*args, app=app, stdin="body")
+                self.assertEqual(done.returncode, 2, (args, app))
+                self.assertIn("mail needs --app thunderbird", done.stderr)
+        self.assertEqual(firefox.requests, [])
+
+    def test_a_body_file_that_cannot_be_read_fails_and_sends_nothing(self):
+        bridge = self.serve()
+        done = self.mail("draft", "--to", "a@b", "--subject", "s", "--body-file", os.path.join(self.runtime, "missing.txt"))
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("cannot read the body", done.stderr)
+        self.assertEqual(bridge.requests, [])
+
+    def test_no_bridge_exits_three(self):
+        for args in (("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), ("archive", "1")):
+            self.assertEqual(self.mail(*args, stdin="body").returncode, 3, args)
+
+    def test_help_names_the_write_gates(self):
+        done = self.mail("draft", "--help")
+        self.assertEqual(done.returncode, 0)
+        for gate in ("bridge_allow_drafts", "bridge_allow_actions", "--body-file"):
+            self.assertIn(gate, done.stdout)
+
+    def test_the_cli_caps_match_the_host_and_its_act_wait_outlasts_the_host_one(self):
+        cli, host = load_script("desertfox"), load_script("desertfox-bridge")
+        self.assertEqual((cli.MAX_BODY_BYTES, cli.MAX_ACT_IDS), (host.MAX_BODY_BYTES, host.MAX_ACT_IDS))
+        self.assertGreater(cli.ACT_TIMEOUT_S, host.ACT_TIMEOUT_S)
+        self.assertGreater(cli.TIMEOUT_S, host.REQUEST_TIMEOUT_S)
+
+    def test_a_draft_with_a_body_at_the_cap_through_the_real_thunderbird_host(self):
+        host = test_bridge.Host(self.runtime, argv=test_bridge.THUNDERBIRD_ARGV)
+        self.addCleanup(host.kill)
+        body = "\U0001f600" * (64 * 1024 // 4)
+        done = {}
+        thread = threading.Thread(target=lambda: done.update(result=self.mail("draft", "--to", "a@b", "--subject", "s", "--body-file", "-", stdin=body)))
+        thread.start()
+        request = host.read_request()
+        self.assertEqual((request["verb"], request["body"]), ("draft", body))
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True})
+        thread.join(20)
+        self.assertEqual((done["result"].returncode, done["result"].stdout), (0, "draft saved\n"))
+
+    def test_an_act_through_the_real_thunderbird_host_waits_for_the_answer(self):
+        host = test_bridge.Host(self.runtime, argv=test_bridge.THUNDERBIRD_ARGV)
+        self.addCleanup(host.kill)
+        done = {}
+        thread = threading.Thread(target=lambda: done.update(result=self.mail("trash", "7")))
+        thread.start()
+        request = host.read_request()
+        self.assertEqual((request["verb"], request["action"], request["ids"]), ("act", "trash", [7]))
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": False, "message": "denied"})
+        thread.join(20)
+        self.assertEqual((done["result"].returncode, done["result"].stderr), (1, "desertfox: denied\n"))
 
 
 if __name__ == "__main__":

@@ -27,6 +27,18 @@ The mail reads need --app thunderbird and the DesertBird share settings, all off
   desertfox --app thunderbird mail read <id> [--json]                    needs bridge_share_headers and bridge_share_bodies
   desertfox --app thunderbird mail attachments <id> [--json]             needs bridge_share_attachments
 
+The mail writes need --app thunderbird and `bridge`. They print a short line and never any mail text:
+
+  desertfox --app thunderbird mail draft --to A [--to B ...] [--cc C ...] --subject S [--from EMAIL] [--reply-to ID] --body-file PATH|-
+                                       save a draft, never send it. Needs bridge_allow_drafts. The body comes from the file
+                                       or, with -, from stdin, never from the arguments, so the shell and `ps` never hold it.
+                                       --to may be left out with --reply-to. --from must name one of your identities exactly
+  desertfox --app thunderbird mail archive <id>...             archive the messages
+  desertfox --app thunderbird mail trash <id>...               move the messages to their account's Trash
+  desertfox --app thunderbird mail move <folder id> <id>...    move the messages, also needs bridge_share_folders
+                                       Each act needs bridge_allow_actions and waits up to 70 s for a person to press y or n
+                                       in Thunderbird. A second act while one waits is refused as busy.
+
 Outside text (folder names and paths, from, to, subject, content type, the body, attachment names and types) prints only between
 `<<<UNTRUSTED mail <what> nonce=<n>>>>` and `<<<END <n>>>>`, with a new random nonce for each print, so a reader can
 tell where text from outside starts and ends. With --json the envelope lines wrap the JSON. A reply that dropped rows or cut the body says `truncated`.
@@ -58,10 +70,15 @@ EXIT_USAGE = 2
 EXIT_NO_BRIDGE = 3
 # The host gives up on the extension after 10 s, so a reply always comes before this.
 TIMEOUT_S = 15
+# The host waits ACT_TIMEOUT_S, 70 s, for the person who answers an act.
+ACT_TIMEOUT_S = 75
 # The host waits 10 s for the tab list, then up to 5 s for each of 64 tabs.
 CAPTURE_TIMEOUT_S = 345
 # The same range as MAX_MESSAGES_LIMIT in desertfox-bridge, checked here too so a bad value is a usage error.
 MAX_MESSAGES_LIMIT = 200
+# The same caps as MAX_BODY_BYTES and MAX_ACT_IDS in desertfox-bridge, checked here so the body is read no further than the cap.
+MAX_BODY_BYTES = 64 * 1024
+MAX_ACT_IDS = 50
 # Longer than the 3 s a starting host waits for the lock, so a host that is starting has bound its socket before this gives up.
 LOCK_RETRY_S = 5
 # The same shape as THEME_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
@@ -83,7 +100,12 @@ USAGE = """usage: desertfox [--app firefox|thunderbird] <verb> ...
                                                                    needs bridge_share_headers and bridge_share_folders
        desertfox --app thunderbird mail read <id> [--json]         needs bridge_share_headers and bridge_share_bodies
        desertfox --app thunderbird mail attachments <id> [--json]  needs bridge_share_attachments
-       Every mail read also needs bridge."""
+       desertfox --app thunderbird mail draft --to A [--to B ...] [--cc C ...] --subject S [--from EMAIL] [--reply-to ID] --body-file PATH|-
+                                                                   needs bridge_allow_drafts; the body comes from the file or stdin (-)
+       desertfox --app thunderbird mail archive <id>...            needs bridge_allow_actions
+       desertfox --app thunderbird mail trash <id>...              needs bridge_allow_actions
+       desertfox --app thunderbird mail move <folder id> <id>...   needs bridge_allow_actions and bridge_share_folders
+       Every mail verb also needs bridge. An act waits up to 70 s for y or n in Thunderbird."""
 
 
 class BridgeDown(Exception):
@@ -127,6 +149,15 @@ def take_app(argv):
     return named, rest
 
 
+def request_line(request):
+    """The request as one JSON line. Text goes as UTF-8, not as escapes, so a 64 KiB body of any script fits the host's
+    request cap. A lone surrogate from an argument that is not UTF-8 has no UTF-8 form, so such a request goes escaped."""
+    try:
+        return json.dumps(request, ensure_ascii=False).encode("utf-8") + b"\n"
+    except UnicodeEncodeError:
+        return json.dumps(request).encode("utf-8") + b"\n"
+
+
 def connected(request, timeout_s):
     """A new connection that has sent the request. Raises BridgeDown when nothing listens."""
     path = socket_path()
@@ -134,7 +165,7 @@ def connected(request, timeout_s):
     try:
         connection.settimeout(timeout_s)
         connection.connect(path)
-        connection.sendall(json.dumps(request).encode("utf-8") + b"\n")
+        connection.sendall(request_line(request))
         return connection
     except (FileNotFoundError, ConnectionRefusedError):
         connection.close()
@@ -454,12 +485,115 @@ def mail_attachments(words):
     return EXIT_DONE
 
 
+def take_repeated_option(words, name):
+    """(every value of `--name value` or `--name=value` in the words, the other words)."""
+    values = []
+    while True:
+        value, words = take_option_once(words, name)
+        if value is None:
+            return values, words
+        values.append(value)
+
+
+def take_option_once(words, name):
+    """(value, the other words) for the first `--name value` or `--name=value`, with value None when it is absent."""
+    for index, word in enumerate(words):
+        if word == name:
+            if index + 1 >= len(words):
+                raise Usage("%s needs a value" % name)
+            return words[index + 1], words[:index] + words[index + 2:]
+        if word.startswith(name + "="):
+            return word[len(name) + 1:], words[:index] + words[index + 1:]
+    return None, words
+
+
+def take_single_option(words, name):
+    values, words = take_repeated_option(words, name)
+    if len(values) > 1:
+        raise Usage("%s is given once" % name)
+    return (values[0] if values else None), words
+
+
+def read_body(path):
+    """The body text from the file at `path`, or from stdin for -. Read no further than one byte past the cap."""
+    if path == "-":
+        data = sys.stdin.buffer.read(MAX_BODY_BYTES + 1)
+    else:
+        with open(path, "rb") as body_file:
+            data = body_file.read(MAX_BODY_BYTES + 1)
+    if len(data) > MAX_BODY_BYTES:
+        raise Usage("the body is over %d bytes" % MAX_BODY_BYTES)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Usage("the body is not UTF-8")
+
+
+def mail_draft(words):
+    to, words = take_repeated_option(words, "--to")
+    cc, words = take_repeated_option(words, "--cc")
+    subject, words = take_single_option(words, "--subject")
+    sender, words = take_single_option(words, "--from")
+    reply_to, words = take_single_option(words, "--reply-to")
+    body_path, words = take_single_option(words, "--body-file")
+    if words:
+        raise Usage("mail draft takes no '%s'; the body comes from --body-file PATH or --body-file -" % words[0])
+    if subject is None or body_path is None:
+        raise Usage("mail draft needs --subject and --body-file")
+    if not to and reply_to is None:
+        raise Usage("mail draft needs --to, unless it is a reply with --reply-to")
+    request = {"verb": "draft", "to": to, "subject": subject}
+    if cc:
+        request["cc"] = cc
+    if sender is not None:
+        request["from"] = sender
+    if reply_to is not None:
+        request["reply_to_id"] = whole_number(reply_to, "the message id after --reply-to")
+    try:
+        request["body"] = read_body(body_path)
+    except OSError as error:
+        return fail("cannot read the body: %s" % error.strerror)
+    reply = ask(request)
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not save the draft")
+    print("draft saved")
+    return EXIT_DONE
+
+
+# The confirmation line of each act, filled with the count and "message" or "messages".
+ACT_DONE = {"archive": "archived %d %s", "trash": "moved %d %s to Trash", "move": "moved %d %s"}
+
+
+def mail_act(action, words):
+    folder = None
+    if action == "move":
+        if not words:
+            raise Usage("mail move takes a folder id, then message ids")
+        folder, words = words[0], words[1:]
+    ids = [whole_number(word, "a message id") for word in words]
+    if not 1 <= len(ids) <= MAX_ACT_IDS or len(set(ids)) != len(ids):
+        raise Usage("mail %s takes 1 to %d different message ids" % (action, MAX_ACT_IDS))
+    request = {"verb": "act", "action": action, "ids": ids}
+    if folder is not None:
+        request["folder"] = folder
+    reply = ask(request, ACT_TIMEOUT_S)
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not %s the messages" % action)
+    count = reply.get("count")
+    count = count if isinstance(count, int) else len(ids)
+    print(ACT_DONE[action] % (count, "message" if count == 1 else "messages"))
+    return EXIT_DONE
+
+
 def do_mail(words):
     if app != "thunderbird":
         raise Usage("mail needs --app thunderbird")
-    handler = {"folders": mail_folders, "list": mail_list, "read": mail_read, "attachments": mail_attachments}.get(words[0] if words else None)
+    verb = words[0] if words else None
+    if verb in ACT_DONE:
+        return mail_act(verb, words[1:])
+    handler = {"folders": mail_folders, "list": mail_list, "read": mail_read, "attachments": mail_attachments, "draft": mail_draft}.get(verb)
     if not handler:
-        raise Usage("mail takes folders, list, read or attachments")
+        raise Usage("mail takes folders, list, read, attachments, draft, archive, trash or move")
     return handler(words[1:])
 
 
