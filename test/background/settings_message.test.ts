@@ -226,3 +226,15 @@ test("only a top-level extension page may send", () => {
   assert.equal(is_extension_page({ ...embedded_cmdline, frameId: 0 }, "test@desertfox", ORIGIN), false);
   assert.equal(is_extension_page({}, "test@desertfox", ORIGIN), false);
 });
+
+test("a temp theme pick from the popup, then desktop again, leaves the saved layer and the file as they were", async () => {
+  const { messages, local, session } = await make({ theme: "desktop" });
+  const pick = (value: string) => messages.change({ type: "change_setting", name: "theme", action: "set", value, layer: "temp" });
+  const saved_before = JSON.stringify(local[SAVED_SETTINGS_STORAGE_KEY] ?? {});
+  assert.ok((await pick("dracula")).ok);
+  assert.deepEqual((session[TEMP_SETTINGS_STORAGE_KEY] as { theme?: string }).theme, "dracula");
+  const back = await pick("desktop");
+  assert.ok(back.ok, "desktop passes the one validator");
+  assert.deepEqual((session[TEMP_SETTINGS_STORAGE_KEY] as { theme?: string }).theme, "desktop");
+  assert.equal(JSON.stringify(local[SAVED_SETTINGS_STORAGE_KEY] ?? {}), saved_before, "the saved settings never changed");
+});

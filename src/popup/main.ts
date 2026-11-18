@@ -4,15 +4,27 @@ import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
 import { site_state } from "../background/toolbar.ts";
 import type { SiteState } from "../background/toolbar.ts";
 import { effective_settings } from "../shared/config.ts";
-import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
+import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
-import { DISABLED_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, disabled_after_click, site_card, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
-import type { PopupRow } from "./model.ts";
+import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "../background/storage_keys.ts";
+import { build_rows, create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
+import type { HostDot, PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
-let notice = "";
+// One notice node for the life of the popup. The expiry and each new notice change its text and nothing else, so a redraw never runs for them and focus stays put.
+const notice_line = document.createElement("div");
+notice_line.className = "desertfox-popup-notice";
+notice_line.setAttribute("role", "status");
+const notice = create_notice({ after: (run, delay_ms) => { const timer = setTimeout(run, delay_ms); return () => clearTimeout(timer); }, changed: () => void (notice_line.textContent = notice.text()) });
+const show_notice = (answer: ToolbarAnswer): void => {
+  notice.show(answer);
+  notice_line.textContent = notice.text();
+};
+// Each draw takes a number before its first await, and only the newest may swap the page.
+let draw_generation = 0;
+// The permission half of the host dot, kept for the live update.
+let host_permission = false;
 
 const ask = (request: ToolbarRequest): Promise<ToolbarAnswer> => browser.runtime.sendMessage(request) as Promise<ToolbarAnswer>;
 
@@ -20,8 +32,9 @@ async function active_tab(): Promise<browser.tabs.Tab | undefined> {
   return (await browser.tabs.query({ active: true, currentWindow: true }))[0];
 }
 
-async function read_site(url: string | undefined): Promise<SiteState> {
-  const { config, edits, config_settings } = await load_effective_config();
+type LoadedConfig = Awaited<ReturnType<typeof load_effective_config>>;
+
+function read_site(url: string | undefined, { config, edits, config_settings }: LoadedConfig): SiteState {
   return site_state(url, {
     file: config_settings.site_rules ?? [],
     saved: edits.saved.site_rules,
@@ -38,24 +51,45 @@ async function open_help_page(hash: string): Promise<void> {
   window.close();
 }
 
-async function open_support_page(): Promise<void> {
+async function open_page_beside(url: string): Promise<void> {
   const tab = await active_tab();
-  await browser.tabs.create({ url: SUPPORT_URL, ...(tab?.id === undefined ? {} : { openerTabId: tab.id }) });
+  await browser.tabs.create({ url, ...(tab?.id === undefined ? {} : { openerTabId: tab.id }) });
   window.close();
+}
+
+// The clipboard write comes first and the page opens only after it worked, so a refused write leaves the notice on screen.
+async function copy_rule(site: SiteState): Promise<void> {
+  if (site.kind === "unavailable") return;
+  await navigator.clipboard.writeText(rule_template(site.pattern));
+  show_notice({ ok: true, message: "Copied a rule for this site" });
+  return open_help_page(EDIT_FILES_HASH);
 }
 
 async function act(row: PopupRow): Promise<void> {
   const tab = await active_tab();
-  if (row.id === "power") notice = (await ask({ type: "toolbar_set_disabled", disabled: disabled_after_click(row) })).message;
+  if (row.id === "power") show_notice(await ask({ type: "toolbar_set_disabled", disabled: disabled_after_click(row) }));
   else if (row.id === "settings") return open_help_page(SETTINGS_HASH);
   else if (row.id === "home") return open_help_page(HOME_HASH);
-  else if (row.id === "support") return open_support_page();
+  else if (row.id === "keys") return open_help_page(COMMANDS_HASH);
+  else if (row.id === "support") return open_page_beside(SUPPORT_URL);
+  else if (row.id === "copy_rule") {
+    try {
+      return await copy_rule(read_site(tab?.url, await load_effective_config()));
+    } catch (error) {
+      show_notice({ ok: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
   else if (row.id === "rule") return open_help_page(SITE_RULES_HASH);
   else if (row.id === "site") {
-    const answer = await ask({ type: "toolbar_site", url: tab?.url ?? "", action: row.site_action ?? "disable" });
-    notice = answer.message;
-  } else if (row.id === "reload_config") notice = (await ask({ type: "toolbar_reload_config" })).message;
+    show_notice(await ask({ type: "toolbar_site", url: tab?.url ?? "", action: row.site_action ?? "disable" }));
+  } else if (row.id === "reload_config") show_notice(await ask({ type: "toolbar_reload_config" }));
+  await draw();
+}
+
+// The settings page's own request, so the one validator checks the name and `desktop` passes like any theme. The temp layer lasts until the browser restarts.
+async function pick_theme(name: string): Promise<void> {
+  show_notice((await browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "set", layer: "temp", value: name } satisfies ChangeSetting)) as ToolbarAnswer);
   await draw();
 }
 
@@ -70,6 +104,7 @@ function button_element(row: PopupRow): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.disabled = !row.enabled;
+  button.dataset.focusKey = row.id;
   const text = element("span", "desertfox-popup-text", row.label);
   if (row.detail !== undefined) text.append(element("span", "desertfox-popup-detail", row.detail));
   button.append(text);
@@ -88,6 +123,8 @@ const ICON_PATHS = {
   settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
   home: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
   reload: "M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6",
+  keys: "M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM6 11h.01M10 11h.01M14 11h.01M18 11h.01M7 14.5h10",
+  copy: "M9 9h11v11H9zM5 15V4h11",
   support: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z",
 } as const;
 
@@ -109,13 +146,29 @@ function icon_button(row: PopupRow, id: keyof typeof ICON_PATHS, extra_class: st
   return button;
 }
 
-function header_element(version: string, disabled: boolean): HTMLElement {
+function paint_dot(status: HTMLElement, dot: HostDot): void {
+  status.classList.toggle("desertfox-popup-host-dot-up", dot.connected);
+  status.setAttribute("aria-label", dot.label);
+  status.title = dot.label;
+}
+
+function header_element(version: string, disabled: boolean, dot: HostDot): HTMLElement {
   const header = element("div", "desertfox-popup-header");
   const icon = document.createElement("img");
   icon.className = "desertfox-popup-icon";
   icon.alt = "";
   icon.src = disabled ? "icons/desertfox-off.svg" : "icons/desertfox.svg";
-  header.append(icon, element("span", "desertfox-popup-wordmark", "DesertFox"), element("span", "desertfox-popup-version", version));
+  const link = element("a", "desertfox-popup-version", version) as HTMLAnchorElement;
+  link.dataset.focusKey = "version";
+  link.href = release_url(version);
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    void open_page_beside(link.href);
+  });
+  const status = element("span", "desertfox-popup-host-dot");
+  status.setAttribute("role", "img");
+  paint_dot(status, dot);
+  header.append(icon, element("span", "desertfox-popup-wordmark", "DesertFox"), status, link);
   return header;
 }
 
@@ -127,6 +180,7 @@ function power_element(row: PopupRow): HTMLElement {
     const radio = document.createElement("input");
     radio.type = "radio";
     radio.name = "power";
+    radio.dataset.focusKey = "power";
     radio.checked = row.on === is_on;
     // The chosen segment is the current state, so only the other one fires a change.
     radio.addEventListener("change", () => void act(row));
@@ -134,6 +188,23 @@ function power_element(row: PopupRow): HTMLElement {
     group.append(label);
   }
   return group;
+}
+
+function theme_element(names: readonly string[], current: string): HTMLElement {
+  const label = element("label", "desertfox-popup-theme");
+  const select = document.createElement("select");
+  select.className = "desertfox-popup-theme-select";
+  select.dataset.focusKey = "theme";
+  for (const name of names) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    option.selected = name === current;
+    select.append(option);
+  }
+  select.addEventListener("change", () => void pick_theme(select.value));
+  label.append(element("span", "desertfox-popup-theme-text", "Theme"), select);
+  return label;
 }
 
 function card_element(rows: PopupRow[], inputs: { site: SiteState; disabled: boolean }): HTMLElement {
@@ -144,40 +215,53 @@ function card_element(rows: PopupRow[], inputs: { site: SiteState; disabled: boo
   card.append(row_button(site, "desertfox-popup-site"));
   const rule = rows.find((row) => row.id === "rule");
   if (rule !== undefined) card.append(row_button(rule, "desertfox-popup-rule desertfox-popup-link"));
+  const copy = rows.find((row) => row.id === "copy_rule");
+  if (copy !== undefined) card.append(icon_button(copy, "copy", "desertfox-popup-copy"));
   return card;
 }
 
 async function draw(): Promise<void> {
-  const [tab, stored, host] = await Promise.all([
+  const mine = ++draw_generation;
+  const [tab, stored, host, session, loaded] = await Promise.all([
     active_tab(),
-    browser.storage.local.get([DISABLED_STORAGE_KEY, WARNINGS_STORAGE_KEY]),
+    browser.storage.local.get([DISABLED_STORAGE_KEY, WARNINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY]),
     browser.permissions.contains({ permissions: ["nativeMessaging"] }),
+    browser.storage.session.get(HOST_CONNECTED_STORAGE_KEY),
+    load_effective_config(),
   ]);
+  // A newer draw started while this one waited, and it paints the newer state.
+  if (mine !== draw_generation) return;
+  host_permission = host;
   const inputs = {
     disabled: stored[DISABLED_STORAGE_KEY] === true,
-    site: await read_site(tab?.url),
+    site: read_site(tab?.url, loaded),
     warning_count: ((stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? []).length,
     version: browser.runtime.getManifest().version,
     has_native_host: host,
+    host_connected: session[HOST_CONNECTED_STORAGE_KEY] === true,
+    theme: effective_settings(loaded.config.settings).theme,
+    extra_theme_names: [...Object.keys(loaded.config.local_themes ?? {}), ...Object.keys((stored[THEME_EDITS_STORAGE_KEY] as object | undefined) ?? {})],
   };
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
-  const elements = [header_element(inputs.version, inputs.disabled), power_element(by_id("power")), card_element(rows, inputs)];
+  const elements = [header_element(inputs.version, inputs.disabled, host_dot(inputs.has_native_host, inputs.host_connected)), power_element(by_id("power")), card_element(rows, inputs)];
   const pair = element("div", "desertfox-popup-pair");
-  pair.append(icon_button(by_id("settings"), "settings", "desertfox-popup-half"), icon_button(by_id("home"), "home", "desertfox-popup-half"));
+  pair.append(icon_button(by_id("settings"), "settings", "desertfox-popup-half"), icon_button(by_id("home"), "home", "desertfox-popup-half"), icon_button(by_id("keys"), "keys", "desertfox-popup-half"));
   elements.push(icon_button(by_id("reload_config"), "reload", "desertfox-popup-action"), pair);
   if (rows.some((row) => row.id === "warnings")) elements.push(row_button(by_id("warnings"), "desertfox-popup-link"));
-  if (notice !== "") {
-    const line = element("div", "desertfox-popup-notice", notice);
-    line.setAttribute("role", "status");
-    elements.push(line);
-  }
-  elements.push(icon_button(by_id("support"), "support", "desertfox-popup-support"));
-  // A redraw replaces the radios, so a keyboard user keeps the focus on the group.
-  const had_focus = document.activeElement instanceof HTMLInputElement && document.activeElement.name === "power";
+  elements.push(theme_element(theme_options(inputs.theme, inputs.extra_theme_names), inputs.theme), notice_line, icon_button(by_id("support"), "support", "desertfox-popup-support"));
+  // A redraw replaces every control, so the one that had focus gets it back by its key. The power radios share a key, and the checked one takes it.
+  const focus_key = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.focusKey : undefined;
   root.replaceChildren(...elements);
-  if (had_focus) root.querySelector<HTMLInputElement>("input[name=power]:checked")?.focus();
+  if (focus_key !== undefined) root.querySelector<HTMLElement>(focus_key === "power" ? "input[data-focus-key=power]:checked" : `[data-focus-key="${focus_key}"]`)?.focus();
 }
+
+// The bridge flips the flag while the popup is open, so the dot follows it without a redraw.
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "session" || !(HOST_CONNECTED_STORAGE_KEY in changes)) return;
+  const dot = root.querySelector<HTMLElement>(".desertfox-popup-host-dot");
+  if (dot !== null) paint_dot(dot, host_dot(host_permission, changes[HOST_CONNECTED_STORAGE_KEY]?.newValue === true));
+});
 
 follow_theme(":root, .desertfox-popup");
 void draw();
