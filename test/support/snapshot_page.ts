@@ -30,6 +30,7 @@ export function saved_reader(page: SavedPage): PageReader<SavedNode> {
     tag_: (node) => node.t,
     attr_: (node, name) => node.a?.[name] ?? null,
     text_: (node) => node.s ?? "",
+    text_length_: (node) => node.n ?? node.s?.length ?? 0,
     box_: (node) => {
       if (!boxes.has(node)) boxes.set(node, node.r && !node.h ? { x: node.r[0], y: node.r[1], w: node.r[2], h: node.r[3] } : undefined);
       return boxes.get(node);
