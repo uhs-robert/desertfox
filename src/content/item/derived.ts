@@ -6,6 +6,9 @@ import type { Found } from "./finder.ts";
 import { dom_reader } from "./dom_reader.ts";
 import { is_shown } from "../shown.ts";
 
+// Read through the `href` attribute, because an `a` in an svg has no string `href` property.
+const same_page_ = (link: Element): boolean => new URL(link.getAttribute("href")!, location.href).href.split("#")[0] === location.href.split("#")[0];
+
 // A page with no list gives `none`, and every key press would read the page again to see whether one appeared. A none answer stands this long.
 export const NONE_RECHECK_MS = 500;
 // After two reads in a row overran the long budget at an address, reads there get the short one for this long, then the long one may try again (a page read while the machine was busy).
@@ -94,7 +97,7 @@ export const list_tail = (items: readonly Element[]): unknown[] => {
 
 export const live_derived_row = (): DerivedRow =>
   create_derived_row({
-    find_: (budget_ms_) => find_items(dom_reader(document), { now_, budget_ms_ }),
+    find_: (budget_ms_) => find_items({ ...dom_reader(document), same_page_ }, { now_, budget_ms_ }),
     url_: () => location.href,
     now_,
     is_shown_: is_shown,
