@@ -157,3 +157,73 @@ test("a first link with a placeholder address still names its card below an unli
   assert.equal(found.kind, "grid");
   assert.equal(found.items.length, 24);
 });
+
+// A feed that loads more by replacing its trailing form with a frame inside the first frame, which holds the next batch. The second batch uses another tag for the same template. Both batches are one list, in document order.
+test("a batch in a frame nested inside the first batch's frame joins the list, whatever its tag", () => {
+  const item = (tag: string, y: number, index: number): SavedNode => ({
+    t: tag,
+    a: { class: "entry" },
+    r: [35, y, 650, 140],
+    c: [{ t: "a", a: { href: `/entry/${index}` }, r: [35, y, 600, 20], s: `Entry number ${index} headline`, c: [] }],
+  });
+  const batch = (tag: string, first: number, y: number, nested: SavedNode[] = []): SavedNode => ({
+    t: "frame",
+    r: [35, y, 650, 150 * (4 + nested.length)],
+    c: [...[0, 1, 2, 3].map((at) => item(tag, y + at * 150, first + at)), ...nested],
+  });
+  const second = batch("div", 4, 700);
+  const first = batch("article", 0, 100, [second]);
+  const body: SavedNode = { t: "body", r: [0, 0, 1366, 1400], c: [first] };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 1400], c: [body] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  const found = find_items(saved_reader({ view: { w: 1366, h: 682, doc_h: 1400 }, root }));
+  assert.deepEqual(found.items.map((entry) => found.links.get(entry)?.s), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `Entry number ${index} headline`));
+});
+
+// Hand-written pages for the nested-batch rule's negative cases: `entry` is a titled block of one class (or none), stacked from `y`.
+const entry = (tag: string, cls: string | undefined, y: number, index: number, kids: SavedNode[] = []): SavedNode => ({
+  t: tag,
+  ...(cls && { a: { class: cls } }),
+  r: [35, y, 650, 140],
+  c: [{ t: "a", a: { href: `/entry/${index}` }, r: [35, y, 600, 20], s: `Entry number ${index} headline`, c: [] }, ...kids],
+});
+function page_with(children: SavedNode[], height = 1400): SavedPage {
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, height], c: [{ t: "body", r: [0, 0, 1366, height], c: children }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  return { view: { w: 1366, h: 682, doc_h: height }, root };
+}
+const titles_of = (found: ReturnType<typeof find_items<SavedNode>>) => found.items.map((item) => found.links.get(item)?.s);
+
+test("classless sections that hold classless cards keep the cards as the items", () => {
+  const section = (at: number): SavedNode => {
+    const y = 100 + at * 400;
+    return { t: "div", r: [35, y, 650, 380], c: [0, 1, 2].map((card) => entry("div", undefined, y + card * 120, at * 3 + card)) };
+  };
+  const found = find_items(saved_reader(page_with([0, 1, 2].map(section), 1400)));
+  assert.deepEqual(titles_of(found), [0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => `Entry number ${index} headline`));
+});
+
+test("cards and the rows inside them that share a class do not join into one list", () => {
+  const card = (at: number): SavedNode => {
+    const y = 100 + at * 300;
+    return { ...entry("div", "flex", y, at * 10, [0, 1].map((row) => entry("div", "flex", y + 30 + row * 100, at * 10 + row + 1))), r: [35, y, 650, 280] };
+  };
+  const found = find_items(saved_reader(page_with([0, 1, 2, 3].map(card), 1400)));
+  // The rows are the items, as without the rule. The cards must not join them after the rows.
+  assert.deepEqual(titles_of(found), [1, 2, 11, 12, 21, 22, 31, 32].map((index) => `Entry number ${index} headline`));
+});
+
+test("a block of the feed's own item class that sits before the feed's items is not a later batch", () => {
+  const side: SavedNode = { t: "div", a: { class: "related" }, r: [35, 100, 650, 450], c: [0, 1, 2].map((at) => entry("article", "entry", 100 + at * 150, 90 + at)) };
+  const feed = [0, 1, 2, 3, 4, 5].map((at) => entry("article", "entry", 600 + at * 150, at));
+  const found = find_items(saved_reader(page_with([side, ...feed], 1600)));
+  assert.deepEqual(titles_of(found), [0, 1, 2, 3, 4, 5].map((index) => `Entry number ${index} headline`));
+});
