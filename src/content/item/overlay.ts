@@ -51,6 +51,8 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
   let user: UserLeft | undefined;
   // The ticks since the focus left the item, 0 while the item holds it. NaN while the focus has not been in the item, so a box drawn while the focus is elsewhere (a j that only scrolls) never runs out its grace: NaN counts on as NaN, which passes no limit.
   let ticks_away = NaN;
+  // The focus when the box was last drawn. Only a row item that took the focus since then gets the box: one that already held it (a Tab, then a j that only scrolls another item) is the user's old focus, not a page script's move.
+  let focus_at_show: Element | null = null;
   let stop_following: (() => void) | undefined;
   let watch: ReturnType<typeof setInterval> | undefined;
 
@@ -66,7 +68,7 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
     let holder;
     if (item!.contains(focused)) ticks_away = 0;
     else if (user!.left_()) clear();
-    else if ((holder = focused?.closest(item_selector!))) {
+    else if (focused !== focus_at_show && (holder = focused?.closest(item_selector!))) {
       show(holder, item_selector);
       on_follow(holder);
     } else if (++ticks_away > PAGE_FOCUS_GRACE_TICKS) clear();
@@ -86,6 +88,7 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
     if (target !== item) ticks_away = target.contains(document.activeElement) ? 0 : NaN;
     item = target;
     item_selector = selector;
+    focus_at_show = document.activeElement;
     user?.stop_();
     user = watch_user();
     reposition();
