@@ -141,23 +141,45 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // The hint labels with the left edge of each, so the test picks the label on the right-hand list.
   const labels_by_left = () => in_active_tab(`[...document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => ({ text: node.textContent, left: node.getBoundingClientRect().left }))).sort((a, b) => a.left - b.left)`);
 
-  await run_case(";L labels each list, and the list picked keeps j and k while the first list still shows", async () => {
+  await run_case(";j labels each list, and the list picked keeps j and k while the first list still shows", async () => {
     await open_page("page", "finder_pick_list", { new_tab: true });
     await add_side_lists();
     await press_keys("j");
     await expect_focus("a0");
-    await press_keys(";L");
+    await press_keys(";j");
     await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
     const [, right] = await labels_by_left();
     await press_keys(right.text);
-    // The pick focuses the card itself, and j then walks the title links of the list.
-    await poll_until("focus on the first card of the second list", async () => (await in_active_tab("document.activeElement?.className ?? ''")) === "card_b");
+    // The pick focuses the title link, as j does, so Enter opens it.
+    await expect_focus("b0");
     await press_keys("j");
     await expect_focus("b1");
     await press_keys("j");
     await expect_focus("b2");
     await press_keys("k");
     await expect_focus("b1");
+  });
+
+  await run_case(";j labels a list in a scroll box whose top items are scrolled out of the box", async () => {
+    await open_page("page", "finder_pick_scrolled_list", { new_tab: true });
+    await add_side_lists();
+    // The right-hand list sits in a box of its own, scrolled past its first four cards, with the clipped ones still inside the window above it, as a playlist panel scrolls to the video that plays.
+    await in_active_tab(`(() => {
+      const holder = document.querySelector(".side_b");
+      holder.style.cssText += ";top:250px;height:420px;overflow-y:auto";
+      holder.scrollTop = 280;
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("a0");
+    await press_keys(";j");
+    await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
+    const [, right] = await labels_by_left();
+    await press_keys(right.text);
+    const picked = await in_active_tab("document.activeElement?.id ?? ''");
+    expect(/^b[4-9]$/.test(picked), "the pick focused " + picked + ", not a shown item of the scrolled list");
+    await press_keys("j");
+    await poll_until("focus on a later item of the second list", async () => /^b\d$/.test(await focused()) && (await focused()) !== picked);
   });
 
   const at_bottom = () => in_active_tab("scrollY + innerHeight >= document.documentElement.scrollHeight - 2");

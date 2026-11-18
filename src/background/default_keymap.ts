@@ -384,7 +384,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ";fF": { id: "frame.exit" },
     ";fs": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";fe": { id: "page.focus_input", label: "Main input" },
-    ";L": { id: "hint.run", args: { action: "focus", filter: "lists" }, label: "Pick the list for j and k" },
+    ";j": { id: "hint.run", args: { action: "focus", filter: "lists" }, label: "Pick the list for j and k" },
     ";fh": { id: "hint.run", args: { action: "focus", filter: "headings" }, label: "Focus heading" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },
@@ -474,8 +474,8 @@ const BASE_SECTIONS: KeymapConfig = {
 };
 
 // The media mode keeps the hint and command line keys of normal mode, so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach.
-// `;fF` and `;fe` sit in the `;` group but run a normal-mode command, so the media mode leaves them out.
-const NORMAL_ONLY_HINT_GROUP_KEYS = new Set([";fF", ";fe"]);
+// `;fF`, `;fe` and `;j` sit in the `;` group but serve normal mode (`;j` picks the list for j and k, which change the volume in media mode), so the media mode leaves them out.
+const NORMAL_ONLY_HINT_GROUP_KEYS = new Set([";fF", ";fe", ";j"]);
 const keys_kept_in_media: ModeBindings = Object.fromEntries(
   Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (sequence === "f" || sequence === ":" || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence)),
 );

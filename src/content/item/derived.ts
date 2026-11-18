@@ -106,7 +106,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     selector_: () => item_selector(kept?.active.items),
     grid_: () => kept?.active.kind === "grid",
     lists_: () => (read(), kept?.found.regions ?? []),
-    pick_: (region) => kept && ((kept.active = region), (active_items = region.items)),
+    pick_: (region) => kept && ((kept.active = region), (active_items = region.items), (kept.tail = deps.tail_(region.items))),
     grew_: () => !!kept?.active.items[0] && deps.tail_(kept.active.items).some((next, at) => next !== kept!.tail[at]) && !(kept = undefined),
   };
 }
