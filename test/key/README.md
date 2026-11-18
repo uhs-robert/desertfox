@@ -113,8 +113,8 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 `run_piece` in `harness.mjs` gives every piece the same start and the same cleanup, so a piece needs no state from the one before it.
 
-- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`) and taking keys (it reported the key probe), the config link on `config_dir`, no temp settings.
-- After the piece, pass or fail: the `h.on_teardown` callbacks in reverse, every tab and window that was not in the start snapshot closed, the config link restored and reloaded, temp settings unset. The page is refocused only when one of those two steps has work, and never on an about: or extension page. A failed step is reported as a FAIL named `<piece> teardown` or `<piece> cleanup`. A failed reset skips the piece and reports `<piece> reset`.
+- Before the piece: one window with one tab at `page?id=home_<piece>`, active and focused (the page reports `document.hasFocus()`) and taking keys (it reported the key probe), the config link on `config_dir`, no saved or temp settings.
+- After the piece, pass or fail: the `h.on_teardown` callbacks in reverse, every tab and window that was not in the start snapshot closed, the config link restored and reloaded, saved and temp settings unset (`:unset all`). The page is refocused only when one of those two steps has work, and never on an about: or extension page. A failed step is reported as a FAIL named `<piece> teardown` or `<piece> cleanup`. A failed reset skips the piece and reports `<piece> reset`.
 - `h.setup(name, fn)` runs under any filter, is timed as `(setup)` and counts in no total. If it fails, the cases behind it fail with `setup failed`.
 - `h.config_copy()` returns a private copy of the base config. Edit the copy and load it with `h.load_config_dir`. Never write `config_dir`.
 
