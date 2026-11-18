@@ -94,6 +94,29 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await in_active_tab("scrollY")) === 0, `gg left the page at scrollY ${await in_active_tab("scrollY")}, not the top`);
   });
 
+  await run_case("after gg with the first result off screen j boxes the second, after G with the last result off screen k boxes the one before it", async () => {
+    await open_results("endstep");
+    await in_active_tab(`(() => {
+      const search = document.getElementById("search");
+      const header = document.createElement("div");
+      header.style.height = (innerHeight + 100) + "px";
+      const footer = document.createElement("div");
+      footer.style.height = (innerHeight + 100) + "px";
+      search.before(header);
+      search.after(footer);
+      return true;
+    })()`);
+    await press_keys("G");
+    await expect_focus("r11");
+    await press_keys("k");
+    await expect_focus("r10");
+    await press_keys("gg");
+    await expect_focus("r0");
+    await press_keys("j");
+    await expect_focus("r1");
+    await expect_box_on_focus("the box on the second result");
+  });
+
   await run_case("the box sits on the focused result and moves with it", async () => {
     await open_results("box");
     await press_keys("j");

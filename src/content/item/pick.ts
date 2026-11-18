@@ -48,14 +48,14 @@ export function pick_item(boxes: readonly Box[], place: Place, direction: MoveDi
   return { index };
 }
 
-// The item that holds the focus, else the last one moved to while it is on screen, else the first one not above the view.
-export function place_of(items: readonly Element[], focused: Element | null, last: Element | undefined, boxes: readonly Box[], view_height: number): Place {
+// The item that holds the focus, else the last one moved to while it is on screen (or pinned), else the first one not above the view.
+export function place_of(items: readonly Element[], focused: Element | null, last: Element | undefined, boxes: readonly Box[], view_height: number, pinned = false): Place {
   const in_view = (index: number) => boxes[index]!.bottom > 0 && boxes[index]!.top < view_height;
   // A focus left behind off screen, after a scroll far away, gives way to the start rules.
   const found = focused ? items.findIndex((item) => item.contains(focused)) : -1;
   const holding = found !== -1 && in_view(found) ? found : -1;
   const remembered = items.indexOf(last as Element);
-  const held = holding !== -1 || remembered === -1 || !in_view(remembered) ? holding : remembered;
+  const held = holding !== -1 || remembered === -1 || (!pinned && !in_view(remembered)) ? holding : remembered;
   if (held !== -1) return { index: held, on_item: true };
   const first_in_view = boxes.findIndex((box) => box.bottom > 0);
   return { index: first_in_view === -1 ? boxes.length : first_in_view, on_item: false };
@@ -76,7 +76,8 @@ export type ItemPage = EndPage & {
 const SCROLL_PX = 50;
 const SCROLL = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as const;
 
-let last_move: { item_: WeakRef<Element>; args_: ItemArgs } | undefined;
+// `pin_y_` is the page scroll an end landing (gg, G) left, so the item stays the start of the next move while the page has not scrolled since, even off screen.
+let last_move: { item_: WeakRef<Element>; args_: ItemArgs; pin_y_?: number } | undefined;
 
 // The box followed a focus that a page script moved, so the next move and `]]` start from that item.
 export const follow_item = (item: Element) => last_move && (last_move.item_ = new WeakRef(item));
@@ -106,7 +107,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then.
   if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item) => land_on(page, item, args, false));
   const boxes = items.map((item) => item.getBoundingClientRect());
-  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight);
+  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight, last_move?.pin_y_ === page.view.scrollY);
   // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.
   if (direction === "current") return items.length === 0 ? undefined : land_on(page, items[Math.min(place.index, items.length - 1)]!, args);
   const steps = args.times ?? 1;
@@ -115,7 +116,9 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   if (items.length === 0) return scroll();
   const vertical = direction === "down" || direction === "up";
   // Down and up read a long item to its end before they leave it: they scroll while the item runs past the view edge in their direction. The box goes back on the item, since a focus move may have cleared it.
-  if (vertical && place.on_item && (direction === "down" ? boxes[place.index]!.bottom > page.view.innerHeight : boxes[place.index]!.top < 0)) {
+  const held = boxes[place.index];
+  // A pinned item off screen has no end in view to read to.
+  if (vertical && place.on_item && held!.bottom > 0 && held!.top < page.view.innerHeight && (direction === "down" ? held!.bottom > page.view.innerHeight : held!.top < 0)) {
     page.highlight(items[place.index]!, args.selector);
     return scroll();
   }
@@ -130,6 +133,6 @@ function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true): 
   focus_target(item, args.link || undefined).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
-  last_move = { item_: new WeakRef(item), args_: args };
+  last_move = { item_: new WeakRef(item), args_: args, ...(reveal ? {} : { pin_y_: page.view.scrollY }) };
   page.highlight(item, args.selector);
 }
