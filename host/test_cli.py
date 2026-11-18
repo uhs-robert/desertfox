@@ -31,6 +31,7 @@ class FakeBridge:
 
     def __init__(self, path, replies):
         self.requests = []
+        self.probes = 0
         self.replies = list(replies)
         self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.listener.bind(path)
@@ -51,6 +52,10 @@ class FakeBridge:
                     if not chunk:
                         break
                     data += chunk
+                if not data:
+                    # The command line's probe for a running bridge: a connect with no request.
+                    self.probes += 1
+                    continue
                 self.requests.append(json.loads(data))
                 reply = self.replies.pop(0)
                 if reply is not None:
@@ -352,6 +357,114 @@ class CliTest(unittest.TestCase):
         thread.join(20)
         self.assertEqual(done["result"].returncode, 1)
         self.assertEqual(done["result"].stderr, "desertfox: no normal window is open\n")
+
+
+class AppTest(unittest.TestCase):
+    """--app and the choice of socket when it is left out."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="dfa")
+        self.addCleanup(self.temp.cleanup)
+        self.runtime = self.temp.name
+        self.sockets = {}
+        for app, folder in (("firefox", "desertfox"), ("thunderbird", "desertbird")):
+            os.makedirs(os.path.join(self.runtime, folder))
+            self.sockets[app] = os.path.join(self.runtime, folder, "bridge.sock")
+
+    def serve(self, app, *replies):
+        bridge = FakeBridge(self.sockets[app], replies)
+        self.addCleanup(bridge.close)
+        return bridge
+
+    def leave_stale_socket(self, app):
+        """A socket file nobody listens on, as a killed host leaves it."""
+        stale = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        stale.bind(self.sockets[app])
+        stale.close()
+
+    def cli(self, *args):
+        return subprocess.run([sys.executable, CLI_PATH, *args], capture_output=True, text=True, env=dict(os.environ, XDG_RUNTIME_DIR=self.runtime), timeout=20)
+
+    def test_app_names_the_socket_in_either_form(self):
+        firefox = self.serve("firefox", {"ok": True, "state": None})
+        thunderbird = self.serve("thunderbird", {"ok": True, "state": None}, {"ok": True, "state": None})
+        self.assertEqual(self.cli("--app", "thunderbird", "state").returncode, 0)
+        self.assertEqual(self.cli("--app=thunderbird", "state").returncode, 0)
+        self.assertEqual(self.cli("--app", "firefox", "state").returncode, 0)
+        self.assertEqual(len(thunderbird.requests), 2)
+        self.assertEqual(len(firefox.requests), 1)
+        self.assertEqual(firefox.probes + thunderbird.probes, 0, "a named app needs no probe")
+
+    def test_without_app_the_only_running_bridge_is_used(self):
+        thunderbird = self.serve("thunderbird", {"ok": True})
+        self.assertEqual(self.cli("run", "msg.next").returncode, 0)
+        self.assertEqual(thunderbird.requests, [{"verb": "run", "command": "msg.next"}])
+
+    def test_without_app_and_no_bridge_it_is_firefox_as_before(self):
+        done = self.cli("run", "tab.next")
+        self.assertEqual(done.returncode, 3)
+        self.assertIn(self.sockets["firefox"], done.stderr)
+        self.assertIn("in DesertFox", done.stderr)
+        done = self.cli("--app", "thunderbird", "run", "msg.next")
+        self.assertIn(self.sockets["thunderbird"], done.stderr)
+        self.assertIn("in DesertBird", done.stderr)
+
+    def test_both_running_without_app_is_a_usage_error_and_sends_nothing(self):
+        firefox = self.serve("firefox")
+        thunderbird = self.serve("thunderbird")
+        done = self.cli("run", "tab.next")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("both the Firefox and the Thunderbird bridge are running", done.stderr)
+        self.assertIn("--app", done.stderr)
+        self.assertEqual(firefox.requests + thunderbird.requests, [])
+
+    def test_a_stale_socket_beside_a_running_bridge_does_not_count(self):
+        for stale, running in (("thunderbird", "firefox"), ("firefox", "thunderbird")):
+            with self.subTest(stale=stale):
+                for path in self.sockets.values():
+                    if os.path.exists(path):
+                        os.unlink(path)
+                self.leave_stale_socket(stale)
+                bridge = self.serve(running, {"ok": True})
+                self.assertEqual(self.cli("run", "x.y").returncode, 0)
+                self.assertEqual(bridge.requests, [{"verb": "run", "command": "x.y"}])
+                bridge.close()
+
+    def test_a_bad_app_is_a_usage_error(self):
+        for args in (("--app", "chrome", "state"), ("--app",), ("--app=", "state"), ("--app", "Firefox", "state")):
+            with self.subTest(args=args):
+                self.assertEqual(self.cli(*args).returncode, 2)
+
+    def test_an_app_option_after_the_verb_is_part_of_the_command(self):
+        bridge = self.serve("firefox", {"ok": True})
+        self.assertEqual(self.cli("run", "--app", "thunderbird").returncode, 0)
+        self.assertEqual(bridge.requests, [{"verb": "run", "command": "--app thunderbird"}])
+
+    def test_theme_without_a_bridge_keeps_the_name_in_the_named_apps_folder(self):
+        self.assertEqual(self.cli("--app", "thunderbird", "theme", "oasis_dune").returncode, 0)
+        with open(os.path.join(self.runtime, "desertbird", "theme.json"), encoding="utf-8") as kept:
+            self.assertEqual(json.load(kept), {"theme": "oasis_dune"})
+        self.assertFalse(os.path.exists(os.path.join(self.runtime, "desertfox", "theme.json")))
+
+    def test_the_cli_reaches_a_restarted_thunderbird_host_and_never_the_firefox_one(self):
+        firefox = test_bridge.Host(self.runtime, argv=test_bridge.FIREFOX_ARGV)
+        self.addCleanup(firefox.kill)
+        for _ in range(2):
+            thunderbird = test_bridge.Host(self.runtime, argv=test_bridge.THUNDERBIRD_ARGV)
+            self.addCleanup(thunderbird.kill)
+            done = {}
+            thread = threading.Thread(target=lambda: done.update(result=self.cli("--app", "thunderbird", "run", "msg.next")))
+            thread.start()
+            request = thunderbird.read_request()
+            self.assertEqual(request["command"], "msg.next")
+            thunderbird.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "message": "done"})
+            thread.join(20)
+            self.assertEqual((done["result"].returncode, done["result"].stdout), (0, "done\n"))
+            thunderbird.close_stdin()
+            self.assertEqual(thunderbird.wait(), 0)
+        with self.assertRaises(AssertionError):
+            firefox.read_request(timeout=0.3)
+        self.assertEqual(self.cli("--app", "thunderbird", "state").returncode, 3, "with the Thunderbird host gone the CLI says so")
 
 
 if __name__ == "__main__":

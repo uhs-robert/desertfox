@@ -23,7 +23,7 @@ in the same framing to stdout and exits. It has seven verbs and no others:
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
 file there, autoconfig.toml. It never edits the user's own files, and it parses no config of the extension: the extension owns that TOML. Only editor.toml, which the extension never sees, is parsed here.
-`self_update` replaces the installed hosts, the command line and their two manifests with a GitHub release (see
+`self_update` replaces the installed hosts, the command line and their three manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
 reply ever carries. `open_firefox_page` asks the Firefox that started the host to open one page of a fixed table (see
 `open_firefox_page`). `list_fonts` runs fontconfig's `fc-list` and answers the installed family names (see
@@ -193,11 +193,16 @@ UPDATE_MAX_REDIRECTS = 5
 SCRIPT_SHEBANG = b"#!/usr/bin/env python3\n"
 STAMP_PATTERN = re.compile(rb'^RELEASE_VERSION = "([^"\n]*)"$', re.MULTILINE)
 EXTENSION_ID = "desertfox@uhs-robert"
-# The manifests install.sh writes, by host script. The updater writes the same content.
+THUNDERBIRD_EXTENSION_ID = "desertbird@uhs-robert"
+# The manifests install.sh writes, by manifest name: (host script, description, allowed extension). The updater writes
+# the same content. The bridge has one per app.
 MANIFESTS = {
-    "desertfox-host": ("desertfox_host", "DesertFox config files and saved edits"),
-    "desertfox-bridge": ("desertfox_bridge", "DesertFox bridge to a desktop shell"),
+    "desertfox_bridge": ("desertfox-bridge", "DesertFox bridge to a desktop shell", EXTENSION_ID),
+    "desertbird_bridge": ("desertfox-bridge", "DesertBird bridge to a desktop shell", THUNDERBIRD_EXTENSION_ID),
+    "desertfox_host": ("desertfox-host", "DesertFox config files and saved edits", EXTENSION_ID),
 }
+# The scripts that carry a stamped release version.
+HOST_SCRIPTS = ("desertfox-host", "desertfox-bridge")
 
 
 class UpdateError(HostError):
@@ -310,13 +315,13 @@ def checked_request(request):
 
 
 def install_paths(host_file=None):
-    """The five paths install.sh writes, found from where this host runs: the two hosts and the command line beside it,
-    the two manifests in ~/.mozilla/native-messaging-hosts. The link ~/.local/bin/desertfox points at the command line
+    """The six paths install.sh writes, found from where this host runs: the two hosts and the command line beside it,
+    the three manifests in ~/.mozilla/native-messaging-hosts. The link ~/.local/bin/desertfox points at the command line
     by path, so it needs no rewrite."""
     data_dir = os.path.dirname(os.path.abspath(host_file or __file__))
     manifest_dir = os.path.join(os.path.expanduser("~"), ".mozilla", "native-messaging-hosts")
     scripts = {name: os.path.join(data_dir, name) for name in UPDATE_SCRIPTS}
-    manifests = {name: os.path.join(manifest_dir, f"{manifest_name}.json") for name, (manifest_name, _) in MANIFESTS.items()}
+    manifests = {name: os.path.join(manifest_dir, f"{name}.json") for name in MANIFESTS}
     return scripts, manifests
 
 
@@ -392,15 +397,15 @@ def fetch_verified(version, expected, fetch):
             raise UpdateError(f"checksum mismatch for {name} of version {version}: the release does not match the hash the extension carries")
         if not script.startswith(SCRIPT_SHEBANG):
             raise UpdateError(f"the downloaded {name} is not a host script")
-        if name in MANIFESTS and stamped_version(script) != version:
+        if name in HOST_SCRIPTS and stamped_version(script) != version:
             raise UpdateError(f"the downloaded {name} says version {stamped_version(script)!r}, not {version}")
         verified[name] = script
     return verified
 
 
-def manifest_bytes(script_name, host_path):
-    manifest_name, description = MANIFESTS[script_name]
-    manifest = {"name": manifest_name, "description": description, "path": host_path, "type": "stdio", "allowed_extensions": [EXTENSION_ID]}
+def manifest_bytes(manifest_name, scripts):
+    script_name, description, extension_id = MANIFESTS[manifest_name]
+    manifest = {"name": manifest_name, "description": description, "path": scripts[script_name], "type": "stdio", "allowed_extensions": [extension_id]}
     return (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
 
 
@@ -478,7 +483,7 @@ def planned_writes(scripts, manifests, verified):
     """(path, bytes, mode) in rename order. This host goes last: its stamped version is what it reports, so until that
     rename lands the extension still sees the old version and asks again, and the next call finishes the rest."""
     writes = [(scripts[name], verified[name], 0o755) for name in ("desertfox-bridge", "desertfox")]
-    writes += [(manifests[name], manifest_bytes(name, scripts[name]), 0o644) for name in ("desertfox-bridge", "desertfox-host")]
+    writes += [(manifests[name], manifest_bytes(name, scripts), 0o644) for name in MANIFESTS]
     writes.append((scripts["desertfox-host"], verified["desertfox-host"], 0o755))
     return writes
 
@@ -486,7 +491,7 @@ def planned_writes(scripts, manifests, verified):
 def install_is_current(scripts, manifests, expected):
     """True when every script matches its expected hash and every manifest holds the bytes the updater would write."""
     scripts_current = all(file_sha256(scripts[name]) == expected[name] for name in UPDATE_SCRIPTS)
-    manifests_current = all(file_sha256(manifests[name]) == hashlib.sha256(manifest_bytes(name, scripts[name])).hexdigest() for name in MANIFESTS)
+    manifests_current = all(file_sha256(manifests[name]) == hashlib.sha256(manifest_bytes(name, scripts)).hexdigest() for name in MANIFESTS)
     return scripts_current and manifests_current
 
 
