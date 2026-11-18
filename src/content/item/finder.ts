@@ -49,7 +49,8 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const region = main_region(reader, nodes);
   const scope = region === reader.root_ ? nodes : [region, ...descendants(reader, region)];
 
-  const is_link = (node: N) => reader.tag_(node) === "a" && reader.attr_(node, "href") !== null;
+  // A hidden link (a copy of the title for small screens) cannot take the focus, so it names no item.
+  const is_link = (node: N) => reader.tag_(node) === "a" && reader.attr_(node, "href") !== null && reader.box_(node) !== undefined;
   // A tile that is itself a link holds no other.
   const links_of = (item: N): N[] => (is_link(item) ? [item] : descendants(reader, item, is_link));
   const link_text = once((link: N): number => reader.text_(link).trim().length);
@@ -61,9 +62,10 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     return HEADING.test(reader.tag_(link)) || descendants(reader, link).some((inner) => HEADING.test(reader.tag_(inner)));
   };
   // A link that no heading holds names its item only from the top part of the item, so the cross references in the body of a long entry do not.
+  // Both have a box: a link that names an item is shown, and so is an item.
   const near_top = (link: N, item: N): boolean => {
-    const [at, from] = [reader.box_(link), reader.box_(item)];
-    return !at || !from || at.y - from.y <= Math.max(TITLE_ZONE_PX, TITLE_ZONE_SHARE * from.h);
+    const from = reader.box_(item)!;
+    return reader.box_(link)!.y - from.y <= Math.max(TITLE_ZONE_PX, TITLE_ZONE_SHARE * from.h);
   };
   // The link that names the item: the first link in a heading, else the first link with a title's worth of text, else the lone link of a tile (a picture that links). Past the time budget it answers none, and the run gives up anyway.
   const title_of = once((item: N): N | undefined => {
@@ -73,7 +75,9 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN;
     // A short heading that links is the name of a section (a manual's "Syntax"), so its item is no card.
     if (headed.length > 0 && !headed.some(long_enough)) return undefined;
-    const strong = headed.some(long_enough) ? headed.filter(long_enough) : links.filter((link) => long_enough(link) && near_top(link, item));
+    // A title under a picture (a video thumbnail) starts low in its tile, and links where the picture links.
+    const names_item = (link: N) => near_top(link, item) || reader.attr_(link, "href") === reader.attr_(links[0]!, "href");
+    const strong = headed.some(long_enough) ? headed.filter(long_enough) : links.filter((link) => long_enough(link) && names_item(link));
     return strong[0] ?? (links.length === 1 ? links[0] : undefined);
   });
   const titled_share = (group: Group<N>): number => group.items.filter(title_of).length / group.items.length;
