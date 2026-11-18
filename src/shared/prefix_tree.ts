@@ -66,8 +66,8 @@ export type TreeNode = TreeLeaf | TreeBranch;
 // `keymap` holds the binds of the keymap modes other than normal (visual, visual_line, caret), compiled as `bind` is. The normal-mode binds of a row, from `bind` and `keymap.normal`, are all in `bind`.
 // `bind` maps a normalized key sequence to its tokens and compiled leaf. The background grafts the merged binds onto the normal tree before it prunes.
 export type SiteBind = { tokens: string[]; leaf: TreeLeaf };
-// `site` is the pattern as written, `origin` says whether the user or DesertFox wrote the row, and `name` is the shipped row's name (set only for `default`). `finder` marks the one row that binds the finder's keys: the hold-back rows share its name, so the name cannot tell them apart. The site rules view reads them, so it lists exactly the rows the keys use.
-export type SiteRuleSource = { origin: "user" } | { origin: "default"; name: string; finder?: true };
+// `site` is the pattern as written, `origin` says whether the user or DesertFox wrote the row, and `name` is the shipped row's name (set only for `default`). The site rules view reads them, so it lists exactly the rows the keys use.
+export type SiteRuleSource = { origin: "user" } | { origin: "default"; name: string };
 export type SiteRule = SiteRuleSource & { site: string; regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; keymap?: Record<string, Record<string, SiteBind>>; modes?: Record<string, { label: string; bind: Record<string, SiteBind> }>; values?: Readonly<Record<string, unknown>> };
 
 export type CompiledKeymap = {

@@ -130,7 +130,7 @@ export function compile_config(input: CompileInput): CompileOutput {
   const finder_wanted = finder_on || user_rows.some((row) => site_row_columns(row).values?.["item_finder"] === true);
   const finder_rows = finder_wanted ? [...hold_back_rows([...user_rows, ...default_rows.map(({ row }) => row)], keymap.normal, (binding) => is_plain_bind(binding, input)), item_finder_row(hover)] : [];
   const settings = { ...input.config.settings, item_finder: finder_on, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
-  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name, ...rest }): SiteRuleSource => ({ origin: "default", name, ..."finder" in rest && { finder: true as const } }))];
+  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
