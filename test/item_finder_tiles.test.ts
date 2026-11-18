@@ -68,3 +68,29 @@ test("cards that fill nearly half of every section stay the picked items", () =>
   assert.equal(found.items.length, 12);
   assert.ok(found.items.every((item) => item.a?.class === "card"));
 });
+
+// Five sections, three of which hold two small blocks each, and four more such blocks outside every section. Three of five is under the share that marks card parts, so the finder steps into the blocks. An item with no holder must not count as a fourth holder.
+test("an inner group held by three of five sections, with items outside them, is not card parts", () => {
+  const block = (x: number, y: number, index: number): SavedNode => ({
+    t: "div",
+    a: { class: "block" },
+    r: [x, y, 300, 100],
+    c: [{ t: "a", a: { href: `/story/${index}` }, r: [x, y, 300, 20], s: `Story number ${index} headline`, c: [] }],
+  });
+  const section = (index: number): SavedNode => {
+    const y = 100 + index * 400;
+    const blocks = index < 3 ? [block(35, y, index * 2), block(35, y + 120, index * 2 + 1)] : [];
+    return { t: "section", a: { class: "block_group" }, r: [35, y, 1300, 300], c: blocks };
+  };
+  const outside: SavedNode = { t: "div", a: { class: "extra" }, r: [35, 2100, 1300, 480], c: [0, 1, 2, 3].map((index) => block(35, 2100 + index * 120, 10 + index)) };
+  const body: SavedNode = { t: "body", r: [0, 0, 1366, 2600], c: [...Array.from({ length: 5 }, (_, index) => section(index)), outside] };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 2600], c: [body] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  const found = find_items(saved_reader({ view: { w: 1366, h: 682, doc_h: 2600 }, root }));
+  assert.equal(found.items.length, 10);
+  assert.equal(found.sections?.length, 5);
+});
