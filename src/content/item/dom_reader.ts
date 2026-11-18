@@ -7,6 +7,9 @@ import type { Box, PageReader } from "../next_page/detect.ts";
 
 const style_of = (element: Element): CSSStyleDeclaration => element.ownerDocument.defaultView!.getComputedStyle(element);
 
+// Only where a pointer cursor starts: a child of a clickable card inherits it. The root has no parent, so it never starts one. The load step of `]]` adds it to the reader.
+export const pointer_starts = (element: Element): boolean => style_of(element).cursor === "pointer" && style_of(element.parentElement ?? element).cursor !== "pointer";
+
 // Boxes are in the coordinates of the element's own document.
 export const dom_reader = (doc: Document): PageReader<Element> => {
   const read_box = (element: Element): Box | undefined => {
@@ -30,8 +33,6 @@ export const dom_reader = (doc: Document): PageReader<Element> => {
       return clientWidth > 0 && ((/auto|scroll/.test(overflowX) && scrollWidth > clientWidth + 20) || (/hidden|clip/.test(overflowX) && scrollWidth > 1.5 * clientWidth && element.children.length > 0 && clientWidth > 150));
     }),
     pinned_: once((element) => /fixed|sticky/.test(style_of(element).position)),
-    // Only where a pointer cursor starts: a child of a clickable card inherits it. The root has no parent, so it never starts one.
-    pointer_: (element) => style_of(element).cursor === "pointer" && style_of(element.parentElement ?? element).cursor !== "pointer",
     text_length_: (element) => (element.textContent ?? "").trim().length,
     view_: () => ({ w: innerWidth, h: innerHeight, page_h: doc.documentElement.scrollHeight }),
   };

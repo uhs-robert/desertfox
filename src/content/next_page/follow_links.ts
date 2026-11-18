@@ -4,7 +4,7 @@ import { BUTTONS, collect, LINKS, name_candidates } from "../hints/candidates.ts
 import type { Found } from "../hints/candidates.ts";
 import { keep_present_found } from "../hints/headings.ts";
 import { has_usable_address } from "../hints/actions.ts";
-import { dom_reader } from "../item/dom_reader.ts";
+import { dom_reader, pointer_starts } from "../item/dom_reader.ts";
 import { detect_next_page } from "./detect.ts";
 import type { LoadStep, NextPageAction } from "./detect.ts";
 
@@ -27,5 +27,5 @@ export function find_next_page(doc: Document, direction: FollowDirection, patter
   const links = keep_present_found(collect(doc, { selector: LINKS }));
   const items = [...links, ...keep_present_found(collect(doc, { selector: BUTTONS }))];
   const controls = items.map((item, place) => ({ node: item.element, texts: texts_of(item.element), is_link: place < links.length }));
-  return detect_next_page(dom_reader(doc), { rel_links: [], controls, patterns }, load_step);
+  return detect_next_page({ ...dom_reader(doc), pointer_: pointer_starts }, { rel_links: [], controls, patterns }, load_step);
 }

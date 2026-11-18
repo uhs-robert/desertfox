@@ -62,11 +62,13 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
 
 const after = (element: Element | null | undefined) => element?.nextElementSibling;
 
+const now_ = () => performance.now();
+
 export const live_derived_row = (): DerivedRow =>
   create_derived_row({
-    find_: () => find_items(dom_reader(document), { now_: () => performance.now(), budget_ms_: FINDER_BUDGET_MS }),
+    find_: () => find_items(dom_reader(document), { now_, budget_ms_: FINDER_BUDGET_MS }),
     url_: () => location.href,
-    now_: () => performance.now(),
+    now_,
     is_shown_: is_shown,
     // New items go after the last one, or into a new batch after its parent.
     tail_: (items) => [after(items.at(-1)), after(items.at(-1)?.parentElement)],
