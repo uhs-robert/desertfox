@@ -8,7 +8,7 @@ import type { BindingTable } from "../shared/settings_table.ts";
 import type { Keymap, KeymapConfig, KeymapMode, ModeBindings } from "../shared/keymap.ts";
 import { spelling_of } from "./edit_layers.ts";
 import type { KeymapEdits } from "./edit_layers.ts";
-import { ANY_KEY, LIVE_KEY } from "../shared/prefix_tree.ts";
+import { capture_branch, LIVE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import type { KeyBinding, Prompt } from "../shared/invocation.ts";
 import { captured_key_param, find_param, is_context_source, without_param } from "../shared/registry/params.ts";
@@ -221,7 +221,7 @@ function check_branch(branch: TreeBranch, path: string[], mode: string, input: C
   for (const [token, node] of Object.entries(branch.children)) {
     if (!keep_node(node, [...path, token], mode, input, warnings)) delete branch.children[token];
     // A leaf that waits for a key press moves under a branch of its own, so the matcher reaches it through one more key.
-    else if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = { kind: "branch", ...(node.label === undefined ? {} : { label: node.label }), children: { [ANY_KEY]: node, ...live_repeat_child(node, input) } };
+    else if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = capture_branch(node, live_repeat_child(node, input));
   }
 }
 
