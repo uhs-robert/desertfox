@@ -130,7 +130,7 @@ const left = () => events.filter((event) => event.startsWith("mouseleave"));
 
 test("the hover starts about 300 ms after the land, not at once", () => {
   const box = overlay();
-  box.show(as_element(tile("a", true)), "div", true);
+  box.show(as_element(tile("a", true)), "div", () => true);
   assert.deepEqual(events, []);
   mock.timers.tick(299);
   assert.deepEqual(events, []);
@@ -143,7 +143,7 @@ test("a held j starts no hover on the tiles it passes, only on the one it stops 
   const box = overlay();
   const tiles = ["a", "b", "c", "d"].map((name) => tile(name, true));
   for (const item of tiles) {
-    box.show(as_element(item), "div", true);
+    box.show(as_element(item), "div", () => true);
     mock.timers.tick(100);
   }
   assert.deepEqual(events, []);
@@ -155,10 +155,10 @@ test("a held j starts no hover on the tiles it passes, only on the one it stops 
 
 test("a change of item unhovers the old item, and hovers the new one after the wait", () => {
   const box = overlay();
-  box.show(as_element(tile("a", true)), "div", true);
+  box.show(as_element(tile("a", true)), "div", () => true);
   mock.timers.tick(300);
   events = [];
-  box.show(as_element(tile("b", true)), "div", true);
+  box.show(as_element(tile("b", true)), "div", () => true);
   assert.ok(left().includes("mouseleave@a-img"), events.join());
   assert.deepEqual(entered(), []);
   mock.timers.tick(300);
@@ -169,7 +169,7 @@ test("a change of item unhovers the old item, and hovers the new one after the w
 test("an item removed before the wait ends gets no hover", () => {
   const box = overlay();
   const item = tile("a", true);
-  box.show(as_element(item), "div", true);
+  box.show(as_element(item), "div", () => true);
   item.isConnected = false;
   mock.timers.tick(300);
   assert.deepEqual(events, []);
@@ -179,10 +179,10 @@ test("an item removed before the wait ends gets no hover", () => {
 test("a redraw on the same item neither unhovers nor hovers again", () => {
   const box = overlay();
   const item = as_element(tile("a", true));
-  box.show(item, "div", true);
+  box.show(item, "div", () => true);
   mock.timers.tick(300);
   events = [];
-  box.show(item, "div", true);
+  box.show(item, "div", () => true);
   mock.timers.tick(1000);
   assert.deepEqual(events, []);
   box.clear();
@@ -190,13 +190,13 @@ test("a redraw on the same item neither unhovers nor hovers again", () => {
 
 test("clear unhovers a hovered item, and cancels a hover still waiting", () => {
   const box = overlay();
-  box.show(as_element(tile("a", true)), "div", true);
+  box.show(as_element(tile("a", true)), "div", () => true);
   mock.timers.tick(300);
   events = [];
   box.clear();
   assert.ok(left().includes("mouseleave@a-img"));
   events = [];
-  box.show(as_element(tile("b", true)), "div", true);
+  box.show(as_element(tile("b", true)), "div", () => true);
   mock.timers.tick(100);
   box.clear();
   mock.timers.tick(1000);
@@ -205,7 +205,7 @@ test("clear unhovers a hovered item, and cancels a hover still waiting", () => {
 
 test("clear twice unhovers once, and leaves no timer running", () => {
   const box = overlay();
-  box.show(as_element(tile("a", true)), "div", true);
+  box.show(as_element(tile("a", true)), "div", () => true);
   mock.timers.tick(300);
   box.clear();
   events = [];
@@ -226,7 +226,7 @@ test("a box without the hover flag sends no event, and the focus mark never hove
 test("the 100 ms watch that clears a box with a removed item also unhovers it", () => {
   const box = overlay();
   const item = tile("a", true);
-  box.show(as_element(item), "div", true);
+  box.show(as_element(item), "div", () => true);
   mock.timers.tick(300);
   events = [];
   item.isConnected = false;
@@ -247,7 +247,7 @@ function hover_page(items: Fake[], thumbs: boolean[]) {
     focused: () => null,
     toast: () => {},
     scroll_by: () => {},
-    highlight: (_item: unknown, _selector: string, hover?: unknown) => calls.push(!!hover),
+    highlight: (_item: unknown, _selector: string, hover?: () => boolean) => calls.push(hover?.() ?? false),
     box_shown: () => false,
     derived: { items_: () => elements as unknown as Element[], link_of_: () => undefined, selector_: () => "div", grew_: () => false, grid_: () => true },
     overflow_y_: () => "visible",
@@ -304,4 +304,58 @@ test("item_hover off removes the arg from the finder row and the video rows", as
   assert.deepEqual(result.warnings, []);
   assert.notEqual((await step_of(result.compiled, "https://a.test/", "j")).args?.["hover"], true);
   assert.notEqual((await step_of(result.compiled, "https://duckduckgo.com/?q=x&iax=videos&ia=videos", "j")).args?.["hover"], true);
+});
+
+test("a request that turns on for the shown item waits and hovers", () => {
+  const box = overlay();
+  const item = as_element(tile("a", true));
+  box.show(item, "div");
+  box.show(item, "div", () => true);
+  assert.deepEqual(events, []);
+  mock.timers.tick(300);
+  assert.ok(entered().length > 0);
+  box.clear();
+});
+
+test("a request that turns off cancels a pending wait and unhovers a running hover", () => {
+  const box = overlay();
+  const item = as_element(tile("a", true));
+  box.show(item, "div", () => true);
+  box.show(item, "div");
+  mock.timers.tick(1000);
+  assert.deepEqual(events, []);
+  box.show(item, "div", () => true);
+  mock.timers.tick(300);
+  events = [];
+  box.show(item, "div");
+  assert.ok(left().includes("mouseleave@a-img"), events.join());
+  box.clear();
+});
+
+test("an item that loses its thumbnail during the wait gets no hover when the finder asked", () => {
+  const item = tile("a", true);
+  let check: (() => boolean) | undefined;
+  const { page } = hover_page([item], [true]);
+  (page as unknown as { highlight: (_i: unknown, _s: string, hover?: () => boolean) => void }).highlight = (_i, _s, hover) => { check = hover; };
+  move_item(page, { direction: "current", hover: true });
+  const box = overlay();
+  box.show(as_element(item), "div", check);
+  item.pictures = [];
+  mock.timers.tick(300);
+  assert.deepEqual(events, []);
+  box.clear();
+});
+
+test("a row that names its selector keeps the hover on the item itself when its picture is gone", () => {
+  const item = tile("a", true);
+  let check: (() => boolean) | undefined;
+  const { page } = hover_page([item], [true]);
+  (page as unknown as { highlight: (_i: unknown, _s: string, hover?: () => boolean) => void }).highlight = (_i, _s, hover) => { check = hover; };
+  move_item(page, { selector: "div", direction: "current", hover: true });
+  const box = overlay();
+  box.show(as_element(item), "div", check);
+  item.pictures = [];
+  mock.timers.tick(300);
+  assert.ok(entered().includes("mouseenter@a"), events.join());
+  box.clear();
 });
