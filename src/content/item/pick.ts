@@ -107,7 +107,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   const items = read_items();
   const { direction } = args;
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then.
-  if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item, on_page) => land_on(page, item, args, false, on_page));
+  if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item, on_page) => land_on(page, item, args, !on_page, on_page));
   const boxes = items.map((item) => item.getBoundingClientRect());
   const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight, last_move?.pin_y_ === page.view.scrollY && page.box_shown());
   // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.
@@ -130,7 +130,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   land_on(page, items[pick.index]!, args);
 }
 
-// Focuses the item, brings it into view (unless `reveal` is false) and draws the box. `]]` lands here too, on the first item a load added. The ends skip the reveal so gg stays at the page top and G at the bottom, with the box on an item that may lie off screen.
+// Focuses the item, brings it into view (unless `reveal` is false) and draws the box. `]]` lands here too, on the first item a load added. The page-scroller ends skip the reveal so gg stays at the page top and G at the bottom, with the box on an item that may lie off screen.
 function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, pin = false): void {
   focus_target(item, args.link || undefined).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();
