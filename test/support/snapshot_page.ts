@@ -41,7 +41,7 @@ export function saved_reader(page: SavedPage): PageReader<SavedNode> {
     scrolls_sideways_: (node) => node.x === 1,
     pinned_: (node) => node.p === 1,
     same_page_: (node) => {
-      const own = page.url ?? "https://page.test/";
+      const own = new URL(page.url ?? "https://page.test/").href;
       return URL.parse(node.a?.href ?? "", own)?.href.split("#")[0] === own.split("#")[0];
     },
     pointer_: (node) => node.k === 1,
