@@ -8,7 +8,7 @@ Generated from `src/background/default_site_rows.ts`. Do not edit between the ma
 
 <!-- BEGIN generated -->
 
-Shipped rows: 26 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `reddit`, `drive`).
+Shipped rows: 27 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `amazon`, `reddit`, `drive`).
 
 ### `sheets`
 
@@ -319,6 +319,19 @@ Addresses: `https://tildes.net/*`
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `amazon`
+
+Addresses: `https://www.amazon.com/s?*`, `https://www.amazon.com/s/*`
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
 

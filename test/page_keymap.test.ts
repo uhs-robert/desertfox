@@ -450,9 +450,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "reddit", "reddit", "drive"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "amazon", "amazon", "reddit", "reddit", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 45);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 47);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -584,7 +584,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 42);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 44);
 });
 
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
@@ -639,6 +639,8 @@ test("the search vertical rows win over the web rows on their tabs only, and eac
     ["https://www.google.com/search?q=cats&udm=28", "[data-cid][data-pid]"],
     ["https://www.google.com/search?udm=28&q=cats", "[data-cid][data-pid]"],
     ["https://duckduckgo.com/?q=cats&ia=videos&iax=videos", '[data-testid="zci-videos"] a:has(> article)'],
+    ["https://www.amazon.com/s?k=toothpaste&ref=nb_sb_noss", 'div[data-component-type="s-search-result"]:not(.AdHolder)'],
+    ["https://www.amazon.com/s/ref=nb_sb_noss?field-keywords=toothpaste", 'div[data-component-type="s-search-result"]:not(.AdHolder)'],
   ];
   for (const [url, selector] of grids) {
     const rows = await Promise.all(["h", "j", "k", "l"].map((key) => item_args_at(compiled, url, key)));
