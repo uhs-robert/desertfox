@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_derived_row, NONE_RECHECK_MS } from "../src/content/item/derived.ts";
+import { FINDER_BUDGET_MS, FIRST_READ_BUDGET_MS } from "../src/content/item/finder.ts";
 import type { Found } from "../src/content/item/finder.ts";
 
 type Fake = { name: string; isConnected: boolean; shown: boolean; contains: (node: unknown) => boolean };
@@ -8,11 +9,12 @@ type FakeLink = { name: string; isConnected: boolean; shown: boolean };
 
 // A page whose items the test can hide, drop and bring back, and a finder that counts how often it is asked. `answer` is what the finder gives next unless `fails` says it runs out of time or throws, and `tail` is what follows the last item of the list.
 function setup(initial: Fake[]) {
-  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink> } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map() };
+  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[] } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [] };
   const link = { name: "link", isConnected: true, shown: true };
   const row = create_derived_row({
-    find_: () => {
+    find_: (budget_ms) => {
       state.finds++;
+      state.budgets.push(budget_ms);
       if (state.fails === "throw") throw new Error("finder bug");
       if (state.fails === "timeout") return { kind: "none", items: [], links: new Map(), timed_out_: true };
       const items = state.answer as unknown as Element[];
@@ -184,4 +186,27 @@ test("a second timeout in a row stands like a none answer, so a held j on a slow
   row.items_();
   row.items_();
   assert.equal(state.finds, 5);
+});
+
+// A table-of-contents or footnote click changes the hash, which drops the kept answer. A short budget on the reads after it (400, 40, 40) timed out on a long page and left j scrolling until a reload.
+test("after a hash change drops the kept answer, the next reads get the long budget again", () => {
+  const { state, row } = setup([item("a"), item("b")]);
+  row.items_();
+  state.url = "https://a.test/#History";
+  row.items_();
+  state.url = "https://a.test/#Notes";
+  row.items_();
+  assert.deepEqual(state.budgets, [FIRST_READ_BUDGET_MS, FIRST_READ_BUDGET_MS, FIRST_READ_BUDGET_MS]);
+});
+
+test("at an address where two reads overran the long budget, reads get the short one until the address changes", () => {
+  const { state, row } = setup([]);
+  state.fails = "timeout";
+  row.items_();
+  row.items_();
+  state.clock += NONE_RECHECK_MS;
+  row.items_();
+  state.url = "https://a.test/other";
+  row.items_();
+  assert.deepEqual(state.budgets, [FIRST_READ_BUDGET_MS, FIRST_READ_BUDGET_MS, FINDER_BUDGET_MS, FIRST_READ_BUDGET_MS]);
 });
