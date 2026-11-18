@@ -4,6 +4,7 @@ import type { PageHostApi } from "../bundle_host.ts";
 import { follow_item, move_item, read_cursor } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
+import { live_derived_row } from "./derived.ts";
 import { watch_user_left } from "../user_left.ts";
 
 type ItemWindow = { desertfox_host?: PageHostApi; desertfox_item_ready?: true };
@@ -23,6 +24,7 @@ if (!item_window.desertfox_item_ready && host) {
     scroll_by: host.scroll_by_,
     highlight: overlay.show,
     box_shown: overlay.shown_,
+    derived: live_derived_row(),
     overflow_y_: (element: Element) => getComputedStyle(element).overflowY,
     // A timer and not the next frame, because a hidden tab draws no frames.
     wait_: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),

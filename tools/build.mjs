@@ -37,11 +37,13 @@ const MAX_BYTES = {
   // 5.5 KB: page.item, the box it draws around a result (search-site-rows), the last move that ]] reads to put the box on the first item a load added, and the first and last ends that scroll the list's own scroller and follow its end while the page loads more (with the user watch of `user_left.ts`). The bundle loads on the first j or k on a result page.
   // 6 KB: the box follows a focus that a page script moves (a loader that takes the focus, then hands it to a result), draws again when j or k only scrolls, and covers the parts of an item that poke out of it.
   // 6.5 KB: the box follows only a row item that took the focus since the box was drawn, so a focus the user left on another item does not pull it away.
-  "item.js": 6.5 * 1024,
+  // 13 KB: the item finder behind `page.item` with no selector (`finder.ts`, the repeated blocks it shares with `]]` in `groups.ts`, the derived row and its cache in `derived.ts`, and the live page reader). It reads a page once and walks the list or grid it finds. The owner accepted about 11 KB for it on the 3.8 KB bundle the plan measured. The bundle was 6.3 KB when it landed, so it is larger.
+  "item.js": 13 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.
-  "next_page.js": 19.5 * 1024,
+  // 20 KB: the load step reads the repeated blocks through `../item/groups.ts`, which the item finder shares.
+  "next_page.js": 20 * 1024,
   // 6.5 KB: the thumb press point, the per-drag step keys (`[` and `]`), the swipe fling (`snap_scroll`, `start_fling`) and the start step read from `grab_step_px`.
   "grab.js": 6.5 * 1024,
   // 59 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings, and the three newtab_weather settings. `set theme` also offers the theme files and imports of the config, which the page gets when the line opens.
@@ -49,7 +51,8 @@ const MAX_BYTES = {
   // 60 KB: behind a key that waits for rows, the page looks up each later key in the keymap, so only typed keys and row keys wait in order and every other key acts at once. A failed answer reads as empty for its word without being kept.
   // 60.5 KB: the font_family, font_family_mono and font_scale settings add their completion entries.
   // 61 KB: the site_rules setting accepts the keymap column, and its check reads the key clash between bind and keymap.normal.
-  "cmdline_page.js": 61 * 1024,
+  // 61.5 KB: the item_finder setting adds its completion entry.
+  "cmdline_page.js": 61.5 * 1024,
   "find_worker.js": 2 * 1024,
   // 10.5 KB: the Worker holds the history cache and builds and ranks the rows of `open`, `history` and the finder. It loads once per background start, never in a page.
   // 11 KB: the Worker also answers `usage_for` (the bookmark list's use boosts) and `pick_history` (Enter on `history <text>`), so the background no longer copies the 20000 rows.

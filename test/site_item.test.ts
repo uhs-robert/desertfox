@@ -4,7 +4,7 @@ import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
-import { move_item, pick_item, place_of, step_from } from "../src/content/item/pick.ts";
+import { move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
 
@@ -117,6 +117,7 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
   const log: string[] = [];
   const shown: string[] = [];
   const toasts: string[] = [];
+  const selectors: string[] = [];
   const make = (rect: Box, index: number) => {
     const link = { tabIndex: 0, setAttribute: () => {}, focus: () => log.push(`focus link ${index}`) };
     const element = {
@@ -152,9 +153,9 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
     toast: (message: string) => toasts.push(message),
     scroll_by: (dx: number, dy: number) => scrolls.push([dx, dy]),
     box_shown: () => false,
-    highlight: (item: unknown) => shown.push(String(items.indexOf(item as (typeof items)[number]))),
+    highlight: (item: unknown, selector: string) => (shown.push(String(items.indexOf(item as (typeof items)[number]))), selectors.push(selector)),
   } as unknown as ItemPage;
-  return { page, log, shown, toasts, scrolls, add: (rect: Box) => items.push(make(rect, items.length)) };
+  return { page, log, shown, toasts, scrolls, selectors, add: (rect: Box) => items.push(make(rect, items.length)) };
 }
 
 test("move_item focuses the link inside the next item, reveals it only when it is not fully in view, and highlights it", () => {
@@ -360,4 +361,35 @@ test("page.click clicks the first shown match, and refuses a bad selector or no 
   assert.equal(click_first_shown(page(["hidden copy"]), ".go", shown, (name) => clicked.push(name)), "Nothing shown on the page matches .go");
   assert.equal(click_first_shown(page([]), "[", shown, (name) => clicked.push(name)), "[ is not a valid CSS selector");
   assert.deepEqual(clicked, ["shown"]);
+});
+
+// The item finder's row: a move with no selector reads the items and links from `derived`, and `]]` has no selector to read the list again by.
+test("a move with no selector walks the derived row and focuses the link the finder named", () => {
+  const { page, log, shown, selectors } = fake_page(list);
+  const items = page.doc.querySelectorAll("li") as unknown as { querySelector: (selector: string) => unknown }[];
+  const named = { tabIndex: 0, setAttribute: () => {}, focus: () => log.push("focus found link") };
+  const queries: string[] = [];
+  page.doc = { ...page.doc, querySelectorAll: (selector: string) => (queries.push(selector), []) } as unknown as Document;
+  page.derived = { items_: () => items as unknown as Element[], link_of_: (item) => (item === (items[0] as unknown) ? (named as unknown as Element) : undefined), selector_: () => "li.row" };
+  move_item(page, { direction: "down" });
+  assert.deepEqual([log, shown, queries], [["focus found link"], ["0"], []]);
+  // The box follows a page script's focus by the selector of the derived row, and by the row's own selector when there is one.
+  assert.deepEqual(selectors, ["li.row"]);
+});
+
+test("with no selector and no derived items down scrolls like the plain key, and a count adds up", () => {
+  const { page, scrolls, shown } = fake_page(list);
+  page.derived = { items_: () => [], link_of_: () => undefined, selector_: () => "" };
+  move_item(page, { direction: "down", times: 3 });
+  move_item(page, { direction: "up" });
+  assert.deepEqual([scrolls, shown], [[[0, 150], [0, -50]], []]);
+});
+
+test("a move through the derived row leaves no cursor for the load step of ]]", () => {
+  const { page } = fake_page(list);
+  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li" };
+  move_item(page, { direction: "down" });
+  assert.equal(read_cursor(page, true), undefined);
+  move_item(page, { selector: "li", direction: "down" });
+  assert.equal(read_cursor(page, true)?.selector_, "li");
 });

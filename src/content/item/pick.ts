@@ -4,7 +4,8 @@ import type { EndPage } from "./ends.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
 export type ItemDirection = MoveDirection | "first" | "last" | "current";
-export type ItemArgs = { selector: string; link?: string; direction: ItemDirection; times?: number };
+// With no selector (undefined, or the empty text the validator fills in) the items come from the derived row (`ItemPage.derived`).
+export type ItemArgs = { selector?: string; link?: string; direction: ItemDirection; times?: number };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
 // Where the move starts. `on_item` is false when no item holds the focus or was the last move, and `index` is then the first item not above the view, or the item count when all are above it.
@@ -73,6 +74,8 @@ export type ItemPage = EndPage & {
   highlight: (item: Element, selector: string) => void;
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
+  // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, and a selector for the box to follow a page script's focus by.
+  derived?: { items_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string };
 };
 
 const SCROLL_PX = 50;
@@ -89,21 +92,25 @@ export type ItemCursor = { item_: Element | undefined; selector_: string; shown_
 
 export function read_cursor(page: ItemPage, shown_: boolean): ItemCursor | undefined {
   const args = last_move?.args_;
-  return args && { item_: last_move!.item_.deref(), selector_: args.selector, shown_, land_: (item) => land_on(page, item, args) };
+  // A move through the derived row has no selector to find the items again by, so `]]` leaves the box where it is.
+  return args?.selector ? { item_: last_move!.item_.deref(), selector_: args.selector, shown_, land_: (item) => land_on(page, item, args) } : undefined;
 }
 
 // A row that names a link and finds none in an item (a comment among stories) focuses the item itself. An item that is not focusable takes tabindex -1, so a script can focus it and the tab order stays as it was.
-function focus_target(item: Element, link_selector: string | undefined): HTMLElement {
+function focus_target(item: Element, link_selector: string | undefined, found_link: Element | undefined): HTMLElement {
   const own = item as HTMLElement;
-  const target = link_selector ? (item.querySelector<HTMLElement>(link_selector) ?? own) : own.tabIndex >= 0 ? own : (item.querySelector<HTMLElement>("a[href]") ?? own);
+  const target = found_link ? (found_link as HTMLElement) : link_selector ? (item.querySelector<HTMLElement>(link_selector) ?? own) : own.tabIndex >= 0 ? own : (item.querySelector<HTMLElement>("a[href]") ?? own);
   if (target.tabIndex < 0) target.setAttribute("tabindex", "-1");
   return target;
 }
 
+// What the box follows a page script's focus by: the row's selector, or the derived row's.
+const row_selector = (page: ItemPage, args: ItemArgs): string => args.selector || page.derived?.selector_() || "";
+
 export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
-  const read_items = () => Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown);
+  const read_items = () => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_() ?? []));
   const items = read_items();
   const { direction } = args;
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then.
@@ -123,7 +130,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   const held = boxes[place.index];
   // A pinned item off screen has no end in view to read to.
   if (vertical && place.on_item && held!.bottom > 0 && held!.top < page.view.innerHeight && (direction === "down" ? held!.bottom > page.view.innerHeight : held!.top < 0)) {
-    page.highlight(items[place.index]!, args.selector);
+    page.highlight(items[place.index]!, row_selector(page, args));
     return scroll();
   }
   const pick = pick_item(boxes, place, direction, steps);
@@ -134,9 +141,9 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
 
 // Focuses the item, brings it into view (unless `reveal` is false) and draws the box. `]]` lands here too, on the first item a load added. The page-scroller ends skip the reveal so gg stays at the page top and G at the bottom, with the box on an item that may lie off screen.
 function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, pin = false): void {
-  focus_target(item, args.link || undefined).focus({ preventScroll: true });
+  focus_target(item, args.link || undefined, args.selector ? undefined : page.derived?.link_of_(item)).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };
-  page.highlight(item, args.selector);
+  page.highlight(item, row_selector(page, args));
 }
