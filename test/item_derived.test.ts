@@ -552,3 +552,19 @@ test("an item inside a shadow root is probed through its own root", () => {
   card.hit = () => element;
   assert.equal(in_view_(element), 200 * 100);
 });
+
+test("an end command keeps its list when the page drops the list's first item and a larger list shows", () => {
+  const feed = [item("f1"), item("f2"), item("f3")];
+  const rail = [item("r1")];
+  rail[0]!.area = 500;
+  const { state, row } = setup(feed);
+  state.others = [];
+  row.items_();
+  // A virtualized feed drops its first item and keeps the rest. A larger rail shows, and the feed itself is out of the view.
+  feed[0]!.isConnected = false;
+  feed.slice(1).forEach((entry) => (entry.covered = true));
+  state.answer = feed.slice(1);
+  state.others = [rail];
+  assert.deepEqual(names(row.items_(true)), ["f2", "f3"]);
+  assert.deepEqual(names(row.items_(true)), ["f2", "f3"]);
+});

@@ -122,7 +122,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     return { kind: kind_of(best.boxes), items: best.items, links, ...(sections && { sections }) };
   };
   const regions = tops.map(region_of).filter((region) => region !== undefined);
-  return out_of_time() ? { ...none<N>(), timed_out_: true } : regions[0] ? { ...regions[0], regions } : none();
+  return regions[0] ? { ...regions[0], regions } : none();
 }
 
 const main_by_area = <N>(groups: readonly Group<N>[]): Group<N> | undefined => groups.reduce<Group<N> | undefined>((top, group) => (!top || group.area > top.area ? group : top), undefined);
