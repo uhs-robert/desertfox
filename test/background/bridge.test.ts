@@ -6,7 +6,7 @@ import type { Mode } from "../../src/shared/command.ts";
 import type { BridgeAnswer } from "../../src/background/bridge_run.ts";
 import type { TabInfo } from "../../src/background/tab_switch.ts";
 
-function make(options: { bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean; tab_verb?: BridgeDeps["tab_verb"]; set_desktop_theme?: BridgeDeps["set_desktop_theme"] } = {}) {
+function make(options: { stale_flag?: boolean; bridge?: boolean; missing_host?: boolean; permission?: boolean; run_command?: (text: string, tab_id?: number) => Promise<BridgeAnswer>; share_tabs?: boolean; tab_verb?: BridgeDeps["tab_verb"]; set_desktop_theme?: BridgeDeps["set_desktop_theme"] } = {}) {
   const themes: string[] = [];
   const warnings: string[] = [];
   const host_ready_calls: unknown[] = [];
@@ -21,6 +21,8 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
   const ports: (BridgePort & { posted: Record<string, unknown>[]; disconnected: boolean; say: (release_version?: string) => void; hear: (message: unknown) => void; drop: () => void; throw_on_post: boolean })[] = [];
   const timers: { run: () => void; delay_ms: number; cancelled: boolean }[] = [];
   const counts = { connects: 0 };
+  // The host flag as storage holds it, and every write in order. A write can be held to model a slow storage call.
+  const flag = { value: options.stale_flag === true, writes: [] as boolean[], hold: undefined as Promise<void> | undefined };
   let now = 0;
   const deps: BridgeDeps = {
     connect: () => {
@@ -73,12 +75,17 @@ function make(options: { bridge?: boolean; missing_host?: boolean; permission?: 
     set_desktop_theme: options.set_desktop_theme ?? (async (name) => void themes.push(name)),
     warn: (text) => void warnings.push(text),
     host_ready: (release_version) => void host_ready_calls.push(release_version),
+    set_host_connected: async (connected) => {
+      await flag.hold;
+      flag.writes.push(connected);
+      flag.value = connected;
+    },
   };
   const bridge = create_bridge(deps);
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
   const pending = () => timers.filter((timer) => !timer.cancelled);
   return {
-    bridge, host_ready_calls, themes, warnings, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
+    bridge, flag, host_ready_calls, themes, warnings, settings, state, windows, active_tab, modes, normal_tabs, ports, counts, settle, tab_calls, timers,
     port: () => ports[ports.length - 1]!,
     advance: (ms: number) => void (now += ms),
     // Fires the newest pending timer, lets the connect it starts finish and returns its delay.
@@ -690,4 +697,57 @@ test("reconnect does nothing while the bridge is off", async () => {
   test_case.bridge.reconnect();
   await test_case.settle();
   assert.equal(test_case.counts.connects, 0);
+});
+
+test("the host flag follows connect, drop and reconnect, and a restart clears a stale one", async () => {
+  const first = make({ stale_flag: true });
+  await first.bridge.start();
+  assert.equal(first.flag.value, false, "start clears a flag left by an earlier run");
+  first.port().say();
+  await first.settle();
+  assert.equal(first.flag.value, true, "ready sets it");
+  first.port().drop();
+  await first.settle();
+  assert.equal(first.flag.value, false, "a host that exits or crashes drops the port and clears it");
+  await first.fire_latest();
+  first.port().say();
+  await first.settle();
+  assert.equal(first.flag.value, true, "the retry sets it again");
+
+  // A restarted extension: the old page is gone with no drop, the flag is still set, and a new bridge starts with the host not yet ready.
+  const restarted = make({ stale_flag: first.flag.value });
+  await restarted.bridge.start();
+  assert.equal(restarted.flag.value, false, "a restart never shows the old connection");
+  assert.deepEqual(restarted.flag.writes, [false]);
+});
+
+test("the flag is false before the host says ready, and after the bridge setting turns off or the host is replaced", async () => {
+  const test_case = make();
+  await test_case.bridge.start();
+  assert.equal(test_case.flag.value, false, "a port that is not ready is not connected");
+  test_case.port().say();
+  await test_case.settle();
+  test_case.bridge.reconnect();
+  await test_case.settle();
+  assert.deepEqual(test_case.flag.writes, [false, true, false], "a reconnect clears it until the new host is ready");
+  test_case.port().say();
+  await test_case.settle();
+  assert.equal(test_case.flag.value, true);
+  test_case.settings.bridge = false;
+  await test_case.bridge.settings_changed();
+  await test_case.settle();
+  assert.equal(test_case.flag.value, false, "turning the bridge off clears it");
+});
+
+test("a slow write of connected never lands after the drop", async () => {
+  const test_case = make();
+  await test_case.bridge.start();
+  let release!: () => void;
+  test_case.flag.hold = new Promise<void>((resolve) => void (release = resolve));
+  test_case.port().say();
+  test_case.port().drop();
+  release();
+  await test_case.settle();
+  assert.equal(test_case.flag.value, false);
+  assert.deepEqual(test_case.flag.writes.slice(-2), [true, false]);
 });

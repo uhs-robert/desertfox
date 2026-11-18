@@ -45,6 +45,8 @@ export type BridgeDeps = {
   warn: (text: string) => void;
   // Gets the `release_version` of the host in its ready frame (undefined for a host from before the updater), so an older host can be updated.
   host_ready: (release_version: unknown) => void;
+  // Publishes whether the host is connected, for the popup. Called in the order the state changed, never overlapping.
+  set_host_connected: (connected: boolean) => Promise<void>;
   // The tab while it is in a normal window, else undefined: the privacy gate of every tab event.
   normal_tab: (tab_id: number) => Promise<TabInfo | undefined>;
 };
@@ -78,10 +80,17 @@ export function create_bridge(deps: BridgeDeps) {
   let cancel_retry: (() => void) | undefined;
   // Publishes run one after another, so a slow lookup cannot let an older state land after a newer one.
   let queue: Promise<void> = Promise.resolve();
+  // The host flag has a chain of its own, so a slow mode lookup never delays it and a late "connected" write never lands after "dropped".
+  let flag_queue: Promise<void> = Promise.resolve();
 
   const enqueue = (work: () => Promise<void>) => {
     queue = queue.then(work).catch((error: unknown) => console.warn("desertfox: a bridge update failed", error));
     return queue;
+  };
+
+  const publish_connected = (connected: boolean) => {
+    flag_queue = flag_queue.then(() => deps.set_host_connected(connected)).catch((error: unknown) => console.warn("desertfox: the host flag did not update", error));
+    return flag_queue;
   };
 
   const events = create_bridge_events({ sharing: () => share_tabs && ready, send: (event) => send(event), normal_tab: deps.normal_tab, after: deps.after });
@@ -180,6 +189,7 @@ export function create_bridge(deps: BridgeDeps) {
 
   function became_ready(release_version: unknown): void {
     ready = true;
+    void publish_connected(true);
     deps.host_ready(release_version);
     // A tabs_off sent while the port was down never arrived, and a new host does not know the setting. Saying it on every ready lets the host delete its caches.
     if (!share_tabs) send(TABS_OFF_EVENT);
@@ -196,6 +206,7 @@ export function create_bridge(deps: BridgeDeps) {
     const was_ready = ready;
     port = undefined;
     ready = false;
+    if (was_ready) void publish_connected(false);
     if (deps.now_ms() - up_since_ms >= STABLE_MS && was_ready) failures = 0;
     if (bridge_on) schedule_retry();
   }
@@ -238,8 +249,10 @@ export function create_bridge(deps: BridgeDeps) {
     cancel_retry?.();
     cancel_retry = undefined;
     const closing = port;
+    const was_ready = ready;
     port = undefined;
     ready = false;
+    if (was_ready) void publish_connected(false);
     closing?.disconnect();
   }
 
@@ -262,7 +275,11 @@ export function create_bridge(deps: BridgeDeps) {
   }
 
   return {
-    start: settings_changed,
+    // A flag left by a host or a background that ended without a drop is cleared before anything connects.
+    start: async () => {
+      await publish_connected(false);
+      await settings_changed();
+    },
     settings_changed,
     // The user granted the permission: no need to wait out the backoff.
     permission_added: () => {
