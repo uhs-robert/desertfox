@@ -25,6 +25,7 @@ import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
+import { site_row_columns } from "../shared/match_pattern.ts";
 import { hold_back_rows, item_finder_row } from "./item_finder_row.ts";
 import { without_hover } from "./item_hover.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
@@ -124,10 +125,12 @@ export function compile_config(input: CompileInput): CompileOutput {
   const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off).map((entry) => (hover ? entry : { ...entry, row: without_hover(entry.row) }));
   // The finder row comes last, so a row that binds j and k for a site decides them first and the finder runs only where no row matches.
   // A row that binds or passes j or k keeps the plain j, k, h and l it does not decide, through a hold-back row before the finder row.
+  // With the switch off the rows still go in when a user row turns the finder on for a site, and the page drops the finder row where the site's value is false.
   const finder_on = input.config.settings.item_finder ?? DEFAULT_SETTINGS.item_finder;
-  const finder_rows = finder_on ? [...hold_back_rows([...user_rows, ...default_rows.map(({ row }) => row)], keymap.normal, (binding) => is_plain_bind(binding, input)), item_finder_row(hover)] : [];
-  const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
-  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
+  const finder_wanted = finder_on || user_rows.some((row) => site_row_columns(row).values?.["item_finder"] === true);
+  const finder_rows = finder_wanted ? [...hold_back_rows([...user_rows, ...default_rows.map(({ row }) => row)], keymap.normal, (binding) => is_plain_bind(binding, input)), item_finder_row(hover)] : [];
+  const settings = { ...input.config.settings, item_finder: finder_on, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
+  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name, ...rest }): SiteRuleSource => ({ origin: "default", name, ..."finder" in rest && { finder: true as const } }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {

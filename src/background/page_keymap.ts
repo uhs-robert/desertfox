@@ -36,8 +36,11 @@ export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 // The page's columns of the site table, for the page's key handling and for which-key alike.
 export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses));
 
-// The rows that fit the page, in table order.
-export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
+// The rows that fit the page, in table order. The finder row goes where the page's `item_finder` value is false, so every key stays as the user set it. A keymap with no global value reads as off.
+export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => {
+  const matching = (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
+  return site_value(resolve_site_columns(matching), "item_finder", keymap?.item_finder === true) ? matching : matching.filter((rule) => !("finder" in rule));
+};
 
 // A per-site setting on a page. The cast holds because the setting's own check accepted the value when the config loaded. The site's value beats the global value, which already holds `:set` and `:set --temp`: the row names the site and `:set` does not.
 export const site_value = <Name extends PerSiteName>(columns: PageSiteColumns, name: Name, global_value: Settings[Name]): Settings[Name] =>
@@ -153,7 +156,7 @@ export async function page_keymap_for(storage: KeymapStorage, addresses: readonl
 async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[]): Promise<PageKeymap | undefined> {
   const keymap = current_keymap(await stored_keymap(storage));
   if (keymap === undefined) return undefined;
-  const { site_rules: _, frame_site_globals: __, ...keymap_without_rules } = keymap;
+  const { site_rules: _, frame_site_globals: __, item_finder: ___, ...keymap_without_rules } = keymap;
   const columns = site_columns_for(keymap, addresses);
   const page_tree = normal_tree_for(keymap.modes.normal, columns);
   const site_values = frame_site_values_for(keymap, addresses[0], PAGE_REPLY_SITE_SETTINGS);
