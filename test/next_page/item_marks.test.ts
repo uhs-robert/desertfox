@@ -102,9 +102,9 @@ test("the finder keeps the story row of Hacker News as the item and its title li
   assert.ok(found.items.every((item) => found.links.get(item)?.t === "a"));
 });
 
-test("the finder stops at its time budget and answers none", () => {
+test("the finder stops at its time budget and answers a none that says so, which the derived row does not keep", () => {
   let ticks = 0;
   const found = find_items(saved_reader(page_of("ddg")), { now_: () => ticks++ * 10, budget_ms_: 40 });
-  assert.equal(found.kind, "none");
-  assert.deepEqual(found.items, []);
+  assert.deepEqual([found.kind, found.items, found.timed_out_], ["none", [], true]);
+  assert.equal(find_items(saved_reader(page_of("de_spiegel"))).timed_out_, undefined);
 });

@@ -1,6 +1,6 @@
 // The repeated blocks of a page, for the load-more step of `]]` (`../next_page/load_more.ts`) and the item finder (`finder.ts`). Both read the same groups, so `]]` and j agree on where the main list is.
 
-import { ancestors, in_carousel, is_item_size, signature, stacked_items } from "../next_page/detect.ts";
+import { ancestors, in_carousel, signature, stacked_items } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
 
 const CHROME_TAGS = new Set(["nav", "header", "footer", "aside", "dialog"]);
@@ -36,28 +36,28 @@ export type GroupRules<N> = {
   stop: () => boolean;
 };
 
-export const PLAIN_RULES = <N>(reader: PageReader<N>): GroupRules<N> => ({ box_of: (child) => reader.box_(child), is_item: (_child, box) => is_item_size(box), stop: () => false });
-
-// Every repeated block of two or more items under `nodes`, outside page chrome, carousels, sideways scrollers and fixed boxes. Area per item is capped at the screen width and three screens high, so one huge item does not win alone.
-export function list_groups<N>(reader: PageReader<N>, nodes: readonly N[], rules: GroupRules<N> = PLAIN_RULES(reader)): Group<N>[] {
+// Every repeated block of two or more items under `nodes`. Area per item is capped at the screen width and three screens high, so one huge item does not win alone. It reads no style: the callers drop the blocks that are no list first and ask `plain_block` last, because it reads computed style up the ancestors.
+export function list_groups<N>(reader: PageReader<N>, nodes: readonly N[], rules: GroupRules<N>): Group<N>[] {
   const view = reader.view_();
   const found: Group<N>[] = [];
   for (const parent of nodes) {
     if (rules.stop()) break;
-    const by_signature = new Map<string, { items: N[]; boxes: Box[] }>();
+    // Children are sorted by signature before any box is read, so a child with no sibling of its kind costs no layout read.
+    const by_signature = new Map<string, number[]>();
     const children = reader.children_(parent);
     children.forEach((child, at) => {
-      const box = rules.box_of(child, children, at);
-      if (!box || !rules.is_item(child, box)) return;
       const kind = signature(reader, child);
-      const group = by_signature.get(kind) ?? by_signature.set(kind, { items: [], boxes: [] }).get(kind)!;
-      group.items.push(child);
-      group.boxes.push(box);
+      (by_signature.get(kind) ?? by_signature.set(kind, []).get(kind)!).push(at);
     });
-    for (const { items, boxes } of by_signature.values()) {
+    for (const places of by_signature.values()) {
+      if (places.length < 2) continue;
+      const items: N[] = [];
+      const boxes: Box[] = [];
+      for (const at of places) {
+        const box = rules.box_of(children[at]!, children, at);
+        if (box && rules.is_item(children[at]!, box)) items.push(children[at]!), boxes.push(box);
+      }
       if (items.length < 2) continue;
-      if (in_chrome(reader, parent) || in_carousel(reader, parent) || reader.scrolls_sideways_(parent) || in_pinned(reader, parent)) continue;
-      if (items.every((item) => is_actionable(reader, item) && reader.text_(item).trim().length < SHORT_LINK_TEXT)) continue;
       const area = boxes.reduce((sum, box) => sum + Math.min(box.w, view.w) * Math.min(box.h, 3 * view.h), 0);
       found.push({ parent, items, boxes, area });
     }
@@ -65,6 +65,10 @@ export function list_groups<N>(reader: PageReader<N>, nodes: readonly N[], rules
   return found;
 }
 
+// A block outside page chrome, carousels, sideways scrollers and fixed boxes, whose items are more than short links (a menu, tags).
+export const plain_block = <N>(reader: PageReader<N>, { parent, items }: Group<N>): boolean =>
+  !in_chrome(reader, parent) && !in_carousel(reader, parent) && !reader.scrolls_sideways_(parent) && !in_pinned(reader, parent) && !items.every((item) => is_actionable(reader, item) && reader.text_(item).trim().length < SHORT_LINK_TEXT);
+
 // The group with the most area among those that stack in three rows: the main list of the page. A smaller block (the tiles of one row of a justified grid) is no list on its own, so the callers do not ask for it here.
 export const main_list = <N>(reader: PageReader<N>, groups: readonly Group<N>[]): Group<N> | undefined =>
-  groups.filter((group) => stacked_items(reader, group.items)).reduce<Group<N> | undefined>((best, group) => (!best || group.area > best.area ? group : best), undefined);
+  groups.filter((group) => stacked_items(reader, group.items) && plain_block(reader, group)).reduce<Group<N> | undefined>((best, group) => (!best || group.area > best.area ? group : best), undefined);
