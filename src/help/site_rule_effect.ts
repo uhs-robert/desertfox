@@ -13,11 +13,13 @@ function key_list(keys: string): { count: number; shown: string } {
   return { count: all.length, shown: all.length > SHOWN_KEYS ? `${all.slice(0, SHOWN_KEYS).join(" ")} ...` : all.join(" ") };
 }
 
+const setting_text = (value: unknown): string => (Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value));
+
 // One short phrase per thing the rule sets, in a fixed order: keys on or off, which keys pass or stay, then binds, modes and settings.
 export function site_rule_effects(row: SiteRuleRow): string[] {
   const columns = site_row_columns(row);
   const effects: string[] = [];
-  if (columns.off !== undefined) effects.push(columns.off ? "Off" : "Keys on");
+  if (columns.off !== undefined) effects.push(columns.off ? "Off" : "Keys stay on");
   if (columns.keys !== undefined) {
     if ("pass" in columns.keys) {
       const { count, shown } = key_list(columns.keys.pass);
@@ -25,11 +27,10 @@ export function site_rule_effects(row: SiteRuleRow): string[] {
     } else effects.push(`Only ${plural(key_list(columns.keys.only).count, "key")}`);
   }
   const bind_count = Object.keys(columns.bind ?? {}).length + Object.values(columns.keymap ?? {}).reduce((total, table) => total + Object.keys(table).length, 0);
-  if (bind_count > 0) effects.push(`${plural(bind_count, "bind")}`);
+  if (bind_count > 0) effects.push(plural(bind_count, "bind"));
   const mode_count = Object.keys(columns.modes ?? {}).length;
   if (mode_count > 0) effects.push(plural(mode_count, "site mode"));
-  const setting_names = Object.keys(columns.values ?? {});
-  if (setting_names.length > 0) effects.push(`Sets ${setting_names.join(", ")}`);
+  for (const [name, value] of Object.entries(columns.values ?? {})) effects.push(`Sets ${name.replaceAll("_", " ")} to ${setting_text(value)}`);
   return effects;
 }
 

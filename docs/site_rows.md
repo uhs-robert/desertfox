@@ -360,6 +360,26 @@ Addresses: `https://drive.google.com/drive/*`
 
 <!-- END generated -->
 
+## Write your own rule
+
+Add a `[[site_rules]]` table to your settings file for each site you want to change. The `site` field is a web address where `*` stands for any text. The rest sets what DesertFox does there:
+
+```toml
+[[site_rules]]
+site = "*://*.example.com/*"
+off = true            # turn every DesertFox key off on these sites
+
+[[site_rules]]
+site = "*://mail.example.org/*"
+pass = "j k"          # give these keys to the page
+
+[[site_rules]]
+site = "*://docs.example.org/*"
+only = "G"            # keep only these keys on
+```
+
+A rule can set `pass` or `only`, not both. A rule with nothing but `site` turns the keys off. For each field, the first rule that matches the page and sets that field decides. Edit the file, then run `config.reload`, or edit the same text in Settings under Advanced. The Your site rules section of Settings lists what each rule does. The Override a row section below covers `bind` and the rest.
+
 ## Turn a row off
 
 The `default_site_rows_off` setting holds the whole list, so `:set` replaces it. List every row to turn off. For example, `:set default_site_rows_off drive maps` turns off Drive and Maps, and turns every other row back on. The setting turns off every row of that name, so `sheets` covers both Sheets address forms. The names are the headings above.
