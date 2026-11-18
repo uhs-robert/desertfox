@@ -165,7 +165,7 @@ function nest_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[] 
   });
 }
 
-// Blocks of one kind under sibling parents (a feed that loads in batches, a front page of sections) read as one group. Parents that share a grandparent merge first, then those that share a great-grandparent.
+// Blocks of one kind under sibling parents of one kind, the same tag and first class (a feed that loads in batches, a front page of sections) read as one group. Parents that share a grandparent merge first, then those that share a great-grandparent.
 function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[] {
   let pool = groups;
   for (const level of [2, 3]) {
@@ -177,7 +177,7 @@ function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[]
         next.push(group);
         continue;
       }
-      const key = signature(reader, group.items[0]!);
+      const key = `${signature(reader, group.items[0]!)}<${signature(reader, group.parent)}`;
       const peers = by_key.get(shared) ?? by_key.set(shared, new Map()).get(shared)!;
       const first = peers.get(key);
       if (first) {
