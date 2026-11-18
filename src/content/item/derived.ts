@@ -1,7 +1,7 @@
 // The derived row of the page: what the finder found, kept for the document so a key press does not read the page again.
 // It is read again when no item of the answer shows, the first item has left the DOM, or the address changed, and at the end of the list when something new follows its last item. There is no MutationObserver: a page that changes under a still-shown answer keeps the old items until one of those holds.
 
-import { find_items, FINDER_BUDGET_MS } from "./finder.ts";
+import { find_items, FINDER_BUDGET_MS, FIRST_READ_BUDGET_MS } from "./finder.ts";
 import type { Found } from "./finder.ts";
 import { dom_reader } from "./dom_reader.ts";
 import { is_shown } from "../shown.ts";
@@ -10,7 +10,8 @@ import { is_shown } from "../shown.ts";
 export const NONE_RECHECK_MS = 500;
 
 export type DerivedDeps = {
-  find_: () => Found<Element>;
+  // The time budget of the read: `FIRST_READ_BUDGET_MS`, or `FINDER_BUDGET_MS` at an address where reads overran the long one.
+  find_: (budget_ms: number) => Found<Element>;
   url_: () => string;
   now_: () => number;
   is_shown_: (element: Element) => boolean;
@@ -27,6 +28,8 @@ const item_selector = (item: Element | undefined): string => (item ? item.localN
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   let kept: { found: Found<Element>; url: string; at: number; tail: unknown[] } | undefined;
   let timeouts_in_a_row = 0;
+  // The address at which two reads in a row ran out of the long budget. Reads there get the short budget, so a page that always overruns pauses at most twice. Every other read gets the long budget, so a long page answers again after a hash change, a route change or a read at the end of the list.
+  let overran_at: string | undefined;
   const still_good = (): boolean => {
     if (!kept || kept.url !== deps.url_()) return false;
     const { items } = kept.found;
@@ -38,8 +41,9 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     if (!still_good()) {
       kept = undefined;
       try {
-        const found = deps.find_();
+        const found = deps.find_(overran_at === deps.url_() ? FINDER_BUDGET_MS : FIRST_READ_BUDGET_MS);
         timeouts_in_a_row = found.timed_out_ ? timeouts_in_a_row + 1 : 0;
+        if (timeouts_in_a_row === 2) overran_at = deps.url_();
         if (timeouts_in_a_row !== 1) kept = { found, url: deps.url_(), at: deps.now_(), tail: deps.tail_(found.items) };
       } catch (error) {
         console.error(error);
@@ -67,7 +71,7 @@ const now_ = () => performance.now();
 
 export const live_derived_row = (): DerivedRow =>
   create_derived_row({
-    find_: () => find_items(dom_reader(document), { now_, budget_ms_: FINDER_BUDGET_MS }),
+    find_: (budget_ms_) => find_items(dom_reader(document), { now_, budget_ms_ }),
     url_: () => location.href,
     now_,
     is_shown_: is_shown,

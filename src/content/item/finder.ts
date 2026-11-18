@@ -14,6 +14,8 @@ export type Found<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefin
 const none = <N>(): Found<N> => ({ kind: "none", items: [], links: new Map() });
 
 export const FINDER_BUDGET_MS = 40;
+// A read may take this long, unless reads at the address overran it (see `derived.ts`): a long page runs past 40 ms in a content script, and its answer is then kept for the later presses, so a press pauses only when the page is read again.
+export const FIRST_READ_BUDGET_MS = 400;
 // A title link has at least this much text.
 const TITLE_TEXT_MIN = 15;
 // A link that no heading holds names its item only when it starts within this far (or this share of the item's height) from the item's top.
