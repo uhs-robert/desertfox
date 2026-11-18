@@ -104,8 +104,8 @@ test("every link the finder names is shown, so the focus can move to it", () => 
 
 test("the finder keeps the sections of a front page and walks the cards in them", () => {
   const found = finder_on("apnews");
-  assert.ok(found.sections && found.sections.length >= 3);
-  assert.ok(found.items.length >= 30);
+  assert.equal(found.sections?.length, 8);
+  assert.equal(found.items.length, 30);
   assert.ok(found.items.every((item) => found.links.get(item) !== undefined));
 });
 
