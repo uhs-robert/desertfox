@@ -1232,6 +1232,50 @@ class TwoAppsTest(BridgeTestCase):
         self.assertTrue(os.path.exists(old_thumbnail), "neither the start prune nor tabs_off may delete a Firefox image")
 
 
+class ThunderbirdLinkTest(BridgeTestCase):
+    """The frames the DesertBird add-on speaks, driven through a Thunderbird host from the socket side."""
+
+    def setUp(self):
+        super().setUp()
+        self.bird_socket = os.path.join(self.runtime, "desertbird", "bridge.sock")
+
+    def test_a_desertbird_style_add_on_runs_lists_and_reports_its_mode(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        self.assertEqual(host.ready, {"ready": True, "host_version": 1, "release_version": "dev"})
+        commands = [{"id": "pane.toggle", "label": "Toggle a pane", "intent": "show or hide a pane", "params": [{"name": "pane", "type": "enum", "values": ["folder"]}]}]
+        listing = Client(self.bird_socket, {"verb": "list"})
+        request = host.read_request(what="list")
+        self.assertEqual(request, {"verb": "list", "request_id": request["request_id"]})
+        self.assertIsInstance(request["request_id"], int)
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": True, "commands": commands})
+        self.assertEqual(listing.result(), {"ok": True, "commands": commands})
+        run = Client(self.bird_socket, {"verb": "run", "command": "pane.toggle folder"})
+        request = host.read_request(what="run")
+        self.assertEqual(request, {"verb": "run", "request_id": request["request_id"], "command": "pane.toggle folder"})
+        host.send({"verb": "reply", "request_id": request["request_id"], "ok": False, "message": "msg.delete never runs through the bridge"})
+        self.assertEqual(run.result(), {"ok": False, "message": "msg.delete never runs through the bridge"})
+        host.send({"verb": "mode", "id": "visual", "label": "VISUAL", "private": False, "tab_id": 7, "window_id": 3})
+        state = self.wait_for_bird_state("visual")
+        self.assertEqual((state["firefox"], state["mode"]), ({"window_id": 3, "private": False}, {"id": "visual", "label": "VISUAL", "tab_id": 7}))
+
+    def test_state_is_answered_by_the_host_and_never_sent_to_the_add_on(self):
+        host = self.start(argv=THUNDERBIRD_ARGV)
+        self.assertEqual(self.ask({"verb": "state"}, socket_path=self.bird_socket), {"ok": True, "state": None})
+        host.send({"verb": "mode", "id": "normal", "label": "NORMAL", "private": False, "tab_id": 7, "window_id": 3})
+        self.assertEqual(self.wait_for_bird_state("normal")["host"]["pid"], host.process.pid)
+        with self.assertRaises(AssertionError):
+            host.read_request(timeout=0.3)
+
+    def wait_for_bird_state(self, mode_id):
+        deadline = time.monotonic() + liveness_s()
+        while time.monotonic() < deadline:
+            state = self.ask({"verb": "state"}, socket_path=self.bird_socket)["state"]
+            if state and state["mode"]["id"] == mode_id:
+                return state
+            time.sleep(0.01)
+        self.fail("the Thunderbird host never showed mode %s" % mode_id)
+
+
 class AcceptErrorTest(BridgeTestCase):
     def test_a_transient_accept_error_does_not_end_the_server(self):
         import errno
