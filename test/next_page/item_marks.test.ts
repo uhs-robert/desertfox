@@ -9,7 +9,7 @@ import { FIXTURES, read_saved_page, saved_reader } from "../support/snapshot_pag
 import type { SavedNode, SavedPage } from "../support/snapshot_page.ts";
 
 // `article` is the phase 3 kind: until then the finder answers `none` on an article, and the label keeps the kind it will have.
-type Finder_label = { kind: FinderKind | "article"; min?: number; known_miss?: string };
+type Finder_label = { kind: FinderKind | "article"; min?: number; max?: number; known_miss?: string };
 type Result = { marks: number; covered: number; picked: number };
 
 const labels = JSON.parse(readFileSync(new URL("labels.json", FIXTURES), "utf8")) as Record<string, { finder?: Finder_label }>;
@@ -70,6 +70,7 @@ for (const [name, label] of Object.entries(labels).filter(([, entry]) => entry.f
     const expected = finder.kind === "article" ? "none" : finder.kind;
     if (found.kind !== expected) failures.push(`kind ${found.kind}, label ${expected}`);
     if (finder.min !== undefined && finder.kind !== "article" && found.items.length < finder.min) failures.push(`${found.items.length} items, label says at least ${finder.min}`);
+    if (finder.max !== undefined && found.items.length > finder.max) failures.push(`${found.items.length} items, label says at most ${finder.max}`);
     if (marks.size > 0) {
       const result = score(saved_reader(page_of(name)), marks, found.items);
       if (result.covered !== result.marks) failures.push(`covered ${result.covered} of ${result.marks} marks`);
