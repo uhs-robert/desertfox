@@ -78,9 +78,10 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   });
   const titled_share = (group: Group<N>): number => group.items.filter((item) => title_of(item) !== undefined).length / group.items.length;
 
+  // A paragraph is prose, never an item, so the paragraphs of an issue comment are no list.
   const rules: GroupRules<N> = {
     box_of: (child, siblings, at) => record_box(reader, child, siblings, at),
-    is_item: (child, box) => box.w >= MIN_ITEM_WIDTH_PX && (box.h >= TALL_ITEM_PX || (box.h >= SHORT_ITEM_PX && title_of(child) !== undefined)),
+    is_item: (child, box) => reader.tag_(child) !== "p" && box.w >= MIN_ITEM_WIDTH_PX && (box.h >= TALL_ITEM_PX || (box.h >= SHORT_ITEM_PX && title_of(child) !== undefined)),
     stop: out_of_time,
   };
   const chrome = once((node: N) => in_chrome(reader, node));

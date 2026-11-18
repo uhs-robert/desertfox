@@ -53,6 +53,10 @@ test("the row pages carry marks and the labels state their minimum", () => {
   }
 });
 
+test("every saved page carries a finder label, so none is left out of the checks below", () => {
+  assert.deepEqual(saved.filter((name) => !labels[name]?.finder), []);
+});
+
 // The finder reads each saved page once.
 const found_on = new Map<string, Found<SavedNode>>();
 const finder_on = (name: string): Found<SavedNode> => found_on.get(name) ?? found_on.set(name, find_items(saved_reader(page_of(name)))).get(name)!;
