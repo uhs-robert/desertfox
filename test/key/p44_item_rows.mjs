@@ -70,6 +70,30 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await in_active_tab("scrollY")) === 0, "j or k scrolled by line instead of moving to the result");
   });
 
+  await run_case("gg scrolls to the page top and boxes the first result, G scrolls to the page bottom and boxes the last, neither pulls the result into view", async () => {
+    await open_results("ends");
+    // A header that leaves the first result half under the fold, and a footer taller than the view that leaves the last result above it at the bottom.
+    await in_active_tab(`(() => {
+      const search = document.getElementById("search");
+      const header = document.createElement("div");
+      header.style.height = (innerHeight - 30) + "px";
+      const footer = document.createElement("div");
+      footer.style.height = (innerHeight + 100) + "px";
+      search.before(header);
+      search.after(footer);
+      return true;
+    })()`);
+    await press_keys("G");
+    await expect_focus("r11");
+    await expect_box_on_focus("the box on the last result");
+    const bottom = await in_active_tab("document.scrollingElement.scrollHeight - innerHeight");
+    expect((await in_active_tab("scrollY")) >= bottom - 1, "G did not leave the page at its bottom");
+    await press_keys("gg");
+    await expect_focus("r0");
+    await expect_box_on_focus("the box on the first result");
+    expect((await in_active_tab("scrollY")) === 0, `gg left the page at scrollY ${await in_active_tab("scrollY")}, not the top`);
+  });
+
   await run_case("the box sits on the focused result and moves with it", async () => {
     await open_results("box");
     await press_keys("j");
