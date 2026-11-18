@@ -92,6 +92,15 @@ test("a finder that picks every link covers the marks but fails the precision ch
   assert.deepEqual(fooled, ["ddg_images"]);
 });
 
+test("every link the finder names is shown, so the focus can move to it", () => {
+  const hidden = saved.filter((name) => {
+    const reader = saved_reader(page_of(name));
+    const found = finder_on(name);
+    return found.items.some((item) => { const link = found.links.get(item); return link !== undefined && reader.box_(link) === undefined; });
+  });
+  assert.deepEqual(hidden, []);
+});
+
 test("the finder keeps the sections of a front page and walks the cards in them", () => {
   const found = finder_on("apnews");
   assert.ok(found.sections && found.sections.length >= 3);
