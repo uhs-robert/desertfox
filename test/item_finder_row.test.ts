@@ -7,6 +7,7 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { normal_tree_for, page_keymap_for, site_columns_for } from "../src/background/page_keymap.ts";
 import { key_command_id_on_page } from "../src/background/open_help.ts";
+import { HELD_KEYS } from "../src/background/item_finder_row.ts";
 import { site_rules_view } from "../src/background/site_rules_view.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
@@ -15,7 +16,8 @@ import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../src/shared/prefix_
 const compiled = (settings: Record<string, unknown> = {}) =>
   compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
 const ask = async (keymap: CompiledKeymap, url: string) => (await page_keymap_for({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } as never, [url]))!;
-const step_of = (reply: Awaited<ReturnType<typeof ask>>, key: string) => ((reply.keymap.modes.normal as TreeBranch).children[key] as TreeLeaf).steps[0]!.invocation;
+// A key of more than one character (gg) sits under its prefix branches.
+const step_of = (reply: Awaited<ReturnType<typeof ask>>, key: string) => ([...key].reduce<TreeBranch | TreeLeaf>((node, char) => (node as TreeBranch).children[char]!, reply.keymap.modes.normal as TreeBranch) as TreeLeaf).steps[0]!.invocation;
 
 test("the setting is off by default, so j and k stay the plain scroll on every page", async () => {
   const result = compiled();
@@ -51,26 +53,34 @@ test("turning a shipped row off hands its site to the finder", async () => {
   assert.equal(step_of(reply, "j").args!["selector"], "");
 });
 
-test("the finder binds h and l too, for a grid, and leaves G to its key", async () => {
+test("the finder binds h and l too, for a grid, and gg and G to the ends of the list", async () => {
   const reply = await ask(compiled({ item_finder: true }).compiled, "https://a.test/");
   for (const [key, direction] of [["h", "left"], ["l", "right"]] as const) {
     const invocation = step_of(reply, key);
     assert.deepEqual([invocation.id, invocation.args?.["direction"], invocation.args?.["selector"]], ["page.item", direction, ""]);
   }
-  assert.notEqual(step_of(reply, "G").id, "page.item");
+  for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
+    const invocation = step_of(reply, key);
+    assert.deepEqual([invocation.id, invocation.args?.["direction"], invocation.args?.["selector"]], ["page.item", direction, ""], key);
+  }
+});
+
+test("with the setting off gg and G stay the plain scroll to the top and bottom", async () => {
+  const reply = await ask(compiled().compiled, "https://a.test/");
+  assert.deepEqual([step_of(reply, "gg").id, step_of(reply, "G").id], ["scroll.to", "scroll.to"]);
 });
 
 const plain_h = (reply: Awaited<ReturnType<typeof ask>>) => step_of(reply, "h").id;
 const is_finder_step = (invocation: ReturnType<typeof step_of>) => invocation.id === "page.item" && invocation.args?.["selector"] === "";
 const claims_j_or_k = (row: (typeof DEFAULT_SITE_ROWS)[number]["row"]) => row.bind?.["j"] !== undefined || row.bind?.["k"] !== undefined || /(^|\s)[jk](\s|$)/.test(row.pass ?? "");
 
-test("no shipped row that binds or passes j or k leaves h or l to the finder", async () => {
+test("no shipped row that binds or passes j or k leaves h, l, gg or G to the finder", async () => {
   const { compiled: keymap } = compiled({ item_finder: true });
   const rows = DEFAULT_SITE_ROWS.filter(({ row }) => claims_j_or_k(row));
   assert.ok(rows.length > 20);
   for (const { name, row } of rows) {
     const reply = await ask(keymap, row.site.replaceAll("*", "x"));
-    for (const key of ["h", "l"]) assert.equal(is_finder_step(step_of(reply, key)), false, `${name} ${row.site} ${key}`);
+    for (const key of ["h", "l", "gg", "G"]) assert.equal(is_finder_step(step_of(reply, key)), false, `${name} ${row.site} ${key}`);
   }
 });
 
@@ -81,6 +91,35 @@ test("kagi passes j and k and keeps the plain h and l, and brave binds only j an
     assert.deepEqual([step_of(reply, "h").id, step_of(reply, "l").id], ["scroll.pixels", "scroll.pixels"], url);
   }
   assert.equal(step_of(await ask(keymap, "https://search.brave.com/search?q=x"), "j").id, "page.send_key");
+});
+
+test("kagi and brave keep the plain gg and G, and reddit keeps its own G and the plain gg", async () => {
+  const { compiled: keymap } = compiled({ item_finder: true });
+  for (const url of ["https://kagi.com/search?q=x", "https://search.brave.com/search?q=x", "https://www.reddit.com/r/x/"]) {
+    const reply = await ask(keymap, url);
+    assert.equal(step_of(reply, "gg").id, "scroll.to", url);
+    assert.equal(is_finder_step(step_of(reply, "G")), false, url);
+  }
+  assert.equal(step_of(await ask(keymap, "https://www.reddit.com/r/x/"), "G").id, "page.item");
+  assert.equal(step_of(await ask(keymap, "https://kagi.com/search?q=x"), "G").id, "scroll.to");
+});
+
+test("a user remap of gg or G shows on a row page, and an unbound one is left to the finder", async () => {
+  const kagi = "https://kagi.com/search?q=x";
+  const remapped = with_keymap({ gg: { id: "tab.prev" }, G: [{ id: "tab.next" }, { id: "tab.prev" }] });
+  const reply = await ask(remapped.compiled, kagi);
+  assert.deepEqual([step_of(reply, "gg").id, step_of(reply, "G").id], ["tab.prev", "tab.next"]);
+  assert.deepEqual(remapped.warnings, []);
+  const unbound = await ask(with_keymap({ gg: null, G: null }).compiled, kagi);
+  assert.deepEqual([is_finder_step(step_of(unbound, "gg")), is_finder_step(step_of(unbound, "G"))], [true, true]);
+});
+
+test("a user key that starts with g keeps working beside the finder's gg", async () => {
+  const reply = await ask(with_keymap({ gx: { id: "tab.next" } }).compiled, "https://a.test/");
+  const g = (reply.keymap.modes.normal as TreeBranch).children["g"] as TreeBranch;
+  assert.equal(g.kind, "branch");
+  assert.equal((g.children["x"] as TreeLeaf).steps[0]!.invocation.id, "tab.next");
+  assert.equal(is_finder_step(((g.children["g"]) as TreeLeaf).steps[0]!.invocation), true);
 });
 
 test("a user row that binds only k keeps the plain j, h and l on its pages", async () => {
@@ -117,8 +156,8 @@ test("with the setting off no hold-back row is compiled, and with it on each sit
   const off = compiled().compiled.site_rules!;
   const on = compiled({ item_finder: true }).compiled.site_rules!;
   assert.deepEqual(off.filter((rule) => (rule as { name?: string }).name === "item_finder"), []);
-  // A row that binds h and l itself needs no hold.
-  const held = new Set(DEFAULT_SITE_ROWS.filter(({ row }) => claims_j_or_k(row) && !(row.bind?.["h"] && row.bind["l"])).map(({ row }) => row.site));
+  // A row that binds every held key itself needs no hold.
+  const held = new Set(DEFAULT_SITE_ROWS.filter(({ row }) => claims_j_or_k(row) && !HELD_KEYS.every((key) => row.bind?.[key])).map(({ row }) => row.site));
   assert.equal(on.length - off.length, held.size + 1);
 });
 
@@ -163,7 +202,16 @@ test("a site row with item_finder false keeps an unbound key, a prompt key and a
   assert.equal(root.children["l"]?.kind, "branch");
   assert.equal(is_finder_step(step_of(await ask(stored, "https://a.test/"), "j")), false);
   assert.equal(is_finder_step(step_of(await ask(stored, "https://b.test/"), "j")), true);
+  assert.equal(is_finder_step(step_of(await ask(stored, "https://b.test/"), "gg")), true);
   assert.equal(((await ask(stored, "https://b.test/")).keymap.modes.normal as TreeBranch).children["h"] !== undefined, true);
+});
+
+test("a site row with item_finder false leaves gg and G the plain scroll while other sites keep the finder's", async () => {
+  const stored = compiled({ item_finder: true, site_rules: [off_at_a] }).compiled;
+  const here = await ask(stored, "https://a.test/");
+  assert.deepEqual([step_of(here, "gg").id, step_of(here, "G").id], ["scroll.to", "scroll.to"]);
+  const elsewhere = await ask(stored, "https://b.test/");
+  assert.deepEqual([step_of(elsewhere, "gg").args?.["direction"], step_of(elsewhere, "G").args?.["direction"]], ["first", "last"]);
 });
 
 test("item_finder true on one site works with the global switch off, and no other site gets the finder", async () => {

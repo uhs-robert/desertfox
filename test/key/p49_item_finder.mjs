@@ -1,4 +1,4 @@
-// The item finder (`item_finder = true`): on a page with no site row, j and k walk the list the finder reads from the page, with the box and the focus on the title link, and Enter opens it. On a page with no list the keys scroll as they do without the setting. A shipped row for the site still decides first. The bundle-refused fallback is covered in test/content/item_finder_fallback.test.ts, because no real page makes the item bundle fail without a test hook.
+// The item finder (`item_finder = true`): on a page with no site row, j and k walk the list the finder reads from the page, with the box and the focus on the title link, and Enter opens it. gg and G go to the first and last card where it is in view after the scroll, and only scroll otherwise. On a page with no list the keys scroll as they do without the setting. A shipped row for the site still decides first. The bundle-refused fallback is covered in test/content/item_finder_fallback.test.ts, because no real page makes the item bundle fail without a test hook.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -87,5 +87,43 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await add_cards();
     await press_keys("j");
     await expect_focus("f0");
+  });
+
+  const at_bottom = () => in_active_tab("scrollY + innerHeight >= document.documentElement.scrollHeight - 2");
+  // Hides the rest of the page, so the cards are all of it and the first and last card are in view at the page ends.
+  const only_cards = () => in_active_tab(`(() => { const list = document.querySelector(".card").parentElement; for (const child of document.body.children) if (child !== list) child.style.display = "none"; window.scrollTo(0, 0); return true; })()`);
+
+  await run_case("G goes to the last card and gg to the first, when the card is in view after the scroll", async () => {
+    await open_page("page", "finder_ends", { new_tab: true });
+    await add_cards(30);
+    await only_cards();
+    await press_keys("G");
+    await expect_focus("f29");
+    expect(await at_bottom(), "G did not scroll to the bottom");
+    await press_keys("gg");
+    await expect_focus("f0");
+    await poll_until("the page top", async () => (await in_active_tab("scrollY")) === 0);
+  });
+
+  await run_case("gg with the first card below the fold only scrolls, and the next j does not jump back", async () => {
+    await open_page("page", "finder_ends_far", { new_tab: true });
+    await add_cards(30);
+    await in_active_tab(`(() => { const spacer = document.createElement("div"); spacer.style.height = "3000px"; document.body.prepend(spacer); window.scrollTo(0, 3000); return true; })()`);
+    await press_keys("gg");
+    await poll_until("the page top", async () => (await in_active_tab("scrollY")) === 0);
+    expect((await focused()) === "", "gg moved the focus to a card far below the view");
+    expect((await in_active_tab(READ_BOX)) === null, "gg drew a box on a card far below the view");
+    await press_keys("j");
+    await sleep(500);
+    expect((await in_active_tab("scrollY")) < 500, "j jumped back down the page after gg");
+  });
+
+  await run_case("gg and G scroll to the top and bottom of a page with no list", async () => {
+    await open_page("page", "finder_ends_none", { new_tab: true });
+    await press_keys("G");
+    await poll_until("the page bottom", at_bottom);
+    await press_keys("gg");
+    await poll_until("the page top", async () => (await in_active_tab("scrollY")) === 0);
+    expect((await focused()) === "", "gg moved the focus on a page with no list");
   });
 }

@@ -4,6 +4,7 @@ import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
+import { create_derived_row } from "../src/content/item/derived.ts";
 import { move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
@@ -132,6 +133,8 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
       focus: () => log.push(`focus item ${index}`),
       scrollIntoView: (options: { block: string }) => log.push(`scroll ${index} ${options.block}`),
       isConnected: true,
+      localName: "li",
+      classList: [],
       parentElement: null,
       getAttribute: () => null,
       closest: () => null,
@@ -288,6 +291,40 @@ test("first and last go to the ends of the page whatever has focus, skip hidden 
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
 });
 
+// The finder's ends: no selector, the items come from the derived row.
+const finder_page = (rects: Box[]) => {
+  const fake = fake_page(rects);
+  fake.page.derived = { items_: () => fake.page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  return fake;
+};
+
+test("with no selector and no derived item, first and last refuse so content.js can scroll, and a selector row still does nothing", async () => {
+  const { page, log, scrolls } = fake_page(list);
+  page.derived = { items_: () => [], link_of_: () => undefined, selector_: () => "", grew_: () => false, grid_: () => false };
+  assert.deepEqual(await move_item(page, { direction: "first" }), { ok: false, message: "No item" });
+  assert.deepEqual(await move_item(page, { direction: "last" }), { ok: false, message: "No item" });
+  assert.deepEqual([log, scrolls], [[], []]);
+  assert.equal(await move_item(page, { selector: "none", direction: "last" }), undefined);
+});
+
+test("with no selector, first and last land on the end item when it is in view after the scroll", async () => {
+  const { page, shown } = finder_page(list);
+  await move_item(page, { direction: "first" });
+  await move_item(page, { direction: "last" });
+  assert.deepEqual(shown, ["0", "3"]);
+});
+
+test("with no selector, an end item off screen after the scroll takes no focus or box, so the next j does not jump back", async () => {
+  const { page, log, shown } = finder_page([box(0, 1500), box(0, 1600), box(0, 1700), box(0, -900)]);
+  await move_item(page, { direction: "first" });
+  await move_item(page, { direction: "last" });
+  assert.deepEqual([log, shown], [[], []]);
+  // A row that names its selector keeps the pin on an end item off screen.
+  const { page: bound, shown: bound_shown } = fake_page([box(0, 1500), box(0, 1600)]);
+  await move_item(bound, { selector: "li", direction: "first" });
+  assert.deepEqual(bound_shown, ["0"]);
+});
+
 test("after gg the first item stays the start of the next move while the box shows it at the same page scroll, and the pin ends with the box or a scroll", async () => {
   // The first two items lie above the view, the third is the first one in it.
   const rects = [box(0, -300), box(0, -200), box(0, 100)];
@@ -403,6 +440,13 @@ test("with no selector and no derived item in view, down and up scroll and move 
   assert.deepEqual([log, shown, scrolls], [[], [], [[0, 50], [0, -50]]]);
 });
 
+test("down at the last item of the derived row scrolls on, so the page below the results stays reachable", () => {
+  const { page, scrolls } = fake_page(list, true, 3);
+  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  move_item(page, { direction: "down" });
+  assert.deepEqual(scrolls, [[0, 50]]);
+});
+
 test("down at the end of the derived row asks it to read the page again once, and walks on to the items the page added", () => {
   const { page, log, scrolls, add } = fake_page(list, true, 3);
   let grew = 0;
@@ -415,6 +459,39 @@ test("down at the end of the derived row asks it to read the page again once, an
   still.derived = { items_: () => still.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   move_item(still, { direction: "down" });
   assert.deepEqual(still_scrolls, [[0, 50]]);
+});
+
+// The real derived row over the fake page, with a footer node that follows the list.
+function real_derived_page(focused_index: number) {
+  const fake = fake_page(list, true, focused_index);
+  const state = { footer: "footer" };
+  fake.page.derived = create_derived_row({
+    find_: () => ({ kind: "list", items: [...(fake.page.doc.querySelectorAll("li") as unknown as Element[])], links: new Map() }) as never,
+    url_: () => "https://a.test/",
+    now_: () => 0,
+    is_shown_: () => true,
+    tail_: () => [state.footer],
+  });
+  return { ...fake, state };
+}
+
+test("last with the real derived row lands on an item the page adds while the first item stays shown", async () => {
+  const { page, shown, add, state } = real_derived_page(-1);
+  const done = move_item(page, { direction: "last" }) as Promise<void>;
+  add(box(0, 240));
+  state.footer = "footer 2";
+  await done;
+  assert.equal(shown.at(-1), "4");
+});
+
+test("down at the end of a list the real derived row kept reads again once the page adds items, and walks on to them", () => {
+  const { page, log, scrolls, add, state } = real_derived_page(3);
+  move_item(page, { direction: "down" });
+  assert.deepEqual(scrolls, [[0, 50]]);
+  add(box(0, 240));
+  state.footer = "footer 2";
+  move_item(page, { direction: "down" });
+  assert.equal(log.at(-1), "focus item 4");
 });
 
 test("with no selector, h and l step along a derived grid and scroll sideways on a derived list", () => {
