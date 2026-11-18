@@ -90,6 +90,7 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
 
   function clear(): void {
     stop_hover();
+    hovers = undefined;
     item = undefined;
     user?.stop_();
     stop_following?.();
