@@ -25,7 +25,7 @@ keeps the space.
 
 It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock for Firefox or $XDG_RUNTIME_DIR/desertbird/bridge.sock for
 Thunderbird, one JSON line out and one line back, or for `events` the lines of the stream. Without --app it talks to
-Firefox, unless the Thunderbird socket is the only one there. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
+Firefox. `theme` is Firefox's alone. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
 `-h` or `--help` after a verb prints the usage and sends nothing. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
 behind, so a caller that wants the stream for good runs it again.
 """
@@ -90,13 +90,6 @@ def socket_path(app_name=None):
     return os.path.join(bridge_folder(app_name), "bridge.sock")
 
 
-def has_socket_file(app_name):
-    try:
-        return os.path.exists(socket_path(app_name))
-    except BridgeDown:
-        return False
-
-
 def take_app(argv):
     """(the app named by a leading --app, the other words). The option counts only in front of the verb, so a run
     argument that looks like it is left alone."""
@@ -111,13 +104,6 @@ def take_app(argv):
     if named not in APP_FOLDERS:
         raise Usage("--app is firefox or thunderbird, not '%s'" % named)
     return named, rest
-
-
-def default_app():
-    """Firefox, unless the Thunderbird socket is the only one there. Desktop calls written before Thunderbird pass no
-    --app, so they keep reaching Firefox whenever its bridge is up."""
-    only_thunderbird = has_socket_file("thunderbird") and not has_socket_file("firefox")
-    return "thunderbird" if only_thunderbird else "firefox"
 
 
 def connected(request, timeout_s):
@@ -362,6 +348,8 @@ def keep_theme_if_no_host(theme):
 
 
 def do_theme(words):
+    if app != "firefox":
+        raise Usage("theme needs --app firefox")
     if len(words) != 1:
         raise Usage("theme takes one theme name")
     theme = words[0]
@@ -436,7 +424,8 @@ def main(argv):
         print(USAGE)
         return EXIT_DONE
     try:
-        app = named_app or default_app()
+        # Desktop calls written before Thunderbird pass no --app, so no --app always means Firefox.
+        app = named_app or "firefox"
         if verb == "run":
             return do_run(rest)
         if verb in ("list", "state"):
