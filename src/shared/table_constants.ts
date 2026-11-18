@@ -6,7 +6,7 @@ export const BUILT_IN_PAGE = "desertfox";
 export const FALLBACK_ENGINE_NAME = "duck";
 
 // The names of the site rows that ship with DesertFox. `default_site_rows.ts` types each row's name from this list, and a test keeps both in step.
-export const DEFAULT_SITE_ROW_NAMES = ["sheets", "maps", "arrow", "google_images", "google_videos", "google_news", "google_short_videos", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "reddit", "drive"] as const;
+export const DEFAULT_SITE_ROW_NAMES = ["sheets", "maps", "arrow", "google_images", "google_videos", "google_news", "google_short_videos", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "amazon", "reddit", "drive"] as const;
 
 // The most steps one site bind may chain. A bind runs every step in a burst, so the cap keeps a typo from sending hundreds.
 export const MAX_BIND_STEPS = 20;
