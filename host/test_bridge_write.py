@@ -55,6 +55,7 @@ class DraftTest(WriteTestCase):
         host = self.start_bird()
         sent, result = self.answer(host, dict(DRAFT, to=[], reply_to_id=7), {"ok": False, "message": "no such identity"})
         self.assertEqual((sent["to"], sent["reply_to_id"]), ([], 7))
+        self.assertNotIn("cc", sent)
         self.assertEqual(result, {"ok": False, "message": "no such identity"})
 
     def test_a_draft_of_the_wrong_shape_is_refused_and_never_reaches_the_add_on(self):
@@ -256,6 +257,12 @@ class ActLifecycleTest(unittest.TestCase):
         thread.join(liveness_s())
         self.assertEqual(results[1], {"ok": True, "count": 2})
 
+    def test_a_draft_that_times_out_frees_its_pending_entry(self):
+        self.module.DRAFT_TIMEOUT_S = 0.3
+        reply = self.module.answer(dict(DRAFT), self.state, self.link, self.limiter)
+        self.assertEqual(reply, {"ok": False, "message": "the extension did not answer in time"})
+        self.assertEqual(self.link.pending, {})
+
     def test_a_closed_port_fails_the_waiting_act_and_frees_the_slot(self):
         results = []
         thread = self.act(results)
@@ -334,6 +341,36 @@ class ActConnectionTest(unittest.TestCase):
             time.sleep(0.01)
         self.assertFalse(self.link.act_slot.locked())
         self.assertEqual(self.link.pending, {})
+
+    def test_a_client_that_only_closes_its_write_side_still_gets_its_answer(self):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(liveness_s())
+            client.connect(self.socket_path)
+            client.sendall(json.dumps(ACT).encode() + b"\n")
+            client.shutdown(socket.SHUT_WR)
+            act = self.sink.wait_for(1)[0]
+            time.sleep(10 * self.module.PEER_CHECK_S)
+            self.assertTrue(self.link.act_slot.locked())
+            self.link.answered({"verb": "reply", "request_id": act["request_id"], "ok": True, "count": 2})
+            self.assertEqual(json.loads(client.recv(4096)), {"ok": True, "count": 2})
+
+    def test_a_request_sent_behind_an_act_is_answered_after_it(self):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(liveness_s())
+            client.connect(self.socket_path)
+            client.sendall(json.dumps(ACT).encode() + b"\n")
+            act = self.sink.wait_for(1)[0]
+            # Sent once the act waits, so the ping sits in the socket while the host checks whether the client left.
+            client.sendall(b'{"verb":"ping"}\n')
+            time.sleep(10 * self.module.PEER_CHECK_S)
+            self.link.answered({"verb": "reply", "request_id": act["request_id"], "ok": True, "count": 2})
+            data = b""
+            while data.count(b"\n") < 2:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+        self.assertEqual([json.loads(line) for line in data.splitlines()], [{"ok": True, "count": 2}, {"ok": True}])
 
     def test_a_partial_request_near_the_raised_cap_still_meets_the_idle_timeout(self):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:

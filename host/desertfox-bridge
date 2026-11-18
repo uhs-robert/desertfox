@@ -993,6 +993,8 @@ MAX_SUBJECT_CHARS = 998
 MAX_BODY_BYTES = 64 * 1024
 MAX_ACT_IDS = 50
 ACT_ACTIONS = ("archive", "trash", "move")
+# The add-on gives up saving a draft after 30 s and answers "timed out", which comes back inside this wait.
+DRAFT_TIMEOUT_S = 40
 # The add-on's confirm prompt gives up after 30 s, so its "timed out" comes back well inside this wait.
 ACT_TIMEOUT_S = 70
 
@@ -1131,7 +1133,7 @@ def answer(request, state, link, limiter, client_left=None):
         if not limiter.admit():
             return RATE_LIMITED
         if verb == "draft":
-            return run_result(link.ask("draft", fields, REQUEST_TIMEOUT_S))
+            return run_result(link.ask("draft", fields, DRAFT_TIMEOUT_S))
         return answer_act(fields, link, client_left)
     if verb in TAB_VERBS:
         if not APPS[state.app]["serves_tabs"]:
@@ -1160,14 +1162,12 @@ def subscribe(connection, hub, limiter):
 
 
 def client_has_left(connection):
-    """True when the client closed its end. It peeks, so a request line the client already sent stays for the next read."""
-    readable, _, _ = select.select([connection], [], [], 0)
-    if not readable:
-        return False
-    try:
-        return connection.recv(1, socket.MSG_PEEK) == b""
-    except OSError:
-        return True
+    """True when the client closed its connection. A Unix socket hangs up only when the peer closed both sides, so a
+    client that shut down only its write side after the request (as `nc -N` does) still waits for its answer. It reads
+    nothing, so a request line the client already sent stays for the next read."""
+    poller = select.poll()
+    poller.register(connection, select.POLLHUP)
+    return any(events & (select.POLLHUP | select.POLLERR) for _, events in poller.poll(0))
 
 
 def serve_connection(connection, state, link, hub, limiter, release_slot):

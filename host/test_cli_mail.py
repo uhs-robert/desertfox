@@ -209,6 +209,7 @@ class MailWriteCliTest(MailCliCase):
         bridge = self.serve({"ok": True})
         self.assertEqual(self.mail("draft", "--reply-to", "42", "--subject", "Re: Lunch", "--body-file", "-", stdin="yes").returncode, 0)
         self.assertEqual(bridge.requests[0]["to"], [])
+        self.assertNotIn("cc", bridge.requests[0])
 
     def test_a_body_at_the_cap_goes_as_utf_8_so_it_fits_the_host_request_cap(self):
         cli = load_script("desertfox")
@@ -291,6 +292,7 @@ class MailWriteCliTest(MailCliCase):
         cli, host = load_script("desertfox"), load_script("desertfox-bridge")
         self.assertEqual((cli.MAX_BODY_BYTES, cli.MAX_ACT_IDS), (host.MAX_BODY_BYTES, host.MAX_ACT_IDS))
         self.assertGreater(cli.ACT_TIMEOUT_S, host.ACT_TIMEOUT_S)
+        self.assertGreater(cli.DRAFT_TIMEOUT_S, host.DRAFT_TIMEOUT_S)
         self.assertGreater(cli.TIMEOUT_S, host.REQUEST_TIMEOUT_S)
 
     def test_a_draft_with_a_body_at_the_cap_through_the_real_thunderbird_host(self):
