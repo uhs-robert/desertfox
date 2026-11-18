@@ -449,7 +449,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       window.focus_at = {};
       window.enter_at = {};
       for (const link of videos.querySelectorAll("a")) {
-        link.addEventListener("focus", () => (window.focus_at[link.id] = performance.now()));
+        link.addEventListener("focus", () => (window.focus_at[link.id] ??= performance.now()));
         for (const type of ["mouseenter", "mouseleave"]) link.addEventListener(type, () => { window.hover_log.push(type + "@" + link.id); if (type === "mouseenter") window.enter_at[link.id] ??= performance.now(); });
       }
       document.activeElement?.blur();
