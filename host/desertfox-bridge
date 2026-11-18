@@ -991,6 +991,9 @@ MAX_ADDRESS_CHARS = 320
 # The longest header line RFC 5322 allows.
 MAX_SUBJECT_CHARS = 998
 MAX_BODY_BYTES = 64 * 1024
+# JSON escapes each of these to six bytes, so a body full of them would pass MAX_BODY_BYTES and still break
+# MAX_REQUEST_BYTES. What a body may hold escapes to two bytes at most (tab, newline, carriage return, quote, backslash).
+BODY_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 MAX_ACT_IDS = 50
 ACT_ACTIONS = ("archive", "trash", "move")
 # The add-on gives up saving a draft after 30 s and answers "timed out", which comes back inside this wait.
@@ -1044,6 +1047,8 @@ def draft_fields(request):
     size = utf8_size(body) if isinstance(body, str) else None
     if size is None or size > MAX_BODY_BYTES:
         return "body is a text of at most %d bytes of UTF-8" % MAX_BODY_BYTES
+    if BODY_CONTROL_PATTERN.search(body):
+        return "body holds a control character other than tab, newline and carriage return"
     fields["body"] = body
     return fields
 

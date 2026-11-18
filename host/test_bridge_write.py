@@ -67,6 +67,7 @@ class DraftTest(WriteTestCase):
             {"from": 5}, {"from": ""}, {"from": "me@example.org\n"},
             {"subject": None}, {"subject": "s" * 999}, {"subject": "Hi\nBcc: eve@example.org"}, {"subject": "\ud800"},
             {"body": None}, {"body": 5}, {"body": "b" * (64 * 1024 + 1)}, {"body": "\ud800"},
+            {"body": "colour \x1b[31mred"}, {"body": "a\x00b"}, {"body": "form\x0cfeed"}, {"body": "del\x7f"},
             {"reply_to_id": "7"}, {"reply_to_id": True}, {"reply_to_id": 1.5},
         ):
             with self.subTest(change=change):
@@ -83,6 +84,14 @@ class DraftTest(WriteTestCase):
         request = dict(DRAFT, to=["a" * 320] * 10, cc=["c@d"] * 10, subject="s" * 998, body="b" * (64 * 1024))
         sent, result = self.answer(host, request, {"ok": True})
         self.assertEqual((sent["body"], result), (request["body"], {"ok": True}))
+
+    def test_a_64_kib_body_of_the_longest_allowed_escapes_fits_the_request_cap(self):
+        host = self.start_bird()
+        for body in ("\n" * (64 * 1024), '"\\\t\r' * (16 * 1024)):
+            request = dict(DRAFT, body=body)
+            self.assertGreater(len(json.dumps(request)), 128 * 1024)
+            sent, result = self.answer(host, request, {"ok": True})
+            self.assertEqual((sent["body"], result), (body, {"ok": True}))
 
     def test_a_64_kib_body_fits_the_request_cap_even_as_json_escapes(self):
         host = self.start_bird()

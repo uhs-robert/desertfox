@@ -81,6 +81,8 @@ MAX_MESSAGES_LIMIT = 200
 # The same caps as MAX_BODY_BYTES and MAX_ACT_IDS in desertfox-bridge, checked here so the body is read no further than the cap.
 MAX_BODY_BYTES = 64 * 1024
 MAX_ACT_IDS = 50
+# The same characters as BODY_CONTROL_PATTERN in desertfox-bridge, which refuses a body that holds one.
+BODY_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 # Longer than the 3 s a starting host waits for the lock, so a host that is starting has bound its socket before this gives up.
 LOCK_RETRY_S = 5
 # The same shape as THEME_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
@@ -526,9 +528,12 @@ def read_body(path):
     if len(data) > MAX_BODY_BYTES:
         raise Usage("the body is over %d bytes" % MAX_BODY_BYTES)
     try:
-        return data.decode("utf-8")
+        body = data.decode("utf-8")
     except UnicodeDecodeError:
         raise Usage("the body is not UTF-8")
+    if BODY_CONTROL_PATTERN.search(body):
+        raise Usage("the body holds a control character other than tab, newline and carriage return")
+    return body
 
 
 def mail_draft(words):
