@@ -20,11 +20,14 @@ file, so a reader never sees a partial file.
 It also owns a Unix socket, $XDG_RUNTIME_DIR/desertfox/bridge.sock, mode 0600. Whoever holds the flock on bridge.lock
 owns the socket and the state file: the first host wins, and a second one waits LOCK_WAIT_S for the lock, then exits
 without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping`,
-`state`, `run`, `list`, `theme` and the tab verbs `tabs`, `activate`, `clear_preface`, `close` and `capture`. Each goes to the
+`state`, `run`, `list`, `theme`, the Firefox tab verbs `tabs`, `activate`, `clear_preface`, `close` and `capture`, and
+the Thunderbird mail reads `folders`, `messages`, `message` and `attachments`. Each but `ping` and `state` goes to the
 extension as {"verb", "request_id", ...fields}, and the extension decides what runs: it holds the bridge field, the
 never-list, the argument validator, the bridge_share_tabs opt-in and the private-window filter. The host only
 forwards, limits the rate and routes each reply back to the connection that asked. A run reply is cut to `ok` and a
-short `message`, and a tab reply to its known fields, so no page data can pass through the host unchecked. The host
+short `message`, and a tab reply to its known fields, so no page data can pass through the host unchecked. A mail
+read reply is the one exception: it passes as the add-on built it, because the add-on owns the mail share settings
+and the body marking (see MAIL_READ_VERBS). The host
 keeps two caches of its own, the tab thumbnails and the tab icons (see `cache_dir`), and writes a file only for a tab
 the extension just listed. Stdout carries only protocol bytes. The host never runs anything it is sent.
 
@@ -140,10 +143,11 @@ def log(text):
 # One script serves both apps, each through its own manifest. Each app gets its own runtime folder, so its lock, socket
 # and state never meet the other's. The Firefox folder keeps its name from before Thunderbird, so an update leaves a
 # running Firefox bridge and the scripts that read its folder working. The tab verbs, tab events and the tab caches
-# under ~/.cache/desertfox belong to Firefox alone, so a Thunderbird host never prunes or deletes Firefox's images.
+# under ~/.cache/desertfox belong to Firefox alone, so a Thunderbird host never prunes or deletes Firefox's images. The
+# mail reads belong to Thunderbird alone.
 APPS = {
-    "firefox": {"folder": "desertfox", "manifest": "desertfox_bridge", "extension_id": "desertfox@uhs-robert", "serves_tabs": True},
-    "thunderbird": {"folder": "desertbird", "manifest": "desertbird_bridge", "extension_id": "desertbird@uhs-robert", "serves_tabs": False},
+    "firefox": {"folder": "desertfox", "manifest": "desertfox_bridge", "extension_id": "desertfox@uhs-robert", "serves_tabs": True, "serves_mail": False},
+    "thunderbird": {"folder": "desertbird", "manifest": "desertbird_bridge", "extension_id": "desertbird@uhs-robert", "serves_tabs": False, "serves_mail": True},
 }
 
 
@@ -933,6 +937,38 @@ def answer_tab_verb(verb, request, link):
 
 
 TAB_VERBS = ("tabs", "activate", "clear_preface", "close", "capture")
+# The mail reads. The add-on checks its share settings and builds each reply. The host checks the request fields, sends
+# only those, and passes the reply on as it came. A reply frame over MAX_MESSAGE_BYTES is skipped unread, so a read
+# whose answer passes 1 MiB fails as unanswered.
+MAIL_READ_VERBS = ("folders", "messages", "message", "attachments")
+MAX_FOLDER_ID_CHARS = 1024
+MAX_MESSAGES_LIMIT = 200
+
+
+def mail_read_fields(verb, request):
+    """The fields that go to the add-on for a mail read, or a refusal text for a request of the wrong shape."""
+    if verb == "folders":
+        return {}
+    if verb in ("message", "attachments"):
+        return {"id": request["id"]} if is_int(request.get("id")) else "%s needs a whole message id" % verb
+    folder = request.get("folder")
+    if not (isinstance(folder, str) and 0 < len(folder) <= MAX_FOLDER_ID_CHARS):
+        return "messages needs a folder id of 1 to %d characters" % MAX_FOLDER_ID_CHARS
+    fields = {"folder": folder}
+    if "limit" in request:
+        if not (is_int(request["limit"]) and 1 <= request["limit"] <= MAX_MESSAGES_LIMIT):
+            return "limit is a whole number from 1 to %d" % MAX_MESSAGES_LIMIT
+        fields["limit"] = request["limit"]
+    if "unread_only" in request:
+        if not isinstance(request["unread_only"], bool):
+            return "unread_only is true or false"
+        fields["unread_only"] = request["unread_only"]
+    return fields
+
+
+def mail_read_result(reply):
+    """The add-on's reply without the link's own fields."""
+    return {name: value for name, value in reply.items() if name not in ("verb", "request_id")}
 
 
 def answer(request, state, link, limiter):
@@ -962,6 +998,15 @@ def answer(request, state, link, limiter):
         if not limiter.admit():
             return RATE_LIMITED
         return list_result(link.ask("list", {}, REQUEST_TIMEOUT_S))
+    if verb in MAIL_READ_VERBS:
+        if not APPS[state.app]["serves_mail"]:
+            return {"ok": False, "message": "mail reads need --app thunderbird"}
+        fields = mail_read_fields(verb, request)
+        if isinstance(fields, str):
+            return {"ok": False, "message": fields}
+        if not limiter.admit():
+            return RATE_LIMITED
+        return mail_read_result(link.ask(verb, fields, REQUEST_TIMEOUT_S))
     if verb in TAB_VERBS:
         if not APPS[state.app]["serves_tabs"]:
             return {"ok": False, "message": "tab verbs need --app firefox"}
