@@ -7,12 +7,14 @@ import type { Box, Control, NextPageInput, PageReader } from "../../src/content/
 // One saved element: tag, kept attributes, box [x, y, w, h], hidden, sideways scroller, fixed or sticky, pointer cursor starts here, text (controls and pointer nodes), text length of a `p`, `pre` or `li` (`n`), marked as an item of the row the site ships (`m`), children. Shadow roots are folded into their host's children.
 export type SavedNode = { t: string; a?: Record<string, string>; r?: [number, number, number, number]; h?: 1; x?: 1; p?: 1; k?: 1; s?: string; n?: number; m?: 1; c?: SavedNode[]; up?: SavedNode | null };
 
-export type SavedPage = { view: { w: number; h: number; doc_h: number }; root: SavedNode };
+// `url` is the address the page was saved from, which the links resolve against (a synthetic page may leave it out).
+export type SavedPage = { view: { w: number; h: number; doc_h: number }; root: SavedNode; url?: string | undefined };
 
 export const FIXTURES = new URL("../fixtures/next_page/", import.meta.url);
 
 export function read_saved_page(name: string): SavedPage {
   const page = JSON.parse(gunzipSync(readFileSync(new URL(`${name}.json.gz`, FIXTURES))).toString("utf8")) as SavedPage;
+  page.url = (JSON.parse(readFileSync(new URL("labels.json", FIXTURES), "utf8")) as Record<string, { url: string }>)[name]?.url;
   const link_up = (node: SavedNode, up: SavedNode | null) => {
     node.up = up;
     for (const child of node.c ?? []) link_up(child, node);
@@ -38,6 +40,10 @@ export function saved_reader(page: SavedPage): PageReader<SavedNode> {
     },
     scrolls_sideways_: (node) => node.x === 1,
     pinned_: (node) => node.p === 1,
+    same_page_: (node) => {
+      const own = page.url ?? "https://page.test/";
+      return new URL(node.a?.href ?? "", own).href.split("#")[0] === own.split("#")[0];
+    },
     pointer_: (node) => node.k === 1,
     view_: () => ({ w: page.view.w, h: page.view.h, page_h: page.view.doc_h }),
   };
