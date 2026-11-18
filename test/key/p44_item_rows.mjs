@@ -450,7 +450,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       window.enter_at = {};
       for (const link of videos.querySelectorAll("a")) {
         link.addEventListener("focus", () => (window.focus_at[link.id] ??= performance.now()));
-        for (const type of ["mouseenter", "mouseleave"]) link.addEventListener(type, () => { window.hover_log.push(type + "@" + link.id); if (type === "mouseenter") window.enter_at[link.id] ??= performance.now(); });
+        for (const type of ["mouseenter", "mouseleave"]) link.addEventListener(type, (event) => { if (event.isTrusted) return; window.hover_log.push(type + "@" + link.id); if (type === "mouseenter") window.enter_at[link.id] ??= performance.now(); });
       }
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -460,7 +460,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("j");
     await expect_focus("d0");
     await poll_until("the enter on the first tile", async () => (await hover_log()) === "mouseenter@d0");
-    // The page's own clock, so the check does not depend on when the test looks.
+    // The page's own clock, so the check does not depend on when the test looks. The log skips trusted events, which a pointer resting over the grid sends.
     const wait_ms = await in_active_tab("window.enter_at.d0 - window.focus_at.d0");
     expect(wait_ms >= 280, `the hover started ${wait_ms} ms after the land, before its wait`);
     await press_keys("j");
