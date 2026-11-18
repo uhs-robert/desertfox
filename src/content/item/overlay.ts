@@ -15,27 +15,28 @@ const STYLE = `
 const WATCH_MS = 100;
 // How many ticks (about a second) a page script may hold the focus off every item before the box clears. Google's loader takes the focus for the length of a load, then hands it to a result.
 const PAGE_FOCUS_GRACE_TICKS = 10;
+const { min, max } = Math;
 // The overflow scan reads at most this many elements per tick, so a huge item stays cheap.
 const OVERFLOW_SCAN_LIMIT = 200;
 
-// The item's rectangle grown over the descendants that poke out of it, as a tile whose image zooms on hover. The walk skips what a box inside the item clips (a carousel row), and that box with it.
+// Under the pointer, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover. Off the pointer, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle: a hidden menu or an off-screen label would stretch it. The walk skips what a box inside the item clips (a carousel row), and that box with it.
 function covered_rect(item: Element) {
-  let { left, top, right, bottom } = item.getBoundingClientRect();
-  // The NodeFilter values as numbers, which the bundle's size guard prefers: 1 is SHOW_ELEMENT and FILTER_ACCEPT, 2 is FILTER_REJECT.
-  const walker = document.createTreeWalker(item, 1, (node) => (getComputedStyle(node as Element).overflow === "visible" ? 1 : 2));
-  for (let seen = 0; seen < OVERFLOW_SCAN_LIMIT && walker.nextNode(); seen++) {
+  const own = item.getBoundingClientRect();
+  const clips = (element: Element) => getComputedStyle(element).overflow !== "visible";
+  if (!item.matches(":hover") || clips(item)) return own;
+  let { left, top, right, bottom } = own;
+  let seen = 0;
+  // The NodeFilter values as numbers, which the bundle's size guard prefers: 1 is SHOW_ELEMENT and FILTER_ACCEPT, 2 is FILTER_REJECT. Past the limit every node is rejected unread.
+  const walker = document.createTreeWalker(item, 1, (node) => (++seen > OVERFLOW_SCAN_LIMIT || clips(node as Element) ? 2 : 1));
+  while (walker.nextNode()) {
     const rect = (walker.currentNode as Element).getBoundingClientRect();
-    if (!rect.width) continue;
-    left = Math.min(left, rect.left);
-    top = Math.min(top, rect.top);
-    right = Math.max(right, rect.right);
-    bottom = Math.max(bottom, rect.bottom);
+    if (rect.width) [left, top, right, bottom] = [min(left, rect.left), min(top, rect.top), max(right, rect.right), max(bottom, rect.bottom)];
   }
   return new DOMRect(left, top, right - left, bottom - top);
 }
 
-// `still_wanted` answers false once the mode is one where the box does not belong. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's.
-export function create_item_overlay(still_wanted: () => boolean, watch_user: () => UserLeft) {
+// `still_wanted` answers false once the mode is one where the box does not belong. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to.
+export function create_item_overlay(still_wanted: () => boolean, watch_user: () => UserLeft, on_follow: (item: Element) => void) {
   const host = document.createElement("div");
   const box = document.createElement("div");
   box.className = "desertfox-item-box";
@@ -48,28 +49,27 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
   let item_selector: string | undefined;
   // The user's input since the box was last drawn.
   let user: UserLeft | undefined;
-  // The ticks since the focus left the item, 0 while the item holds it. Undefined while the focus has not been in the item, so a box drawn while the focus is elsewhere (a j that only scrolls) waits for it.
-  let ticks_away: number | undefined;
+  // The ticks since the focus left the item, 0 while the item holds it. NaN while the focus has not been in the item, so a box drawn while the focus is elsewhere (a j that only scrolls) never runs out its grace: NaN counts on as NaN, which passes no limit.
+  let ticks_away = NaN;
   let stop_following: (() => void) | undefined;
   let watch: ReturnType<typeof setInterval> | undefined;
 
   const reposition = () => {
     const rect = item && covered_rect(item);
-    const hidden = !rect?.width || !rect.height;
-    box.style.visibility = hidden ? "hidden" : "";
-    if (hidden) return;
-    Object.assign(box.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+    // The class sets every other property, so the inline style holds only the place or the hiding.
+    box.style.cssText = !rect?.width || !rect.height ? "visibility:hidden" : `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
   };
 
   // Focus moving inside the item (to a link in it) keeps the box. A move the user made, by key, click or wheel, clears it. A page script's move gets the grace: the item that takes the focus gets the box, and with none the box clears once the grace runs out.
   const follow_focus = () => {
     const focused = document.activeElement;
-    const holder = focused?.closest(item_selector!);
+    let holder;
     if (item!.contains(focused)) ticks_away = 0;
-    else if (ticks_away === undefined) return;
     else if (user!.left_()) clear();
-    else if (holder) show(holder, item_selector);
-    else if (++ticks_away > PAGE_FOCUS_GRACE_TICKS) clear();
+    else if ((holder = focused?.closest(item_selector!))) {
+      show(holder, item_selector);
+      on_follow(holder);
+    } else if (++ticks_away > PAGE_FOCUS_GRACE_TICKS) clear();
   };
 
   function clear(): void {
@@ -83,7 +83,7 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
 
   // Without a selector the box is the focus mark. A redraw on the same item keeps the count of a page script's hold on the focus.
   function show(target: Element, selector?: string): void {
-    if (target !== item) ticks_away = target.contains(document.activeElement) ? 0 : undefined;
+    if (target !== item) ticks_away = target.contains(document.activeElement) ? 0 : NaN;
     item = target;
     item_selector = selector;
     user?.stop_();

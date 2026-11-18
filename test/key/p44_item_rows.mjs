@@ -532,6 +532,18 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_box_on_focus("the box on the result two below");
   });
 
+  await run_case("after the box follows the page's focus to a result, j from a loader that holds the focus again starts from that result", async () => {
+    await open_results("loader_remember");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await page_focuses("r4");
+    await expect_box_on_focus("the box on the result the page focused");
+    expect(await steal_focus(), "the loader did not take the focus again");
+    await press_keys("j");
+    await expect_focus("r5");
+  });
+
   await run_case("once the box is gone, a page focus move onto a result draws nothing, after Escape and after the row turns off", async () => {
     await open_results("cleared_timers");
     await press_keys("j");
@@ -565,27 +577,61 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("the box back on the tall result", async () => { const drawn = await box(); return drawn !== null && near(drawn, await item_rect_of("r0")); });
   });
 
-  await run_case("the box covers a part of the result that grows past it, but not a part a clipping box inside it hides", async () => {
+  await run_case("after Escape, a j that only scrolls redraws the box, and a click beside the results then clears it at once", async () => {
+    await open_results("tall_redraw_click", 3000);
+    await press_keys("j");
+    await expect_box_on_focus("the box on the tall result");
+    await press_keys("-k", "Escape");
+    await expect_no_box("the box to clear on Escape");
+    await press_keys("j");
+    await poll_until("the box back on the tall result", async () => (await box()) !== null);
+    // Beside the tall result, below the top of the view, which the scroll moved past the top of #search.
+    await click_element(rdp, in_active_tab, "r0", 400, 200);
+    await sleep(AT_ONCE_MS);
+    expect((await box()) === null, "the redrawn box outlived a click elsewhere");
+  });
+
+  // The session delivers a pointer move only with a press, so a click on the focused title link puts the pointer over its result without moving the focus. A click beside the results takes the pointer away again.
+  const hover_title = (id) => click_element(rdp, in_active_tab, id, 5, 5);
+  const hover_away = () => click_element(rdp, in_active_tab, "search", 400, 30);
+  const rect_of = (expression) => in_active_tab(`(() => { const r = (${expression}).getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; })()`);
+
+  await run_case("off the pointer the box fits the result, and under it the box covers a part of the result that grows past it", async () => {
     await open_results("overflow");
+    await press_keys("j");
+    await expect_box_on_focus("the box on the first result");
+    // As a hover zoom does: a child that pokes out past the right and bottom edges.
+    await in_active_tab(`(() => { const item = document.getElementById("r0").closest(".MjjYud"); item.id = "item0"; item.append(Object.assign(document.createElement("div"), { id: "zoomed", style: "position:relative;left:250px;width:100px;height:20px;top:20px" })); return 0; })()`);
+    await sleep(300);
+    await expect_box_stays_on_item_of("r0", "the box grew while no pointer was over the result");
+    await hover_title("r0");
+    await poll_until("the box to cover the zoomed part", async () => {
+      const drawn = await box();
+      const item = await rect_of(`document.getElementById("item0")`);
+      const zoomed = await rect_of(`document.getElementById("zoomed")`);
+      const union = { left: Math.min(item.left, zoomed.left), top: Math.min(item.top, zoomed.top), width: Math.max(item.right, zoomed.right) - Math.min(item.left, zoomed.left), height: Math.max(item.bottom, zoomed.bottom) - Math.min(item.top, zoomed.top) };
+      return drawn !== null && near(drawn, union);
+    });
+    expect((await focused()) === "r0", `the click moved the focus to ${await focused()}`);
+    await hover_away();
+  });
+
+  await run_case("under the pointer, the box on an image tile that crops its image fits the tile", async () => {
+    await open_results("cropped_tile");
     await in_active_tab(`(() => {
-      const clip = Object.assign(document.createElement("div"), { style: "overflow:hidden;width:100px;height:10px" });
-      clip.append(Object.assign(document.createElement("div"), { style: "width:900px;height:10px" }));
-      document.getElementById("r1").closest(".MjjYud").append(clip);
+      const item = document.getElementById("r0").closest(".MjjYud");
+      item.id = "tile0";
+      item.style.overflow = "hidden";
+      item.append(Object.assign(document.createElement("div"), { style: "width:900px;height:200px;background:#888" }));
       return 0;
     })()`);
     await press_keys("j");
-    await expect_box_on_focus("the box on the first result");
-    // As a hover zoom does after the box is drawn: a child that pokes out past the right and bottom edges.
-    await in_active_tab(`(() => { document.getElementById("r0").closest(".MjjYud").append(Object.assign(document.createElement("div"), { id: "zoomed", style: "position:relative;left:250px;width:100px;height:20px;top:20px" })); return 0; })()`);
-    await poll_until("the box to cover the zoomed part", async () => {
-      const drawn = await box();
-      const [item, zoomed] = await in_active_tab(`[document.getElementById("r0").closest(".MjjYud"), document.getElementById("zoomed")].map((element) => { const r = element.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; })`);
-      const union = { left: Math.min(item.left, zoomed.left), top: Math.min(item.top, zoomed.top), width: Math.max(item.right, zoomed.right) - Math.min(item.left, zoomed.left), height: Math.max(item.bottom, zoomed.bottom) - Math.min(item.top, zoomed.top) };
-      return drawn !== null && union.width > item.right - item.left && near(drawn, union);
-    });
-    await press_keys("j");
-    await expect_focus("r1");
-    await poll_until("the box on the second result, not on its clipped wide row", async () => { const drawn = await box(); return drawn !== null && near(drawn, await item_rect_of("r1")); });
+    await expect_focus("r0");
+    await hover_title("r0");
+    expect(await in_active_tab(`document.getElementById("tile0").matches(":hover")`), "the pointer is not over the tile");
+    await sleep(300);
+    await expect_box_stays_on_item_of("r0", "the box spread past the tile over its cropped image");
+    await hover_away();
   });
 
   await run_case("on a page with no result row, j scrolls and no box shows", async () => {

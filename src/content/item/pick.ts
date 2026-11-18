@@ -78,6 +78,9 @@ const SCROLL = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as co
 
 let last_move: { item_: WeakRef<Element>; args_: ItemArgs } | undefined;
 
+// The box followed a focus that a page script moved, so the next move and `]]` start from that item.
+export const follow_item = (item: Element) => last_move && (last_move.item_ = new WeakRef(item));
+
 // What `]]` reads of the last move, to carry the box onto the first item a load adds. `item_` is gone once the page dropped the item and nothing else holds it.
 export type ItemCursor = { item_: Element | undefined; selector_: string; shown_: boolean; land_: (item: Element) => void };
 
