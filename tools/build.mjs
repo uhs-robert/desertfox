@@ -55,7 +55,7 @@ const MAX_BYTES = {
   // 60 KB: behind a key that waits for rows, the page looks up each later key in the keymap, so only typed keys and row keys wait in order and every other key acts at once. A failed answer reads as empty for its word without being kept.
   // 60.5 KB: the font_family, font_family_mono and font_scale settings add their completion entries.
   // 61 KB: the site_rules setting accepts the keymap column, and its check reads the key clash between bind and keymap.normal.
-  // 61.5 KB: the item_finder setting adds its completion entry.
+  // 61.5 KB: the item_navigator setting adds its completion entry.
   "cmdline_page.js": 61.5 * 1024,
   "find_worker.js": 2 * 1024,
   // 10.5 KB: the Worker holds the history cache and builds and ranks the rows of `open`, `history` and the finder. It loads once per background start, never in a page.
