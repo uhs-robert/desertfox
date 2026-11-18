@@ -75,8 +75,9 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     if (out_of_time()) return undefined;
     const links = links_of(item);
     const headed = links.filter((link) => in_heading(link, item));
-    // A short link in an h3 to h6 that goes to another page (a comment's author handle) names its item too. A section name's heading links to a fragment of this page (a manual's "Syntax"), and so does an empty address.
-    const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN || (!reader.same_page_!(link) && in_heading(link, item, DEEP_HEADING));
+    // A short link in an h3 to h6 that goes to another web page (a comment's author handle) names its item too. A section name's heading links to a fragment of this page (a manual's "Syntax"), and so does an empty address.
+    const leaves_web = (link: N) => /^\s*(?!https?:)[a-z][a-z\d+.-]*:/i.test(reader.attr_(link, "href")!);
+    const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN || (!leaves_web(link) && !reader.same_page_!(link) && in_heading(link, item, DEEP_HEADING));
     // A short heading that links is the name of a section, so its item is no card.
     if (headed.length > 0 && !headed.some(long_enough)) return undefined;
     // A title under a picture (a video thumbnail) starts low in its tile, and links where the picture links.
@@ -179,7 +180,7 @@ function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[]
         next.push(group);
         continue;
       }
-      const key = `${signature(reader, group.items[0]!)}<${signature(reader, group.parent)}`;
+      const key = `${signature(reader, group.items[0]!)} ${signature(reader, group.parent)}`;
       const peers = by_key.get(shared) ?? by_key.set(shared, new Map()).get(shared)!;
       const first = peers.get(key);
       if (first) {

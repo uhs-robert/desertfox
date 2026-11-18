@@ -6,8 +6,8 @@ import type { Found } from "./finder.ts";
 import { dom_reader } from "./dom_reader.ts";
 import { is_shown } from "../shown.ts";
 
-// Read through the `href` attribute, because an `a` in an svg has no string `href` property, and a malformed one is another page.
-const same_page_ = (link: Element): boolean => URL.parse(link.getAttribute("href")!, location.href)?.href.split("#")[0] === location.href.split("#")[0];
+// Read through the `href` attribute, because an `a` in an svg has no string `href` property, and a malformed one is another page. The address resolves against the base of the document, and the page is where the browser is.
+const same_page_ = (link: Element): boolean => URL.parse(link.getAttribute("href")!, document.baseURI)?.href.split("#")[0] === location.href.split("#")[0];
 
 // A page with no list gives `none`, and every key press would read the page again to see whether one appeared. A none answer stands this long.
 export const NONE_RECHECK_MS = 500;
