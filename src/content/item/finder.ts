@@ -76,7 +76,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const links = links_of(item);
     const headed = links.filter((link) => in_heading(link, item));
     // A short link in an h3 to h6 that goes to another page (a comment's author handle) names its item too. A section name's heading links to a fragment of this page (a manual's "Syntax"), and so does an empty address.
-    const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN || (!reader.same_page_(link) && in_heading(link, item, DEEP_HEADING));
+    const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN || (!reader.same_page_!(link) && in_heading(link, item, DEEP_HEADING));
     // A short heading that links is the name of a section, so its item is no card.
     if (headed.length > 0 && !headed.some(long_enough)) return undefined;
     // A title under a picture (a video thumbnail) starts low in its tile, and links where the picture links.
