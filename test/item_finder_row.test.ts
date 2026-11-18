@@ -136,9 +136,14 @@ test("a key the user unbound is not held, so the finder keeps it on a row page",
 });
 
 test("an h that waits for a key or has bad args adds no warning to the shipped rows", async () => {
-  for (const entry of [{ id: "mark.jump" }, { id: "scroll.pixels", args: { dx: "far" } }, { id: "tab.prev", prompt: { param: "x" } }, [{ id: "tab.prev" }, { id: "tab.next" }]]) {
+  for (const entry of [{ id: "mark.jump" }, { id: "scroll.pixels", args: { dx: "far" } }, { id: "tab.prev", prompt: { param: "x" } }, { id: "no.such_command" }, [{ id: "tab.prev" }, { id: "mark.jump" }]]) {
     const result = with_keymap({ h: entry });
     assert.ok(result.warnings.length <= warnings_with_finder_off({ h: entry }).length, JSON.stringify(entry));
     assert.equal(is_finder_step(step_of(await ask(result.compiled, "https://kagi.com/search?q=x"), "h")), true, JSON.stringify(entry));
   }
+});
+
+test("an h bound to a list of plain steps is held on a row page", async () => {
+  const reply = await ask(with_keymap({ h: [{ id: "tab.prev" }, { id: "tab.next" }] }).compiled, "https://kagi.com/search?q=x");
+  assert.equal(step_of(reply, "h").id, "tab.prev");
 });
