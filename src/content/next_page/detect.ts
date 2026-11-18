@@ -10,6 +10,8 @@ export type PageReader<N> = {
   tag_: (node: N) => string;
   attr_: (node: N, name: string) => string | null;
   text_: (node: N) => string;
+  // The length of the node's text with spaces trimmed, for a prose block that holds more text than its links.
+  text_length_: (node: N) => number;
   box_: (node: N) => Box | undefined;
   scrolls_sideways_: (node: N) => boolean;
   pinned_: (node: N) => boolean;
