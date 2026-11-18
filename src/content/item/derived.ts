@@ -39,8 +39,8 @@ const item_selector = (items: readonly Element[] = []): string => {
 };
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
-  // The first item of the list that was active at the last read, so the next read can tell which list it was.
-  let active_first: Element | undefined;
+  // The items of the list that was active at the last read, so the next read can tell which list it was. A feed that drops its first items still matches through one that stays.
+  let active_items: Element[] = [];
   let kept: { found: Found<Element>; active: Region<Element>; url: string; at: number; tail: unknown[] } | undefined;
   // The count of reads in a row that ran out of time at `read_at`, the address of the last read. It starts again at a new address.
   let timeouts_in_a_row = 0;
@@ -52,7 +52,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     let most = 0;
     for (const region of regions) {
       const area = region.items.reduce((sum, item) => sum + deps.in_view_(item), 0);
-      if (area > most) [top, most] = [region, area];
+      if (area > most) (top = region), (most = area);
     }
     return top;
   };
@@ -84,9 +84,10 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
         if (timeouts_in_a_row >= 2) overran = { url, until: deps.now_() + OVERRUN_PAUSE_MS };
         if (timeouts_in_a_row !== 1) {
           // The list the user was on stays active while it shows (or, for an end command, always), and otherwise the list in view takes over.
-          const old = found.regions.find((region) => active_first && region.items.includes(active_first));
+          const alive = active_items.find((item) => item.isConnected);
+          const old = found.regions.find((region) => alive && region.items.includes(alive));
           const active = (keep ? old : most_in_view(old ? [old] : [])) ?? most_in_view(found.regions) ?? old ?? found;
-          active_first = active.items[0];
+          active_items = active.items;
           kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
         }
       } catch (error) {
