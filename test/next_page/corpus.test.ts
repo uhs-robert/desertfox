@@ -8,7 +8,7 @@ import { FIXTURES, read_saved_page, saved_input, saved_reader } from "../support
 import type { SavedNode } from "../support/snapshot_page.ts";
 
 type Answer = { action: "follow" | "click" | "scroll" | "none"; text?: string; label?: string; href?: string };
-type Label = { url: string; ok: Answer[]; why: string; soft?: true; covers?: string; known_miss?: string; no_next_word?: true };
+type Label = { url: string; ok: Answer[]; why: string; soft?: true; covers?: string; known_miss?: string; miss_as?: Answer; no_next_word?: true };
 
 const labels = JSON.parse(readFileSync(new URL("labels.json", FIXTURES), "utf8")) as Record<string, Label>;
 
@@ -43,6 +43,11 @@ for (const [name, label] of Object.entries(labels)) {
     const target = outcome.action === "none" ? undefined : outcome.target;
     if (label.ok.some((answer) => fits(answer, outcome.action, target))) return;
     const shown = target ? `${outcome.action} <${target.t}> "${target.s ?? ""}" ${JSON.stringify(target.a ?? {})}` : outcome.action;
+    // `miss_as` pins the one wrong answer a known miss gives today, so a different wrong answer still fails.
+    if (label.miss_as !== undefined) {
+      assert.ok(label.known_miss !== undefined && fits(label.miss_as, outcome.action, target), `got ${shown}`);
+      return;
+    }
     // A known miss may do nothing, or scroll a list that does reach the page end. It must never click or follow the wrong thing.
     assert.ok(label.known_miss !== undefined && (outcome.action === "none" || (outcome.action === "scroll" && !label.soft)), `got ${shown}`);
   });

@@ -1,4 +1,4 @@
-// Drops the tracking parts of the addresses in a saved page (every query parameter but the paging and search ones the labels read, and the fragment) and masks email addresses in every attribute and text.
+// Blanks long hidden-input values (form tokens), drops the tracking parts of the addresses in a saved page (every query parameter but the paging and search ones the labels read, and the fragment) and masks email addresses in every attribute and text.
 // Run alone, it scrubs every saved page in test/fixtures/next_page/ in place: node tools/next_page_fixtures/scrub.mjs
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -16,6 +16,8 @@ export function scrub_href(href) {
     return href;
   }
   if (!/^https?:$/.test(url.protocol)) return href;
+  // Bing's redirect links carry a signed token in every parameter.
+  if (url.pathname === "/ck/a") url.search = "";
   for (const name of [...url.searchParams.keys()]) if (!KEPT_PARAMS.has(name)) url.searchParams.delete(name);
   url.hash = "";
   const absolute = url.href;
@@ -26,9 +28,19 @@ export function scrub_href(href) {
 const EMAIL = /[^\s@<>"'()\/:=?&;,]+(?:@|%40)[^\s@<>"'()\/:=?&;,]+\.[^\s@<>"'()\/:=?&;,]+/gi;
 export const mask_emails = (text) => text.replace(EMAIL, "email@scrub.invalid");
 
+// A long value with no space is a token (anti-forgery key, signed hash), not a name or a sentence.
+const is_token = (value) => value.length >= 40 && !/\s/.test(value);
+const URL_VALUE = /^(?:https?:\/\/|\/(?!\/))\S*$/i;
+
 export function scrub_page(node) {
   if (node.a?.href !== undefined) node.a.href = scrub_href(node.a.href);
   for (const name of Object.keys(node.a ?? {})) node.a[name] = mask_emails(node.a[name]);
+  for (const name of Object.keys(node.a ?? {})) {
+    if (name !== "id" && !name.startsWith("data-")) continue;
+    node.a[name] = URL_VALUE.test(node.a[name]) ? scrub_href(node.a[name]) : is_token(node.a[name]) ? "" : node.a[name];
+  }
+  // A hidden input's long value is a session or anti-forgery token.
+  if (node.t === "input" && node.a?.type?.toLowerCase() === "hidden" && is_token(node.a.value ?? "")) node.a.value = "";
   if (node.s !== undefined) node.s = mask_emails(node.s);
   for (const child of node.c ?? []) scrub_page(child);
 }

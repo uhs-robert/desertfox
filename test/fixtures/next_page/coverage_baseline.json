@@ -1,0 +1,62 @@
+{
+ "arxiv": {
+  "marks": 50,
+  "covered": 50,
+  "picked": 50
+ },
+ "bing": {
+  "marks": 5,
+  "covered": 0,
+  "picked": 6
+ },
+ "ddg": {
+  "marks": 10,
+  "covered": 10,
+  "picked": 10
+ },
+ "ddg_images": {
+  "marks": 410,
+  "covered": 0,
+  "picked": 98
+ },
+ "ddg_news": {
+  "marks": 30,
+  "covered": 30,
+  "picked": 30
+ },
+ "ddg_videos": {
+  "marks": 212,
+  "covered": 212,
+  "picked": 212
+ },
+ "hn": {
+  "marks": 30,
+  "covered": 0,
+  "picked": 3
+ },
+ "lobsters": {
+  "marks": 25,
+  "covered": 25,
+  "picked": 25
+ },
+ "stackoverflow_list": {
+  "marks": 15,
+  "covered": 15,
+  "picked": 15
+ },
+ "startpage": {
+  "marks": 10,
+  "covered": 10,
+  "picked": 10
+ },
+ "tildes": {
+  "marks": 50,
+  "covered": 50,
+  "picked": 50
+ },
+ "wikipedia_search": {
+  "marks": 20,
+  "covered": 20,
+  "picked": 20
+ }
+}

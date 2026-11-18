@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import type { Box, Control, NextPageInput, PageReader } from "../../src/content/next_page/detect.ts";
 
-// One saved element: tag, kept attributes, box [x, y, w, h], hidden, sideways scroller, fixed or sticky, pointer cursor starts here, text (controls and pointer nodes), children. Shadow roots are folded into their host's children.
-export type SavedNode = { t: string; a?: Record<string, string>; r?: [number, number, number, number]; h?: 1; x?: 1; p?: 1; k?: 1; s?: string; c?: SavedNode[]; up?: SavedNode | null };
+// One saved element: tag, kept attributes, box [x, y, w, h], hidden, sideways scroller, fixed or sticky, pointer cursor starts here, text (controls and pointer nodes), text length of a `p`, `pre` or `li` (`n`), marked as an item of the row the site ships (`m`), children. Shadow roots are folded into their host's children.
+export type SavedNode = { t: string; a?: Record<string, string>; r?: [number, number, number, number]; h?: 1; x?: 1; p?: 1; k?: 1; s?: string; n?: number; m?: 1; c?: SavedNode[]; up?: SavedNode | null };
 
 export type SavedPage = { view: { w: number; h: number; doc_h: number }; root: SavedNode };
 
