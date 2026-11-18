@@ -165,12 +165,13 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
     await close_panel();
   });
 
-  await run_case("a comma then a pause shows the DesertFox panel, and comma then j still scrolls", async () => {
+  await run_case("a comma then a pause shows the DesertFox panel, and comma then G still scrolls", async () => {
     let mark = events.length;
     await press_keys(",");
     await panel_value(mark, (value) => value !== "", "the comma panel");
     await close_panel();
-    expect(await scroll_delta_by_press("wk", [",j"]) > 0, ",j did not scroll the page");
+    expect(await scroll_delta_by_press("wk", [",G"]) > 0, ",G did not scroll the page");
+    await scroll_delta_by_press("wk", ["gg"]);
   });
 
   await run_case("Space reaches the page in normal mode and scrolls it", async () => {
