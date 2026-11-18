@@ -112,7 +112,7 @@ const DDG_VIDEO_TILES = grid_binds('[data-testid="zci-videos"] a:has(> article)'
 const DDG_NEWS_ITEMS = item_binds('[data-testid="news-vertical"] li > article', "a:has(h2)");
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
 const LOBSTERS_ITEMS = item_binds("ol.stories > li.story", "a.u-url");
-// Amazon lays results out as a grid whose columns depend on the width, and full-width widgets split it into runs. Sponsored results carry `.AdHolder`. Only the amazon.com domain is covered because a match pattern cannot wildcard the top-level domain. The title link is the anchor around the `h2`; the image link comes first in the DOM and a bare `a[href]` would pick it.
+// Amazon lays results out as a grid whose columns depend on the width, and full-width widgets split it into runs. Sponsored results carry `.AdHolder`. Only the amazon.com domain is covered because a match pattern cannot wildcard the top-level domain. The title link is the anchor around the `h2`. The image link comes first in the DOM, and a bare `a[href]` would pick it.
 const AMAZON_ITEMS = grid_binds('div[data-component-type="s-search-result"]:not(.AdHolder)', "a:has(> h2)");
 const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-title");
 const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
