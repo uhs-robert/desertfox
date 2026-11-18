@@ -69,11 +69,11 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
   if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: sentence_case(inputs.site.rule), enabled: true });
   rows.push(
-    { id: "settings", kind: "link", label: "Settings", enabled: true },
-    { id: "home", kind: "link", label: "Help", enabled: true },
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }
       : { id: "reload_config", kind: "action", label: "Reload config", detail: "Needs the native host", enabled: false },
+    { id: "settings", kind: "link", label: "Settings", enabled: true },
+    { id: "home", kind: "link", label: "Help", enabled: true },
   );
   // Warnings is a problem list, so it shows only when there is something in it.
   if (inputs.warning_count > 0) rows.push({ id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true });
