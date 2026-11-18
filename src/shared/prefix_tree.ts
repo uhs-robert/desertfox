@@ -47,6 +47,11 @@ export const ANY_KEY = "";
 // The second child of a character find's branch: the key flow takes it instead of waiting for a target while the sink reports a live find, so the find key repeats it. No key press names it, because a token is one character or `<name>`.
 export const LIVE_KEY = "live";
 
+// A leaf whose step waits for a key press goes under a branch of its own, so the matcher reaches it through one more key. `extra_children` are the branch's other children (the live find repeat).
+export function capture_branch(leaf: TreeLeaf, extra_children: Record<string, TreeLeaf> = {}): TreeBranch {
+  return { kind: "branch", ...(leaf.label === undefined ? {} : { label: leaf.label }), children: { [ANY_KEY]: leaf, ...extra_children } };
+}
+
 // How a key listing writes a token: the capture child reads `<key>`, so `m` then any key lists as `m<key>`.
 export const token_label = (token: string): string => (token === ANY_KEY ? "<key>" : token);
 
