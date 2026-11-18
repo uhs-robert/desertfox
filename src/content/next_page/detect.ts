@@ -13,6 +13,8 @@ export type PageReader<N> = {
   // The length of the node's text with spaces trimmed, for a prose block that holds more text than its links.
   text_length_: (node: N) => number;
   box_: (node: N) => Box | undefined;
+  // The elements of the page that a CSS selector list matches, also inside the shadow roots `children_` has opened: one native query per root, where a walk would read every element.
+  query_all_: (selector: string) => N[];
   scrolls_sideways_: (node: N) => boolean;
   pinned_: (node: N) => boolean;
   // Where a pointer cursor starts (the same rule as a hint's click sign), for a control that has no role. Only the load step reads it, so the item finder's reader leaves it out.

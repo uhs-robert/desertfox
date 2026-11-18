@@ -31,6 +31,7 @@ export function saved_reader(page: SavedPage): PageReader<SavedNode> {
     attr_: (node, name) => node.a?.[name] ?? null,
     text_: (node) => node.s ?? "",
     text_length_: (node) => node.n ?? node.s?.length ?? 0,
+    query_all_: (selector) => [...walk(page.root)].filter((node) => matches(node, selector)),
     box_: (node) => {
       if (!boxes.has(node)) boxes.set(node, node.r && !node.h ? { x: node.r[0], y: node.r[1], w: node.r[2], h: node.r[3] } : undefined);
       return boxes.get(node);
@@ -40,6 +41,16 @@ export function saved_reader(page: SavedPage): PageReader<SavedNode> {
     pointer_: (node) => node.k === 1,
     view_: () => ({ w: page.view.w, h: page.view.h, page_h: page.view.doc_h }),
   };
+}
+
+// The selectors the finder queries: a list of tags, `[name=value]` or `tag[name=value]`.
+const SIMPLE_SELECTOR = /^([a-z0-9-]*)(?:\[([a-z-]+)=([^\]]+)\])?$/;
+function matches(node: SavedNode, selector: string): boolean {
+  return selector.split(",").some((part) => {
+    const [, tag, name, value] = SIMPLE_SELECTOR.exec(part.trim()) ?? [];
+    if (tag === undefined) throw new Error(`the saved reader cannot match ${part}`);
+    return (!tag || node.t === tag) && (!name || node.a?.[name] === value);
+  });
 }
 
 function* walk(node: SavedNode): Generator<SavedNode> {

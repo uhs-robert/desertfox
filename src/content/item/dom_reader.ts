@@ -18,14 +18,22 @@ export const dom_reader = (doc: Document): PageReader<Element> => {
     const view = element.ownerDocument.defaultView!;
     return { x: box.left + view.scrollX, y: box.top + view.scrollY, w: box.width, h: box.height };
   };
+  // A content script reads the page through a wrapper that makes each DOM call cost more, and the finder asks the same tag and attribute many times, so each read happens once per reader.
+  const attr_readers = new Map<string, (element: Element) => string | null>();
+  const shadow_roots: ShadowRoot[] = [];
   return {
     root_: doc.documentElement,
-    parent_: (element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null,
-    children_: once((element) => [...Array.from(element.children), ...Array.from(shadow_root_of(element)?.children ?? [])]),
-    tag_: (element) => element.localName,
-    attr_: (element, name) => element.getAttribute(name),
+    parent_: once((element) => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null),
+    children_: once((element) => {
+      const shadow = shadow_root_of(element);
+      if (shadow) shadow_roots.push(shadow);
+      return [...Array.from(element.children), ...Array.from(shadow?.children ?? [])];
+    }),
+    tag_: once((element) => element.localName),
+    attr_: (element, name) => (attr_readers.get(name) ?? attr_readers.set(name, once((at: Element) => at.getAttribute(name))).get(name)!)(element),
     text_: (element) => (element as HTMLElement).innerText ?? element.textContent ?? "",
     box_: once(read_box),
+    query_all_: (selector) => [doc, ...shadow_roots].flatMap((root) => Array.from(root.querySelectorAll(selector))),
     // A track that scrolls sideways, or one that hides a much wider row (a carousel that moves by transform).
     scrolls_sideways_: once((element) => {
       const { overflowX } = style_of(element);
@@ -33,7 +41,7 @@ export const dom_reader = (doc: Document): PageReader<Element> => {
       return clientWidth > 0 && ((/auto|scroll/.test(overflowX) && scrollWidth > clientWidth + 20) || (/hidden|clip/.test(overflowX) && scrollWidth > 1.5 * clientWidth && element.children.length > 0 && clientWidth > 150));
     }),
     pinned_: once((element) => /fixed|sticky/.test(style_of(element).position)),
-    text_length_: (element) => (element.textContent ?? "").trim().length,
+    text_length_: once((element) => (element.textContent ?? "").trim().length),
     view_: () => ({ w: innerWidth, h: innerHeight, page_h: doc.documentElement.scrollHeight }),
   };
 };
