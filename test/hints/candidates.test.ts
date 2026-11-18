@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_swipeable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_swipeable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, list_targets, with_site_selectors } from "../../src/content/hints/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 
@@ -639,4 +639,15 @@ test("an added element inside a pointer wrapper takes the hint from the wrapper"
   const inner = el({ name: "added", local: "span", plain: true, parent: wrapper as unknown as Dom });
   assert.deepEqual(names_of(drop_redundant_weak([weak(wrapper), { element: inner, frames: [], added: true }])), ["added"]);
   assert.deepEqual(names_of(drop_redundant_weak([weak(wrapper), strong(inner)])), ["wrapper", "added"]);
+});
+
+test("the lists filter keeps the elements the item bundle handed over, and none when it handed over nothing", () => {
+  const first = {} as Element;
+  const other = {} as Element;
+  list_targets.clear();
+  assert.equal(query_for("lists", undefined).test?.(first), false);
+  list_targets.set(first, {});
+  assert.equal(query_for("lists", undefined).test?.(first), true);
+  assert.equal(query_for("lists", undefined).test?.(other), false);
+  list_targets.clear();
 });

@@ -10,7 +10,7 @@ import { keep_visible, scroll_clips_of, viewport_size } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
 
 // `drop` is internal: the target pass of a grab asks for it, and no command accepts it.
-export type HintFilter = "drop" | "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "headings" | "custom";
+export type HintFilter = "lists" | "drop" | "all" | "every" | "clickable" | "buttons" | "inputs" | "links" | "prose" | "scrollable" | "draggable" | "swipeable" | "media" | "images" | "frames" | "headings" | "custom";
 
 const TEXT_FIELDS = 'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable=""], [contenteditable="true"]';
 export const LINKS = "a[href]";
@@ -105,7 +105,10 @@ export const is_draggable = (element: Element, swipe = false): boolean => {
 
 export const is_swipeable = (element: Element): boolean => is_draggable(element, true);
 
+// What the `lists` filter labels: the first shown item of each list the item bundle found, mapped to its list. Module state, because `;L` never runs rapid and so never rebuilds labels from a stored session.
+export const list_targets = new Map<Element, unknown>();
 const QUERIES: Record<Exclude<HintFilter, "custom" | "drop">, Query> = {
+  lists: { selector: "*", test: (element) => list_targets.has(element) },
   all: { selector: ALL },
   every: { selector: "*", test: is_every_target },
   clickable: { selector: CLICKABLE },

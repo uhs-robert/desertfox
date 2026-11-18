@@ -38,6 +38,7 @@ if (!item_window.desertfox_item_ready && host) {
     // With no row selector the box is the focus mark.
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
+  host.register_handler_("item.lists", (args) => void (args.region ? page.derived.pick_(args.region as never) : (args.take as (regions: unknown) => void)(page.derived.lists_())));
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }

@@ -30,7 +30,7 @@ export type DerivedDeps = {
 };
 
 // `grew_` reads the page again when something new follows the last item, and says whether it did. A move at the end of the list asks it. `grid_` says whether the kept answer is a grid.
-export type DerivedRow = { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean };
+export type DerivedRow = { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; lists_: () => Region<Element>[]; pick_: (region: Region<Element>) => void };
 
 // The tag and first class that the finder grouped the items by, as a selector. It only has to find the item a focus sits in (`closest`), so a page that reuses the class elsewhere gets a box on that element when a script moves the focus there. Items of more than one tag (batches that draw one template in two tags) give the class alone.
 const item_selector = (items: readonly Element[] = []): string => {
@@ -105,6 +105,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     },
     selector_: () => item_selector(kept?.active.items),
     grid_: () => kept?.active.kind === "grid",
+    lists_: () => (read(), kept?.found.regions ?? []),
+    pick_: (region) => kept && ((kept.active = region), (active_items = region.items)),
     grew_: () => !!kept?.active.items[0] && deps.tail_(kept.active.items).some((next, at) => next !== kept!.tail[at]) && !(kept = undefined),
   };
 }

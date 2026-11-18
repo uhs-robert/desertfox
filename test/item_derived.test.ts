@@ -584,3 +584,30 @@ test("an end command keeps its list when the page hides the list's first item an
   assert.equal(row.grew_(), true);
   assert.deepEqual(names(row.items_(true)), ["f2", "f3"]);
 });
+
+test("lists_ gives every list of the page, reading the page first", () => {
+  const mix = [item("m1")];
+  const related = [item("r1"), item("r2")];
+  const { state, row } = setup(related);
+  state.others = [mix];
+  assert.deepEqual(row.lists_().map((region) => names(region.items)), [["r1", "r2"], ["m1"]]);
+  assert.equal(state.finds, 1);
+});
+
+test("lists_ gives none for a page with no list", () => {
+  const { row } = setup([]);
+  assert.deepEqual(row.lists_(), []);
+});
+
+test("a picked list stays active while the old list still shows, and the old list takes over again only after the picked one leaves", () => {
+  const related = [item("r1"), item("r2")];
+  const comments = [item("c1"), item("c2")];
+  const { state, row } = setup(related);
+  state.others = [comments];
+  assert.deepEqual(names(row.items_()), ["r1", "r2"]);
+  row.pick_(row.lists_()[1]!);
+  assert.deepEqual(names(row.items_()), ["c1", "c2"]);
+  assert.equal(state.finds, 1);
+  leave(comments);
+  assert.deepEqual(names(row.items_()), ["r1", "r2"]);
+});

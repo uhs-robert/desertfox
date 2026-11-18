@@ -100,10 +100,10 @@ define("hint.run", {
     {
       name: "filter",
       type: "enum",
-      values: ["all", "every", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "draggable", "swipeable", "media", "images", "frames", "headings", "custom"],
+      values: ["all", "every", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "draggable", "swipeable", "media", "images", "frames", "headings", "lists", "custom"],
       default: "clickable",
-      short: { all: "a", every: "e", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", headings: "T", custom: "u" },
-      value_labels: { all: "for all elements", every: "for every visible element", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", draggable: "for draggable elements", swipeable: "for swipeable elements", media: "for video and audio", images: "for images", frames: "for frames", headings: "for headings", custom: "for a selector" },
+      short: { all: "a", every: "e", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", headings: "T", lists: "n", custom: "u" },
+      value_labels: { all: "for all elements", every: "for every visible element", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", draggable: "for draggable elements", swipeable: "for swipeable elements", media: "for video and audio", images: "for images", frames: "for frames", headings: "for headings", lists: "for lists", custom: "for a selector" },
       description: {
         all: "Label every element.",
         every: "Label visible elements, not empty or one-child wrappers.",
@@ -118,6 +118,7 @@ define("hint.run", {
         images: "Label the pictures of at least 24 px, even as backgrounds.",
         frames: "Label the frames of at least 24 px, to focus one.",
         headings: "Label the headings, to focus one.",
+        lists: "Label the lists, to make one the list for j and k.",
         custom: "Label the elements that match a selector.",
       },
     },
