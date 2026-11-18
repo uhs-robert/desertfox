@@ -3,9 +3,10 @@
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 
-const step = (direction: "down" | "up" | "left" | "right", label: string): BoundInvocation => ({ id: "page.item", args: { direction }, label });
+// `hover` is the `item_hover` setting. The bundle hovers only the items that hold a thumbnail.
+const step = (direction: "down" | "up" | "left" | "right", label: string, hover: boolean): BoundInvocation => ({ id: "page.item", args: { direction, ...(hover ? { hover } : {}) }, label });
 
-export const ITEM_FINDER_ROW: { name: string; row: SiteRuleRow } = {
+export const item_finder_row = (hover: boolean): { name: string; row: SiteRuleRow } => ({
   name: "item_finder",
-  row: { site: "<all_urls>", bind: { j: step("down", "Next item, or scroll down"), k: step("up", "Previous item, or scroll up"), h: step("left", "Item to the left, or scroll left"), l: step("right", "Item to the right, or scroll right") } },
-};
+  row: { site: "<all_urls>", bind: { j: step("down", "Next item, or scroll down", hover), k: step("up", "Previous item, or scroll up", hover), h: step("left", "Item to the left, or scroll left", hover), l: step("right", "Item to the right, or scroll right", hover) } },
+});
