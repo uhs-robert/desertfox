@@ -94,3 +94,39 @@ test("an inner group held by three of five sections, with items outside them, is
   assert.equal(found.items.length, 10);
   assert.equal(found.sections?.length, 5);
 });
+
+// Ten stacked comment panels. Each has a short link at the top and a long link low in the panel ("Show 12 more replies"), and both go to the same address. When that address is a placeholder the two links do not name one target, so the long link is no title and the panels are no list. A real shared address still names the item.
+function reply_panels(href: string): SavedPage {
+  const panel = (index: number): SavedNode => {
+    const y = 100 + index * 220;
+    return {
+      t: "div",
+      a: { class: "panel" },
+      r: [35, y, 800, 200],
+      c: [
+        { t: "a", a: { href }, r: [35, y, 60, 20], s: "Reply", c: [] },
+        { t: "a", a: { href }, r: [35, y + 150, 300, 20], s: "Show 12 more replies", c: [] },
+      ],
+    };
+  };
+  const list: SavedNode = { t: "div", a: { class: "thread" }, r: [35, 100, 800, 2200], c: Array.from({ length: 10 }, (_, index) => panel(index)) };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 2400], c: [{ t: "body", r: [0, 0, 1366, 2400], c: [list] }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  return { view: { w: 1366, h: 682, doc_h: 2400 }, root };
+}
+
+test("links that share only a placeholder address do not name their panel", () => {
+  for (const href of ["#", "", "javascript:void(0)", " JavaScript:;"]) {
+    assert.equal(find_items(saved_reader(reply_panels(href))).items.length, 0, `href ${JSON.stringify(href)}`);
+  }
+});
+
+test("links that share a real address or a fragment name their panel", () => {
+  for (const href of ["/thread/7", "#item-3"]) {
+    assert.equal(find_items(saved_reader(reply_panels(href))).items.length, 10, `href ${JSON.stringify(href)}`);
+  }
+});
