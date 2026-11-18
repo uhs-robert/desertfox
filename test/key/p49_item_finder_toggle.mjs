@@ -3,7 +3,7 @@ export const areas = ["keys", "config", "bundles"];
 
 const CARDS = 10;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect }) {
+export async function run_cases({ run_case, on_teardown, run_line, open_page, press_keys, in_active_tab, poll_until, expect }) {
   const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
   const add_cards = () =>
@@ -15,6 +15,9 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
       window.scrollTo(0, 0);
       return true;
     })()`);
+
+  // `,j` saves item_finder, and a saved setting outlives the piece and beats the config file for the next piece in the shard.
+  on_teardown(() => run_line(":unset item_finder"));
 
   await run_case(",j turns the item finder on in an open tab and a second ,j turns it off", async () => {
     await open_page("page", "finder_toggle", { new_tab: true });
