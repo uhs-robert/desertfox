@@ -76,9 +76,19 @@ export function pick_heading(rows: readonly HeadingItem[], typed: string): numbe
 // `scrollIntoView` moves only the document of the element, so each frame that holds it scrolls to the top in turn, innermost first.
 // It leaves focus, selection and the address alone, which a focus or a fragment would not.
 // `inset` is the height of a fixed or sticky bar that covers the top of the view: the target ends just below it, not under it.
-export function scroll_to_top(element: Element, frames: readonly Element[], inset = 0): void {
-  for (const target of [element, ...[...frames].reverse()]) target.scrollIntoView({ block: "start", behavior: "instant" });
-  if (inset > 0) window.scrollBy({ top: -inset, behavior: "instant" });
+// The scroll margin makes `scrollIntoView` leave the room in any scroller, which `scrollBy` on the window does not do for a scrolling div.
+// A bar that sticks only once the layout runs (or below the top edge) is missed by the first read, so `reread_inset` reads again after the jump and the jump repeats once for a taller bar.
+export function scroll_to_top(element: Element, frames: readonly Element[], inset = 0, reread_inset: () => number = () => 0): void {
+  const jump = (room: number) => {
+    const { style } = element as HTMLElement;
+    const kept = style.scrollMarginTop;
+    style.scrollMarginTop = `${room}px`;
+    for (const target of [element, ...[...frames].reverse()]) target.scrollIntoView({ block: "start", behavior: "instant" });
+    style.scrollMarginTop = kept;
+  };
+  jump(inset);
+  const covering = reread_inset();
+  if (covering > inset) jump(covering);
 }
 
 // A bar taller than this share of the view is a wall or an overlay, not a header, and the scroll stays as it is.
@@ -183,7 +193,7 @@ export function step_heading(direction: HeadingDirection, steps: number): string
   const index = pick_heading_step(tops, step_of(direction), steps, on_screen ? at : undefined);
   if (index === undefined) return NO_HEADING[direction];
   const { element, frames } = found[index]!;
-  scroll_to_top(element, frames, inset);
+  scroll_to_top(element, frames, inset, top_inset);
   keep_for_align(element, frames);
   last_heading = new WeakRef(element);
   return undefined;
@@ -192,10 +202,10 @@ export function step_heading(direction: HeadingDirection, steps: number): string
 export type Snapshot = { found: Found[]; rows: HeadingItem[] };
 
 // The heading may have left the page since the list was read, with its frame or alone.
-export function jump_in({ found, rows }: Snapshot, typed: string, inset = 0): Found {
+export function jump_in({ found, rows }: Snapshot, typed: string, inset = 0, reread_inset?: () => number): Found {
   const chosen = found[pick_heading(rows, typed)]!;
   if (!chosen.element.isConnected || !chosen.frames.every((frame) => frame.isConnected)) throw new RuntimeRefusal("That heading is gone");
-  scroll_to_top(chosen.element, chosen.frames, inset);
+  scroll_to_top(chosen.element, chosen.frames, inset, reread_inset);
   return chosen;
 }
 
@@ -216,7 +226,7 @@ export const clear_snapshot = (): void => {
 export function go_to_heading(typed: string): void {
   const held = snapshot;
   try {
-    const { element, frames } = jump_in(held ?? take_snapshot(), typed, top_inset());
+    const { element, frames } = jump_in(held ?? take_snapshot(), typed, top_inset(), top_inset);
     keep_for_align(element, frames);
   } finally {
     if (!held) clear_snapshot();

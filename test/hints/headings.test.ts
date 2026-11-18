@@ -88,7 +88,7 @@ test("text picks the best fuzzy match and an equal tie takes the first on the pa
 test("scroll_to_top scrolls the heading first and then each frame, innermost first, with nothing else touched", () => {
   const scrolls: string[] = [];
   const options: unknown[] = [];
-  const at = (name: string) => ({ scrollIntoView: (option: unknown) => (scrolls.push(name), options.push(option)) }) as unknown as Element;
+  const at = (name: string) => ({ style: {}, scrollIntoView: (option: unknown) => (scrolls.push(name), options.push(option)) }) as unknown as Element;
   scroll_to_top(at("heading"), [at("outer"), at("inner")]);
   assert.deepEqual(scrolls, ["heading", "inner", "outer"]);
   assert.deepEqual(options[0], { block: "start", behavior: "instant" });
@@ -96,7 +96,7 @@ test("scroll_to_top scrolls the heading first and then each frame, innermost fir
 
 test("a heading that left the page, or whose frame did, gives That heading is gone and scrolls nothing", () => {
   const scrolls: string[] = [];
-  const element = (connected: boolean) => ({ isConnected: connected, scrollIntoView: () => scrolls.push("scrolled") }) as unknown as Element;
+  const element = (connected: boolean) => ({ isConnected: connected, style: {}, scrollIntoView: () => scrolls.push("scrolled") }) as unknown as Element;
   const snapshot = (heading_element: Element, frames: Element[] = []) => ({ found: [{ element: heading_element, frames }], rows: [{ level: 2, text: "Intro" }] });
   assert.throws(() => jump_in(snapshot(element(false)), "1 Intro"), /That heading is gone/);
   assert.throws(() => jump_in(snapshot(element(true), [element(false)]), "1 Intro"), /That heading is gone/);
@@ -277,17 +277,24 @@ test("a bar over a third of the view or with no height below the top is not a he
   assert.equal(covering_inset(chain({ position: "fixed", bottom: 0 }), position_of, 1000), 0);
 });
 
-test("scroll_to_top moves the page back by the inset, and not at all without one", () => {
-  const moves: unknown[] = [];
-  const real = globalThis.window;
-  Object.defineProperty(globalThis, "window", { value: { scrollBy: (options: unknown) => moves.push(options) }, configurable: true });
-  try {
-    const target = { scrollIntoView: () => {} } as unknown as Element;
-    scroll_to_top(target, []);
-    assert.deepEqual(moves, []);
-    scroll_to_top(target, [], 98);
-    assert.deepEqual(moves, [{ top: -98, behavior: "instant" }]);
-  } finally {
-    Object.defineProperty(globalThis, "window", { value: real, configurable: true });
-  }
+test("scroll_to_top leaves the inset as scroll margin for the jump and restores the margin", () => {
+  const margins: string[] = [];
+  const style = { scrollMarginTop: "4px" };
+  const target = { style, scrollIntoView: () => margins.push(style.scrollMarginTop) } as unknown as Element;
+  scroll_to_top(target, []);
+  scroll_to_top(target, [], 98);
+  assert.deepEqual(margins, ["0px", "98px"]);
+  assert.equal(style.scrollMarginTop, "4px");
+});
+
+test("scroll_to_top jumps again with the taller bar the second read finds, and not for the same or a smaller one", () => {
+  const margins: string[] = [];
+  const style = { scrollMarginTop: "" };
+  const target = { style, scrollIntoView: () => margins.push(style.scrollMarginTop) } as unknown as Element;
+  scroll_to_top(target, [], 0, () => 98);
+  assert.deepEqual(margins, ["0px", "98px"]);
+  margins.length = 0;
+  scroll_to_top(target, [], 98, () => 98);
+  scroll_to_top(target, [], 98, () => 50);
+  assert.deepEqual(margins, ["98px", "98px"]);
 });
