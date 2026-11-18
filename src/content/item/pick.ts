@@ -71,13 +71,15 @@ export type ItemPage = EndPage & {
   scroll_by: (dx: number, dy: number) => void;
   // Draws the box around the item, which follows the focus among the items the selector matches.
   highlight: (item: Element, selector: string) => void;
+  // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
+  box_shown: () => boolean;
 };
 
 const SCROLL_PX = 50;
 const SCROLL = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] } as const;
 
-// `pin_y_` is the page scroll an end landing (gg, G) left, so the item stays the start of the next move while the page has not scrolled since, even off screen.
-let last_move: { item_: WeakRef<Element>; args_: ItemArgs; pin_y_?: number } | undefined;
+// `pin_y_` is the page scroll an end landing (gg, G) on the page scroller left, so the item stays the start of the next move while the box still shows it at that scroll, even off screen. A list in its own panel keeps its end item in view and takes no pin.
+let last_move: { item_: WeakRef<Element>; args_: ItemArgs; pin_y_: number | undefined } | undefined;
 
 // The box followed a focus that a page script moved, so the next move and `]]` start from that item.
 export const follow_item = (item: Element) => last_move && (last_move.item_ = new WeakRef(item));
@@ -105,9 +107,9 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   const items = read_items();
   const { direction } = args;
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then.
-  if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item) => land_on(page, item, args, false));
+  if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item, on_page) => land_on(page, item, args, false, on_page));
   const boxes = items.map((item) => item.getBoundingClientRect());
-  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight, last_move?.pin_y_ === page.view.scrollY);
+  const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight, last_move?.pin_y_ === page.view.scrollY && page.box_shown());
   // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.
   if (direction === "current") return items.length === 0 ? undefined : land_on(page, items[Math.min(place.index, items.length - 1)]!, args);
   const steps = args.times ?? 1;
@@ -129,10 +131,10 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
 }
 
 // Focuses the item, brings it into view (unless `reveal` is false) and draws the box. `]]` lands here too, on the first item a load added. The ends skip the reveal so gg stays at the page top and G at the bottom, with the box on an item that may lie off screen.
-function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true): void {
+function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, pin = false): void {
   focus_target(item, args.link || undefined).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
-  last_move = { item_: new WeakRef(item), args_: args, ...(reveal ? {} : { pin_y_: page.view.scrollY }) };
+  last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };
   page.highlight(item, args.selector);
 }
