@@ -166,6 +166,9 @@
   .desertfox-settings-row { display: flex; flex-direction: column; gap: .25rem; padding: .6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); }
   .desertfox-settings-head { display: flex; align-items: center; gap: .5rem; }
   .desertfox-settings-doc { margin: 0; }
+  .desertfox-site-rules .desertfox-help-site-rules td:first-child { overflow-wrap: anywhere; }
+  /* The row's "changed" colour is for the tag, not for each effect. */
+  .desertfox-settings-row[data-changed] .desertfox-site-rule-effect { margin: 0 .35rem .2rem 0; background: color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); color: inherit; }
   .desertfox-settings-more > summary { cursor: pointer; font-size: .85em; }
   .desertfox-settings-more > p { margin: .25rem 0 0; }
   /* The changed-only filter: render.ts sets the class on the settings box and settings_page.ts sets data-changed on each row. */

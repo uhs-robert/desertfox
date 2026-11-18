@@ -277,14 +277,22 @@ function only_changed_toggle(): HTMLElement {
   return el("p", undefined, el("label", undefined, box, " Show only changed settings"));
 }
 
-// The toolbar popup links to `#section=settings/site-rules`. The settings rows are built after the page loads, so the anchor is drawn at render, ahead of the General rows, where the route can land at once. Keep it when the row is redesigned.
+// The toolbar popup links to `#section=settings/site-rules`, the id of this section's heading. The heading and the box are drawn at render, so the route lands on it at once. `main.ts` fills the box through `mount_settings`.
 export const SITE_RULES_SLUG = "site-rules";
 
-function site_rules_anchor(): HTMLElement {
-  const anchor = el("span", "desertfox-settings-anchor");
-  anchor.id = section_anchor("settings", SITE_RULES_SLUG);
-  anchor.tabIndex = -1;
-  return anchor;
+const SITE_RULES_DOC_URL = "https://github.com/uhs-robert/desertfox/blob/main/docs/design.md#site-table";
+
+// The box is a settings row, so the changed-only filter treats it like any other row.
+function site_rules_section(): HTMLElement {
+  const box = el("div", "desertfox-settings-row desertfox-site-rules");
+  box.setAttribute("data-setting", "site_rules");
+  return el(
+    "div",
+    "desertfox-settings-section",
+    section_heading("settings", settings_section(SITE_RULES_SECTION)),
+    el("p", "desertfox-help-muted", "Each rule names the sites it covers and what DesertFox does there, for example turns its keys off or gives some keys to the page. The first rule that matches a page and sets a field decides that field. ", new_tab_link("Read the full rules", SITE_RULES_DOC_URL), "."),
+    box,
+  );
 }
 
 function settings_group_section(page_section: Section, group: (typeof GROUPS)[number]): HTMLElement {
@@ -293,10 +301,13 @@ function settings_group_section(page_section: Section, group: (typeof GROUPS)[nu
   const intro = el("p", "desertfox-help-muted", group.intro, ...(group.title === "Appearance" ? [" For full control with CSS, see ", page_link("Styling", "styling"), "."] : []));
   // `main.ts` fills `.desertfox-themes`.
   const importer = group.title === "Appearance" ? [el("h4", undefined, "Import a theme"), el("p", "desertfox-help-muted", "Bring in a base16 or base24 color scheme. Paste its text or choose its file, check the preview, then save it. Use it with the theme setting above, or with :set theme and its name."), el("p", "desertfox-help-muted", "Find schemes in the ", new_tab_link("base16", "https://github.com/tinted-theming/schemes/tree/spec-0.11/base16"), " and ", new_tab_link("base24", "https://github.com/tinted-theming/schemes/tree/spec-0.11/base24"), " collections, or browse them in the ", new_tab_link("gallery", "https://tinted-theming.github.io/tinted-gallery/"), ". Open a scheme file, copy its text and paste it here."), el("div", "desertfox-themes")] : [];
-  return el("div", "desertfox-settings-section", section_heading("settings", page_section), intro, ...(group.title === "General" ? [site_rules_anchor()] : []), box, ...importer);
+  return el("div", "desertfox-settings-section", section_heading("settings", page_section), intro, box, ...importer);
 }
 
 const settings_section = (title: string): Section => settings_sections[SETTINGS_SECTION_TITLES.indexOf(title)]!;
+
+// Where the site rules table sends the reader to edit: the files editor in the collapsed Advanced block, which a section link opens.
+export const edit_files_hash = (): string => section_hash("settings", settings_section(ADVANCED_FILES_EDITOR_SECTION).slug);
 
 // A form section: its heading, one sentence of what it gives the reader, and the box `main.ts` fills.
 function settings_form_section(title: string, box_class: string, ...intro: Child[]): HTMLElement[] {
@@ -335,6 +346,7 @@ function settings_page(model: HelpModel): HTMLElement[] {
       "desertfox-settings",
       el("p", `desertfox-help-muted ${NO_CHANGED_CLASS}`, "You have not changed any setting yet."),
       ...GROUPS.map((group) => settings_group_section(settings_section(group.title), group)),
+      site_rules_section(),
     ),
     // `main.ts` fills `.desertfox-keys`, `.desertfox-engines`, `.desertfox-aliases` and `.desertfox-quickmarks`.
     ...settings_form_section(KEYS_SECTION, "desertfox-keys", "Change what a key does. Pick a key below, press the new keys and type the command it runs. The change works at once."),
@@ -423,11 +435,12 @@ const KEYS_SECTION = "Keys";
 const ENGINES_SECTION = "Search engines";
 const ALIASES_SECTION = "Aliases";
 const QUICKMARKS_SECTION = "Quickmarks";
+const SITE_RULES_SECTION = "Site rules";
 const ADVANCED_FILES_SECTION = "Advanced: settings files";
 const ADVANCED_BACKUP_SECTION = "Advanced: back up and restore";
 const ADVANCED_FILES_EDITOR_SECTION = "Advanced: edit files";
 // The setting groups come first, then the forms, then the collapsed Advanced block.
-const SETTINGS_SECTION_TITLES = [...GROUPS.map((group) => group.title), KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ADVANCED_FILES_SECTION, ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION];
+const SETTINGS_SECTION_TITLES = [...GROUPS.map((group) => group.title), SITE_RULES_SECTION, KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ADVANCED_FILES_SECTION, ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION];
 const settings_sections = sections_from_titles(SETTINGS_SECTION_TITLES);
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
