@@ -132,6 +132,19 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     }
   });
 
+  // A pin on the first file would drag the panel back to it. The stand-in draws two lines beyond the panel, so a scroll of two lines keeps f0 drawn, and a negative margin lifts the panel so f0 lies above the window.
+  await run_case("list view: j after gg and a scroll of the panel does not drag the panel back to the first file", async () => {
+    await open_drive("list_pin", "list", 2000);
+    await press_keys("gg");
+    await expect_focus("f0");
+    await in_active_tab('(() => { const panel = document.getElementById("panel"); panel.style.marginTop = "-200px"; panel.scrollTop = 60; return true; })()');
+    await expect_focus("f0");
+    await press_keys("j");
+    await sleep(500);
+    const top = await panel_top();
+    expect(top >= 60, `j dragged the panel back to ${top}`);
+  });
+
   await run_case("list view: G follows a list that loads in parts to the last file", async () => {
     await open_drive("list_fetch", "list", 250, 100);
     await press_keys("G");

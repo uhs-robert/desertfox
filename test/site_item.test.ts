@@ -147,7 +147,7 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
     wait_: async (ms: number) => void (clock += ms),
     now_: () => clock,
     watch_user_: () => ({ left_: () => false, stop_: () => {} }),
-    view: { innerHeight: 800, innerWidth: on_screen ? 800 : 50 },
+    view: { innerHeight: 800, innerWidth: on_screen ? 800 : 50, scrollY: 0 },
     focused: () => items[focused_index] ?? null,
     toast: (message: string) => toasts.push(message),
     scroll_by: (dx: number, dy: number) => scrolls.push([dx, dy]),
@@ -285,6 +285,24 @@ test("first and last go to the ends of the page whatever has focus, skip hidden 
   const none = fake_page(list);
   await move_item(none.page, { selector: "none", direction: "last" });
   assert.deepEqual([none.log, none.scrolls, none.toasts], [[], [], []]);
+});
+
+test("after gg the first item stays the start of the next move while the box shows it at the same page scroll, and the pin ends with the box or a scroll", async () => {
+  // The first two items lie above the view, the third is the first one in it.
+  const rects = [box(0, -300), box(0, -200), box(0, 100)];
+  const down_after_gg = async (change: (state: { box_shown: boolean; scroll_y: number }) => void) => {
+    const { page, shown } = fake_page(rects);
+    const state = { box_shown: true, scroll_y: 0 };
+    Object.assign(page, { box_shown: () => state.box_shown });
+    Object.defineProperty(page.view, "scrollY", { get: () => state.scroll_y });
+    await move_item(page, { selector: "li", link: "a.t", direction: "first" });
+    change(state);
+    await move_item(page, { selector: "li", link: "a.t", direction: "down" });
+    return shown;
+  };
+  assert.deepEqual(await down_after_gg(() => {}), ["0", "1"]);
+  assert.deepEqual(await down_after_gg((state) => (state.box_shown = false)), ["0", "2"]);
+  assert.deepEqual(await down_after_gg((state) => (state.scroll_y = 40)), ["0", "2"]);
 });
 
 test("every shipped page.item bind table that moves binds gg and G to its first and last item, guarded by its own item selector", () => {
