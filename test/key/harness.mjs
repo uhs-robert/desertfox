@@ -750,13 +750,17 @@ export async function create_session({ name: session_name, timings, sweep = true
     return new URL(target.url).searchParams.get("id");
   }
 
-  const temp_settings_pending = async () => (await read_config_status())?.temp?.length > 0;
+  // Saved edits count too: they beat the config file and outlive a piece, as a `,j` toggle or a `:set` leaves them.
+  const setting_edits_pending = async () => {
+    const status = await read_config_status();
+    return status?.temp?.length > 0 || status?.saved?.length > 0;
+  };
 
-  // Unsets the temp edits through the command line, which rebuilds the effective config the way a user's :unset does. Returns whether it typed keys.
-  async function clear_temp_settings() {
-    if (!(await temp_settings_pending())) return false;
-    await run_line(":unset -t all");
-    await poll_until("the temp settings to clear", async () => !(await temp_settings_pending()), { timeout_ms: 6000 });
+  // Unsets the saved and temp edits through the command line, which rebuilds the effective config the way a user's :unset does. Returns whether it typed keys.
+  async function clear_setting_edits() {
+    if (!(await setting_edits_pending())) return false;
+    await run_line(":unset all");
+    await poll_until("the setting edits to clear", async () => !(await setting_edits_pending()), { timeout_ms: 6000 });
     return true;
   }
 
@@ -772,7 +776,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     return true;
   }
 
-  // Every piece starts from the same state: one window with one tab at home_<piece>, active and focused, on the base config with no temp edits.
+  // Every piece starts from the same state: one window with one tab at home_<piece>, active and focused, on the base config with no saved or temp edits.
   async function reset_for_piece(home_id) {
     const mark = events.length;
     const home = await background_call(`(async () => {
@@ -792,14 +796,14 @@ export async function create_session({ name: session_name, timings, sweep = true
     // A page drops the keys of its first moments, and restore_config types ,r, so a pending load waits for the key probe first.
     if (config_restore_pending()) await wait_takes_keys(home_id);
     const restored = await restore_config();
-    const unset = await clear_temp_settings();
+    const unset = await clear_setting_edits();
     // Their keys can leave the focus elsewhere, so the page is asked once more only when they typed.
     if (restored || unset) await confirm_page_focus(home.tab_id, home.window_id);
     await wait_takes_keys(home_id);
     return { tab_ids: [home.tab_id], window_ids: [home.window_id] };
   }
 
-  // Runs after the cases, pass or fail. The teardown callbacks each report their own failure. Close, focus, config restore and temp unset each run in their own try, so a failed close does not skip the config restore.
+  // Runs after the cases, pass or fail. The teardown callbacks each report their own failure. Close, focus, config restore and setting unset each run in their own try, so a failed close does not skip the config restore.
   async function clean_up_piece(file, state, snapshot) {
     const failed_step = (step, error) => {
       // After a signal the steps fail on the closed debugger, as the cases do in run_case.
@@ -822,13 +826,13 @@ export async function create_session({ name: session_name, timings, sweep = true
       }
     };
     await attempt("cleanup close", () => close_tabs_outside(snapshot.tab_ids, snapshot.window_ids));
-    // Only these two steps type keys, so a piece that left no config or temp edits skips the refocus.
+    // Only these two steps type keys, so a piece that left no config or setting edits skips the refocus.
     const restore_pending = config_restore_pending();
-    const unset_pending = await temp_settings_pending();
+    const unset_pending = await setting_edits_pending();
     // The page must take keys before ,r and :unset, as in the reset. A lost ,r after this probe is a real fault of the page, not a young page.
     if (restore_pending || unset_pending) await attempt("cleanup focus", async () => wait_takes_keys(await refocus_any_tab()));
     if (restore_pending) await attempt("cleanup config restore", restore_config);
-    if (unset_pending) await attempt("cleanup temp unset", clear_temp_settings);
+    if (unset_pending) await attempt("cleanup setting unset", clear_setting_edits);
   }
 
   // The command line is an extension iframe in the page. This reads its text, rows and note from the frame of the selected tab, or answers { open: false } when none is there.
