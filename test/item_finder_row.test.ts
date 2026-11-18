@@ -5,7 +5,9 @@ import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
-import { page_keymap_for } from "../src/background/page_keymap.ts";
+import { normal_tree_for, page_keymap_for, site_columns_for } from "../src/background/page_keymap.ts";
+import { key_command_id_on_page } from "../src/background/open_help.ts";
+import { site_rules_view } from "../src/background/site_rules_view.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";
@@ -146,4 +148,72 @@ test("an h that waits for a key or has bad args adds no warning to the shipped r
 test("an h bound to a list of plain steps is held on a row page", async () => {
   const reply = await ask(with_keymap({ h: [{ id: "tab.prev" }, { id: "tab.next" }] }).compiled, "https://kagi.com/search?q=x");
   assert.equal(step_of(reply, "h").id, "tab.prev");
+});
+
+// A site row's `item_finder` value, per address.
+const off_at_a = { site: "https://a.test/*", item_finder: false };
+const on_at_a = { site: "https://a.test/*", item_finder: true };
+
+test("a site row with item_finder false keeps an unbound key, a prompt key and a capture key as the user set them", async () => {
+  const keymap = { normal: { h: null, J: { id: "tab.prev", prompt: { param: "x" } }, l: { id: "mark.jump" } } } as never;
+  const config = { ...empty_config(), settings: { item_finder: true, site_rules: [off_at_a] } as never, keymap };
+  const { compiled: stored } = compile_config({ config, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
+  const root = (await ask(stored, "https://a.test/")).keymap.modes.normal as TreeBranch;
+  assert.equal(root.children["h"], undefined);
+  assert.equal(root.children["l"]?.kind, "branch");
+  assert.equal(is_finder_step(step_of(await ask(stored, "https://a.test/"), "j")), false);
+  assert.equal(is_finder_step(step_of(await ask(stored, "https://b.test/"), "j")), true);
+  assert.equal(((await ask(stored, "https://b.test/")).keymap.modes.normal as TreeBranch).children["h"] !== undefined, true);
+});
+
+test("item_finder true on one site works with the global switch off, and no other site gets the finder", async () => {
+  const result = compiled({ site_rules: [on_at_a] });
+  assert.deepEqual(result.warnings, []);
+  assert.equal(is_finder_step(step_of(await ask(result.compiled, "https://a.test/"), "j")), true);
+  assert.equal(step_of(await ask(result.compiled, "https://b.test/"), "j").id, "scroll.lines");
+  assert.equal(result.compiled.item_finder, undefined);
+});
+
+test("a narrow true row ahead of a broad false row wins, and the first match decides", async () => {
+  const narrow = { site: "https://www.a.test/feed*", item_finder: true };
+  const broad = { site: "https://*.a.test/*", item_finder: false };
+  const ordered = compiled({ item_finder: true, site_rules: [narrow, broad] }).compiled;
+  assert.equal(is_finder_step(step_of(await ask(ordered, "https://www.a.test/feed/1"), "j")), true);
+  assert.equal(is_finder_step(step_of(await ask(ordered, "https://www.a.test/other"), "j")), false);
+  const reversed = compiled({ item_finder: true, site_rules: [broad, narrow] }).compiled;
+  assert.equal(is_finder_step(step_of(await ask(reversed, "https://www.a.test/feed/1"), "j")), false);
+});
+
+test("a subframe resolves against its own address and the tab's", async () => {
+  const stored = compiled({ item_finder: true, site_rules: [off_at_a] }).compiled;
+  const reply = async (addresses: string[]) => step_of((await page_keymap_for({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) } as never, addresses))!, "j");
+  assert.equal(is_finder_step(await reply(["https://a.test/frame", "https://c.test/"])), false);
+  assert.equal(is_finder_step(await reply(["https://c.test/frame", "https://a.test/"])), false);
+  assert.equal(is_finder_step(await reply(["https://c.test/frame", "https://d.test/"])), true);
+});
+
+test("a compiled keymap with no global value reads as off, and the finder shows only where a site row says true", async () => {
+  const { item_finder: _, ...bare } = compiled({ item_finder: true }).compiled;
+  assert.equal(is_finder_step(step_of(await ask(bare as CompiledKeymap, "https://a.test/"), "j")), false);
+  const with_row = { ...compiled({ item_finder: true, site_rules: [on_at_a] }).compiled } as Partial<CompiledKeymap>;
+  delete with_row.item_finder;
+  assert.equal(is_finder_step(step_of(await ask(with_row as CompiledKeymap, "https://a.test/"), "j")), true);
+});
+
+test("which-key, the site rules view and help agree with the page on a site where the finder is off", async () => {
+  const stored = compiled({ item_finder: true, site_rules: [off_at_a] }).compiled;
+  const address = "https://a.test/";
+  const page_tree = (await ask(stored, address)).keymap.modes.normal;
+  const columns = site_columns_for(stored, [address]);
+  assert.deepEqual(normal_tree_for(stored.modes.normal, columns).tree, stored.modes.normal);
+  assert.equal(page_tree, stored.modes.normal);
+  assert.equal(site_rules_view(stored, address).rows.some((row) => row.origin === "default" && row.name === "item_finder"), false);
+  assert.equal(key_command_id_on_page(stored, address, "j").id, "scroll.lines");
+  assert.equal(key_command_id_on_page(stored, "https://b.test/", "j").id, "page.item");
+});
+
+test("toggling item_finder flips the global value only", () => {
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",j"], { id: "settings.toggle", args: { name: "item_finder" }, label: "Toggle the item finder" });
+  assert.equal(compiled({ item_finder: true, site_rules: [off_at_a] }).compiled.item_finder, true);
+  assert.equal(compiled({ item_finder: false, site_rules: [off_at_a] }).compiled.item_finder, undefined);
 });
