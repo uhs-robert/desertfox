@@ -44,7 +44,11 @@ test("turning a shipped row off hands its site to the finder", async () => {
   assert.equal(step_of(reply, "j").args!["selector"], "");
 });
 
-test("the finder leaves h, l and G to their keys", async () => {
+test("the finder binds h and l too, for a grid, and leaves G to its key", async () => {
   const reply = await ask(compiled({ item_finder: true }).compiled, "https://a.test/");
-  for (const key of ["h", "l", "G"]) assert.notEqual(step_of(reply, key).id, "page.item", key);
+  for (const [key, direction] of [["h", "left"], ["l", "right"]] as const) {
+    const invocation = step_of(reply, key);
+    assert.deepEqual([invocation.id, invocation.args?.["direction"], invocation.args?.["selector"]], ["page.item", direction, ""]);
+  }
+  assert.notEqual(step_of(reply, "G").id, "page.item");
 });

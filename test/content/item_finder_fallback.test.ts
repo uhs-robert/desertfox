@@ -33,10 +33,17 @@ test("a bundle that loads but registers no handler scrolls too", () =>
     assert.deepEqual(scrolls.map((scroll) => scroll.top), [50]);
   }));
 
-test("a row that names a selector keeps the refusal, and so do the directions that do not scroll", () =>
+test("h and l scroll sideways when the bundle cannot load", () =>
+  with_page(async () => false, async (scrolls) => {
+    assert.deepEqual(await item_step({ direction: "left" }), { ok: true });
+    assert.deepEqual(await item_step({ direction: "right", times: 2 }), { ok: true });
+    assert.deepEqual(scrolls.map((scroll) => scroll.left), [-50, 100]);
+  }));
+
+test("a row that names a selector keeps the refusal, and so do the ends, which do not scroll", () =>
   with_page(async () => false, async (scrolls) => {
     assert.equal((await item_step({ selector: "li", direction: "down" })).ok, false);
-    assert.equal((await item_step({ direction: "left" })).ok, false);
+    assert.equal((await item_step({ direction: "first" })).ok, false);
     assert.deepEqual(scrolls, []);
   }));
 

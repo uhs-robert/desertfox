@@ -12,11 +12,12 @@ const lazy_handler = ({ id, bundle }: Invocation): ContentHandler => {
   return { run: (args) => (id === "page.item" && !args.selector ? scroll_if_refused(args, bundles.run_command_(id, bundle, args, `needs ${bundle}`)) : bundles.run_command_(id, bundle, args, `needs ${bundle}`)) };
 };
 
-// The item finder binds j and k on every page, so a page where the item bundle cannot load or run (one still loading, a privileged page) still scrolls. A bound row names its selector and keeps the refusal.
+// The item finder binds j, k, h and l on every page, so a page where the item bundle cannot load or run (one still loading, a privileged page) still scrolls. A bound row names its selector and keeps the refusal.
 const scroll_if_refused = (args: Record<string, unknown>, run: Promise<Outcome>): Promise<Outcome> =>
   run.then((outcome) => {
-    if (outcome.ok || (args.direction !== "down" && args.direction !== "up")) return outcome;
-    scroll_by(0, (args.direction === "down" ? 50 : -50) * Number(args.times ?? 1));
+    const [dx, dy] = { down: [0, 50], up: [0, -50], left: [-50, 0], right: [50, 0] }[args.direction as string] ?? [];
+    if (outcome.ok || dx === undefined) return outcome;
+    scroll_by(dx * Number(args.times ?? 1), dy! * Number(args.times ?? 1));
     return { ok: true };
   });
 
