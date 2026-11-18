@@ -8,7 +8,7 @@ Generated from `src/background/default_site_rows.ts`. Do not edit between the ma
 
 <!-- BEGIN generated -->
 
-Shipped rows: 25 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `drive`).
+Shipped rows: 26 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `reddit`, `drive`).
 
 ### `sheets`
 
@@ -320,6 +320,16 @@ Addresses: `https://tildes.net/*`
 | `j` | Go to item below |
 | `k` | Go to item above |
 | `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
+### `reddit`
+
+Addresses: `https://www.reddit.com/*`, `https://reddit.com/*`
+
+| Key | What it does |
+| --- | --- |
+| `j` | Go to item below |
+| `k` | Go to item above |
 | `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `drive`
