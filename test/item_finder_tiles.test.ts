@@ -255,3 +255,41 @@ test("sibling parents of one kind merge their entries, and parents of another ki
   assert.equal(find_items(saved_reader(sibling_parents("batch"))).items.length, 12);
   assert.equal(find_items(saved_reader(sibling_parents("comments"))).items.length, 0);
 });
+
+// Ten stacked entries, each with a short link in a heading: a comment's author handle (a page of its own) or a manual's section name (a fragment of the same page).
+function short_heading_entries(heading: string, href: (index: number) => string): SavedPage {
+  const entry = (index: number): SavedNode => {
+    const y = 100 + index * 220;
+    return {
+      t: "div",
+      a: { class: "entry" },
+      r: [35, y, 800, 200],
+      c: [
+        { t: heading, r: [35, y, 200, 24], c: [{ t: "a", a: { href: href(index) }, r: [35, y, 120, 24], s: "@someone", c: [] }] },
+        { t: "p", r: [35, y + 40, 800, 100], n: 200, c: [] },
+      ],
+    };
+  };
+  const list: SavedNode = { t: "div", a: { class: "thread" }, r: [35, 100, 800, 2200], c: Array.from({ length: 10 }, (_, index) => entry(index)) };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 2400], c: [{ t: "body", r: [0, 0, 1366, 2400], c: [list] }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  return { view: { w: 1366, h: 682, doc_h: 2400 }, root };
+}
+
+test("a short h3 link to another page names its entry, also with a fragment", () => {
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `/user/${index}`))).items.length, 10);
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `/user/${index}#activity`))).items.length, 10);
+});
+
+test("a short heading link to a fragment of this page or with an empty address is a section name, so its entry is no card", () => {
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `#section-${index}`))).items.length, 0);
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", () => ""))).items.length, 0);
+});
+
+test("a short h2 link to another page is still a section name", () => {
+  assert.equal(find_items(saved_reader(short_heading_entries("h2", (index) => `/user/${index}`))).items.length, 0);
+});
