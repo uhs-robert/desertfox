@@ -1,7 +1,7 @@
 // The load-more step of `]]`, tried when the next pass finds no next page. Structure first: it finds the page's main list and takes the lone control right after its last item. The words only break ties. With no control, it scrolls to the end of the list, but only when that list reaches the end of the page.
 
 import { in_chrome as node_in_chrome, in_pinned as node_in_pinned, is_actionable as node_is_actionable, list_groups, main_list } from "../item/groups.ts";
-import { ancestors, descendants, in_carousel, normalize } from "./detect.ts";
+import { ancestors, descendants, in_carousel, is_item_size, normalize } from "./detect.ts";
 import type { NextPageAction, PageReader } from "./detect.ts";
 
 const LOAD_WORDS = new Set([
@@ -53,7 +53,7 @@ export function find_load_more<N>(reader: PageReader<N>): NextPageAction<N> {
 
   // The main list: the repeated block that covers the most area.
   const view = reader.view_();
-  const list = main_list(reader, list_groups(reader, nodes));
+  const list = main_list(reader, list_groups(reader, nodes, { box_of: (child) => reader.box_(child), is_item: (_child, box) => is_item_size(box), stop: () => false }));
   if (!list) return { action: "none" };
   const { items } = list;
   const last = items.reduce((lowest, item) => (bottom(item) > bottom(lowest) ? item : lowest));

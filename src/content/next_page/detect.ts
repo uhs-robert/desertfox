@@ -41,7 +41,8 @@ export const normalize = (text: string): string => text.toLowerCase().replace(/\
 const escape_pattern = (pattern: string): string => pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
-const has_cjk = new RegExp(`[${CJK}]`, "u");
+// A literal and not `new RegExp(CJK)`, so a bundle that never tests text (the item bundle) drops it.
+const has_cjk = /[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]/u;
 
 // Kana and kanji have no spaces, so a text with them is capped by characters, not words. "次のページへ" is 6, a sentence that holds the word is longer.
 const MAX_CJK_CHARS = 12;
@@ -82,13 +83,20 @@ export function* ancestors<N>(reader: PageReader<N>, node: N, limit = Infinity):
   for (let at = reader.parent_(node); at !== null && limit-- > 0; at = reader.parent_(at)) yield at;
 }
 
-// In page order. A loop, not a recursive generator, whose cost grows with the depth of the tree.
-export function descendants<N>(reader: PageReader<N>, node: N): N[] {
+// The answer of `read` per node, read once. A reader serves one read of the page (a `]]` press or a finder run), so the answers go with it.
+export const once = <N, T>(read: (node: N) => T): ((node: N) => T) => {
+  const seen = new Map<N, T>();
+  return (node) => (seen.has(node) ? seen.get(node)! : seen.set(node, read(node)).get(node)!);
+};
+
+// In page order, only those `keep` takes. A loop, not a recursive generator, whose cost grows with the depth of the tree.
+export function descendants<N>(reader: PageReader<N>, node: N, keep: (node: N) => boolean = () => true): N[] {
   const found: N[] = [];
-  const stack = [...reader.children_(node)].reverse();
+  const stack = [node];
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    found.push(next);
-    stack.push(...[...reader.children_(next)].reverse());
+    if (next !== node && keep(next)) found.push(next);
+    const children = reader.children_(next);
+    for (let at = children.length; at-- > 0; ) stack.push(children[at]!);
   }
   return found;
 }

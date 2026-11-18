@@ -1,15 +1,15 @@
 // The item finder: reads a page once and answers where its list or grid of items is, or that it is not sure. The answer is a derived row, the shape of a site row without the selectors: the items and the link that takes the focus in each.
 // It is pure over `PageReader`, so the live page (`dom_reader.ts`) and the saved pages of `test/fixtures/next_page/` run the same code. Unsure means `none`, and then the keys scroll as they do without it.
 
-import { ancestors, descendants, signature, stacked_items } from "../next_page/detect.ts";
+import { ancestors, descendants, once, signature, stacked_items } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
-import { in_chrome, list_groups } from "./groups.ts";
+import { in_chrome, list_groups, plain_block } from "./groups.ts";
 import type { Group, GroupRules } from "./groups.ts";
 
 export type FinderKind = "list" | "grid" | "none";
 
-// `links` holds the link of each item that takes the focus. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections).
-export type Found<N> = { kind: FinderKind; items: N[]; links: Map<N, N>; sections?: N[] };
+// `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `timed_out_` marks a `none` that only says the time budget ran out.
+export type Found<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; timed_out_?: true };
 
 const none = <N>(): Found<N> => ({ kind: "none", items: [], links: new Map() });
 
@@ -40,37 +40,42 @@ const HEADING = /^h[1-6]$/;
 
 export type FinderClock = { now_: () => number; budget_ms_: number };
 
-export function find_items<N>(reader: PageReader<N>, clock: FinderClock = { now_: () => 0, budget_ms_: Infinity }): Found<N> {
-  const started = clock.now_();
-  const out_of_time = () => clock.now_() - started > clock.budget_ms_;
+// With no clock the run has no time budget (the saved pages of the tests).
+export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found<N> {
+  const started = clock?.now_();
+  const out_of_time = () => !!clock && clock.now_() - started! > clock.budget_ms_;
   const view = reader.view_();
   const nodes = [reader.root_, ...descendants(reader, reader.root_)];
   const region = main_region(reader, nodes);
   const scope = region === reader.root_ ? nodes : [region, ...descendants(reader, region)];
 
-  const links_of = (item: N): N[] => [item, ...descendants(reader, item)].filter((node) => reader.tag_(node) === "a" && reader.attr_(node, "href") !== null);
-  const link_text = (link: N): number => reader.text_(link).trim().length;
-  const in_heading = (link: N, item: N): boolean => HEADING.test(reader.tag_(link)) || [...ancestors(reader, link)].some((at) => at !== item && HEADING.test(reader.tag_(at))) || descendants(reader, link).some((inner) => HEADING.test(reader.tag_(inner)));
+  const is_link = (node: N) => reader.tag_(node) === "a" && reader.attr_(node, "href") !== null;
+  // A tile that is itself a link holds no other.
+  const links_of = (item: N): N[] => (is_link(item) ? [item] : descendants(reader, item, is_link));
+  const link_text = once((link: N): number => reader.text_(link).trim().length);
+  const in_heading = (link: N, item: N): boolean => {
+    for (const at of ancestors(reader, link)) {
+      if (at === item) break;
+      if (HEADING.test(reader.tag_(at))) return true;
+    }
+    return HEADING.test(reader.tag_(link)) || descendants(reader, link).some((inner) => HEADING.test(reader.tag_(inner)));
+  };
   // A link that no heading holds names its item only from the top part of the item, so the cross references in the body of a long entry do not.
   const near_top = (link: N, item: N): boolean => {
     const [at, from] = [reader.box_(link), reader.box_(item)];
     return !at || !from || at.y - from.y <= Math.max(TITLE_ZONE_PX, TITLE_ZONE_SHARE * from.h);
   };
-  const titles = new Map<N, N | undefined>();
-  // The link that names the item: the first link in a heading, else the first link with a title's worth of text, else the lone link of a tile (a picture that links).
-  const title_of = (item: N): N | undefined => {
-    if (titles.has(item)) return titles.get(item);
+  // The link that names the item: the first link in a heading, else the first link with a title's worth of text, else the lone link of a tile (a picture that links). Past the time budget it answers none, and the run gives up anyway.
+  const title_of = once((item: N): N | undefined => {
     if (out_of_time()) return undefined;
     const links = links_of(item);
     const headed = links.filter((link) => in_heading(link, item));
     const long_enough = (link: N) => link_text(link) >= TITLE_TEXT_MIN;
     // A short heading that links is the name of a section (a manual's "Syntax"), so its item is no card.
-    if (headed.length > 0 && !headed.some(long_enough)) return titles.set(item, undefined).get(item);
+    if (headed.length > 0 && !headed.some(long_enough)) return undefined;
     const strong = headed.some(long_enough) ? headed.filter(long_enough) : links.filter((link) => long_enough(link) && near_top(link, item));
-    const title = strong[0] ?? (links.length === 1 ? links[0] : undefined);
-    titles.set(item, title);
-    return title;
-  };
+    return strong[0] ?? (links.length === 1 ? links[0] : undefined);
+  });
   const titled_share = (group: Group<N>): number => group.items.filter((item) => title_of(item) !== undefined).length / group.items.length;
 
   const rules: GroupRules<N> = {
@@ -78,15 +83,17 @@ export function find_items<N>(reader: PageReader<N>, clock: FinderClock = { now_
     is_item: (child, box) => box.w >= MIN_ITEM_WIDTH_PX && (box.h >= TALL_ITEM_PX || (box.h >= SHORT_ITEM_PX && title_of(child) !== undefined)),
     stop: out_of_time,
   };
-  // Only groups that stack in three rows and whose items mostly hold a title link can be lists. A group of sections holds title links too, which the nesting step below sorts out.
-  const lists = merge_batches(reader, list_groups(reader, scope, rules)).filter((group) => stacked_items(reader, group.items) && titled_share(group) >= MIN_TITLED);
-  if (out_of_time()) return none();
+  const chrome = once((node: N) => in_chrome(reader, node));
+  // Only groups that stack in three rows and whose items mostly hold a title link can be lists. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
+  const groups = list_groups(reader, scope, rules).filter((group) => !chrome(group.parent));
+  const lists = merge_batches(reader, groups).filter((group) => stacked_items(reader, group.items) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+  if (out_of_time()) return { ...none<N>(), timed_out_: true };
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
   const top = main_by_area(gated);
   if (!top) return none();
-  const rivals = gated.filter((group) => group !== top && group.area >= RIVAL_SHARE * top.area && !nests(reader, group, top) && !nests(reader, top, group));
-  if (rivals.length > 0) return none();
+  const is_rival = (group: Group<N>) => group !== top && group.area >= RIVAL_SHARE * top.area && !nests(reader, group, top) && !nests(reader, top, group);
+  if (gated.some(is_rival)) return none();
 
   // The deepest group inside the best one that still carries a good part of its area: the cards in the sections of a front page.
   let best = top;
@@ -97,19 +104,14 @@ export function find_items<N>(reader: PageReader<N>, clock: FinderClock = { now_
     sections = best.items;
     best = inner;
   }
-  if (prose_around(reader, scope, best, in_chrome_cached(reader))) return none();
+  if (prose_around(reader, scope, best, chrome)) return none();
   // An item with no title link of its own (a story with a short title) takes its longest link, so the focus never lands on a vote arrow.
   const longest_link = (item: N): N | undefined => links_of(item).reduce<N | undefined>((long, link) => (!long || link_text(link) > link_text(long) ? link : long), undefined);
-  const links = new Map(best.items.flatMap((item): [N, N][] => { const link = title_of(item) ?? longest_link(item); return link === undefined ? [] : [[item, link]]; }));
+  const links = new Map(best.items.map((item) => [item, title_of(item) ?? longest_link(item)]));
   return { kind: kind_of(best.boxes), items: best.items, links, ...(sections && { sections }) };
 }
 
 const main_by_area = <N>(groups: readonly Group<N>[]): Group<N> | undefined => groups.reduce<Group<N> | undefined>((top, group) => (!top || group.area > top.area ? group : top), undefined);
-
-const in_chrome_cached = <N>(reader: PageReader<N>): ((node: N) => boolean) => {
-  const seen = new Map<N, boolean>();
-  return (node) => seen.get(node) ?? seen.set(node, in_chrome(reader, node)).get(node)!;
-};
 
 // The page's own main block, when it has one: the largest `main`, so a list walk skips the page chrome around it.
 function main_region<N>(reader: PageReader<N>, nodes: readonly N[]): N {
@@ -153,7 +155,7 @@ function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[]
         first.boxes.push(...group.boxes);
         first.area += group.area;
       } else {
-        const copy = { parent: group.parent, items: [...group.items], boxes: [...group.boxes], area: group.area };
+        const copy = { ...group, items: [...group.items], boxes: [...group.boxes] };
         peers.set(key, copy);
         next.push(copy);
       }
