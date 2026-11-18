@@ -280,7 +280,13 @@ function only_changed_toggle(): HTMLElement {
 // The toolbar popup links to `#section=settings/site-rules`, the id of this section's heading. The heading and the box are drawn at render, so the route lands on it at once. `main.ts` fills the box through `mount_settings`.
 export const SITE_RULES_SLUG = "site-rules";
 
-const SITE_RULES_DOC_URL = "https://github.com/uhs-robert/desertfox/blob/main/docs/design.md#site-table";
+const SITE_RULES_DOC_URL = "https://github.com/uhs-robert/desertfox/blob/main/docs/site_rows.md#write-your-own-rule";
+
+function edit_rules_link(): HTMLElement {
+  const link = el("a", undefined, "Edit rules");
+  link.setAttribute("href", edit_files_hash());
+  return link;
+}
 
 // The box is a settings row, so the changed-only filter treats it like any other row.
 function site_rules_section(): HTMLElement {
@@ -290,7 +296,8 @@ function site_rules_section(): HTMLElement {
     "div",
     "desertfox-settings-section",
     section_heading("settings", settings_section(SITE_RULES_SECTION)),
-    el("p", "desertfox-help-muted", "Each rule names the sites it covers and what DesertFox does there, for example turns its keys off or gives some keys to the page. The first rule that matches a page and sets a field decides that field. ", new_tab_link("Read the full rules", SITE_RULES_DOC_URL), "."),
+    el("p", undefined, edit_rules_link()),
+    el("p", "desertfox-help-muted", "Each rule names the sites it covers and what DesertFox does there, for example turns its keys off or gives some keys to the page. The first rule that matches a page and sets a field decides that field. ", new_tab_link("Read how to write a rule", SITE_RULES_DOC_URL), "."),
     box,
   );
 }
@@ -307,7 +314,7 @@ function settings_group_section(page_section: Section, group: (typeof GROUPS)[nu
 const settings_section = (title: string): Section => settings_sections[SETTINGS_SECTION_TITLES.indexOf(title)]!;
 
 // Where the site rules table sends the reader to edit: the files editor in the collapsed Advanced block, which a section link opens.
-export const edit_files_hash = (): string => section_hash("settings", settings_section(ADVANCED_FILES_EDITOR_SECTION).slug);
+const edit_files_hash = (): string => section_hash("settings", settings_section(ADVANCED_FILES_EDITOR_SECTION).slug);
 
 // A form section: its heading, one sentence of what it gives the reader, and the box `main.ts` fills.
 function settings_form_section(title: string, box_class: string, ...intro: Child[]): HTMLElement[] {
@@ -435,13 +442,14 @@ const KEYS_SECTION = "Keys";
 const ENGINES_SECTION = "Search engines";
 const ALIASES_SECTION = "Aliases";
 const QUICKMARKS_SECTION = "Quickmarks";
-const SITE_RULES_SECTION = "Site rules";
+const SITE_RULES_SECTION = "Your site rules";
 const ADVANCED_FILES_SECTION = "Advanced: settings files";
 const ADVANCED_BACKUP_SECTION = "Advanced: back up and restore";
 const ADVANCED_FILES_EDITOR_SECTION = "Advanced: edit files";
 // The setting groups come first, then the forms, then the collapsed Advanced block.
 const SETTINGS_SECTION_TITLES = [...GROUPS.map((group) => group.title), SITE_RULES_SECTION, KEYS_SECTION, ENGINES_SECTION, ALIASES_SECTION, QUICKMARKS_SECTION, ADVANCED_FILES_SECTION, ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION];
-const settings_sections = sections_from_titles(SETTINGS_SECTION_TITLES);
+// The title says "Your site rules", but the id stays `settings-site-rules` for the popup link.
+const settings_sections = sections_from_titles(SETTINGS_SECTION_TITLES).map((section) => (section.title === SITE_RULES_SECTION ? { ...section, slug: SITE_RULES_SLUG } : section));
 const STYLING_SECTIONS = sections_from_titles(["Variables", "Classes"]);
 
 // The sections a page lists in the sidebar. Only Search Engines reads the guide.
