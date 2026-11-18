@@ -46,7 +46,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const out_of_time = () => !!clock && clock.now_() - started! > clock.budget_ms_;
   const view = reader.view_();
   const nodes = [reader.root_, ...descendants(reader, reader.root_)];
-  const region = main_region(reader, nodes);
+  const region = main_region(reader);
   const scope = region === reader.root_ ? nodes : [region, ...descendants(reader, region)];
 
   // A hidden link (a copy of the title for small screens) cannot take the focus, so it names no item.
@@ -119,8 +119,9 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
 const main_by_area = <N>(groups: readonly Group<N>[]): Group<N> | undefined => groups.reduce<Group<N> | undefined>((top, group) => (!top || group.area > top.area ? group : top), undefined);
 
 // The page's own main block, when it has one: the largest `main`, so a list walk skips the page chrome around it.
-function main_region<N>(reader: PageReader<N>, nodes: readonly N[]): N {
-  const mains = nodes.filter((node) => reader.tag_(node) === "main" || reader.attr_(node, "role") === "main");
+// The walk of the whole page comes first, so the query also sees a `main` inside a shadow root.
+function main_region<N>(reader: PageReader<N>): N {
+  const mains = reader.query_all_("main,[role=main]");
   const area = (node: N) => (reader.box_(node)?.w ?? 0) * (reader.box_(node)?.h ?? 0);
   return mains.sort((a, b) => area(b) - area(a))[0] ?? reader.root_;
 }
