@@ -36,10 +36,13 @@ export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 // The page's columns of the site table, for the page's key handling and for which-key alike.
 export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses));
 
-// The rows that fit the page, in table order. The finder row goes where the page's `item_finder` value is false, so every key stays as the user set it. A keymap with no global value reads as off.
+// The rows compile adds for the finder: its row and the hold-back rows before it, all named `item_finder`. No other default row has that name.
+const is_finder_row = (rule: SiteRule): boolean => rule.origin === "default" && rule.name === "item_finder";
+
+// The rows that fit the page, in table order. The finder rows go where the page's `item_finder` value is false, so every key stays as the user set it. A keymap with no global value reads as off.
 export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => {
   const matching = (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
-  return site_value(resolve_site_columns(matching), "item_finder", keymap?.item_finder === true) ? matching : matching.filter((rule) => !("finder" in rule));
+  return site_value(resolve_site_columns(matching), "item_finder", keymap?.item_finder === true) ? matching : matching.filter((rule) => !is_finder_row(rule));
 };
 
 // A per-site setting on a page. The cast holds because the setting's own check accepted the value when the config loaded. The site's value beats the global value, which already holds `:set` and `:set --temp`: the row names the site and `:set` does not.

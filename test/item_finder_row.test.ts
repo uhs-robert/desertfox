@@ -217,3 +217,16 @@ test("toggling item_finder flips the global value only", () => {
   assert.equal(compiled({ item_finder: true, site_rules: [off_at_a] }).compiled.item_finder, true);
   assert.equal(compiled({ item_finder: false, site_rules: [off_at_a] }).compiled.item_finder, undefined);
 });
+
+// Everything the page and the views show for a row page, so a leftover finder row anywhere differs.
+const row_page = async (settings: Record<string, unknown>, url: string) => {
+  const stored = compiled({ ...settings, site_rules: [{ site: "https://kagi.com/*", bind: { hx: { id: "tab.next" } } }, ...((settings["site_rules"] as unknown[]) ?? [])] }).compiled;
+  return { reply: await ask(stored, url), view: site_rules_view(stored, url).rows.filter(({ site }) => site !== "https://kagi.com/search*").map(({ origin, name, site }) => ({ origin, name, site })) };
+};
+
+test("a row page where the finder is off is the page compiled with no finder, with the finder switch on or off", async () => {
+  const url = "https://kagi.com/search?q=x";
+  const none = await row_page({}, url);
+  assert.deepEqual(await row_page({ item_finder: true, site_rules: [{ site: "https://kagi.com/search*", item_finder: false }] }, url), none);
+  assert.deepEqual(await row_page({ site_rules: [{ site: "https://a.test/*", item_finder: true }] }, url), none);
+});
