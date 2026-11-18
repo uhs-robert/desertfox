@@ -254,6 +254,8 @@ class MailWriteCliTest(MailCliCase):
             (("draft", "--to", "a@b", "--subject", "s", "--body-file"), ""),
             (("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), "b" * (64 * 1024 + 1)),
             (("draft", "--to", "a@b", "--subject", "s", "--body-file", self.body_file(b"\xff\xfe")), ""),
+            (("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), "colour \x1b[31mred"),
+            (("draft", "--to", "a@b", "--subject", "s", "--body-file", "-"), "del \x7f"),
             (("archive",), ""), (("trash", "x"), ""), (("archive", "1", "1"), ""), (("archive", *map(str, range(51))), ""),
             (("move",), ""), (("move", "f1"), ""), (("frob", "1"), ""),
         ):
@@ -293,6 +295,7 @@ class MailWriteCliTest(MailCliCase):
         self.assertEqual((cli.MAX_BODY_BYTES, cli.MAX_ACT_IDS), (host.MAX_BODY_BYTES, host.MAX_ACT_IDS))
         self.assertGreater(cli.ACT_TIMEOUT_S, host.ACT_TIMEOUT_S)
         self.assertGreater(cli.DRAFT_TIMEOUT_S, host.DRAFT_TIMEOUT_S)
+        self.assertEqual(cli.BODY_CONTROL_PATTERN.pattern, host.BODY_CONTROL_PATTERN.pattern)
         self.assertGreater(cli.TIMEOUT_S, host.REQUEST_TIMEOUT_S)
 
     def test_a_draft_with_a_body_at_the_cap_through_the_real_thunderbird_host(self):
