@@ -70,6 +70,8 @@ EXIT_USAGE = 2
 EXIT_NO_BRIDGE = 3
 # The host gives up on the extension after 10 s, so a reply always comes before this.
 TIMEOUT_S = 15
+# The host waits DRAFT_TIMEOUT_S, 40 s, for the add-on to save a draft.
+DRAFT_TIMEOUT_S = 45
 # The host waits ACT_TIMEOUT_S, 70 s, for the person who answers an act.
 ACT_TIMEOUT_S = 75
 # The host waits 10 s for the tab list, then up to 5 s for each of 64 tabs.
@@ -553,7 +555,7 @@ def mail_draft(words):
         request["body"] = read_body(body_path)
     except OSError as error:
         return fail("cannot read the body: %s" % error.strerror)
-    reply = ask(request)
+    reply = ask(request, DRAFT_TIMEOUT_S)
     if reply.get("ok") is not True:
         return fail(reply.get("message") or "the bridge did not save the draft")
     print("draft saved")
