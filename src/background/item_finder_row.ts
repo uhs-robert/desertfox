@@ -1,4 +1,4 @@
-// The site row of the `item_finder` setting: j, k, h, l, gg and G on every address (h and l move only on a grid), through `page.item` with no selector, so the finder (`src/content/item/finder.ts`) walks the list or grid it finds and the keys scroll when it finds none. `compile_config` appends it after every other row when the setting is on, so a user row or a shipped row that binds j and k decides them first. Those rows get a hold-back row before it (below), so the finder's other keys do not run on their pages. It has no name in `default_site_rows_off`: the setting is its switch.
+// The site row of the `item_navigator` setting: j, k, h, l, gg and G on every address (h and l move only on a grid), through `page.item` with no selector, so the finder (`src/content/item/finder.ts`) walks the list or grid it finds and the keys scroll when it finds none. `compile_config` appends it after every other row when the setting is on, so a user row or a shipped row that binds j and k decides them first. Those rows get a hold-back row before it (below), so the finder's other keys do not run on their pages. It has no name in `default_site_rows_off`: the setting is its switch.
 
 import { site_row_columns, type SiteRuleRow } from "../shared/match_pattern.ts";
 import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
@@ -7,7 +7,7 @@ import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
 const step = (direction: "down" | "up" | "left" | "right" | "first" | "last", label: string, hover: boolean): BoundInvocation => ({ id: "page.item", args: { direction, ...(hover ? { hover } : {}) }, label });
 
 export const item_finder_row = (hover: boolean): { name: string; row: SiteRuleRow} => ({
-  name: "item_finder",
+  name: "item_navigator",
   row: { site: "<all_urls>", bind: { j: step("down", "Next item, or scroll down", hover), k: step("up", "Previous item, or scroll up", hover), h: step("left", "Item to the left, or scroll left", hover), l: step("right", "Item to the right, or scroll right", hover), gg: step("first", "First item, or scroll to top", hover), G: step("last", "Last item, or scroll to bottom", hover) } },
 });
 
@@ -26,7 +26,7 @@ const claims_item_keys = (row: SiteRuleRow): boolean => ["j", "k"].some((key) =>
 // A row at `site` that binds each of `keys` to its plain binding in `normal`. The finder row comes after it, so the keys stay plain there. A key with no plain binding stays out, and the finder keeps it. `holds` says which bindings a site row can take.
 export const hold_back_row = (site: string, keys: readonly string[], normal: Readonly<Record<string, KeyBinding | null>> | undefined, holds: (binding: KeyBinding) => boolean): { name: string; row: SiteRuleRow } | undefined => {
   const bind = Object.fromEntries(keys.flatMap((key) => (normal?.[key] && holds(normal[key]) ? [[key, normal[key]]] : [])));
-  return Object.keys(bind).length === 0 ? undefined : { name: "item_finder", row: { site, bind: bind as NonNullable<SiteRuleRow["bind"]> } };
+  return Object.keys(bind).length === 0 ? undefined : { name: "item_navigator", row: { site, bind: bind as NonNullable<SiteRuleRow["bind"]> } };
 };
 
 // One hold-back row per site pattern that a row of `rows` claims j or k for. `normal` is the merged keymap's normal mode, so a user remap holds.

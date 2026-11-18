@@ -1,4 +1,4 @@
-// The item finder (`item_finder = true`) on a long list: a content script reads a page of about 6000 elements past the 40 ms of a later read. The first read of a page has a longer budget, so a press of j walks the list, after a pause at most, instead of scrolling.
+// The item finder (`item_navigator = true`) on a long list: a content script reads a page of about 6000 elements past the 40 ms of a later read. The first read of a page has a longer budget, so a press of j walks the list, after a pause at most, instead of scrolling.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -7,11 +7,11 @@ export const areas = ["keys", "config", "bundles"];
 const CARDS = 500;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("load a config with item_finder on", async () => {
+  await setup("load a config with item_navigator on", async () => {
     const dir = config_copy();
     const file = join(dir, "settings.toml");
     // A top-level setting goes above the first table.
-    writeFileSync(file, `item_finder = true\n${readFileSync(file, "utf8")}`);
+    writeFileSync(file, `item_navigator = true\n${readFileSync(file, "utf8")}`);
     await load_config_dir(dir);
   });
 

@@ -319,7 +319,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ",h": { id: "help.open" },
     ",s": { id: "help.open", args: { name: "settings" }, label: "Settings page" },
     ",t": { id: "settings.toggle", prompt: { param: "name" } },
-    ",j": { id: "settings.toggle", args: { name: "item_finder" }, label: "Toggle the item finder" },
+    ",j": { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle the item navigator" },
     ",i": { id: "mode.set", args: { mode: "ignore" } },
     ",,": { id: "open.anything", prompt: { param: "query" }, label: "Find anything" },
     ",b": { id: "page.blur" },

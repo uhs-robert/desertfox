@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 12;
+export const COMPILED_KEYMAP_VERSION = 13;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -84,8 +84,8 @@ export type CompiledKeymap = {
   bridge_share_tabs?: true;
   // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
   frame_site_globals?: FrameSiteValues;
-  // Set when the `item_finder` setting is on. A site row can turn the finder on or off for its pages against it. Absent means off.
-  item_finder?: true;
+  // Set when the `item_navigator` setting is on. A site row can turn the finder on or off for its pages against it. Absent means off.
+  item_navigator?: true;
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
   which_key_delay_ms: number;
@@ -124,7 +124,7 @@ export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partia
 // What a site mode adds to the page's normal tree: its badge label and the top-level children that differ from the normal tree, which the content script lays over it. A sticky mode ignores mouse presses and keys the page keeps.
 export type PageSiteMode = { label: string; tree: Record<string, TreeNode>; sticky?: boolean };
 
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals" | "item_finder">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals" | "item_navigator">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

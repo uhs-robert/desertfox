@@ -215,7 +215,7 @@ bound: 496 (normal 265, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `,h` | `help` | Help |
 | `,s` | `help settings` | Settings page |
 | `,t` | `toggle` (prompts) | Toggle a setting |
-| `,j` | `toggle item_finder` | Toggle the item finder |
+| `,j` | `toggle item_navigator` | Toggle the item navigator |
 | `,i` | `mode ignore` | Set mode |
 | `,,` | `anything` (prompts) | Find anything |
 | `,b` | `page.blur` | Blur |

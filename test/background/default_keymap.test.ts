@@ -84,7 +84,7 @@ test("the , group holds the DesertFox commands", () => {
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",b"], { id: "page.blur" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",s"], { id: "help.open", args: { name: "settings" }, label: "Settings page" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",t"], { id: "settings.toggle", prompt: { param: "name" } });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",j"], { id: "settings.toggle", args: { name: "item_finder" }, label: "Toggle the item finder" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",j"], { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle the item navigator" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",?"], { id: "help.whichkey" });
   for (const mode of ["normal", "caret", "visual", "visual_line", "media", "insert", "hint"] as const) {
     assert.deepEqual(DEFAULT_KEYMAP[mode]?.["<A-?>"], { id: "help.whichkey", label: "Show the keys" }, mode);
