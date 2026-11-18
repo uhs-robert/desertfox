@@ -122,3 +122,21 @@ test("the finder stops at its time budget and answers a none that says so, which
   assert.deepEqual([found.kind, found.items, found.timed_out_], ["none", [], true]);
   assert.equal(find_items(saved_reader(page_of("de_spiegel"))).timed_out_, undefined);
 });
+
+// The reader finds `main` with a native query, which sees a shadow root only once the walk of the page opened it. This reader answers the query that way, so the test fails if the finder asks before it walks.
+test("the finder finds a main inside a shadow root, which the walk of the page opens before the main query", () => {
+  const card = (x: number, y: number, index: number): SavedNode => ({ t: "div", a: { class: "card" }, r: [x, y, 500, 100], c: [{ t: "h3", r: [x, y, 500, 30], c: [{ t: "a", a: { href: `#c${index}` }, r: [x, y, 300, 20], s: `Result number ${index} with a title` }] }] });
+  const list = (x: number, count: number): SavedNode => ({ t: "div", a: { class: "list" }, r: [x, 0, 500, count * 120], c: Array.from({ length: count }, (_, at) => card(x, at * 120, at)) });
+  const in_main = list(0, 10);
+  const main: SavedNode = { t: "main", r: [0, 0, 500, 1200], c: [in_main] };
+  // A custom element whose shadow root holds the main. The saved page folds a shadow root into its host's children.
+  const host: SavedNode = { t: "x-app", r: [0, 0, 500, 1200], c: [main] };
+  const root: SavedNode = { t: "html", r: [0, 0, 1200, 1500], c: [{ t: "body", r: [0, 0, 1200, 1500], c: [host, list(600, 12)] }] };
+  const page: SavedPage = { view: { w: 1200, h: 800, doc_h: 1500 }, root };
+  for (const node of walk(root)) for (const child of node.c ?? []) child.up = node;
+  const base = saved_reader(page);
+  const opened = new Set<SavedNode>();
+  const reader: PageReader<SavedNode> = { ...base, children_: (node) => (opened.add(node), base.children_(node)), query_all_: (selector) => base.query_all_(selector).filter((node) => opened.has(node.up!)) };
+  const found = find_items(reader);
+  assert.deepEqual([found.kind, found.items], ["list", in_main.c]);
+});
