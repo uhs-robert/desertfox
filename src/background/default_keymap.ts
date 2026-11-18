@@ -384,6 +384,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ";fF": { id: "frame.exit" },
     ";fs": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";fe": { id: "page.focus_input", label: "Main input" },
+    ";L": { id: "hint.run", args: { action: "focus", filter: "lists" }, label: "Pick the list for j and k" },
     ";fh": { id: "hint.run", args: { action: "focus", filter: "headings" }, label: "Focus heading" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },

@@ -123,6 +123,43 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("b1");
   });
 
+  // Two lists side by side, both in view: `a0` to `a11` (the larger, so the finder's first answer) on the left and `b0` to `b9` on the right.
+  const add_side_lists = () =>
+    in_active_tab(`(() => {
+      const list = (name, count, left) => {
+        const holder = document.createElement("div");
+        holder.className = "side_" + name;
+        holder.style.cssText = "position:absolute;top:0;left:" + left + "px;width:400px";
+        holder.innerHTML = Array.from({ length: count }, (_, index) => '<div class="card_' + name + '" style="height:60px;margin:0 0 10px 0;width:400px"><h3 style="margin:0"><a id="' + name + index + '" href="#' + name + index + '">List ' + name + ' result number ' + index + ' title</a></h3><span>snippet</span></div>').join("");
+        return holder;
+      };
+      document.body.prepend(list("a", 12, 0), list("b", 10, 450));
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+  // The hint labels with the left edge of each, so the test picks the label on the right-hand list.
+  const labels_by_left = () => in_active_tab(`[...document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => ({ text: node.textContent, left: node.getBoundingClientRect().left }))).sort((a, b) => a.left - b.left)`);
+
+  await run_case(";L labels each list, and the list picked keeps j and k while the first list still shows", async () => {
+    await open_page("page", "finder_pick_list", { new_tab: true });
+    await add_side_lists();
+    await press_keys("j");
+    await expect_focus("a0");
+    await press_keys(";L");
+    await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
+    const [, right] = await labels_by_left();
+    await press_keys(right.text);
+    // The pick focuses the card itself, and j then walks the title links of the list.
+    await poll_until("focus on the first card of the second list", async () => (await in_active_tab("document.activeElement?.className ?? ''")) === "card_b");
+    await press_keys("j");
+    await expect_focus("b1");
+    await press_keys("j");
+    await expect_focus("b2");
+    await press_keys("k");
+    await expect_focus("b1");
+  });
+
   const at_bottom = () => in_active_tab("scrollY + innerHeight >= document.documentElement.scrollHeight - 2");
   // Hides the rest of the page, so the cards are all of it and the first and last card are in view at the page ends.
   const only_cards = () => in_active_tab(`(() => { const list = document.querySelector(".card").parentElement; for (const child of document.body.children) if (child !== list) child.style.display = "none"; window.scrollTo(0, 0); return true; })()`);

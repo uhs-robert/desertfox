@@ -15,7 +15,7 @@ import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
 import { keeps_narrowing, drop_targets_of } from "./drop_targets.ts";
-import { collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
+import { list_targets, is_rect_off_screen, collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
 import { clean_letters, make_labels, narrow } from "./labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
@@ -246,6 +246,7 @@ type HandOver = (text: string, what?: string) => void;
 let picking = false;
 
 const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
+  if (current.args.filter === "lists") void page.desertfox_host.run_command_("item.lists", "item", { region: list_targets.get(element) });
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
   // A pick right after a jump is the user's own move, so the address change it makes records.
   arm_leave_watch(page.desertfox_host).quiet_(false);
@@ -562,6 +563,10 @@ function register(host: PageHostApi): void {
     args = plain_args;
     let filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
+    if (filter === "lists") {
+      list_targets.clear();
+      await host.run_command_("item.lists", "item", { take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find((item) => !is_rect_off_screen(item.getBoundingClientRect(), innerWidth, innerHeight)); if (first) list_targets.set(first, region); }) });
+    }
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
