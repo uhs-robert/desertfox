@@ -43,6 +43,8 @@ The external editor sends the text of a page field to a program you chose in `ed
 
 The setting `bridge_share_tabs` is off by default and needs the desktop link (bridge) to be on. When it is on, programs on your own computer that connect to the link's local socket (readable by your user only) can list your open tabs with their titles and addresses, switch to them, close them and capture them. Tabs in private windows never show. The host keeps a screenshot of a captured tab and the icon of a listed tab as files in `~/.cache/desertfox/` (or `$XDG_CACHE_HOME/desertfox/`), outside Firefox storage. These files stay on your computer, and the host deletes the files of tabs that are no longer open after 7 days, and deletes both folders when sharing is turned off. DesertFox sends none of this over the network.
 
+The same host also serves DesertBird, the Thunderbird add-on. Its share settings are off by default and need its bridge setting on. With them on, programs on your computer that connect to its own local socket (readable by your user only) can list your mail folders, list messages with sender, subject and date, read a message body and list attachment names. The host passes each answer to the program that asked and keeps none of it. Nothing goes over the network.
+
 ## Permissions
 
 DesertFox asks for `nativeMessaging`, `browsingData`, `geolocation` and the location information data collection permission only when you click the button that needs them.

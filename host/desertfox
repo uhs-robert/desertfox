@@ -19,6 +19,19 @@ The tab commands need `bridge_share_tabs` on in DesertFox, and never see a priva
   desertfox close <id>
   desertfox capture [id...] [--json]           save thumbnails of the tabs (all loaded ones without ids) and print their paths
 
+The mail reads need --app thunderbird and the DesertBird share settings, all off by default, beside `bridge`:
+
+  desertfox --app thunderbird mail folders [--json]                      needs bridge_share_folders
+  desertfox --app thunderbird mail list <folder id> [--limit N] [--unread] [--json]
+                                                                         needs bridge_share_headers and bridge_share_folders
+  desertfox --app thunderbird mail read <id> [--json]                    needs bridge_share_headers and bridge_share_bodies
+  desertfox --app thunderbird mail attachments <id> [--json]             needs bridge_share_attachments
+
+Sender text (from, to, subject, content type, the body, attachment names and types) prints only between
+`<<<UNTRUSTED mail <what> nonce=<n>>>>` and `<<<END <n>>>>`, with a new random nonce for each print, so a reader can
+tell where text from outside starts and ends. With --json the envelope lines wrap the JSON. `folders` carries no
+sender text and prints bare. A reply that dropped rows or cut the body says `truncated`.
+
 `run` joins its arguments into the one command line the `:` line takes. A single argument is used as it is, so
 `desertfox run "scroll.lines 3"` works. Several arguments are quoted for the line, so `desertfox run tab.switch "my tab"`
 keeps the space.
@@ -33,6 +46,7 @@ import fcntl
 import json
 import os
 import re
+import secrets
 import shlex
 import socket
 import sys
@@ -47,6 +61,8 @@ EXIT_NO_BRIDGE = 3
 TIMEOUT_S = 15
 # The host waits 10 s for the tab list, then up to 5 s for each of 64 tabs.
 CAPTURE_TIMEOUT_S = 345
+# The same range as MAX_MESSAGES_LIMIT in desertfox-bridge, checked here too so a bad value is a usage error.
+MAX_MESSAGES_LIMIT = 200
 # Longer than the 3 s a starting host waits for the lock, so a host that is starting has bound its socket before this gives up.
 LOCK_RETRY_S = 5
 # The same shape as THEME_PATTERN in desertfox-bridge: the two scripts are standalone, and a test compares them.
@@ -62,7 +78,13 @@ USAGE = """usage: desertfox [--app firefox|thunderbird] <verb> ...
        desertfox activate <id> [--preface <nonce>]
        desertfox clear-preface <window id> [--preface <nonce>]
        desertfox close <id>
-       desertfox capture [id...] [--json]"""
+       desertfox capture [id...] [--json]
+       desertfox --app thunderbird mail folders [--json]           needs bridge_share_folders
+       desertfox --app thunderbird mail list <folder id> [--limit N] [--unread] [--json]
+                                                                   needs bridge_share_headers and bridge_share_folders
+       desertfox --app thunderbird mail read <id> [--json]         needs bridge_share_headers and bridge_share_bodies
+       desertfox --app thunderbird mail attachments <id> [--json]  needs bridge_share_attachments
+       Every mail read also needs bridge."""
 
 
 class BridgeDown(Exception):
@@ -316,6 +338,131 @@ def do_capture(words):
     return EXIT_DONE if all(result.get("ok") for result in results) else EXIT_FAILED
 
 
+def print_untrusted(what, text):
+    """Prints text from outside between nonce lines. The nonce is drawn after the text is known and drawn again while
+    the text holds it, so no line of the text can close the envelope, a guessed or an old END line included."""
+    nonce = secrets.token_hex(16)
+    while nonce in text:
+        nonce = secrets.token_hex(16)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    sys.stdout.write("<<<UNTRUSTED mail %s nonce=%s>>>\n%s<<<END %s>>>\n" % (what, nonce, text, nonce))
+
+
+def one_line(value):
+    """A field for a tab separated row. The add-on strips control characters already, so this only keeps a row whole if
+    one gets through."""
+    return "".join(" " if ord(char) < 32 or 127 <= ord(char) < 160 else char for char in str(value))
+
+
+def note_truncated(reply):
+    if reply.get("truncated") is True:
+        sys.stderr.write("desertfox: truncated: the reply left out rows to stay under its size cap\n")
+
+
+def without_ok(reply):
+    return {name: value for name, value in reply.items() if name != "ok"}
+
+
+def mail_folders(words):
+    if words not in ([], ["--json"]):
+        raise Usage("mail folders takes only --json")
+    reply = ask({"verb": "folders"})
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not list the folders")
+    if words:
+        print(json.dumps(without_ok(reply), indent=2))
+        return EXIT_DONE
+    for folder in reply.get("folders", []):
+        print("\t".join(one_line(folder.get(name, "")) for name in ("id", "unread", "total", "account", "path")))
+    note_truncated(reply)
+    return EXIT_DONE
+
+
+def message_row(message):
+    flags = "".join(letter if message.get(name) else "-" for letter, name in (("r", "read"), ("f", "flagged")))
+    return "\t".join(one_line(value) for value in (message.get("id", ""), message.get("date", ""), flags, message.get("from", ""), message.get("subject", "")))
+
+
+def mail_list(words):
+    limit, words = take_option(words, "--limit")
+    flags = [word for word in words if word in ("--unread", "--json")]
+    folder_ids = [word for word in words if word not in flags]
+    if len(folder_ids) != 1 or len(set(flags)) != len(flags):
+        raise Usage("mail list takes one folder id, then --limit N, --unread and --json")
+    request = {"verb": "messages", "folder": folder_ids[0]}
+    if limit is not None:
+        request["limit"] = whole_number(limit, "the limit")
+        if not 1 <= request["limit"] <= MAX_MESSAGES_LIMIT:
+            raise Usage("the limit is from 1 to %d" % MAX_MESSAGES_LIMIT)
+    if "--unread" in flags:
+        request["unread_only"] = True
+    reply = ask(request)
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not list the messages")
+    if "--json" in flags:
+        print_untrusted("list", json.dumps(without_ok(reply), indent=2))
+        return EXIT_DONE
+    print_untrusted("list", "".join(message_row(message) + "\n" for message in reply.get("messages", [])))
+    note_truncated(reply)
+    return EXIT_DONE
+
+
+def taken_message_id(words, what):
+    """(the message id, whether --json follows it)."""
+    as_json = words[1:] == ["--json"]
+    if len(words) != (2 if as_json else 1):
+        raise Usage("mail %s takes one message id and --json" % what)
+    return whole_number(words[0], "the message id"), as_json
+
+
+def mail_read(words):
+    message_id, as_json = taken_message_id(words, "read")
+    reply = ask({"verb": "message", "id": message_id})
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not read the message")
+    message = reply.get("message") or {}
+    if as_json:
+        print_untrusted("body id=%d" % message_id, json.dumps(message, indent=2))
+        return EXIT_DONE
+    for name in ("id", "date", "html_stripped", "truncated"):
+        value = message.get(name, "")
+        print("%s: %s" % (name, json.dumps(value) if isinstance(value, bool) else one_line(value)))
+    # content_type is the sender's own header, so it goes inside with the other sender text.
+    to = message.get("to")
+    headers = "".join("%s: %s\n" % (name, one_line(value)) for name, value in (
+        ("from", message.get("from", "")),
+        ("to", ", ".join(map(str, to)) if isinstance(to, list) else ""),
+        ("subject", message.get("subject", "")),
+        ("content_type", message.get("content_type", "")),
+    ))
+    print_untrusted("body id=%d" % message_id, headers + "\n" + str(message.get("body", "")))
+    return EXIT_DONE
+
+
+def mail_attachments(words):
+    message_id, as_json = taken_message_id(words, "attachments")
+    reply = ask({"verb": "attachments", "id": message_id})
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not list the attachments")
+    if as_json:
+        print_untrusted("attachments id=%d" % message_id, json.dumps(without_ok(reply), indent=2))
+        return EXIT_DONE
+    rows = ("\t".join(one_line(part.get(name, "")) for name in ("part", "size", "content_type", "name")) + "\n" for part in reply.get("attachments", []))
+    print_untrusted("attachments id=%d" % message_id, "".join(rows))
+    note_truncated(reply)
+    return EXIT_DONE
+
+
+def do_mail(words):
+    if app != "thunderbird":
+        raise Usage("mail needs --app thunderbird")
+    handler = {"folders": mail_folders, "list": mail_list, "read": mail_read, "attachments": mail_attachments}.get(words[0] if words else None)
+    if not handler:
+        raise Usage("mail takes folders, list, read or attachments")
+    return handler(words[1:])
+
+
 def write_atomically(path, content):
     descriptor, temp_path = tempfile.mkstemp(prefix=".state.", suffix=".tmp", dir=os.path.dirname(path))
     try:
@@ -420,7 +567,7 @@ def main(argv):
         print(USAGE)
         return EXIT_DONE if argv else EXIT_USAGE
     verb, rest = argv[0], argv[1:]
-    if rest[:1] in (["-h"], ["--help"]):
+    if rest[:1] in (["-h"], ["--help"]) or (verb == "mail" and rest[1:2] in (["-h"], ["--help"])):
         print(USAGE)
         return EXIT_DONE
     try:
@@ -432,7 +579,7 @@ def main(argv):
             if rest not in ([], ["--json"]):
                 return fail("%s takes only --json\n%s" % (verb, USAGE), EXIT_USAGE)
             return {"list": do_list, "state": do_state}[verb](rest)
-        handler = {"tabs": do_tabs, "events": do_events, "theme": do_theme, "activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture}.get(verb)
+        handler = {"tabs": do_tabs, "events": do_events, "theme": do_theme, "activate": do_activate, "clear-preface": do_clear_preface, "close": do_close, "capture": do_capture, "mail": do_mail}.get(verb)
         if handler:
             return handler(rest)
     except Usage as error:
