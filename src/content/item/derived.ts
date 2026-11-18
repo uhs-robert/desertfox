@@ -39,7 +39,7 @@ const item_selector = (items: readonly Element[] = []): string => {
 };
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
-  // The items of the list that was active at the last read, so the next read can tell which list it was. A feed that drops its first items still matches through one that stays.
+  // The items of the list that was active at the last read, so the next read can tell which list it was. A feed that drops or hides its first items still matches through one that stays.
   let active_items: Element[] = [];
   let kept: { found: Found<Element>; active: Region<Element>; url: string; at: number; tail: unknown[] } | undefined;
   // The count of reads in a row that ran out of time at `read_at`, the address of the last read. It starts again at a new address.
@@ -84,8 +84,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
         if (timeouts_in_a_row >= 2) overran = { url, until: deps.now_() + OVERRUN_PAUSE_MS };
         if (timeouts_in_a_row !== 1) {
           // The list the user was on stays active while it shows (or, for an end command, always), and otherwise the list in view takes over.
-          const alive = active_items.find((item) => item.isConnected);
-          const old = found.regions.find((region) => alive && region.items.includes(alive));
+          const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)));
           const active = (keep ? old : most_in_view(old ? [old] : [])) ?? most_in_view(found.regions) ?? old ?? found;
           active_items = active.items;
           kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
