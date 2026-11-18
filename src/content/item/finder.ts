@@ -81,7 +81,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     // An empty, "#" or script address goes nowhere, so two links that share it share no target.
     const address = (link: N) => reader.attr_(link, "href")?.trim() ?? "";
     const shares_target = (link: N) => address(link) === address(links[0]!) && !/^(#?$|javascript:)/i.test(address(link));
-    const names_item = (link: N) => near_top(link, item) || shares_target(link);
+    const names_item = (link: N) => near_top(link, item) || link === links[0] || shares_target(link);
     const strong = headed.some(long_enough) ? headed.filter(long_enough) : links.filter((link) => long_enough(link) && names_item(link));
     return strong[0] ?? (links.length === 1 ? links[0] : undefined);
   });

@@ -130,3 +130,30 @@ test("links that share a real address or a fragment name their panel", () => {
     assert.equal(find_items(saved_reader(reply_panels(href))).items.length, 10, `href ${JSON.stringify(href)}`);
   }
 });
+
+// Cards whose picture is no link: the title link sits below it with a script address, and a short "Save" link follows. The title is the first link, so it names its card wherever it sits.
+test("a first link with a placeholder address still names its card below an unlinked picture", () => {
+  const tile = (index: number): SavedNode => {
+    const [x, y] = [35 + (index % 4) * 330, 120 + Math.floor(index / 4) * 310];
+    return {
+      t: "div",
+      a: { class: "tile" },
+      r: [x, y, 321, 290],
+      c: [
+        { t: "img", r: [x, y, 321, 200] },
+        { t: "a", a: { href: "javascript:void(0)" }, r: [x, y + 205, 300, 20], s: `The product with the number ${index} in its title`, c: [] },
+        { t: "a", a: { href: `/save/${index}` }, r: [x, y + 250, 60, 20], s: "Save", c: [] },
+      ],
+    };
+  };
+  const grid: SavedNode = { t: "div", a: { class: "grid" }, r: [35, 120, 1310, 1860], c: Array.from({ length: 24 }, (_, index) => tile(index)) };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 2100], c: [{ t: "body", r: [0, 0, 1366, 2100], c: [grid] }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  const found = find_items(saved_reader({ view: { w: 1366, h: 682, doc_h: 2100 }, root }));
+  assert.equal(found.kind, "grid");
+  assert.equal(found.items.length, 24);
+});
