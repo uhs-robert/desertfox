@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_derived_row, NONE_RECHECK_MS } from "../src/content/item/derived.ts";
-import { FINDER_BUDGET_MS, FIRST_READ_BUDGET_MS } from "../src/content/item/finder.ts";
+import { create_derived_row, NONE_RECHECK_MS, OVERRUN_PAUSE_MS } from "../src/content/item/derived.ts";
+import { FINDER_BUDGET_MS, LONG_BUDGET_MS } from "../src/content/item/finder.ts";
 import type { Found } from "../src/content/item/finder.ts";
 
 type Fake = { name: string; isConnected: boolean; shown: boolean; contains: (node: unknown) => boolean };
@@ -196,7 +196,7 @@ test("after a hash change drops the kept answer, the next reads get the long bud
   row.items_();
   state.url = "https://a.test/#Notes";
   row.items_();
-  assert.deepEqual(state.budgets, [FIRST_READ_BUDGET_MS, FIRST_READ_BUDGET_MS, FIRST_READ_BUDGET_MS]);
+  assert.deepEqual(state.budgets, [LONG_BUDGET_MS, LONG_BUDGET_MS, LONG_BUDGET_MS]);
 });
 
 test("at an address where two reads overran the long budget, reads get the short one until the address changes", () => {
@@ -208,5 +208,40 @@ test("at an address where two reads overran the long budget, reads get the short
   row.items_();
   state.url = "https://a.test/other";
   row.items_();
-  assert.deepEqual(state.budgets, [FIRST_READ_BUDGET_MS, FIRST_READ_BUDGET_MS, FINDER_BUDGET_MS, FIRST_READ_BUDGET_MS]);
+  assert.deepEqual(state.budgets, [LONG_BUDGET_MS, LONG_BUDGET_MS, FINDER_BUDGET_MS, LONG_BUDGET_MS]);
+});
+
+test("a held j on a page with no list re-reads its expired none with the short budget, and a timeout there keeps the none", () => {
+  const { state, row } = setup([]);
+  row.items_();
+  state.clock += NONE_RECHECK_MS;
+  row.items_();
+  state.fails = "timeout";
+  state.clock += NONE_RECHECK_MS;
+  assert.deepEqual(row.items_(), []);
+  row.items_();
+  assert.deepEqual([state.budgets, state.finds], [[LONG_BUDGET_MS, FINDER_BUDGET_MS, FINDER_BUDGET_MS], 3]);
+});
+
+test("the overrun count starts again at a new address, so its first timeout is not kept", () => {
+  const { state, row } = setup([]);
+  state.fails = "timeout";
+  row.items_();
+  row.items_();
+  state.url = "https://a.test/#Notes";
+  row.items_();
+  row.items_();
+  assert.deepEqual(state.budgets, [LONG_BUDGET_MS, LONG_BUDGET_MS, LONG_BUDGET_MS, LONG_BUDGET_MS]);
+});
+
+test("two overruns put the address on the short budget only for a while, then the long one tries again", () => {
+  const { state, row } = setup([]);
+  state.fails = "timeout";
+  row.items_();
+  row.items_();
+  state.clock += NONE_RECHECK_MS;
+  row.items_();
+  state.clock += OVERRUN_PAUSE_MS;
+  row.items_();
+  assert.deepEqual(state.budgets, [LONG_BUDGET_MS, LONG_BUDGET_MS, FINDER_BUDGET_MS, LONG_BUDGET_MS]);
 });
