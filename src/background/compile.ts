@@ -168,11 +168,12 @@ export function compile_config(input: CompileInput): CompileOutput {
   return { compiled, theme: { dark: theme.dark, light: theme.light, ...stored_font(input.config.settings) }, warnings: [...resolve_warnings, ...warnings] };
 }
 
-// A normal-mode binding a site row takes as it is: one step, no prompt, no key to wait for, and args that pass the check. Any other entry compiles only in the keymap, so a hold-back row skips it and the finder keeps the key.
+// A normal-mode binding a site row takes as it is: known commands, no prompt, no key to wait for, and args that pass the check, in each step of a list. Any other entry compiles only in the keymap, so a hold-back row skips it and the finder keeps the key.
 function is_plain_bind(binding: KeyBinding, input: CompileInput): boolean {
-  if (Array.isArray(binding) || binding.prompt) return false;
-  const command = input.get_command(binding.id);
-  return command === undefined || (mode_problem("normal", command) === undefined && captured_key_param(command, binding.args) === undefined && check_args(command, binding.args, input.enum_sources).ok);
+  return [binding].flat().every((step) => {
+    const command = input.get_command(step.id);
+    return command !== undefined && !step.prompt && mode_problem("normal", command) === undefined && captured_key_param(command, step.args) === undefined && check_args(command, step.args, input.enum_sources).ok;
+  });
 }
 
 // Checks the binds of a site row, one of its keymap modes or one of its site modes, and drops the bad ones in place. `mode` is the keymap mode the commands must fit: a site mode lays over normal mode, so its binds run in normal mode.
