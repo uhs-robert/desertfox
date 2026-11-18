@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 498 (normal 266, media 59, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 497 (normal 266, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -275,7 +275,7 @@ bound: 498 (normal 266, media 59, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `;fF` | `frame.exit` | Focus top page |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |
 | `;fe` | `page.focus_input` | Main input |
-| `;L` | `hint --focus --lists` | Pick the list for j and k |
+| `;j` | `hint --focus --lists` | Pick the list for j and k |
 | `;fh` | `hint --focus --headings` | Focus heading |
 | `;m` | `hint --media` | Play or pause media |
 | `;M` | `hint --enter-media --media` | Start media mode at a video |
@@ -358,7 +358,6 @@ Which-key group names:
 | `;hf` | `hint --hover --frames` | Hover frame |
 | `;xf` | `hint --delete --frames` | Delete frame |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |
-| `;L` | `hint --focus --lists` | Pick the list for j and k |
 | `;fh` | `hint --focus --headings` | Focus heading |
 | `;m` | `hint --media` | Play or pause media |
 | `;M` | `hint --enter-media --media` | Start media mode at a video |

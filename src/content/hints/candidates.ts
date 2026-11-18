@@ -105,7 +105,7 @@ export const is_draggable = (element: Element, swipe = false): boolean => {
 
 export const is_swipeable = (element: Element): boolean => is_draggable(element, true);
 
-// What the `lists` filter labels: the first shown item of each list the item bundle found, mapped to its list. Module state, because `;L` never runs rapid and so never rebuilds labels from a stored session.
+// What the `lists` filter labels: the first shown item of each list the item bundle found, mapped to its list. Module state, because `;j` never runs rapid and so never rebuilds labels from a stored session.
 export const list_targets = new Map<Element, unknown>();
 const QUERIES: Record<Exclude<HintFilter, "custom" | "drop">, Query> = {
   lists: { selector: "*", test: (element) => list_targets.has(element) },

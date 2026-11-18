@@ -15,7 +15,7 @@ import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
 import { copy_yank } from "../caret/copy_text.ts";
 import { keeps_narrowing, drop_targets_of } from "./drop_targets.ts";
-import { list_targets, is_rect_off_screen, collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
+import { list_targets, collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
 import { clean_letters, make_labels, narrow } from "./labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
@@ -246,7 +246,9 @@ type HandOver = (text: string, what?: string) => void;
 let picking = false;
 
 const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
-  if (current.args.filter === "lists") void page.desertfox_host.run_command_("item.lists", "item", { region: list_targets.get(element) });
+  // A list's pick makes the list active and focuses what j focuses, the title link, so Enter opens it.
+  const region = current.args.filter === "lists" ? (list_targets.get(element) as { links: Map<Element, HTMLElement | undefined> } | undefined) : undefined;
+  if (region) (void page.desertfox_host.run_command_("item.lists", "item", { region }), (element = region.links.get(element) ?? element));
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
   // A pick right after a jump is the user's own move, so the address change it makes records.
   arm_leave_watch(page.desertfox_host).quiet_(false);
@@ -267,6 +269,19 @@ const ACROSS_START_WAIT_MS = 2000;
 
 // Across frames every frame runs the bundle, and a parent that can read a frame (same origin, about:blank) already labels it with its own walk. Such a frame labels nothing itself, so no element gets two labels. A frame of another site reads null here.
 const parent_labels_me = (): boolean => window.frameElement !== null;
+
+// The first item of a list that shows the way `in_view_` in the item bundle reads it: clipped to the window and probed at its middle, so an item a scroll box or a fixed header hides does not stand for its list.
+const shows = (item: Element): boolean => {
+  const rect = item.getBoundingClientRect();
+  const [left, top, right, bottom] = [Math.max(rect.left, 0), Math.max(rect.top, 0), Math.min(rect.right, innerWidth), Math.min(rect.bottom, innerHeight)];
+  return right > left && bottom > top && item.contains((item.getRootNode() as Document).elementFromPoint((left + right) / 2, (top + bottom) / 2));
+};
+
+// Each frame fills its own map from its own item bundle, before it collects.
+const fill_list_targets = async (): Promise<void> => {
+  list_targets.clear();
+  await page.desertfox_host.run_command_("item.lists", "item", { take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
+};
 
 const texts_of = (found: Found[]): string[] => found.map((item) => text_of(item.element));
 
@@ -563,10 +578,7 @@ function register(host: PageHostApi): void {
     args = plain_args;
     let filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
-    if (filter === "lists") {
-      list_targets.clear();
-      await host.run_command_("item.lists", "item", { take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find((item) => !is_rect_off_screen(item.getBoundingClientRect(), innerWidth, innerHeight)); if (first) list_targets.set(first, region); }) });
-    }
+    if (filter === "lists") await fill_list_targets();
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
@@ -635,6 +647,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     const filter = args.filter as HintFilter;
     const text = (args.text as string | undefined) || undefined;
     let found: Found[] = [];
+    if (filter === "lists") await fill_list_targets();
     const [site_selectors, patterns] = await Promise.all([read_site_selectors(() => {}), read_strip_patterns(window.location.href)]);
     strip_patterns = patterns;
     // A parent labels its readable child only when it is asked itself, which only `all_frames` does. A lone parked frame labels its own targets.
