@@ -20,8 +20,9 @@ file, so a reader never sees a partial file.
 It also owns a Unix socket, $XDG_RUNTIME_DIR/desertfox/bridge.sock, mode 0600. Whoever holds the flock on bridge.lock
 owns the socket and the state file: the first host wins, and a second one waits LOCK_WAIT_S for the lock, then exits
 without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping`,
-`state`, `run`, `list`, `theme`, the Firefox tab verbs `tabs`, `activate`, `clear_preface`, `close` and `capture`, and
-the Thunderbird mail reads `folders`, `messages`, `message` and `attachments`. Each but `ping` and `state` goes to the
+`state`, `run`, `list`, `theme`, the Firefox tab verbs `tabs`, `activate`, `clear_preface`, `close` and `capture`, the
+Thunderbird mail reads `folders`, `messages`, `message` and `attachments`, and the Thunderbird mail writes `draft` and
+`act` (see MAIL_WRITE_VERBS). Each but `ping` and `state` goes to the
 extension as {"verb", "request_id", ...fields}, and the extension decides what runs: it holds the bridge field, the
 never-list, the argument validator, the bridge_share_tabs opt-in and the private-window filter. The host only
 forwards, limits the rate and routes each reply back to the connection that asked. A run reply is cut to `ok` and a
@@ -71,7 +72,8 @@ MAX_MESSAGE_BYTES = 1024 * 1024
 MAX_SKIPPED_BYTES = 256 * 1024 * 1024
 MAX_TEXT_CHARS = 64
 LOCK_WAIT_S = 3
-MAX_REQUEST_BYTES = 64 * 1024
+# A draft carries a body of up to 64 KiB of UTF-8, which JSON escaping can grow, so the cap is three times that for every verb.
+MAX_REQUEST_BYTES = 192 * 1024
 IDLE_TIMEOUT_S = 5
 MAX_CONNECTIONS = 16
 ACCEPT_RETRY_S = 0.1
@@ -564,6 +566,8 @@ class ExtensionLink:
         # Requests being answered, from the start of the answer to the end of the write to the client. Shutdown waits for these, not for `pending`, which empties before the write.
         self.busy = 0
         self.next_id = 1
+        # A human answers an act, so only one waits at a time. A second one is refused as busy and never reaches the extension.
+        self.act_slot = threading.Lock()
         # False until say_ready, so a request before it is refused and never reaches the extension.
         self.open = False
 
@@ -598,13 +602,19 @@ class ExtensionLink:
             self.pending.pop(waiting.request_id, None)
             self.pending_guard.notify_all()
 
-    def wait(self, waiting, timeout_s):
-        """The extension's reply dict, or {"ok": False, "message": ...} when it cannot answer."""
+    def wait(self, waiting, timeout_s, client_left=None):
+        """The extension's reply dict, or {"ok": False, "message": ...} when it cannot answer. With `client_left` the
+        wait also ends, every PEER_CHECK_S, once the client that asked has gone."""
         if waiting.request_id is None:
             return waiting.reply
+        deadline = time.monotonic() + timeout_s
+        check_every_s = PEER_CHECK_S if client_left else timeout_s
         try:
-            if not waiting.done.wait(timeout_s):
-                return {"ok": False, "message": "the extension did not answer in time"}
+            while not waiting.done.wait(max(0, min(deadline - time.monotonic(), check_every_s))):
+                if time.monotonic() >= deadline:
+                    return {"ok": False, "message": "the extension did not answer in time"}
+                if client_left and client_left():
+                    return {"ok": False, "message": "the client left"}
             if self.serves_tabs:
                 forget_caches_if_sharing_off(waiting.reply)
             return waiting.reply
@@ -971,7 +981,108 @@ def mail_read_result(reply):
     return {name: value for name, value in reply.items() if name not in ("verb", "request_id")}
 
 
-def answer(request, state, link, limiter):
+# The mail writes. The add-on checks the settings, the address shapes and the identity, and asks a human before an act.
+# The host checks the field types and sizes, sends only the known fields, and cuts the reply to `ok`, a short `message`
+# and an act's `count`, so no draft id or mail data leaves through it.
+MAIL_WRITE_VERBS = ("draft", "act")
+MAX_RECIPIENTS = 10
+# Room for a display name beside the address. The add-on checks the address shape.
+MAX_ADDRESS_CHARS = 320
+# The longest header line RFC 5322 allows.
+MAX_SUBJECT_CHARS = 998
+MAX_BODY_BYTES = 64 * 1024
+MAX_ACT_IDS = 50
+ACT_ACTIONS = ("archive", "trash", "move")
+# The add-on's confirm prompt gives up after 30 s, so its "timed out" comes back well inside this wait.
+ACT_TIMEOUT_S = 70
+
+
+def is_header_text(value, limit):
+    """A string of at most `limit` characters with no control character or lone surrogate, as a header line needs."""
+    return isinstance(value, str) and len(value) <= limit and not any(ord(char) < 32 or 127 <= ord(char) < 160 or 0xD800 <= ord(char) < 0xE000 for char in value)
+
+
+def is_address(value):
+    return is_header_text(value, MAX_ADDRESS_CHARS) and value.strip() != ""
+
+
+def utf8_size(text):
+    """The UTF-8 size of `text`, or None when it holds a lone surrogate, which has no UTF-8 form."""
+    try:
+        return len(text.encode("utf-8"))
+    except UnicodeEncodeError:
+        return None
+
+
+def draft_fields(request):
+    """The fields that go to the add-on for a draft, or a refusal text for a request of the wrong shape."""
+    fields = {}
+    if "reply_to_id" in request:
+        if not is_int(request["reply_to_id"]):
+            return "reply_to_id is a whole message id"
+        fields["reply_to_id"] = request["reply_to_id"]
+    fewest_to = 0 if "reply_to_id" in fields else 1
+    to = request.get("to")
+    if not (isinstance(to, list) and fewest_to <= len(to) <= MAX_RECIPIENTS and all(is_address(address) for address in to)):
+        return "to is a list of %d to %d addresses of at most %d characters, with no control characters" % (fewest_to, MAX_RECIPIENTS, MAX_ADDRESS_CHARS)
+    fields["to"] = to
+    if "cc" in request:
+        cc = request["cc"]
+        if not (isinstance(cc, list) and len(cc) <= MAX_RECIPIENTS and all(is_address(address) for address in cc)):
+            return "cc is a list of at most %d addresses of at most %d characters, with no control characters" % (MAX_RECIPIENTS, MAX_ADDRESS_CHARS)
+        fields["cc"] = cc
+    if "from" in request:
+        if not is_address(request["from"]):
+            return "from is one address of at most %d characters, with no control characters" % MAX_ADDRESS_CHARS
+        fields["from"] = request["from"]
+    if not is_header_text(request.get("subject"), MAX_SUBJECT_CHARS):
+        return "subject is a text of at most %d characters, with no control characters" % MAX_SUBJECT_CHARS
+    fields["subject"] = request["subject"]
+    body = request.get("body")
+    size = utf8_size(body) if isinstance(body, str) else None
+    if size is None or size > MAX_BODY_BYTES:
+        return "body is a text of at most %d bytes of UTF-8" % MAX_BODY_BYTES
+    fields["body"] = body
+    return fields
+
+
+def act_fields(request):
+    """The fields that go to the add-on for an act, or a refusal text for a request of the wrong shape."""
+    action = request.get("action")
+    if action not in ACT_ACTIONS:
+        return "action is archive, trash or move"
+    ids = request.get("ids")
+    if not (isinstance(ids, list) and 1 <= len(ids) <= MAX_ACT_IDS and all(is_int(message_id) for message_id in ids) and len(set(ids)) == len(ids)):
+        return "ids is a list of 1 to %d different whole message ids" % MAX_ACT_IDS
+    fields = {"action": action, "ids": ids}
+    folder = request.get("folder")
+    if action != "move":
+        return "only move takes a folder" if "folder" in request else fields
+    if not (isinstance(folder, str) and 0 < len(folder) <= MAX_FOLDER_ID_CHARS):
+        return "move needs a folder id of 1 to %d characters" % MAX_FOLDER_ID_CHARS
+    return dict(fields, folder=folder)
+
+
+def act_result(reply):
+    result = run_result(reply)
+    if result["ok"] and is_int(reply.get("count")):
+        result["count"] = reply["count"]
+    return result
+
+
+def answer_act(fields, link, client_left):
+    """Waits up to ACT_TIMEOUT_S for the human's answer. The slot frees on the reply, the timeout, the client leaving
+    and the port closing (which fails every waiting request), so no act can hold it for good."""
+    if not link.act_slot.acquire(blocking=False):
+        return {"ok": False, "message": "busy"}
+    try:
+        return act_result(link.wait(link.start("act", fields), ACT_TIMEOUT_S, client_left))
+    finally:
+        link.act_slot.release()
+
+
+def answer(request, state, link, limiter, client_left=None):
+    """The reply to one request. `client_left` says whether the client that asked has gone, so a long act wait can end early."""
     verb = request.get("verb") if isinstance(request, dict) else None
     if verb == "ping":
         return {"ok": True}
@@ -1011,6 +1122,17 @@ def answer(request, state, link, limiter):
         if not limiter.admit():
             return RATE_LIMITED
         return mail_read_result(link.ask(verb, fields, REQUEST_TIMEOUT_S))
+    if verb in MAIL_WRITE_VERBS:
+        if not APPS[state.app]["serves_mail"]:
+            return {"ok": False, "message": "mail writes need --app thunderbird"}
+        fields = draft_fields(request) if verb == "draft" else act_fields(request)
+        if isinstance(fields, str):
+            return {"ok": False, "message": fields}
+        if not limiter.admit():
+            return RATE_LIMITED
+        if verb == "draft":
+            return run_result(link.ask("draft", fields, REQUEST_TIMEOUT_S))
+        return answer_act(fields, link, client_left)
     if verb in TAB_VERBS:
         if not APPS[state.app]["serves_tabs"]:
             return {"ok": False, "message": "tab verbs need --app firefox"}
@@ -1035,6 +1157,17 @@ def subscribe(connection, hub, limiter):
         reply(connection, {"ok": False, "message": "too many subscribers"})
         return
     hub.stream(subscriber)
+
+
+def client_has_left(connection):
+    """True when the client closed its end. It peeks, so a request line the client already sent stays for the next read."""
+    readable, _, _ = select.select([connection], [], [], 0)
+    if not readable:
+        return False
+    try:
+        return connection.recv(1, socket.MSG_PEEK) == b""
+    except OSError:
+        return True
 
 
 def serve_connection(connection, state, link, hub, limiter, release_slot):
@@ -1062,7 +1195,7 @@ def serve_connection(connection, state, link, hub, limiter, release_slot):
                 subscribe(connection, hub, limiter)
                 return
             with link.working():
-                reply(connection, answer(request, state, link, limiter))
+                reply(connection, answer(request, state, link, limiter, lambda: client_has_left(connection)))
     except OSError:
         pass
     finally:

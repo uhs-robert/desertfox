@@ -446,7 +446,7 @@ class SocketTest(BridgeTestCase):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(liveness_s())
             client.connect(self.socket_path)
-            client.sendall(b"x" * (70 * 1024))
+            client.sendall(b"x" * (200 * 1024))
             data = client.recv(4096)
         self.assertEqual(json.loads(data), {"ok": False, "message": "request too large"})
         self.assertEqual(self.ask({"verb": "ping"}), {"ok": True})
