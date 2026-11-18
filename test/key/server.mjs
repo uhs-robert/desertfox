@@ -635,6 +635,18 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const body = `${chrome("header", "banner")}${chrome("nav", "menu")}${text("p1")}${text("p2")}<h2 id="sec" style="margin:0">Section</h2>${text("p3")}<div style="height:3000px"></div>${chrome("footer", "foot")}`;
       return response.end(page(`article ${id}`, body));
     }
+    if (url.pathname === "/article_scroller") {
+      // The page does not scroll: a div does, and a 70px bar sticks to its top. The title is hidden so the blocks are p1 to p4.
+      const text = (name) => `<p id="${name}" style="min-height:600px;margin:0">Paragraph ${name} holds enough running text to be a stop for the brace keys.</p>`;
+      const body = `<div style="position:fixed;inset:0;overflow:auto"><div style="position:sticky;top:0;height:70px;background:#468;z-index:2">Bar</div>${text("p1")}${text("p2")}${text("p3")}${text("p4")}<div style="height:2000px"></div></div>`;
+      return response.end(page(`article_scroller ${id}`, body, "<style>h1{display:none}body{overflow:hidden}</style>"));
+    }
+    if (url.pathname === "/article_late_bar") {
+      // A 40px banner scrolls away, and the 60px bar under it sticks to the top only once the page has scrolled past the banner, so a read at the top edge before the jump finds nothing.
+      const text = (name) => `<p id="${name}" style="min-height:700px;margin:0">Paragraph ${name} holds enough running text to be a stop for the brace keys.</p>`;
+      const body = `<div style="height:40px">Banner</div><div style="position:sticky;top:0;height:60px;background:#468;z-index:2">Bar</div>${text("p1")}${text("p2")}${text("p3")}<div style="height:2000px"></div>`;
+      return response.end(page(`article_late_bar ${id}`, body, "<style>h1{display:none}</style>"));
+    }
     if (url.pathname === "/headings_many") {
       // Sixty headings, more than the panel shows. "Section 59" is the last row, so its label is below the panel's edge.
       const sections = Array.from({ length: 60 }, (_, index) => `<h2 id="section_${index}">Section ${index}</h2><div style="height:200px"></div>`).join("");

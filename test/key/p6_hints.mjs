@@ -495,6 +495,31 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     expect((await scroll_delta_by_press("p6_article", ["j"])) > 0, "j did not scroll the article");
   });
 
+  await run_case("} and { land below a sticky bar in a div scroller, and { passes the block it just placed", async () => {
+    await open_page("article_scroller", "p6_article_scroller", { new_tab: true });
+    const below_bar = async (id) => Math.abs((await top_of(id)) - 70) <= 3;
+    await press_keys("2}");
+    await poll_until("p2 below the bar", async () => await below_bar("p2"));
+    await press_keys("}");
+    await poll_until("p3 below the bar", async () => await below_bar("p3"));
+    await press_keys("{");
+    await poll_until("p2 below the bar again", async () => await below_bar("p2"));
+    await press_keys("{");
+    await poll_until("p1 below the bar", async () => await below_bar("p1"));
+    await press_keys("{");
+    await poll_until("the notice before the first section", async () => (await toast_text()).includes("No previous section"));
+  });
+
+  await run_case("} lands below a bar that sticks only once the page has scrolled, from the page top", async () => {
+    await open_page("article_late_bar", "p6_article_late_bar", { new_tab: true });
+    await press_keys("}");
+    await poll_until("p1 below the bar", async () => Math.abs((await top_of("p1")) - 60) <= 3);
+    await press_keys("}");
+    await poll_until("p2 below the bar", async () => Math.abs((await top_of("p2")) - 60) <= 3);
+    await press_keys("{");
+    await poll_until("p1 below the bar again", async () => Math.abs((await top_of("p1")) - 60) <= 3);
+  });
+
   await run_case("sh jumps to a heading in a same-origin frame, skips one in a hidden frame, and scrolls the frame too", async () => {
     await open_page("headings_frames", "p6_headings_frames", { new_tab: true });
     await open_headings_line(3);
