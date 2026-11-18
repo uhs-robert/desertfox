@@ -19,7 +19,7 @@ const { min, max } = Math;
 // The overflow scan reads at most this many elements per tick, so a huge item stays cheap.
 const OVERFLOW_SCAN_LIMIT = 200;
 
-// Under the pointer or while it holds the focus, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover or on focus (Google Shopping zooms on both). Otherwise, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle: a hidden menu or an off-screen label would stretch it. The walk skips what a box inside the item clips (a carousel row), and that box with it.
+// Under the pointer or while it holds the focus, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover or on focus (Google Shopping zooms on both). Otherwise, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle. The walk skips what a box inside the item clips (a carousel row), and that box with it. It also skips what the eye does not see: a hidden or transparent child (a menu) and one wholly outside the viewport (screen-reader text at left:-9999px), which would stretch the box on every tick.
 function covered_rect(item: Element) {
   const own = item.getBoundingClientRect();
   const clips = (element: Element) => getComputedStyle(element).overflow !== "visible";
@@ -30,7 +30,8 @@ function covered_rect(item: Element) {
   const walker = document.createTreeWalker(item, 1, (node) => (++seen > OVERFLOW_SCAN_LIMIT || clips(node as Element) ? 2 : 1));
   while (walker.nextNode()) {
     const rect = (walker.currentNode as Element).getBoundingClientRect();
-    if (rect.width) [left, top, right, bottom] = [min(left, rect.left), min(top, rect.top), max(right, rect.right), max(bottom, rect.bottom)];
+    const seen_by_eye = (walker.currentNode as Element).checkVisibility({ visibilityProperty: true, opacityProperty: true }) && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+    if (rect.width && seen_by_eye) [left, top, right, bottom] = [min(left, rect.left), min(top, rect.top), max(right, rect.right), max(bottom, rect.bottom)];
   }
   return new DOMRect(left, top, right - left, bottom - top);
 }
