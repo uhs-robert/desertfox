@@ -80,13 +80,13 @@ const ARROW_MODE: SiteModeTable[string] = {
 };
 
 // Result pages that j and k walk item by item through `page.item`. Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
-const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last" | "current"): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction } });
+const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last" | "current", hover = false): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction, ...(hover ? { hover } : {}) } });
 // gg and G go to the first and last item. `page.item` does nothing for them on a page that shows no item, so `when_present` hands those pages the plain scroll to the top and bottom.
-const end_binds = (selector: string, link: string | undefined): BindingTable => ({
-  gg: { ...item_step(selector, link, "first"), when_present: selector },
-  G: { ...item_step(selector, link, "last"), when_present: selector },
+const end_binds = (selector: string, link: string | undefined, hover = false): BindingTable => ({
+  gg: { ...item_step(selector, link, "first", hover), when_present: selector },
+  G: { ...item_step(selector, link, "last", hover), when_present: selector },
 });
-const item_binds = (selector: string, link?: string): BindingTable => ({ j: item_step(selector, link, "down"), k: item_step(selector, link, "up"), ...end_binds(selector, link) });
+const item_binds = (selector: string, link?: string, hover = false): BindingTable => ({ j: item_step(selector, link, "down", hover), k: item_step(selector, link, "up", hover), ...end_binds(selector, link, hover) });
 // A result is the block that holds a title link, so the box spans site, address, title and snippet. `.MjjYud` is a generated class, but the block is its own nesting level in every layout read, and when the class changes the selector matches nothing and j and k scroll as usual.
 const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)");
 const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="result-title-a"]');
@@ -94,21 +94,22 @@ const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
 const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 // A grid of tiles has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
-const grid_binds = (selector: string, link?: string): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction)])), ...end_binds(selector, link) });
+// `hover` is for a grid of video thumbnails: the box starts the tile's preview (the `item_hover` setting turns it off).
+const grid_binds = (selector: string, link?: string, hover = false): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction, hover)])), ...end_binds(selector, link, hover) });
 // The tile is a figure, which holds the picture and its caption link.
 const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 // A Google image tile is a div with a picture button (focusable) and a caption link.
 const GOOGLE_IMAGE_TILES = grid_binds('div[data-attrid="images universal"]', '[role="button"]');
 // The Videos tab puts every video in one `.MjjYud` block, so the web row's selector boxes them all as one item. Each video is the innermost block with a data-hveid that holds a title link. The next pages load below `#search`, so the selector looks in `#center_col`.
-const GOOGLE_VIDEO_ITEMS = item_binds("#center_col div.MjjYud div[data-hveid]:has(a > h3):not(:has(div[data-hveid] a > h3))", "a:has(> h3)");
+const GOOGLE_VIDEO_ITEMS = item_binds("#center_col div.MjjYud div[data-hveid]:has(a > h3):not(:has(div[data-hveid] a > h3))", "a:has(> h3)", true);
 // The News tab opens with a two-by-two grid of top stories above the list, so h and l reach the right column. Only the stories carry data-news-doc-id.
 const GOOGLE_NEWS_ITEMS = grid_binds("#rso [data-news-doc-id]", "a[href]");
 // A short video tile has no h3, so the web row matches nothing there. Its first link is the thumbnail or the caption, which open the same video. The next pages load below `#rso`.
-const GOOGLE_SHORT_VIDEO_TILES = grid_binds("#center_col div.MjjYud:has(a[href])", "a[href]");
+const GOOGLE_SHORT_VIDEO_TILES = grid_binds("#center_col div.MjjYud:has(a[href])", "a[href]", true);
 // A Shopping tile holds no link: its role=button opens the product panel on Enter.
 const GOOGLE_SHOPPING_TILES = grid_binds("[data-cid][data-pid]", '[role="button"]');
 // The video tile is a link around an article, so it takes the focus itself.
-const DDG_VIDEO_TILES = grid_binds('[data-testid="zci-videos"] a:has(> article)');
+const DDG_VIDEO_TILES = grid_binds('[data-testid="zci-videos"] a:has(> article)', undefined, true);
 const DDG_NEWS_ITEMS = item_binds('[data-testid="news-vertical"] li > article', "a:has(h2)");
 const WIKIPEDIA_ITEMS = item_binds("li.mw-search-result", ".mw-search-result-heading a");
 const LOBSTERS_ITEMS = item_binds("ol.stories > li.story", "a.u-url");

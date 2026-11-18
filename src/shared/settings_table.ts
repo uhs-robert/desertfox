@@ -136,6 +136,8 @@ export const SETTINGS_TABLE = {
   completion_all_windows: { kind: "boolean", default: false },
   // Lets j and k walk the list or grid of items that the finder (`src/content/item/finder.ts`) finds on a page that has no site row of its own. Off until the finder has no known misses left.
   item_finder: { kind: "boolean", default: false },
+  // Sends the pointer events of a resting mouse to the item that `page.item` boxes on a thumbnail tile, so a video preview starts. Fills the `hover` arg of the rows that ask for it (`src/background/compile.ts`).
+  item_hover: { kind: "boolean", default: true },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },
   // List order is display order. An empty list hides the status area.

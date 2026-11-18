@@ -39,8 +39,8 @@ const MAX_BYTES = {
   // 6.5 KB: the box follows only a row item that took the focus since the box was drawn, so a focus the user left on another item does not pull it away.
   // 13 KB: the item finder behind `page.item` with no selector (`finder.ts`, the repeated blocks it shares with `]]` in `groups.ts`, the derived row and its cache in `derived.ts`, and the live page reader). It reads a page once and walks the list or grid it finds. The owner accepted about 11 KB for it on the 3.8 KB bundle the plan measured. The bundle was 6.3 KB when it landed, so it is larger.
   // 13.25 KB: the gg and G page pin and panel reveal land beside the item finder.
-  // 13.5 KB: the finder skips an inner group that is only the text parts of the cards it already picked.
-  "item.js": 13.5 * 1024,
+  // 15 KB: the hover of the boxed tile (`hover.ts`): the pointer events a resting mouse sends, the 300 ms wait, and the undo.
+  "item.js": 15 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.

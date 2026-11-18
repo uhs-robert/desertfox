@@ -1,11 +1,12 @@
 import { is_shown } from "../shown.ts";
 import { follow_end } from "./ends.ts";
+import { thumbnail } from "./hover.ts";
 import type { EndPage } from "./ends.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
 export type ItemDirection = MoveDirection | "first" | "last" | "current";
 // With no selector (undefined, or the empty text the validator fills in) the items come from the derived row (`ItemPage.derived`).
-export type ItemArgs = { selector?: string; link?: string; direction: ItemDirection; times?: number };
+export type ItemArgs = { selector?: string; link?: string; direction: ItemDirection; times?: number; hover?: boolean };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
 // Where the move starts. `on_item` is false when no item holds the focus or was the last move, and `index` is then the first item not above the view, or the item count when all are above it.
@@ -71,7 +72,7 @@ export type ItemPage = EndPage & {
   // The page scroll of the plain keys, for a page where no item matches.
   scroll_by: (dx: number, dy: number) => void;
   // Draws the box around the item, which follows the focus among the items the selector matches.
-  highlight: (item: Element, selector: string) => void;
+  highlight: (item: Element, selector: string, hover?: boolean) => void;
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
@@ -150,5 +151,6 @@ function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, p
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };
-  page.highlight(item, row_selector(page, args));
+  // A row that names its selector asks for the hover outright. The finder's items get it only when one holds a thumbnail, so a text result gets no hover card opened.
+  page.highlight(item, row_selector(page, args), !!args.hover && (!!args.selector || !!thumbnail(item)));
 }

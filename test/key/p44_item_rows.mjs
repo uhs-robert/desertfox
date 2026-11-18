@@ -437,6 +437,33 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("the address to name the last video", async () => (await in_active_tab("location.hash")) === "#d5");
   });
 
+  // The hover of the boxed tile: the shipped ddg videos row asks for it, so a tile gets the enter events about 300 ms after the land, the leave after a j that scrolls to another tile, and the leave on Escape.
+  await run_case("on ddg videos, the boxed tile gets enter after the land and leave after a scrolling j and on Escape", async () => {
+    await open_page("controls", "dvid_hover", { new_tab: true });
+    await in_active_tab(`(() => {
+      window.hover_log = [];
+      const videos = document.createElement("div");
+      videos.dataset.testid = "zci-videos";
+      videos.innerHTML = '<ol style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,300px);gap:12px">' + [0, 1, 2, 3].map((index) => '<li><a id="d' + index + '" href="#d' + index + '" style="display:block"><article style="height:700px"><img alt="" width="200" height="120" style="display:block"></article></a></li>').join("") + '</ol>';
+      document.body.prepend(videos);
+      for (const link of videos.querySelectorAll("a")) for (const type of ["mouseenter", "mouseleave"]) link.addEventListener(type, () => window.hover_log.push(type + "@" + link.id));
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+    const hover_log = () => in_active_tab("window.hover_log.join()");
+    await press_keys("j");
+    await expect_focus("d0");
+    expect((await hover_log()) === "", "the hover started before its wait");
+    await poll_until("the enter on the first tile", async () => (await hover_log()) === "mouseenter@d0");
+    await press_keys("j");
+    await expect_focus("d2");
+    await poll_until("the leave of the first tile after a scrolling j", async () => (await hover_log()).startsWith("mouseenter@d0,mouseleave@d0"));
+    await poll_until("the enter on the third tile", async () => (await hover_log()).endsWith("mouseenter@d2"));
+    await press_keys("-k", "Escape");
+    await poll_until("the leave of the third tile on Escape", async () => (await hover_log()).endsWith("mouseenter@d2,mouseleave@d2"));
+  });
+
   // A page of one site that lists both result shapes: ddg articles and image tiles. Which one j walks depends on the row the address matches.
   const open_both_shapes = async (id) => {
     await open_page("controls", id, { new_tab: true });

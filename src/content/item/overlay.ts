@@ -3,6 +3,7 @@
 import { LAYERS } from "../../shared/layers.ts";
 import { follow_windows } from "../hints/follow.ts";
 import type { UserLeft } from "../user_left.ts";
+import { hover_at } from "./hover.ts";
 
 // Defaults are var() fallbacks, never declarations, as in the hint labels.
 const STYLE = `
@@ -18,6 +19,8 @@ const PAGE_FOCUS_GRACE_TICKS = 10;
 const { min, max } = Math;
 // The overflow scan reads at most this many elements per tick, so a huge item stays cheap.
 const OVERFLOW_SCAN_LIMIT = 200;
+// A hover starts this long after the last land, so a held j does not start a preview on every tile it passes.
+const HOVER_DELAY_MS = 300;
 
 // Under the pointer or while it holds the focus, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover or on focus (Google Shopping zooms on both). Otherwise, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle. The walk skips what a box inside the item clips (a carousel row), and that box with it. It also skips what the eye does not see: a hidden or transparent child (a menu) and one wholly outside the viewport (screen-reader text at left:-9999px), which would stretch the box on every tick.
 function covered_rect(item: Element) {
@@ -55,6 +58,9 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
   // The focus when the box was last drawn. Only a row item that took the focus since then gets the box: one that already held it (a Tab, then a j that only scrolls another item) is the user's old focus, not a page script's move.
   let focus_at_show: Element | null = null;
   let stop_following: (() => void) | undefined;
+  // The timer that waits to hover the item, and the function that undoes the hover once done.
+  let hover_timer: ReturnType<typeof setTimeout> | undefined;
+  let unhover: (() => void) | undefined;
   let watch: ReturnType<typeof setInterval> | undefined;
 
   const reposition = () => {
@@ -75,7 +81,14 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
     } else if (++ticks_away > PAGE_FOCUS_GRACE_TICKS) clear();
   };
 
+  function stop_hover(): void {
+    clearTimeout(hover_timer);
+    unhover?.();
+    unhover = undefined;
+  }
+
   function clear(): void {
+    stop_hover();
     item = undefined;
     user?.stop_();
     stop_following?.();
@@ -84,9 +97,13 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
     host.remove();
   }
 
-  // Without a selector the box is the focus mark. A redraw on the same item keeps the count of a page script's hold on the focus.
-  function show(target: Element, selector?: string): void {
-    if (target !== item) ticks_away = target.contains(document.activeElement) ? 0 : NaN;
+  // Without a selector the box is the focus mark, which never hovers. A redraw on the same item keeps the count of a page script's hold on the focus and its hover. An item the box follows the page's focus to gets none.
+  function show(target: Element, selector?: string, hover?: boolean): void {
+    if (target !== item) {
+      ticks_away = target.contains(document.activeElement) ? 0 : NaN;
+      stop_hover();
+      if (hover) hover_timer = setTimeout(() => target.isConnected && (unhover = hover_at(target)), HOVER_DELAY_MS);
+    }
     item = target;
     item_selector = selector;
     focus_at_show = document.activeElement;
