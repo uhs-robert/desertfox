@@ -75,9 +75,27 @@ export function pick_heading(rows: readonly HeadingItem[], typed: string): numbe
 
 // `scrollIntoView` moves only the document of the element, so each frame that holds it scrolls to the top in turn, innermost first.
 // It leaves focus, selection and the address alone, which a focus or a fragment would not.
-export function scroll_to_top(element: Element, frames: readonly Element[]): void {
+// `inset` is the height of a fixed or sticky bar that covers the top of the view: the target ends just below it, not under it.
+export function scroll_to_top(element: Element, frames: readonly Element[], inset = 0): void {
   for (const target of [element, ...[...frames].reverse()]) target.scrollIntoView({ block: "start", behavior: "instant" });
+  if (inset > 0) window.scrollBy({ top: -inset, behavior: "instant" });
 }
+
+// A bar taller than this share of the view is a wall or an overlay, not a header, and the scroll stays as it is.
+const MAX_INSET_SHARE = 1 / 3;
+
+// The bottom edge of the fixed or sticky element at the top of the view, or 0. One point at the top edge finds it: the element under the point, or the ancestor that sticks.
+export function covering_inset(hit: Element | null, position_of: (element: Element) => string, view_height: number): number {
+  for (let element = hit; element; element = element.parentElement) {
+    const position = position_of(element);
+    if (position !== "fixed" && position !== "sticky") continue;
+    const bottom = element.getBoundingClientRect().bottom;
+    return bottom > 0 && bottom <= view_height * MAX_INSET_SHARE ? Math.ceil(bottom) : 0;
+  }
+  return 0;
+}
+
+export const top_inset = (): number => covering_inset(document.elementFromPoint(window.innerWidth / 2, 1), (element) => getComputedStyle(element).position, window.innerHeight);
 
 type JumpSlot = { desertfox_heading_jump?: HeadingJump };
 let clears_slot = false;
@@ -155,15 +173,17 @@ const top_in_view = ({ element, frames }: Found): number => [element, ...frames]
 export function step_heading(direction: HeadingDirection, steps: number): string | undefined {
   const by_block = direction === "next_block" || direction === "prev_block";
   const found = keep_present_found(collect(document, by_block ? { selector: BLOCKS, test: is_block } : { selector: HEADINGS, test: is_heading }));
-  if (by_block && found.length === 0) return "No sections";
-  const tops = found.map(top_in_view);
+  if (found.length === 0) return by_block ? "No sections" : NO_HEADING[direction];
+  // The covering bar is the top line: a heading parked just below it counts as at the top, so the next press passes it.
+  const inset = top_inset();
+  const tops = found.map((item) => top_in_view(item) - inset);
   const remembered = last_heading?.deref();
   const at = remembered === undefined ? -1 : found.findIndex(({ element }) => element === remembered);
   const on_screen = at !== -1 && tops[at]! >= -AT_TOP_SLACK && tops[at]! < window.innerHeight;
   const index = pick_heading_step(tops, step_of(direction), steps, on_screen ? at : undefined);
   if (index === undefined) return NO_HEADING[direction];
   const { element, frames } = found[index]!;
-  scroll_to_top(element, frames);
+  scroll_to_top(element, frames, inset);
   keep_for_align(element, frames);
   last_heading = new WeakRef(element);
   return undefined;
@@ -172,10 +192,10 @@ export function step_heading(direction: HeadingDirection, steps: number): string
 export type Snapshot = { found: Found[]; rows: HeadingItem[] };
 
 // The heading may have left the page since the list was read, with its frame or alone.
-export function jump_in({ found, rows }: Snapshot, typed: string): Found {
+export function jump_in({ found, rows }: Snapshot, typed: string, inset = 0): Found {
   const chosen = found[pick_heading(rows, typed)]!;
   if (!chosen.element.isConnected || !chosen.frames.every((frame) => frame.isConnected)) throw new RuntimeRefusal("That heading is gone");
-  scroll_to_top(chosen.element, chosen.frames);
+  scroll_to_top(chosen.element, chosen.frames, inset);
   return chosen;
 }
 
@@ -196,7 +216,7 @@ export const clear_snapshot = (): void => {
 export function go_to_heading(typed: string): void {
   const held = snapshot;
   try {
-    const { element, frames } = jump_in(held ?? take_snapshot(), typed);
+    const { element, frames } = jump_in(held ?? take_snapshot(), typed, top_inset());
     keep_for_align(element, frames);
   } finally {
     if (!held) clear_snapshot();

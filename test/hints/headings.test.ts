@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { load } from "cheerio";
 import { test } from "node:test";
 import { is_heading } from "../../src/content/hints/heading_match.ts";
-import { NO_HEADING, heading_level, is_block, step_of, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top, step_heading } from "../../src/content/hints/headings.ts";
+import { NO_HEADING, covering_inset, heading_level, is_block, step_of, jump_in, keep_present, pick_heading, pick_heading_step, row_of, scroll_to_top, step_heading } from "../../src/content/hints/headings.ts";
 
 type FakeHeading = { localName: string; text?: string; rendered?: string; role?: string; level?: string };
 const heading = (fake: FakeHeading) => ({ localName: fake.localName, textContent: fake.text ?? "Title", innerText: fake.rendered ?? fake.text ?? "Title", getAttribute: (name: string) => (name === "role" ? (fake.role ?? null) : name === "aria-level" ? (fake.level ?? null) : null) }) as unknown as Element;
@@ -251,5 +251,43 @@ test("the notices name the section at the ends and on a page with none", () => {
     assert.equal(step_heading("next", 1), "No next heading");
   } finally {
     Object.defineProperty(globalThis, "document", { value: real, configurable: true });
+  }
+});
+
+// A chain from the element under the probe point up to the root: each link has a position and, for the bar, the bottom edge.
+const chain = (...links: { position: string; bottom?: number }[]): Element | null => {
+  let parent: Element | null = null;
+  for (const link of [...links].reverse()) parent = { parentElement: parent, position: link.position, getBoundingClientRect: () => ({ bottom: link.bottom ?? 0 }) } as unknown as Element;
+  return parent;
+};
+const position_of = (element: Element) => (element as unknown as { position: string }).position;
+
+test("a sticky or fixed element at the top edge gives the height of the view it covers", () => {
+  assert.equal(covering_inset(chain({ position: "static" }, { position: "sticky", bottom: 97.2 }, { position: "static" }), position_of, 1000), 98);
+  assert.equal(covering_inset(chain({ position: "fixed", bottom: 75 }), position_of, 1000), 75);
+});
+
+test("with no fixed or sticky element at the top edge, or a hit on nothing, there is no inset", () => {
+  assert.equal(covering_inset(chain({ position: "static" }, { position: "relative", bottom: 50 }), position_of, 1000), 0);
+  assert.equal(covering_inset(null, position_of, 1000), 0);
+});
+
+test("a bar over a third of the view or with no height below the top is not a header", () => {
+  assert.equal(covering_inset(chain({ position: "fixed", bottom: 400 }), position_of, 1000), 0);
+  assert.equal(covering_inset(chain({ position: "fixed", bottom: 0 }), position_of, 1000), 0);
+});
+
+test("scroll_to_top moves the page back by the inset, and not at all without one", () => {
+  const moves: unknown[] = [];
+  const real = globalThis.window;
+  Object.defineProperty(globalThis, "window", { value: { scrollBy: (options: unknown) => moves.push(options) }, configurable: true });
+  try {
+    const target = { scrollIntoView: () => {} } as unknown as Element;
+    scroll_to_top(target, []);
+    assert.deepEqual(moves, []);
+    scroll_to_top(target, [], 98);
+    assert.deepEqual(moves, [{ top: -98, behavior: "instant" }]);
+  } finally {
+    Object.defineProperty(globalThis, "window", { value: real, configurable: true });
   }
 });
