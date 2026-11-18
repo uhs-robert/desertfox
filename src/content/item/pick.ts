@@ -77,7 +77,7 @@ export type ItemPage = EndPage & {
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
-  derived?: { items_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean };
+  derived?: { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean };
 };
 
 const SCROLL_PX = 50;
@@ -115,7 +115,8 @@ const hover_check = (args: ItemArgs, item: Element) => (args.hover ? () => !!arg
 export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Promise<void> {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
-  const read_items = () => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_() ?? []));
+  // An end command reads on with `keep`, so its own scroll cannot hand the follow to another list.
+  const read_items = (keep?: boolean) => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_(keep) ?? []));
   const items = read_items();
   const { direction } = args;
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then. With no selector (the finder's gg and G) they refuse instead, and content.js scrolls to the top or bottom.
@@ -125,7 +126,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
   if (direction === "first" || direction === "last") {
     if (!args.selector && !items[0]) return { ok: false, message: "No item" };
     // Each poll of the follow asks first whether the page added something after the last item, so the answer kept for the first item does not hide it.
-    const read_grown = () => (args.selector ? undefined : page.derived?.grew_(), read_items());
+    const read_grown = () => (args.selector ? undefined : page.derived?.grew_(), read_items(true));
     return follow_end(page, read_grown, direction === "last", (item, on_page) => {
       const { top, bottom } = item.getBoundingClientRect();
       if (args.selector || (top < page.view.innerHeight && bottom > 0)) land_on(page, item, args, !on_page && !revealed, on_page);

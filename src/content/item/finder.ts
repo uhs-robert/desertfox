@@ -9,9 +9,11 @@ import type { Group, GroupRules } from "./groups.ts";
 export type FinderKind = "list" | "grid" | "none";
 
 // `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `timed_out_` marks a `none` that only says the time budget ran out.
-export type Found<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; timed_out_?: true };
+export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[] };
+// The answer is its first region (the one with the most area) plus every top-level list of the page in `regions`, from the largest down, so the derived row can follow the one in view.
+export type Found<N> = Region<N> & { regions: Region<N>[]; timed_out_?: true };
 
-const none = <N>(): Found<N> => ({ kind: "none", items: [], links: new Map() });
+const none = <N>(): Found<N> => ({ kind: "none", items: [], links: new Map(), regions: [] });
 
 export const FINDER_BUDGET_MS = 40;
 // The first read at an address may take this long (see `derived.ts` for which reads get it): a long page runs past 40 ms in a content script, and its answer is then kept for the later presses.
@@ -27,8 +29,6 @@ const MIN_TITLED = 0.6;
 const MIN_SPAN = 0.6;
 // The cards inside a group of sections must hold this share of the area of the sections.
 const INNER_SHARE = 0.1;
-// A rival is a group this close to the best one in area.
-const RIVAL_SHARE = 0.8;
 // An item is at least this tall, or this tall when it holds a title link (a Hacker News row), and this wide, so icons and chips are not items.
 const TALL_ITEM_PX = 24;
 const SHORT_ITEM_PX = 12;
@@ -103,25 +103,26 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   if (out_of_time()) return { ...none<N>(), timed_out_: true };
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
-  const top = main_by_area(gated);
-  if (!top) return none();
-  const is_rival = (group: Group<N>) => group !== top && group.area >= RIVAL_SHARE * top.area && !nests(reader, group, top) && !nests(reader, top, group);
-  if (gated.some(is_rival)) return none();
-
-  // The deepest group inside the best one that still carries a good part of its area: the cards in the sections of a front page.
-  let best = top;
-  let sections: N[] | undefined;
-  for (;;) {
-    const inner = main_by_area(lists.filter((group) => group !== best && nests(reader, group, best) && group.area >= INNER_SHARE * best.area && !parts_of_cards(reader, group, best)));
-    if (!inner) break;
-    sections = best.items;
-    best = inner;
-  }
-  if (prose_around(reader, scope, best, chrome)) return none();
+  // A list that sits inside an item of another is no top-level list. Several lists side by side (a feed and its rails) are all kept.
+  const tops = gated.filter((group) => !gated.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
   // An item with no title link of its own (a story with a short title) takes its longest link, so the focus never lands on a vote arrow.
   const longest_link = (item: N): N | undefined => links_of(item).reduce<N | undefined>((long, link) => (!long || link_text(link) > link_text(long) ? link : long), undefined);
-  const links = new Map(best.items.map((item) => [item, title_of(item) ?? longest_link(item)]));
-  return { kind: kind_of(best.boxes), items: best.items, links, ...(sections && { sections }) };
+  const region_of = (top: Group<N>): Region<N> | undefined => {
+    // The deepest group inside the top one that still carries a good part of its area: the cards in the sections of a front page.
+    let best = top;
+    let sections: N[] | undefined;
+    for (;;) {
+      const inner = main_by_area(lists.filter((group) => group !== best && nests(reader, group, best) && group.area >= INNER_SHARE * best.area && !parts_of_cards(reader, group, best)));
+      if (!inner) break;
+      sections = best.items;
+      best = inner;
+    }
+    if (prose_around(reader, scope, best, chrome)) return undefined;
+    const links = new Map(best.items.map((item) => [item, title_of(item) ?? longest_link(item)]));
+    return { kind: kind_of(best.boxes), items: best.items, links, ...(sections && { sections }) };
+  };
+  const regions = tops.map(region_of).filter((region) => region !== undefined);
+  return out_of_time() ? { ...none<N>(), timed_out_: true } : regions[0] ? { ...regions[0], regions } : none();
 }
 
 const main_by_area = <N>(groups: readonly Group<N>[]): Group<N> | undefined => groups.reduce<Group<N> | undefined>((top, group) => (!top || group.area > top.area ? group : top), undefined);

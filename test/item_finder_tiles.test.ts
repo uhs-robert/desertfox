@@ -229,6 +229,16 @@ test("a block of the feed's own item class that sits before the feed's items is 
   assert.deepEqual(titles_of(found), [0, 1, 2, 3, 4, 5].map((index) => `Entry number ${index} headline`));
 });
 
+// The rail holds about 85% of the feed's item area, which the old rival rule answered none for. It comes first in the page, so the test also shows that the larger feed is first.
+test("two lists of comparable size are both kept, the larger first", () => {
+  const box = (x: number, y: number, w: number, h: number) => [x, y, w, h] as [number, number, number, number];
+  const rail: SavedNode = { t: "div", a: { class: "rail" }, r: box(900, 100, 400, 1560), c: [0, 1, 2, 3, 4, 5].map((at) => ({ ...entry("li", "mix", 100 + at * 260, 50 + at), r: box(900, 100 + at * 260, 400, 240) })) };
+  const feed: SavedNode = { t: "div", a: { class: "feed" }, r: box(35, 100, 800, 900), c: [0, 1, 2, 3, 4].map((at) => ({ ...entry("article", "story", 100 + at * 180, at), r: box(35, 100 + at * 180, 800, 170) })) };
+  const found = find_items(saved_reader(page_with([rail, feed], 1700)));
+  assert.deepEqual(found.regions.map((region) => region.items.length), [5, 6]);
+  assert.deepEqual(titles_of(found), [0, 1, 2, 3, 4].map((index) => `Entry number ${index} headline`));
+});
+
 // Two sibling parents, each with six stacked entries that hold a title link. When both parents are one kind the entries are one list of twelve. When the parents differ in tag or class (a video page's title rows and its comment section), the groups stay apart and neither passes the span test on its own.
 function sibling_parents(second_class: string): SavedPage {
   const parent = (class_name: string, first: number): SavedNode => {

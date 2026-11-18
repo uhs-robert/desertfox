@@ -89,6 +89,40 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("f0");
   });
 
+  // Two lists of ten cards a screen apart, with different classes so they stay two lists: `a0` to `a9` at the top and `b0` to `b9` below a spacer.
+  const add_two_lists = () =>
+    in_active_tab(`(() => {
+      const list = (name, parent_class) => {
+        const holder = document.createElement("div");
+        holder.className = parent_class;
+        holder.innerHTML = Array.from({ length: 10 }, (_, index) => '<div class="card_' + name + '" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="' + name + index + '" href="#' + name + index + '">List ' + name + ' result number ' + index + ' title</a></h3><span>snippet</span></div>').join("");
+        return holder;
+      };
+      const spacer = document.createElement("div");
+      spacer.style.height = "2500px";
+      document.body.prepend(list("a", "first"), spacer, list("b", "second"));
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+
+  await run_case("j walks the list in view and hands over to the list that shows once the first one has scrolled away", async () => {
+    await open_page("page", "finder_two_lists", { new_tab: true });
+    await add_two_lists();
+    await press_keys("j");
+    await expect_focus("a0");
+    await press_keys("j");
+    await expect_focus("a1");
+    // The user scrolls to the other list. The press after the scroll takes that list, and scrolling alone moves nothing.
+    await in_active_tab("(() => { window.scrollTo(0, document.getElementById('b0').closest('div').getBoundingClientRect().top + scrollY - 20); return true; })()");
+    await sleep(300);
+    expect((await focused()) === "a1", "a scroll moved the focus");
+    await press_keys("j");
+    await expect_focus("b0");
+    await press_keys("j");
+    await expect_focus("b1");
+  });
+
   const at_bottom = () => in_active_tab("scrollY + innerHeight >= document.documentElement.scrollHeight - 2");
   // Hides the rest of the page, so the cards are all of it and the first and last card are in view at the page ends.
   const only_cards = () => in_active_tab(`(() => { const list = document.querySelector(".card").parentElement; for (const child of document.body.children) if (child !== list) child.style.display = "none"; window.scrollTo(0, 0); return true; })()`);

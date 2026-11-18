@@ -480,10 +480,14 @@ function real_derived_page(focused_index: number) {
   const fake = fake_page(list, true, focused_index);
   const state = { footer: "footer" };
   fake.page.derived = create_derived_row({
-    find_: () => ({ kind: "list", items: [...(fake.page.doc.querySelectorAll("li") as unknown as Element[])], links: new Map() }) as never,
+    find_: () => {
+      const region = { kind: "list", items: [...(fake.page.doc.querySelectorAll("li") as unknown as Element[])], links: new Map() };
+      return { ...region, regions: [region] } as never;
+    },
     url_: () => "https://a.test/",
     now_: () => 0,
     is_shown_: () => true,
+    in_view_: () => 1,
     tail_: () => [state.footer],
   });
   return { ...fake, state };
