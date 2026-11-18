@@ -19,11 +19,11 @@ const { min, max } = Math;
 // The overflow scan reads at most this many elements per tick, so a huge item stays cheap.
 const OVERFLOW_SCAN_LIMIT = 200;
 
-// Under the pointer, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover. Off the pointer, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle: a hidden menu or an off-screen label would stretch it. The walk skips what a box inside the item clips (a carousel row), and that box with it.
+// Under the pointer or while it holds the focus, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover or on focus (Google Shopping zooms on both). Otherwise, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle: a hidden menu or an off-screen label would stretch it. The walk skips what a box inside the item clips (a carousel row), and that box with it.
 function covered_rect(item: Element) {
   const own = item.getBoundingClientRect();
   const clips = (element: Element) => getComputedStyle(element).overflow !== "visible";
-  if (!item.matches(":hover") || clips(item)) return own;
+  if (!item.matches(":hover, :focus-within") || clips(item)) return own;
   let { left, top, right, bottom } = own;
   let seen = 0;
   // The NodeFilter values as numbers, which the bundle's size guard prefers: 1 is SHOW_ELEMENT and FILTER_ACCEPT, 2 is FILTER_REJECT. Past the limit every node is rejected unread.
