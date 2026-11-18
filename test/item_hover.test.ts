@@ -359,3 +359,20 @@ test("a row that names its selector keeps the hover on the item itself when its 
   assert.ok(entered().includes("mouseenter@a"), events.join());
   box.clear();
 });
+
+test("a j that only scrolls a tall item redraws its box with the hover request, so the hover stays", () => {
+  const item = tile("tall", true);
+  // The move reads `top` and `bottom` of the item box.
+  item.rect = { left: 0, top: 0, width: 200, height: 2000, right: 200, bottom: 2000 } as Rect;
+  const { page } = hover_page([item], [true]);
+  const box = overlay();
+  Object.assign(page, { highlight: box.show, focused: () => item as unknown as Element });
+  move_item(page, { selector: "div", direction: "current", hover: true });
+  mock.timers.tick(300);
+  assert.ok(entered().length > 0);
+  events = [];
+  move_item(page, { selector: "div", direction: "down", hover: true });
+  mock.timers.tick(1000);
+  assert.deepEqual(events, []);
+  box.clear();
+});
