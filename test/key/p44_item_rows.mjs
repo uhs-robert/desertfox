@@ -446,7 +446,12 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       videos.dataset.testid = "zci-videos";
       videos.innerHTML = '<ol style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,300px);gap:12px">' + [0, 1, 2, 3].map((index) => '<li><a id="d' + index + '" href="#d' + index + '" style="display:block"><article style="height:700px"><img alt="" width="200" height="120" style="display:block"></article></a></li>').join("") + '</ol>';
       document.body.prepend(videos);
-      for (const link of videos.querySelectorAll("a")) for (const type of ["mouseenter", "mouseleave"]) link.addEventListener(type, () => window.hover_log.push(type + "@" + link.id));
+      window.focus_at = {};
+      window.enter_at = {};
+      for (const link of videos.querySelectorAll("a")) {
+        link.addEventListener("focus", () => (window.focus_at[link.id] = performance.now()));
+        for (const type of ["mouseenter", "mouseleave"]) link.addEventListener(type, () => { window.hover_log.push(type + "@" + link.id); if (type === "mouseenter") window.enter_at[link.id] ??= performance.now(); });
+      }
       document.activeElement?.blur();
       window.scrollTo(0, 0);
       return true;
@@ -454,8 +459,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     const hover_log = () => in_active_tab("window.hover_log.join()");
     await press_keys("j");
     await expect_focus("d0");
-    expect((await hover_log()) === "", "the hover started before its wait");
     await poll_until("the enter on the first tile", async () => (await hover_log()) === "mouseenter@d0");
+    // The page's own clock, so the check does not depend on when the test looks.
+    const wait_ms = await in_active_tab("window.enter_at.d0 - window.focus_at.d0");
+    expect(wait_ms >= 280, `the hover started ${wait_ms} ms after the land, before its wait`);
     await press_keys("j");
     await expect_focus("d2");
     await poll_until("the leave of the first tile after a scrolling j", async () => (await hover_log()).startsWith("mouseenter@d0,mouseleave@d0"));

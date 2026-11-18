@@ -72,7 +72,7 @@ export type ItemPage = EndPage & {
   // The page scroll of the plain keys, for a page where no item matches.
   scroll_by: (dx: number, dy: number) => void;
   // Draws the box around the item, which follows the focus among the items the selector matches.
-  highlight: (item: Element, selector: string, hover?: boolean) => void;
+  highlight: (item: Element, selector: string, hover?: () => boolean) => void;
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
@@ -108,6 +108,9 @@ function focus_target(item: Element, link_selector: string | undefined, found_li
 // What the box follows a page script's focus by: the row's selector, or the derived row's.
 const row_selector = (page: ItemPage, args: ItemArgs): string => args.selector || page.derived?.selector_() || "";
 
+// A row that names its selector asks for the hover outright. The finder's items get it only while one holds a thumbnail, checked again when the wait ends, so a text result gets no hover card opened.
+const hover_check = (args: ItemArgs, item: Element) => (args.hover ? () => !!args.selector || !!thumbnail(item) : undefined);
+
 export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
@@ -135,7 +138,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> 
   const held = boxes[place.index];
   // A pinned item off screen has no end in view to read to.
   if (vertical && place.on_item && held!.bottom > 0 && held!.top < page.view.innerHeight && (direction === "down" ? held!.bottom > page.view.innerHeight : held!.top < 0)) {
-    page.highlight(items[place.index]!, row_selector(page, args));
+    page.highlight(items[place.index]!, row_selector(page, args), hover_check(args, items[place.index]!));
     return scroll();
   }
   const pick = pick_item(boxes, place, direction, steps);
@@ -151,6 +154,5 @@ function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, p
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };
-  // A row that names its selector asks for the hover outright. The finder's items get it only when one holds a thumbnail, so a text result gets no hover card opened.
-  page.highlight(item, row_selector(page, args), !!args.hover && (!!args.selector || !!thumbnail(item)));
+  page.highlight(item, row_selector(page, args), hover_check(args, item));
 }

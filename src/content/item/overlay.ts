@@ -58,7 +58,8 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
   // The focus when the box was last drawn. Only a row item that took the focus since then gets the box: one that already held it (a Tab, then a j that only scrolls another item) is the user's old focus, not a page script's move.
   let focus_at_show: Element | null = null;
   let stop_following: (() => void) | undefined;
-  // The timer that waits to hover the item, and the function that undoes the hover once done.
+  // What the box was last asked to hover with, the timer that waits to hover the item, and the function that undoes the hover once done.
+  let hovers: (() => boolean) | undefined;
   let hover_timer: ReturnType<typeof setTimeout> | undefined;
   let unhover: (() => void) | undefined;
   let watch: ReturnType<typeof setInterval> | undefined;
@@ -97,13 +98,16 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
     host.remove();
   }
 
-  // Without a selector the box is the focus mark, which never hovers. A redraw on the same item keeps the count of a page script's hold on the focus and its hover. An item the box follows the page's focus to gets none.
-  function show(target: Element, selector?: string, hover?: boolean): void {
-    if (target !== item) {
-      ticks_away = target.contains(document.activeElement) ? 0 : NaN;
+  // Without a selector the box is the focus mark, which never hovers. A redraw on the same item keeps the count of a page script's hold on the focus. `hover` answers whether the item may still be hovered when the wait ends, and a redraw that asks the same keeps its hover. An item the box follows the page's focus to gets none.
+  function show(target: Element, selector?: string, hover?: () => boolean): void {
+    const changed = target !== item;
+    if (changed) ticks_away = target.contains(document.activeElement) ? 0 : NaN;
+    // A change of the item or of the request restarts the hover: a request that turns off cancels the wait or unhovers, and one that turns on waits.
+    if (changed || !hover !== !hovers) {
       stop_hover();
-      if (hover) hover_timer = setTimeout(() => target.isConnected && (unhover = hover_at(target)), HOVER_DELAY_MS);
+      if (hover) hover_timer = setTimeout(() => target.isConnected && hover() && (unhover = hover_at(target)), HOVER_DELAY_MS);
     }
+    hovers = hover;
     item = target;
     item_selector = selector;
     focus_at_show = document.activeElement;
