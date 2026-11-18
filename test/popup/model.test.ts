@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { disabled_after_click, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { disabled_after_click, site_card, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
@@ -8,8 +8,8 @@ const base: PopupInputs = { disabled: false, site: { kind: "enabled", pattern: "
 const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
-test("the first row is the switch and the rows follow the owner's order", () => {
-  assert.deepEqual(ids(base), ["power", "settings", "home", "site", "reload_config", "warnings", "version"]);
+test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
+  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "reload_config", "warnings", "version"]);
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
   assert.equal(row({ ...base, disabled: true }, "power").label, "DesertFox is off");
   assert.equal(row({ ...base, disabled: true }, "power").on, false);
@@ -64,4 +64,12 @@ test("the rule link lands on the settings group that holds site_rules", async ()
   const route = parse_route(SITE_RULES_HASH);
   assert.equal(route.page, "settings");
   assert.ok(page_sections("settings", []).some((section) => section.slug === route.section));
+});
+
+test("the site card names the host and one state line", () => {
+  assert.deepEqual(site_card(base.site, false), { host: "a.test", state: "Enabled on this site" });
+  assert.equal(site_card({ kind: "disabled", pattern: "*://*.a.test/*" }, false).state, "Disabled on this site");
+  assert.equal(site_card({ kind: "config", pattern: "*://*.a.test/*" }, false).state, "A rule covers this site");
+  assert.equal(site_card(base.site, true).state, "DesertFox is off");
+  assert.deepEqual(site_card({ kind: "unavailable" }, false), { host: "This page", state: "No site on this page" });
 });

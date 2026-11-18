@@ -6,7 +6,7 @@ export const areas = ["toolbar"];
 
 const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 
-export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_until, open_page, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
+export async function run_cases({ take_shot, rdp, extension_id, run_case, press_keys, poll_until, open_page, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const flag = () => in_background(`browser.storage.local.get("desertfox_disabled").then((got) => got.desertfox_disabled === true)`);
   const title = () => in_background(`browser.browserAction.getTitle({})`);
@@ -120,19 +120,19 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
   });
 
   const slot_chord = () => in_background(`browser.commands.getAll().then((all) => all.find((command) => command.name === "slot_1")?.shortcut ?? "")`);
-  const click_power = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelector(".desertfox-popup-power").click()`);
-  const power_label = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html")?.document.querySelector(".desertfox-popup-power")?.textContent ?? ""`);
+  const click_power = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelector('.desertfox-popup-segment[aria-checked="false"]').click()`);
+  const power_label = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html")?.document.querySelector('.desertfox-popup-segment[aria-checked="true"]')?.textContent ?? ""`);
 
   await run_case("clicking the popup switch turns DesertFox off and on, and Firefox releases the slot chords while off", async () => {
     try {
       await ask({ type: "toolbar_set_disabled", disabled: false });
-      await poll_until("the popup to show on", async () => (await power_label()) === "DesertFox is on");
+      await poll_until("the popup to show on", async () => (await power_label()) === "On");
       const chord_when_on = await slot_chord();
       expect(chord_when_on !== "", "no slot chord was assigned while on");
       await click_power();
       await wait_state(true, "the switch click to turn DesertFox off");
       await poll_until("the slot chord to be released", async () => (await slot_chord()) === "");
-      await poll_until("the popup to show off", async () => (await power_label()) === "DesertFox is off");
+      await poll_until("the popup to show off", async () => (await power_label()) === "Off");
       await click_power();
       await wait_state(false, "the switch click to turn DesertFox on");
       await poll_until("the slot chord to return", async () => (await slot_chord()) === chord_when_on);
@@ -176,6 +176,28 @@ export async function run_cases({ rdp, extension_id, run_case, press_keys, poll_
       await wait_event(mark, badge_is("sw_shadow", "INSERT"), "INSERT after the cycle");
     } finally {
       await turn_on();
+    }
+  });
+
+  // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots rewrite that rule in the page's styles, never the machine's scheme.
+  const popup_scheme = (target) => in_background(`(() => { const doc = browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document; const rule = /@media (?:\\(prefers-color-scheme: light\\)|not all|all)(?![\\w-])/g; for (const sheet of doc.querySelectorAll("style")) if (sheet.textContent.includes("prefers-color-scheme: light") || sheet.dataset.scheme_set) { sheet.textContent = sheet.textContent.replace(rule, ${JSON.stringify(target)}); sheet.dataset.scheme_set = "1"; } })()`);
+
+  await run_case("the popup page draws the header, the segments and the site card, with shots under DESERTFOX_SHOT_DIR", async () => {
+    await open_page("page", "popup_look", { new_tab: true });
+    try {
+      await close_popup();
+      await in_background(`browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: true })`);
+      await poll_until("the popup page to draw", () => in_background(`browser.extension.getViews({ type: "tab" }).some((view) => view.location.pathname === "/popup.html" && view.document.querySelector(".desertfox-popup-card") !== null)`).catch(() => false));
+      expect(await in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelectorAll(".desertfox-popup-segment").length`) === 2, "the on/off control has two segments");
+      const shot_dir = process.env.DESERTFOX_SHOT_DIR;
+      if (!shot_dir) return;
+      for (const [scheme, target] of [["dark", "@media not all"], ["light", "@media all"]]) {
+        await popup_scheme(target);
+        await sleep(700);
+        await take_shot(`${shot_dir}/popup-${scheme}.png`);
+      }
+    } finally {
+      await close_popup();
     }
   });
 }

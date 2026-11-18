@@ -33,6 +33,17 @@ export type PopupRow = {
   site_action?: "disable" | "enable";
 };
 
+export type SiteCard = { host: string; state: string };
+
+// The card's two lines: the host the rows cover (the pattern without its wildcards) and one word of state, with the reason where a button is grey.
+export function site_card(site: SiteState, disabled: boolean): SiteCard {
+  if (site.kind === "unavailable") return { host: "This page", state: "No site on this page" };
+  const host = site.pattern.replace(/^\*:\/\/\*\./, "").replace(/\/\*$/, "");
+  if (disabled) return { host, state: "DesertFox is off" };
+  if (site.kind === "config") return { host, state: "A rule covers this site" };
+  return { host, state: site.kind === "disabled" ? "Disabled on this site" : "Enabled on this site" };
+}
+
 function site_row(site: SiteState, disabled: boolean): PopupRow {
   const row = (label: string, enabled: boolean, detail?: string): PopupRow => ({ id: "site", kind: "action", label, enabled, ...(detail === undefined ? {} : { detail }) });
   if (site.kind === "unavailable") return row("Disable on this site", false, "no site on this page");
@@ -49,13 +60,13 @@ export const disabled_after_click = (power_row: Pick<PopupRow, "on">): boolean =
 export function build_rows(inputs: PopupInputs): PopupRow[] {
   const rows: PopupRow[] = [
     { id: "power", kind: "switch", label: inputs.disabled ? "DesertFox is off" : "DesertFox is on", enabled: true, on: !inputs.disabled },
-    { id: "settings", kind: "link", label: "Settings", enabled: true },
-    { id: "home", kind: "link", label: "Help", enabled: true },
     site_row(inputs.site, inputs.disabled),
   ];
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
   if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: inputs.site.rule, enabled: true });
   rows.push(
+    { id: "settings", kind: "link", label: "Settings", enabled: true },
+    { id: "home", kind: "link", label: "Help", enabled: true },
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }
       : { id: "reload_config", kind: "action", label: "Reload config", detail: "needs the native host", enabled: false },

@@ -8,7 +8,7 @@ import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, disabled_after_click, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, disabled_after_click, site_card, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
 import type { PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -52,31 +52,65 @@ async function act(row: PopupRow): Promise<void> {
   await draw();
 }
 
-function row_element(row: PopupRow): HTMLElement {
-  if (row.kind === "info") {
-    const info = document.createElement("div");
-    info.className = "desertfox-popup-info";
-    info.textContent = row.label;
-    return info;
-  }
+function element(tag: string, class_name: string, text?: string): HTMLElement {
+  const made = document.createElement(tag);
+  made.className = class_name;
+  if (text !== undefined) made.textContent = text;
+  return made;
+}
+
+function button_element(row: PopupRow): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "desertfox-popup-row";
   button.disabled = !row.enabled;
-  button.append(row.label);
-  if (row.detail !== undefined) {
-    const detail = document.createElement("span");
-    detail.className = "desertfox-popup-detail";
-    detail.textContent = row.detail;
-    button.append(detail);
-  }
-  if (row.kind === "switch") {
-    button.classList.add("desertfox-popup-power");
-    button.setAttribute("role", "switch");
-    button.setAttribute("aria-checked", String(row.on));
-    button.addEventListener("click", () => void act(row));
-  } else button.addEventListener("click", () => void act(row));
+  const text = element("span", "desertfox-popup-text", row.label);
+  if (row.detail !== undefined) text.append(element("span", "desertfox-popup-detail", row.detail));
+  button.append(text);
+  button.addEventListener("click", () => void act(row));
   return button;
+}
+
+function row_button(row: PopupRow, extra_class: string): HTMLButtonElement {
+  const button = button_element(row);
+  button.className = `desertfox-popup-row ${extra_class}`;
+  return button;
+}
+
+function header_element(version: string, disabled: boolean): HTMLElement {
+  const header = element("div", "desertfox-popup-header");
+  const icon = document.createElement("img");
+  icon.className = "desertfox-popup-icon";
+  icon.alt = "";
+  icon.src = disabled ? "icons/desertfox-off.svg" : "icons/desertfox.svg";
+  header.append(icon, element("span", "desertfox-popup-wordmark", "DesertFox"), element("span", "desertfox-popup-version", version));
+  return header;
+}
+
+function power_element(row: PopupRow): HTMLElement {
+  const group = element("div", "desertfox-popup-segments");
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", row.label);
+  for (const [name, is_on] of [["On", true], ["Off", false]] as const) {
+    const segment = element("button", "desertfox-popup-segment", name) as HTMLButtonElement;
+    segment.type = "button";
+    segment.setAttribute("role", "radio");
+    segment.setAttribute("aria-checked", String(row.on === is_on));
+    // The chosen segment is the current state, so a click on it changes nothing.
+    if (row.on !== is_on) segment.addEventListener("click", () => void act(row));
+    group.append(segment);
+  }
+  return group;
+}
+
+function card_element(rows: PopupRow[], inputs: { site: SiteState; disabled: boolean }): HTMLElement {
+  const card = element("div", "desertfox-popup-card");
+  const { host, state } = site_card(inputs.site, inputs.disabled);
+  card.append(element("div", "desertfox-popup-host", host), element("div", "desertfox-popup-state", state));
+  const site = rows.find((row) => row.id === "site")!;
+  card.append(row_button(site, "desertfox-popup-site"));
+  const rule = rows.find((row) => row.id === "rule");
+  if (rule !== undefined) card.append(row_button(rule, "desertfox-popup-rule desertfox-popup-link"));
+  return card;
 }
 
 async function draw(): Promise<void> {
@@ -85,20 +119,21 @@ async function draw(): Promise<void> {
     browser.storage.local.get([DISABLED_STORAGE_KEY, WARNINGS_STORAGE_KEY]),
     browser.permissions.contains({ permissions: ["nativeMessaging"] }),
   ]);
-  const rows = build_rows({
+  const inputs = {
     disabled: stored[DISABLED_STORAGE_KEY] === true,
     site: await read_site(tab?.url),
     warning_count: ((stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? []).length,
     version: browser.runtime.getManifest().version,
     has_native_host: host,
-  });
-  const elements = rows.map(row_element);
+  };
+  const rows = build_rows(inputs);
+  const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
+  const elements = [header_element(inputs.version, inputs.disabled), power_element(by_id("power")), card_element(rows, inputs)];
+  for (const id of ["settings", "home", "reload_config", "warnings"] as const) elements.push(row_button(by_id(id), id === "reload_config" ? "" : "desertfox-popup-link"));
   if (notice !== "") {
-    const line = document.createElement("div");
-    line.className = "desertfox-popup-notice";
+    const line = element("div", "desertfox-popup-notice", notice);
     line.setAttribute("role", "status");
-    line.textContent = notice;
-    elements.splice(elements.length - 1, 0, line);
+    elements.push(line);
   }
   root.replaceChildren(...elements);
 }
