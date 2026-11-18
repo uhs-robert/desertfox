@@ -76,12 +76,12 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const strong = headed.some(long_enough) ? headed.filter(long_enough) : links.filter((link) => long_enough(link) && near_top(link, item));
     return strong[0] ?? (links.length === 1 ? links[0] : undefined);
   });
-  const titled_share = (group: Group<N>): number => group.items.filter((item) => title_of(item) !== undefined).length / group.items.length;
+  const titled_share = (group: Group<N>): number => group.items.filter(title_of).length / group.items.length;
 
   // A paragraph is prose, never an item, so the paragraphs of an issue comment are no list.
   const rules: GroupRules<N> = {
     box_of: (child, siblings, at) => record_box(reader, child, siblings, at),
-    is_item: (child, box) => reader.tag_(child) !== "p" && box.w >= MIN_ITEM_WIDTH_PX && (box.h >= TALL_ITEM_PX || (box.h >= SHORT_ITEM_PX && title_of(child) !== undefined)),
+    is_item: (child, box) => reader.tag_(child) !== "p" && box.w >= MIN_ITEM_WIDTH_PX && (box.h >= TALL_ITEM_PX || (box.h >= SHORT_ITEM_PX && !!title_of(child))),
     stop: out_of_time,
   };
   const chrome = once((node: N) => in_chrome(reader, node));
@@ -118,7 +118,7 @@ const main_by_area = <N>(groups: readonly Group<N>[]): Group<N> | undefined => g
 function main_region<N>(reader: PageReader<N>, nodes: readonly N[]): N {
   const mains = nodes.filter((node) => reader.tag_(node) === "main" || reader.attr_(node, "role") === "main");
   const area = (node: N) => (reader.box_(node)?.w ?? 0) * (reader.box_(node)?.h ?? 0);
-  return mains.reduce<N>((best, node) => (area(node) > area(best) ? node : best), mains[0] ?? reader.root_);
+  return mains.sort((a, b) => area(b) - area(a))[0] ?? reader.root_;
 }
 
 // A `tr` that opens a record (Hacker News puts a story over two or three `tr` of other kinds) counts with the rows after it, up to the next `tr` of its own kind.
@@ -190,7 +190,7 @@ function prose_around<N>(reader: PageReader<N>, scope: readonly N[], best: Group
   for (const node of scope) {
     const tag = reader.tag_(node);
     if ((tag !== "p" && tag !== "pre") || reader.text_length_(node) < MIN_PROSE_PARAGRAPH || chrome(node) || [...ancestors(reader, node)].some((at) => holders.has(at))) continue;
-    const links = descendants(reader, node).filter((inner) => reader.tag_(inner) === "a").reduce((sum, link) => sum + reader.text_length_(link), 0);
+    const links = descendants(reader, node, (inner) => reader.tag_(inner) === "a").reduce((sum, link) => sum + reader.text_length_(link), 0);
     around += reader.text_length_(node) - links;
   }
   return around >= PROSE_AROUND_CHARS;

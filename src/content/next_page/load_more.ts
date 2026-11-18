@@ -80,7 +80,7 @@ export function find_load_more<N>(reader: PageReader<N>): NextPageAction<N> {
     return box.x + box.w >= list_box.x - COLUMN_SLACK_PX && box.x <= list_box.x + list_box.w + COLUMN_SLACK_PX;
   };
   // A div or span that a script makes clickable has no role. Only its own pointer cursor and a load word mark it, and it never stands alone as a plain button.
-  const is_weak_load = (node: N) => in_reach(node) && reader.attr_(node, "aria-disabled") !== "true" && reader.pointer_(node) && texts_of(node).some(is_load_text) && !descendants(reader, node).some(is_actionable);
+  const is_weak_load = (node: N) => in_reach(node) && reader.attr_(node, "aria-disabled") !== "true" && reader.pointer_?.(node) && texts_of(node).some(is_load_text) && !descendants(reader, node).some(is_actionable);
   // Tried after `is_actionable`, so it never sees a link or a button.
   const is_control = (node: N) => is_actionable(node) || is_weak_load(node);
   // Many controls share one branch (a footer), so each branch is counted once.
