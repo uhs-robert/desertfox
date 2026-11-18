@@ -83,6 +83,31 @@ function row_button(row: PopupRow, extra_class: string): HTMLButtonElement {
   return button;
 }
 
+// Inline icons, drawn in the text color so they follow the theme. Each value is the path data of a 24 by 24 outline.
+const ICON_PATHS = {
+  settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+  home: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
+  support: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z",
+} as const;
+
+function icon_element(id: keyof typeof ICON_PATHS): SVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", `desertfox-popup-glyph desertfox-popup-glyph-${id}`);
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", ICON_PATHS[id]);
+  svg.append(path);
+  return svg;
+}
+
+function icon_button(row: PopupRow, id: keyof typeof ICON_PATHS, extra_class: string): HTMLButtonElement {
+  const button = button_element(row);
+  button.className = `desertfox-popup-row ${extra_class}`;
+  button.prepend(icon_element(id));
+  return button;
+}
+
 function header_element(version: string, disabled: boolean): HTMLElement {
   const header = element("div", "desertfox-popup-header");
   const icon = document.createElement("img");
@@ -137,12 +162,16 @@ async function draw(): Promise<void> {
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
   const elements = [header_element(inputs.version, inputs.disabled), power_element(by_id("power")), card_element(rows, inputs)];
-  for (const id of ["settings", "home", "support", "reload_config", "warnings"] as const) elements.push(row_button(by_id(id), "desertfox-popup-link"));
+  const pair = element("div", "desertfox-popup-pair");
+  pair.append(icon_button(by_id("settings"), "settings", "desertfox-popup-half"), icon_button(by_id("home"), "home", "desertfox-popup-half"));
+  elements.push(pair, row_button(by_id("reload_config"), "desertfox-popup-action"));
+  if (rows.some((row) => row.id === "warnings")) elements.push(row_button(by_id("warnings"), "desertfox-popup-link"));
   if (notice !== "") {
     const line = element("div", "desertfox-popup-notice", notice);
     line.setAttribute("role", "status");
     elements.push(line);
   }
+  elements.push(icon_button(by_id("support"), "support", "desertfox-popup-support"));
   // A redraw replaces the radios, so a keyboard user keeps the focus on the group.
   const had_focus = document.activeElement instanceof HTMLInputElement && document.activeElement.name === "power";
   root.replaceChildren(...elements);

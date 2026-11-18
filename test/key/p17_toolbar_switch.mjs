@@ -205,7 +205,7 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
       await press_keys("-k", "Right");
       await wait_state(true, "the arrow key to turn DesertFox off");
       await poll_until("Off to be checked", async () => (await checked()) === "Off");
-      await poll_until("the site card to name the host and the rule", async () => (await popup_eval(`document.querySelector(".desertfox-popup-host")?.textContent === "127.0.0.1" && document.querySelector(".desertfox-popup-rule .desertfox-popup-detail")?.textContent === "pass 2 keys"`)) === true);
+      await poll_until("the site card to name the host and the rule", async () => (await popup_eval(`document.querySelector(".desertfox-popup-host")?.textContent === "127.0.0.1" && document.querySelector(".desertfox-popup-rule .desertfox-popup-detail")?.textContent === "Pass 2 keys"`)) === true);
       const shot_dir = process.env.DESERTFOX_SHOT_DIR;
       const shoot = async (name) => {
         if (!shot_dir) return;
@@ -215,6 +215,9 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
           await take_shot(`${shot_dir}/popup-${name}-${scheme}.png`);
         }
       };
+      // The Warnings row is absent while the page has no warnings, and Reload config is a button.
+      expect((await popup_eval(`[...document.querySelectorAll(".desertfox-popup-row")].some((button) => button.textContent.startsWith("Warnings"))`)) === false, "the Warnings row shows with no warnings");
+      expect((await popup_eval(`document.querySelector(".desertfox-popup-action")?.textContent`)) === "Reload config", "Reload config is a button");
       await shoot("off");
       await ask({ type: "toolbar_set_disabled", disabled: false });
       await wait_state(false, "DesertFox to be on");
