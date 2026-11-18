@@ -172,10 +172,11 @@ function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[]
 
 // Whether `inner` is the pieces of the cards in `outer` rather than cards inside sections: it sits in nearly every outer item yet fills only a small part of them (the title, channel and chapter blocks beside a video thumbnail).
 const CARD_PARTS_HELD = 0.8;
-const CARD_PARTS_COVER = 0.4;
+const CARD_PARTS_COVER = 0.3;
 function parts_of_cards<N>(reader: PageReader<N>, inner: Group<N>, outer: Group<N>): boolean {
   const holders = new Set(outer.items);
   const held = new Set(inner.items.map((item) => [...ancestors(reader, item)].find((at) => holders.has(at))));
+  held.delete(undefined);
   const held_area = outer.items.reduce((sum, item, at) => (held.has(item) ? sum + outer.boxes[at]!.w * outer.boxes[at]!.h : sum), 0);
   return held.size >= CARD_PARTS_HELD * outer.items.length && inner.area < CARD_PARTS_COVER * held_area;
 }
