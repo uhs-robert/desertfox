@@ -1,5 +1,5 @@
+import { CMDLINE_STYLE } from "../../src/cmdline/style.ts";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { derive_roles, mix } from "../../src/shared/theme/derive.ts";
 import { ROLES } from "../../src/shared/theme/roles.ts";
@@ -128,8 +128,7 @@ test("a role's token is --desertfox- plus the role with hyphens", () => {
 });
 
 test("the command line page declares its colors as role tokens, bg_mantle and secondary included", () => {
-  const html = readFileSync(new URL("../../src/cmdline/cmdline.html", import.meta.url), "utf8");
-  const block = /\.desertfox-cmdline \{([^}]*)\}/.exec(html)![1]!;
+  const block = /\.desertfox-cmdline \{([^}]*)\}/.exec(CMDLINE_STYLE)![1]!;
   const declared = [...block.matchAll(/(--desertfox-[a-z-]+):\s*#[0-9a-f]{3,6};/g)].map((match) => match[1]);
   const role_token_names = ROLES.map(token_name);
   for (const name of declared) assert.ok(role_token_names.includes(name!), `${name} is not a role token`);

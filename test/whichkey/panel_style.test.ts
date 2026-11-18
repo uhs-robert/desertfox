@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STYLE as MODE_STYLE } from "../../src/content/mode_indicator.ts";
 import { STYLE as TOAST_STYLE } from "../../src/content/toast.ts";
-import { STYLE as PANEL_STYLE } from "../../src/content/whichkey/panel.ts";
+import { STYLE as PANEL_STYLE } from "../../src/content/whichkey/style.ts";
 
 const THEME_DECLARATION = /--desertfox-(bg|fg|font|radius)\s*:/;
 

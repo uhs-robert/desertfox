@@ -3,6 +3,7 @@ import { write_commands_json } from "./write_commands_json.mjs";
 import { grey_svg } from "./grey_svg.mjs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { refused_as } from "../src/shared/swallow.ts";
+import { CMDLINE_STYLE } from "../src/cmdline/style.ts";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
 const MAX_BYTES = {
@@ -129,6 +130,9 @@ for (const [name, entry] of Object.entries(minified_entries)) {
 for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "popup/popup.html", "cmdline/cmdline.html", "devtools/devtools.html"]) {
   await copyFile(`src/${file}`, `${out_dir}/${file.split("/").pop()}`);
 }
+// The command line's sheet lives in style.ts so another host can import it; the page gets it at the marker.
+const cmdline_html = (await readFile("src/cmdline/cmdline.html", "utf8")).replace("<!--cmdline-style-->", () => `<style>${CMDLINE_STYLE}    </style>`);
+await writeFile(`${out_dir}/cmdline.html`, cmdline_html);
 
 // The shared base sheet of the help and new tab pages, linked by both.
 await copyFile("src/shared/page_base.css", `${out_dir}/page_base.css`);
