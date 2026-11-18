@@ -568,3 +568,19 @@ test("an end command keeps its list when the page drops the list's first item an
   assert.deepEqual(names(row.items_(true)), ["f2", "f3"]);
   assert.deepEqual(names(row.items_(true)), ["f2", "f3"]);
 });
+
+test("an end command keeps its list when the page hides the list's first item and a larger list shows", () => {
+  const feed = [item("f1"), item("f2"), item("f3")];
+  const rail = [item("r1")];
+  rail[0]!.area = 500;
+  const { state, row } = setup(feed);
+  row.items_();
+  // The first item stays in the page but is hidden, so the next read leaves it out. The rest are out of the view while a larger rail shows.
+  feed[0]!.shown = false;
+  feed.slice(1).forEach((entry) => (entry.covered = true));
+  state.answer = feed.slice(1);
+  state.others = [rail];
+  state.tail = ["more"];
+  assert.equal(row.grew_(), true);
+  assert.deepEqual(names(row.items_(true)), ["f2", "f3"]);
+});
