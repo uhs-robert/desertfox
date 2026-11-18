@@ -9,7 +9,9 @@ const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
 test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
-  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "support", "reload_config", "warnings"]);
+  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "reload_config", "warnings", "support"]);
+  assert.ok(!ids({ ...base, warning_count: 0 }).includes("warnings"), "no Warnings row without warnings");
+  assert.equal(ids({ ...base, warning_count: 0 }).at(-1), "support");
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
   assert.equal(row({ ...base, disabled: true }, "power").label, "DesertFox is off");
   assert.equal(row({ ...base, disabled: true }, "power").on, false);
@@ -24,7 +26,7 @@ test("the site row flips with the state and greys out while off or where a file 
   assert.equal(row({ ...disabled, disabled: true }, "site").enabled, false);
   assert.equal(row({ ...base, disabled: true }, "site").detail, "DesertFox is off");
   const config = { ...base, site: { kind: "config", pattern: "p", rule: "pass 3 keys" } } as const;
-  assert.deepEqual([row(config, "site").enabled, row(config, "site").detail], [false, "a rule covers it"]);
+  assert.deepEqual([row(config, "site").enabled, row(config, "site").detail], [false, "A rule covers it"]);
   assert.equal(row({ ...base, site: { kind: "unavailable" } }, "site").enabled, false);
 });
 
@@ -32,15 +34,20 @@ test("a rule on the page shows its summary and links to the settings page", () =
   assert.ok(!ids(base).includes("rule"));
   // A key rule leaves the site row live and still shows.
   const keys = { ...base, site: { kind: "enabled", pattern: "p", rule: "pass 1 key" } } as const;
-  assert.equal(row(keys, "rule").detail, "pass 1 key");
+  assert.equal(row(keys, "rule").detail, "Pass 1 key");
   assert.equal(row(keys, "site").enabled, true);
   const config = { ...base, site: { kind: "config", pattern: "p", rule: "pass 3 keys" } } as const;
-  assert.deepEqual(row(config, "rule"), { id: "rule", kind: "link", label: "Rule on this page", detail: "pass 3 keys", enabled: true });
+  assert.deepEqual(row(config, "rule"), { id: "rule", kind: "link", label: "Rule on this page", detail: "Pass 3 keys", enabled: true });
+});
+
+test("reload config is an action button, not a link", () => {
+  assert.equal(row(base, "reload_config").kind, "action");
+  assert.equal(row(base, "reload_config").enabled, true);
 });
 
 test("reload config greys out without the native host", () => {
   assert.equal(row({ ...base, has_native_host: false }, "reload_config").enabled, false);
-  assert.equal(row({ ...base, has_native_host: false }, "reload_config").detail, "needs the native host");
+  assert.equal(row({ ...base, has_native_host: false }, "reload_config").detail, "Needs the native host");
 });
 
 test("the support row follows Help and links to GitHub Sponsors", () => {
@@ -65,11 +72,13 @@ test("a click on the switch asks for the opposite of what it shows", () => {
   assert.equal(disabled_after_click(row({ ...base, disabled: true }, "power")), false);
 });
 
-test("the rule link lands on the settings group that holds site_rules", async () => {
-  const { page_sections } = await import("../../src/help/render.ts");
+test("the rule line URL names the site rules anchor, which the settings page draws at render", async () => {
+  assert.equal(SITE_RULES_HASH, "#section=settings/site-rules");
   const route = parse_route(SITE_RULES_HASH);
-  assert.equal(route.page, "settings");
-  assert.ok(page_sections("settings", []).some((section) => section.slug === route.section));
+  assert.deepEqual(route, { page: "settings", section: "site-rules" });
+  const { SITE_RULES_SLUG, section_anchor } = await import("../../src/help/render.ts");
+  assert.equal(route.section, SITE_RULES_SLUG);
+  assert.equal(section_anchor("settings", route.section!), "settings-site-rules");
 });
 
 test("the site card names the host and one state line", () => {

@@ -13,6 +13,18 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
   const tag_of = (name) => in_page(row(name, `return row.querySelector(".desertfox-help-badge").textContent;`));
   const saved = () => in_background(`browser.storage.local.get("desertfox_saved_settings").then((got) => got.desertfox_saved_settings ?? {})`);
 
+  await run_case("settings page: a cold open of the site rules link lands on the anchor and focuses it", async () => {
+    await close_tabs();
+    await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#section=settings/site-rules") }).then(() => true)`);
+    const cold_view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#section=settings/site-rules"))`;
+    const in_cold = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${cold_view}; ${code} })()`);
+    await poll_until("the settings rows to load", () => in_cold(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
+    await sleep(300);
+    const landed = await in_cold(`const anchor = view.document.getElementById("settings-site-rules"); const box = anchor?.getBoundingClientRect(); return { found: !!anchor, focused: view.document.activeElement === anchor, in_view: !!box && box.top >= 0 && box.top < view.innerHeight, scrolled: view.scrollY > 0 };`);
+    expect(landed?.found && landed.focused && landed.in_view && landed.scrolled, `cold open of the site rules link: ${JSON.stringify(landed)}`);
+    await close_tabs();
+  });
+
   await run_case("settings page: a select change saves, reset returns to the file value, another write refreshes the row", async () => {
     await close_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);

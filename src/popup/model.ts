@@ -7,8 +7,8 @@ const page_hash = (id: (typeof PAGES)[number]["id"]) => PAGES.find((page) => pag
 
 export const HOME_HASH = page_hash("home");
 export const SETTINGS_HASH = page_hash("settings");
-// `site_rules` sits in the General group. A test keeps the slug in step with the settings page, which this file cannot import.
-export const SITE_RULES_HASH = "#section=settings/general";
+// The `site_rules` row on the settings page carries the id `settings-site-rules`. A test keeps the slug in step with the page, which this file cannot import.
+export const SITE_RULES_HASH = "#section=settings/site-rules";
 // The Warnings heading on Home, where the count points.
 export const WARNINGS_HASH = "#section=home/warnings";
 
@@ -48,13 +48,15 @@ export function site_card(site: SiteState, disabled: boolean): SiteCard {
 
 function site_row(site: SiteState, disabled: boolean): PopupRow {
   const row = (label: string, enabled: boolean, detail?: string): PopupRow => ({ id: "site", kind: "action", label, enabled, ...(detail === undefined ? {} : { detail }) });
-  if (site.kind === "unavailable") return row("Disable on this site", false, "no site on this page");
-  if (site.kind === "config") return row("Disable on this site", false, "a rule covers it");
+  if (site.kind === "unavailable") return row("Disable on this site", false, "No site on this page");
+  if (site.kind === "config") return row("Disable on this site", false, "A rule covers it");
   const site_action = site.kind === "disabled" ? "enable" : "disable";
   const label = site_action === "enable" ? "Enable on this site" : "Disable on this site";
   // Off wins over a disabled site, so the row has no effect to offer.
   return { ...(disabled ? row(label, false, "DesertFox is off") : row(label, true)), site_action };
 }
+
+const sentence_case = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 // What a click on the switch asks for: the opposite of what it shows now.
 export const disabled_after_click = (power_row: Pick<PopupRow, "on">): boolean => power_row.on === true;
@@ -65,15 +67,16 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
     site_row(inputs.site, inputs.disabled),
   ];
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
-  if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: inputs.site.rule, enabled: true });
+  if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: sentence_case(inputs.site.rule), enabled: true });
   rows.push(
     { id: "settings", kind: "link", label: "Settings", enabled: true },
     { id: "home", kind: "link", label: "Help", enabled: true },
-    { id: "support", kind: "link", label: "Support DesertFox", enabled: true },
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }
-      : { id: "reload_config", kind: "action", label: "Reload config", detail: "needs the native host", enabled: false },
-    { id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true },
+      : { id: "reload_config", kind: "action", label: "Reload config", detail: "Needs the native host", enabled: false },
   );
+  // Warnings is a problem list, so it shows only when there is something in it.
+  if (inputs.warning_count > 0) rows.push({ id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true });
+  rows.push({ id: "support", kind: "link", label: "Support DesertFox", enabled: true });
   return rows;
 }

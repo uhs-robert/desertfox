@@ -51,6 +51,13 @@
   .desertfox-popup-rule { border-style: dashed; }
   .desertfox-popup-link::after { content: ""; flex: none; width: .45em; height: .45em; border: solid var(--desertfox-fg-muted, #9aa0ab); border-width: 2px 2px 0 0; transform: rotate(45deg); }
   .desertfox-popup-row:hover:not(:disabled)::after { border-color: var(--desertfox-primary, #7fa3c9); }
+  .desertfox-popup-pair { display: flex; gap: .5rem; }
+  .desertfox-popup-half { flex: 1; justify-content: center; min-width: 0; }
+  .desertfox-popup-glyph { flex: none; width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .desertfox-popup-action { justify-content: center; background: var(--desertfox-bg-mantle, #151922); font-weight: bold; }
+  .desertfox-popup-action .desertfox-popup-text { align-items: center; }
+  .desertfox-popup-support { justify-content: center; margin-top: .15rem; border-style: dashed; color: var(--desertfox-primary, #7fa3c9); }
+  .desertfox-popup-support .desertfox-popup-glyph { fill: currentColor; }
   .desertfox-popup-notice { padding: 0 .2em; font-size: .85em; color: var(--desertfox-fg-muted, #9aa0ab); }
 </style>
 </head>
