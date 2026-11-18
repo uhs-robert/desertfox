@@ -1,10 +1,11 @@
+import { CMDLINE_STYLE } from "../../src/cmdline/style.ts";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STYLE as MODE_STYLE } from "../../src/content/mode_indicator.ts";
 import { STYLE as TOAST_STYLE } from "../../src/content/toast.ts";
 import { STYLE as HINTS_STYLE } from "../../src/content/hints/view.ts";
-import { STYLE as WHICHKEY_STYLE } from "../../src/content/whichkey/panel.ts";
+import { STYLE as WHICHKEY_STYLE } from "../../src/content/whichkey/style.ts";
 
 // The outer var() is the user's `--desertfox-font`. Everything the font settings add sits in its fallback, so a user rule replaces the whole font.
 const SURFACE_FONT = /font: var\(--desertfox-font, calc\(14px \* var\(--desertfox-font-scale, 1\)\) var\(--desertfox-font-family, system-ui, sans-serif\)\)/;
@@ -24,7 +25,7 @@ test("the hint label takes the scale and the mono family", () => {
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 
 test("the command line takes the mono family and scales its text and its row height with a floor", () => {
-  const html = read("src/cmdline/cmdline.html");
+  const html = CMDLINE_STYLE;
   assert.match(html, /--desertfox-font: calc\(12px \* var\(--desertfox-font-scale, 1\)\)\/1\.4 var\(--desertfox-font-family-mono, ui-monospace, monospace\);/);
   assert.match(html, /height: max\(14px, calc\(20px \* var\(--desertfox-font-scale, 1\)\)\);/);
 });

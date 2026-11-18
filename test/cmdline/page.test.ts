@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { CMDLINE_STYLE } from "../../src/cmdline/style.ts";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { USER_CSS_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
@@ -234,8 +235,7 @@ test("the colon preset shows a colon with the colon class", async (t) => {
 });
 
 test("the colon class styles the prompt in the primary color with the old gap", () => {
-  const html = readFileSync(new URL("../../src/cmdline/cmdline.html", import.meta.url), "utf8");
-  const rule = html.match(/\.desertfox-cmdline-prompt-colon \{([^}]*)\}/)![1]!;
+  const rule = CMDLINE_STYLE.match(/\.desertfox-cmdline-prompt-colon \{([^}]*)\}/)![1]!;
   assert.match(rule, /color: var\(--desertfox-primary\)/);
   assert.match(rule, /margin-right: \.5rem/);
 });
