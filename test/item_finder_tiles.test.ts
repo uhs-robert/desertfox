@@ -41,3 +41,30 @@ test("top-aligned cards of unequal height in a row are still a grid", () => {
   const found = find_items(saved_reader(video_grid((index) => 200 + (index % 4) * 20)));
   assert.equal(found.kind, "grid");
 });
+
+// Sections stacked down the page, each holding two cards that fill about 46% of it (the shape of a news front). The cards are the items, not the sections and not the pieces of a card.
+test("cards that fill nearly half of every section stay the picked items", () => {
+  const card = (x: number, y: number, index: number): SavedNode => ({
+    t: "div",
+    a: { class: "card" },
+    r: [x, y, 300, 300],
+    c: [
+      { t: "a", a: { href: `/story/${index}` }, r: [x, y, 300, 20], s: `Story number ${index} headline`, c: [] },
+      { t: "p", r: [x, y + 30, 300, 100], n: 200, c: [] },
+    ],
+  });
+  const section = (index: number): SavedNode => {
+    const y = 100 + index * 400;
+    return { t: "section", a: { class: "block" }, r: [35, y, 1300, 300], c: [card(35, y, index * 2), card(400, y, index * 2 + 1)] };
+  };
+  const body: SavedNode = { t: "body", r: [0, 0, 1366, 2600], c: Array.from({ length: 6 }, (_, index) => section(index)) };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 2600], c: [body] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  const found = find_items(saved_reader({ view: { w: 1366, h: 682, doc_h: 2600 }, root }));
+  assert.equal(found.items.length, 12);
+  assert.ok(found.items.every((item) => item.a?.class === "card"));
+});
