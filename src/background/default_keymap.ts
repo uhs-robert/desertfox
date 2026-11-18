@@ -142,6 +142,8 @@ const BASE_SECTIONS: KeymapConfig = {
     "[i": { id: "page.focus_field", args: { direction: "prev" }, label: "Previous form control" },
     "]h": { id: "page.heading", args: { direction: "next" }, label: "Next heading" },
     "[h": { id: "page.heading", args: { direction: "prev" }, label: "Previous heading" },
+    "}": { id: "page.heading", args: { direction: "next_block" }, label: "Next paragraph" },
+    "{": { id: "page.heading", args: { direction: "prev_block" }, label: "Previous paragraph" },
     "]H": { id: "page.heading", args: { direction: "last" }, label: "Last heading" },
     "[H": { id: "page.heading", args: { direction: "first" }, label: "First heading" },
     "]'": { id: "mark.step", args: { direction: "next" }, label: "Next mark" },
