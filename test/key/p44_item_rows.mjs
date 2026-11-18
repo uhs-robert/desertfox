@@ -591,6 +591,34 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await box()) === null, "the redrawn box outlived a click elsewhere");
   });
 
+  await run_case("a focus the user left on a result below the view does not take the box that a j that only scrolls draws, and the next j scrolls on", async () => {
+    await open_results("stale_holder", 3000);
+    await press_keys("j");
+    await expect_box_on_focus("the box on the tall result");
+    await press_keys("-k", "Tab");
+    await expect_focus("r1");
+    await expect_no_box("the box to clear when Tab moved the focus");
+    await in_active_tab("window.scrollTo(0, 0); 0");
+    await press_keys("j");
+    await poll_until("j to scroll 50 px", async () => (await in_active_tab("scrollY")) === 50);
+    await sleep(AT_ONCE_MS);
+    await expect_box_stays_on_item_of("r0", "the box left the tall result for the result the user had focused");
+    await press_keys("j");
+    await poll_until("the next j to scroll on", async () => (await in_active_tab("scrollY")) === 100);
+  });
+
+  await run_case("after the grace cleared the box, a j that only scrolls draws it again, and it follows the result the page focuses next", async () => {
+    await open_results("tall_loader", 3000);
+    await press_keys("j");
+    await expect_box_on_focus("the box on the tall result");
+    expect(await steal_focus(), "the loader did not take the focus");
+    await poll_until("the box to clear after the grace", async () => (await box()) === null, { timeout_ms: 2000 });
+    await press_keys("j");
+    await poll_until("the box back on the tall result", async () => { const drawn = await box(); return drawn !== null && near(drawn, await item_rect_of("r0")); });
+    await page_focuses("r2");
+    await expect_box_on_focus("the box on the result the page focused");
+  });
+
   // The session delivers a pointer move only with a press, so a click on the focused title link puts the pointer over its result without moving the focus. A click beside the results takes the pointer away again.
   const hover_title = (id) => click_element(rdp, in_active_tab, id, 5, 5);
   const hover_away = () => click_element(rdp, in_active_tab, "search", 400, 30);

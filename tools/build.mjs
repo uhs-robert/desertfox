@@ -36,7 +36,8 @@ const MAX_BYTES = {
   "site_actions.js": 4 * 1024,
   // 5.5 KB: page.item, the box it draws around a result (search-site-rows), the last move that ]] reads to put the box on the first item a load added, and the first and last ends that scroll the list's own scroller and follow its end while the page loads more (with the user watch of `user_left.ts`). The bundle loads on the first j or k on a result page.
   // 6 KB: the box follows a focus that a page script moves (a loader that takes the focus, then hands it to a result), draws again when j or k only scrolls, and covers the parts of an item that poke out of it.
-  "item.js": 6 * 1024,
+  // 6.5 KB: the box follows only a row item that took the focus since the box was drawn, so a focus the user left on another item does not pull it away.
+  "item.js": 6.5 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.
