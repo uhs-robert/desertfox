@@ -11,6 +11,8 @@ On `youtube_watch`, the player's Next button has the box it has when the player 
 
 `coverage_baseline.json` holds, per marked page, how many marks the main-list pick of `]]` covers; the item marks test compares against it and only reports a change. Rewrite it with `UPDATE_COVERAGE_BASELINE=1 npm test -- test/next_page/item_marks.test.ts` (or run that file with `node --test`).
 
+A live page can load differently on each capture (bing shows 5 to 10 results, reddit pages may not reach the page end), so recapture until the labels hold and keep `finder.min` at what every capture gave.
+
 Google sends a headless Firefox to its bot check, so `google` and `google_images` are not captured; capture them from a browser Google accepts when one is at hand. Pages with a row get marks only when captured through `capture.mjs` at the row's address.
 
 The capture saves each text as `textContent`, while the live `]]` reads `innerText`, so whitespace and hidden text can differ from what the suite sees.

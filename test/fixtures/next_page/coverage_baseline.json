@@ -5,9 +5,9 @@
   "picked": 50
  },
  "bing": {
-  "marks": 10,
-  "covered": 10,
-  "picked": 10
+  "marks": 5,
+  "covered": 0,
+  "picked": 6
  },
  "ddg": {
   "marks": 10,
@@ -15,14 +15,14 @@
   "picked": 10
  },
  "ddg_images": {
-  "marks": 411,
-  "covered": 1,
-  "picked": 96
+  "marks": 410,
+  "covered": 0,
+  "picked": 98
  },
  "ddg_news": {
-  "marks": 29,
-  "covered": 29,
-  "picked": 29
+  "marks": 30,
+  "covered": 30,
+  "picked": 30
  },
  "ddg_videos": {
   "marks": 212,

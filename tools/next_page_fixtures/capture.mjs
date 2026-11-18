@@ -18,7 +18,8 @@ const save_script = (mark_selector) => `(() => {
   const MARK = ${JSON.stringify(mark_selector)};
   const ATTRS = ["rel", "href", "role", "aria-label", "aria-expanded", "aria-haspopup", "aria-controls", "aria-pressed", "aria-roledescription", "aria-modal", "title", "type", "value", "disabled", "onclick"];
   const NEVER_WEAK = new Set(["html", "body", "head", "script", "style", "option"]);
-  const TEXT_TAGS = new Set(["p", "pre", "li"]);
+  const TEXT_TAGS = new Set(["p", "pre", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
+  const ARTICLE_BLOCKS = new Set(["figure", "table", "blockquote"]);
   const CONTROL = "a[href], area[href], button, [role=button], [role=link], input, summary";
   const scrolls_sideways = (el, style) => el.clientWidth > 0 && (/auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth + 20 || /hidden|clip/.test(style.overflowX) && el.scrollWidth > 1.5 * el.clientWidth && el.children.length > 0 && el.clientWidth > 150);
   const save = (el) => {
@@ -38,9 +39,10 @@ const save_script = (mark_selector) => `(() => {
     const rel = /\\b(next|prev)\\b/.test(el.getAttribute("rel") || "");
     const item_size = !hidden && box[2] >= 120 && box[3] >= 24;
     const media = tag === "video" || tag === "audio";
+    const article_block = ARTICLE_BLOCKS.has(tag) && !hidden;
     const marked = MARK !== null && !hidden && el.matches(MARK);
     const text_length = TEXT_TAGS.has(tag) && !hidden ? (el.textContent || "").replace(/\\s+/g, " ").trim().length : 0;
-    if (!kids.length && !control && !(pointer && !hidden) && !rel && !item_size && !sideways && !pinned && !media && !marked && !text_length && tag !== "html" && tag !== "body") return null;
+    if (!kids.length && !control && !(pointer && !hidden) && !rel && !item_size && !sideways && !pinned && !media && !marked && !article_block && !text_length && tag !== "html" && tag !== "body") return null;
     const node = { t: tag };
     const attrs = {};
     for (const name of ATTRS) { const value = el.getAttribute(name); if (value !== null) attrs[name] = name === "onclick" ? "" : value.slice(0, 160); }

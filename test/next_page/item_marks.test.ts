@@ -16,7 +16,7 @@ const CHROME_TAGS = new Set(["nav", "header", "footer", "aside", "dialog"]);
 const CHROME_ROLES = new Set(["navigation", "banner", "contentinfo", "menu", "menubar", "tablist", "dialog"]);
 const SHORT_LINK_TEXT = 30;
 
-// The main-list pick of `find_load_more`, copied because that function keeps it inside. The first finder phase replaces this copy with the shared module, so the baseline is the one to beat.
+// The main-list pick of `find_load_more`, copied because that function keeps it inside. Phase 2 of the item finder moves the pick into the shared finder module that `load_more.ts` calls too, and deletes this copy. The baseline is the one to beat.
 function main_list_items<N>(reader: PageReader<N>): N[] {
   const nodes = [reader.root_, ...descendants(reader, reader.root_)];
   const self_and_up = (node: N) => [node, ...ancestors(reader, node)];
@@ -54,32 +54,41 @@ function* walk(node: SavedNode): Generator<SavedNode> {
   for (const child of node.c ?? []) yield* walk(child);
 }
 
-// A mark counts as covered when a picked item is that node, sits inside it, or holds it and no other mark. An item that holds several marks (a table around the rows) finds none of them.
+// A mark counts as covered when a picked item is that node, sits inside it, or holds it and no other mark. An item that holds several marks (a table around the rows) finds none of them. One ancestor walk per picked item and one per mark keeps this linear in the page.
 function coverage(name: string): Coverage {
   const page = read_saved_page(name);
   const reader = saved_reader(page);
+  const marks = new Set([...walk(page.root)].filter((node) => node.m === 1));
+  if (marks.size === 0) return { marks: 0, covered: 0, picked: 0 };
   const picked = main_list_items(reader);
-  const marks = [...walk(page.root)].filter((node) => node.m === 1);
-  const marks_in = (item: SavedNode) => marks.filter((mark) => [mark, ...ancestors(reader, mark)].includes(item));
-  const finds = (item: SavedNode, mark: SavedNode) => [item, ...ancestors(reader, item)].includes(mark) || (marks_in(item).length === 1 && marks_in(item)[0] === mark);
-  return { marks: marks.length, covered: marks.filter((mark) => picked.some((item) => finds(item, mark))).length, picked: picked.length };
+  const covered = new Set<SavedNode>();
+  for (const item of picked) {
+    const up = [item, ...ancestors(reader, item)];
+    // The item sits inside a mark.
+    const holder = up.find((node) => marks.has(node));
+    if (holder) covered.add(holder);
+    // The item holds exactly one mark.
+    const inside = [...walk(item)].filter((node) => marks.has(node));
+    if (inside.length === 1) covered.add(inside[0]!);
+  }
+  return { marks: marks.size, covered: covered.size, picked: picked.length };
 }
 
 const saved = readdirSync(FIXTURES).filter((file) => file.endsWith(".json.gz")).map((file) => file.replace(/\.json\.gz$/, "")).sort();
+const mark_count = (name: string): number => [...walk(read_saved_page(name).root)].filter((node) => node.m === 1).length;
 
 test("the row pages carry marks and the labels state their minimum", () => {
   const row_pages = Object.entries(labels).filter(([, label]) => label.finder).map(([name]) => name);
   assert.ok(row_pages.length >= 10);
   for (const name of row_pages) {
-    const { marks } = coverage(name);
+    const marks = mark_count(name);
     const label = labels[name]!.finder!;
     // An article or a grid with no row has no marks, so only the pages with marks are held to their count.
     if (marks > 0) assert.ok(marks >= label.min, `${name}: ${marks} marks, label says at least ${label.min}`);
   }
-  for (const name of ["bing", "ddg", "hn", "lobsters", "tildes", "startpage", "arxiv", "stackoverflow_list", "wikipedia_search", "ddg_images", "ddg_news", "ddg_videos"]) assert.ok(coverage(name).marks > 0, `${name} has no marks`);
+  for (const name of ["bing", "ddg", "hn", "lobsters", "tildes", "startpage", "arxiv", "stackoverflow_list", "wikipedia_search", "ddg_images", "ddg_news", "ddg_videos"]) assert.ok(mark_count(name) > 0, `${name} has no marks`);
 });
 
-// No finder exists yet, so this records how much of each row the main-list pick of `]]` finds and never fails on the numbers. A changed number shows as a diagnostic. Rewrite the baseline with UPDATE_COVERAGE_BASELINE=1.
 test("coverage baseline of the main-list pick over the marked pages", (t) => {
   const now: Record<string, Coverage> = {};
   for (const name of saved) {
