@@ -13,15 +13,15 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
   const tag_of = (name) => in_page(row(name, `return row.querySelector(".desertfox-help-badge").textContent;`));
   const saved = () => in_background(`browser.storage.local.get("desertfox_saved_settings").then((got) => got.desertfox_saved_settings ?? {})`);
 
-  await run_case("settings page: a cold open of the site rules link lands on the anchor and focuses it", async () => {
+  await run_case("settings page: a cold open of the site rules link lands on the section heading and its first row", async () => {
     await close_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#section=settings/site-rules") }).then(() => true)`);
     const cold_view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#section=settings/site-rules"))`;
     const in_cold = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${cold_view}; ${code} })()`);
     await poll_until("the settings rows to load", () => in_cold(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
     await sleep(300);
-    const landed = await in_cold(`const anchor = view.document.getElementById("settings-site-rules"); const box = anchor?.getBoundingClientRect(); return { found: !!anchor, focused: view.document.activeElement === anchor, in_view: !!box && box.top >= 0 && box.top < view.innerHeight, scrolled: view.scrollY > 0 };`);
-    expect(landed?.found && landed.focused && landed.in_view && landed.scrolled, `cold open of the site rules link: ${JSON.stringify(landed)}`);
+    const landed = await in_cold(`const heading = view.document.getElementById("settings-site-rules"); const box = heading?.getBoundingClientRect(); const first = view.document.querySelector('[data-setting="site_rules"] tr + tr, [data-setting="site_rules"] p')?.getBoundingClientRect(); const inside = (rect) => !!rect && rect.top >= 0 && rect.bottom <= view.innerHeight; return { found: !!heading, is_heading: heading?.tagName === "H2", focused: view.document.activeElement === heading, heading_in_view: inside(box), first_row_in_view: inside(first), scrolled: view.scrollY > 0 };`);
+    expect(landed?.found && landed.is_heading && landed.focused && landed.heading_in_view && landed.first_row_in_view && landed.scrolled, `cold open of the site rules link: ${JSON.stringify(landed)}`);
     await close_tabs();
   });
 

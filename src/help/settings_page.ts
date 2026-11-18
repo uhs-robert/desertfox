@@ -1,6 +1,8 @@
 // Draws the settings page from a session and wires its controls. The session (`settings_model.ts`) holds the state, so this file only turns fields into nodes and events into session calls.
 
-import { el } from "./render.ts";
+import { edit_files_hash, el } from "./render.ts";
+import { site_rule_effects } from "./site_rule_effect.ts";
+import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import { create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
@@ -233,7 +235,27 @@ function widget_of(field: Field, hooks: Hooks): Widget | undefined {
 // The long description is kept for power users in a closed fold: it holds the input format, such as CSS selectors or the range of a number.
 const more_of = (doc: string): HTMLElement => el("details", "desertfox-settings-more", el("summary", undefined, "More"), el("p", "desertfox-help-muted", doc));
 
+// The site rules row: one table row per rule, with its sites, its effect in words and a link to the editor. The rules themselves stay in the settings file, so the table has no controls.
+function fill_site_rules(box: HTMLElement, field: Field): void {
+  const rules = Array.isArray(field.row.value) ? (field.row.value as SiteRuleRow[]) : [];
+  box.setAttribute("data-changed", String(is_changed(field.row)));
+  const how = el("p", "desertfox-help-muted", "Add or change rules in your settings file. ", edit_link("Edit your setup files"), ", or edit settings.toml in your DesertFox folder and press the reload key.");
+  if (rules.length === 0) return box.replaceChildren(el("p", undefined, "You have no site rules of your own."), how);
+  const rows = rules.map((rule) => el("tr", undefined, el("td", undefined, el("code", undefined, rule.site)), el("td", undefined, ...effect_badges(rule)), el("td", undefined, edit_link("Edit"))));
+  box.replaceChildren(el("table", "desertfox-help-site-rules", el("tr", undefined, ...["Site", "Effect", ""].map((name) => el("th", undefined, name))), ...rows), how);
+}
+
+const effect_badges = (rule: SiteRuleRow): HTMLElement[] => site_rule_effects(rule).map((effect) => el("span", "desertfox-help-badge desertfox-site-rule-effect", effect));
+
+function edit_link(text: string): HTMLElement {
+  const link = el("a", undefined, text);
+  link.setAttribute("href", edit_files_hash());
+  return link;
+}
+
 export type Row = { node: HTMLElement; tag: HTMLElement; message: HTMLElement; reset: HTMLButtonElement; widget?: Widget; preview?: HTMLElement };
+
+const SITE_RULES = "site_rules";
 
 const PREVIEW_TEXT = "The quick brown fox jumps over the lazy dog. 0123456789 { } [ ] ( ) -> =>";
 
@@ -297,13 +319,19 @@ type StorageChangedEvents = { addListener: (listener: (changes: Record<string, u
 // Loads the settings into `container` and keeps them current: a change in another tab refreshes the rows the reader is not editing. The returned function stops the listening. The router calls it before it rebuilds the body.
 export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents, reload_key: string, resolve_keys: SessionDeps["resolve_keys"]): () => void {
   const rows = new Map<string, Row>();
+  const show_site_rules = (fields: Field[]) => {
+    const box = container.querySelector<HTMLElement>(`[data-setting="${SITE_RULES}"]`);
+    const field = fields.find((candidate) => candidate.row.name === SITE_RULES);
+    if (box && field) fill_site_rules(box, field);
+  };
   // The headings and the group boxes come from the render, so a section link reaches a heading before the settings load.
   const build = (session: SettingsSession) => {
     const fields = session.fields();
+    show_site_rules(fields);
     for (const group of GROUPS) {
       const box = container.querySelector(`[data-group="${group.title}"]`);
       box?.replaceChildren(
-        ...fields.filter((field) => field.group === group.title).map((field) => {
+        ...fields.filter((field) => field.group === group.title && field.row.name !== SITE_RULES).map((field) => {
           const row = build_row(field, session, reload_key);
           rows.set(field.row.name, row);
           row.widget?.write(field.row.value);
@@ -319,6 +347,7 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
     resolve_keys,
     on_change: (name) => {
       if (rows.size === 0) return build(session);
+      if (name === undefined || name === SITE_RULES) show_site_rules(session.fields());
       for (const field of session.fields()) {
         const row = rows.get(field.row.name);
         if (row && (name === undefined || name === field.row.name)) update_row(row, field);
