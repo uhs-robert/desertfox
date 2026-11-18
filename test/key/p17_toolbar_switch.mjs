@@ -226,6 +226,24 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
       await poll_until("On to be checked", async () => (await checked()) === "On");
       await poll_until("the state line to read enabled", async () => (await popup_eval(`document.querySelector(".desertfox-popup-state")?.textContent`)) === "Enabled on this site");
       await shoot("on");
+      // The extras: the host dot, the version link, the copy and keys rows, and a session-only theme pick.
+      const manifest_version = await in_background(`browser.runtime.getManifest().version`);
+      expect((await popup_eval(`document.querySelector("a.desertfox-popup-version")?.href`)).startsWith("https://github.com/uhs-robert/desertfox/releases"), `the version links to the releases, got ${manifest_version}`);
+      expect((await popup_eval(`document.querySelector(".desertfox-popup-host-dot")?.getAttribute("aria-label")`)).startsWith("Native host:"), "the header has a host dot");
+      const row_text = () => popup_eval(`[...document.querySelectorAll(".desertfox-popup-row")].map((button) => button.textContent).join("|")`);
+      const rows_now = await row_text();
+      expect(rows_now.includes("Copy rule") && rows_now.includes("Keys"), `the popup has the Copy rule and Keys rows, got ${rows_now}`);
+      const saved_before = await in_background(`browser.storage.local.get("desertfox_saved_settings").then((got) => JSON.stringify(got.desertfox_saved_settings ?? {}))`);
+      await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "catppuccin"; select.dispatchEvent(new Event("change")); return true; })()`);
+      await poll_until("the theme pick to reach the temp layer", async () => (await in_background(`browser.storage.session.get("desertfox_temp_settings").then((got) => got.desertfox_temp_settings?.theme)`)) === "catppuccin");
+      expect((await in_background(`browser.storage.local.get("desertfox_saved_settings").then((got) => JSON.stringify(got.desertfox_saved_settings ?? {}))`)) === saved_before, "the theme pick wrote the saved settings");
+      await poll_until("the popup select to show the pick", async () => (await popup_eval(`document.querySelector(".desertfox-popup-theme-select")?.value`)) === "catppuccin");
+      await shoot("theme");
+      // Back to the desktop entry through the same request, which the dropdown always offers.
+      await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "desktop"; select.dispatchEvent(new Event("change")); return true; })()`);
+      await poll_until("desktop to reach the temp layer", async () => (await in_background(`browser.storage.session.get("desertfox_temp_settings").then((got) => got.desertfox_temp_settings?.theme)`)) === "desktop");
+      // Through the settings path, so the edits status the cleanup waits on follows.
+      await ask({ type: "change_setting", name: "theme", action: "reset" });
       // Stub the tab creation so the click proves the URL without opening the Sponsors page. The click closes the popup, so the record lives in the background.
       await popup_eval(`(globalThis.support_tabs = [], popup_browser.tabs.create = async (options) => { globalThis.support_tabs.push(options.url); }, true)`);
       const support = `[...document.querySelectorAll(".desertfox-popup-row")].find((button) => button.textContent === "Support DesertFox")`;
