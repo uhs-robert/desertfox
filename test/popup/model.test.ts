@@ -9,7 +9,7 @@ const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
 test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
-  assert.deepEqual(ids(base), ["power", "site", "settings", "home", "reload_config", "warnings", "support"]);
+  assert.deepEqual(ids(base), ["power", "site", "reload_config", "settings", "home", "warnings", "support"]);
   assert.ok(!ids({ ...base, warning_count: 0 }).includes("warnings"), "no Warnings row without warnings");
   assert.equal(ids({ ...base, warning_count: 0 }).at(-1), "support");
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
