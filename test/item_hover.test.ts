@@ -288,7 +288,7 @@ const step_of = async (keymap: CompiledKeymap, url: string, key: string) => {
 };
 
 test("item_hover is on by default: the finder row and the video rows carry hover", async () => {
-  const result = compiled({ item_finder: true });
+  const result = compiled({ item_navigator: true });
   assert.deepEqual(result.warnings, []);
   assert.equal((await step_of(result.compiled, "https://a.test/", "j")).args?.["hover"], true);
   assert.equal((await step_of(result.compiled, "https://duckduckgo.com/?q=x&iax=videos&ia=videos", "j")).args?.["hover"], true);
@@ -300,7 +300,7 @@ test("a text result row never carries hover", async () => {
 });
 
 test("item_hover off removes the arg from the finder row and the video rows", async () => {
-  const result = compiled({ item_finder: true, item_hover: false });
+  const result = compiled({ item_navigator: true, item_hover: false });
   assert.deepEqual(result.warnings, []);
   assert.notEqual((await step_of(result.compiled, "https://a.test/", "j")).args?.["hover"], true);
   assert.notEqual((await step_of(result.compiled, "https://duckduckgo.com/?q=x&iax=videos&ia=videos", "j")).args?.["hover"], true);

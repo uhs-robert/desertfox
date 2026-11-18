@@ -1,4 +1,4 @@
-// The item finder (`item_finder = true`): on a page with no site row, j and k walk the list the finder reads from the page, with the box and the focus on the title link, and Enter opens it. gg and G go to the first and last card where it is in view after the scroll, and only scroll otherwise. On a page with no list the keys scroll as they do without the setting. A shipped row for the site still decides first. The bundle-refused fallback is covered in test/content/item_finder_fallback.test.ts, because no real page makes the item bundle fail without a test hook.
+// The item finder (`item_navigator = true`): on a page with no site row, j and k walk the list the finder reads from the page, with the box and the focus on the title link, and Enter opens it. gg and G go to the first and last card where it is in view after the scroll, and only scroll otherwise. On a page with no list the keys scroll as they do without the setting. A shipped row for the site still decides first. The bundle-refused fallback is covered in test/content/item_finder_fallback.test.ts, because no real page makes the item bundle fail without a test hook.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -7,11 +7,11 @@ export const areas = ["keys", "config", "bundles"];
 const CARDS = 10;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("load a config with item_finder on", async () => {
+  await setup("load a config with item_navigator on", async () => {
     const dir = config_copy();
     const file = join(dir, "settings.toml");
     // A top-level setting goes above the first table.
-    writeFileSync(file, `item_finder = true\n${readFileSync(file, "utf8")}`);
+    writeFileSync(file, `item_navigator = true\n${readFileSync(file, "utf8")}`);
     await load_config_dir(dir);
   });
 

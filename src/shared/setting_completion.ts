@@ -488,7 +488,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
-    "name": "item_finder",
+    "name": "item_navigator",
     "settable": true,
     "is_toggle": true,
     "is_list": false,

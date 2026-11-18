@@ -126,10 +126,10 @@ export function compile_config(input: CompileInput): CompileOutput {
   // The finder row comes last, so a row that binds j and k for a site decides them first and the finder runs only where no row matches.
   // A row that binds or passes j or k keeps the plain j, k, h and l it does not decide, through a hold-back row before the finder row.
   // With the switch off the rows still go in when a user row turns the finder on for a site, and the page drops the finder row where the site's value is false.
-  const finder_on = input.config.settings.item_finder ?? DEFAULT_SETTINGS.item_finder;
-  const finder_wanted = finder_on || user_rows.some((row) => site_row_columns(row).values?.["item_finder"] === true);
+  const finder_on = input.config.settings.item_navigator ?? DEFAULT_SETTINGS.item_navigator;
+  const finder_wanted = finder_on || user_rows.some((row) => site_row_columns(row).values?.["item_navigator"] === true);
   const finder_rows = finder_wanted ? [...hold_back_rows([...user_rows, ...default_rows.map(({ row }) => row)], keymap.normal, (binding) => is_plain_bind(binding, input)), item_finder_row(hover)] : [];
-  const settings = { ...input.config.settings, item_finder: finder_on, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
+  const settings = { ...input.config.settings, item_navigator: finder_on, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
   const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
