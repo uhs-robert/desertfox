@@ -22,6 +22,9 @@ export { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 // The theme name the desktop last pushed over the bridge. `theme = "desktop"` follows it. Local storage, so it stays on this machine and survives a restart.
 export const DESKTOP_THEME_STORAGE_KEY = "desertfox_desktop_theme";
 
+// True in `storage.session` while the bridge port is up and the host has sent its ready message. The bridge clears it when the port drops and at every background start, so the popup's host dot never outlives the host.
+export const HOST_CONNECTED_STORAGE_KEY = "desertfox_host_connected";
+
 // What the host updater remembers (`host_update.ts`): the last attempt, the version whose failure showed its toast, a blocked version and the notice shown.
 export const HOST_UPDATE_STORAGE_KEY = "desertfox_host_update";
 
