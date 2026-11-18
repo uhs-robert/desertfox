@@ -1,5 +1,5 @@
 {
- "apnews": {"url": "https://apnews.com/", "ok": [{"action": "none"}], "why": "front page with no paging control; the video carousel's Next arrow is a trap", "known_miss": "the detector follows the Next arrow of a flickity video carousel (flickity-button) as a next page", "finder": {"kind": "list", "min": 30}},
+ "apnews": {"url": "https://apnews.com/", "ok": [{"action": "none"}], "why": "front page with no paging control; the video carousel's Next arrow is a trap", "known_miss": "the detector follows the Next arrow of a flickity video carousel (flickity-button) as a next page", "miss_as": {"action": "follow", "label": "^next$"}, "finder": {"kind": "list", "min": 30}},
  "arstechnica": {"url": "https://arstechnica.com/", "ok": [{"action": "follow", "text": "^load more", "href": "/page/2"}], "why": "front page; the Load more link goes to page 2", "known_miss": "the detector finds no Load more link", "finder": {"kind": "grid", "min": 12}},
  "arxiv": {"url": "https://arxiv.org/search/?query=transformer&searchtype=all", "ok": [{"action": "follow", "text": "^next$", "href": "start=50"}], "why": "Next link, rel-less; the numbered page links are traps", "finder": {"kind": "list", "min": 50}},
  "bbc_home": {"url": "https://www.bbc.com/news", "ok": [{"action": "none"}], "why": "front page; carousel arrows are traps", "soft": true},
