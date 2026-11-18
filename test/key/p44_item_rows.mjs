@@ -117,6 +117,35 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_box_on_focus("the box on the second result");
   });
 
+  const add_tall_header = (extra) => in_active_tab(`(() => {
+    const search = document.getElementById("search");
+    const header = document.createElement("div");
+    header.style.height = (innerHeight + ${extra}) + "px";
+    search.before(header);
+    return true;
+  })()`);
+
+  await run_case("Enter after gg opens the boxed first result even when it is off screen", async () => {
+    await open_results("endenter");
+    await add_tall_header(100);
+    await press_keys("gg");
+    await expect_focus("r0");
+    await press_keys("-k", "Return");
+    await poll_until("the address to name the first result", async () => (await in_active_tab("location.hash")) === "#r0");
+  });
+
+  // The box stays while the focus stays in the item, so a scroll away and back to the top leaves item 1 boxed and focused, and j goes on to item 2 from it, rightly. Only a scroll that leaves the pinned scroll position ends the pin.
+  await run_case("a scroll away from the top ends the pin of gg, so j picks the first result in view", async () => {
+    await open_results("endscroll");
+    await add_tall_header(100);
+    await press_keys("gg");
+    await expect_focus("r0");
+    // The first two results lie above the view and the third is the first one in it.
+    await in_active_tab("window.scrollTo(0, innerHeight + 100 + 180)");
+    await press_keys("j");
+    await expect_focus("r2");
+  });
+
   await run_case("the box sits on the focused result and moves with it", async () => {
     await open_results("box");
     await press_keys("j");
