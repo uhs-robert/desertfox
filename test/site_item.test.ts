@@ -151,6 +151,7 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
     focused: () => items[focused_index] ?? null,
     toast: (message: string) => toasts.push(message),
     scroll_by: (dx: number, dy: number) => scrolls.push([dx, dy]),
+    box_shown: () => false,
     highlight: (item: unknown) => shown.push(String(items.indexOf(item as (typeof items)[number]))),
   } as unknown as ItemPage;
   return { page, log, shown, toasts, scrolls, add: (rect: Box) => items.push(make(rect, items.length)) };

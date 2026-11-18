@@ -22,6 +22,7 @@ if (!item_window.desertfox_item_ready && host) {
     toast: host.show_toast_,
     scroll_by: host.scroll_by_,
     highlight: overlay.show,
+    box_shown: overlay.shown_,
     overflow_y_: (element: Element) => getComputedStyle(element).overflowY,
     // A timer and not the next frame, because a hidden tab draws no frames.
     wait_: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
