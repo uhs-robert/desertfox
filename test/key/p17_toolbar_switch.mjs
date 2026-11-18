@@ -6,7 +6,7 @@ export const areas = ["toolbar"];
 
 const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 
-export async function run_cases({ take_shot, rdp, extension_id, run_case, press_keys, poll_until, open_page, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
+export async function run_cases({ take_shot, rdp, extension_id, run_case, press_keys, poll_until, open_page, url_of, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const flag = () => in_background(`browser.storage.local.get("desertfox_disabled").then((got) => got.desertfox_disabled === true)`);
   const title = () => in_background(`browser.browserAction.getTitle({})`);
@@ -24,6 +24,7 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
     if (await flag()) await ask({ type: "toolbar_set_disabled", disabled: false });
     await wait_state(false, "DesertFox to be on");
   };
+  const POPUP_VIEW = `browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html")`;
   const press_toggle = () => press_keys(...TOGGLE);
 
   await run_case("the shortcut turns DesertFox off: the flag, title and keymap say off, keys reach the page, the badge goes", async () => {
@@ -120,8 +121,8 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
   });
 
   const slot_chord = () => in_background(`browser.commands.getAll().then((all) => all.find((command) => command.name === "slot_1")?.shortcut ?? "")`);
-  const click_power = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelector('.desertfox-popup-segment[aria-checked="false"]').click()`);
-  const power_label = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html")?.document.querySelector('.desertfox-popup-segment[aria-checked="true"]')?.textContent ?? ""`);
+  const click_power = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelector('input[name=power]:not(:checked)').click()`);
+  const power_label = () => in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html")?.document.querySelector('input[name=power]:checked')?.parentElement.textContent ?? ""`);
 
   await run_case("clicking the popup switch turns DesertFox off and on, and Firefox releases the slot chords while off", async () => {
     try {
@@ -179,24 +180,51 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
     }
   });
 
-  // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots rewrite that rule in the page's styles, never the machine's scheme.
-  const popup_scheme = (target) => in_background(`(() => { const doc = browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document; const rule = /@media (?:\\(prefers-color-scheme: light\\)|not all|all)(?![\\w-])/g; for (const sheet of doc.querySelectorAll("style")) if (sheet.textContent.includes("prefers-color-scheme: light") || sheet.dataset.scheme_set) { sheet.textContent = sheet.textContent.replace(rule, ${JSON.stringify(target)}); sheet.dataset.scheme_set = "1"; } })()`);
+  // The theme sheet applies its light set under a prefers-color-scheme media rule, and the test Firefox reports light. The shots set that rule's media list on the parsed sheets, never the machine's scheme.
+  const popup_scheme = (target) => in_background(`(() => { const doc = ${POPUP_VIEW}.document; for (const sheet of doc.styleSheets) for (const rule of sheet.cssRules) if (rule instanceof ${POPUP_VIEW}.CSSMediaRule && (rule.media.mediaText.includes("prefers-color-scheme") || rule.media.mediaText === "all" || rule.media.mediaText === "not all")) rule.media.mediaText = ${JSON.stringify(target)}; })()`);
+  // The code text runs in the background with the popup's `document` and `popup_browser` in scope, because the pages' CSP blocks eval.
+  const popup_eval = (code) => in_background(`(() => { const view = ${POPUP_VIEW}; const document = view.document; const popup_browser = view.browser; return (${code}); })()`);
 
-  await run_case("the popup page draws the header, the segments and the site card, with shots under DESERTFOX_SHOT_DIR", async () => {
-    await open_page("page", "popup_look", { new_tab: true });
+  await run_case("the popup draws the header, one On/Off radio group moved by the arrow keys, and the site card with its rule line, with shots under DESERTFOX_SHOT_DIR", async () => {
+    await open_page("page", "rule_pass_look", { new_tab: true });
+    const page_url = url_of("page", "rule_pass_look");
     try {
       await close_popup();
       await in_background(`browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: true })`);
-      await poll_until("the popup page to draw", () => in_background(`browser.extension.getViews({ type: "tab" }).some((view) => view.location.pathname === "/popup.html" && view.document.querySelector(".desertfox-popup-card") !== null)`).catch(() => false));
-      expect(await in_background(`browser.extension.getViews({ type: "tab" }).find((view) => view.location.pathname === "/popup.html").document.querySelectorAll(".desertfox-popup-segment").length`) === 2, "the on/off control has two segments");
+      await poll_until("the popup page to draw", () => in_background(`${POPUP_VIEW}?.document.querySelector(".desertfox-popup-card") !== null`).catch(() => false));
+      // The popup reads the active tab, which here is the popup itself, so the test hands it the rule page's address.
+      await popup_eval(`(popup_browser.tabs.query = async () => [{ id: 1, url: ${JSON.stringify(page_url)} }], true)`);
+      const checked = () => popup_eval(`document.querySelector("input[name=power]:checked").parentElement.textContent`);
+      const group_names = () => popup_eval(`[...document.querySelectorAll("input[type=radio]")].map((input) => input.name).join()`);
+      const names = await group_names(); expect(names === "power,power", `the On and Off radios share one name, got ${JSON.stringify(names)}`);
+      expect((await popup_eval(`document.querySelector(".desertfox-popup-segments legend").textContent`)) === "DesertFox", "the group label is neutral");
+      // An arrow key on the focused radio moves the selection to Off, which a redraw then shows with the host.
+      await popup_eval(`document.querySelector("input[name=power]:checked").focus()`);
+      // The first key after the tab opens can land before the page takes keys.
+      await sleep(500);
+      await press_keys("-k", "Right");
+      await wait_state(true, "the arrow key to turn DesertFox off");
+      await poll_until("Off to be checked", async () => (await checked()) === "Off");
+      await poll_until("the site card to name the host and the rule", async () => (await popup_eval(`document.querySelector(".desertfox-popup-host")?.textContent === "127.0.0.1" && document.querySelector(".desertfox-popup-rule .desertfox-popup-detail")?.textContent === "pass 2 keys"`)) === true);
       const shot_dir = process.env.DESERTFOX_SHOT_DIR;
-      if (!shot_dir) return;
-      for (const [scheme, target] of [["dark", "@media not all"], ["light", "@media all"]]) {
-        await popup_scheme(target);
-        await sleep(700);
-        await take_shot(`${shot_dir}/popup-${scheme}.png`);
-      }
+      const shoot = async (name) => {
+        if (!shot_dir) return;
+        for (const [scheme, target] of [["dark", "not all"], ["light", "all"]]) {
+          await popup_scheme(target);
+          await sleep(700);
+          await take_shot(`${shot_dir}/popup-${name}-${scheme}.png`);
+        }
+      };
+      await shoot("off");
+      await ask({ type: "toolbar_set_disabled", disabled: false });
+      await wait_state(false, "DesertFox to be on");
+      await popup_eval(`document.querySelector("input[name=power]:not(:checked)").click()`);
+      await wait_state(false, "the clicks to leave DesertFox on");
+      await poll_until("On to be checked", async () => (await checked()) === "On");
+      await poll_until("the state line to read enabled", async () => (await popup_eval(`document.querySelector(".desertfox-popup-state")?.textContent`)) === "Enabled on this site");
+      await shoot("on");
     } finally {
+      await turn_on();
       await close_popup();
     }
   });

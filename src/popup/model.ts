@@ -21,8 +21,8 @@ export type PopupInputs = {
 };
 
 export type PopupRow = {
-  id: "power" | "settings" | "home" | "site" | "rule" | "reload_config" | "warnings" | "version";
-  kind: "switch" | "link" | "action" | "info";
+  id: "power" | "settings" | "home" | "site" | "rule" | "reload_config" | "warnings";
+  kind: "switch" | "link" | "action";
   label: string;
   // A greyed row says why in `detail`.
   detail?: string;
@@ -71,7 +71,6 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }
       : { id: "reload_config", kind: "action", label: "Reload config", detail: "needs the native host", enabled: false },
     { id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true },
-    { id: "version", kind: "info", label: `Version ${inputs.version}`, enabled: false },
   );
   return rows;
 }
