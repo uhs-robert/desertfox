@@ -624,14 +624,12 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const hover_away = () => click_element(rdp, in_active_tab, "search", 400, 30);
   const rect_of = (expression) => in_active_tab(`(() => { const r = (${expression}).getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; })()`);
 
-  await run_case("off the pointer the box fits the result, and under it the box covers a part of the result that grows past it", async () => {
+  await run_case("under the pointer, the box on the focused result covers a part of the result that grows past it", async () => {
     await open_results("overflow");
     await press_keys("j");
     await expect_box_on_focus("the box on the first result");
     // As a hover zoom does: a child that pokes out past the right and bottom edges.
     await in_active_tab(`(() => { const item = document.getElementById("r0").closest(".MjjYud"); item.id = "item0"; item.append(Object.assign(document.createElement("div"), { id: "zoomed", style: "position:relative;left:250px;width:100px;height:20px;top:20px" })); return 0; })()`);
-    await sleep(300);
-    await expect_box_stays_on_item_of("r0", "the box grew while no pointer was over the result");
     await hover_title("r0");
     await poll_until("the box to cover the zoomed part", async () => {
       const drawn = await box();
@@ -642,6 +640,27 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     });
     expect((await focused()) === "r0", `the click moved the focus to ${await focused()}`);
     await hover_away();
+  });
+
+  // As a Google Shopping tile does: its image grows when the tile holds the focus, which j gives it with no pointer event.
+  await run_case("on a tile whose image grows while the tile holds the focus, j draws the box over the grown image", async () => {
+    await open_results("focus_zoom");
+    await in_active_tab(`(() => {
+      const style = document.createElement("style");
+      style.textContent = "#focus_img { width: 100px; height: 20px; } .MjjYud:focus-within #focus_img { width: 400px; height: 120px; }";
+      document.head.append(style);
+      document.getElementById("r0").closest(".MjjYud").append(Object.assign(document.createElement("div"), { id: "focus_img" }));
+      return 0;
+    })()`);
+    await press_keys("j");
+    await expect_focus("r0");
+    await poll_until("the box to cover the grown image", async () => {
+      const drawn = await box();
+      const item = await rect_of(`document.getElementById("r0").closest(".MjjYud")`);
+      const image = await rect_of(`document.getElementById("focus_img")`);
+      const union = { left: Math.min(item.left, image.left), top: Math.min(item.top, image.top), width: Math.max(item.right, image.right) - Math.min(item.left, image.left), height: Math.max(item.bottom, image.bottom) - Math.min(item.top, image.top) };
+      return drawn !== null && union.width > item.right - item.left && near(drawn, union);
+    });
   });
 
   await run_case("under the pointer, the box on an image tile that crops its image fits the tile", async () => {
