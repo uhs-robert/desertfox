@@ -39,6 +39,11 @@ test("a shipped row that binds j and k decides them before the finder, and a use
   assert.equal(step_of(await ask(compiled({ item_finder: true, site_rules: [mine] }).compiled, "https://a.test/"), "j").id, "tab.next");
 });
 
+test("a shipped grid row keeps h, j, k and l on its pages, ahead of the finder", async () => {
+  const reply = await ask(compiled({ item_finder: true }).compiled, "https://www.amazon.com/s?k=keyboard");
+  for (const key of ["h", "j", "k", "l"]) assert.notEqual(step_of(reply, key).args!["selector"], "", key);
+});
+
 test("turning a shipped row off hands its site to the finder", async () => {
   const reply = await ask(compiled({ item_finder: true, default_site_rows_off: ["ddg"] }).compiled, "https://duckduckgo.com/?q=x");
   assert.equal(step_of(reply, "j").args!["selector"], "");
