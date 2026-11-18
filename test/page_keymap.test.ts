@@ -683,8 +683,8 @@ test("the list-page rows bind j and k to page.item on their result lists and lea
     ["https://stackoverflow.com/questions/tagged/rust", "div.s-post-summary"],
     ["https://tildes.net/", "article.topic"],
     ["https://tildes.net/~comp", "article.topic"],
-    ["https://www.reddit.com/r/rust/new/?js_challenge=1", "shreddit-feed shreddit-post"],
-    ["https://reddit.com/", "shreddit-feed shreddit-post"],
+    ["https://www.reddit.com/r/rust/new/?js_challenge=1", "shreddit-feed shreddit-post, shreddit-feed shreddit-profile-comment"],
+    ["https://reddit.com/", "shreddit-feed shreddit-post, shreddit-feed shreddit-profile-comment"],
   ];
   for (const [url, selector] of walks) {
     for (const key of ["j", "k"]) assert.equal((await item_args_at(compiled, url, key))?.selector, selector, `${key} on ${url}`);

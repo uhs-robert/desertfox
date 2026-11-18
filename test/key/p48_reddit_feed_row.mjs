@@ -56,6 +56,28 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await focused()) !== "p0", "gg focused the first post");
   });
 
+  // A user overview page: posts and comments in one feed. A comment holds no full-post link, so it takes the focus itself.
+  await run_case("on a user page, j walks posts and comments, and a comment takes the focus itself", async () => {
+    await open_page("controls", "reddit_profile", { new_tab: true });
+    await in_active_tab(`(() => {
+      const comment = (id) => '<article><shreddit-profile-comment id="' + id + '" style="display:block;height:60px;margin-bottom:40px"><a href="#in' + id + '">a comment</a></shreddit-profile-comment></article>';
+      const feed = document.createElement("shreddit-feed");
+      feed.innerHTML = ${JSON.stringify(post("p0"))} + comment("c0") + '<faceplate-batch>' + comment("c1") + ${JSON.stringify(post("p1"))} + '</faceplate-batch>';
+      document.body.prepend(feed);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("p0");
+    await press_keys("j");
+    await expect_focus("c0");
+    await press_keys("jj");
+    await expect_focus("p1");
+    await press_keys("k");
+    await expect_focus("c1");
+  });
+
   await run_case("on a thread page with no shreddit-feed, j scrolls", async () => {
     await open_page("controls", "reddit_thread", { new_tab: true });
     await in_active_tab(`(() => {
