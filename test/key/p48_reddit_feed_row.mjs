@@ -56,13 +56,14 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     expect((await focused()) !== "p0", "gg focused the first post");
   });
 
-  // A user overview page: posts and comments in one feed. A comment holds no full-post link, so it takes the focus itself.
-  await run_case("on a user page, j walks posts and comments, and a comment takes the focus itself", async () => {
+  // A user overview page: posts and comments in one feed. A comment holds a permalink overlay, and a post with a later /comment/ link keeps its full-post link.
+  await run_case("on a user page, j walks posts and comments, a comment focuses its permalink and a post keeps its full-post link", async () => {
     await open_page("controls", "reddit_profile", { new_tab: true });
     await in_active_tab(`(() => {
-      const comment = (id) => '<article><shreddit-profile-comment id="' + id + '" style="display:block;height:60px;margin-bottom:40px"><a href="#in' + id + '">a comment</a></shreddit-profile-comment></article>';
+      const comment = (id) => '<article><shreddit-profile-comment id="' + id + '" style="display:block;height:60px;margin-bottom:40px"><a id="link_' + id + '" href="/r/x/comments/1/comment/' + id + '/" style="display:block;height:60px">a comment</a></shreddit-profile-comment></article>';
       const feed = document.createElement("shreddit-feed");
-      feed.innerHTML = ${JSON.stringify(post("p0"))} + comment("c0") + '<faceplate-batch>' + comment("c1") + ${JSON.stringify(post("p1"))} + '</faceplate-batch>';
+      const post_with_comment_link = ${JSON.stringify(post("p0").replace("</shreddit-post>", '<a id="inner" href="/r/x/comments/1/comment/9/">reply</a></shreddit-post>'))};
+      feed.innerHTML = post_with_comment_link + comment("c0") + '<faceplate-batch>' + comment("c1") + ${JSON.stringify(post("p1"))} + '</faceplate-batch>';
       document.body.prepend(feed);
       document.activeElement?.blur();
       window.scrollTo(0, 0);
@@ -71,11 +72,11 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("j");
     await expect_focus("p0");
     await press_keys("j");
-    await expect_focus("c0");
+    await expect_focus("link_c0");
     await press_keys("jj");
     await expect_focus("p1");
     await press_keys("k");
-    await expect_focus("c1");
+    await expect_focus("link_c1");
   });
 
   await run_case("on a thread page with no shreddit-feed, j scrolls", async () => {
