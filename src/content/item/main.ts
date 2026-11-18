@@ -1,7 +1,7 @@
 // The `item` bundle: the handler of `page.item`, which site rows bind to j and k on result pages. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { move_item, read_cursor } from "./pick.ts";
+import { follow_item, move_item, read_cursor } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { watch_user_left } from "../user_left.ts";
@@ -14,7 +14,7 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const watch_user_ = () => watch_user_left(document, window, host.pressed_keys_);
-  const overlay = create_item_overlay(() => host.get_mode() === "normal", watch_user_);
+  const overlay = create_item_overlay(() => host.get_mode() === "normal", watch_user_, follow_item);
   const page = {
     doc: document,
     view: window,
