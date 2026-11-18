@@ -5,6 +5,8 @@ import { selector_of } from "./selector_of.ts";
 import type { FrameCue, MediaPin } from "../../shared/messages.ts";
 import { parent_across_shadow, player_box } from "../player_box.ts";
 import { best_effort } from "../../shared/swallow.ts";
+import { center_of, dispatch_mouse_event } from "../pointer_events.ts";
+import type { Hoverable } from "../pointer_events.ts";
 
 export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "prompt" | "grab" | "grab_move" | "grab_swipe";
 
@@ -107,26 +109,6 @@ export function has_usable_address(target: Target, with_background: boolean, ope
 
 export const is_media = (target: { localName: string }): boolean => target.localName === "video" || target.localName === "audio";
 
-export type MouseEventName =
-  | "pointerover" | "pointerenter" | "pointermove" | "pointerout" | "pointerleave" | "pointerdown" | "pointerup"
-  | "mouseover" | "mouseenter" | "mousemove" | "mouseout" | "mouseleave" | "mousedown" | "mouseup" | "click" | "dblclick";
-
-export function center_of(target: Target): { x: number; y: number } {
-  const box = target.getBoundingClientRect?.();
-  return { x: box ? box.left + box.width / 2 : 0, y: box ? box.top + box.height / 2 : 0 };
-}
-
-// One mouse-side event as the left button sends it. Returns false when the page cancelled it. The enter and leave events do not bubble. The point defaults to the middle of the target. A move across several elements passes one point, so every event of it agrees. `detail` is the click count.
-export function dispatch_mouse_event(target: Target, type: MouseEventName, related_target: EventTarget | null = null, at = center_of(target), detail = 0): boolean {
-  if (!target.dispatchEvent) return true;
-  const stays_inside = /(enter|leave)$/.test(type);
-  const init = { bubbles: !stays_inside, cancelable: true, composed: !stays_inside, button: 0, buttons: type.endsWith("down") ? 1 : 0, relatedTarget: related_target, clientX: at.x, clientY: at.y };
-  // A browser sends `click` as a PointerEvent too, so the synthetic one is built the same way.
-  // The other pointer events carry no click count, so only the click gets `detail`.
-  if (type === "click") return target.dispatchEvent(new PointerEvent(type, { ...init, detail, pointerType: "mouse", isPrimary: true }));
-  return target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, { ...init, detail }));
-}
-
 // The pointer and mouse events of one press and release. A browser skips the mouse events after a cancelled pointerdown and the focus after a cancelled mousedown, and a widget such as Chosen relies on that to keep its own focus.
 function press_and_release(target: Target, detail: number): void {
   const pointer_pressed = dispatch_mouse_event(target, "pointerdown", null, undefined, detail);
@@ -136,7 +118,7 @@ function press_and_release(target: Target, detail: number): void {
 }
 
 // The events a real click gives, so a widget that opens on mousedown or pointerdown opens. The click comes last, from click(), so a link or button acts once. An SVG element has no click(), so it gets a click event.
-function click_like_a_mouse(target: Target, pointer_from: Target | undefined): void {
+function click_like_a_mouse(target: Target, pointer_from: Hoverable | undefined): void {
   enter_for_click(target, pointer_from);
   press_and_release(target, 1);
   if (typeof target.click === "function") target.click();
@@ -189,7 +171,7 @@ function select_word_at(target: Target, at: { x: number; y: number }): void {
 }
 
 // Two presses with click counts 1 and 2, a click after each, then dblclick, as a mouse sends them. The clicks are events and not click(), because click() carries no count. A link would act on the first, so links are not offered as targets.
-function double_click_like_a_mouse(target: Target, pointer_from: Target | undefined): void {
+function double_click_like_a_mouse(target: Target, pointer_from: Hoverable | undefined): void {
   enter_for_click(target, pointer_from);
   for (const detail of [1, 2]) {
     press_and_release(target, detail);
