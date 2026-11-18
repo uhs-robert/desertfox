@@ -409,26 +409,19 @@ class AppTest(unittest.TestCase):
         self.assertIn(self.sockets["thunderbird"], done.stderr)
         self.assertIn("in DesertBird", done.stderr)
 
-    def test_both_running_without_app_is_a_usage_error_and_sends_nothing(self):
-        firefox = self.serve("firefox")
+    def test_without_app_both_running_is_firefox_so_calls_from_before_thunderbird_still_work(self):
+        firefox = self.serve("firefox", {"ok": True}, {"ok": True})
         thunderbird = self.serve("thunderbird")
-        done = self.cli("run", "tab.next")
-        self.assertEqual(done.returncode, 2)
-        self.assertIn("both the Firefox and the Thunderbird bridge are running", done.stderr)
-        self.assertIn("--app", done.stderr)
-        self.assertEqual(firefox.requests + thunderbird.requests, [])
+        self.assertEqual(self.cli("run", "tab.next").returncode, 0)
+        self.assertEqual(self.cli("theme", "oasis_dune").returncode, 0)
+        self.assertEqual([request["verb"] for request in firefox.requests], ["run", "theme"])
+        self.assertEqual((thunderbird.requests, firefox.probes + thunderbird.probes), ([], 0))
 
-    def test_a_stale_socket_beside_a_running_bridge_does_not_count(self):
-        for stale, running in (("thunderbird", "firefox"), ("firefox", "thunderbird")):
-            with self.subTest(stale=stale):
-                for path in self.sockets.values():
-                    if os.path.exists(path):
-                        os.unlink(path)
-                self.leave_stale_socket(stale)
-                bridge = self.serve(running, {"ok": True})
-                self.assertEqual(self.cli("run", "x.y").returncode, 0)
-                self.assertEqual(bridge.requests, [{"verb": "run", "command": "x.y"}])
-                bridge.close()
+    def test_without_app_a_stale_thunderbird_socket_beside_firefox_does_not_matter(self):
+        self.leave_stale_socket("thunderbird")
+        firefox = self.serve("firefox", {"ok": True})
+        self.assertEqual(self.cli("run", "x.y").returncode, 0)
+        self.assertEqual(firefox.requests, [{"verb": "run", "command": "x.y"}])
 
     def test_a_bad_app_is_a_usage_error(self):
         for args in (("--app", "chrome", "state"), ("--app",), ("--app=", "state"), ("--app", "Firefox", "state")):

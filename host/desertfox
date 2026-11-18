@@ -24,9 +24,8 @@ The tab commands need `bridge_share_tabs` on in DesertFox, and never see a priva
 keeps the space.
 
 It speaks to $XDG_RUNTIME_DIR/desertfox/bridge.sock for Firefox or $XDG_RUNTIME_DIR/desertbird/bridge.sock for
-Thunderbird, one JSON line out and one line back, or for `events` the lines of the stream. Without --app it takes the
-bridge that is running, Firefox when neither is, and refuses with exit 2 when both are. It prints plain text, errors to
-stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
+Thunderbird, one JSON line out and one line back, or for `events` the lines of the stream. Without --app it talks to
+Firefox, unless the Thunderbird socket is the only one there. It prints plain text, errors to stderr. Exit codes: 0 done, 1 refused or failed, 2 bad usage, 3 the bridge is not running (`theme` instead keeps the name in theme.json and exits 0).
 `-h` or `--help` after a verb prints the usage and sends nothing. `events` exits 0 when the bridge ends the stream, which it also does to a reader that falls
 behind, so a caller that wants the stream for good runs it again.
 """
@@ -98,21 +97,6 @@ def has_socket_file(app_name):
         return False
 
 
-def is_listening(app_name):
-    """True when a host accepts a connection on the app's socket. A leftover socket file of a dead host does not count."""
-    try:
-        path = socket_path(app_name)
-    except BridgeDown:
-        return False
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
-        probe.settimeout(1)
-        try:
-            probe.connect(path)
-            return True
-        except OSError:
-            return False
-
-
 def take_app(argv):
     """(the app named by a leading --app, the other words). The option counts only in front of the verb, so a run
     argument that looks like it is left alone."""
@@ -129,16 +113,11 @@ def take_app(argv):
     return named, rest
 
 
-def running_app():
-    """The app of the one bridge that is running, Firefox when none is. Both running is a usage error, because a call
-    meant for one app must never land in the other."""
-    # Only two socket files call for a probe: a lone one is used as it is, so a Firefox-only setup works as before.
-    running = [name for name in APP_FOLDERS if has_socket_file(name)]
-    if len(running) > 1:
-        running = [name for name in running if is_listening(name)]
-    if len(running) > 1:
-        raise Usage("both the Firefox and the Thunderbird bridge are running. Pick one with --app firefox or --app thunderbird")
-    return running[0] if running else "firefox"
+def default_app():
+    """Firefox, unless the Thunderbird socket is the only one there. Desktop calls written before Thunderbird pass no
+    --app, so they keep reaching Firefox whenever its bridge is up."""
+    only_thunderbird = has_socket_file("thunderbird") and not has_socket_file("firefox")
+    return "thunderbird" if only_thunderbird else "firefox"
 
 
 def connected(request, timeout_s):
@@ -457,7 +436,7 @@ def main(argv):
         print(USAGE)
         return EXIT_DONE
     try:
-        app = named_app or running_app()
+        app = named_app or default_app()
         if verb == "run":
             return do_run(rest)
         if verb in ("list", "state"):
