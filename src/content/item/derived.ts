@@ -26,19 +26,21 @@ const item_selector = (item: Element | undefined): string => (item ? item.localN
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   let kept: { found: Found<Element>; url: string; at: number; tail: unknown[] } | undefined;
+  let timeouts_in_a_row = 0;
   const still_good = (): boolean => {
     if (!kept || kept.url !== deps.url_()) return false;
     const { items } = kept.found;
     if (items.length === 0) return deps.now_() - kept.at < NONE_RECHECK_MS;
     return items[0]!.isConnected && items.some(deps.is_shown_);
   };
-  // A run that ran out of time, or a finder bug, scrolls this press and keeps nothing, so the next press reads the page again.
+  // A run that ran out of time, or a finder bug, scrolls this press and keeps nothing, so the next press reads the page again: a cold first run can overrun where a warm one fits. A second timeout in a row stands as a none, so a held j on a page that always overruns does not run the finder on every repeat.
   const read = (): Found<Element> | undefined => {
     if (!still_good()) {
       kept = undefined;
       try {
         const found = deps.find_();
-        if (!found.timed_out_) kept = { found, url: deps.url_(), at: deps.now_(), tail: deps.tail_(found.items) };
+        timeouts_in_a_row = found.timed_out_ ? timeouts_in_a_row + 1 : 0;
+        if (timeouts_in_a_row !== 1) kept = { found, url: deps.url_(), at: deps.now_(), tail: deps.tail_(found.items) };
       } catch (error) {
         console.error(error);
       }
