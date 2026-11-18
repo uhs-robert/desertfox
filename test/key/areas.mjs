@@ -96,7 +96,7 @@ export const area_rules = [
   },
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{engine_layer,engine_message}.ts", "src/shared/engine_fields.ts"], areas: ["config", "engines"] },
-  { globs: ["src/background/{default_keymap,default_site_rows,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
+  { globs: ["src/background/{default_keymap,default_site_rows,item_finder_row,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },

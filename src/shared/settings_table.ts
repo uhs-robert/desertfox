@@ -134,6 +134,8 @@ export const SETTINGS_TABLE = {
   // Consent to update the native hosts to the extension's version on connect. Asked once from the :native.install page, off until then.
   host_auto_update: { kind: "boolean", default: false },
   completion_all_windows: { kind: "boolean", default: false },
+  // Lets j and k walk the list or grid of items that the finder (`src/content/item/finder.ts`) finds on a page that has no site row of its own. Off until the finder has no known misses left.
+  item_finder: { kind: "boolean", default: false },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },
   // List order is display order. An empty list hides the status area.

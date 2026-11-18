@@ -3,13 +3,22 @@ import { bundles } from "./bundles.ts";
 import { settle } from "./bundle_host.ts";
 import { content_handlers } from "./handler_map.ts";
 import type { ContentHandler } from "./handlers/types.ts";
+import { scroll_by } from "./handlers/scroll.ts";
 import { args_for_count } from "./invocation_args.ts";
 
 // A command whose code sits in a bundle runs through the bundle host, which loads the bundle on the first run. A bundle that registers no handler yet refuses with `needs <bundle name>`.
 const lazy_handler = ({ id, bundle }: Invocation): ContentHandler => {
   if (!bundle) throw new Error(`${id} cannot run in the page`);
-  return { run: (args) => bundles.run_command_(id, bundle, args, `needs ${bundle}`) };
+  return { run: (args) => (id === "page.item" && !args.selector ? scroll_if_refused(args, bundles.run_command_(id, bundle, args, `needs ${bundle}`)) : bundles.run_command_(id, bundle, args, `needs ${bundle}`)) };
 };
+
+// The item finder binds j and k on every page, so a page where the item bundle cannot load or run (one still loading, a privileged page) still scrolls. A bound row names its selector and keeps the refusal.
+const scroll_if_refused = (args: Record<string, unknown>, run: Promise<Outcome>): Promise<Outcome> =>
+  run.then((outcome) => {
+    if (outcome.ok || (args.direction !== "down" && args.direction !== "up")) return outcome;
+    scroll_by(0, (args.direction === "down" ? 50 : -50) * Number(args.times ?? 1));
+    return { ok: true };
+  });
 
 // Runs one invocation here and answers how it ended. Never rejects and shows nothing: the caller shows a failure once.
 // Its args are already checked, with defaults filled in, by the background compiler.

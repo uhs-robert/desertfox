@@ -25,6 +25,7 @@ import { compile_keymap } from "../shared/keys/compiler.ts";
 import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
+import { ITEM_FINDER_ROW } from "./item_finder_row.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
@@ -119,8 +120,10 @@ export function compile_config(input: CompileInput): CompileOutput {
   const user_rows = with_resolved_binds(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules, input, resolve_warnings);
   // The shipped rows rank after the user's, so a user row decides each column first.
   const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off);
-  const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows.map(({ row }) => row)] };
-  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...default_rows.map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
+  // The finder row comes last, so a row that binds j and k for a site decides them first and the finder runs only where no row matches.
+  const finder_rows = (input.config.settings.item_finder ?? DEFAULT_SETTINGS.item_finder) ? [ITEM_FINDER_ROW] : [];
+  const settings = { ...input.config.settings, site_rules: [...user_rows, ...default_rows.map(({ row }) => row), ...finder_rows.map(({ row }) => row)] };
+  const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...[...default_rows, ...finder_rows].map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {
     const command = input.get_command(command_id);
     return command && { runs_in: command.runs_in, ...(command.bundle && { bundle: command.bundle }), label: command.label, count: command.count ?? "ignore", params: command.params ?? [], accepts_args: (args, prompt) => {
