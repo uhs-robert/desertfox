@@ -69,7 +69,7 @@ test("cards that fill nearly half of every section stay the picked items", () =>
   assert.ok(found.items.every((item) => item.a?.class === "card"));
 });
 
-// Five sections, three of which hold two small blocks each, and four more such blocks outside every section. Three of five is under the share that marks card parts, so the finder steps into the blocks. An item with no holder must not count as a fourth holder.
+// Five sections in a holder, three of which hold two small blocks each, and four more such blocks in a lone section outside the holder. That section has the kind of the sections, so its blocks merge with theirs. Three of five is under the share that marks card parts, so the finder steps into the blocks. An item with no holder must not count as a fourth holder.
 test("an inner group held by three of five sections, with items outside them, is not card parts", () => {
   const block = (x: number, y: number, index: number): SavedNode => ({
     t: "div",
@@ -82,8 +82,9 @@ test("an inner group held by three of five sections, with items outside them, is
     const blocks = index < 3 ? [block(35, y, index * 2), block(35, y + 120, index * 2 + 1)] : [];
     return { t: "section", a: { class: "block_group" }, r: [35, y, 1300, 300], c: blocks };
   };
-  const outside: SavedNode = { t: "div", a: { class: "extra" }, r: [35, 2100, 1300, 480], c: [0, 1, 2, 3].map((index) => block(35, 2100 + index * 120, 10 + index)) };
-  const body: SavedNode = { t: "body", r: [0, 0, 1366, 2600], c: [...Array.from({ length: 5 }, (_, index) => section(index)), outside] };
+  const outside: SavedNode = { t: "div", a: { class: "outer" }, r: [35, 2100, 1300, 480], c: [{ t: "section", a: { class: "block_group" }, r: [35, 2100, 1300, 480], c: [0, 1, 2, 3].map((index) => block(35, 2100 + index * 120, 10 + index)) }] };
+  const holder: SavedNode = { t: "div", a: { class: "holder" }, r: [35, 100, 1300, 2000], c: Array.from({ length: 5 }, (_, index) => section(index)) };
+  const body: SavedNode = { t: "body", r: [0, 0, 1366, 2600], c: [holder, outside] };
   const root: SavedNode = { t: "html", r: [0, 0, 1366, 2600], c: [body] };
   const link_up = (node: SavedNode, up: SavedNode | null) => {
     node.up = up;
@@ -226,4 +227,31 @@ test("a block of the feed's own item class that sits before the feed's items is 
   const feed = [0, 1, 2, 3, 4, 5].map((at) => entry("article", "entry", 600 + at * 150, at));
   const found = find_items(saved_reader(page_with([side, ...feed], 1600)));
   assert.deepEqual(titles_of(found), [0, 1, 2, 3, 4, 5].map((index) => `Entry number ${index} headline`));
+});
+
+// Two sibling parents, each with six stacked entries that hold a title link. When both parents are one kind the entries are one list of twelve. When the parents differ in tag or class (a video page's title rows and its comment section), the groups stay apart and neither passes the span test on its own.
+function sibling_parents(second_class: string): SavedPage {
+  const parent = (class_name: string, first: number): SavedNode => {
+    const y = 100 + first * 100;
+    const entry = (index: number): SavedNode => ({
+      t: "div",
+      a: { class: "entry" },
+      r: [35, y + (index - first) * 100, 800, 80],
+      c: [{ t: "a", a: { href: `/entry/${index}` }, r: [35, y + (index - first) * 100, 400, 20], s: `The entry with the number ${index}`, c: [] }],
+    });
+    return { t: "div", a: { class: class_name }, r: [35, y, 800, 600], c: Array.from({ length: 6 }, (_, at) => entry(first + at)) };
+  };
+  const holder: SavedNode = { t: "div", r: [35, 100, 800, 1200], c: [parent("batch", 0), parent(second_class, 6)] };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 1400], c: [{ t: "body", r: [0, 0, 1366, 1400], c: [holder] }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  return { view: { w: 1366, h: 1000, doc_h: 1400 }, root };
+}
+
+test("sibling parents of one kind merge their entries, and parents of another kind stay apart", () => {
+  assert.equal(find_items(saved_reader(sibling_parents("batch"))).items.length, 12);
+  assert.equal(find_items(saved_reader(sibling_parents("comments"))).items.length, 0);
 });
