@@ -2,6 +2,7 @@ import { is_shown } from "../shown.ts";
 import { follow_end } from "./ends.ts";
 import { thumbnail } from "./hover.ts";
 import type { EndPage } from "./ends.ts";
+import type { Outcome } from "../../shared/messages.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
 export type ItemDirection = MoveDirection | "first" | "last" | "current";
@@ -111,16 +112,26 @@ const row_selector = (page: ItemPage, args: ItemArgs): string => args.selector |
 // A row that names its selector asks for the hover outright. The finder's items get it only while one holds a thumbnail, checked again when the wait ends, so a text result gets no hover card opened.
 const hover_check = (args: ItemArgs, item: Element) => (args.hover ? () => !!args.selector || !!thumbnail(item) : undefined);
 
-export function move_item(page: ItemPage, args: ItemArgs): void | Promise<void> {
+export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Promise<void> {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
   const read_items = () => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_() ?? []));
   const items = read_items();
   const { direction } = args;
-  // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then.
+  // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then. With no selector (the finder's gg and G) they refuse instead, and content.js scrolls to the top or bottom.
+  // The finder's list can start screens below the top, so with no selector an end item off screen after the scroll takes no focus, no box and no pin: the next j starts from the view and does not jump back.
   // Only the first land reveals. The follow lands again on a row the page redrew, and a reveal then would drag a panel the user has scrolled since.
   let revealed = false;
-  if (direction === "first" || direction === "last") return follow_end(page, read_items, direction === "last", (item, on_page) => { land_on(page, item, args, !on_page && !revealed, on_page); revealed = true; });
+  if (direction === "first" || direction === "last") {
+    if (!args.selector && !items[0]) return { ok: false, message: "No item" };
+    // Each poll of the follow asks first whether the page added something after the last item, so the answer kept for the first item does not hide it.
+    const read_grown = () => (args.selector ? undefined : page.derived?.grew_(), read_items());
+    return follow_end(page, read_grown, direction === "last", (item, on_page) => {
+      const { top, bottom } = item.getBoundingClientRect();
+      if (args.selector || (top < page.view.innerHeight && bottom > 0)) land_on(page, item, args, !on_page && !revealed, on_page);
+      revealed = true;
+    });
+  }
   const boxes = items.map((item) => item.getBoundingClientRect());
   const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight, last_move?.pin_y_ === page.view.scrollY && page.box_shown());
   // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.

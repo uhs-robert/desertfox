@@ -151,6 +151,16 @@ test("at the end of the list the row reads the page again only when something ne
   assert.equal(state.finds, 2);
 });
 
+test("a node after the list that changes on its own causes no read on a press in the middle of the list", () => {
+  const { state, row } = setup([item("a"), item("b")]);
+  row.items_();
+  for (let press = 0; press < 5; press++) {
+    state.tail = [`footer ${press}`];
+    assert.deepEqual(names(row.items_()), ["a", "b"]);
+  }
+  assert.equal(state.finds, 1);
+});
+
 test("a kept link that left the page or its item is looked up again", () => {
   const first = item("a");
   const { state, row, link } = setup([first, item("b")]);

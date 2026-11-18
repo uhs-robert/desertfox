@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bundles } from "../../src/content/bundles.ts";
+import { content_handlers } from "../../src/content/handler_map.ts";
 import { run_content_invocation } from "../../src/content/run_content.ts";
 
 type Scroll = { top: number; left: number };
@@ -40,12 +41,45 @@ test("h and l scroll sideways when the bundle cannot load", () =>
     assert.deepEqual(scrolls.map((scroll) => scroll.left), [-50, 100]);
   }));
 
-test("a row that names a selector keeps the refusal, and so do the ends, which do not scroll", () =>
+// Stands in for the scroll.to handler and records the percent and axis it is given.
+async function with_scroll_to(body: (calls: unknown[]) => Promise<void>): Promise<void> {
+  const calls: unknown[] = [];
+  const handler = content_handlers["scroll.to"]!;
+  const saved = handler.run;
+  handler.run = (args) => void calls.push([args.percent, args.axis]);
+  try {
+    await body(calls);
+  } finally {
+    handler.run = saved;
+  }
+}
+
+test("a row that names a selector keeps the refusal, down and up scroll, and the ends do not", () =>
   with_page(async () => false, async (scrolls) => {
     assert.equal((await item_step({ selector: "li", direction: "down" })).ok, false);
-    assert.equal((await item_step({ direction: "first" })).ok, false);
+    assert.equal((await item_step({ selector: "li", direction: "first" })).ok, false);
+    assert.equal((await item_step({ selector: "li", direction: "last" })).ok, false);
     assert.deepEqual(scrolls, []);
   }));
+
+test("with no selector, first and last scroll to the top and bottom when the bundle cannot load", () =>
+  with_page(async () => false, () =>
+    with_scroll_to(async (calls) => {
+      assert.deepEqual(await item_step({ direction: "first" }), { ok: true });
+      assert.deepEqual(await item_step({ direction: "last" }), { ok: true });
+      assert.deepEqual(calls, [[0, "y"], [100, "y"]]);
+    })));
+
+test("with no selector, first and last scroll when the bundle refuses because it found no item, and not when it lands", () =>
+  with_page(async () => true, () =>
+    with_scroll_to(async (calls) => {
+      bundles.api.register_handler_("page.item", () => ({ ok: false, message: "No item" }));
+      assert.deepEqual(await item_step({ direction: "last" }), { ok: true });
+      assert.deepEqual(calls, [[100, "y"]]);
+      bundles.api.register_handler_("page.item", () => undefined);
+      assert.deepEqual(await item_step({ direction: "first" }), { ok: true });
+      assert.deepEqual(calls, [[100, "y"]]);
+    })));
 
 test("a handler that fails scrolls, and one that finishes does not", () =>
   with_page(async () => true, async (scrolls) => {
