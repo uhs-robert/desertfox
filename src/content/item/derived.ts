@@ -49,10 +49,10 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   };
   return {
     items_: () => read()?.items.filter(deps.is_shown_) ?? [],
-    // A link the page replaced or moved out of its item reads the page again. A link that left the page is in no item.
+    // A link the page replaced, hid or moved out of its item reads the page again. A link that left the page is in no item.
     link_of_: (item) => {
       const link = kept?.found.links.get(item);
-      if (link && !item.contains(link)) kept = undefined;
+      if (link && !(item.contains(link) && deps.is_shown_(link))) kept = undefined;
       return read()?.links.get(item);
     },
     selector_: () => item_selector(kept?.found.items[0]),

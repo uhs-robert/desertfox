@@ -5,14 +5,14 @@ import { saved_reader } from "./support/snapshot_page.ts";
 import type { SavedNode, SavedPage } from "./support/snapshot_page.ts";
 
 // A stand-in for a video site's front page, written by hand: a grid of thumbnail tiles, four to a row. Each tile holds the picture link (with its length and quality over it), the title link under the picture and a short channel link. Both links of a tile go to the same video.
-function video_grid(): SavedPage {
+function video_grid(tile_height = (_index: number) => 256): SavedPage {
   const tile = (index: number): SavedNode => {
     const [x, y] = [35 + (index % 4) * 330, 120 + Math.floor(index / 4) * 270];
     const video = `/video/${index}/a-video`;
     return {
       t: "div",
       a: { class: "tile" },
-      r: [x, y, 321, 256],
+      r: [x, y, 321, tile_height(index)],
       c: [
         { t: "a", a: { class: "thumb", href: video }, r: [x, y, 321, 200], s: "10 min 720p", c: [{ t: "img", r: [x, y, 321, 200] }] },
         { t: "p", a: { class: "title" }, r: [x, y + 205, 321, 20], n: 40, c: [{ t: "a", a: { href: video }, r: [x, y + 205, 300, 20], s: `The video with the number ${index} in its title` }] },
@@ -35,4 +35,9 @@ test("a grid of video thumbnails is a grid, and the title under each picture is 
   assert.equal(found.kind, "grid");
   assert.equal(found.items.length, 24);
   assert.ok(found.items.every((item) => found.links.get(item)?.s?.startsWith("The video with the number")));
+});
+
+test("top-aligned cards of unequal height in a row are still a grid", () => {
+  const found = find_items(saved_reader(video_grid((index) => 200 + (index % 4) * 20)));
+  assert.equal(found.kind, "grid");
 });

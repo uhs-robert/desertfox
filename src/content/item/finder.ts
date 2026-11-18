@@ -176,11 +176,11 @@ function nests<N>(reader: PageReader<N>, inner: Group<N>, outer: Group<N>): bool
   return inner.items.some((item) => [...ancestors(reader, item)].some((at) => holders.has(at)));
 }
 
-// A grid has two or more items in a row on most of its rows. Boxes whose middles are within 8 px share a row.
+// A grid has two or more items in a row on most of its rows. Boxes whose tops are within 8 px share a row.
 function kind_of(boxes: readonly Box[]): FinderKind {
   const rows = new Map<number, number>();
   for (const box of boxes) {
-    const row = Math.round((box.y + box.h / 2) / 8);
+    const row = Math.round(box.y / 8);
     rows.set(row, (rows.get(row) ?? 0) + 1);
   }
   const wide = [...rows.values()].filter((count) => count >= 2).length;
