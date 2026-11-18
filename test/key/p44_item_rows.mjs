@@ -681,6 +681,31 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await hover_away();
   });
 
+  await run_case("under the pointer, the box ignores hidden, transparent, off-screen and clipped children", async () => {
+    await open_results("unseen_children");
+    await in_active_tab(`(() => {
+      const item = document.getElementById("r0").closest(".MjjYud");
+      item.id = "item0";
+      const poke = "position:relative;left:250px;width:100px;height:20px;";
+      const add = (style, parent = item) => parent.append(Object.assign(document.createElement("div"), { style }));
+      add(poke + "visibility:hidden");
+      add(poke + "opacity:0");
+      add("position:absolute;left:-9999px;width:100px;height:20px");
+      const clipper = document.createElement("div");
+      clipper.style.cssText = "overflow:hidden;height:10px";
+      add("width:900px;height:200px", clipper);
+      item.append(clipper);
+      return 0;
+    })()`);
+    await press_keys("j");
+    await expect_focus("r0");
+    await hover_title("r0");
+    expect(await in_active_tab(`document.getElementById("item0").matches(":hover")`), "the pointer is not over the item");
+    await sleep(300);
+    await expect_box_stays_on_item_of("r0", "the box stretched over a child that is not seen");
+    await hover_away();
+  });
+
   await run_case("on a page with no result row, j scrolls and no box shows", async () => {
     await open_page("controls", "plain_item", { new_tab: true });
     await press_keys("j");
