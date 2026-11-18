@@ -294,6 +294,13 @@ test("a short h3 link with a malformed address goes to another page and does not
   assert.equal(find_items(saved_reader(short_heading_entries("h3", () => "http://"))).items.length, 10);
 });
 
+test("a short h3 link that leaves the web, or sits on a page saved with no trailing slash, is no title", () => {
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", () => "javascript:void(0)"))).items.length, 0);
+  assert.equal(find_items(saved_reader(short_heading_entries("h3", () => "mailto:a@b.test"))).items.length, 0);
+  const bare = { ...short_heading_entries("h3", (index) => `https://page.test/#part-${index}`), url: "https://page.test" };
+  assert.equal(find_items(saved_reader(bare)).items.length, 0);
+});
+
 test("a short h3 link to this page with a fragment, absolute or path-relative, is a section name", () => {
   assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `https://page.test/#part-${index}`))).items.length, 0);
   assert.equal(find_items(saved_reader(short_heading_entries("h3", (index) => `/#part-${index}`))).items.length, 0);
