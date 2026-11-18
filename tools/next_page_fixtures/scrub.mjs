@@ -28,11 +28,19 @@ export function scrub_href(href) {
 const EMAIL = /[^\s@<>"'()\/:=?&;,]+(?:@|%40)[^\s@<>"'()\/:=?&;,]+\.[^\s@<>"'()\/:=?&;,]+/gi;
 export const mask_emails = (text) => text.replace(EMAIL, "email@scrub.invalid");
 
+// A long value with no space is a token (anti-forgery key, signed hash), not a name or a sentence.
+const is_token = (value) => value.length >= 40 && !/\s/.test(value);
+const URL_VALUE = /^(?:https?:\/\/|\/(?!\/))\S*$/i;
+
 export function scrub_page(node) {
   if (node.a?.href !== undefined) node.a.href = scrub_href(node.a.href);
   for (const name of Object.keys(node.a ?? {})) node.a[name] = mask_emails(node.a[name]);
+  for (const name of Object.keys(node.a ?? {})) {
+    if (name !== "id" && !name.startsWith("data-")) continue;
+    node.a[name] = URL_VALUE.test(node.a[name]) ? scrub_href(node.a[name]) : is_token(node.a[name]) ? "" : node.a[name];
+  }
   // A hidden input's long value is a session or anti-forgery token.
-  if (node.t === "input" && node.a?.type === "hidden" && (node.a.value?.length ?? 0) >= 40) node.a.value = "";
+  if (node.t === "input" && node.a?.type?.toLowerCase() === "hidden" && is_token(node.a.value ?? "")) node.a.value = "";
   if (node.s !== undefined) node.s = mask_emails(node.s);
   for (const child of node.c ?? []) scrub_page(child);
 }

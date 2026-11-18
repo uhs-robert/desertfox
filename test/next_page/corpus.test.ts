@@ -44,7 +44,10 @@ for (const [name, label] of Object.entries(labels)) {
     if (label.ok.some((answer) => fits(answer, outcome.action, target))) return;
     const shown = target ? `${outcome.action} <${target.t}> "${target.s ?? ""}" ${JSON.stringify(target.a ?? {})}` : outcome.action;
     // `miss_as` pins the one wrong answer a known miss gives today, so a different wrong answer still fails.
-    if (label.known_miss !== undefined && label.miss_as !== undefined && fits(label.miss_as, outcome.action, target)) return;
+    if (label.miss_as !== undefined) {
+      assert.ok(label.known_miss !== undefined && fits(label.miss_as, outcome.action, target), `got ${shown}`);
+      return;
+    }
     // A known miss may do nothing, or scroll a list that does reach the page end. It must never click or follow the wrong thing.
     assert.ok(label.known_miss !== undefined && (outcome.action === "none" || (outcome.action === "scroll" && !label.soft)), `got ${shown}`);
   });
