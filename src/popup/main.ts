@@ -8,7 +8,7 @@ import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, disabled_after_click, site_card, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, disabled_after_click, site_card, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
 import type { PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -38,11 +38,18 @@ async function open_help_page(hash: string): Promise<void> {
   window.close();
 }
 
+async function open_support_page(): Promise<void> {
+  const tab = await active_tab();
+  await browser.tabs.create({ url: SUPPORT_URL, ...(tab?.id === undefined ? {} : { openerTabId: tab.id }) });
+  window.close();
+}
+
 async function act(row: PopupRow): Promise<void> {
   const tab = await active_tab();
   if (row.id === "power") notice = (await ask({ type: "toolbar_set_disabled", disabled: disabled_after_click(row) })).message;
   else if (row.id === "settings") return open_help_page(SETTINGS_HASH);
   else if (row.id === "home") return open_help_page(HOME_HASH);
+  else if (row.id === "support") return open_support_page();
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
   else if (row.id === "rule") return open_help_page(SITE_RULES_HASH);
   else if (row.id === "site") {
@@ -130,7 +137,7 @@ async function draw(): Promise<void> {
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
   const elements = [header_element(inputs.version, inputs.disabled), power_element(by_id("power")), card_element(rows, inputs)];
-  for (const id of ["settings", "home", "reload_config", "warnings"] as const) elements.push(row_button(by_id(id), "desertfox-popup-link"));
+  for (const id of ["settings", "home", "support", "reload_config", "warnings"] as const) elements.push(row_button(by_id(id), "desertfox-popup-link"));
   if (notice !== "") {
     const line = element("div", "desertfox-popup-notice", notice);
     line.setAttribute("role", "status");

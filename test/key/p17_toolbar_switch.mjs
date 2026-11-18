@@ -223,6 +223,12 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
       await poll_until("On to be checked", async () => (await checked()) === "On");
       await poll_until("the state line to read enabled", async () => (await popup_eval(`document.querySelector(".desertfox-popup-state")?.textContent`)) === "Enabled on this site");
       await shoot("on");
+      // Stub the tab creation so the click proves the URL without opening the Sponsors page. The click closes the popup, so the record lives in the background.
+      await popup_eval(`(globalThis.support_tabs = [], popup_browser.tabs.create = async (options) => { globalThis.support_tabs.push(options.url); }, true)`);
+      const support = `[...document.querySelectorAll(".desertfox-popup-row")].find((button) => button.textContent === "Support DesertFox")`;
+      expect((await popup_eval(`${support} !== undefined`)) === true, "the popup has a Support DesertFox row");
+      await popup_eval(`(${support}.click(), true)`);
+      await poll_until("the support row to open its page", async () => (await in_background(`globalThis.support_tabs.join()`)) === "https://github.com/sponsors/uhs-robert");
     } finally {
       await turn_on();
       await close_popup();
