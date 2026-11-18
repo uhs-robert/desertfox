@@ -104,7 +104,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   let best = top;
   let sections: N[] | undefined;
   for (;;) {
-    const inner = main_by_area(lists.filter((group) => group !== best && nests(reader, group, best) && group.area >= INNER_SHARE * best.area));
+    const inner = main_by_area(lists.filter((group) => group !== best && nests(reader, group, best) && group.area >= INNER_SHARE * best.area && !parts_of_cards(reader, group, best)));
     if (!inner) break;
     sections = best.items;
     best = inner;
@@ -168,6 +168,16 @@ function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[]
     pool = next;
   }
   return pool;
+}
+
+// Whether `inner` is the pieces of the cards in `outer` rather than cards inside sections: it sits in nearly every outer item yet fills only a small part of them (the title, channel and chapter blocks beside a video thumbnail).
+const CARD_PARTS_HELD = 0.8;
+const CARD_PARTS_COVER = 0.4;
+function parts_of_cards<N>(reader: PageReader<N>, inner: Group<N>, outer: Group<N>): boolean {
+  const holders = new Set(outer.items);
+  const held = new Set(inner.items.map((item) => [...ancestors(reader, item)].find((at) => holders.has(at))));
+  const held_area = outer.items.reduce((sum, item, at) => (held.has(item) ? sum + outer.boxes[at]!.w * outer.boxes[at]!.h : sum), 0);
+  return held.size >= CARD_PARTS_HELD * outer.items.length && inner.area < CARD_PARTS_COVER * held_area;
 }
 
 // Whether `inner` sits inside an item of `outer`.
