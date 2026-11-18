@@ -1,16 +1,18 @@
 // The derived row of the page: what the finder found, kept for the document so a key press does not read the page again.
 // It is read again when no item of the answer shows, the first item has left the DOM, or the address changed, and at the end of the list when something new follows its last item. There is no MutationObserver: a page that changes under a still-shown answer keeps the old items until one of those holds.
 
-import { find_items, FINDER_BUDGET_MS, FIRST_READ_BUDGET_MS } from "./finder.ts";
+import { find_items, FINDER_BUDGET_MS, LONG_BUDGET_MS } from "./finder.ts";
 import type { Found } from "./finder.ts";
 import { dom_reader } from "./dom_reader.ts";
 import { is_shown } from "../shown.ts";
 
 // A page with no list gives `none`, and every key press would read the page again to see whether one appeared. A none answer stands this long.
 export const NONE_RECHECK_MS = 500;
+// After two reads in a row overran the long budget at an address, reads there get the short one for this long, then the long one may try again (a page read while the machine was busy).
+export const OVERRUN_PAUSE_MS = 10_000;
 
 export type DerivedDeps = {
-  // The time budget of the read: `FIRST_READ_BUDGET_MS`, or `FINDER_BUDGET_MS` at an address where reads overran the long one.
+  // The time budget of the read: `LONG_BUDGET_MS` or `FINDER_BUDGET_MS`.
   find_: (budget_ms: number) => Found<Element>;
   url_: () => string;
   now_: () => number;
@@ -27,9 +29,10 @@ const item_selector = (item: Element | undefined): string => (item ? item.localN
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   let kept: { found: Found<Element>; url: string; at: number; tail: unknown[] } | undefined;
+  // The count of reads in a row that ran out of time at `read_at`, the address of the last read. It starts again at a new address.
   let timeouts_in_a_row = 0;
-  // The address at which two reads in a row ran out of the long budget. Reads there get the short budget, so a page that always overruns pauses at most twice. Every other read gets the long budget, so a long page answers again after a hash change, a route change or a read at the end of the list.
-  let overran_at: string | undefined;
+  let read_at: string | undefined;
+  let overran: { url: string; until: number } | undefined;
   const still_good = (): boolean => {
     if (!kept || kept.url !== deps.url_()) return false;
     const { items } = kept.found;
@@ -37,14 +40,25 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     return items[0]!.isConnected && items.some(deps.is_shown_);
   };
   // A run that ran out of time, or a finder bug, scrolls this press and keeps nothing, so the next press reads the page again: a cold first run can overrun where a warm one fits. A second timeout in a row stands as a none, so a held j on a page that always overruns does not run the finder on every repeat.
+  // Budgets: a read gets the long one (the first read at an address, or one after the kept list dropped), so a long page answers once. A held j on a page with no list re-reads its expired `none` with the short one, and a timeout there keeps the old `none`: a full read of a long text page every 500 ms would stall the scroll. Two overruns in a row put the address on the short budget for `OVERRUN_PAUSE_MS`.
   const read = (): Found<Element> | undefined => {
     if (!still_good()) {
+      const url = deps.url_();
+      const expired_none = kept && kept.url === url && kept.found.items.length === 0 ? kept : undefined;
       kept = undefined;
+      if (read_at !== url) timeouts_in_a_row = 0;
+      read_at = url;
+      const short = (expired_none && !expired_none.found.timed_out_) || (overran?.url === url && deps.now_() < overran.until);
       try {
-        const found = deps.find_(overran_at === deps.url_() ? FINDER_BUDGET_MS : FIRST_READ_BUDGET_MS);
+        const found = deps.find_(short ? FINDER_BUDGET_MS : LONG_BUDGET_MS);
+        if (found.timed_out_ && short && expired_none) {
+          expired_none.at = deps.now_();
+          kept = expired_none;
+          return kept.found;
+        }
         timeouts_in_a_row = found.timed_out_ ? timeouts_in_a_row + 1 : 0;
-        if (timeouts_in_a_row === 2) overran_at = deps.url_();
-        if (timeouts_in_a_row !== 1) kept = { found, url: deps.url_(), at: deps.now_(), tail: deps.tail_(found.items) };
+        if (timeouts_in_a_row >= 2) overran = { url, until: deps.now_() + OVERRUN_PAUSE_MS };
+        if (timeouts_in_a_row !== 1) kept = { found, url, at: deps.now_(), tail: deps.tail_(found.items) };
       } catch (error) {
         console.error(error);
       }

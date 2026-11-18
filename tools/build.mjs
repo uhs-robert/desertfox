@@ -41,7 +41,8 @@ const MAX_BYTES = {
   // 13.25 KB: the gg and G page pin and panel reveal land beside the item finder.
   // 13.5 KB: the finder skips an inner group that is only the text parts of the cards it already picked.
   // 13.75 KB: the page reader reads each tag and attribute once, and finds the main block with a native query.
-  "item.js": 13.75 * 1024,
+  // 14 KB: the derived row picks the read budget by address, so a held j on a long text page re-reads with the short one.
+  "item.js": 14 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.
