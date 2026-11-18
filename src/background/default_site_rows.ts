@@ -116,6 +116,10 @@ const STARTPAGE_ITEMS = item_binds("div.result:has(a.result-title)", "a.result-t
 const ARXIV_ITEMS = item_binds("li.arxiv-result", "p.list-title > a");
 const STACKOVERFLOW_ITEMS = item_binds("div.s-post-summary", "h3 a.s-link");
 const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
+// Reddit unloads posts far above the view, so gg would stop at the first post still drawn and not at the top of the feed. The row leaves gg to the plain scroll to the top and keeps G, which follows the loading to the end. The descendant combinator reaches the later pages, which sit in `faceplate-batch`. Ads are `shreddit-ad-post`, which the selector does not match. A thread page holds no `shreddit-feed`, so j and k scroll there.
+const REDDIT_POST = "shreddit-feed shreddit-post";
+const REDDIT_LINK = 'a[slot="full-post-link"]';
+const REDDIT_ITEMS: BindingTable = { j: item_step(REDDIT_POST, REDDIT_LINK, "down"), k: item_step(REDDIT_POST, REDDIT_LINK, "up"), G: end_binds(REDDIT_POST, REDDIT_LINK).G! };
 // Drive scrolls its file list in an inner panel and draws more rows as it scrolls, so a move through `page.item` stops at the last drawn row. Drive's own arrow keys move its selection, scroll the panel and draw more rows, so j, k, h and l focus the current file with `page.item` and then send Drive's key to it. gg and G go to the ends through `page.item`, which scrolls the panel and follows the end while Drive draws more. `current` takes the focus into the files from the view toggle or from nowhere, so the key never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
@@ -188,6 +192,8 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", bind: STACKOVERFLOW_ITEMS } },
   // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
   { name: "tildes", row: { site: "https://tildes.net/*", bind: TILDES_ITEMS } },
+  { name: "reddit", row: { site: "https://www.reddit.com/*", bind: REDDIT_ITEMS } },
+  { name: "reddit", row: { site: "https://reddit.com/*", bind: REDDIT_ITEMS } },
   { name: "drive", row: { site: "https://drive.google.com/drive/*", bind: DRIVE_BIND } },
 ];
 

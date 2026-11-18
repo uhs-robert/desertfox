@@ -248,7 +248,7 @@ test("page.item is a command of the item bundle", () => {
 });
 
 test("the shipped result rows bind j and k to page.item", () => {
-  for (const name of ["google", "google_videos", "ddg_news", "bing", "hackernews", "wikipedia"]) {
+  for (const name of ["google", "google_videos", "ddg_news", "bing", "hackernews", "wikipedia", "reddit"]) {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {
@@ -290,7 +290,8 @@ test("every shipped page.item bind table that moves binds gg and G to its first 
   type Step = { id?: string; args?: { selector?: string; direction?: string }; when_present?: string };
   const steps_of = (binding: unknown): Step[] => [binding].flat(2) as Step[];
   let tables = 0;
-  for (const { name, row } of DEFAULT_SITE_ROWS) {
+  // Reddit unloads posts far above the view, so its row leaves gg to the plain scroll to the top (see REDDIT_ITEMS).
+  for (const { name, row } of DEFAULT_SITE_ROWS.filter((entry) => entry.name !== "reddit")) {
     for (const { scope, table } of bind_tables_of(row as SiteRuleRow)) {
       const moves = Object.values(table).flatMap(steps_of).filter((step) => step.id === "page.item" && !["first", "last", "current"].includes(step.args?.direction ?? ""));
       if (moves.length === 0) continue;
