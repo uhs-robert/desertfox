@@ -6,27 +6,46 @@
 <style>
   html { background: var(--desertfox-bg-core, #0c0e13); color-scheme: dark light; }
   body { margin: 0; }
-  /* The defaults sit on an inner element, like every DesertFox surface. */
+  /* The defaults sit on an inner element, like every DesertFox surface. The light set is for the first paint, before the theme sheet arrives. */
   .desertfox-popup {
     --desertfox-bg-core: #0c0e13;
+    --desertfox-bg-mantle: #151922;
     --desertfox-fg-core: #f5f5dc;
+    --desertfox-fg-muted: #9aa0ab;
+    --desertfox-border: #2c3240;
     --desertfox-primary: #7fa3c9;
     --desertfox-font: calc(14px * var(--desertfox-font-scale, 1))/1.4 var(--desertfox-font-family, system-ui, sans-serif);
-    --desertfox-radius: 6px;
-    box-sizing: border-box; width: 17rem; padding: .35rem;
-    background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); font: var(--desertfox-font);
+    --desertfox-radius: 8px;
+    box-sizing: border-box; width: 17rem; padding: .6rem; display: flex; flex-direction: column; gap: .5rem;
+    background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font);
   }
+  @media (prefers-color-scheme: light) {
+    .desertfox-popup { --desertfox-bg-core: #fbf8ef; --desertfox-bg-mantle: #f0ebdc; --desertfox-fg-core: #2b2b24; --desertfox-fg-muted: #6a6a5e; --desertfox-border: #cfc8b4; --desertfox-primary: #2f6a9e; }
+  }
+  .desertfox-popup-header { display: flex; align-items: center; gap: .5em; }
+  .desertfox-popup-icon { width: 1.8em; height: 1.8em; }
+  .desertfox-popup-wordmark { font-size: 1.25em; font-weight: bold; letter-spacing: .02em; }
+  .desertfox-popup-version { margin-left: auto; font-size: .8em; color: var(--desertfox-fg-muted, #9aa0ab); }
+  .desertfox-popup-segments { display: flex; padding: .2em; gap: .2em; border: 1px solid var(--desertfox-border, #2c3240); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-mantle, #151922); }
+  .desertfox-popup-segment { flex: 1; padding: .4em 0; border: 0; border-radius: calc(var(--desertfox-radius) - 2px); background: none; color: var(--desertfox-fg-muted, #9aa0ab); font: inherit; font-weight: bold; cursor: pointer; }
+  .desertfox-popup-segment[aria-checked="true"] { background: var(--desertfox-primary, #7fa3c9); color: var(--desertfox-bg-core, #0c0e13); cursor: default; }
+  .desertfox-popup-segment:hover:not([aria-checked="true"]) { color: var(--desertfox-fg-core, #f5f5dc); }
+  .desertfox-popup-card { display: flex; flex-direction: column; gap: .25em; padding: .6em .7em; border: 1px solid var(--desertfox-border, #2c3240); border-radius: var(--desertfox-radius); background: var(--desertfox-bg-mantle, #151922); }
+  .desertfox-popup-host { font-weight: bold; overflow-wrap: anywhere; }
+  .desertfox-popup-state { font-size: .85em; color: var(--desertfox-fg-muted, #9aa0ab); }
   .desertfox-popup-row {
-    display: flex; flex-direction: column; align-items: flex-start; width: 100%; padding: .4rem .6rem;
-    border: 0; border-radius: var(--desertfox-radius); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between; gap: .5em; box-sizing: border-box; width: 100%; padding: .5em .7em;
+    border: 1px solid var(--desertfox-border, #2c3240); border-radius: var(--desertfox-radius); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
   }
-  .desertfox-popup-row:hover:not(:disabled), .desertfox-popup-row:focus-visible { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); outline: none; }
+  .desertfox-popup-row:hover:not(:disabled), .desertfox-popup-row:focus-visible, .desertfox-popup-segment:focus-visible { border-color: var(--desertfox-primary, #7fa3c9); outline: none; }
   .desertfox-popup-row:disabled { opacity: .5; cursor: default; }
-  .desertfox-popup-detail { font-size: .85em; opacity: .8; }
-  .desertfox-popup-power { font-weight: bold; color: var(--desertfox-primary); }
-  .desertfox-popup-power[aria-checked="false"] { color: inherit; opacity: .7; }
-  .desertfox-popup-info { padding: .4rem .6rem; opacity: .7; font-size: .85em; }
-  .desertfox-popup-notice { margin: .25rem .6rem; font-size: .85em; }
+  .desertfox-popup-text { display: flex; flex-direction: column; }
+  .desertfox-popup-detail { font-size: .85em; color: var(--desertfox-fg-muted, #9aa0ab); }
+  .desertfox-popup-site { margin-top: .35em; }
+  .desertfox-popup-rule { border-style: dashed; }
+  .desertfox-popup-link::after { content: ""; flex: none; width: .45em; height: .45em; border: solid var(--desertfox-fg-muted, #9aa0ab); border-width: 2px 2px 0 0; transform: rotate(45deg); }
+  .desertfox-popup-row:hover:not(:disabled)::after { border-color: var(--desertfox-primary, #7fa3c9); }
+  .desertfox-popup-notice { padding: 0 .2em; font-size: .85em; color: var(--desertfox-fg-muted, #9aa0ab); }
 </style>
 </head>
 <body>
