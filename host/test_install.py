@@ -141,6 +141,10 @@ class InstallCase(unittest.TestCase):
     def thunderbird_manifest_path(self):
         return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertbird_bridge.json")
 
+    @property
+    def thunderbird_host_manifest_path(self):
+        return os.path.join(self.home, ".mozilla", "native-messaging-hosts", "desertbird_host.json")
+
     def home_files(self):
         found = []
         for base, _, names in os.walk(self.home):
@@ -196,6 +200,16 @@ class ReleaseChannelTest(InstallCase):
             with open(path) as file:
                 self.assertEqual(json.load(file)["allowed_extensions"], ["desertfox@uhs-robert"], "Thunderbird gets no Firefox manifest")
         self.assertIn("Return to Firefox or Thunderbird", done.stdout)
+
+    def test_the_thunderbird_host_manifest_starts_the_config_host_for_desertbird_only(self):
+        self.serve_release()
+        self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
+        with open(self.thunderbird_host_manifest_path) as file:
+            manifest = json.load(file)
+        self.assertEqual(manifest, {
+            "name": "desertbird_host", "description": "DesertBird config host and external editor", "path": self.host_path,
+            "type": "stdio", "allowed_extensions": ["desertbird@uhs-robert"],
+        })
 
     def test_the_manifests_match_what_self_update_writes(self):
         # The updater counts an install as current only when its manifests match these bytes, so a drift here makes every update rewrite them.
@@ -299,7 +313,7 @@ class ReleaseChannelTest(InstallCase):
         self.serve_release()
         self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
         self.assertEqual(self.run_install(*self.release_args()).returncode, 0)
-        self.assertEqual(len(self.home_files()), 7)
+        self.assertEqual(len(self.home_files()), 8)
 
 
 class MainChannelTest(InstallCase):

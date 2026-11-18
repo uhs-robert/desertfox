@@ -23,7 +23,7 @@ in the same framing to stdout and exits. It has seven verbs and no others:
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes exactly one
 file there, autoconfig.toml. It never edits the user's own files, and it parses no config of the extension: the extension owns that TOML. Only editor.toml, which the extension never sees, is parsed here.
-`self_update` replaces the installed hosts, the command line and their three manifests with a GitHub release (see
+`self_update` replaces the installed hosts, the command line and their four manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
 reply ever carries. `open_firefox_page` asks the Firefox that started the host to open one page of a fixed table (see
 `open_firefox_page`). `list_fonts` runs fontconfig's `fc-list` and answers the installed family names (see
@@ -200,6 +200,7 @@ MANIFESTS = {
     "desertfox_bridge": ("desertfox-bridge", "DesertFox bridge to a desktop shell", EXTENSION_ID),
     "desertbird_bridge": ("desertfox-bridge", "DesertBird bridge to a desktop shell", THUNDERBIRD_EXTENSION_ID),
     "desertfox_host": ("desertfox-host", "DesertFox config files and saved edits", EXTENSION_ID),
+    "desertbird_host": ("desertfox-host", "DesertBird config host and external editor", THUNDERBIRD_EXTENSION_ID),
 }
 # The scripts that carry a stamped release version.
 HOST_SCRIPTS = ("desertfox-host", "desertfox-bridge")
@@ -315,8 +316,8 @@ def checked_request(request):
 
 
 def install_paths(host_file=None):
-    """The six paths install.sh writes, found from where this host runs: the two hosts and the command line beside it,
-    the three manifests in ~/.mozilla/native-messaging-hosts. The link ~/.local/bin/desertfox points at the command line
+    """The seven paths install.sh writes, found from where this host runs: the two hosts and the command line beside it,
+    the four manifests in ~/.mozilla/native-messaging-hosts. The link ~/.local/bin/desertfox points at the command line
     by path, so it needs no rewrite."""
     data_dir = os.path.dirname(os.path.abspath(host_file or __file__))
     manifest_dir = os.path.join(os.path.expanduser("~"), ".mozilla", "native-messaging-hosts")

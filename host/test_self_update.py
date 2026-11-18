@@ -88,9 +88,9 @@ class UpdateCase(unittest.TestCase):
         os.makedirs(self.manifest_dir)
         os.makedirs(self.runtime, mode=0o700)
         self.paths = {name: os.path.join(self.data_dir, name) for name in SCRIPTS}
-        self.manifests = {name: os.path.join(self.manifest_dir, f"{name}.json") for name in ("desertfox_bridge", "desertbird_bridge", "desertfox_host")}
-        # An install from before Thunderbird: the Thunderbird manifest is the one path the update adds.
-        self.added_manifest = self.manifests["desertbird_bridge"]
+        self.manifests = {name: os.path.join(self.manifest_dir, f"{name}.json") for name in ("desertfox_bridge", "desertbird_bridge", "desertfox_host", "desertbird_host")}
+        # An install from before Thunderbird: the two Thunderbird manifests are the paths the update adds.
+        self.added_manifests = [self.manifests["desertbird_bridge"], self.manifests["desertbird_host"]]
         for name in SCRIPTS:
             self.write(self.paths[name], stamped(name, OLD), 0o755)
         for name, script in (("desertfox_bridge", "desertfox-bridge"), ("desertfox_host", "desertfox-host")):
@@ -216,14 +216,14 @@ class DowngradeTest(UpdateCase):
 
 
 class UpdateTest(UpdateCase):
-    def test_an_update_writes_exactly_the_six_paths_and_adds_the_thunderbird_manifest(self):
+    def test_an_update_writes_exactly_the_seven_paths_and_adds_the_thunderbird_manifests(self):
         before = self.snapshot()
         result = self.update()
         after = self.snapshot()
-        six = [self.paths["desertfox-bridge"], self.paths["desertfox"], *self.manifests.values(), self.paths["desertfox-host"]]
-        self.assertEqual(result, {"updated": True, "version": NEW, "replaced": six})
-        self.assertEqual(set(after), set(before) | {self.added_manifest}, "only the Thunderbird manifest is added, no .new is left behind")
-        self.assertEqual(sorted(path for path in after if after[path] != before.get(path)), sorted(six))
+        seven = [self.paths["desertfox-bridge"], self.paths["desertfox"], *self.manifests.values(), self.paths["desertfox-host"]]
+        self.assertEqual(result, {"updated": True, "version": NEW, "replaced": seven})
+        self.assertEqual(set(after), set(before) | set(self.added_manifests), "only the Thunderbird manifests are added, no .new is left behind")
+        self.assertEqual(sorted(path for path in after if after[path] != before.get(path)), sorted(seven))
         for name in SCRIPTS:
             self.assertEqual(after[self.paths[name]][:2], (self.new_scripts[name], 0o755))
 
@@ -233,6 +233,7 @@ class UpdateTest(UpdateCase):
             "desertfox_host": ("DesertFox config files and saved edits", "desertfox-host", "desertfox@uhs-robert"),
             "desertfox_bridge": ("DesertFox bridge to a desktop shell", "desertfox-bridge", "desertfox@uhs-robert"),
             "desertbird_bridge": ("DesertBird bridge to a desktop shell", "desertfox-bridge", "desertbird@uhs-robert"),
+            "desertbird_host": ("DesertBird config host and external editor", "desertfox-host", "desertbird@uhs-robert"),
         }
         for name, (description, script, extension_id) in expected.items():
             with open(self.manifests[name]) as file:
@@ -382,16 +383,17 @@ class ReplaceTest(UpdateCase):
             self.assertEqual(json.load(file)["description"], "DesertFox bridge to a desktop shell")
         self.assertEqual(self.update(current=NEW)["updated"], False, "now the install is current")
 
-    def test_a_current_install_without_the_thunderbird_manifest_is_not_current_and_gains_it(self):
-        # What an update by a host from before Thunderbird leaves: the new scripts and only the two older manifests.
+    def test_a_current_install_without_the_thunderbird_manifests_is_not_current_and_gains_them(self):
+        # What an update by a host from before the Thunderbird host manifest leaves: the new scripts and the three older manifests.
         for name in SCRIPTS:
             self.write(self.paths[name], self.new_scripts[name], 0o755)
-        for name in ("desertfox_bridge", "desertfox_host"):
+        for name in ("desertfox_bridge", "desertfox_host", "desertbird_bridge"):
             self.write(self.manifests[name], host.manifest_bytes(name, self.paths), 0o644)
         result = self.update(current=NEW)
         self.assertTrue(result["updated"])
-        self.assertIn(self.added_manifest, result["replaced"])
-        with open(self.added_manifest) as file:
+        added = self.manifests["desertbird_host"]
+        self.assertIn(added, result["replaced"])
+        with open(added) as file:
             self.assertEqual(json.load(file)["allowed_extensions"], ["desertbird@uhs-robert"])
         self.assertEqual(self.update(current=NEW)["updated"], False, "now the install is current")
 
@@ -678,7 +680,7 @@ print(json.dumps(module.self_update(json.loads(sys.argv[3]), fetch=fetch)))
 
 
 class TemporaryHomeTest(UpdateCase):
-    def test_the_installed_host_writes_only_the_six_paths_under_home(self):
+    def test_the_installed_host_writes_only_the_seven_paths_under_home(self):
         served = os.path.join(self.tmp.name, "served")
         os.makedirs(served)
         for url, data in self.release.files.items():
@@ -691,7 +693,7 @@ class TemporaryHomeTest(UpdateCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue(json.loads(done.stdout)["updated"])
         after = self.snapshot()
-        self.assertEqual(set(after), set(before) | {self.added_manifest})
+        self.assertEqual(set(after), set(before) | set(self.added_manifests))
         changed = sorted(path for path in after if after[path] != before.get(path))
         self.assertEqual(changed, sorted([*self.paths.values(), *self.manifests.values()]))
 

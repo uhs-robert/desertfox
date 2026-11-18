@@ -236,5 +236,22 @@ class WriteAutoconfigTest(ConfigDirCase):
         self.assertEqual(os.listdir(self.config), [])
 
 
+class ThunderbirdManifestTest(unittest.TestCase):
+    def test_the_desertbird_host_manifest_names_the_thunderbird_id_and_this_script(self):
+        script, _, extension_id = host.MANIFESTS["desertbird_host"]
+        self.assertEqual(script, "desertfox-host")
+        self.assertEqual(extension_id, "desertbird@uhs-robert")
+        self.assertEqual(host.THUNDERBIRD_EXTENSION_ID, extension_id)
+        scripts = {"desertfox-host": "/data/desertfox-host"}
+        manifest = json.loads(host.manifest_bytes("desertbird_host", scripts))
+        self.assertEqual(manifest["name"], "desertbird_host")
+        self.assertEqual(manifest["path"], "/data/desertfox-host")
+        self.assertEqual(manifest["allowed_extensions"], ["desertbird@uhs-robert"])
+
+    def test_no_firefox_manifest_allows_the_thunderbird_id_and_no_thunderbird_one_allows_firefox(self):
+        for name, (_, _, extension_id) in host.MANIFESTS.items():
+            self.assertEqual(extension_id == host.THUNDERBIRD_EXTENSION_ID, name.startswith("desertbird_"), name)
+
+
 if __name__ == "__main__":
     unittest.main()
