@@ -4,12 +4,12 @@ import { create_derived_row, NONE_RECHECK_MS } from "../src/content/item/derived
 import type { Found } from "../src/content/item/finder.ts";
 
 type Fake = { name: string; isConnected: boolean; shown: boolean; contains: (node: unknown) => boolean };
-type FakeLink = { name: string; isConnected: boolean };
+type FakeLink = { name: string; isConnected: boolean; shown: boolean };
 
 // A page whose items the test can hide, drop and bring back, and a finder that counts how often it is asked. `answer` is what the finder gives next unless `fails` says it runs out of time or throws, and `tail` is what follows the last item of the list.
 function setup(initial: Fake[]) {
   const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink> } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map() };
-  const link = { name: "link", isConnected: true };
+  const link = { name: "link", isConnected: true, shown: true };
   const row = create_derived_row({
     find_: () => {
       state.finds++;
@@ -104,6 +104,17 @@ test("the link of an item is the one the finder named, and an unknown item has n
   assert.equal(state.finds, 1);
 });
 
+test("a kept link the page hides is looked up again", () => {
+  const first = item("a");
+  const { state, row, link } = setup([first, item("b")]);
+  const hidden = { name: "hidden", isConnected: true, shown: false };
+  state.links.set(first, hidden);
+  row.items_();
+  state.links.set(first, link);
+  assert.equal(row.link_of_(first as unknown as Element), link as unknown as Element);
+  assert.equal(state.finds, 2);
+});
+
 test("a run that ran out of time scrolls this press and is not kept, so the next press reads the page again", () => {
   const { state, row } = setup([]);
   state.fails = "timeout";
@@ -141,13 +152,13 @@ test("at the end of the list the row reads the page again only when something ne
 test("a kept link that left the page or its item is looked up again", () => {
   const first = item("a");
   const { state, row, link } = setup([first, item("b")]);
-  const stale = { name: "stale", isConnected: false };
+  const stale = { name: "stale", isConnected: false, shown: true };
   state.links.set(first, stale);
   row.items_();
   state.links.set(first, link);
   assert.equal(row.link_of_(first as unknown as Element), link as unknown as Element);
   assert.equal(state.finds, 2);
-  const stray = { name: "stray", isConnected: true };
+  const stray = { name: "stray", isConnected: true, shown: true };
   state.links.set(first, stray);
   state.url = "https://a.test/moved";
   row.items_();

@@ -1,4 +1,4 @@
-// The repeated blocks of a page, for the load-more step of `]]` (`../next_page/load_more.ts`) and the item finder (`finder.ts`). Both read the same groups, so `]]` and j agree on where the main list is.
+// The repeated blocks of a page, for the load-more step of `]]` (`../next_page/load_more.ts`) and the item finder (`finder.ts`). Both build the groups with this code, and each decides its own items and picks its own main list.
 
 import { ancestors, in_carousel, signature, stacked_items } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
@@ -54,6 +54,7 @@ export function list_groups<N>(reader: PageReader<N>, nodes: readonly N[], rules
       const items: N[] = [];
       const boxes: Box[] = [];
       for (const at of places) {
+        if (rules.stop()) return found;
         const box = rules.box_of(children[at]!, children, at);
         if (box && rules.is_item(children[at]!, box)) items.push(children[at]!), boxes.push(box);
       }
