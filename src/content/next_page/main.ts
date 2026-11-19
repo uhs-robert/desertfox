@@ -68,7 +68,7 @@ async function follow_page(host: PageHostApi, direction: FollowDirection, place:
   const cursor = await read_item_cursor(host);
   // The box wait reads the old items before the click, which can add the new ones at once.
   const act_ = () => {
-    void move_box_after_load(cursor, { items_: visible_items, watch_: dom_content_watch(document), cursor_: () => read_item_cursor(host), in_normal_mode_: () => host.get_mode() === "normal", watch_user_left_: () => watch_user_left(document, window, host.pressed_keys_) });
+    void move_box_after_load(cursor, { items_: visible_items, watch_: dom_content_watch(document), cursor_: () => read_item_cursor(host), mode_: host.get_mode, watch_user_left_: () => watch_user_left(document, window, host.pressed_keys_) });
     if (found.action === "click") void follow_like_a_hint("here", target, open_link_);
     else scroll_past(target);
   };
