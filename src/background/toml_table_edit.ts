@@ -187,6 +187,9 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
   // Each new row goes after the block of the kept row before it, above the first block when no kept row comes before it, or at the end when the text has no block.
   const after_block = new Map<number, Line[]>();
   const above_first: Line[] = [];
+  // A first block that is dropped, followed by a blank line that stays or by the end, hands that blank line to the rows above it.
+  const first_after = blocks[0] === undefined ? undefined : lines[blocks[0].end + 1];
+  const takes_slot = !kept_old.has(0) && !dropped.has((blocks[0]?.end ?? 0) + 1) && (first_after === undefined || first_after.body.trim() === "");
   const at_end: Line[] = [];
   let previous_kept: number | undefined;
   for (const j of next.keys()) {
@@ -195,10 +198,7 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
       previous_kept = kept;
       continue;
     }
-    // A first block that is dropped and followed by a blank line or the end hands that blank line to the new row.
-    const first_after = blocks[0] === undefined ? undefined : lines[blocks[0].end + 1];
-    const takes_slot = !kept_old.has(0) && (first_after === undefined || first_after.body.trim() === "");
-    if (previous_kept === undefined && blocks.length > 0) above_first.push(...lines_of(j), ...(takes_slot && above_first.length === 0 ? [] : [BLANK(eol)]));
+    if (previous_kept === undefined && blocks.length > 0) above_first.push(...(above_first.length > 0 ? [BLANK(eol)] : []), ...lines_of(j));
     else if (previous_kept === undefined) at_end.push(...(at_end.length > 0 ? [BLANK(eol)] : []), ...lines_of(j));
     else {
       const bucket = after_block.get(previous_kept) ?? [];
@@ -206,6 +206,8 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
       after_block.set(previous_kept, bucket);
     }
   }
+
+  if (above_first.length > 0 && !takes_slot) above_first.push(BLANK(eol));
 
   const block_ending_at = new Map(blocks.map((block, index) => [block.end, index]));
   const out: Line[] = [];
