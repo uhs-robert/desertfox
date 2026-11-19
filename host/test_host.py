@@ -471,6 +471,23 @@ class WriteSettingsTest(ConfigDirCase):
             self.assertEqual(self.read_settings(), data)
             self.assertEqual(self.entries(), ["settings.toml"])
 
+    def test_an_old_file_that_cannot_be_read_back_goes_back_and_refuses_as_unread_not_changed(self):
+        self.put("settings.toml", "a = 1\n")
+        real_open = os.open
+
+        def failing_open(target, *args, **kwargs):
+            if str(target).endswith(".old"):
+                raise OSError(5, "Input/output error")
+            return real_open(target, *args, **kwargs)
+
+        with mock.patch.object(host.os, "open", side_effect=failing_open):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertFalse(reply["ok"])
+        self.assertIn(host.NOT_READ_BACK, reply["error"])
+        self.assertNotIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read_settings(), b"a = 1\n")
+        self.assertEqual(self.entries(), ["settings.toml"])
+
     def test_a_racing_edit_that_cannot_be_put_back_stays_aside(self):
         path = self.put("settings.toml", "a = 1\n")
         real_replace = os.replace
