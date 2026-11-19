@@ -11,6 +11,7 @@ in the same framing to stdout and exits. It has nine verbs and no others:
   {"cmd": "write_config_file", "kind": "settings", "text": "<text>" or null, "base_sha256": "<hex>" or null}
   {"cmd": "write_config_file", "kind": "theme", "name": "<theme name>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
   {"cmd": "write_config_file", "kind": "engines", "text": "<text>" or null, "base_sha256": "<hex>" or null}
+  {"cmd": "write_config_file", "kind": "search_keys", "text": "<text>" or null, "base_sha256": "<hex>" or null}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "...", "sha256": "<hex of text>"}  or, for a null text, "deleted": true
   {"cmd": "write_settings", "text": "<text>", "base_sha256": "<hex>" or null}
       -> the reply of write_config_file with kind settings, which it is under its older name
@@ -28,8 +29,9 @@ in the same framing to stdout and exits. It has nine verbs and no others:
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes there:
-autoconfig.toml, and settings.toml, themes/<name>.toml and search_engines.d/zz-desertfox.toml through `write_config_file`, which replaces or deletes a file
-only while it is still the text the extension edited and takes the lock file .settings.lock in the folder, which stays
+autoconfig.toml, and settings.toml, themes/<name>.toml, search_engines.d/zz-desertfox.toml and keymap.d/zz-desertfox.toml
+through `write_config_file`, which replaces or deletes a file only while it is still the text the extension edited and
+takes the lock file .settings.lock in the folder, which stays
 (see `write_config_file`). It parses no config of the extension: the extension owns that TOML and makes
 the edit. Only editor.toml, which the extension never sees, is parsed here.
 `self_update` replaces the installed hosts, the command line and their four manifests with a GitHub release (see
@@ -257,6 +259,8 @@ CONFIG_FILE_KINDS = {
     # The Engines page's own file. The extension refuses a page engine that a hand file in search_engines.d defines, so the
     # sort order of the hand files does not matter.
     "engines": ConfigFileKind(folder="search_engines.d", name_pattern=None, fixed_name="zz-desertfox.toml"),
+    # The Engines page's key letters, a `[search_keys]` table only. The key editor's own keys never come here.
+    "search_keys": ConfigFileKind(folder="keymap.d", name_pattern=None, fixed_name="zz-desertfox.toml"),
 }
 
 
@@ -287,8 +291,8 @@ def write_config_file(request):
     for the file, or null when it read none. Another digest means a hand edit since, and the host refuses rather than
     overwrite or delete it, so a delete needs a base. A link is followed, so a file that links into a dotfiles repository
     stays a link, and the target keeps its mode. The config folder must exist: a write never creates a config folder that
-    read_config would then find with only this file in it. A kind's own folder (themes, search_engines.d) is created for a
-    new file.
+    read_config would then find with only this file in it. A kind's own folder (themes, search_engines.d, keymap.d) is
+    created for a new file.
 
     Host writers take a lock. An editor takes none, so the old file is hard-linked aside before the rename and checked
     after it: an edit saved into it in the meantime puts it back and refuses as changed on disk. An old file that cannot

@@ -672,6 +672,26 @@ class WriteConfigFileTest(ConfigDirCase):
         self.assertEqual(self.read("search_engines.d/10-mine.toml"), b"mine = 1\n")
         self.assertEqual(self.tree(), ["search_engines.d/", "search_engines.d/10-mine.toml", "search_engines.d/zz-desertfox.toml"])
 
+    def test_the_search_keys_kind_writes_only_its_fixed_name_in_keymap_d_beside_the_hand_files(self):
+        self.put("keymap.d/10-mine.toml", "[normal]\nJ = \"tab.close\"\n")
+        reply = self.write("search_keys", None, "[search_keys]\nw = \"wiki\"\n", None)
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(reply["path"], os.path.join(self.config, "keymap.d", "zz-desertfox.toml"))
+        self.assertIn("takes no name", self.write("search_keys", "../keymap", "a = 1\n", None)["error"])
+        self.assertTrue(self.write("search_keys", None, None, sha("[search_keys]\nw = \"wiki\"\n"))["ok"])
+        self.assertEqual(self.tree(), ["keymap.d/", "keymap.d/10-mine.toml"])
+
+    def test_the_search_keys_kind_creates_a_missing_keymap_d(self):
+        self.assertTrue(self.write("search_keys", None, "[search_keys]\nw = \"wiki\"\n", None)["ok"])
+        self.assertEqual(self.tree(), ["keymap.d/", "keymap.d/zz-desertfox.toml"])
+
+    def test_a_hand_made_keys_file_is_never_overwritten(self):
+        self.put("keymap.d/zz-desertfox.toml", "[search_keys]\nh = \"hand\"\n")
+        for base in (sha("read = 1\n"), None):
+            self.assertIn(host.CHANGED_ON_DISK, self.write("search_keys", None, "new = 1\n", base)["error"], base)
+        self.assertIn(host.CHANGED_ON_DISK, self.write("search_keys", None, None, sha("read = 1\n"))["error"])
+        self.assertEqual(self.read("keymap.d/zz-desertfox.toml"), b"[search_keys]\nh = \"hand\"\n")
+
     def test_a_linked_search_engines_d_is_used_as_it_is(self):
         target = os.path.join(self.tmp.name, "dotfiles", "engines")
         os.makedirs(target)

@@ -9,7 +9,7 @@ import { ALIAS_EDITS_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, KEYMAP_EDITS_STORAGE
 // Mode to key sequence to the command text, as keymap.toml writes it. `""` unbinds a default or file binding.
 export type KeymapEdits = Partial<Record<KeymapMode, Record<string, string>>>;
 
-// The search engines the browser adds, in the shape search_engines.toml and keymap.toml write them, so an export is `stringify` of each part.
+// The search engines and key letters older versions added in the browser, in the shape search_engines.toml and keymap.toml write them, so an export is `stringify` of each part. The Engines page now writes files instead (`engine_file.ts`, `engine_keys_file.ts`).
 // `engines` is a table per engine name with child tables inside, and the build is the only judge of the fields. `letters` maps a key letter to an engine name, as `[search_keys]` does: the form's key letter lives and dies with its engine, and keymap.d carries it on export.
 export type EngineEdits = { engines?: Record<string, Record<string, unknown>>; letters?: Record<string, string> };
 
@@ -87,6 +87,11 @@ export const EDIT_LAYERS: { [K in LayerKind]: LayerSpec<K> } = {
 
 // The engines layer, empty when none is stored.
 export const engine_edits_of = (layers: EditLayers): EngineEdits => layers.engines ?? {};
+// The layer without an empty `engines` or `letters`, as `load_layers` reads it back.
+export const nonempty_engine_edits = (edits: EngineEdits): EngineEdits => ({
+  ...(Object.keys(edits.engines ?? {}).length > 0 && { engines: edits.engines }),
+  ...(Object.keys(edits.letters ?? {}).length > 0 && { letters: edits.letters }),
+});
 export const has_engine_edits = (edits: EngineEdits): boolean => Object.keys(edits.engines ?? {}).length > 0 || Object.keys(edits.letters ?? {}).length > 0;
 
 export const alias_edits_of = (layers: EditLayers): AliasEdits => layers.aliases ?? {};

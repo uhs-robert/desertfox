@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import "../../src/background/command_modules.ts";
 import { load_layers } from "../../src/background/edit_layers.ts";
 import { holds_engine, PAGE_FILE_MARKER, page_path_is_hand_file } from "../../src/background/engine_file.ts";
+import { KEYS_FILE_MARKER } from "../../src/background/engine_keys_file.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
 import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { build_files_config } from "../../src/background/config_reload.ts";
@@ -14,9 +15,11 @@ let fresh_count = 0;
 const fresh_startup = async () => (await import(`../../src/background/startup.ts?engine_file_${fresh_count++}`)) as Startup;
 
 const FILE = "search_engines.d/zz-desertfox.toml";
-// The first lines of a page file the page wrote.
+const KEYS = "keymap.d/zz-desertfox.toml";
+// The first lines of a page file and a keys file the page wrote.
 const MARK = `${PAGE_FILE_MARKER}\n\n`;
-type Host = { files: Files; granted?: boolean; no_engines_kind?: boolean };
+const KEYS_MARK = `${KEYS_FILE_MARKER}\n\n`;
+type Host = { files: Files; granted?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; refuse?: string[] };
 
 const messages_of = (startup: Startup) =>
   create_engine_messages({ read_engine_state: startup.read_engine_state, change_engine_file: startup.change_engine_file, read_starter: async () => readFileSync(new URL("../../examples/engines.toml", import.meta.url), "utf8") });
@@ -79,13 +82,14 @@ test("an engine a hand file defines is refused by name for a save and a remove, 
   assert.equal(host.files["search_engines.toml"], files["search_engines.toml"]);
 });
 
-test("a save of an engine the old browser layer holds moves it into the file with its label, children and letter", async () => {
+test("a save of an engine the old browser layer holds moves it into the file with its label and children, and its letter into the keys file", async () => {
   const layer = { engines: { gh: { url: "https://github.com/search?q={query}", label: "GitHub", keyword: "g", repo: { url: "https://github.com/{repo}/search?q={query}", label: "Repo" } }, other: { url: "https://o.test/?q={query}" } }, letters: { g: "gh" } };
   const { host, startup, messages } = await started(undefined, undefined, layer);
   const answer = await messages.change(set("gh", "https://github.com/search?q={query}&type=code", { letter: "g" }));
   assert.equal(answer.ok, true, answer.message);
   assert.equal(host.files[FILE], MARK + '[gh]\nurl = "https://github.com/search?q={query}&type=code"\nlabel = "GitHub"\n\n[gh.repo]\nurl = "https://github.com/{repo}/search?q={query}"\nlabel = "Repo"\n');
-  assert.deepEqual((await load_layers()).engines, { engines: { other: { url: "https://o.test/?q={query}" } }, letters: { g: "gh" } });
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\ng = "gh"\n');
+  assert.deepEqual((await load_layers()).engines, { engines: { other: { url: "https://o.test/?q={query}" } } });
   const config = await startup.get_config();
   assert.equal(config.search_engines.gh?.keyword, undefined);
   assert.ok(config.search_engines["gh.repo"]);
@@ -94,13 +98,12 @@ test("a save of an engine the old browser layer holds moves it into the file wit
   assert.deepEqual(listed.ok && listed.engines.map((row) => [row.name, row.letter ?? ""]), [["gh", "g"], ["other", ""]]);
   // A remove of an engine still in the layer changes no file.
   assert.deepEqual(await messages.change(remove("other")), { ok: true, message: "Removed the engine other." });
-  assert.deepEqual((await load_layers()).engines, { letters: { g: "gh" } });
+  assert.equal((await load_layers()).engines, undefined);
 });
 
-test("a remove takes the engine's key letter with it in the same storage write", async () => {
-  const { messages, startup, local, fake } = await started();
-  await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
-  assert.deepEqual((await load_layers()).engines?.letters, { w: "wiki" });
+test("a remove of an engine whose old layer letter names it takes the letter in the same storage write as the file", async () => {
+  const { messages, startup, local, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n' }, undefined, { letters: { w: "wiki" } });
+  assert.equal((await startup.get_config()).keymap.search_keys?.w, "wiki");
   const writes: string[][] = [];
   const store_set = fake.storage.local.set;
   fake.storage.local.set = async (values: Record<string, unknown>) => {
@@ -349,9 +352,8 @@ test("a page engine path names a child table or a child a param makes, never par
   assert.equal(holds_engine(tables, "none"), false);
 });
 
-test("a remove whose storage write fails puts the page's file and the key letter back together", async () => {
-  const { messages, startup, local, fake } = await started();
-  await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+test("a remove whose storage write fails puts the page's file and the old layer's key letter back together", async () => {
+  const { messages, startup, local, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n' }, undefined, { letters: { w: "wiki" } });
   const file_before = stored_files(local)[FILE];
   const layer_before = structuredClone(local[ENGINE_EDITS_STORAGE_KEY]);
   const store_set = fake.storage.local.set;
@@ -584,4 +586,225 @@ test("a save whose browser copy an import replaced does not say its key letter s
   assert.equal(answer.ok, true, answer.message);
   assert.match(answer.message, /A config import replaced the browser copy/);
   assert.doesNotMatch(answer.message, /sW searches/);
+});
+
+const kinds_sent = (sent: { cmd: string; kind?: string }[]) => sent.filter((message) => message.cmd === "write_config_file").map((message) => message.kind);
+
+test("a key letter goes to the keys file after the engine file, the page lists it, and a remove takes it out first", async () => {
+  const { host, messages, local, sent, fake } = await started();
+  const broken = watch_folder_builds(fake, host);
+  sent.length = 0;
+  const saved = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.deepEqual(saved, { ok: true, message: `Saved the engine wiki to ${FILE}. Saved its key letter to ${KEYS}. sw searches it.` });
+  assert.deepEqual(kinds_sent(sent), ["engines", "search_keys"]);
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nw = "wiki"\n');
+  assert.equal(stored_files(local)[KEYS], host.files[KEYS]);
+  assert.equal(local[ENGINE_EDITS_STORAGE_KEY], undefined);
+  await messages.change(set("docs", "https://d.test/?q={query}", { letter: "d" }));
+  const listed = await messages.list();
+  assert.deepEqual(listed.ok && listed.engines.map((row) => [row.name, row.letter]), [["wiki", "w"], ["docs", "d"]]);
+
+  sent.length = 0;
+  assert.deepEqual(await messages.change(remove("wiki")), { ok: true, message: `Removed the engine wiki from ${FILE}. Removed its key letter from ${KEYS}.` });
+  assert.deepEqual(kinds_sent(sent), ["search_keys", "engines"]);
+  assert.deepEqual(await messages.change(remove("docs")), { ok: true, message: `Removed the engine docs. ${FILE} held no other engine, so it is deleted. Removed its key letter. ${KEYS} held no other key letter, so it is deleted.` });
+  assert.equal(host.files[KEYS], undefined);
+  assert.deepEqual(broken, []);
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a save without a letter takes the engine's letter out of the keys file, and one without any letter leaves the file alone", async () => {
+  const { host, messages, sent } = await started();
+  await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  await messages.change(set("docs", "https://d.test/?q={query}", { letter: "d" }));
+  assert.deepEqual(await messages.change(set("wiki", "https://w.test/?q={query}&x=1")), { ok: true, message: `Saved the engine wiki to ${FILE}. Removed its key letter from ${KEYS}.` });
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nd = "docs"\n');
+  sent.length = 0;
+  assert.deepEqual(await messages.change(set("wiki", "https://w.test/?q={query}&x=2")), { ok: true, message: `Saved the engine wiki to ${FILE}.` });
+  assert.deepEqual(kinds_sent(sent), ["engines"]);
+  assert.deepEqual(await messages.change(set("docs", "https://d.test/?q={query}")), { ok: true, message: `Saved the engine docs. Removed its key letter. ${KEYS} held no other key letter, so it is deleted.` });
+  assert.equal(host.files[KEYS], undefined);
+});
+
+test("a letter another page engine had moves to the saved engine, and the reply names the engine it searched", async () => {
+  const { host, messages, startup } = await started();
+  await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  const moved = await messages.change(set("wolf", "https://wolf.test/?q={query}", { letter: "w" }));
+  assert.deepEqual(moved, { ok: true, message: `Saved the engine wolf to ${FILE}. Saved its key letter to ${KEYS}. sw searches it, where it searched wiki.` });
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nw = "wolf"\n');
+  assert.equal((await startup.get_config()).keymap.search_keys?.w, "wolf");
+});
+
+test("a letter a hand file loaded earlier binds replaces it, and the hand file stays as written", async () => {
+  const hand = '[search_keys]\nw = "duck"\n';
+  const { host, messages, startup } = await started({ "settings.toml": "", "keymap.d/10-mine.toml": hand });
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.deepEqual(answer, { ok: true, message: `Saved the engine wiki to ${FILE}. Saved its key letter to ${KEYS}. sw searches it, where it searched duck.` });
+  assert.equal(host.files["keymap.d/10-mine.toml"], hand);
+  assert.equal((await startup.get_config()).keymap.search_keys?.w, "wiki");
+});
+
+test("a letter a keymap.d file loaded after the keys file binds to another engine is refused by name, and nothing is written", async () => {
+  const page_file = MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n';
+  const { host, messages, sent } = await started({ "settings.toml": "", [FILE]: page_file, "keymap.d/zz-mine.toml": '[search_keys]\nw = "duck"\nd = "wiki"\n' });
+  sent.length = 0;
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}&x=1", { letter: "w" }));
+  assert.deepEqual(answer, { ok: false, message: `keymap.d/zz-mine.toml sets the key letter w in [search_keys], and it wins over ${KEYS}. Change it there, or pick another letter.`, problems: [] });
+  assert.deepEqual(kinds_sent(sent), []);
+  assert.equal(host.files[FILE], page_file);
+  // The later file binds d to this same engine, so the page's d takes nothing from it.
+  assert.equal((await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "d" }))).ok, true);
+});
+
+test("a later keymap.d file that spells the letter another way still counts as setting it", async () => {
+  const { messages } = await started({ "settings.toml": "", "keymap.d/zz-mine.toml": '[search_keys]\n"<C-D>" = "duck"\n' });
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "<C-d>" }));
+  assert.deepEqual(answer, { ok: false, message: `keymap.d/zz-mine.toml sets the key letter <C-d> in [search_keys], and it wins over ${KEYS}. Change it there, or pick another letter.`, problems: [] });
+});
+
+test("a letter the build refuses is refused and stores nothing", async () => {
+  const { host, messages, local } = await started();
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "/" }));
+  assert.equal(answer.ok, false);
+  assert.match(answer.message, /zz-desertfox\.toml: search_keys\["\/"\]|"\/" is the key of the current site search/);
+  assert.equal(host.files[FILE], undefined);
+  assert.equal(stored_files(local)[KEYS], undefined);
+});
+
+test("a keys file at the page's path without the marker stays the user's: its letters are not listed and a letter change is refused by name", async () => {
+  const hand = '[search_keys]\nw = "wiki"\n';
+  const { host, messages, sent } = await started({ "settings.toml": "", [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n', [KEYS]: hand });
+  const listed = await messages.list();
+  assert.deepEqual(listed.ok && listed.engines.map((row) => row.letter), [undefined]);
+  sent.length = 0;
+  const refusal = `${KEYS} was not written by the Engines page, so the page does not change it. Rename it, or move its keys to another keymap.d file.`;
+  assert.deepEqual(await messages.change(set("docs", "https://d.test/?q={query}", { letter: "d" })), { ok: false, message: refusal, problems: [] });
+  assert.deepEqual(await messages.change(set("docs", "https://d.test/?q={query}")), { ok: true, message: `Saved the engine docs to ${FILE}.` });
+  // The hand file binds w to wiki, so the files build refuses the remove.
+  const removed = await messages.change(remove("wiki"));
+  assert.equal(removed.ok, false);
+  assert.match(removed.message, /unknown search engine "wiki"/);
+  assert.equal(host.files[KEYS], hand);
+  assert.deepEqual(kinds_sent(sent), ["engines"]);
+});
+
+test("a keys file made by hand since the last read is never overwritten, and the question is asked", async () => {
+  const { host, messages, local } = await started();
+  host.files = { ...host.files, [KEYS]: '[search_keys]\nh = "duck"\n' };
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.ok(answer.ok);
+  assert.match(answer.message, new RegExp(`Saved its key letter\\. ${KEYS.replace(".", "\\.")} changed on disk, so it stays as it is`));
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.equal(host.files[KEYS], '[search_keys]\nh = "duck"\n');
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("an engine file write that lands while the keys write fails leaves the engine without its letter in the folder, and the reply says so", async () => {
+  const { host, messages, local } = await started({ "settings.toml": "" }, { files: { "settings.toml": "" }, refuse: [KEYS] });
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.deepEqual(answer, { ok: true, message: `Saved the engine wiki to ${FILE}. Saved its key letter. ${KEYS} was not written (The DesertFox native host refused: cannot write /home/u/.config/desertfox/${KEYS}: Permission denied). It is tried again at the next start. sw searches it.` });
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.equal(host.files[KEYS], undefined);
+  assert.deepEqual(unsynced_of(local), { [KEYS]: null });
+  host.refuse = [];
+  await (await fresh_startup()).reload_config_at_start();
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nw = "wiki"\n');
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a keys write whose gate cannot read the folder after the engine file landed is held, and the reply says so", async () => {
+  const { host, messages, fake, local } = await started();
+  const send = fake.runtime.sendNativeMessage;
+  let engine_written = false;
+  fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string; kind?: string }) => {
+    if (message.cmd === "read_config" && engine_written) throw new Error("read failed");
+    const reply = await send(name, message);
+    if (message.kind === "engines") engine_written = true;
+    return reply;
+  };
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.ok(answer.ok);
+  assert.match(answer.message, new RegExp(`^Saved the engine wiki to ${FILE.replace(".", "\\.")}\\. Saved its key letter\\. ${KEYS.replace(".", "\\.")} waits, because the config folder could not be read to check the write \\(.*read failed\\)`));
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.equal(host.files[KEYS], undefined);
+  assert.deepEqual(unsynced_of(local), { [KEYS]: null });
+});
+
+test("a key letter whose engine's file went to the question is held by the gate, so the folder never names a missing engine", async () => {
+  const { host, messages, local } = await started();
+  host.files = { ...host.files, [FILE]: '[hand]\nurl = "https://h.test/?q={query}"\n' };
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.ok(answer.ok);
+  assert.match(answer.message, /zz-desertfox\.toml changed on disk, so it stays as it is/);
+  assert.match(answer.message, /keymap\.d\/zz-desertfox\.toml waits, because the config folder would not build with it \(.*unknown search engine "wiki"\)/);
+  assert.equal(host.files[KEYS], undefined);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object), [KEYS]);
+});
+
+test("a host without the search_keys kind writes the engine file, the letter waits for the update, and the updated host writes it", async () => {
+  const files = { "settings.toml": "" };
+  const host: Host = { files, no_keys_kind: true };
+  const { messages, startup, local } = await started(files, host);
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.deepEqual(answer, { ok: true, message: `Saved the engine wiki to ${FILE}. Saved its key letter. ${KEYS} updates once the native host is updated. sw searches it.` });
+  assert.equal((await startup.get_config()).keymap.search_keys?.w, "wiki");
+  assert.equal(host.files[KEYS], undefined);
+  assert.deepEqual(unsynced_of(local), { [KEYS]: null });
+  host.no_keys_kind = false;
+  await (await fresh_startup()).reload_config_at_start();
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nw = "wiki"\n');
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("two saves with letters sent while the first write is out reach both files in order, and no letter is lost", async () => {
+  const { host, messages, fake, local } = await started();
+  const broken = watch_folder_builds(fake, host);
+  const held = hold_writes(fake);
+  const first = messages.change(set("one", "https://1.test/?q={query}", { letter: "o" }));
+  await until(() => held.length === 1, "the first write did not go out");
+  const second = messages.change(set("two", "https://2.test/?q={query}", { letter: "t" }));
+  while (held.length > 0 || !(await Promise.race([Promise.all([first, second]).then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 20))]))) {
+    if (held.length > 0) held.shift()!();
+  }
+  const answers = await Promise.all([first, second]);
+  assert.ok(answers.every((answer) => answer.ok && answer.message.includes(`Saved its key letter to ${KEYS}`)), JSON.stringify(answers));
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\no = "one"\nt = "two"\n');
+  assert.match(host.files[FILE]!, /\[one\][^]*\[two\]/);
+  assert.deepEqual(broken, []);
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a new engine with a letter and the removal of one the folder's keys file names reach the folder through a bridge file", async () => {
+  const host: Host = { files: { "settings.toml": "", [FILE]: MARK + '[old]\nurl = "https://o.test/?q={query}"\n', [KEYS]: KEYS_MARK + '[search_keys]\no = "old"\n' } };
+  const { messages, local, fake } = await started(host.files, host);
+  host.granted = false;
+  await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  await messages.change(remove("old"));
+  assert.deepEqual(Object.keys(unsynced_of(local) as object), [FILE, KEYS]);
+  host.granted = true;
+  const broken = watch_folder_builds(fake, host);
+  const sent_kinds: string[] = [];
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = (name: string, message: { cmd: string; kind?: string }) => {
+    if (message.cmd === "write_config_file") sent_kinds.push(message.kind ?? "");
+    return send(name, message);
+  };
+  await (await fresh_startup()).reload_config_at_start();
+  assert.deepEqual(sent_kinds, ["engines", "search_keys", "engines"]);
+  assert.deepEqual(broken, []);
+  assert.equal(host.files[FILE], MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n');
+  assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nw = "wiki"\n');
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a remove whose keys write goes to the question takes the engine file's removal with it, so the folder keeps building", async () => {
+  const { host, messages, local, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n\n[keep]\nurl = "https://k.test/?q={query}"\n', [KEYS]: KEYS_MARK + '[search_keys]\nw = "wiki"\n' });
+  const broken = watch_folder_builds(fake, host);
+  host.files = { ...host.files, [KEYS]: '[search_keys]\nw = "wiki"\nk = "keep"\n' };
+  const answer = await messages.change(remove("wiki"));
+  assert.ok(answer.ok, answer.message);
+  assert.match(answer.message, /zz-desertfox\.toml changed on disk, so it stays as it is/);
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.deepEqual(broken, []);
+  assert.equal(unsynced_of(local), undefined);
 });

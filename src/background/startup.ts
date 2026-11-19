@@ -11,11 +11,12 @@ import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } fr
 import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
-import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, store_layers } from "./edit_layers.ts";
+import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, nonempty_engine_edits, store_layers } from "./edit_layers.ts";
 import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
-import type { EnginePlan, EngineState, EngineTurn } from "./engine_message.ts";
+import type { EngineFileOutcomes, EnginePlan, EngineState, EngineTurn } from "./engine_message.ts";
 import { ENGINE_FILE, engine_file_text, engine_resolves_without_owned, engines_in_text, holds_engine, owned_engines } from "./engine_file.ts";
+import { KEYS_FILE, letters_in_text } from "./engine_keys_file.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -286,11 +287,11 @@ export function read_engine_state(): Promise<EngineState> {
   });
 }
 
-// One change of the Engines page: its engine file and the engines layer in one storage write, then the host write of the file.
+// One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then the host writes of the files, the engine file first.
 // `plan` runs in the change queue and gets a build of any files and layer over the aliases in force, so it refuses what a change breaks before anything is stored.
-// The answer has no `file` when the file stayed as it was.
-export async function change_engine_file<R>(plan: (turn: EngineTurn) => EnginePlan | { done: R }): Promise<{ done: R } | { file?: FileWriteOutcome }> {
-  let file_changed = false;
+// The answer has no `file` or `keys` for a file that stayed as it was.
+export async function change_engine_file<R>(plan: (turn: EngineTurn) => EnginePlan | { done: R }): Promise<{ done: R } | EngineFileOutcomes> {
+  let changed_paths: string[] = [];
   const changed = await change_folder_files<R>(async (files) => {
     const config = await get_config();
     const layers = await load_layers();
@@ -302,12 +303,15 @@ export async function change_engine_file<R>(plan: (turn: EngineTurn) => EnginePl
     const { dir_label } = step.source;
     const planned = plan({ files, config, layer, dropped, trial: (next_files, next_layer) => build_layered(next_files, dir_label, built_in_commands(), next_layer, aliases) });
     if ("done" in planned) return planned;
-    file_changed = planned.files[ENGINE_FILE] !== files[ENGINE_FILE];
-    const layer_changed = JSON.stringify(planned.layer) !== JSON.stringify(layer);
-    return { files: planned.files, edits_after: await load_edits(), paths: file_changed ? [ENGINE_FILE] : [], ...(layer_changed && { engines_after: planned.layer }) };
+    changed_paths = [ENGINE_FILE, KEYS_FILE].filter((path) => planned.files[path] !== files[path]);
+    const layer_changed = JSON.stringify(nonempty_engine_edits(planned.layer)) !== JSON.stringify(nonempty_engine_edits(layer));
+    return { files: planned.files, edits_after: await load_edits(), paths: changed_paths, ...(layer_changed && { engines_after: planned.layer }) };
   });
   if ("done" in changed) return changed;
-  return file_changed ? { file: changed.outcomes[0]! } : {};
+  const outcome_of = (path: string) => changed.outcomes[changed_paths.indexOf(path)];
+  const file = outcome_of(ENGINE_FILE);
+  const keys = outcome_of(KEYS_FILE);
+  return { ...(file && { file }), ...(keys && { keys }) };
 }
 
 // The browser copy of the config files, read in the change queue so a change still writing is not seen half done.
@@ -334,7 +338,7 @@ export function republish(): Promise<void> {
 
 // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
 // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
-// A setting write passes `setting`: the edits that replace the setting edits, the record of the folder's base texts (none when no file is written), and for an Engines page change the engines layer after it.
+// A setting write passes `setting`: the edits that replace the setting edits, the record of the folder's base texts (none when no file is written), and for an Engines page change that touches the old engines layer the layer after it.
 // They go into the same storage write as the files, so a stop between writes never leaves one without the other, and a failure restores them all.
 async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedFiles | undefined; engines_after?: EngineEdits }): Promise<{ warnings: number }> {
   const { files, dir_label } = source;
@@ -528,7 +532,7 @@ async function change_setting_in_file<R>(name: keyof Settings, plan: (files: Con
 }
 
 // A change of config files the host writes: the browser copy's files after it, the setting edits after it, and the paths it changed, in the order they are written.
-// `engines_after` replaces the engines layer in the same storage write, for an Engines page change that moves an engine or a key letter.
+// `engines_after` replaces the engines layer in the same storage write, for an Engines page change that moves an engine or a key letter out of the layer an older version kept.
 type FolderFilesPlan = { files: ConfigFiles; edits_after: SettingEdits; paths: string[]; engines_after?: EngineEdits };
 
 // One change of files the folder holds. `plan` runs in the change queue on the browser copy's files. The outcomes follow the plan's paths.
@@ -720,8 +724,8 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
   let bridges = 0;
   for (;;) {
     const first = await in_queue(() => path_to_write_first(path));
-    // Each waits for the other: settings.toml names an engine only the copy's page file has, and that file drops an engine the folder's settings.toml names.
-    // The bridge file holds both, so settings.toml can land, then the page file as the copy has it.
+    // Each waits for the other: settings.toml or the keys file names an engine only the copy's page file has, and that file drops an engine the folder's settings.toml or keys file names.
+    // The bridge file holds both, so the namer can land, then the page file as the copy has it.
     if (first !== undefined && waiting_above.includes(first)) {
       if (bridges === MAX_BRIDGES) return replaced() ?? { kind: "waiting" };
       bridges += 1;
@@ -763,18 +767,35 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
   }
 }
 
-// A settings.toml `theme` or `default_engine` and the file that holds it reach the folder in the order that keeps the folder building: the file before a settings.toml that names it, and a settings.toml that names it no more before the file that drops it.
+// A settings.toml `theme` or `default_engine`, or a page key letter, and the file that holds what it names reach the folder in the order that keeps the folder building: the file before a namer that names it, and a namer that names it no more before the file that drops it.
 // The path of the record whose write goes before the one at `path`, or undefined. In the change queue.
 async function path_to_write_first(path: string): Promise<string | undefined> {
   const unsynced = await read_unsynced();
   if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
   const { files } = await load_files_source();
   if (path === SETTINGS_FILE) return files_named_by_settings(files[SETTINGS_FILE] ?? null, files, unsynced).find((named_path) => Object.hasOwn(unsynced, named_path));
-  if (!Object.hasOwn(unsynced, SETTINGS_FILE)) return undefined;
-  // The folder holds the base, or soon the text of a settings.toml write that is out, so neither may name what `path` drops.
-  const out = writes_of(SETTINGS_FILE).out;
-  const folder_settings = [unsynced[SETTINGS_FILE] ?? null, ...(out ? [out.text] : [])];
-  return folder_settings.some((text) => drops_what_settings_names(path, text, files)) ? SETTINGS_FILE : undefined;
+  if (path === KEYS_FILE) return Object.hasOwn(unsynced, ENGINE_FILE) && keys_name_new_engine(files, unsynced) ? ENGINE_FILE : undefined;
+  // The folder holds the base, or soon the text of a namer's write that is out, so neither may name what `path` drops.
+  return NAMING_PATHS.find((namer) => {
+    if (!Object.hasOwn(unsynced, namer)) return false;
+    const out = writes_of(namer).out;
+    return [unsynced[namer] ?? null, ...(out ? [out.text] : [])].some((text) => drops_what_is_named(path, namer, text, files));
+  });
+}
+
+// The files that name what another file holds: settings.toml a theme or an engine, the page's keys file an engine.
+const NAMING_PATHS = [SETTINGS_FILE, KEYS_FILE];
+
+// Whether the copy's keys file binds a letter to an engine of the copy's page file that the folder's page file (the record's base) lacks.
+function keys_name_new_engine(files: ConfigFiles, unsynced: UnsyncedFiles): boolean {
+  const folder_engines = engines_in_text(unsynced[ENGINE_FILE] ?? null);
+  return Object.values(letters_in_text(files[KEYS_FILE] ?? null)).some((engine) => holds_engine(owned_engines(files), engine) && !holds_engine(folder_engines, engine));
+}
+
+// Whether the copy's file at `path` drops what the file `namer`, at `text`, names.
+function drops_what_is_named(path: string, namer: string, text: string | null, files: ConfigFiles): boolean {
+  if (namer === SETTINGS_FILE) return drops_what_settings_names(path, text, files);
+  return path === ENGINE_FILE && Object.values(letters_in_text(text)).some((engine) => !holds_engine(owned_engines(files), engine) && !engine_resolves_without_owned(files, engine));
 }
 
 // The files of the copy that hold what a settings.toml of `text` names and the folder lacks: the theme file of its `theme`, and the Engines page's file when it defines the `default_engine` and the folder's page file (the record's base) does not.
@@ -799,7 +820,7 @@ function drops_what_settings_names(path: string, text: string | null, files: Con
 // The writes of a bridge file one write loop makes before it gives up and waits.
 const MAX_BRIDGES = 3;
 
-// Writes the bridge page file: the folder's engines (the record's base) with the copy's over them. It drops nothing the folder's settings.toml names and holds what the copy's settings.toml names.
+// Writes the bridge page file: the folder's engines (the record's base) with the copy's over them. It drops nothing the folder's settings.toml or keys file names and holds what the copy's name.
 // The record keeps the page file at the bridge text as its base, so the copy's own text follows.
 async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite> {
   const gate_read = await folder_for_gate(in_queue, ENGINE_FILE);
@@ -820,8 +841,8 @@ async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite>
   return in_queue(() => settle_host_write(started, reply, folder && { ...folder, current: writes_landed === landed_before_read }));
 }
 
-// The files whose writes must leave the folder building: the settings.toml and the page's file can name or drop an engine, a theme, a keyword the other depends on.
-const GATED_PATHS = new Set([SETTINGS_FILE, ENGINE_FILE]);
+// The files whose writes must leave the folder building: settings.toml and the page's two files can name or drop an engine, a theme, a keyword or a letter another depends on.
+const GATED_PATHS = new Set([SETTINGS_FILE, ENGINE_FILE, KEYS_FILE]);
 
 // The folder as the host reads it now, for the gate of a write of `path`, with the count of writes landed before the read. Undefined when the path has no gate or nothing waits for it.
 // A failed read holds the write, since nothing checked it. A host that is missing or not permitted waits instead, as the write itself would.
@@ -944,11 +965,11 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
       const asked = await ask_when_folder_differs(folder, { clear_when_settled: false });
       const end: FileWriteOutcome = { kind: asked === "asked" ? "conflict" : "conflict_kept" };
       let kept = without_unsynced_path(unsynced, path);
-      // A theme delete or an engine removal waits behind this write. The folder's settings.toml still names that theme or engine, so that file goes to the question too, and the folder keeps building.
-      if (path === SETTINGS_FILE) {
+      // A theme delete or an engine removal waits behind this write. The folder's settings.toml or keys file still names that theme or engine, so that file goes to the question too, and the folder keeps building.
+      if (NAMING_PATHS.includes(path)) {
         const { files } = await load_files_source();
         for (const other of Object.keys(kept ?? {})) {
-          if (!drops_what_settings_names(other, folder.files[SETTINGS_FILE] ?? null, files)) continue;
+          if (!drops_what_is_named(other, path, folder.files[path] ?? null, files)) continue;
           kept = without_unsynced_path(kept, other);
           writes_of(other).end = end;
         }
