@@ -8,7 +8,7 @@ Generated from `src/background/default_site_rows.ts`. Do not edit between the ma
 
 <!-- BEGIN generated -->
 
-Shipped rows: 27 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `amazon`, `reddit`, `drive`).
+Shipped rows: 29 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi_images`, `kagi`, `brave_images`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `amazon`, `reddit`, `drive`).
 
 ### `sheets`
 
@@ -215,11 +215,41 @@ In item mode:
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
 
+### `kagi_images`
+
+Addresses: `https://kagi.com/images*`
+
+In item mode:
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
+
 ### `kagi`
 
 Addresses: `https://kagi.com/search*`
 
 Keys left to the page: `j` `k`.
+
+### `brave_images`
+
+Addresses: `https://search.brave.com/images*`
+
+In item mode:
+
+| Key | What it does |
+| --- | --- |
+| `h` | Go to item on the left |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `l` | Go to item on the right |
+| `gg` | Go to first item (scrolls the page when no item shows) |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `brave`
 

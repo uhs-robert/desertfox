@@ -266,7 +266,7 @@ test("the shipped result rows bind j and k to page.item", () => {
 });
 
 test("the shipped image row binds hjkl to page.item", () => {
-  for (const name of ["ddg_images", "google_images", "google_news", "google_short_videos", "google_shopping", "ddg_videos", "amazon"]) {
+  for (const name of ["ddg_images", "google_images", "google_news", "google_short_videos", "google_shopping", "ddg_videos", "amazon", "kagi_images", "brave_images"]) {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {
@@ -275,6 +275,13 @@ test("the shipped image row binds hjkl to page.item", () => {
       assert.match(JSON.stringify(row.keymap?.item?.h), /"id":"page.item"/, name);
     }
   }
+});
+
+test("the Kagi and Brave image rows name their tiles, and only Kagi names a link inside them", () => {
+  const args_of = (name: string) => (DEFAULT_SITE_ROWS.find((entry) => entry.name === name)!.row.keymap!.item!.j as unknown as { args: { selector: string; link?: string } }).args;
+  assert.deepEqual([args_of("kagi_images").selector, args_of("kagi_images").link], ["._0_image_item", "a._0_img_link_el"]);
+  assert.deepEqual([args_of("brave_images").selector, args_of("brave_images").link], ["button.image-result", undefined]);
+  for (const name of ["kagi_images", "brave_images"]) assert.equal(DEFAULT_SITE_ROWS.find((entry) => entry.name === name)!.row.pass, undefined, name);
 });
 
 test("first and last go to the ends of the page whatever has focus, skip hidden items, and do nothing with no item", async () => {

@@ -96,6 +96,11 @@ const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 // A grid of tiles has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
 // `hover` is for a grid of video thumbnails: the box starts the tile's preview (the `item_hover` setting turns it off).
 const grid_binds = (selector: string, link?: string, hover = false): BindingTable => ({ ...Object.fromEntries(Object.entries(GRID_DIRECTIONS).map(([key, direction]) => [key, item_step(selector, link, direction, hover)])), ...end_binds(selector, link, hover) });
+// Kagi's tile is a focusable div that holds the picture link. Brave's tile is a button with no link, so it takes the focus itself.
+const KAGI_IMAGE_TILES = grid_binds("._0_image_item", "a._0_img_link_el");
+
+const BRAVE_IMAGE_TILES = grid_binds("button.image-result");
+
 // The tile is a figure, which holds the picture and its caption link.
 const DDG_IMAGE_TILES = grid_binds("figure", "a[href]");
 // A Google image tile is a div with a picture button (focusable) and a caption link.
@@ -167,8 +172,10 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. The image, video and news verticals have their own rows above.
   { name: "ddg", row: { site: "https://duckduckgo.com/?*", keymap: { item: DDG_ITEMS }, item_navigator: "shipped" } },
   // Kagi moves its own result highlight on j and k, so the keys go to the page. h, l, v and ' stay ours.
+  { name: "kagi_images", row: { site: "https://kagi.com/images*", keymap: { item: KAGI_IMAGE_TILES }, item_navigator: "shipped" } },
   { name: "kagi", row: { site: "https://kagi.com/search*", pass: "j k" } },
   // Brave moves its highlight on arrow keys only, so j and k send them to the focused element.
+  { name: "brave_images", row: { site: "https://search.brave.com/images*", keymap: { item: BRAVE_IMAGE_TILES }, item_navigator: "shipped" } },
   { name: "brave", row: { site: "https://search.brave.com/search*", bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } }, k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } } } } },
   // Google result pages on www.google.com only, as the Maps rows. The result blocks that hold a title link are the items, so People also ask and the sidebar stay out.
   { name: "google", row: { site: "https://www.google.com/search*", keymap: { item: GOOGLE_ITEMS }, item_navigator: "shipped" } },
