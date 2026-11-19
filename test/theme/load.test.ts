@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { derive_roles } from "../../src/shared/theme/derive.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
-import { OASIS_THEMES } from "../../src/shared/themes.ts";
+import { OASIS_THEMES, REPO_THEMES } from "../../src/shared/themes.ts";
 
 const colors = derive_roles({ bg_core: "#101010", fg_core: "#eeeeee", primary: "#88aaff", accent: "#ffcc66" }, "dark");
 
@@ -66,4 +66,37 @@ test("moonlight keeps its mode colors, caret from the cursor color, and its Sear
   assert.equal(dark.mode_item, "#c695ff");
   assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], ["#666666", "#f5f5dc", "#cdc673", "#0c0e13"]);
   assert.deepEqual([light.search_bg, light.search_fg, light.search_current_bg, light.search_current_fg], ["#e1b69d", "#4e260e", "#dd6f6f", "#350808"]);
+});
+
+function lab_of(hex: string): [number, number, number] {
+  const linear = [1, 3, 5].map((at) => {
+    const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const [r, g, b] = linear;
+  const white = [0.95047, 1, 1.08883];
+  const xyz = [(0.4124 * r + 0.3576 * g + 0.1805 * b) / white[0]!, 0.2126 * r + 0.7152 * g + 0.0722 * b, (0.0193 * r + 0.1192 * g + 0.9505 * b) / white[2]!];
+  const [fx, fy, fz] = xyz.map((value) => (value > 0.008856 ? Math.cbrt(value) : 7.787 * value + 16 / 116)) as [number, number, number];
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+const BADGE_ROLES = ["mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"] as const;
+// Older pairs (such as normal and caret in a few Oasis themes) sit below the floor and are out of scope here.
+const MIN_BADGE_DISTANCE = 12;
+
+test("every built-in theme keeps the item and media badge colors a CIE76 distance of 12 from every other badge", () => {
+  const themes = [...Object.keys(OASIS_THEMES).map((name) => [name, load_theme(name, 3)!] as const), ...Object.entries(REPO_THEMES)];
+  for (const [name, theme] of themes) {
+    for (const variant of ["dark", "light"] as const) {
+      for (const [at, first] of BADGE_ROLES.entries()) {
+        for (const second of BADGE_ROLES.slice(at + 1)) {
+          const [l1, a1, b1] = lab_of(theme[variant][first]);
+          const [l2, a2, b2] = lab_of(theme[variant][second]);
+          const distance = Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+          if (first !== "mode_item" && first !== "mode_media" && second !== "mode_item" && second !== "mode_media") continue;
+          assert.ok(distance >= MIN_BADGE_DISTANCE, `${name} ${variant} ${first} vs ${second}: ${distance.toFixed(1)}`);
+        }
+      }
+    }
+  }
 });

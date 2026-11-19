@@ -396,6 +396,16 @@ test("a damaged stored list moves only the whole themes", () => {
   assert.deepEqual(stored_imports_of("garbage"), {});
 });
 
+test("a stored import from before mode_item and mode_media gets both from the derive table", () => {
+  const good = mapped(SCHEME);
+  const { mode_item: _item, mode_media: _media, ...old_dark } = good.dark;
+  const { mode_item: _light_item, mode_media: _light_media, ...old_light } = good.light;
+  const kept = stored_imports_of({ old: { dark: old_dark, light: old_light } });
+  assert.deepEqual(Object.keys(kept), ["old"]);
+  assert.equal(kept.old!.dark.mode_item, kept.old!.dark.info);
+  assert.equal(kept.old!.dark.mode_media, kept.old!.dark.error);
+});
+
 test("the picker lists the theme file names after the built-in ones, without repeating a built-in name", () => {
   const status = { settings: DEFAULT_SETTINGS, saved: [], temp: [], configured: [] };
   const allowed = build_setting_list(status, ["dusk_one", "oasis_cactus"]).find((row) => row.name === "theme")?.allowed ?? [];
