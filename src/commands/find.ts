@@ -3,7 +3,7 @@ import { define } from "../shared/registry/builtin.ts";
 define("find.open", {
   name: "find",
   completion: "hidden",
-  modes: ["normal", "caret", "visual", "visual_line"],
+  modes: ["normal", "caret", "visual", "visual_line", "item"],
   label: "Find",
   intent: "Search the page text as you type. Enter keeps the match. Escape clears the highlights and keeps the search and the current match as your position. The text is a regular expression, and a capital letter makes it match case. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays. With `--word` there is no line: it searches the word under the caret, or the selected text in visual mode.",
   params: [{ name: "direction", type: "enum", values: ["forward", "backward"], default: "forward", value_labels: { backward: "backward" }, description: { backward: "Search up the page, and let n go up." } },

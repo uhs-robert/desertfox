@@ -68,6 +68,7 @@ define("frame.exit", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
+  modes: ["normal", "item"],
   run: (ctx) => handlers.exit_frame(ctx),
 });
 

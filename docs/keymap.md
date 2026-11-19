@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 518 (normal 265, media 58, item 22, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 559 (normal 265, media 58, item 63, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -393,16 +393,57 @@ Which-key group names:
 
 | Key | Command | Label |
 | --- | --- | --- |
-| `J` | `tab.next` | Next tab |
-| `K` | `tab.prev` | Previous tab |
-| `gt` | `tab.goto` | Next tab |
-| `gT` | `tab.prev` | Previous tab |
 | `<C-d>` | `scroll.pages --fraction=0.5` | Scroll half page down |
 | `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
 | `<C-f>` | `scroll.pages` | Scroll page down |
 | `<C-b>` | `scroll.pages --fraction=-1` | Scroll page up |
-| `:` | `cmdline.open` | Command line |
+| `<C-o>` | `page.jump --older` | Jump back |
+| `<C-i>` | `page.jump --newer` | Jump forward |
+| `]]` | `page.follow --next` | Next page |
+| `[[` | `page.follow --prev` | Previous page |
+| `J` | `tab.next` | Next tab |
+| `K` | `tab.prev` | Previous tab |
+| `gt` | `tab.goto` | Next tab |
+| `gT` | `tab.prev` | Previous tab |
+| `gi` | `page.focus_input` | Focus input |
 | `<F1>` | `help` | Help |
+| `f` | `hint` | Click element |
+| `F` | `hint --background` | Click element in background tab |
+| `;v` | `hint --caret --prose` | Start caret mode at text |
+| `;V` | `hint --visual --prose` | Start visual mode at text |
+| `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
+| `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
+| `;b` | `hint --buttons` | Click button |
+| `;a` | `hint --every` | Click every element |
+| `;t` | `hint --prose` | Click text |
+| `;s` | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |
+| `;i` | `hint --inputs` | Click input |
+| `;l` | `hint --links` | Click link |
+| `;I` | `hint --images` | Open image in new tab |
+| `;yl` | `hint --copy --links` | Copy link URL |
+| `;yi` | `hint --copy-image --images` | Copy picture |
+| `;yI` | `hint --copy --images` | Copy image URL |
+| `;ym` | `hint --copy --media` | Copy media URL |
+| `;yf` | `hint --copy --frames` | Copy frame URL |
+| `;yt` | `hint --copy-text --all` | Copy text |
+| `;yc` | `hint --copy-selector --every` | Copy CSS selector |
+| `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
+| `;yh` | `hint --copy-html --every` | Copy outer HTML |
+| `;ff` | `hint --frames` | Focus frame |
+| `;of` | `hint --inspect --frames` | Inspect frame |
+| `;hf` | `hint --hover --frames` | Hover frame |
+| `;xf` | `hint --delete --frames` | Delete frame |
+| `;fF` | `frame.exit` | Focus top page |
+| `;fs` | `hint --focus --scrollable` | Focus scroll box |
+| `;fe` | `page.focus_input` | Main input |
+| `;j` | `hint --focus --lists` | Pick the list for j and k |
+| `;fh` | `hint --focus --headings` | Focus heading |
+| `;m` | `hint --media` | Play or pause media |
+| `;M` | `hint --enter-media --media` | Start media mode at a video |
+| `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |
+| `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
+| `:` | `cmdline.open` | Command line |
+| `/` | `find` | Find forward |
 | `g?` | `help` | Help |
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
