@@ -161,7 +161,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("f249");
   });
 
-  // Escape also blurs the file, so the check reads the stand-in's selection, which follows the focus.
+  // Escape also blurs the file, so the check reads the stand-in's selection. The arrow pair of G runs before the queued Escape and sets it.
   await run_case("list view: a key during G stops following the end", async () => {
     await open_drive("list_cancel", "list", 400, 100);
     const selected = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.selected ?? -1`));

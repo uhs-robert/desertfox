@@ -425,12 +425,12 @@ In item mode:
 
 | Key | What it does |
 | --- | --- |
-| `j` | Move to the file below with Drive's own ArrowDown key (scrolls the page when no file shows) |
-| `k` | Move to the file above with Drive's own ArrowUp key (scrolls the page when no file shows) |
+| `j` | Move to the file below (scrolls the page when no file shows) |
+| `k` | Move to the file above (scrolls the page when no file shows) |
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
-| `h` | Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view) |
-| `l` | Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view) |
+| `h` | Move to the file on the left (scrolls sideways in the list view) |
+| `l` | Move to the file on the right (scrolls sideways in the list view) |
 
 - Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. gg and G go to the end and then send an arrow pair that comes back to it, so Enter opens that file. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
 
