@@ -245,6 +245,10 @@ class WriteSettingsTest(ConfigDirCase):
         _, raw = run_in_process(frame({"cmd": "write_settings", "text": text, "base_sha256": base, **extra}))
         return unframe(raw)
 
+    def entries(self):
+        """The folder without the lock file, which stays between writes and which read_config skips."""
+        return sorted(name for name in os.listdir(self.config) if name != host.SETTINGS_LOCK_NAME)
+
     def read_settings(self, path=None):
         with open(path or os.path.join(self.config, "settings.toml"), "rb") as file:
             return file.read()
@@ -257,7 +261,7 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertTrue(reply["ok"], reply)
         self.assertEqual(reply["sha256"], sha(new))
         self.assertEqual(self.read_settings(), new.encode("utf-8"))
-        self.assertEqual(sorted(os.listdir(self.config)), ["settings.toml"])
+        self.assertEqual(self.entries(), ["settings.toml"])
 
     def test_refuses_a_hand_edit_since_the_read_and_leaves_it(self):
         self.put("settings.toml", "theme = \"hand\"\n")
@@ -265,7 +269,7 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertFalse(reply["ok"])
         self.assertIn(host.CHANGED_ON_DISK, reply["error"])
         self.assertEqual(self.read_settings(), b"theme = \"hand\"\n")
-        self.assertEqual(os.listdir(self.config), ["settings.toml"])
+        self.assertEqual(self.entries(), ["settings.toml"])
 
     def test_a_null_base_creates_the_file_and_refuses_when_one_appeared(self):
         self.assertTrue(self.write("theme = \"b\"\n", None)["ok"])
@@ -288,7 +292,7 @@ class WriteSettingsTest(ConfigDirCase):
             reply = self.write("a = 3\n", sha("a = 1\n"))
         self.assertIn(host.CHANGED_ON_DISK, reply["error"])
         self.assertEqual(self.read_settings(), b"a = 2\n")
-        self.assertEqual(os.listdir(self.config), ["settings.toml"])
+        self.assertEqual(self.entries(), ["settings.toml"])
 
     def test_a_failed_write_leaves_the_file_whole_and_no_temporary(self):
         self.put("settings.toml", "a = 1\n")
@@ -297,7 +301,7 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertFalse(reply["ok"])
         self.assertIn("No space left", reply["error"])
         self.assertEqual(self.read_settings(), b"a = 1\n")
-        self.assertEqual(os.listdir(self.config), ["settings.toml"])
+        self.assertEqual(self.entries(), ["settings.toml"])
 
     def test_a_link_stays_a_link_and_its_target_keeps_its_mode(self):
         dotfiles = os.path.join(self.tmp.name, "dotfiles")
@@ -340,13 +344,109 @@ class WriteSettingsTest(ConfigDirCase):
             _, raw = run_in_process(frame(request))
             self.assertFalse(unframe(raw)["ok"], request)
         self.assertEqual(self.read_settings(), b"a = 1\n")
-        self.assertEqual(os.listdir(self.config), ["settings.toml"])
+        self.assertEqual(self.entries(), ["settings.toml"])
 
     def test_writes_no_other_file(self):
         self.put("keymap.toml", "x = 1\n")
         self.put("settings.toml", "a = 1\n")
         self.write("a = 2\n", sha("a = 1\n"))
-        self.assertEqual(sorted(os.listdir(self.config)), ["keymap.toml", "settings.toml"])
+        self.assertEqual(self.entries(), ["keymap.toml", "settings.toml"])
+
+
+    def test_bytes_that_are_not_utf8_refuse_and_stay(self):
+        path = os.path.join(self.config, "settings.toml")
+        with open(path, "wb") as file:
+            file.write(b"# caf\xe9\ntheme = \"a\"\n")
+        _, raw = run_in_process(frame({"cmd": "read_config"}))
+        lossy = unframe(raw)["files"]["settings.toml"]
+        reply = self.write(lossy.replace('"a"', '"b"'), sha(lossy))
+        self.assertFalse(reply["ok"])
+        self.assertIn("not UTF-8", reply["error"])
+        self.assertEqual(self.read_settings(), b"# caf\xe9\ntheme = \"a\"\n")
+
+    def test_a_second_writer_waits_for_the_lock(self):
+        import threading
+
+        self.put("settings.toml", "a = 1\n")
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold():
+            with host.settings_lock(self.config):
+                held.set()
+                release.wait(5)
+
+        holder = threading.Thread(target=hold)
+        holder.start()
+        held.wait(5)
+        replies = []
+        writer = threading.Thread(target=lambda: replies.append(self.write("a = 2\n", sha("a = 1\n"))))
+        writer.start()
+        writer.join(0.3)
+        self.assertTrue(writer.is_alive(), "the write did not wait for the lock")
+        self.assertEqual(self.read_settings(), b"a = 1\n")
+        release.set()
+        holder.join(5)
+        writer.join(5)
+        self.assertTrue(replies[0]["ok"], replies)
+        self.assertEqual(self.read_settings(), b"a = 2\n")
+
+    def test_an_edit_saved_into_the_file_just_before_the_rename_is_put_back(self):
+        path = self.put("settings.toml", "a = 1\n")
+        real_replace = os.replace
+        calls = []
+
+        def edit_then_replace(source, destination):
+            if not calls and destination == path:
+                # An editor that writes into the same file, after the host's last check.
+                with open(path, "r+", encoding="utf-8") as file:
+                    file.write("a = 9\n")
+            calls.append(destination)
+            return real_replace(source, destination)
+
+        with mock.patch.object(host.os, "replace", side_effect=edit_then_replace):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read_settings(), b"a = 9\n")
+        self.assertEqual(self.entries(), ["settings.toml"])
+
+    def test_a_link_pointed_elsewhere_during_the_write_refuses(self):
+        first = os.path.join(self.tmp.name, "first.toml")
+        second = os.path.join(self.tmp.name, "second.toml")
+        for target in (first, second):
+            with open(target, "w", encoding="utf-8") as file:
+                file.write("a = 1\n")
+        link = os.path.join(self.config, "settings.toml")
+        os.symlink(first, link)
+        real_chmod = os.chmod
+
+        def repoint_then_chmod(target, mode):
+            real_chmod(target, mode)
+            if os.path.basename(target).startswith(".settings-"):
+                os.unlink(link)
+                os.symlink(second, link)
+
+        with mock.patch.object(host.os, "chmod", side_effect=repoint_then_chmod):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read_settings(first), b"a = 1\n")
+        self.assertEqual(self.read_settings(second), b"a = 1\n")
+
+    def test_a_file_created_during_a_first_write_stays(self):
+        path = os.path.join(self.config, "settings.toml")
+        real_chmod = os.chmod
+
+        def create_then_chmod(target, mode):
+            real_chmod(target, mode)
+            if os.path.basename(target).startswith(".settings-") and not os.path.exists(path):
+                with open(path, "w", encoding="utf-8") as file:
+                    file.write("mine = 1\n")
+
+        with mock.patch.object(host.os, "chmod", side_effect=create_then_chmod):
+            reply = self.write("a = 2\n", None)
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read_settings(), b"mine = 1\n")
+        self.assertEqual(self.entries(), ["settings.toml"])
 
 
 class ThunderbirdManifestTest(unittest.TestCase):

@@ -97,8 +97,8 @@ def visible_entries(directory):
     return sorted(name for name in os.listdir(directory) if not name.startswith("."))
 
 
-def read_text(path):
-    """The text of a regular file of at most MAX_CONFIG_FILE_BYTES. Any other file is a HostError naming it, so config.reload keeps the current config.
+def read_bytes(path):
+    """The bytes of a regular file of at most MAX_CONFIG_FILE_BYTES. Any other file is a HostError naming it, so config.reload keeps the current config.
     Opens without blocking and judges the open descriptor, so a FIFO swapped in after a check cannot hang the host."""
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
@@ -115,7 +115,11 @@ def read_text(path):
         os.close(descriptor)
     if len(raw) > MAX_CONFIG_FILE_BYTES:
         raise HostError(f"cannot read {path}: larger than 1 MiB")
-    return raw.decode("utf-8", errors="replace")
+    return raw
+
+
+def read_text(path):
+    return read_bytes(path).decode("utf-8", errors="replace")
 
 
 def read_files(directory):
@@ -198,11 +202,36 @@ def text_sha256(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def settings_digest(path):
-    """The digest of the text read_config would send for `path`, or None when there is no file."""
+def settings_digest(path, label):
+    """The SHA-256 of the file's bytes, or None when there is no file. Bytes that are not UTF-8 refuse: read_config sends
+    them as U+FFFD, so a write of the extension's text would rewrite them outside the line it changed."""
     if not os.path.lexists(path):
         return None
-    return text_sha256(read_text(path))
+    raw = read_bytes(path)
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HostError(f"{label} holds bytes that are not UTF-8, so DesertFox leaves it as it is. Save it as UTF-8 first.") from None
+    return hashlib.sha256(raw).hexdigest()
+
+
+# A hidden name, so read_config skips it. The lock is on its own file: a lock on settings.toml would go with the inode the
+# rename replaces.
+SETTINGS_LOCK_NAME = ".settings.lock"
+
+
+@contextlib.contextmanager
+def settings_lock(directory):
+    """Serializes write_settings across host processes, so two writers never both pass the check against one base."""
+    try:
+        descriptor = os.open(os.path.join(directory, SETTINGS_LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError as error:
+        raise HostError(f"cannot lock {directory}: {error.strerror or error}") from error
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def write_settings(request):
@@ -211,7 +240,11 @@ def write_settings(request):
     `base_sha256` is the SHA-256 of the text the extension last read for the file, or null when it read none. Another
     digest means a hand edit since, and the host refuses rather than overwrite it. A link is followed, so a settings.toml
     that links into a dotfiles repository stays a link, and the target keeps its mode. The folder must exist: a write
-    never creates a config folder that read_config would then find with only this file in it."""
+    never creates a config folder that read_config would then find with only this file in it.
+
+    Host writers take a lock. An editor takes none, so the old file is linked aside before the rename and checked after
+    it: an edit saved into it in the meantime puts it back and refuses. An editor that saves by renaming a new file over
+    settings.toml in the microseconds between the last check and the rename is not caught."""
     checked_fields(request, {"text", "base_sha256"}, "write_settings")
     text, base = request.get("text"), request.get("base_sha256")
     if not isinstance(text, str):
@@ -225,20 +258,59 @@ def write_settings(request):
     path = os.path.join(directory, SETTINGS_NAME)
     if not os.path.isdir(directory):
         raise HostError(f"cannot write {path}: the config folder {directory} does not exist")
-    target = os.path.realpath(path)
+    changed = HostError(f"{path} {CHANGED_ON_DISK} since DesertFox last read it, so it was not written")
+    with settings_lock(directory):
+        target = os.path.realpath(path)
+        if settings_digest(target, path) != base:
+            raise changed
+        try:
+            mode = stat.S_IMODE(os.stat(target).st_mode) if base is not None else 0o644
+            descriptor, temporary = tempfile.mkstemp(dir=os.path.dirname(target), prefix=".settings-", suffix=".tmp")
+        except OSError as error:
+            raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+        aside = None
+        try:
+            with os.fdopen(descriptor, "wb") as file:
+                file.write(data)
+                file.flush()
+                os.fsync(file.fileno())
+            os.chmod(temporary, mode)
+            # A dotfiles tool can point the link elsewhere while the text was written.
+            if os.path.realpath(path) != target or settings_digest(target, path) != base:
+                raise changed
+            if base is None:
+                # link() refuses an existing name, so a file created since the check stays.
+                try:
+                    os.link(temporary, target)
+                except FileExistsError:
+                    raise changed from None
+                return {"path": path, "sha256": text_sha256(text)}
+            aside = keep_aside(target)
+            os.replace(temporary, target)
+            # The aside link shares the old file, so an editor that wrote into it after the check shows here.
+            if settings_digest(aside, path) != base:
+                os.replace(aside, target)
+                aside = None
+                raise changed
+            return {"path": path, "sha256": text_sha256(text)}
+        except OSError as error:
+            raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+        finally:
+            for leftover in (temporary, aside):
+                if leftover is not None:
+                    with contextlib.suppress(OSError):
+                        os.unlink(leftover)
 
-    def still_base():
-        if settings_digest(target) != base:
-            raise HostError(f"{path} {CHANGED_ON_DISK} since DesertFox last read it, so it was not written")
 
-    still_base()
+def keep_aside(target):
+    """A second name for the file at `target`, beside it: a hard link, or a copy where the filesystem has none."""
+    aside = os.path.join(os.path.dirname(target), f".settings-{secrets.token_hex(8)}.old")
     try:
-        mode = stat.S_IMODE(os.stat(target).st_mode) if os.path.exists(target) else 0o644
-    except OSError as error:
-        raise HostError(f"cannot write {path}: {error.strerror or error}") from error
-    # Checked again right before the rename, so an edit saved while the temporary file was written is not lost either.
-    replace_file(target, data, mode, ".settings-", still_base)
-    return {"path": path, "sha256": text_sha256(text)}
+        os.link(target, aside)
+    except OSError:
+        with open(target, "rb") as source, open(aside, "xb") as copy:
+            copy.write(source.read())
+    return aside
 
 
 # The updater. The caller (the extension, over Firefox's native port) names a version and the hashes its signed build
