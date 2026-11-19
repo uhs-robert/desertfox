@@ -361,3 +361,70 @@ test("an edited import never reaches the folder: a pick after an editor save cha
   assert.deepEqual(await startup.set_in_settings_file("theme", "nord"), { kind: "written" });
   assert.equal(host.files["settings.toml"], 'theme = "nord"\n');
 });
+
+// A host whose `write_settings` answers only when the test says so.
+function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
+  const send = fake.runtime.sendNativeMessage;
+  const held: (() => void)[] = [];
+  fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
+    if (message.cmd !== "write_settings") return send(name, message);
+    return new Promise((resolve) => held.push(() => resolve(send(name, message))));
+  };
+  return held;
+}
+
+const settles_soon = (promise: Promise<unknown>) => Promise.race([promise.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 500))]);
+
+test("a host that never answers a write blocks no other change, at start or after a pick", async () => {
+  const host = { files: { "settings.toml": MINE }, old_host: true };
+  const { fake, startup } = await reloaded(host);
+  await startup.set_in_settings_file("theme", "oasis_night");
+  host.old_host = false;
+  hold_writes(fake);
+
+  const restarted = await fresh_startup();
+  await restarted.get_config();
+  void restarted.reload_config_at_start();
+  assert.ok(await settles_soon(restarted.change_edits((current) => ({ ...current, saved: { which_key_delay_ms: 5 } }))), "a :set waited on the start's host write");
+
+  void restarted.set_in_settings_file("theme", "nord");
+  assert.ok(await settles_soon(restarted.change_edits((current) => ({ ...current, saved: { which_key_delay_ms: 6 } }))), "a :set waited on the pick's host write");
+  assert.equal((await restarted.get_config()).settings.theme, "nord");
+});
+
+test("a pick during a write lands after it, from the text the first one left", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, fake, startup } = await reloaded(host);
+  const held = hold_writes(fake);
+  const first = startup.set_in_settings_file("theme", "nord");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const second = startup.set_in_settings_file("theme", "oasis_night");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(held.length, 1, "a second write went out while the first was out");
+  held.shift()!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  held.shift()!();
+  assert.deepEqual(await Promise.all([first, second]), [{ kind: "written" }, { kind: "written" }]);
+  assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
+  assert.equal(unsynced_of(local), undefined);
+
+  const restarted = await fresh_startup();
+  await restarted.reload_config_at_start();
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("`,r` while a write is out waits for it and keeps the pick", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, fake, startup } = await reloaded(host);
+  const held = hold_writes(fake);
+  const pick = startup.set_in_settings_file("theme", "oasis_night");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const reload = startup.reload_config();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  held.shift()!();
+  await reload;
+  assert.deepEqual(await pick, { kind: "written" });
+  assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
+  assert.equal(stored_settings(local), with_theme("oasis_night"));
+  assert.equal(unsynced_of(local), undefined);
+});

@@ -37,6 +37,10 @@ export async function read_unsynced(): Promise<UnsyncedSettingsFile | undefined>
   return { base: stored.base };
 }
 
+export async function store_unsynced(unsynced: UnsyncedSettingsFile): Promise<void> {
+  await browser.storage.local.set({ [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: unsynced });
+}
+
 export async function clear_unsynced(): Promise<void> {
   await browser.storage.local.remove(SETTINGS_FILE_UNSYNCED_STORAGE_KEY);
 }
