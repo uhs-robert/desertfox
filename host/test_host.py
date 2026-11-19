@@ -488,6 +488,21 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertEqual(self.read_settings(), b"a = 1\n")
         self.assertEqual(self.entries(), ["settings.toml"])
 
+    def test_an_old_file_whose_size_changed_is_an_edit_found_without_reading_it(self):
+        path = self.put("settings.toml", "a = 1\n")
+        real_open = os.open
+
+        def no_read_back(target, *args, **kwargs):
+            if str(target).endswith(".old"):
+                raise AssertionError("the old file was read although its size already shows the edit")
+            return real_open(target, *args, **kwargs)
+
+        with self.edit_before_rename(path, b"#" * (2 * host.MAX_CONFIG_FILE_BYTES)), mock.patch.object(host.os, "open", side_effect=no_read_back):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(len(self.read_settings()), 2 * host.MAX_CONFIG_FILE_BYTES)
+        self.assertEqual(self.entries(), ["settings.toml"])
+
     def test_a_racing_edit_that_cannot_be_put_back_stays_aside(self):
         path = self.put("settings.toml", "a = 1\n")
         real_replace = os.replace

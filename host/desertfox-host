@@ -206,16 +206,17 @@ def text_sha256(text):
 
 
 def settings_digest(path, label):
-    """The SHA-256 of the file's bytes, or None when there is no file. Bytes that are not UTF-8 refuse: read_config sends
-    them as U+FFFD, so a write of the extension's text would rewrite them outside the line it changed."""
+    """The SHA-256 of the file's bytes and their count, or (None, None) when there is no file. Bytes that are not UTF-8
+    refuse: read_config sends them as U+FFFD, so a write of the extension's text would rewrite them outside the line it
+    changed."""
     if not os.path.lexists(path):
-        return None
+        return None, None
     raw = read_bytes(path)
     try:
         raw.decode("utf-8")
     except UnicodeDecodeError:
         raise HostError(f"{label} holds bytes that are not UTF-8, so DesertFox leaves it as it is. Save it as UTF-8 first.") from None
-    return hashlib.sha256(raw).hexdigest()
+    return hashlib.sha256(raw).hexdigest(), len(raw)
 
 
 # A hidden name, so read_config skips it. The lock is on its own file: a lock on settings.toml would go with the inode the
@@ -271,7 +272,7 @@ def write_settings(request):
     changed = HostError(f"{path} {CHANGED_ON_DISK} since DesertFox last read it, so it was not written")
     with settings_lock(directory):
         target = os.path.realpath(path)
-        if settings_digest(target, path) != base:
+        if settings_digest(target, path)[0] != base:
             raise changed
         try:
             mode = stat.S_IMODE(os.stat(target).st_mode) if base is not None else 0o644
@@ -287,7 +288,10 @@ def write_settings(request):
                 written_inode = os.fstat(file.fileno()).st_ino
             os.chmod(temporary, mode)
             # A dotfiles tool can point the link elsewhere while the text was written.
-            if os.path.realpath(path) != target or settings_digest(target, path) != base:
+            if os.path.realpath(path) != target:
+                raise changed
+            checked_digest, base_size = settings_digest(target, path)
+            if checked_digest != base:
                 raise changed
             if base is None:
                 # link() refuses an existing name, so a file created since the check stays.
@@ -309,7 +313,7 @@ def write_settings(request):
             os.replace(temporary, target)
             # The aside link shares the old file, so an editor that wrote into it after the check shows here.
             try:
-                unchanged, read_error = holds_digest(aside, base), None
+                unchanged, read_error = holds_digest(aside, base, base_size), None
             except OSError as error:
                 unchanged, read_error = False, error
             if not unchanged:
@@ -358,17 +362,18 @@ def put_back_edit(path, target, edit, written_inode, why):
         raise HostError(f"{path} {why} and could not be put back ({error.strerror or error}). The old file is in {edit}.") from error
 
 
-def holds_digest(path, digest):
-    """Whether the file's raw bytes have `digest`. A file that is not a regular file has not. A failure to read raises
-    OSError, so the caller can tell it from an edit. There is no size limit: a file over 1 MiB simply does not match."""
+def holds_digest(path, digest, size):
+    """Whether the file's raw bytes, `size` of them, have `digest`. A file that is not a regular file has not. A failure
+    to read raises OSError, so the caller can tell it from an edit. Another size is an edit too, found without reading,
+    so a file grown huge is never hashed while the lock is held."""
+    if os.stat(path).st_size != size:
+        return False
     descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     with os.fdopen(descriptor, "rb") as file:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             return False
-        hasher = hashlib.sha256()
-        for chunk in iter(lambda: file.read(1 << 16), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest() == digest
+        raw = file.read(size + 1)
+    return len(raw) == size and hashlib.sha256(raw).hexdigest() == digest
 
 
 # What link() answers on a filesystem without hard links (FAT, exFAT, some FUSE and network mounts).
