@@ -836,3 +836,15 @@ test("which-key and the page reply read the same rewritten item tree", async () 
   assert.equal(await has_j(drive), false);
   assert.equal(await has_j("https://example.test/"), true);
 });
+
+test("normal-mode I on Drive lands on a file and selects it, in the page reply and in which-key", async () => {
+  const compiled = with_defaults({});
+  const drive = "https://drive.google.com/drive/my-drive";
+  const normal = (await ask(compiled, drive))!.keymap.modes.normal!;
+  const pick = normal.children["I"] as TreeLeaf;
+  assert.deepEqual(pick.steps.map((step) => step.invocation.id), ["hint.run", "page.item", "page.send_key", "page.send_key"], "the landing sends Down and Up, as the item tree does");
+  assert.deepEqual(page_mode_trees_for(compiled, site_columns_for(compiled, [drive]), drive).normal, normal);
+  // Where the site selects with its own keys the rewrite is off, and a page of another site keeps the plain landing.
+  const elsewhere = (await ask(compiled, "https://www.google.com/search?q=a"))!.keymap.modes.normal!.children["I"] as TreeLeaf;
+  assert.deepEqual(elsewhere.steps.map((step) => step.invocation.id), ["hint.run", "page.item"]);
+});

@@ -4,10 +4,10 @@ export const areas = ["keys", "config", "bundles"];
 
 const CARDS = 10;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+export async function run_cases({ run_line, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  // The command line enters item mode on any page, with or without a list. The key after it lands in item mode once the badge says ITEM.
   const enter_item_mode = async () => {
-    await press_keys("I");
+    await run_line("mode item");
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
   };
   // Ten cards, each with a title link in a heading, stacked on a page that has no row and no `main`.
@@ -142,21 +142,18 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
   // The hint labels with the left edge of each, so the test picks the label on the right-hand list.
   const labels_by_left = () => in_active_tab(`[...document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => ({ text: node.textContent, left: node.getBoundingClientRect().left }))).sort((a, b) => a.left - b.left)`);
 
-  await run_case(";j labels each list, and the list picked keeps j and k while the first list still shows", async () => {
+  await run_case("I in item mode labels each list, and the list picked keeps j and k while the first list still shows", async () => {
     await open_page("page", "finder_pick_list", { new_tab: true });
     await enter_item_mode();
     await add_side_lists();
     await press_keys("j");
     await expect_focus("a0");
-    // The hint keys belong to normal mode, so Escape leaves item mode for the pick and I goes back.
-    await press_keys("-k", "Escape");
-    await press_keys(";j");
+    await press_keys("-k", "I");
     await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
     const [, right] = await labels_by_left();
     await press_keys(right.text);
-    // The pick focuses the title link, as j does, so Enter opens it.
+    // The pick starts the walk on that list and lands on its current item, so Enter opens it.
     await expect_focus("b0");
-    await enter_item_mode();
     await press_keys("j");
     await expect_focus("b1");
     await press_keys("j");
@@ -165,7 +162,19 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await expect_focus("b1");
   });
 
-  await run_case(";j labels a list in a scroll box whose top items are scrolled out of the box", async () => {
+  await run_case("Escape in the picker from normal mode leaves normal mode as it was, and I with one list starts at once", async () => {
+    await open_page("page", "finder_pick_escape", { new_tab: true });
+    await add_side_lists();
+    await press_keys("I");
+    await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "NORMAL");
+    await in_active_tab(`(() => { document.querySelector(".side_b").remove(); return true; })()`);
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+  });
+
+  await run_case("I labels a list in a scroll box whose top items are scrolled out of the box", async () => {
     await open_page("page", "finder_pick_scrolled_list", { new_tab: true });
     await enter_item_mode();
     await add_side_lists();
@@ -178,14 +187,12 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     })()`);
     await press_keys("j");
     await expect_focus("a0");
-    await press_keys("-k", "Escape");
-    await press_keys(";j");
+    await press_keys("-k", "I");
     await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
     const [, right] = await labels_by_left();
     await press_keys(right.text);
     const picked = await in_active_tab("document.activeElement?.id ?? ''");
     expect(/^b[4-9]$/.test(picked), "the pick focused " + picked + ", not a shown item of the scrolled list");
-    await enter_item_mode();
     await press_keys("j");
     await poll_until("focus on a later item of the second list", async () => /^b\d$/.test(await focused()) && (await focused()) !== picked);
   });

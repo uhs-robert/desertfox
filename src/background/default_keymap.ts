@@ -1,4 +1,5 @@
 import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
+import type { KeyBinding } from "../shared/invocation.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
@@ -54,6 +55,9 @@ const VISUAL_KEYS: ModeBindings = {
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
 };
+
+// Hints every list and grid, one list starts at once, and the pick starts item mode on it. The landing walks the picked list.
+const PICK_LIST: KeyBinding = [{ id: "hint.run", args: { filter: "lists" }, label: "Pick a list for item mode" }, { id: "page.item", args: { direction: "current" } }];
 
 const BASE_SECTIONS: KeymapConfig = {
   // `s//` and `S//`: search the current site with the built-in `site` engine. Only the shipped keymap may use the letter `/`: the build refuses it in a user file.
@@ -269,7 +273,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "]c": { id: "url.increment", args: { direction: "up" } },
     "[c": { id: "url.increment", args: { direction: "down" } },
     gi: { id: "page.focus_input" },
-    I: { id: "mode.set", args: { mode: "item" }, label: "Item mode" },
+    I: PICK_LIST,
     i: { id: "mode.insert" },
 
     pp: { id: "open.clipboard", args: { where: "here" } },
@@ -383,7 +387,6 @@ const BASE_SECTIONS: KeymapConfig = {
     ";fF": { id: "frame.exit" },
     ";fs": { id: "hint.run", args: { action: "focus", filter: "scrollable" }, label: "Focus scroll box" },
     ";fe": { id: "page.focus_input", label: "Main input" },
-    ";j": { id: "hint.run", args: { action: "focus", filter: "lists" }, label: "Pick the list for j and k" },
     ";fh": { id: "hint.run", args: { action: "focus", filter: "headings" }, label: "Focus heading" },
     ";m": { id: "hint.run", args: { filter: "media" }, label: "Play or pause media", variant_label: "Media" },
     ";M": { id: "hint.run", args: { action: "enter_media", filter: "media" }, label: "Start media mode at a video" },
@@ -473,8 +476,8 @@ const BASE_SECTIONS: KeymapConfig = {
 };
 
 // The media mode keeps the hint and command line keys of normal mode, so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach.
-// `;fF`, `;fe` and `;j` sit in the `;` group but serve normal mode (`;j` picks the list for j and k, which change the volume in media mode), so the media mode leaves them out.
-const NORMAL_ONLY_HINT_GROUP_KEYS = new Set([";fF", ";fe", ";j"]);
+// `;fF` and `;fe` sit in the `;` group but serve normal mode, so the media mode leaves them out.
+const NORMAL_ONLY_HINT_GROUP_KEYS = new Set([";fF", ";fe"]);
 const keys_kept_in_media: ModeBindings = Object.fromEntries(
   Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (sequence === "f" || sequence === ":" || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence)),
 );
@@ -512,17 +515,21 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys and `gi`, and any other key goes to the page. The hints label the whole page. `I` goes back to the current item.
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys and `gi`, and any other key goes to the page. The hints label the whole page. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
-const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi"];
+const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L"];
+const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
 const ITEM_KEYS: ModeBindings = {
   ...Object.fromEntries(Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";"))),
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
-  I: { id: "page.item", args: { direction: "current" }, label: "Back to the current item" },
+  I: PICK_LIST,
+  zt: item_align("top", "Back to the current item, at the top"),
+  zz: item_align("center", "Back to the current item, in the middle"),
+  zb: item_align("bottom", "Back to the current item, at the bottom"),
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
   h: item_step("left", "Item to the left, or scroll left"),

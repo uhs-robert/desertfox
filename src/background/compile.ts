@@ -27,6 +27,7 @@ import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
 import { without_hover } from "./item_hover.ts";
 import { item_select_keys } from "./item_select.ts";
+import { with_item_landings } from "./item_landings.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
@@ -121,9 +122,9 @@ export function compile_config(input: CompileInput): CompileOutput {
   // The shipped item keys ask for the hover like the shipped rows do, and lose the arg together with them.
   const default_keymap = hover || !input.default_keymap.item ? input.default_keymap : { ...input.default_keymap, item: without_hover(input.default_keymap.item) };
   const keymap = merge_keymaps(default_keymap, user_keymap);
-  const user_rows = with_resolved_binds(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules, input, resolve_warnings);
+  const user_rows = with_resolved_binds(input.config.settings.site_rules ?? DEFAULT_SETTINGS.site_rules, input, resolve_warnings).map(with_item_landings);
   // The shipped rows rank after the user's, so a user row decides each column first.
-  const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off).map((entry) => (hover ? entry : { ...entry, row: without_hover(entry.row) }));
+  const default_rows = default_rows_left_on(input.default_site_rows ?? [], input.config.settings.default_site_rows_off ?? DEFAULT_SETTINGS.default_site_rows_off).map((entry) => ({ ...entry, row: with_item_landings(hover ? entry.row : without_hover(entry.row)) }));
   const settings = { ...input.config.settings, item_navigator: input.config.settings.item_navigator ?? DEFAULT_SETTINGS.item_navigator, site_rules: [...user_rows, ...default_rows.map(({ row }) => row)] };
   const row_sources: SiteRuleSource[] = [...user_rows.map((): SiteRuleSource => ({ origin: "user" })), ...default_rows.map(({ name }): SiteRuleSource => ({ origin: "default", name }))];
   const { compiled, warnings } = compile_keymap(keymap, settings, (command_id) => {

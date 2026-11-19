@@ -17,6 +17,7 @@ define("page.back", {
   bridge: false,
   runs_in: "background",
   count: "repeat",
+  modes: ["normal", "item"],
   run: async (ctx) => browser.tabs.goBack(require_tab_id(ctx)),
 });
 
@@ -26,6 +27,7 @@ define("page.forward", {
   bridge: false,
   runs_in: "background",
   count: "repeat",
+  modes: ["normal", "item"],
   run: async (ctx) => browser.tabs.goForward(require_tab_id(ctx)),
 });
 

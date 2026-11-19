@@ -75,13 +75,52 @@ test("a step that ended the mode while a line was open sends the line back to no
 
 test("the item section holds the item keys and, of normal mode, only the tab, page scroll, command line, help, hint, find, follow, jump and gi keys", () => {
   const item = compiled_with().modes.item!;
-  for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>"]) assert.ok(item.children[key], key);
+  for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>", "H", "L"]) assert.ok(item.children[key], key);
   assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["?", "T", "g", "i", "t"], "the g group holds gg, gt, gT, g? and gi");
   for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children), [group], `${group}${group} alone`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
   assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").sort(), "the whole ; family");
   for (const key of ["o", "t", "<Space>", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, { id: "mode.set", args: { mode: "item" }, label: "Item mode" });
+});
+
+const step_ids = (node: unknown): string[] => (node as { steps: { invocation: { id: string } }[] }).steps.map((step) => step.invocation.id);
+
+test("I hints the lists and lands on the pick, in normal mode and in item mode, and ;j is gone", () => {
+  const compiled = compiled_with();
+  for (const mode of ["normal", "item"] as const) assert.deepEqual(step_ids(compiled.modes[mode]!.children["I"]), ["hint.run", "page.item"], mode);
+  const hint_step = (compiled.modes.normal!.children["I"] as { steps: { invocation: { args: Record<string, unknown> } }[] }).steps[0]!.invocation;
+  assert.deepEqual([hint_step.args["filter"], hint_step.args["action"], hint_step.args["items"]], ["lists", "enter_item", ""]);
+  for (const mode of ["normal", "media", "item"] as const) assert.equal(((compiled.modes[mode]!.children[";"] as { children: Record<string, unknown> }).children)["j"], undefined, `${mode} has no ;j`);
+});
+
+test("H and L keep history back and forward in item mode", () => {
+  const compiled = compiled_with();
+  for (const [key, id] of [["H", "page.back"], ["L", "page.forward"]] as const) assert.deepEqual(step_ids(compiled.modes.item!.children[key]), [id], key);
+});
+
+test("zt, zz and zb in item mode go back to the current item and then scroll it", () => {
+  const compiled = compiled_with();
+  for (const key of ["zt", "zz", "zb"]) assert.deepEqual(step_ids((compiled.modes.item!.children["z"] as { children: Record<string, unknown> }).children[key.slice(1)]), ["page.item", "scroll.align"], key);
+});
+
+test("a row with an item selector gets I and zt, zz and zb for its own items, a user row too, and its own binds win", () => {
+  const google = compiled_with().site_rules?.find((rule) => rule.origin === "default" && rule.name === "google")!;
+  const selector = "#search div.MjjYud:has(a > h3)";
+  const landing = (bind: { leaf: { when_present?: string; steps: { invocation: { id: string; args?: Record<string, unknown> } }[] } } | undefined) => bind?.leaf.steps.map((step) => [step.invocation.id, step.invocation.args?.["selector"]]);
+  assert.deepEqual(landing(google.bind?.["I"]), [["hint.run", undefined], ["page.item", selector]]);
+  assert.equal(google.bind?.["I"]?.leaf.when_present, selector);
+  assert.equal(google.bind?.["I"]?.leaf.steps[0]?.invocation.args?.["items"], selector);
+  for (const key of ["zt", "zz", "zb"]) assert.deepEqual(landing(google.keymap?.["item"]?.[key]), [["page.item", selector], ["scroll.align", undefined]], key);
+  assert.deepEqual(landing(google.keymap?.["item"]?.["I"]), [["hint.run", undefined], ["page.item", selector]]);
+
+  const row = { site: "https://example.org/*", keymap: { item: { j: { id: "page.item", args: { selector: "li.hit", direction: "down" } }, zz: { id: "page.item", args: { selector: "li.mine", direction: "current" } } } } };
+  const user = compiled_with({ site_rules: [row] }).site_rules?.find((rule) => rule.origin === "user")!;
+  assert.equal(user.bind?.["I"]?.leaf.when_present, "li.hit");
+  assert.deepEqual(landing(user.keymap?.["item"]?.["zz"]), [["page.item", "li.mine"]], "the row's own zz stays");
+  assert.deepEqual(landing(user.keymap?.["item"]?.["zt"]), [["page.item", "li.hit"], ["scroll.align", undefined]]);
+
+  const own_pick = { ...row, bind: { I: { id: "scroll.align", args: { position: "top" } } } };
+  assert.equal(compiled_with({ site_rules: [own_pick] }).site_rules?.find((rule) => rule.origin === "user")!.bind?.["I"]?.leaf.steps[0]?.invocation.id, "scroll.align");
 });
 
 test("every item key runs a command that allows item mode, and compiling the default keymap warns of nothing", () => {

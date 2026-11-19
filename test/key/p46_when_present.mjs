@@ -10,10 +10,10 @@ const ITEMS = 6;
 const GRID = "ul.grid li.tile";
 const LIST = "table.list tr.row";
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  // The command line enters item mode on any page, with or without a list. The key after it lands in item mode once the badge says ITEM.
   const enter_item_mode = async () => {
-    await press_keys("I");
+    await run_line("mode item");
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
   };
   await setup("load the shipped google row for the ends_ pages and a row with a choice list on l for the views_ pages", async () => {

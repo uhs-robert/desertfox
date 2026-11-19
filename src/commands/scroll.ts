@@ -56,4 +56,5 @@ define("scroll.align", {
   bridge: true,
   runs_in: "content",
   bundle: "page",
+  modes: ["normal", "item"],
 });

@@ -9,7 +9,7 @@ import type { Group, GroupRules } from "./groups.ts";
 export type FinderKind = "list" | "grid" | "none";
 
 // `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `timed_out_` marks a `none` that only says the time budget ran out.
-export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[] };
+export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; short_?: true };
 // The answer is its first region (the one with the most area) plus every top-level list of the page in `regions`, from the largest down, so the derived row can follow the one in view.
 export type Found<N> = Region<N> & { regions: Region<N>[]; timed_out_?: true };
 
@@ -25,7 +25,7 @@ const TITLE_ZONE_PX = 100;
 const TITLE_ZONE_SHARE = 0.4;
 // The share of a group's items that must hold a title link.
 const MIN_TITLED = 0.6;
-// The group must span this share of the screen height, so a small module of links is no list.
+// The group must span this share of the screen height to be the first list or to start item mode on load. A shorter list is kept as a `short_` region, which only a pick can make active.
 const MIN_SPAN = 0.6;
 // The cards inside a group of sections must hold this share of the area of the sections.
 const INNER_SHARE = 0.1;
@@ -104,7 +104,10 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
   // A list that sits inside an item of another is no top-level list. Several lists side by side (a feed and its rails) are all kept.
-  const tops = gated.filter((group) => !gated.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
+  const top_of = (pool: Group<N>[]) => pool.filter((group) => !pool.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
+  const tops = top_of(gated);
+  // A short list that sits in no list at all (gated or short) is a top-level list too, placed after the gated ones.
+  const short_tops = top_of(lists.filter((group) => !gated.includes(group))).filter((group) => !lists.some((outer) => outer !== group && nests(reader, group, outer)));
   // An item with no title link of its own (a story with a short title) takes its longest link, so the focus never lands on a vote arrow.
   const longest_link = (item: N): N | undefined => links_of(item).reduce<N | undefined>((long, link) => (!long || link_text(link) > link_text(long) ? link : long), undefined);
   const region_of = (top: Group<N>): Region<N> | undefined => {
@@ -122,7 +125,9 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     return { kind: kind_of(best.boxes), items: best.items, links, ...(sections && { sections }) };
   };
   const regions = tops.map(region_of).filter((region) => region !== undefined);
-  return regions[0] ? { ...regions[0], regions } : none();
+  const short_regions = short_tops.map(region_of).filter((region) => region !== undefined).map((region): Region<N> => ({ ...region, short_: true }));
+  const every = [...regions, ...short_regions];
+  return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
 }
 
 const main_by_area = <N>(groups: readonly Group<N>[]): Group<N> | undefined => groups.reduce<Group<N> | undefined>((top, group) => (!top || group.area > top.area ? group : top), undefined);

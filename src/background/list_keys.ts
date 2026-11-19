@@ -119,7 +119,7 @@ export async function list_keys(
   const columns = site_columns_for(keymap, addresses);
   const page_normal = keymap && normal_tree_for(keymap.modes.normal, columns);
   const mode_binds = keymap && page_normal && !page_normal.all_off ? page_mode_trees_for(keymap, columns, addresses[0])[request.mode as keyof CompiledKeymap["modes"]] : undefined;
-  const root = request.mode === "normal" ? page_normal?.tree : (mode_binds ?? mode_root);
+  const root = mode_binds ?? (request.mode === "normal" ? page_normal?.tree : mode_root);
   const shown = root && availability ? without_unavailable(root, availability) : root;
   const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
   const marked = marks ? await with_page_marks(panel, shown, request.prefix, marks) : panel;

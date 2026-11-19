@@ -55,6 +55,14 @@ test("caret and visual run across frames, because the owner frame starts the mod
   assert.equal(check_args(hint, { action: "enter_media", filter: "media" }).ok, true);
 });
 
+test("the lists filter starts item mode and nothing else, and hint --lists defaults to that pick", () => {
+  const plain = check_args(hint, { filter: "lists" });
+  assert.equal(plain.ok && plain.args["action"], "enter_item");
+  assert.equal(check_args(hint, { action: "focus", filter: "lists" }).ok, false, "--focus --lists is gone");
+  assert.equal(check_args(hint, { action: "enter_item", filter: "links" }).ok, false);
+  assert.equal(check_args(hint, { filter: "lists", frames: "all_frames" }).ok, false);
+});
+
 test("double_click is refused for the links filter", () => {
   assert.equal(check_args(hint, { action: "double_click", filter: "links" }).ok, false);
   assert.equal(check_args(hint, { action: "double_click", filter: "buttons" }).ok, true);
