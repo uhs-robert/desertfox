@@ -127,6 +127,50 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("the next file selected", async () => (await selected_file()) >= 1);
   });
 
+  const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`);
+  const open_drive_in_normal_mode = async (id, view = "list") => {
+    await open_drive(id, view);
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await badge()) === "NORMAL");
+  };
+
+  // The leaf of I goes on with Down and Up after the pick. A j typed behind the pick waits for the whole leaf, so it moves from the file the select landed on: three arrows in all (two to select, one for j).
+  await run_case("list view: I then j typed together selects the second file, with the arrows in order", async () => {
+    await open_drive_in_normal_mode("list_pick_fast");
+    await press_keys("I", "j");
+    await poll_until("j to select the second file", async () => (await selected_file()) === 1 && (await arrows_sent()) === 3);
+    await sleep(500);
+    expect((await selected_file()) === 1 && (await arrows_sent()) === 3, `the select ended on ${await selected_file()} after ${await arrows_sent()} arrows`);
+    expect((await badge()) === "ITEM", "item mode ended");
+  });
+
+  // Where the Escape lands depends on timing: in the pick it cancels the picker, behind the pick it waits for the leaf and then leaves item mode. Either way the mode ends and no key stays held.
+  await run_case("list view: Escape typed behind I and j leaves item mode and holds nothing back", async () => {
+    await open_drive_in_normal_mode("list_pick_escape");
+    await press_keys("I", "j", "-k", "Escape");
+    await poll_until("normal mode", async () => (await badge()) === "NORMAL");
+    await sleep(500);
+    expect((await badge()) === "NORMAL", "item mode came back");
+    await press_keys("j");
+    await poll_until("the next j to scroll the page", async () => (await in_active_tab("scrollY")) > 0);
+  });
+
+  // The page goes away while the keys wait, and comes back from the history: nothing stays held.
+  await run_case("list view: leaving the page right after I and j and coming back leaves no key held", async () => {
+    await open_drive_in_normal_mode("list_pick_leave");
+    await press_keys("I", "j");
+    await in_active_tab(`location.href = "/controls?id=leave_other"; 0`);
+    await poll_until("the other page", async () => (await in_active_tab("location.search").catch(() => "")) === "?id=leave_other");
+    await sleep(500);
+    await in_active_tab("history.back(); 0");
+    await poll_until("the drive page again", async () => (await in_active_tab("location.search").catch(() => "")) === "?id=drive_list_pick_leave");
+    await sleep(800);
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await badge()) === "NORMAL");
+    await press_keys("j");
+    await poll_until("scrolled", async () => (await in_active_tab("scrollY")) > 0);
+  });
+
   await run_case("list view: j walks past the drawn rows, and the panel scrolls to draw more", async () => {
     await open_drive("list_far", "list");
     await press_keys("j");

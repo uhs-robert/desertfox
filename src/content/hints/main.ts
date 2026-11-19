@@ -57,6 +57,8 @@ type Session = {
   // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode_`, because the mode change ends the session as cancelled.
   finish: (outcome: Outcome | Promise<Outcome>) => void;
   action: HintAction;
+  // The end of the leaf that started an `enter_item` pick. A key typed behind the pick waits for it, so it moves on from the landing the leaf's later steps make (Drive's Down and Up) and not before it. Read at the start, while that leaf is the one running.
+  leaf_end_?: Promise<void> | undefined;
   // Keys typed while the elements are still being found.
   waiting_tokens_: string[];
   waiting_physical_: (string | null | undefined)[];
@@ -242,11 +244,6 @@ type PickArgs = Pick<Session, "args" | "action" | "rapid" | "collected_" | "with
 // `hand_over` is for a pick another frame owns: the text that would be copied, or the line that would open, goes to the keyboard frame instead.
 type HandOver = (text: string, what?: string) => void;
 
-// A key typed right behind the pick of `enter_item` waits for the landing step that follows, so it moves on from the landing and not before it. The item bundle calls `landed` when it lands, and the timer frees the key where no landing comes.
-const LANDING_WAIT_MS = 1000;
-let landing: Promise<void> | undefined;
-let landed: (() => void) | undefined;
-
 // Set while a pick performs, so the address change the pick makes (a table-of-contents anchor) does not end the session that made it.
 let picking = false;
 
@@ -256,8 +253,7 @@ const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandO
   // For `enter_item` the bundle also focuses the link of the first item shown, when the pick makes another list active: the landing that follows starts from the focus, so it never takes an item a scroll box clips.
   if (region) {
     const focus = region.links.get(element) ?? element;
-    if (current.action === "enter_item") landing = new Promise<void>((resolve) => ((landed = resolve), void setTimeout(resolve, LANDING_WAIT_MS)));
-    void page.desertfox_host.run_command_("item.lists", "item", { region, focus, landed });
+    void page.desertfox_host.run_command_("item.lists", "item", { region, focus });
     element = focus;
   }
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
@@ -362,8 +358,6 @@ function register(host: PageHostApi): void {
     const keys = current.waiting_tokens_.splice(0);
     host.escape_();
     after_leaving?.();
-    const landing_done = landing;
-    landing = undefined;
     if (owner_left) {
       void owner_left.then((rest) => rest.length > 0 && host.hold_keys_until_(Promise.resolve(rest)));
       return;
@@ -371,7 +365,7 @@ function register(host: PageHostApi): void {
     const focused_a_field = after_leaving && host.get_mode() === "insert";
     if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });
     const left = focused_a_field ? insert_into_focused_field(keys) : keys;
-    if (left.length > 0 || landing_done) host.hold_keys_until_(landing_done ? landing_done.then(() => left) : Promise.resolve(left));
+    if (left.length > 0 || current.leaf_end_) host.hold_keys_until_(current.leaf_end_ ? current.leaf_end_.then(() => left) : Promise.resolve(left), !!current.leaf_end_);
   }
 
   // Hands this frame's count to the background and waits for the labels of every frame. A background that does not answer leaves this frame's own labels.
@@ -586,6 +580,7 @@ function register(host: PageHostApi): void {
     const started_ms = performance.now();
     const run = ++latest_run;
     const action = args.action as HintAction;
+    const leaf_end_ = action === "enter_item" ? host.leaf_end_() : undefined;
     // The source element stays in this frame: `label_across` sends the args to other frames, and an element does not clone.
     const { drop_source_, ...plain_args } = args as { drop_source_?: Element } & Record<string, unknown>;
     args = plain_args;
@@ -613,7 +608,7 @@ function register(host: PageHostApi): void {
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, drop_source_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, leaf_end_, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, drop_source_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true, started_ms);

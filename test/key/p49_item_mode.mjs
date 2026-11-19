@@ -1,10 +1,10 @@
 // Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a load of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["keys", "tabs", "bundles"];
 
-export async function run_cases({ run_line, config_dir, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
@@ -14,6 +14,12 @@ export async function run_cases({ run_line, config_dir, open_cmdline, close_cmdl
   const focus_frame = () => in_active_tab(`document.getElementById("inner").contentWindow.focus(); 0`);
   const open_list = (id) => open_page("item_list", id, { new_tab: true });
   const scrolled = async () => (await in_active_tab("scrollY")) > 0;
+
+  await setup("bind a bare picker on I for the im_nolanding_ pages, so the leaf has no step after the pick", async () => {
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=im_nolanding_*"', 'bind = { I = "hint --lists" }', ""].join("\n"));
+    await load_config_dir(dir);
+  });
 
   await run_case("I enters item mode, j walks the cards and Escape leaves, after which j scrolls again", async () => {
     await open_list("im_basic");
@@ -198,6 +204,17 @@ export async function run_cases({ run_line, config_dir, open_cmdline, close_cmdl
     await expect_focus("c1");
     await sleep(500);
     expect((await focused()) === "c1", "the key typed after I landed on " + (await focused()));
+  });
+
+  // The leaf ends with the pick and no landing follows, so the key typed behind it must not wait for one.
+  await run_case("I with no landing step after the pick still passes the key typed behind it", async () => {
+    await open_list("im_nolanding_a");
+    await press_keys("I", "j");
+    await expect_badge("ITEM");
+    await poll_until("j to focus a card", async () => (await focused()).startsWith("c"));
+    const first = await focused();
+    await press_keys("j");
+    await poll_until("the next j to move on", async () => (await focused()) !== first && (await focused()).startsWith("c"));
   });
 
   await run_case("H in item mode goes back in the tab history", async () => {
