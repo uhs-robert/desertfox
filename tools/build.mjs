@@ -47,7 +47,8 @@ const MAX_BYTES = {
   // 16.5 KB: a short h3 to h6 link to another page names its item (a comment thread), beside the batch merge by parent kind.
   // 17 KB: the finder keeps every top-level list, and the derived row follows the one in view.
   // 17.5 KB: item mode: the start of the mode on a list page that is idle (`item.start`), and the box that shows in item mode as well as in normal mode.
-  "item.js": 17.5 * 1024,
+  // 18 KB: item mode: the start waits for a row's items by the clock and ends that wait when the page starts to unload.
+  "item.js": 18 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.
