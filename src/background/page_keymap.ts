@@ -36,14 +36,15 @@ export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 // The page's columns of the site table, for the page's key handling and for which-key alike.
 export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses));
 
-// The rows compile adds for the finder: its row and the hold-back rows before it, all named `item_navigator`. No other default row has that name.
-const is_finder_row = (rule: SiteRule): boolean => rule.origin === "default" && rule.name === "item_navigator";
+// The rows that fit the page, in table order.
+export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
 
-// The rows that fit the page, in table order. The finder rows go where the page's `item_navigator` value is false, so every key stays as the user set it. A keymap with no global value reads as off.
-export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => {
-  const matching = (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
-  return site_value(resolve_site_columns(matching), "item_navigator", keymap?.item_navigator === true) ? matching : matching.filter((rule) => !is_finder_row(rule));
-};
+// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there.
+export async function item_start_wanted(storage: KeymapStorage, address: string | undefined): Promise<boolean> {
+  const keymap = current_keymap(await stored_keymap(storage));
+  const columns = site_columns_for(keymap, [address]);
+  return keymap !== undefined && columns.off !== true && site_value(columns, "item_navigator", keymap.item_navigator === true);
+}
 
 // A per-site setting on a page. The cast holds because the setting's own check accepted the value when the config loaded. The site's value beats the global value, which already holds `:set` and `:set --temp`: the row names the site and `:set` does not.
 export const site_value = <Name extends PerSiteName>(columns: PageSiteColumns, name: Name, global_value: Settings[Name]): Settings[Name] =>
@@ -140,12 +141,14 @@ function with_stop_for_record(node: TreeBranch): TreeBranch {
   return { ...node, children };
 }
 
-// The mode a frame that starts late joins. Insert wins: media entry leaves a frame in insert alone too. Media is asked only when insert is not held, so its join writes the frame into the hold only when the frame joins it.
+// The mode a frame that starts late joins. Insert wins: media entry leaves a frame in insert alone too. Media and item are asked only when the holds before them are not held, so a join writes the frame into a hold only when the frame joins it.
 // Only a frame's first ask joins: a re-ask (config reload, macro recording) from a frame in another mode must not write it into a hold.
-export const join_mode = async (first_ask: boolean, insert_held: () => Promise<boolean>, media_held: () => Promise<boolean>): Promise<"insert" | "media" | undefined> => (!first_ask ? undefined : (await insert_held()) ? "insert" : (await media_held()) ? "media" : undefined);
+export type JoinMode = "insert" | "media" | "item";
+export const join_mode = async (first_ask: boolean, insert_held: () => Promise<boolean>, media_held: () => Promise<boolean>, item_held: () => Promise<boolean>): Promise<JoinMode | undefined> =>
+  !first_ask ? undefined : (await insert_held()) ? "insert" : (await media_held()) ? "media" : (await item_held()) ? "item" : undefined;
 
 // `recording` is the register a macro is being recorded into, or undefined.
-export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<"insert" | "media" | undefined>): Promise<PageKeymap | undefined> {
+export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<JoinMode | undefined>): Promise<PageKeymap | undefined> {
   const trimmed = await trimmed_keymap_for(storage, addresses);
   const joined = trimmed && !trimmed.all_off ? await join?.() : undefined;
   const reply = trimmed && joined ? { ...trimmed, join: joined } : trimmed;
@@ -172,7 +175,7 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.
-export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<"insert" | "media" | undefined>): Promise<string | undefined> => {
+export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<JoinMode | undefined>): Promise<string | undefined> => {
   const reply = await page_keymap_for(storage, addresses, recording, join);
   return reply && JSON.stringify(reply);
 };

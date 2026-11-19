@@ -74,6 +74,7 @@ export const area_rules = [
   // The key lookup names keys on the help pages and the new tab hint.
   { globs: ["src/shared/{bound_keys,key_docs}.ts"], areas: ["help", "newtab"] },
   { globs: ["src/background/tab_media.ts"], areas: ["media", "tabs"] },
+  { globs: ["src/background/tab_item.ts"], areas: ["keys", "tabs", "bundles"] },
   {
     globs: ["src/background/{tab_*,previous_tab,last_used_tab,window_focus,count}.ts", "src/commands/{tab,tab_group,tab_split,window,url,url_build,browser,open,copy_tabs}.ts", "src/shared/{tab_model_port,container_store,group_name}.ts"],
     areas: ["tabs"],
@@ -98,7 +99,7 @@ export const area_rules = [
   { globs: ["src/shared/engines/**", "src/commands/engine.ts"], areas: ["engines"] },
   { globs: ["src/background/{engine_file,engine_layer,engine_layer_move,engine_message}.ts", "src/shared/engine_fields.ts"], areas: ["config", "engines"] },
   { globs: ["src/background/engine_keys_file.ts"], areas: ["config", "engines", "keys"] },
-  { globs: ["src/background/{default_keymap,default_site_rows,item_finder_row,item_hover,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
+  { globs: ["src/background/{default_keymap,default_site_rows,item_hover,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },

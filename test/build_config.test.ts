@@ -693,12 +693,12 @@ test("a site row bind is checked like a keymap binding", () => {
   assert.equal(problems.some((problem) => problem.includes('bind "l"')), false);
 });
 
-test("the settings schema offers the keymap column for the four site modes and no other", () => {
+test("the settings schema offers the keymap column for the five site modes and no other", () => {
   const dir = make_tmp_dir("desertfox-schemas-");
   write_schemas(dir, build_schemas(commands));
   const schema = JSON.parse(readFileSync(join(dir, "settings.schema.json"), "utf8"));
   const keymap = schema.properties.site_rules.items.properties.keymap;
-  assert.deepEqual(Object.keys(keymap.properties), ["normal", "visual", "visual_line", "caret"]);
+  assert.deepEqual(Object.keys(keymap.properties), ["normal", "visual", "visual_line", "caret", "item"]);
   assert.equal(keymap.additionalProperties, false);
   assert.equal(keymap.minProperties, 1);
 });

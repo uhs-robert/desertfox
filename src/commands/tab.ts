@@ -389,6 +389,7 @@ define("tab.next", {
   bridge: true,
   runs_in: "background",
   count: "repeat",
+  modes: ["normal", "item"],
   run: (ctx) => handlers.next(ctx),
 });
 
@@ -398,6 +399,7 @@ define("tab.prev", {
   bridge: true,
   runs_in: "background",
   count: "repeat",
+  modes: ["normal", "item"],
   run: (ctx) => handlers.prev(ctx),
 });
 
@@ -446,6 +448,7 @@ define("tab.goto", {
   bridge: true,
   runs_in: "background",
   count: { param: "index" },
+  modes: ["normal", "item"],
   run: (ctx, args) => handlers.goto(ctx, args as { index: number }),
 });
 

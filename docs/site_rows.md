@@ -90,6 +90,8 @@ Start it with `<A-l>`.
 
 Addresses: `https://www.google.com/search*udm=2&*`, `https://www.google.com/search*udm=2`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `h` | Go to item on the left |
@@ -103,6 +105,8 @@ Addresses: `https://www.google.com/search*udm=2&*`, `https://www.google.com/sear
 
 Addresses: `https://www.google.com/search*udm=7&*`, `https://www.google.com/search*udm=7`, `https://www.google.com/search*udm=vids&*`, `https://www.google.com/search*udm=vids`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -113,6 +117,8 @@ Addresses: `https://www.google.com/search*udm=7&*`, `https://www.google.com/sear
 ### `google_news`
 
 Addresses: `https://www.google.com/search*tbm=nws&*`, `https://www.google.com/search*tbm=nws`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -127,6 +133,8 @@ Addresses: `https://www.google.com/search*tbm=nws&*`, `https://www.google.com/se
 
 Addresses: `https://www.google.com/search*udm=short_vids&*`, `https://www.google.com/search*udm=short_vids`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `h` | Go to item on the left |
@@ -139,6 +147,8 @@ Addresses: `https://www.google.com/search*udm=short_vids&*`, `https://www.google
 ### `google_shopping`
 
 Addresses: `https://www.google.com/search*udm=28&*`, `https://www.google.com/search*udm=28`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -153,6 +163,8 @@ Addresses: `https://www.google.com/search*udm=28&*`, `https://www.google.com/sea
 
 Addresses: `https://duckduckgo.com/?*iax=images*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `h` | Go to item on the left |
@@ -165,6 +177,8 @@ Addresses: `https://duckduckgo.com/?*iax=images*`
 ### `ddg_videos`
 
 Addresses: `https://duckduckgo.com/?*iax=videos*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -179,6 +193,8 @@ Addresses: `https://duckduckgo.com/?*iax=videos*`
 
 Addresses: `https://duckduckgo.com/?*iar=news*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -189,6 +205,8 @@ Addresses: `https://duckduckgo.com/?*iar=news*`
 ### `ddg`
 
 Addresses: `https://duckduckgo.com/?*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -216,6 +234,8 @@ Addresses: `https://search.brave.com/search*`
 
 Addresses: `https://www.google.com/search*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -226,6 +246,8 @@ Addresses: `https://www.google.com/search*`
 ### `bing`
 
 Addresses: `https://www.bing.com/search*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -238,6 +260,8 @@ Addresses: `https://www.bing.com/search*`
 
 Addresses: `https://news.ycombinator.com/*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -248,6 +272,8 @@ Addresses: `https://news.ycombinator.com/*`
 ### `wikipedia`
 
 Addresses: `https://*.wikipedia.org/w/index.php?*search=*`, `https://*.wikipedia.org/wiki/Special:Search*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -260,6 +286,8 @@ Addresses: `https://*.wikipedia.org/w/index.php?*search=*`, `https://*.wikipedia
 
 Addresses: `https://lobste.rs/`, `https://lobste.rs/newest*`, `https://lobste.rs/active*`, `https://lobste.rs/t/*`, `https://lobste.rs/page/*`, `https://lobste.rs/recent*`, `https://lobste.rs/top*`, `https://lobste.rs/domains/*`, `https://lobste.rs/search*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -270,6 +298,8 @@ Addresses: `https://lobste.rs/`, `https://lobste.rs/newest*`, `https://lobste.rs
 ### `archwiki`
 
 Addresses: `https://wiki.archlinux.org/index.php?*search=*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -282,6 +312,8 @@ Addresses: `https://wiki.archlinux.org/index.php?*search=*`
 
 Addresses: `https://www.startpage.com/sp/search*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -292,6 +324,8 @@ Addresses: `https://www.startpage.com/sp/search*`
 ### `arxiv`
 
 Addresses: `https://arxiv.org/search/*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -304,6 +338,8 @@ Addresses: `https://arxiv.org/search/*`
 
 Addresses: `https://stackoverflow.com/questions*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -315,6 +351,8 @@ Addresses: `https://stackoverflow.com/questions*`
 
 Addresses: `https://tildes.net/*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -325,6 +363,8 @@ Addresses: `https://tildes.net/*`
 ### `amazon`
 
 Addresses: `https://www.amazon.com/s?*`, `https://www.amazon.com/s/*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |
@@ -339,6 +379,8 @@ Addresses: `https://www.amazon.com/s?*`, `https://www.amazon.com/s/*`
 
 Addresses: `https://www.reddit.com/*`, `https://reddit.com/*`
 
+In item mode:
+
 | Key | What it does |
 | --- | --- |
 | `j` | Go to item below |
@@ -348,6 +390,8 @@ Addresses: `https://www.reddit.com/*`, `https://reddit.com/*`
 ### `drive`
 
 Addresses: `https://drive.google.com/drive/*`
+
+In item mode:
 
 | Key | What it does |
 | --- | --- |

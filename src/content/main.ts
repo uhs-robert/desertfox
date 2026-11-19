@@ -391,7 +391,7 @@ function start(): void {
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
-    if (mode !== "media") media_by_step = false;
+    if (mode !== "media" && mode !== "item") media_by_step = false;
     key_flow.reset_sequence_();
     site_mode.set_();
     bundles.enter_mode_(mode);
@@ -408,8 +408,9 @@ function start(): void {
   listen("pageshow", report_mode, false);
 
   // A fullscreen change in this frame and the media mode of another frame take the same step.
-  const media_step = (on: boolean, own?: boolean) => {
-    const next = on ? fullscreen_step(page_mode.get_mode_(), true) : page_mode.media_ended_(own);
+  const media_step = (on: boolean, own?: boolean, item?: true) => {
+    const held = item && "item";
+    const next = on ? fullscreen_step(page_mode.get_mode_(), true, held) : page_mode.media_ended_(own, held);
     if (next) {
       media_by_step = !own;
       void bundles.set_mode_(next);
@@ -456,7 +457,7 @@ function start(): void {
       replaying = true;
       bundles.api.hold_keys_until_(send_to_background({ type: "replay_end" }).then((ended) => ((replaying = false), ended.ok || key_flow.drop_held_(), [])), true);
     } else if (message.type === "refusal") show_toast(message.refusal.message, message.kind);
-    else if (message.type === "media" && takes_media_step(message, browser.runtime.getFrameId(window))) media_step(message.on);
+    else if (message.type === "media" && takes_media_step(message, browser.runtime.getFrameId(window))) media_step(message.on, undefined, message.item);
     else if (message.type === "set_mode" && !(message.held && was_all_off)) {
       void bundles.set_mode_(message.mode);
       sync_mode_to_focus();

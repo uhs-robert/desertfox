@@ -90,6 +90,7 @@ export const BINDINGS = {
   // `<C-[>` also escapes, but `<Escape>` is the key a reader knows.
   escape: { mode: "normal", id: "mode.escape", args: {}, test: () => true, prefer: "<Escape>" },
   insert: { mode: "normal", id: "mode.insert", args: {} },
+  item: { mode: "normal", id: "mode.set", args: { mode: "item" } },
   help: { mode: "normal", id: "help.open", args: {} },
   settings_page: { mode: "normal", id: "help.open", args: { name: "settings" } },
   // Host features: the keys follow the keymap like the rest, so a rebind never leaves this section wrong.

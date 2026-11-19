@@ -56,6 +56,7 @@ test("a leaf with no guard runs whatever has focus, and a selector that does not
 const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
 const storage_of = (stored: unknown) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) }) as never;
 const page_tree = async (compiled: CompiledKeymap, url: string) => (await page_keymap_for(storage_of(compiled), [url]))!.keymap.modes.normal!;
+const item_tree = async (compiled: CompiledKeymap, url: string) => (await page_keymap_for(storage_of(compiled), [url]))!.keymap.modes.item!;
 
 test("a guarded bind keeps the leaf it replaced, a guarded bind over a branch keeps none, and an unguarded bind keeps none", async () => {
   const keymap = { normal: { j: { id: "a.j" }, gg: { id: "a.gg" }, k: { id: "a.k" } } };
@@ -152,14 +153,14 @@ test("the result page rows bind j and k to page.item on their addresses, and def
   for (const [name, urls] of Object.entries(addresses)) {
     for (const url of urls) {
       for (const key of ["j", "k"]) {
-        const on = (await page_tree(with_defaults({}), url)).children[key] as TreeLeaf;
-        assert.equal(on.steps[0]?.invocation.id, "page.item", `${url} ${key}`);
-        const off = (await page_tree(with_defaults({ default_site_rows_off: [name] }), url)).children[key] as TreeLeaf;
-        assert.notEqual(off.steps[0]?.invocation.id, "page.item", `${url} ${key} with ${name} off`);
+        const selector_of = async (compiled: CompiledKeymap) => ((await item_tree(compiled, url)).children[key] as TreeLeaf).steps[0]?.invocation.args?.["selector"] || undefined;
+        assert.equal(((await page_tree(with_defaults({}), url)).children[key] as TreeLeaf).steps[0]?.invocation.id, "scroll.lines", `${url} ${key} scrolls in normal mode`);
+        assert.equal(typeof (await selector_of(with_defaults({}))), "string", `${url} ${key}`);
+        assert.equal(await selector_of(with_defaults({ default_site_rows_off: [name] })), undefined, `${url} ${key} with ${name} off`);
       }
     }
   }
   for (const url of ["https://old.reddit.com/", "https://en.wikipedia.org/wiki/Cat", "https://en.wikipedia.org/w/index.php?title=Cat&action=edit"]) {
-    assert.notEqual(((await page_tree(with_defaults({}), url)).children["j"] as TreeLeaf).steps[0]?.invocation.id, "page.item", url);
+    assert.ok(!((await item_tree(with_defaults({}), url)).children["j"] as TreeLeaf).steps[0]?.invocation.args?.["selector"], url);
   }
 });

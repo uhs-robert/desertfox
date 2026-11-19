@@ -1,20 +1,10 @@
-// The item finder (`item_navigator = true`): on a page with no site row, j and k walk the list the finder reads from the page, with the box and the focus on the title link, and Enter opens it. gg and G go to the first and last card where it is in view after the scroll, and only scroll otherwise. On a page with no list the keys scroll as they do without the setting. A shipped row for the site still decides first. The bundle-refused fallback is covered in test/content/item_finder_fallback.test.ts, because no real page makes the item bundle fail without a test hook.
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// The item finder in item mode (`I`): on a page with no site row, j and k walk the list the finder reads from the page, with the box and the focus on the title link, and Enter opens it. gg and G go to the first and last card where it is in view after the scroll, and only scroll otherwise. On a page with no list the keys scroll as they do without the setting. A shipped row for the site still decides first. The bundle-refused fallback is covered in test/content/item_finder_fallback.test.ts, because no real page makes the item bundle fail without a test hook.
 
 export const areas = ["keys", "config", "bundles"];
 
 const CARDS = 10;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("load a config with item_navigator on", async () => {
-    const dir = config_copy();
-    const file = join(dir, "settings.toml");
-    // A top-level setting goes above the first table.
-    writeFileSync(file, `item_navigator = true\n${readFileSync(file, "utf8")}`);
-    await load_config_dir(dir);
-  });
-
+export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   // Ten cards, each with a title link in a heading, stacked on a page that has no row and no `main`.
   const add_cards = (count = CARDS) =>
     in_active_tab(`(() => {
@@ -41,6 +31,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("j focuses the title link of a card, j goes on to the next and k goes back", async () => {
     await open_page("page", "finder_walk", { new_tab: true });
+    await press_keys("I");
     await add_cards();
     await press_keys("j");
     await expect_focus("f0");
@@ -52,6 +43,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("the box sits on the card and moves with it", async () => {
     await open_page("page", "finder_box", { new_tab: true });
+    await press_keys("I");
     await add_cards();
     await press_keys("j");
     await expect_focus("f0");
@@ -63,6 +55,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("Enter opens the focused link", async () => {
     await open_page("page", "finder_enter", { new_tab: true });
+    await press_keys("I");
     await add_cards();
     await press_keys("j");
     await expect_focus("f0");
@@ -72,6 +65,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("a page with no list scrolls on j and moves no focus", async () => {
     await open_page("page", "finder_none", { new_tab: true });
+    await press_keys("I");
     await press_keys("j");
     await poll_until("the page to scroll", async () => (await in_active_tab("scrollY")) > 0);
     expect((await focused()) === "", "j moved the focus on a page with no list");
@@ -80,6 +74,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("a page whose list grows after a none answer is read again, and the list is walked", async () => {
     await open_page("page", "finder_late", { new_tab: true });
+    await press_keys("I");
     await press_keys("j");
     await poll_until("the page to scroll", async () => (await in_active_tab("scrollY")) > 0);
     // The none answer stands for half a second, so the list comes after that.
@@ -108,6 +103,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("j walks the list in view and hands over to the list that shows once the first one has scrolled away", async () => {
     await open_page("page", "finder_two_lists", { new_tab: true });
+    await press_keys("I");
     await add_two_lists();
     await press_keys("j");
     await expect_focus("a0");
@@ -143,15 +139,19 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case(";j labels each list, and the list picked keeps j and k while the first list still shows", async () => {
     await open_page("page", "finder_pick_list", { new_tab: true });
+    await press_keys("I");
     await add_side_lists();
     await press_keys("j");
     await expect_focus("a0");
+    // The hint keys belong to normal mode, so Escape leaves item mode for the pick and I goes back.
+    await press_keys("-k", "Escape");
     await press_keys(";j");
     await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
     const [, right] = await labels_by_left();
     await press_keys(right.text);
     // The pick focuses the title link, as j does, so Enter opens it.
     await expect_focus("b0");
+    await press_keys("I");
     await press_keys("j");
     await expect_focus("b1");
     await press_keys("j");
@@ -162,6 +162,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case(";j labels a list in a scroll box whose top items are scrolled out of the box", async () => {
     await open_page("page", "finder_pick_scrolled_list", { new_tab: true });
+    await press_keys("I");
     await add_side_lists();
     // The right-hand list sits in a box of its own, scrolled past its first four cards, with the clipped ones still inside the window above it, as a playlist panel scrolls to the video that plays.
     await in_active_tab(`(() => {
@@ -172,12 +173,14 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     })()`);
     await press_keys("j");
     await expect_focus("a0");
+    await press_keys("-k", "Escape");
     await press_keys(";j");
     await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
     const [, right] = await labels_by_left();
     await press_keys(right.text);
     const picked = await in_active_tab("document.activeElement?.id ?? ''");
     expect(/^b[4-9]$/.test(picked), "the pick focused " + picked + ", not a shown item of the scrolled list");
+    await press_keys("I");
     await press_keys("j");
     await poll_until("focus on a later item of the second list", async () => /^b\d$/.test(await focused()) && (await focused()) !== picked);
   });
@@ -188,6 +191,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("G goes to the last card and gg to the first, when the card is in view after the scroll", async () => {
     await open_page("page", "finder_ends", { new_tab: true });
+    await press_keys("I");
     await add_cards(30);
     await only_cards();
     await press_keys("G");
@@ -200,6 +204,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("gg with the first card below the fold only scrolls, and the next j does not jump back", async () => {
     await open_page("page", "finder_ends_far", { new_tab: true });
+    await press_keys("I");
     await add_cards(30);
     await in_active_tab(`(() => { const spacer = document.createElement("div"); spacer.style.height = "3000px"; document.body.prepend(spacer); window.scrollTo(0, 3000); return true; })()`);
     await press_keys("gg");
@@ -213,6 +218,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("gg and G scroll to the top and bottom of a page with no list", async () => {
     await open_page("page", "finder_ends_none", { new_tab: true });
+    await press_keys("I");
     await press_keys("G");
     await poll_until("the page bottom", at_bottom);
     await press_keys("gg");

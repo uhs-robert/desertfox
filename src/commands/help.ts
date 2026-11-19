@@ -12,7 +12,7 @@ define("help.whichkey", {
   bridge: false,
   runs_in: "content",
   repeatable: false,
-  modes: ["normal", "caret", "visual", "visual_line", "media", "insert", "hint", "grab"],
+  modes: ["normal", "caret", "visual", "visual_line", "media", "item", "insert", "hint", "grab"],
   bundle: "whichkey",
 });
 
@@ -27,6 +27,7 @@ define("help.open", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
+  modes: ["normal", "item"],
   run: async (ctx, args) => {
     const name = args.name as string;
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);

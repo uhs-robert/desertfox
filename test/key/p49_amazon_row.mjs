@@ -23,6 +23,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const tile = (id, ad) => `<div data-component-type="s-search-result" class="${ad ? "AdHolder" : ""}" style="width:100px;height:60px;margin:0 10px 40px 0"><a class="s-no-outline" tabindex="-1" href="#img_${id}" style="display:block;height:20px">image</a><div data-cy="title-recipe"><a id="${id}" href="#${id}" style="display:block;height:20px"><h2>title ${id}</h2></a></div></div>`;
   const open_grid = async (id) => {
     await open_page("controls", `amazon_${id}`, { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const slot = document.createElement("div");
       slot.style.cssText = "display:flex;flex-wrap:wrap;width:330px";

@@ -78,6 +78,7 @@ export function render_site_rows(rows: readonly DefaultSiteRow[], keymap: Keymap
     const first = own[0]!;
     const parts = [`### ${code(name)}`, `Addresses: ${patterns.map((pattern) => code(pattern)).join(", ")}`];
     if (first.bind && Object.keys(first.bind).length > 0) parts.push(key_table(first.bind, registry));
+    for (const [keymap_mode, binds] of Object.entries(first.keymap ?? {})) if (binds && Object.keys(binds).length > 0) parts.push(`In ${keymap_mode} mode:`, key_table(binds, registry));
     parts.push(...setting_notes(first).map((note) => `- ${note}`).join("\n").split("\n\n").filter(Boolean));
     if (first.pass) parts.push(`Keys left to the page: ${first.pass.split(" ").map((key) => code(key)).join(" ")}.`);
     for (const [mode_name, mode] of Object.entries(first.modes ?? {})) parts.push(mode_section(mode_name, mode, first.bind, keymap, registry));

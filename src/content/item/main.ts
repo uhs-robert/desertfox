@@ -1,4 +1,4 @@
-// The `item` bundle: the handler of `page.item`, which site rows bind to j and k on result pages. Loaded on the first press.
+// The `item` bundle: the handler of `page.item`, which item mode and site rows bind to j and k on result pages, and `item.start`, which starts item mode on a list page. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
 import { follow_item, move_item, read_cursor } from "./pick.ts";
@@ -6,6 +6,7 @@ import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
 import { watch_user_left } from "../user_left.ts";
+import { create_item_start } from "./start.ts";
 
 type ItemWindow = { desertfox_host?: PageHostApi; desertfox_item_ready?: true };
 const item_window = window as unknown as ItemWindow;
@@ -15,7 +16,8 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const watch_user_ = () => watch_user_left(document, window, host.pressed_keys_);
-  const overlay = create_item_overlay(() => host.get_mode() === "normal", watch_user_, follow_item);
+  // Item mode shows the box. Normal mode keeps it for a row of the user's that binds j and k there, and for the focus mark.
+  const overlay = create_item_overlay(() => ["normal", "item"].includes(host.get_mode()), watch_user_, follow_item);
   const page = {
     doc: document,
     view: window,
@@ -32,6 +34,16 @@ if (!item_window.desertfox_item_ready && host) {
     watch_user_,
   };
   host.register_handler_("page.item", (args) => move_item(page, args as unknown as ItemArgs));
+  // The background asks when a load completes. The handler answers at once, so no key waits for the idle time.
+  const start = create_item_start({
+    mode_: host.get_mode,
+    user_active_: () => navigator.userActivation.hasBeenActive,
+    in_field_: () => host.is_editable_(host.focused_()),
+    has_list_: () => page.derived.items_().length > 0,
+    enter_: () => host.set_mode_("item"),
+    when_idle_: (run) => requestIdleCallback(run, { timeout: 1000 }),
+  });
+  host.register_handler_("item.start", start);
   // The shared focus mark, asked for by the hints bundle after a focus move. The focus can have left by the time this bundle loads, and then there is nothing to mark.
   host.register_handler_("item.mark", (args) => {
     const element = args.element as Element;

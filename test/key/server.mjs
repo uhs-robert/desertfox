@@ -227,6 +227,14 @@ export function start_server() {
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/item_list" || url.pathname === "/item_frame") {
+      // Ten cards with a title link each, which the item finder takes for a list. The list is in the markup, so a page that starts in item mode finds it when it loads. A `_frame` id adds a same-origin frame with a list of its own, and a `_field` id a text field.
+      const prefix = url.pathname === "/item_list" ? "c" : "f";
+      const cards = Array.from({ length: 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span></div>`).join("");
+      const frame = url.pathname === "/item_list" && id.includes("_frame") ? `<iframe id="inner" src="/item_frame?id=${id}_inner" style="display:block;width:560px;height:300px"></iframe>` : "";
+      const field = id.includes("_field") ? '<input id="q">' : "";
+      return response.end(page(`${url.pathname.slice(1)} ${id}`, field + frame + cards, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+    }
     if (url.pathname === "/links") {
       // Two links up top, an anchor without href that ]l skips, and a link far below. The page reports each focus.
       const links = '<a href="#a" id="first">one</a> <a id="bare">bare</a> <a href="#b" id="second">two</a>' + tall_filler + '<a href="#c" id="last">three</a>';

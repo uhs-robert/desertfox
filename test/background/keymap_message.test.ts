@@ -214,12 +214,12 @@ test("a browser chord past the last free Firefox slot is refused by the check", 
 
 test("the export keeps only the edits in force: one that does not read and one the compile skips stay out", () => {
   const config = config_with({});
-  const layers: EditLayers = { keymap: { normal: { J: "tab.close", K: "", x: "user.gone" }, visual: { zz: "tab.next" } } };
+  const layers: EditLayers = { keymap: { normal: { J: "tab.close", K: "", x: "user.gone" }, visual: { zz: "tab.undo_close" } } };
   const exported = exportable_key_edits({ config, layers, compile: (other) => compile_config(input_of(config, other.keymap)) });
   assert.deepEqual(exported.edits, { normal: { J: "tab.close", K: "" } });
   assert.equal(exported.skipped.length, 2);
   assert.match(exported.skipped[0]!, /^keymap edits: normal skipped "x": unknown command "user.gone"/);
-  assert.match(exported.skipped[1]!, /^visual: skipped "zz": tab.next runs in normal mode/);
+  assert.match(exported.skipped[1]!, /^visual: skipped "zz": tab.undo_close runs in normal mode/);
 });
 
 test("a repeat remove says the key is already unbound", async () => {

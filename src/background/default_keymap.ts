@@ -269,7 +269,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "]c": { id: "url.increment", args: { direction: "up" } },
     "[c": { id: "url.increment", args: { direction: "down" } },
     gi: { id: "page.focus_input" },
-    I: { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle item navigator" },
+    I: { id: "mode.set", args: { mode: "item" }, label: "Item mode" },
     i: { id: "mode.insert" },
 
     pp: { id: "open.clipboard", args: { where: "here" } },
@@ -512,6 +512,24 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line and help keys, and any other key goes to the page. `I` goes back to the current item.
+// The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
+const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
+const ITEM_KEYS: ModeBindings = {
+  ...Object.fromEntries(["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?"].map((sequence) => [sequence, BASE_SECTIONS.normal![sequence]!])),
+  "<Escape>": { id: "mode.escape" },
+  "<C-[>": { id: "mode.escape" },
+  "?": { id: "help.whichkey", label: "Show the keys" },
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
+  I: { id: "page.item", args: { direction: "current" }, label: "Back to the current item" },
+  j: item_step("down", "Next item, or scroll down"),
+  k: item_step("up", "Previous item, or scroll up"),
+  h: item_step("left", "Item to the left, or scroll left"),
+  l: item_step("right", "Item to the right, or scroll right"),
+  gg: item_step("first", "First item, or scroll to top"),
+  G: item_step("last", "Last item, or scroll to bottom"),
+};
+
 // The keys of grab mode. Enter drops where the element is. Escape puts a range input or a draggable element back first and releases a pointer drag where it is. [ and ] halve and double the step.
 const GRAB_KEYS: ModeBindings = {
   h: { id: "grab.move", args: { direction: "left" }, label: "Move left" },
@@ -527,4 +545,4 @@ const GRAB_KEYS: ModeBindings = {
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS };
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS };

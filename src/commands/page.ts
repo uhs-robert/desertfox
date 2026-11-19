@@ -170,7 +170,7 @@ define("page.send_key", {
   ],
   bridge: false,
   runs_in: "content",
-  modes: ["normal", "insert"],
+  modes: ["normal", "insert", "item"],
   // The handler sends the repeats itself, so a quick second key cannot land between them.
   count: { param: "times" },
   bundle: "site_actions",
@@ -201,7 +201,7 @@ define("page.arrow", {
   bundle: "site_actions",
 });
 
-// Meant for site rows on result lists, where a row names the item selector and binds j and k. Enter on the focused link then opens it, as the browser does.
+// Bound to j, k, h, l, gg and G in item mode, and by site rows on result lists, which name the item selector in their `keymap.item` column. Enter on the focused link then opens it, as the browser does.
 define("page.item", {
   label: "Move through items",
   intent: "Focus the next item that a CSS selector names. With no selector, it reads the page for a list or a grid of items (the item navigator) and moves through that, and when it is not sure there is one, or when this bundle cannot load, down and up scroll like the plain keys, and first and last scroll to the top and bottom as the plain keys do. It draws a box around the item, which is a search result on a results page. Down and up go to the nearest item below or above, left and right to the nearest on the same row, so one bind set serves a list and a grid. It starts from the item that holds the focus, else the last item it moved to while that is on screen, else the first item in view. A count prefix moves that many items. Down and up scroll 50 px per count instead while the item runs past the view edge and at the last item, and with no item on the page they scroll as the plain keys do. Left and right show a notice at the last item. First and last scroll the list to its top or bottom and go to the first and last item, whatever has focus. While the page draws or loads more items they follow the end, until it stays the same for a second or you press a key. They ignore a count, record the place they leave in the jump list, and do nothing on a page with no item, except with no selector, where they scroll to the top or bottom. With no selector they also focus the end item only when it is in view after the scroll. Current focuses the item a move would start from and goes nowhere, and does nothing on a page with no item. Escape clears the box. With hover on, the item under the box also gets the pointer events of a mouse resting on it, about 300 ms after the last move, and loses them when the box moves or clears.",
@@ -218,6 +218,7 @@ define("page.item", {
   // The ends replace gg and G on the result rows, which record the place they leave, so `<C-o>` and `''` come back.
   jumps: (args) => args.direction === "first" || args.direction === "last",
   bundle: "item",
+  modes: ["normal", "item"],
 });
 
 // Meant for site rows, where a synthetic Ctrl+X or Ctrl+V keydown does not cut or paste: the browser runs a clipboard action only from `execCommand`, so a row binds a key to this command instead.

@@ -672,6 +672,8 @@ export type SetMode = {
 export type MediaStep = {
   type: "media";
   on: boolean;
+  // The step is for item mode, not media mode (`tab_item.ts`).
+  item?: true;
   // The frame whose own report started the mode. It is in the mode already, so it skips the step: a step that reaches it after it left the mode would put it back.
   from?: number | undefined;
 };
