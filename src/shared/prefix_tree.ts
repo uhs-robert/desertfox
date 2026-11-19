@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 13;
+export const COMPILED_KEYMAP_VERSION = 14;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -89,7 +89,7 @@ export type CompiledKeymap = {
   bridge_share_tabs?: true;
   // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
   frame_site_globals?: FrameSiteValues;
-  // The global `item_navigator` value when it is not false: `shipped` starts item mode on the sites of the shipped rows, true on every list page. Absent means off, as in a keymap an older version stored.
+  // The global `item_navigator` value when it is not false: `shipped` starts item mode on the sites of the shipped rows, true on every list page. Absent means off.
   item_navigator?: true | "shipped";
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
