@@ -84,6 +84,34 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     await settle_focus();
   }, { setup: true });
 
+  await run_case("a restart moves settings an older version saved in the browser into the folder's settings.toml", async () => {
+    const folded_config = config_copy();
+    await load_config_dir(folded_config);
+    // The layer as an older version left it: written straight to storage, so only the start after it sees it.
+    await in_background(`browser.storage.local.set({ desertfox_saved_settings: { toast_ms: 4321, which_key_skip: ["zq"] } })`);
+    await in_background(`browser.storage.local.remove("desertfox_reinject_report")`);
+    await run_line(":debug.restart");
+    await wait_reinject_report();
+    const settings_text = () => readFileSync(join(folded_config, "settings.toml"), "utf8");
+    // The host writes the file before the start settles its record, so the poll waits for the whole stored state too.
+    const fold_state = async () => {
+      const status = await read_local("desertfox_config_status");
+      return {
+        file: /^toast_ms = 4321$/m.test(settings_text()) && /^which_key_skip = \["zq"\]$/m.test(settings_text()),
+        saved: JSON.stringify(await read_local("desertfox_saved_settings")),
+        record: (await read_local("desertfox_settings_file_unsynced")) ?? null,
+        in_force: status?.settings?.toast_ms === 4321 && status?.saved?.length === 0,
+        noted: (await read_local("desertfox_warnings"))?.some((warning) => warning.startsWith("2 settings saved in the browser moved into settings.toml")) ?? false,
+      };
+    };
+    const settled = (state) => state.file && state.saved === "{}" && state.record === null && state.in_force && state.noted;
+    let last_state;
+    await poll_until("the saved settings to reach settings.toml in the folder, and the start to settle its record, status and warnings", async () => settled((last_state = await fold_state())), { timeout_ms: 8000 }).catch((error) => {
+      throw new Error(`${error.message}: ${JSON.stringify(last_state)}`);
+    });
+    await settle_focus();
+  });
+
   await run_case("keys work on a fresh load after the reload", async () => {
     await open_page("page", "after_reload", { new_tab: true });
     expect((await scroll_delta_by_press("after_reload", ["j"])) === single_j_pixels, "j moved a different distance");

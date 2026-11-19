@@ -36,7 +36,7 @@ function answer(startup: Startup, choice: HostStartChoice["choice"], seen: HostS
   return answer_host_start_choice({ type: "host_start_choice", choice, host_digest: seen.host_digest, browser_digest: seen.browser_digest }, startup.choose_host_start);
 }
 
-test("a start applies a changed folder at once while the browser copy holds no browser change, and a saved edit stays on top", async () => {
+test("a start applies a changed folder at once while the browser copy holds no browser change, and then moves a saved edit into the folder", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local, fake } = install_fake_browser(host);
   const first = await fresh_startup("changed_first");
@@ -50,7 +50,9 @@ test("a start applies a changed folder at once while the browser copy holds no b
   await restarted.reload_config_at_start();
   assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "xy", which_key_delay_ms: 5 });
   assert.equal(pending_of(local), undefined);
-  assert.deepEqual(toasts, []);
+  assert.equal(host.files["settings.toml"], 'hint_letters = "xy"\nwhich_key_delay_ms = 5\n');
+  assert.equal(toasts.length, 1);
+  assert.match(toasts[0]!, /1 setting saved in the browser moved into settings\.toml: which_key_delay_ms\./);
 
   // The start that applied it remembers it too, so the next folder edit applies as well.
   host.files = settings_file('hint_letters = "zx"\n');
@@ -192,18 +194,19 @@ test("a :set issued while the start adopts the folder waits for the swap and sta
   const swap_is_writing = new Promise<void>((resolve) => (swap_started = resolve));
   const working = fake.storage.local.set;
   fake.storage.local.set = async (values) => {
-    if (FILES_CONFIG_STORAGE_KEY in values) {
-      swap_started();
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    }
-    return working(values);
+    if (!(FILES_CONFIG_STORAGE_KEY in values)) return working(values);
+    swap_started();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await working(values);
+    finished.push("swap");
   };
   const finished: string[] = [];
   const start = startup.reload_config_at_start().then(() => finished.push("start"));
   await swap_is_writing;
   const set = startup.change_edits((current) => ({ ...current, temp: { ...current.temp, which_key_delay_ms: 9 } })).then(() => finished.push("set"));
   await Promise.all([start, set]);
-  assert.deepEqual(finished, ["start", "set"]);
+  // The start goes on after its swap, with the fold of the saved settings, so only the swap's end is ordered against the set.
+  assert.deepEqual(finished.slice(0, 2), ["swap", "set"]);
   assert.deepEqual((await startup.get_config()).settings, { hint_letters: "ab", which_key_delay_ms: 9 });
 });
 

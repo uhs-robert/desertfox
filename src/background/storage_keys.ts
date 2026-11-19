@@ -52,6 +52,9 @@ export const LAYERED_CONFIG_STORAGE_KEY = "desertfox_layered_config";
 // Setting name to the value `:set --temp` gave it, in `storage.session`: a browser restart clears it. Global, private windows included.
 export const TEMP_SETTINGS_STORAGE_KEY = "desertfox_temp_settings";
 
+// The notes of this start's fold of the saved settings into settings.toml (`saved_fold.ts`), in `storage.session`: what moved, and what stays saved and why. Every publish adds them to the warnings, and every start writes them again.
+export const SAVED_FOLD_NOTES_STORAGE_KEY = "desertfox_saved_fold_notes";
+
 // Theme name to the theme a base16 import made (`edit_layers.ts`): `{ dark, light }` with every role filled. Global, private windows included.
 export const THEME_EDITS_STORAGE_KEY = "desertfox_imported_themes";
 

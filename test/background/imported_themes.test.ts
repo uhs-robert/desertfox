@@ -287,13 +287,13 @@ async function with_stored_imports(files: Files, saved: Record<string, unknown>,
 }
 
 test("the first start moves the stored imports into theme files and the saved pick into settings.toml, once", async () => {
-  const { host, local, sent } = await with_stored_imports({ "settings.toml": "# mine\n" }, { theme: "dusk_one", which_key_delay_ms: 5 });
+  const { host, local, sent } = await with_stored_imports({ "settings.toml": "# mine\n" }, { theme: "dusk_one", newtab_ip_info: true });
   const restarted = await fresh_startup();
   await restarted.reload_config_at_start();
   assert.equal(host.files["themes/dusk_one.toml"], file_of(SCHEME));
   assert.equal(host.files["themes/other.toml"], file_of(OTHER_SCHEME));
   assert.equal(host.files["settings.toml"], 'theme = "dusk_one"\n# mine\n');
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_delay_ms: 5 });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_ip_info: true });
   assert.equal(local[THEME_EDITS_STORAGE_KEY], undefined);
   assert.equal(unsynced_of(local), undefined);
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
