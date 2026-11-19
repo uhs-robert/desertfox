@@ -40,10 +40,17 @@ export function merged_by_path(under: Record<string, unknown> | undefined, over:
   const over_fields = fields_of(over);
   const over_is_node = over_fields.length > 0 || !Object.entries(over).some(([key, value]) => is_child(key, value));
   const merged: Record<string, unknown> = Object.fromEntries(over_is_node ? over_fields : fields_of(under));
-  for (const [key, value] of Object.entries(under)) if (is_child(key, value)) merged[key] = value;
+  // A child and a field of one name (a narrowing `repo = { only = [...] }` beside a `repo` child) are two nodes in two files, and one table cannot hold both.
+  const clash = (key: string) => new ConfigRefusal(`A child table and a field of the engine share the name ${key}, and one table cannot hold both.`);
+  for (const [key, value] of Object.entries(under)) {
+    if (!is_child(key, value)) continue;
+    if (Object.hasOwn(merged, key)) throw clash(key);
+    merged[key] = value;
+  }
   for (const [key, value] of Object.entries(over)) {
     if (!is_child(key, value)) continue;
     const below = merged[key];
+    if (below !== undefined && !is_child(key, below)) throw clash(key);
     merged[key] = is_table(below) ? merged_by_path(below, value as Record<string, unknown>) : value;
   }
   return merged;

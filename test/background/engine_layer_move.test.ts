@@ -374,3 +374,13 @@ test("a move that only drops a layer letter publishes, so the running keymap fol
   assert.match(JSON.stringify(local[COMPILED_KEYMAP_STORAGE_KEY]), /"engine":"other"/);
   assert.doesNotMatch(JSON.stringify(local[COMPILED_KEYMAP_STORAGE_KEY]), /"engine":"docs"/);
 });
+
+test("a moved narrowing that shares its name with a page child stays in the layer, since one table cannot hold both", () => {
+  const files = { [FILE]: `${MARK}[gh]\nurl = "https://github.com/search?q={query}"\n\n[gh.repo]\nurl = "https://github.com/{repo}?q={query}"\n` };
+  const layer = { engines: { gh: { url: "https://github.com/search?q={query}&x=1", params: { type: { values: { code: "code", repo: "repositories" } } }, repo: { only: ["code"] } } } };
+  const move = engine_layer_moved(layer, files, {}, () => []);
+  assert.deepEqual(move.left, layer);
+  assert.equal(move.files[FILE], files[FILE]);
+  assert.match(move.notes.join(" "), /The engine gh saved in the browser stays there.*repo/);
+  assert.throws(() => merged_by_path({ repo: { only: ["code"] } }, { repo: { url: "u" } }), /repo/);
+});
