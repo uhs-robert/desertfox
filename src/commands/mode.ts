@@ -76,6 +76,7 @@ define("page.focus_input", {
   bridge: false,
   runs_in: "content",
   bundle: "page",
+  modes: ["normal", "item"],
 });
 
 define("page.blur", {

@@ -512,11 +512,12 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line and help keys, and any other key goes to the page. `I` goes back to the current item.
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys and `gi`, and any other key goes to the page. The hints label the whole page. `I` goes back to the current item.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
+const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi"];
 const ITEM_KEYS: ModeBindings = {
-  ...Object.fromEntries(["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?"].map((sequence) => [sequence, BASE_SECTIONS.normal![sequence]!])),
+  ...Object.fromEntries(Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";"))),
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },

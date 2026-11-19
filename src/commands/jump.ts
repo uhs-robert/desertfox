@@ -13,4 +13,5 @@ define("page.jump", {
   count: { param: "steps" },
   bundle: "page",
   repeatable: false,
+  modes: ["normal", "item"],
 });

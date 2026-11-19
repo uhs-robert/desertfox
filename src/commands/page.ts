@@ -107,6 +107,7 @@ define("page.follow", {
   runs_in: "content",
   bundle: "next_page",
   jumps: (args) => args.where === "here",
+  modes: ["normal", "item"],
 });
 
 // Both keys start from the focused control, else the last one Escape left, else the top of the view. It stops at the ends and does not wrap.
