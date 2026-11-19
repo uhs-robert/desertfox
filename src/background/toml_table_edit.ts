@@ -122,12 +122,14 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
     if (kept_old.has(index)) continue;
     for (let line = block.start; line <= block.end; line += 1) dropped.add(line);
   }
+  // The first line at or after each index that no dropped block holds, in one pass from the end. The blank lines dropped below lie before their own block, so they never change it.
+  const kept_from = new Array<number>(lines.length + 1).fill(lines.length);
+  for (let index = lines.length - 1; index >= 0; index -= 1) kept_from[index] = dropped.has(index) ? kept_from[index + 1]! : index;
   // The blank line that led into a dropped block goes with it when a blank line or the end follows.
   // So a row added after the last row, where a blank line or the end came next, and removed again leaves the text as it was.
   for (const [index, block] of blocks.entries()) {
     if (kept_old.has(index)) continue;
-    let after = block.end + 1;
-    while (after < lines.length && dropped.has(after)) after += 1;
+    const after = kept_from[block.end + 1]!;
     const before = block.start - 1;
     if (before >= 0 && !dropped.has(before) && lines[before]!.body.trim() === "" && (after >= lines.length || lines[after]!.body.trim() === "")) dropped.add(before);
     // A dropped block that opened the text takes the blank line after it, so the text does not start with one.
@@ -136,9 +138,17 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
 
   // A row that leaves one place and arrives at another takes its own lines along: its comment and its layout.
   const dropped_rows = new Map<string, number[]>();
-  for (const [i, row] of old.entries()) if (!kept_old.has(i)) dropped_rows.set(row_identity(row), [...(dropped_rows.get(row_identity(row)) ?? []), i]);
+  for (const [i, row] of old.entries()) {
+    if (kept_old.has(i)) continue;
+    const identity = row_identity(row);
+    const same_rows = dropped_rows.get(identity) ?? [];
+    same_rows.push(i);
+    dropped_rows.set(identity, same_rows);
+  }
+  for (const same_rows of dropped_rows.values()) same_rows.reverse();
   const lines_of = (j: number): Line[] => {
-    const source = dropped_rows.get(row_identity(next[j]))?.shift();
+    // Each list holds its rows last first, so the earliest dropped copy of a row moves first.
+    const source = dropped_rows.get(row_identity(next[j]))?.pop();
     if (source === undefined) return row_lines(key, next[j]!, eol);
     const { start, end } = blocks[source]!;
     return lines.slice(start, end + 1).map((line) => ({ body: line.body, eol }));
@@ -157,7 +167,11 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
     }
     if (previous_kept === undefined && blocks.length > 0) above_first.push(...lines_of(j), BLANK(eol));
     else if (previous_kept === undefined) at_end.push(...(at_end.length > 0 ? [BLANK(eol)] : []), ...lines_of(j));
-    else after_block.set(previous_kept, [...(after_block.get(previous_kept) ?? []), BLANK(eol), ...lines_of(j)]);
+    else {
+      const bucket = after_block.get(previous_kept) ?? [];
+      bucket.push(BLANK(eol), ...lines_of(j));
+      after_block.set(previous_kept, bucket);
+    }
   }
 
   const block_ending_at = new Map(blocks.map((block, index) => [block.end, index]));
