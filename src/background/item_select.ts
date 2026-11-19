@@ -33,11 +33,17 @@ const current_step = (step: LeafStep): LeafStep => {
 };
 const ignoring_count = (step: LeafStep): LeafStep => ({ ...step, count_rule: "ignore" });
 
+// A move of `times` items sends the arrow that many times. A typed count still replaces it at run time.
+const with_times_of = (move: LeafStep, arrow: LeafStep): LeafStep => {
+  const times = move.invocation.args?.["times"];
+  return typeof times === "number" ? { ...arrow, invocation: { ...arrow.invocation, args: { ...arrow.invocation.args, times } } } : arrow;
+};
+
 // A move becomes "focus the current item, then send the site's arrow", so the site moves its own selection. The end keys keep their scroll and follow, then come back to the end item with an arrow pair. Up then Down at the last item: a Down on the last row can make the site load more rows and leave its selection on a new one. The `current` step first puts the focus back on the end item when the site redrew it during the follow, or the arrows would go to the body.
 const steps_after_rewrite = (step: LeafStep, keys: ItemSelectKeys): LeafStep[] => {
   if (!names_selector(step)) return [step];
   const direction = direction_of(step) as string;
-  if (MOVES.includes(direction)) return [current_step(step), keys[direction as keyof ItemSelectKeys]];
+  if (MOVES.includes(direction)) return [current_step(step), with_times_of(step, keys[direction as keyof ItemSelectKeys])];
   if (direction === "first" || direction === "last") {
     const pair = (direction as End) === "last" ? [keys.up, keys.down] : [keys.down, keys.up];
     return [step, current_step(step), ...pair.map(ignoring_count)];

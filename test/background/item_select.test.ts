@@ -32,6 +32,15 @@ test("a move focuses the current item and then sends the arrow, which keeps the 
   }
 });
 
+test("a move with its own times sends the arrow that many times, and one without keeps the default", () => {
+  const counted = item_step("down");
+  const [, arrow] = rewritten({ ...counted, invocation: { ...counted.invocation, args: { ...counted.invocation.args, times: 3 } } });
+  assert.equal(arrow?.invocation.args?.["times"], 3);
+  assert.equal(arrow?.invocation.args?.["key"], "ArrowDown");
+  assert.equal(rewritten(item_step("down"))[1]?.invocation.args?.["times"], 1);
+  assert.equal(keys.down.invocation.args?.["times"], 1);
+});
+
 test("the ends keep their scroll and jump, then come back to the end item with an arrow pair that ignores the count", () => {
   for (const [direction, expected] of [["last", ["item:last", "item:current", "ArrowUp", "ArrowDown"]], ["first", ["item:first", "item:current", "ArrowDown", "ArrowUp"]]] as const) {
     const steps = rewritten(item_step(direction, ".row", true));
