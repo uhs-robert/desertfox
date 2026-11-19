@@ -75,7 +75,7 @@ function start_warnings() {
 }
 
 test("the first start moves the layer into both files and the saved default engine into settings.toml after them, once", async () => {
-  const { host, local, sent, fake } = await old_profile(LAYER, { "settings.toml": "# mine\n" }, { default_engine: "wiki", which_key_delay_ms: 5 });
+  const { host, local, sent, fake } = await old_profile(LAYER, { "settings.toml": "# mine\n" }, { default_engine: "wiki", newtab_ip_info: true });
   const broken = watch_folder_builds(fake, host);
   sent.length = 0;
   const warnings = start_warnings();
@@ -88,7 +88,7 @@ test("the first start moves the layer into both files and the saved default engi
   assert.deepEqual(kinds_sent(sent), ["engines", "search_keys", "settings"]);
   assert.deepEqual(broken, []);
   assert.equal(local[ENGINE_EDITS_STORAGE_KEY], undefined);
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_delay_ms: 5 });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_ip_info: true });
   assert.equal(unsynced_of(local), undefined);
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   const config = await startup.get_config();

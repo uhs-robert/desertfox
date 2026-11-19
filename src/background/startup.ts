@@ -18,6 +18,7 @@ import type { EngineFileOutcomes, EnginePlan, EngineState, EngineTurn } from "./
 import { ENGINE_FILE, engine_file_text, engine_resolves_without_owned, engines_in_text, holds_engine, owned_engines } from "./engine_file.ts";
 import { KEYS_FILE, letters_in_text } from "./engine_keys_file.ts";
 import { engine_layer_moved } from "./engine_layer_move.ts";
+import { fold_kept_notes, fold_moved_note, has_foldable, saved_layer_folded } from "./saved_fold.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -50,7 +51,7 @@ import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
 import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
@@ -141,7 +142,7 @@ async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers)
     const applied = await apply_slot_plan(plan, browser.commands);
     step.slots = { plan, table: slot_table({ ...plan, assignments: applied.applied }), warnings: [...plan.warnings, ...applied.warnings], applied: true };
   }
-  const all_warnings = [...step.load_warnings, ...layer_warnings, ...warnings, ...step.slots.warnings];
+  const all_warnings = [...step.load_warnings, ...layer_warnings, ...warnings, ...step.slots.warnings, ...(await read_fold_notes())];
   for (const warning of all_warnings) console.warn(`desertfox: ${warning}`);
 
   await browser.storage.local.set({
@@ -1078,34 +1079,44 @@ export async function reload_config_at_start(): Promise<void> {
     await in_change_queue(clear_host_pending).catch(warn_and_go("clear host pending"));
     return;
   }
-  await in_change_queue(async () => {
+  // Whether the copy now stands for the folder, with no question open: the only state where the saved settings can join the copy without a later "use the folder" dropping them.
+  const settled = await in_change_queue(async (): Promise<boolean> => {
     await get_config();
-    if (swap_count !== swaps_before) return;
+    if (swap_count !== swaps_before) return false;
     const browser_files = (await load_files_source()).files;
     // A setting the host could not write yet (an older host) is the copy's only change while the folder still holds the base text: no question, the write comes later.
     const unsynced = await read_unsynced();
     const only_unwritten_edit_differs = unsynced !== undefined && same_files(compared_files(reply.files), compared_files(files_before_unsynced(browser_files, unsynced)));
-    if (only_unwritten_edit_differs) return;
+    if (only_unwritten_edit_differs) return true;
     const plan = await classify_host_start(reply, browser_files, await read_host_memory());
     if (plan.kind === "ask") {
       await store_host_pending(plan.pending);
       await toast_start(HOST_DIFFERS_MESSAGE, "warning");
-      return;
+      return false;
     }
     if (plan.kind === "ignore") {
       if (plan.reason === "missing") console.warn(missing_folder_message(reply.config_dir));
       if (plan.reason === "empty") console.warn(empty_folder_message(reply.config_dir));
       if (plan.reason === "same") await remember_applied(reply.files);
       await clear_host_pending();
-      return;
+      return plan.reason === "same";
     }
     try {
       await apply_host_files(reply.files, reply.config_dir);
+      return true;
     } catch (error) {
       if (!(error instanceof ConfigRefusal)) throw error;
       await toast_start(error.message, "error");
+      return false;
     }
-  }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
+  }).catch((error: unknown) => {
+    console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  });
+  if (!settled) return;
+  const folded = await fold_saved_layer().catch(warn_and_go("move the settings saved in the browser into settings.toml"));
+  // Only a fold adds a write. A path the first round left waiting waits for the next start, as before.
+  if (folded === true) await write_waiting_files(in_change_queue).catch(warn_and_go("write the folded settings.toml at start"));
 }
 
 // Moves the imports an older version kept in browser storage into theme files, and a saved `theme` edit that names one into settings.toml. The waiting writes of the start send them to the folder, or a later start when the host is off.
@@ -1147,6 +1158,57 @@ async function move_engine_layer(): Promise<void> {
     return move.notes;
   });
   if (notes.length > 0) await toast_start(`Moving the search engines saved in the browser into ${ENGINE_FILE}: ${notes.join(" ")}`, "warning");
+}
+
+// Moves the settings an older version saved in the browser into settings.toml (`saved_layer_folded`). The start runs it only after its folder read settled, and the waiting writes after it send the file to the folder.
+// Without the host or a folder, or while the copies-differ question waits, the layer stays on top as before: a later "use the folder" answer drops values that sit only in the copy.
+// The smaller layer goes in the same storage write as the files and the record, so a stop at any point moves nothing twice and loses nothing.
+// A name that stays saved gets a Home warning at every start, and a start that moves something says so in a toast and on Home.
+// True when it moved something into the browser copy.
+async function fold_saved_layer(): Promise<boolean> {
+  const moved_note = await in_change_queue(async () => {
+    await get_config();
+    const pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
+    // A swap or a pick can land between the start read and this turn.
+    if (pending || !(await came_from_folder(await load_files_source()))) return undefined;
+    const edits = await load_edits();
+    const notes_before = await read_fold_notes();
+    const engine = edits.saved.default_engine;
+    // Only the old engines layer defines such an engine, and the files build refuses a settings.toml that names it, so it stays a saved edit (`set_in_settings_file`).
+    const browser_only_engine = typeof engine === "string" && (await where_engine_named(engine)) === "browser";
+    const stays_in_browser = (name: keyof Settings) => name === "default_engine" && browser_only_engine;
+    let notes: string[] = [];
+    let moved_note: string | undefined;
+    if (has_foldable(edits.saved, stays_in_browser)) {
+      const current = await load_files_source();
+      const fold = saved_layer_folded(edits.saved, current.files, (files) => folder_build_problems(files, current.dir_label), stays_in_browser);
+      moved_note = fold_moved_note(fold);
+      if (moved_note !== undefined) {
+        const paths = fold.files[SETTINGS_FILE] === current.files[SETTINGS_FILE] ? [] : [SETTINGS_FILE];
+        await commit_folder_files(current, { files: fold.files, edits_after: { saved: fold.saved, temp: edits.temp }, paths });
+      }
+      notes = [...(moved_note === undefined ? [] : [moved_note]), ...fold_kept_notes(fold)];
+    }
+    // Stored after the swap, so a refused swap claims no move. The warnings then need a publish of their own to reach Home.
+    if (JSON.stringify(notes) !== JSON.stringify(notes_before)) {
+      await store_fold_notes(notes);
+      await publish(await (load_step as Promise<LoadStep>), await load_edits());
+    }
+    return moved_note;
+  });
+  if (moved_note === undefined) return false;
+  await toast_start(moved_note, "warning").catch(warn_and_go("show the toast of the folded settings"));
+  return true;
+}
+
+async function read_fold_notes(): Promise<string[]> {
+  const stored: unknown = (await browser.storage.session.get(SAVED_FOLD_NOTES_STORAGE_KEY))[SAVED_FOLD_NOTES_STORAGE_KEY];
+  return Array.isArray(stored) ? stored.filter((note): note is string => typeof note === "string") : [];
+}
+
+async function store_fold_notes(notes: string[]): Promise<void> {
+  if (notes.length === 0) await browser.storage.session.remove(SAVED_FOLD_NOTES_STORAGE_KEY);
+  else await browser.storage.session.set({ [SAVED_FOLD_NOTES_STORAGE_KEY]: notes });
 }
 
 const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";
