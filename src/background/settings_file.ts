@@ -31,13 +31,10 @@ export function without_setting(edits: SettingEdits, name: keyof Settings): Sett
 export type UnsyncedSettingsFile = { base: string | null };
 
 export async function read_unsynced(): Promise<UnsyncedSettingsFile | undefined> {
-  const stored = (await browser.storage.local.get(SETTINGS_FILE_UNSYNCED_STORAGE_KEY))[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] as { base?: unknown } | undefined;
-  if (stored === undefined || !(typeof stored.base === "string" || stored.base === null)) return undefined;
+  // `null` is a dropped record: `apply_files` drops it inside its one storage write.
+  const stored = (await browser.storage.local.get(SETTINGS_FILE_UNSYNCED_STORAGE_KEY))[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] as { base?: unknown } | null | undefined;
+  if (typeof stored !== "object" || stored === null || !(typeof stored.base === "string" || stored.base === null)) return undefined;
   return { base: stored.base };
-}
-
-export async function store_unsynced(record: UnsyncedSettingsFile): Promise<void> {
-  await browser.storage.local.set({ [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: record });
 }
 
 export async function clear_unsynced(): Promise<void> {
@@ -51,9 +48,11 @@ export async function text_sha256(text: string): Promise<string> {
 
 // What became of the file after the browser copy changed.
 // `waiting`: no host, no permission or a host without `write_settings`, so the next start or `,r` writes it.
-// `conflict`: the file changed on disk, so the copies-differ question took over. `failed`: the host could not write, and the next start tries again.
+// `conflict`: the file changed on disk, so the copies-differ question took over. `conflict_kept`: it changed on disk, and no question was stored (the user kept the browser copy over that folder before).
+// `failed`: the host could not write, or the folder could not be read after a refusal, and the next start tries again.
 // `saved_in_browser`: an imported theme, which the files cannot name, went to the saved edits instead.
-export type FileWriteOutcome = { kind: "written" } | { kind: "waiting" } | { kind: "conflict" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" };
+// `browser_copy`: the browser copy did not come from the config folder, so only the copy changed.
+export type FileWriteOutcome = { kind: "written" } | { kind: "waiting" } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" } | { kind: "browser_copy" };
 
 export function outcome_note(outcome: FileWriteOutcome): string {
   switch (outcome.kind) {
@@ -61,6 +60,8 @@ export function outcome_note(outcome: FileWriteOutcome): string {
     case "waiting": return `. ${SETTINGS_FILE} updates when the native host connects`;
     case "conflict": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is. Open the Settings page to choose`;
     case "failed": return `. ${SETTINGS_FILE} was not written (${outcome.reason}). It is tried again at the next start`;
+    case "conflict_kept": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is, and the pick stays in the browser copy`;
     case "saved_in_browser": return ", saved in the browser because the theme is not in your files";
+    case "browser_copy": return `, saved in the browser copy. It did not come from a config folder, so no ${SETTINGS_FILE} is written`;
   }
 }
