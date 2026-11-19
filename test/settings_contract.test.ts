@@ -60,6 +60,7 @@ const EXPECTATIONS: Record<string, string> = {
   completion_all_windows: "true or false",
   item_navigator: '"shipped", true or false',
   item_hover: "true or false",
+  item_select: '"off" or "arrows"',
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
   statusbar_widgets: 'a list of "url", "scroll" and "tabs" with no repeat',
@@ -113,6 +114,7 @@ test("every setting keeps its listed values", () => {
     completion_all_windows: ["true", "false"],
     item_navigator: ["shipped", "true", "false"],
     item_hover: ["true", "false"],
+    item_select: ["off", "arrows"],
     cmdline_prompt: ["caret", "colon"],
     open_completion: ["bookmarks", "history"],
     statusbar_widgets: ["url", "scroll", "tabs"],
@@ -185,6 +187,7 @@ const ACCEPTS: Record<string, unknown[]> = {
   completion_all_windows: [true, false],
   item_navigator: ["shipped", true, false],
   item_hover: [true, false],
+  item_select: ["off", "arrows"],
   // Code points, not UTF-16 units: eight emoji are sixteen units.
   cmdline_prompt: ["c", "> ", "12345678", "\u{1F600}".repeat(8), "\t"],
   open_completion: [[], ["history"], ["history", "bookmarks"]],
@@ -259,6 +262,7 @@ const REFUSES: Record<string, unknown[]> = {
   completion_all_windows: ["true", 1],
   item_navigator: ["true", "Shipped", 1],
   item_hover: ["true", 1],
+  item_select: ["on", "Arrows", 1, true],
   cmdline_prompt: ["", "123456789", "\u{1F600}".repeat(9), "a\nb", "a\rb", 1, true],
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
   statusbar_widgets: [["url", "url"], ["clock"], "url"],
@@ -378,6 +382,7 @@ test("the defaults stay the same", () => {
     completion_all_windows: false,
     item_navigator: "shipped",
     item_hover: true,
+    item_select: "off",
     cmdline_prompt: "caret",
     open_completion: ["bookmarks", "history"],
     statusbar_widgets: ["url", "scroll", "tabs"],
@@ -435,7 +440,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["item_navigator", "item_hover", "statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info", "font_family", "font_family_mono", "font_scale"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
+  for (const name of ["item_navigator", "item_hover", "item_select", "statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info", "font_family", "font_family_mono", "font_scale"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
   // #620 rewrote every description for a first-time reader.
   const described_now = settings_schema(all_commands).properties as Record<string, { description: string }>;
   for (const [name, property] of Object.entries(properties as Record<string, { description?: string | undefined }>)) property.description = described_now[name]?.description;

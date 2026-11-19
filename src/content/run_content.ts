@@ -52,9 +52,9 @@ export const run_in_order = (invocations: Invocation[], repeat?: boolean): Promi
 
 // A leaf's steps with the typed count on each. The router applies the count rule of a step it runs.
 export const counted_invocations = (steps: readonly LeafStep[], count: number | undefined): Invocation[] =>
-  steps.map(({ invocation, bundle }) => {
+  steps.map(({ invocation, bundle, count_rule }) => {
     const sent = bundle ? { ...invocation, bundle } : invocation;
-    return count === undefined ? sent : { ...sent, count };
+    return count === undefined || count_rule === "ignore" ? sent : { ...sent, count };
   });
 
 // Runs a leaf of content steps here. A step starts after the one before it has finished, and the first runs in the caller's turn.

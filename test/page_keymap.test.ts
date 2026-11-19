@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONFIG_STATUS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { create_media_quality } from "../src/background/media_quality.ts";
-import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, page_keymap_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
+import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, page_keymap_for, page_mode_trees_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
@@ -767,32 +767,65 @@ test("an older reply that lands after a newer ask began is dropped, across a bur
   assert.deepEqual(installed, ["c"]);
 });
 
-test("the drive row focuses the current file and sends Drive's own key to it, binds gg and G to the item ends, and leaves list h and l to the plain scroll", async () => {
+test("the drive row binds plain item moves, and the page reply turns them into focus plus Drive's own arrow key", async () => {
   const compiled = with_defaults({});
   const drive = "https://drive.google.com/drive/my-drive";
   const list = '[role="grid"] [role="row"][data-id]';
   const grid = '[role="grid"] [role="gridcell"][data-id]';
-  const leaf_at = async (key: string) => {
+  const leaf_at = async (key: string, compiled_keymap = compiled) => {
     // gg sits under the g branch.
-    let node: TreeNode | undefined = (await ask(compiled, drive))!.keymap.modes.item;
+    let node: TreeNode | undefined = (await ask(compiled_keymap, drive))!.keymap.modes.item;
     for (const token of key) node = node?.kind === "branch" ? node.children[token] : undefined;
     assert.equal(node?.kind, "leaf", key);
     return node as TreeLeaf;
   };
+  const shape = (leaf: TreeLeaf) => leaf.steps.map((step) => (step.invocation.id === "page.item" ? `item:${step.invocation.args?.["direction"]}` : String(step.invocation.args?.["key"])));
   for (const [key, guard, sent] of [["j", `${grid}, ${list}`, "ArrowDown"], ["k", `${grid}, ${list}`, "ArrowUp"], ["h", grid, "ArrowLeft"], ["l", grid, "ArrowRight"]] as const) {
     const leaf = await leaf_at(key);
     assert.equal(leaf.when_present, guard, key);
-    const args = leaf.steps.map((step) => step.invocation.args as { selector?: string; direction?: string; key?: string; target?: string });
-    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), args[0]?.selector, args[0]?.direction, args[1]?.key, args[1]?.target], [["page.item", "page.send_key"], guard, "current", sent, ""], key);
+    assert.deepEqual(shape(leaf), ["item:current", sent], key);
+    assert.equal(leaf.steps[0]?.invocation.args?.["selector"], guard, key);
+    assert.equal(leaf.steps[1]?.invocation.args?.["target"], "", key);
   }
-  // Drive ignores a sent Home and End, so gg and G go to the ends through page.item, which scrolls Drive's panel.
-  for (const [key, direction] of [["gg", "first"], ["G", "last"]] as const) {
+  // Drive ignores a sent Home and End, so gg and G scroll through page.item and then come back to the end file with an arrow pair.
+  for (const [key, expected] of [["gg", ["item:first", "item:current", "ArrowDown", "ArrowUp"]], ["G", ["item:last", "item:current", "ArrowUp", "ArrowDown"]]] as const) {
     const leaf = await leaf_at(key);
     assert.equal(leaf.when_present, `${grid}, ${list}`, key);
-    assert.deepEqual([leaf.steps.map((step) => step.invocation.id), leaf.steps[0]?.invocation.args?.direction], [["page.item"], direction], key);
+    assert.deepEqual(shape(leaf), expected, key);
+    assert.deepEqual(leaf.steps.map((step) => step.count_rule), [leaf.steps[0]!.count_rule, "ignore", "ignore", "ignore"], key);
+    assert.deepEqual(leaf.steps.map((step) => step.jump), [true, undefined, undefined, undefined], key);
   }
-  // A guard that fails falls through to the item key of the mode, which scrolls sideways when the page has no grid.
-  assert.equal((await leaf_at("h")).otherwise?.steps[0]?.invocation.id, "page.item");
+  // A guard that fails falls through to the item key of the mode, which scrolls sideways when the page has no grid. It names no selector, so it stays as it is.
+  const fallback = (await leaf_at("h")).otherwise;
+  assert.deepEqual(fallback?.steps.map((step) => step.invocation.id), ["page.item"]);
+  assert.equal(fallback?.steps[0]?.invocation.args?.["selector"], "");
   for (const url of ["https://docs.google.com/document/d/abc/edit", "https://drive.google.com/file/d/abc/view"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
   assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["drive"] }), drive, "j"), undefined);
+  // The stored keymap keeps the plain moves: the rewrite copies.
+  const stored = compiled.site_rules?.find((rule) => rule.origin === "default" && rule.name === "drive")?.keymap?.["item"]?.["j"]?.leaf;
+  assert.deepEqual(stored?.steps.map((step) => step.invocation.args?.["direction"]), ["down"]);
+  // A user row with item_select off leaves the moves plain.
+  const off = with_defaults({ site_rules: [{ site: "https://drive.google.com/*", item_select: "off" }] });
+  assert.deepEqual(shape(await leaf_at("j", off)), ["item:down"]);
+});
+
+test("a global item_select of arrows rewrites the item rows that name a selector and leaves the finder keys", async () => {
+  const compiled = with_defaults({ item_select: "arrows" });
+  const reply = (await ask(compiled, "https://news.ycombinator.com/news"))!;
+  const leaf = reply.keymap.modes.item?.children["j"] as TreeLeaf;
+  assert.deepEqual(leaf.steps.map((step) => step.invocation.id), ["page.item", "page.send_key"]);
+  const plain = (await ask(compiled, "https://example.test/"))!.keymap.modes.item?.children["j"] as TreeLeaf;
+  assert.deepEqual(plain.steps.map((step) => step.invocation.id), ["page.item"]);
+  assert.equal(plain.steps[0]?.invocation.args?.["selector"], "");
+  assert.equal(compiled.item_select_keys?.down.invocation.args?.["key"], "ArrowDown");
+  assert.equal("item_select_keys" in reply.keymap, false);
+});
+
+test("which-key and the page reply read the same rewritten item tree", async () => {
+  const compiled = with_defaults({});
+  const drive = "https://drive.google.com/drive/my-drive";
+  const shared = page_mode_trees_for(compiled, site_columns_for(compiled, [drive]), drive).item;
+  assert.deepEqual(shared, (await ask(compiled, drive))!.keymap.modes.item);
+  const j = shared?.children["j"] as TreeLeaf;
+  assert.deepEqual(j.steps.map((step) => step.invocation.id), ["page.item", "page.send_key"]);
 });

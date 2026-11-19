@@ -513,6 +513,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "item_select",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "\"off\" or \"arrows\"",
+    "values": [
+      "off",
+      "arrows"
+    ]
+  },
+  {
     "name": "cmdline_prompt",
     "settable": true,
     "is_toggle": false,

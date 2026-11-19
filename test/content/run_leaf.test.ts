@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { holds_keys_after, run_leaf } from "../../src/content/run_leaf.ts";
 import type { Outcome, TreeLeaf } from "../../src/shared/index.ts";
 
-const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in, count_rule: "ignore" as const });
+const step = (id: string, runs_in: "content" | "background") => ({ invocation: { id }, runs_in, count_rule: "repeat" as const });
 const leaf_of = (...steps: ReturnType<typeof step>[]): TreeLeaf => ({ kind: "leaf", steps });
 
 function setup(outcome: Outcome = { ok: true }) {

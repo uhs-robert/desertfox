@@ -26,6 +26,7 @@ import { COUNT_MODES } from "../shared/keys/matcher.ts";
 import { default_rows_left_on } from "./default_site_rows.ts";
 import type { DefaultSiteRow } from "./default_site_rows.ts";
 import { without_hover } from "./item_hover.ts";
+import { item_select_keys } from "./item_select.ts";
 import { default_layer_of, merge_keymaps } from "./keymap_merge.ts";
 
 export type CompileInput = {
@@ -162,6 +163,9 @@ export function compile_config(input: CompileInput): CompileOutput {
     for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, "normal", site, input, warnings);
   }
   warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
+  const selects_with_arrows = compiled.frame_site_globals?.item_select === "arrows" || (compiled.site_rules ?? []).some((rule) => rule.values?.["item_select"] === "arrows");
+  const select_keys = selects_with_arrows ? item_select_keys(input.get_command, input.enum_sources) : undefined;
+  if (select_keys) compiled.item_select_keys = select_keys;
   return { compiled, theme: { dark: theme.dark, light: theme.light, ...stored_font(input.config.settings) }, warnings: [...resolve_warnings, ...warnings] };
 }
 

@@ -106,8 +106,13 @@ test("the first step of a content leaf runs in the caller's turn, and the typed 
   const running = run_content_steps([content_step("t.first")], 4);
   assert.deepEqual(counts, [1]);
   await running;
-  assert.deepEqual(counted_invocations([content_step("a"), content_step("b")], 4), [{ id: "a", count: 4 }, { id: "b", count: 4 }]);
+  assert.deepEqual(counted_invocations([content_step("a", "repeat"), content_step("b", "repeat")], 4), [{ id: "a", count: 4 }, { id: "b", count: 4 }]);
   assert.deepEqual(counted_invocations([content_step("a")], undefined), [{ id: "a" }]);
+});
+
+test("a step whose count rule is ignore gets no count, and a param step keeps it", () => {
+  const param_step = { invocation: { id: "p" }, runs_in: "content", count_rule: { param: "times" } } as const;
+  assert.deepEqual(counted_invocations([content_step("a"), param_step], 100), [{ id: "a" }, { id: "p", count: 100 }]);
 });
 
 test("a repeat flag reaches the handler as given, and a run with none reaches it as false", async () => {

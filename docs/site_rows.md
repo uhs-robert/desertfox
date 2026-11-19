@@ -432,6 +432,8 @@ In item mode:
 | `h` | Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view) |
 | `l` | Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view) |
 
+- Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. gg and G go to the end and then send an arrow pair that comes back to it, so Enter opens that file. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
+
 <!-- END generated -->
 
 ## Write your own rule
