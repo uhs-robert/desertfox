@@ -195,8 +195,10 @@ def write_autoconfig(toml_text):
 
 
 SETTINGS_NAME = "settings.toml"
-# The extension tells this refusal from other failures by these words (src/background/native_client.ts).
+# The extension tells these refusals from other failures by these words (src/background/native_client.ts).
 CHANGED_ON_DISK = "changed on disk"
+# The old file could not be read back after the rename, so the host cannot tell an edit saved into it from none.
+NOT_READ_BACK = "could not be read back"
 
 
 def text_sha256(text):
@@ -247,8 +249,9 @@ def write_settings(request):
     never creates a config folder that read_config would then find with only this file in it.
 
     Host writers take a lock. An editor takes none, so the old file is hard-linked aside before the rename and checked
-    after it: an edit saved into it in the meantime, or an old file that cannot be read, puts it back and refuses. A
-    filesystem without hard links refuses every write. Before it puts the old file back, it checks that settings.toml is
+    after it: an edit saved into it in the meantime puts it back and refuses as changed on disk. An old file that cannot
+    be read goes back too, and the refusal says so instead, because nothing shows an edit. A filesystem without hard
+    links refuses every write. Before it puts the old file back, it checks that settings.toml is
     still the file it renamed in: a save renamed over it since stays, the old file stays aside, and the write refuses.
     Two windows of microseconds stay open: an editor that renames a new file over settings.toml between the last check
     and the rename is not caught, and neither is one that does so between that inode check and the put-back."""
@@ -305,11 +308,18 @@ def write_settings(request):
                 raise
             os.replace(temporary, target)
             # The aside link shares the old file, so an editor that wrote into it after the check shows here.
-            if not holds_digest(aside, base):
-                # From here the aside file may hold the only copy of that edit: no exit deletes it until it is back.
+            try:
+                unchanged, read_error = holds_digest(aside, base), None
+            except OSError as error:
+                unchanged, read_error = False, error
+            if not unchanged:
+                # From here the aside file may hold the only copy of an edit: no exit deletes it until it is back.
                 edit, aside = aside, None
-                put_back_edit(path, target, edit, written_inode)
-                raise changed
+                if read_error is None:
+                    put_back_edit(path, target, edit, written_inode, "was edited during the write")
+                    raise changed
+                put_back_edit(path, target, edit, written_inode, f"{NOT_READ_BACK} after the write")
+                raise HostError(f"{path} was not written: the old file {NOT_READ_BACK} after the rename ({read_error.strerror or read_error}), so it is back in place")
             return {"path": path, "sha256": text_sha256(text)}
         except OSError as error:
             raise HostError(f"cannot write {path}: {error.strerror or error}") from error
@@ -320,39 +330,45 @@ def write_settings(request):
                         os.unlink(leftover)
 
 
-def put_back_edit(path, target, edit, written_inode):
-    """Moves the file `edit`, an edit saved into the old settings.toml during a write, back to `target`. Returns only
-    once it is back. Any other outcome leaves `edit` in place and raises a HostError that names it."""
+def put_back_edit(path, target, edit, written_inode, why):
+    """Moves the file `edit`, the old settings.toml, back to `target` after a write. `why` says what the old file did:
+    it was edited during the write, or it could not be read back. Returns only once it is back. Any other outcome
+    leaves `edit` in place and raises a HostError that names it."""
     try:
         current_inode = os.stat(target).st_ino
     except FileNotFoundError:
         current_inode = None
     except OSError as error:
-        raise HostError(f"{path} was edited during the write and could not be checked ({error.strerror or error}). The edit is in {edit}.") from error
+        raise HostError(f"{path} {why} and could not be checked ({error.strerror or error}). The old file is in {edit}.") from error
     if current_inode is None:
         # Removed since the rename. link() refuses a name created since, so a newer file stays.
         try:
             os.link(edit, target)
         except OSError as error:
-            raise HostError(f"{path} was edited during the write and then removed, and could not be put back ({error.strerror or error}). The edit is in {edit}.") from error
+            raise HostError(f"{path} {why} and then removed, and could not be put back ({error.strerror or error}). The old file is in {edit}.") from error
         with contextlib.suppress(OSError):
             os.unlink(edit)
         return
-    # An editor that renamed its save over the new text since is newer than the edit, so both stay.
+    # An editor that renamed its save over the new text since is newer than the old file, so both stay.
     if current_inode != written_inode:
-        raise HostError(f"{path} was edited twice during the write, so it holds the newer save and the older edit is in {edit}. Compare the two files.")
+        raise HostError(f"{path} {why}, and a newer save was renamed over it since, so it holds that save and the old file is in {edit}. Compare the two files.")
     try:
         os.replace(edit, target)
     except OSError as error:
-        raise HostError(f"{path} was edited during the write and could not be put back ({error.strerror or error}). The edit is in {edit}.") from error
+        raise HostError(f"{path} {why} and could not be put back ({error.strerror or error}). The old file is in {edit}.") from error
 
 
 def holds_digest(path, digest):
-    """Whether the file's raw bytes have `digest`. Any failure to read counts as no: the caller then keeps the file."""
-    try:
-        return hashlib.sha256(read_bytes(path)).hexdigest() == digest
-    except Exception:
-        return False
+    """Whether the file's raw bytes have `digest`. A file that is not a regular file has not. A failure to read raises
+    OSError, so the caller can tell it from an edit. There is no size limit: a file over 1 MiB simply does not match."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as file:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return False
+        hasher = hashlib.sha256()
+        for chunk in iter(lambda: file.read(1 << 16), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest() == digest
 
 
 # What link() answers on a filesystem without hard links (FAT, exFAT, some FUSE and network mounts).

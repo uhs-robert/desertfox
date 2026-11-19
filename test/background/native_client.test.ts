@@ -96,10 +96,12 @@ test("the client and the real host agree on both requests", { skip: spawnSync("p
   }
 });
 
-test("write_settings reads a hand edit as file_changed and a host from before the verb as outdated", async () => {
+test("write_settings reads a hand edit as file_changed, an old file it could not read back as its own failure, and a host from before the verb as outdated", async () => {
   const changed = client_with(async () => ({ ok: false, error: "/c/settings.toml changed on disk since DesertFox last read it, so it was not written" }));
   assert.equal(await failure_of(() => changed.client.write_settings("a = 1\n", null)), "file_changed");
   assert.deepEqual(changed.sent, [{ cmd: "write_settings", text: "a = 1\n", base_sha256: null }]);
+  const unread = client_with(async () => ({ ok: false, error: "/c/settings.toml was not written: the old file could not be read back after the rename (Input/output error), so it is back in place" }));
+  assert.equal(await failure_of(() => unread.client.write_settings("a = 1\n", null)), "file_not_read_back");
   const old = client_with(async () => ({ ok: false, error: "unknown cmd: 'write_settings'" }));
   assert.equal(await failure_of(() => old.client.write_settings("a = 1\n", null)), "host_outdated");
   const other = client_with(async () => ({ ok: false, error: "cannot write /c/settings.toml: Permission denied" }));

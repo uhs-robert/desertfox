@@ -5,7 +5,8 @@ import { NATIVE_HOST_NAME, NATIVE_PERMISSION } from "../shared/native_host.ts";
 
 // "host_outdated": the host answered with an error and is older than the extension. The message says whether it is updating.
 // "file_changed": `write_settings` found settings.toml changed on disk since the extension read it, and wrote nothing.
-export type NativeFailure = "no_permission" | "host_missing" | "host_failed" | "bad_reply" | "host_outdated" | "file_changed";
+// "file_not_read_back": `write_settings` could not read the old file back after its rename, so it put that file back and wrote nothing. No edit is known, so a later write can try again.
+export type NativeFailure = "no_permission" | "host_missing" | "host_failed" | "bad_reply" | "host_outdated" | "file_changed" | "file_not_read_back";
 
 export class NativeHostError extends Error {
   readonly failure: NativeFailure;
@@ -136,6 +137,7 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
       } catch (error) {
         if (!(error instanceof NativeHostError)) throw error;
         if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
+        if (/could not be read back/.test(error.message)) throw new NativeHostError("file_not_read_back", error.message);
         if (error.failure === "host_failed" && /unknown cmd/.test(error.message)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
         throw error;
       }
