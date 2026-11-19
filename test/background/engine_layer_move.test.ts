@@ -8,6 +8,7 @@ import { KEYS_FILE_MARKER } from "../../src/background/engine_keys_file.ts";
 import { engine_layer_moved, merged_by_path } from "../../src/background/engine_layer_move.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
 import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
@@ -360,4 +361,16 @@ test("an engine left in the layer can be the default engine, keeps it across a r
   assert.equal(host.files["settings.toml"], 'default_engine = "wiki"\n');
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.equal((await startup.get_config()).settings.default_engine, "wiki");
+});
+
+test("a move that only drops a layer letter publishes, so the running keymap follows the later keymap.d file", async () => {
+  const files = { "settings.toml": "", "search_engines.toml": 'docs = { url = "https://d.test/?q={query}" }\nother = { url = "https://o.test/?q={query}" }\n', "keymap.d/zzz.toml": '[search_keys]\nd = "other"\n' };
+  const { local } = await old_profile({ letters: { d: "docs" } }, files);
+  const warnings = start_warnings();
+  const startup = await first_start();
+  warnings.restore();
+  assert.equal(local[ENGINE_EDITS_STORAGE_KEY], undefined);
+  assert.equal((await startup.get_config()).keymap.search_keys?.d, "other");
+  assert.match(JSON.stringify(local[COMPILED_KEYMAP_STORAGE_KEY]), /"engine":"other"/);
+  assert.doesNotMatch(JSON.stringify(local[COMPILED_KEYMAP_STORAGE_KEY]), /"engine":"docs"/);
 });
