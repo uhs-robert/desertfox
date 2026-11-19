@@ -16,7 +16,7 @@
     --desertfox-primary: #7fa3c9;
     --desertfox-font: calc(14px * var(--desertfox-font-scale, 1))/1.4 var(--desertfox-font-family, system-ui, sans-serif);
     --desertfox-radius: 8px;
-    box-sizing: border-box; width: 17rem; padding: .6rem; display: flex; flex-direction: column; gap: .5rem;
+    box-sizing: border-box; width: 18.5rem; padding: .6rem; display: flex; flex-direction: column; gap: .5rem;
     background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: var(--desertfox-font);
   }
   @media (prefers-color-scheme: light) {
@@ -47,7 +47,7 @@
   }
   .desertfox-popup-row:hover:not(:disabled), .desertfox-popup-row:focus-visible { border-color: var(--desertfox-primary, #7fa3c9); outline: none; }
   .desertfox-popup-row:disabled { opacity: .5; cursor: default; }
-  .desertfox-popup-text { display: flex; flex-direction: column; }
+  .desertfox-popup-text { display: flex; flex-direction: column; min-width: 0; }
   .desertfox-popup-detail { font-size: .85em; color: var(--desertfox-fg-muted, #9aa0ab); }
   .desertfox-popup-site { margin-top: .35em; }
   .desertfox-popup-site:disabled { border-color: transparent; padding-left: 0; padding-right: 0; opacity: .6; }
@@ -60,8 +60,9 @@
   .desertfox-popup-link::after { content: ""; flex: none; width: .45em; height: .45em; border: solid var(--desertfox-fg-muted, #9aa0ab); border-width: 2px 2px 0 0; transform: rotate(45deg); }
   .desertfox-popup-row:hover:not(:disabled)::after { border-color: var(--desertfox-primary, #7fa3c9); }
   .desertfox-popup-pages { display: flex; flex-direction: column; gap: .4rem; margin-top: .15rem; padding-top: .6rem; border-top: 1px solid var(--desertfox-border, #2c3240); }
-  .desertfox-popup-pair { display: flex; gap: .4rem; }
-  .desertfox-popup-half { flex: 1; justify-content: center; min-width: 0; gap: .3em; padding-left: .2em; padding-right: .2em; font-size: .92em; }
+  .desertfox-popup-pair { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; }
+  .desertfox-popup-half { justify-content: safe center; min-width: 0; gap: .3em; padding-left: .2em; padding-right: .2em; font-size: .92em; }
+  .desertfox-popup-half .desertfox-popup-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .desertfox-popup-glyph { flex: none; width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .desertfox-popup-action { justify-content: center; background: var(--desertfox-bg-mantle, #151922); font-weight: bold; }
   .desertfox-popup-action .desertfox-popup-text { align-items: center; }
