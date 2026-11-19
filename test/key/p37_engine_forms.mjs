@@ -5,16 +5,20 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["help", "config", "engines", "keys"];
 
-export async function run_cases({ run_case, open_page, press_keys, poll_until, rdp, extension_id, expect, on_teardown, wait_event, events }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, poll_until, rdp, extension_id, expect, on_teardown, wait_event, events }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#/settings"))`;
   const in_page = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const close_settings_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
   const layer = () => in_background(`browser.storage.local.get("desertfox_engine_edits").then((got) => got.desertfox_engine_edits ?? {})`);
-  // The browser copy of the page's engine file. No native host runs, so the copy is the only place it lands.
+  // The browser copy of the page's engine file. The native host also writes it to the folder, so the piece runs on a copy of the base config, and a failed teardown leaves nothing in the base.
   const engine_file = () => in_background(`browser.storage.local.get("desertfox_files_source").then((got) => got.desertfox_files_source?.files?.["search_engines.d/zz-desertfox.toml"] ?? "")`);
   const has_table = async (name) => new RegExp(`^\\[${name}\\]`, "m").test(await engine_file());
   const button_named = (label) => `[...view.document.querySelectorAll(".desertfox-engines button")].find((button) => button.textContent === ${JSON.stringify(label)})`;
+
+  await setup("load a copy of the base config, which the page's writes change", async () => {
+    await load_config_dir(config_copy());
+  });
 
   async function open_settings() {
     await close_settings_tabs();
