@@ -1134,17 +1134,16 @@ async function move_engine_layer(): Promise<void> {
     const current = await load_files_source();
     const move = engine_layer_moved(stored, current.files, edits.saved, (files) => folder_build_problems(files, current.dir_label));
     const left_changed = stored !== undefined && JSON.stringify(move.left) !== JSON.stringify(stored);
-    let layer_changed_alone = false;
     if (move.paths.length > 0 || move.saved !== edits.saved) {
       await commit_folder_files(current, { files: move.files, edits_after: { saved: move.saved, temp: edits.temp }, paths: move.paths, ...(left_changed && { engines_after: move.left }) });
     } else if (left_changed) {
-      // No file changed, so the layer has no write to share.
-      await browser.storage.local.set({ [ENGINE_EDITS_STORAGE_KEY]: move.left });
-      layer_changed_alone = true;
+      // No file changed, so the layer has no write to share. It still needs a publish, or the running keymap keeps a dropped letter, and a failed publish puts the stored layer back.
+      const store = async (layer: unknown) => (layer === undefined ? browser.storage.local.remove(ENGINE_EDITS_STORAGE_KEY) : browser.storage.local.set({ [ENGINE_EDITS_STORAGE_KEY]: layer }));
+      const step = await (load_step as Promise<LoadStep>);
+      await commit_change<unknown>(stored, has_engine_edits(move.left) ? move.left : undefined, { store, publish: async () => publish(step, edits) });
+      return move.notes;
     }
     if (stored !== undefined && !has_engine_edits(move.left)) await browser.storage.local.remove(ENGINE_EDITS_STORAGE_KEY);
-    // The commit above publishes its change. A layer change alone, such as a dropped letter, needs its own publish, or the running keymap keeps the old letter.
-    if (layer_changed_alone) current_config = Promise.resolve((await publish(await (load_step as Promise<LoadStep>), edits)).config);
     return move.notes;
   });
   if (notes.length > 0) await toast_start(`Moving the search engines saved in the browser into ${ENGINE_FILE}: ${notes.join(" ")}`, "warning");
