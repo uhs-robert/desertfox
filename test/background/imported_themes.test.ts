@@ -489,3 +489,31 @@ test("with no config folder, a remove of the theme in use says once that only th
   assert.deepEqual(answer, { ok: true, message: "Removed the theme dusk_one from the browser copy. It did not come from a config folder, so no file there changes. The theme setting goes back to the default." });
   assert.equal(stored_files(browser.local)["themes/dusk_one.toml"], undefined);
 });
+
+test("a theme file whose name the host does not write is listed apart, and its remove is refused with the file kept", async () => {
+  const { host, messages, local } = await started({ "settings.toml": "", "themes/Nord.toml": HAND_THEME, "themes/dusk.toml": HAND_THEME });
+  assert.deepEqual(await messages.list(), { ok: true, names: ["dusk"], kept_names: ["Nord"] });
+  const answer = await messages.change(remove("Nord"));
+  assert.equal(answer.ok, false);
+  assert.match(answer.message, /does not write themes\/Nord\.toml.*by hand/);
+  assert.equal(stored_files(local)["themes/Nord.toml"], HAND_THEME);
+  assert.equal(host.files["themes/Nord.toml"], HAND_THEME);
+});
+
+test("removing a theme file that shadows a built-in keeps the selection, which finds the built-in again", async () => {
+  const { host, messages, startup, local } = await started({ "settings.toml": 'theme = "nord"\n', "themes/nord.toml": HAND_THEME });
+  await startup.change_edits((current) => ({ ...current, temp: { theme: "nord" } }));
+  assert.deepEqual(await messages.change(remove("nord")), { ok: true, message: "Removed the theme nord, and themes/nord.toml is deleted from the config folder." });
+  assert.equal(host.files["themes/nord.toml"], undefined);
+  assert.equal(host.files["settings.toml"], 'theme = "nord"\n');
+  assert.deepEqual((await load_edits()).temp, { theme: "nord" });
+  assert.equal((await startup.get_config()).settings.theme, "nord");
+  assert.deepEqual(local[THEME_STORAGE_KEY], load_theme("nord", 3));
+});
+
+test("a settings.d file that picks a shadowed built-in does not refuse the file's removal", async () => {
+  const { host, messages } = await started({ "settings.toml": "", "settings.d/look.toml": 'theme = "nord"\n', "themes/nord.toml": HAND_THEME });
+  assert.equal((await messages.change(remove("nord"))).ok, true);
+  assert.equal(host.files["themes/nord.toml"], undefined);
+  assert.equal(host.files["settings.d/look.toml"], 'theme = "nord"\n');
+});

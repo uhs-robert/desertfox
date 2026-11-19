@@ -205,3 +205,9 @@ test("a save clears the form only when both the name and the text are still the 
   assert.equal(themes.state.name, "renamed");
   assert.equal(themes.state.text, NAMED);
 });
+
+test("theme files the host does not write are listed apart, so the page offers no Remove for them", async () => {
+  const { themes } = session(() => ({ ok: true, names: ["dusk"], kept_names: ["Nord"] }));
+  await themes.refresh();
+  assert.deepEqual([themes.state.names, themes.state.kept_names], [["dusk"], ["Nord"]]);
+});

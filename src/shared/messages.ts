@@ -463,7 +463,8 @@ export type ChangeQuickmarksAnswer = { ok: true; message: string } | { ok: false
 
 // From an extension page: the themes the base16 importer saved, for the list under the theme picker.
 export type ListImportedThemes = { type: "list_imported_themes" };
-export type ListImportedThemesAnswer = { ok: true; names: string[] } | { ok: false; message: string };
+// `names` can be removed through the native host. `kept_names` are theme files whose names the host does not write, which only a hand edit of the folder removes.
+export type ListImportedThemesAnswer = { ok: true; names: string[]; kept_names?: string[] } | { ok: false; message: string };
 
 // From an extension page: saves the scheme in `text` as `themes/<name>.toml`, or removes that theme file. The background parses the text itself, so a page cannot store a theme the parser would refuse.
 // A save over an existing name is refused with `needs_replace` until the request says `replace: true`, so the page can ask first.
