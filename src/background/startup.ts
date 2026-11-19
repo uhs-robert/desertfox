@@ -1,7 +1,7 @@
 // Loads the config, compiles the keymap and publishes the result.
 
 import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
-import { effective_settings, with_fallback_engines } from "../shared/config.ts";
+import { effective_settings, needs_page, with_fallback_engines } from "../shared/config.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
@@ -392,6 +392,7 @@ export function set_in_settings_file(name: keyof Settings, value: TomlValue): Pr
   return change_setting_in_file<FileWriteOutcome>(name, async (files) => {
     const named = NAMED_KINDS[name];
     if (named !== undefined && typeof value === "string") {
+      if (name === "default_engine" && needs_page(with_fallback_engines((await get_config()).search_engines)[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
       const home = await where_named(named, value);
       if (home === "nowhere") throw new RuntimeRefusal(`${name} not changed: no ${named} named "${value}"`);
       if (home === "browser") {
@@ -448,7 +449,7 @@ async function change_setting_in_file<R>(name: keyof Settings, plan: (files: Con
     try {
       await apply_files({ ...current, files: planned.files }, "setting", { edits_after, unsynced });
     } catch (error) {
-      // The files build can refuse a value the setting's own check passes, such as a default engine that needs a page slot.
+      // The files build can refuse a value the setting's own check passes. The checks above catch the common ones with a clearer message.
       throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
     }
     if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
