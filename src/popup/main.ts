@@ -8,7 +8,7 @@ import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/mes
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
 import type { HostDot, PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -25,6 +25,7 @@ const show_notice = (answer: ToolbarAnswer): void => {
 let draw_generation = 0;
 // The permission half of the host dot, kept for the live update.
 let host_permission = false;
+const host_flag = create_host_flag();
 
 const ask = (request: ToolbarRequest): Promise<ToolbarAnswer> => browser.runtime.sendMessage(request) as Promise<ToolbarAnswer>;
 
@@ -222,11 +223,10 @@ function card_element(rows: PopupRow[], inputs: { site: SiteState; disabled: boo
 
 async function draw(): Promise<void> {
   const mine = ++draw_generation;
-  const [tab, stored, host, session, loaded] = await Promise.all([
+  const [tab, stored, host, loaded] = await Promise.all([
     active_tab(),
     browser.storage.local.get([DISABLED_STORAGE_KEY, WARNINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY]),
     browser.permissions.contains({ permissions: ["nativeMessaging"] }),
-    browser.storage.session.get(HOST_CONNECTED_STORAGE_KEY),
     load_effective_config(),
   ]);
   // A newer draw started while this one waited, and it paints the newer state.
@@ -238,13 +238,12 @@ async function draw(): Promise<void> {
     warning_count: ((stored[WARNINGS_STORAGE_KEY] as string[] | undefined) ?? []).length,
     version: browser.runtime.getManifest().version,
     has_native_host: host,
-    host_connected: session[HOST_CONNECTED_STORAGE_KEY] === true,
     theme: effective_settings(loaded.config.settings).theme,
     extra_theme_names: [...Object.keys(loaded.config.local_themes ?? {}), ...Object.keys((stored[THEME_EDITS_STORAGE_KEY] as object | undefined) ?? {})],
   };
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
-  const elements = [header_element(inputs.version, inputs.disabled, host_dot(inputs.has_native_host, inputs.host_connected)), power_element(by_id("power")), card_element(rows, inputs)];
+  const elements = [header_element(inputs.version, inputs.disabled, host_dot(inputs.has_native_host, host_flag.get())), power_element(by_id("power")), card_element(rows, inputs)];
   const pair = element("div", "desertfox-popup-pair");
   pair.append(icon_button(by_id("settings"), "settings", "desertfox-popup-half"), icon_button(by_id("home"), "home", "desertfox-popup-half"), icon_button(by_id("keys"), "keys", "desertfox-popup-half"));
   elements.push(icon_button(by_id("reload_config"), "reload", "desertfox-popup-action"), pair);
@@ -256,12 +255,18 @@ async function draw(): Promise<void> {
   if (focus_key !== undefined) root.querySelector<HTMLElement>(focus_key === "power" ? "input[data-focus-key=power]:checked" : `[data-focus-key="${focus_key}"]`)?.focus();
 }
 
-// The bridge flips the flag while the popup is open, so the dot follows it without a redraw.
+// The bridge flips the flag while the popup is open. The listener keeps the latest value and repaints the dot in place. A draw reads that value when it paints, so a change during a draw is never lost.
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== "session" || !(HOST_CONNECTED_STORAGE_KEY in changes)) return;
+  host_flag.set(changes[HOST_CONNECTED_STORAGE_KEY]?.newValue === true);
   const dot = root.querySelector<HTMLElement>(".desertfox-popup-host-dot");
-  if (dot !== null) paint_dot(dot, host_dot(host_permission, changes[HOST_CONNECTED_STORAGE_KEY]?.newValue === true));
+  if (dot !== null) paint_dot(dot, host_dot(host_permission, host_flag.get()));
 });
 
+async function start(): Promise<void> {
+  host_flag.seed((await browser.storage.session.get(HOST_CONNECTED_STORAGE_KEY))[HOST_CONNECTED_STORAGE_KEY] === true);
+  await draw();
+}
+
 follow_theme(":root, .desertfox-popup");
-void draw();
+void start();

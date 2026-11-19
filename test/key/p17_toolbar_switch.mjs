@@ -209,11 +209,15 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
       const shot_dir = process.env.DESERTFOX_SHOT_DIR;
       const shoot = async (name) => {
         if (!shot_dir) return;
+        const backgrounds = [];
         for (const [scheme, target] of [["dark", "not all"], ["light", "all"]]) {
           await popup_scheme(target);
           await sleep(700);
+          backgrounds.push(await popup_eval(`getComputedStyle(document.querySelector(".desertfox-popup")).backgroundColor`));
           await take_shot(`${shot_dir}/popup-${name}-${scheme}.png`);
         }
+        // Equal backgrounds mean the scheme switch did not take, and the two shots would be the same picture.
+        expect(backgrounds[0] !== backgrounds[1], `the ${name} shots share the background ${backgrounds[0]}`);
       };
       // The Warnings row is absent while the page has no warnings, and Reload config is a button.
       expect((await popup_eval(`[...document.querySelectorAll(".desertfox-popup-row")].some((button) => button.textContent.startsWith("Warnings"))`)) === false, "the Warnings row shows with no warnings");

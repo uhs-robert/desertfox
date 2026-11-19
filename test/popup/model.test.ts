@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { create_host_flag, create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
-const base: PopupInputs = { disabled: false, site: { kind: "enabled", pattern: "*://*.a.test/*" }, warning_count: 2, version: "1.2.3", has_native_host: true, host_connected: false, extra_theme_names: [], theme: "oasis_moonlight" };
+const base: PopupInputs = { disabled: false, site: { kind: "enabled", pattern: "*://*.a.test/*" }, warning_count: 2, version: "1.2.3", has_native_host: true, extra_theme_names: [], theme: "oasis_moonlight" };
 const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
@@ -166,4 +166,22 @@ test("an older timer never clears a newer notice, even one that fires late", () 
   timers[1]!.run();
   assert.equal(notice.text(), "failed");
   assert.equal(redraws(), 0);
+});
+
+test("a host flag change between a draw's read and its paint is not lost", () => {
+  const flag = create_host_flag();
+  // The startup read says disconnected, and a draw is about to paint.
+  flag.seed(false);
+  // The bridge flips the flag after the draw's other reads and before its paint. The paint reads the flag last.
+  flag.set(true);
+  assert.deepEqual(host_dot(true, flag.get()), { connected: true, label: "Native host: connected" });
+});
+
+test("an event that lands before the startup read returns wins over that older read", () => {
+  const flag = create_host_flag();
+  flag.set(true);
+  flag.seed(false);
+  assert.equal(flag.get(), true);
+  flag.set(false);
+  assert.equal(flag.get(), false);
 });
