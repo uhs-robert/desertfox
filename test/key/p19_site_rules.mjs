@@ -146,6 +146,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       writeFileSync(d_path, '[[site_rules]]\nsite = "*://127.0.0.1/page?id=rule_d_other*"\npass = "q"\n');
       await reload();
       const disabled = await site_request("rule_d", "disable");
+      const after_disable = `${file_before}\n[[site_rules]]\nsite = "${pattern}"\noff = true\n`;
       expect(disabled.ok, `disable answered ${JSON.stringify(disabled)}`);
       expect(settings_toml() === `${file_before}\n[[site_rules]]\nsite = "${pattern}"\noff = true\n`, `settings.toml after disable ends with: ${settings_toml().slice(-120)}`);
       expect(readFileSync(d_path, "utf8").includes("rule_d_other"), "the settings.d file changed");
@@ -155,7 +156,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       await reload();
       const refused = await site_request("rule_d", "enable");
       expect(refused.ok === false && refused.message.includes("50-popup-test.toml"), `enable answered ${JSON.stringify(refused)}`);
-      expect(settings_toml().includes('off = true'), "the refused Enable changed settings.toml");
+      expect(settings_toml() === after_disable, "the refused Enable changed settings.toml");
     } finally {
       rmSync(d_path, { force: true });
       await reload();
