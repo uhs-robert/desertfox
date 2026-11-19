@@ -16,7 +16,7 @@ import { FILE_WRITTEN_SETTINGS, is_setting_name, SETTING_SPECS } from "../shared
 
 export type SettingsMessageDeps = {
   change_edits: (decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined) => Promise<void>;
-  // The file layer and the stored edits, read fresh.
+  // The file layer and the stored edits, read fresh in the change queue (`read_settings_layers`), so a reply never shows a change that is still storing or rolling back.
   read_layers: () => Promise<{ source: ConfigSource; config_settings: MergedConfig["settings"]; edits: SettingEdits; config: MergedConfig }>;
   // The names of the imported themes, which the theme picker lists.
   read_theme_names: () => Promise<string[]>;
@@ -35,16 +35,10 @@ function refusal_of(command_id: "settings.set" | "settings.unset", name: unknown
 const failure = (error: unknown): { ok: false; message: string } => ({ ok: false, message: error instanceof Error ? error.message : String(error) });
 
 export function create_settings_messages(deps: SettingsMessageDeps) {
-  // Reads the edits inside the change queue, so a change still writing or rolling back is not shown half done.
   async function list(): Promise<ListSettingsAnswer> {
     try {
-      let edits: SettingEdits | undefined;
-      await deps.change_edits((current) => {
-        edits = current;
-        return undefined;
-      });
-      const { source, config_settings } = await deps.read_layers();
-      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits!), await deps.read_theme_names()) };
+      const { source, config_settings, edits } = await deps.read_layers();
+      return { ok: true, settings: build_setting_list(build_config_status(source, config_settings, edits), await deps.read_theme_names()) };
     } catch (error) {
       return failure(error);
     }

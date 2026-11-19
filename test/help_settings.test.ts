@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import "../src/background/command_modules.ts";
 import { test } from "node:test";
-import { load_effective_config } from "../src/background/config_load.ts";
 import { create_settings_messages } from "../src/background/settings_message.ts";
 import { stringify } from "smol-toml";
-import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
 import { mount_settings, update_row } from "../src/help/settings_page.ts";
 import { can_reset, control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
@@ -49,7 +48,7 @@ async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (
   const fake = install_fake_browser(file_settings);
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = async (message: unknown) => {
     const request = message as { type: string };
     return request.type === "list_settings" ? messages.list() : messages.change(message as never);
@@ -57,7 +56,7 @@ async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (
   const changes: (string | undefined)[] = [];
   const session = create_settings_session({ send, engines: ["google", "ddg"], resolve_keys, on_change: (name) => changes.push(name) });
   await session.load();
-  return { ...fake, session, messages, changes };
+  return { ...fake, session, messages, changes, startup };
 }
 
 test("a field's summary and long text come from the key resolver", async () => {
@@ -272,7 +271,7 @@ test("the font settings suggest the names the background answers, and no other t
   install_fake_browser({});
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = async (message: unknown) => {
     const type = (message as { type: string }).type;
     return type === "list_font_names" ? names : type === "list_settings" ? messages.list() : messages.change(message as never);
@@ -288,7 +287,7 @@ test("a font ask that fails leaves the font settings with no suggestions", async
   install_fake_browser({});
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = async (message: unknown) => {
     const type = (message as { type: string }).type;
     if (type === "list_font_names") throw new Error("background restarting");
@@ -313,4 +312,43 @@ test("update_row sets the preview line from the draft, else from the value in fo
   const mono = { style: { fontFamily: "x" } };
   update_row(make_row(mono) as never, { ...session.field("font_family_mono")!, row: { ...session.field("font_family_mono")!.row, value: "" } });
   assert.equal(mono.style.fontFamily, "monospace");
+});
+
+test("a reply never shows another change that is still storing and then rolls back", async () => {
+  const { startup } = await make({ hint_letters: "ab" });
+  const session_area = (globalThis as unknown as { browser: { storage: { session: { set: (values: Record<string, unknown>) => Promise<void> } } } }).browser.storage.session;
+  const store = session_area.set;
+  let temp_writes = 0;
+  let release: (() => void) | undefined;
+  // The second change's temp write, the last step of its storing, waits and then fails, so its files roll back.
+  session_area.set = async (values) => {
+    if (Object.hasOwn(values, TEMP_SETTINGS_STORAGE_KEY) && ++temp_writes === 2) {
+      await new Promise<void>((resolve) => (release = resolve));
+      throw new Error("session storage refused the write");
+    }
+    return store(values);
+  };
+  const second_change_waits = async () => {
+    while (release === undefined) await new Promise((resolve) => setTimeout(resolve, 5));
+  };
+  // The reset's reply reads its row while the second change waits with its files stored.
+  const messages = create_settings_messages({
+    change_edits: startup.change_edits,
+    read_layers: async () => {
+      await second_change_waits();
+      const read = startup.read_settings_layers();
+      release!();
+      return read;
+    },
+    read_theme_names: async () => [],
+    set_in_file: startup.set_in_settings_file,
+    unset_in_file: startup.unset_in_settings_file,
+  });
+  const reset = messages.change({ type: "change_setting", name: "hint_letters", action: "reset", layer: "file" });
+  const failing = startup.set_in_settings_file("hint_letters", "qwe");
+  const [reset_answer, failing_answer] = await Promise.allSettled([reset, failing]);
+  assert.equal(failing_answer.status, "rejected");
+  assert.ok(reset_answer.status === "fulfilled" && reset_answer.value.ok, JSON.stringify(reset_answer));
+  assert.equal(reset_answer.value.setting.value, "asdfghjkl");
+  assert.equal(reset_answer.value.setting.top_layer, "default");
 });
