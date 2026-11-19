@@ -135,16 +135,19 @@ test("a commit marks only a child frame of a live hold", async () => {
   assert.deepEqual(data["desertfox_tab_item_4"], { frames: [0] });
 });
 
-test("the start goes to the tab only while it still shows the completed address", async () => {
+test("the start goes only to the top document that completed at the address, and only when one is wanted", async () => {
   const sent: unknown[] = [];
-  const ask = (wanted: { selector?: string } | undefined, now: { url?: string; status?: string } | undefined) =>
-    ask_item_start({ start_for: async () => wanted, tab_now: async () => now, send_start: async (tab_id, args) => void sent.push([tab_id, args]) }, 4, "https://a.test/");
-  await ask({ selector: "li" }, { url: "https://a.test/", status: "complete" });
-  await ask({}, { url: "https://b.test/", status: "complete" });
-  await ask({}, { url: "https://a.test/", status: "loading" });
-  await ask({}, undefined);
-  await ask(undefined, { url: "https://a.test/", status: "complete" });
-  assert.deepEqual(sent, [[4, { selector: "li" }]]);
+  const ask = (wanted: { selectors: string[] } | undefined, top: { url?: string; documentId?: string } | undefined, after_read?: () => void) =>
+    ask_item_start({ start_for: async () => (after_read?.(), wanted), top_document: async () => top, send_start: async (tab_id, document_id, start) => void sent.push([tab_id, document_id, start]) }, 4, "https://a.test/");
+  await ask({ selectors: ["li"] }, { url: "https://a.test/", documentId: "d1" });
+  await ask({ selectors: [] }, { url: "https://b.test/", documentId: "d2" });
+  await ask({ selectors: [] }, undefined);
+  await ask({ selectors: [] }, { url: "https://a.test/" });
+  await ask(undefined, { url: "https://a.test/", documentId: "d3" });
+  // A reload at the same address during the read: the send still names the document that completed, which Firefox no longer delivers to.
+  const top = { url: "https://a.test/", documentId: "d4" };
+  await ask({ selectors: [] }, top, () => (top.documentId = "d5"));
+  assert.deepEqual(sent, [[4, "d1", { selectors: ["li"] }], [4, "d4", { selectors: [] }]]);
 });
 
 test("a load of the page ends the mode in every frame, and an address change of the page keeps it", async () => {

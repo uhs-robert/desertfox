@@ -152,12 +152,19 @@ test("a page whose row passes or binds j or k in normal mode keeps them for the 
   for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a"]) assert.equal(await starts_item_mode(stored(compiled), address), false, address);
 });
 
-test("the start carries the item selector of the row whose item keys apply, and none on a page the finder reads", async () => {
+test("the start carries the item selectors of every item key and guarded choice the rows bind, and none on a page the finder reads", async () => {
   const compiled = compiled_with({ item_navigator: true });
-  assert.deepEqual(await item_start_for(stored(compiled), "https://news.ycombinator.com/"), { selector: "tr.athing" });
-  assert.deepEqual(await item_start_for(stored(compiled), "https://drive.google.com/drive/my-drive"), { selector: '[role="grid"] [role="gridcell"][data-id], [role="grid"] [role="row"][data-id]' });
-  assert.deepEqual(await item_start_for(stored(compiled), "https://a.test/"), {});
+  assert.deepEqual(await item_start_for(stored(compiled), "https://news.ycombinator.com/"), { selectors: ["tr.athing"] });
+  assert.deepEqual(await item_start_for(stored(compiled), "https://drive.google.com/drive/my-drive"), { selectors: ['[role="grid"] [role="gridcell"][data-id], [role="grid"] [role="row"][data-id]', '[role="grid"] [role="gridcell"][data-id]'] });
+  assert.deepEqual(await item_start_for(stored(compiled), "https://a.test/"), { selectors: [] });
+  const step = (selector: string) => ({ id: "page.item", args: { selector, direction: "down" }, when_present: selector });
+  const choices = compiled_with({ item_navigator: true, site_rules: [{ site: "https://a.test/*", keymap: { item: { j: [[step(".grid .tile")], [step("tr.result")]] } } }] });
+  assert.deepEqual(await item_start_for(stored(choices), "https://a.test/"), { selectors: [".grid .tile", "tr.result"] });
+  // A user key on j that is not a move leaves the selectors of the row's other item keys.
+  const remapped = compiled_with({ item_navigator: true, site_rules: [{ site: "https://news.ycombinator.com/*", keymap: { item: { j: { id: "tab.next" } } } }] });
+  assert.deepEqual(await item_start_for(stored(remapped), "https://news.ycombinator.com/"), { selectors: ["tr.athing"] });
 });
+
 
 test("each global value starts the shipped sites and the other list pages as it says", async () => {
   const shipped_site = "https://news.ycombinator.com/";
