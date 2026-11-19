@@ -53,7 +53,7 @@ function toml_value(value: TomlScalar): string {
   return String(value);
 }
 
-function same_value(left: unknown, right: unknown): boolean {
+export function same_value(left: unknown, right: unknown): boolean {
   if (left instanceof Date || right instanceof Date) return left instanceof Date && right instanceof Date && String(left) === String(right);
   if (Array.isArray(left) || Array.isArray(right)) {
     return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((item, index) => same_value(item, right[index]));
