@@ -306,16 +306,9 @@ def write_settings(request):
             os.replace(temporary, target)
             # The aside link shares the old file, so an editor that wrote into it after the check shows here.
             if not holds_digest(aside, base):
-                # An editor that renamed its save over the new text since is newer than the edit aside, so both stay.
-                if os.stat(target).st_ino != written_inode:
-                    kept, aside = aside, None
-                    raise HostError(f"{path} was edited twice during the write, so it holds the newer save and the older edit is in {kept}. Compare the two files.")
-                try:
-                    os.replace(aside, target)
-                except OSError as error:
-                    kept, aside = aside, None
-                    raise HostError(f"{path} was edited during the write and could not be put back ({error.strerror or error}). The edit is in {kept}.") from error
-                aside = None
+                # From here the aside file may hold the only copy of that edit: no exit deletes it until it is back.
+                edit, aside = aside, None
+                put_back_edit(path, target, edit, written_inode)
                 raise changed
             return {"path": path, "sha256": text_sha256(text)}
         except OSError as error:
@@ -325,6 +318,33 @@ def write_settings(request):
                 if leftover is not None:
                     with contextlib.suppress(OSError):
                         os.unlink(leftover)
+
+
+def put_back_edit(path, target, edit, written_inode):
+    """Moves the file `edit`, an edit saved into the old settings.toml during a write, back to `target`. Returns only
+    once it is back. Any other outcome leaves `edit` in place and raises a HostError that names it."""
+    try:
+        current_inode = os.stat(target).st_ino
+    except FileNotFoundError:
+        current_inode = None
+    except OSError as error:
+        raise HostError(f"{path} was edited during the write and could not be checked ({error.strerror or error}). The edit is in {edit}.") from error
+    if current_inode is None:
+        # Removed since the rename. link() refuses a name created since, so a newer file stays.
+        try:
+            os.link(edit, target)
+        except OSError as error:
+            raise HostError(f"{path} was edited during the write and then removed, and could not be put back ({error.strerror or error}). The edit is in {edit}.") from error
+        with contextlib.suppress(OSError):
+            os.unlink(edit)
+        return
+    # An editor that renamed its save over the new text since is newer than the edit, so both stay.
+    if current_inode != written_inode:
+        raise HostError(f"{path} was edited twice during the write, so it holds the newer save and the older edit is in {edit}. Compare the two files.")
+    try:
+        os.replace(edit, target)
+    except OSError as error:
+        raise HostError(f"{path} was edited during the write and could not be put back ({error.strerror or error}). The edit is in {edit}.") from error
 
 
 def holds_digest(path, digest):
