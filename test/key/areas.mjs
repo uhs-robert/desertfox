@@ -57,6 +57,7 @@ export const area_rules = [
   { globs: ["src/background/{alias_message,quickmark_message}.ts", "src/help/pairs_*.ts"], areas: ["help", "config", "keys", "newtab"] },
   { globs: ["src/background/font_names.ts", "src/shared/font_candidates.ts"], areas: ["help", "cmdline"] },
   { globs: ["src/background/theme_message.ts", "src/help/themes_*.ts"], areas: ["help", "config"] },
+  { globs: ["src/background/site_keys.ts", "src/help/site_keys_*.ts"], areas: ["help", "config", "keys", "toolbar"] },
   {
     globs: [
       "src/help/**",

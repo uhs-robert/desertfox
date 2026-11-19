@@ -240,6 +240,16 @@
   .desertfox-keys-capture { min-width: 12rem; min-height: 1.6rem; cursor: text; }
   .desertfox-keys-capture:focus { outline: 2px solid var(--desertfox-primary); }
   .desertfox-keys-capture kbd { margin-right: .3rem; }
+  .desertfox-site-keys { margin-top: 1rem; }
+  .desertfox-site-keys label { display: block; }
+  .desertfox-site-keys input[aria-label="Site pattern"] { width: min(34rem, 100%); }
+  .desertfox-site-keys-line { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .4rem 0; }
+  .desertfox-site-keys-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .desertfox-site-keys-chip { display: inline-flex; align-items: center; gap: .15rem; padding: .1rem .2rem .1rem .45rem; border: 1px solid var(--desertfox-border); border-radius: 999px; }
+  .desertfox-site-keys-drop { border: 0; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 .35rem; }
+  .desertfox-site-keys-fold { margin: .4rem 0; }
+  .desertfox-site-keys-picks { max-height: 12rem; overflow-y: auto; margin-top: .4rem; }
+  .desertfox-site-keys-pick { display: block; padding: .1rem 0; }
   .desertfox-keys-command { min-width: 20rem; flex: 1; }
   /* A short window: the support card sits after the links in the scroll, so it cannot cover them. */
   @media (max-height: 45rem) { .desertfox-help-sidebar .desertfox-help-support { margin-top: var(--desertfox-space-3); } }

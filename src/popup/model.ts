@@ -14,6 +14,8 @@ export const SETTINGS_HASH = page_hash("settings");
 export const COMMANDS_HASH = page_hash("commands");
 // The settings page draws an empty anchor with the id `settings-site-rules` at the top of the General rows, because the rows load after the route lands. A test keeps the slug in step with the page, which this file cannot import.
 export const SITE_RULES_HASH = "#section=settings/site-rules";
+// The same section with the form's site filled in. The address is encoded, so a pattern stays one value.
+export const site_keys_hash = (pattern: string): string => `${SITE_RULES_HASH}?site=${encodeURIComponent(pattern)}`;
 // The Warnings heading on Home, where the count points.
 export const WARNINGS_HASH = "#section=home/warnings";
 
@@ -93,7 +95,7 @@ export type PopupInputs = {
 };
 
 export type PopupRow = {
-  id: "power" | "settings" | "home" | "support" | "site" | "rule" | "reload_config" | "warnings" | "keys";
+  id: "power" | "settings" | "home" | "support" | "site" | "keys_for_site" | "rule" | "reload_config" | "warnings" | "keys";
   kind: "switch" | "link" | "action";
   label: string;
   // A greyed row says why in `detail`.
@@ -126,6 +128,14 @@ function site_row(site: SiteState, disabled: boolean): PopupRow {
   return { ...(disabled ? row(label, false, "DesertFox is off") : row(label, true)), site_action };
 }
 
+// The guided entry to a `{site, pass}` rule. It is grey where the rule could have no effect: no site, DesertFox off, or the site off.
+function keys_for_site_row(site: SiteState, disabled: boolean): PopupRow {
+  const row = (enabled: boolean, detail?: string): PopupRow => ({ id: "keys_for_site", kind: "link", label: "Let this site keep some keys...", enabled, ...(detail === undefined ? {} : { detail }) });
+  if (site.kind === "unavailable") return row(false, "No site on this page");
+  if (disabled) return row(false, "DesertFox is off");
+  return site.kind === "disabled" ? row(false, "This site is off") : row(true);
+}
+
 const sentence_case = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 // What a click on the switch asks for: the opposite of what it shows now.
@@ -135,6 +145,7 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
   const rows: PopupRow[] = [
     { id: "power", kind: "switch", label: inputs.disabled ? "DesertFox is off" : "DesertFox is on", enabled: true, on: !inputs.disabled },
     site_row(inputs.site, inputs.disabled),
+    keys_for_site_row(inputs.site, inputs.disabled),
   ];
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
   if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: sentence_case(inputs.site.rule), enabled: true });

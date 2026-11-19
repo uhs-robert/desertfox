@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows, site_keys_hash } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
@@ -9,7 +9,7 @@ const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
 test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
-  assert.deepEqual(ids(base), ["power", "site", "warnings", "reload_config", "settings", "home", "keys", "support"]);
+  assert.deepEqual(ids(base), ["power", "site", "keys_for_site", "warnings", "reload_config", "settings", "home", "keys", "support"]);
   assert.ok(!ids({ ...base, warning_count: 0 }).includes("warnings"), "no Warnings row without warnings");
   assert.equal(ids({ ...base, warning_count: 0 }).at(-1), "support");
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
@@ -175,4 +175,20 @@ test("an event that lands before the startup read returns wins over that older r
   assert.equal(flag.get(), true);
   flag.set(false);
   assert.equal(flag.get(), false);
+});
+
+test("the keys-for-site row is live on a site and grey with its reason where it could have no effect", () => {
+  assert.deepEqual(row(base, "keys_for_site"), { id: "keys_for_site", kind: "link", label: "Let this site keep some keys...", enabled: true });
+  assert.deepEqual([row({ ...base, disabled: true }, "keys_for_site").enabled, row({ ...base, disabled: true }, "keys_for_site").detail], [false, "DesertFox is off"]);
+  assert.equal(row({ ...base, site: { kind: "unavailable" } }, "keys_for_site").detail, "No site on this page");
+  assert.equal(row({ ...base, site: { kind: "disabled", pattern: "p" } }, "keys_for_site").detail, "This site is off");
+  assert.equal(row({ ...base, site: { kind: "config", pattern: "p" } }, "keys_for_site").enabled, true);
+});
+
+test("the keys-for-site link lands on the site rules section with the pattern as one value", () => {
+  for (const pattern of ["*://*.a.test/*", "*://*.a.test/x?y=1#z/*", "*://*.a.test/100%/*"]) {
+    assert.deepEqual(parse_route(site_keys_hash(pattern)), { page: "settings", section: "site-rules", site_keys: pattern }, pattern);
+  }
+  assert.deepEqual(parse_route(`${SITE_RULES_HASH}?site=`), { page: "settings", section: "site-rules" });
+  assert.deepEqual(parse_route(`${SITE_RULES_HASH}?site=%E0%A4%A`), { page: "settings", section: "site-rules" });
 });

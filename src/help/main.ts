@@ -2,7 +2,7 @@ import { load_commands_file } from "../shared/load_commands.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { build_config_status, load_effective_config } from "../background/config_load.ts";
-import { default_engine_names } from "../shared/config.ts";
+import { default_engine_names, effective_settings } from "../shared/config.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
 import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 import { follow_settings } from "../shared/storage_watch.ts";
@@ -12,6 +12,7 @@ import type { HelpModel } from "./model.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur, command_anchor, engine_anchor, render_help, section_anchor, update_config_source } from "./render.ts";
 import { mount_grant_panel } from "./grant_panel.ts";
 import { mount_settings } from "./settings_page.ts";
+import { mount_site_keys, SITE_KEYS_CAPTURE_CLASS } from "./site_keys_page.ts";
 import { create_key_capture, mount_keys } from "./keys_page.ts";
 import { mount_engines } from "./engines_page.ts";
 import { mount_pairs } from "./pairs_page.ts";
@@ -34,6 +35,7 @@ import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
+let stop_site_keys: (() => void) | undefined;
 let stop_engines: (() => void) | undefined;
 let stop_aliases: (() => void) | undefined;
 let stop_quickmarks: (() => void) | undefined;
@@ -106,6 +108,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   stop_section_hold?.();
   stop_settings?.();
   stop_settings = undefined;
+  stop_site_keys?.();
+  stop_site_keys = undefined;
   stop_keys?.();
   stop_keys = undefined;
   stop_engines?.();
@@ -119,6 +123,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   render_help(document.body, model, route, guide);
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never, model.keys.reload, model.resolve_keys);
+  const site_keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-site-keys") : null;
+  if (site_keys_box) stop_site_keys = mount_site_keys(site_keys_box, { send: (message) => browser.runtime.sendMessage(message), read_rules: async () => effective_settings((await load_effective_config()).config.settings).site_rules }, route.site_keys, key_capture, browser.storage.onChanged as never);
   const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
   if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
   const engines_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-engines") : null;
@@ -158,6 +164,8 @@ function land_on(route: Route, cause: "first" | "moved"): void {
     section_heading.scrollIntoView();
     section_heading.focus({ preventScroll: true });
     hold_section_in_view(section_heading);
+    // The popup link names a site, so the keys the site keeps are what the reader types next.
+    if (route.site_keys !== undefined) document.querySelector<HTMLElement>(`.${SITE_KEYS_CAPTURE_CLASS}`)?.focus({ preventScroll: true });
     return;
   }
   if (cause === "moved") document.querySelector<HTMLElement>(".desertfox-help-page h1")?.focus({ preventScroll: true });
@@ -227,7 +235,8 @@ window.addEventListener("blur", close_drawer_on_window_blur);
 window.addEventListener("hashchange", () => {
   if (!current) return;
   const route = parse_route(location.hash);
-  if (route.page === shown_page && KEEPS_STATE_PAGES.includes(route.page)) land_on(route, "moved");
+  // A link that names a site draws the page again, so the form takes the site.
+  if (route.page === shown_page && KEEPS_STATE_PAGES.includes(route.page) && route.site_keys === undefined) land_on(route, "moved");
   else show_route(current.model_, current.guide, current.engines, "moved");
 });
 listen_for_bundle_requests();
