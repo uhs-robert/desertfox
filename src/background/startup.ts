@@ -449,13 +449,17 @@ let host_write: HostWrite | undefined;
 type PickMark = { seq: number; drops: number };
 let picks_made = 0;
 let record_drops = 0;
-let dropped_by: CopyReplacedBy = "reload";
+// The swap behind each drop: entry n dropped the record of the picks made after n drops.
+const drop_causes: CopyReplacedBy[] = [];
 // How the record last ended, for a pick whose write another caller settled before the pick's own turn.
 let record_end: FileWriteOutcome | undefined;
+// Refused writes in a row whose edits went onto the folder's new text. A tool that rewrites settings.toml all the time would otherwise keep the loop going.
+let replays_in_a_row = 0;
+const MAX_REPLAYS_IN_A_ROW = 3;
 
 function note_record_dropped(by: CopyReplacedBy): void {
+  drop_causes[record_drops] = by;
   record_drops += 1;
-  dropped_by = by;
   record_end = { kind: "replaced", by, written: false };
 }
 
@@ -469,7 +473,7 @@ async function write_waiting_settings_file(in_queue: QueueRunner, pick?: PickMar
   let outcome: FileWriteOutcome | undefined;
   // Whether a write that held the pick reached the folder before a swap replaced the copy.
   let pick_written = false;
-  const replaced = (): FileWriteOutcome | undefined => (pick && record_drops !== pick.drops ? { kind: "replaced", by: dropped_by, written: pick_written } : undefined);
+  const replaced = (): FileWriteOutcome | undefined => (pick && record_drops !== pick.drops ? { kind: "replaced", by: drop_causes[pick.drops]!, written: pick_written } : undefined);
   const holds_pick = (write: HostWrite) => pick !== undefined && write.covers >= pick.seq && write.drops === pick.drops;
   for (;;) {
     const started = await in_queue(async () => replaced() ?? (await start_host_write()));
@@ -511,6 +515,7 @@ const read_folder_after_write = () => native_host.read_config().catch(warn_and_g
 // In the change queue. Applies the host's reply to the record once, however many callers waited on the write. `folder` is the folder read after a refusal, undefined when it could not be read.
 function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: ConfigFilesReply | undefined): Promise<SettledWrite> {
   if (host_write === write) host_write = undefined;
+  if (reply.ok) replays_in_a_row = 0;
   write.outcome ??= outcome_of_host_write(write, reply, folder);
   return write.outcome;
 }
@@ -519,15 +524,21 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
   if (!reply.ok && !(reply.error instanceof NativeHostError)) throw reply.error;
   const unsynced = await read_unsynced();
   // A swap replaced the browser copy during the write and dropped the record. On success the folder holds this text, and the copy is the swap's.
-  if (!unsynced) return { kind: "replaced", by: dropped_by, written: reply.ok };
+  if (!unsynced) return { kind: "replaced", by: drop_causes[write.drops]!, written: reply.ok };
   // A later pick started a new record after a swap: its own write goes next, from its own base.
   if (unsynced.base !== write.base) return { kind: "superseded" };
   if (!reply.ok) {
+    // The new record can share the dropped one's base, and this refusal and its folder read are older than it.
+    if (write.drops !== record_drops) return { kind: "superseded" };
     const error = reply.error as NativeHostError;
     if (error.failure === "file_changed") {
       // Both sides changed. The record stays for a retry when the folder cannot be read.
       if (!folder) return { kind: "failed", reason: `${SETTINGS_FILE} changed on disk, and the config folder could not be read again` };
-      if (await replay_edits_onto_folder(unsynced, folder)) return { kind: "superseded" };
+      if (replays_in_a_row < MAX_REPLAYS_IN_A_ROW && (await replay_edits_onto_folder(unsynced, folder))) {
+        replays_in_a_row += 1;
+        return { kind: "superseded" };
+      }
+      replays_in_a_row = 0;
       // Only the user can choose. The record goes once the folder is classified.
       const asked = await ask_when_folder_differs(folder, { clear_when_settled: false });
       await clear_unsynced();
@@ -549,18 +560,20 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
   return (record_end = { kind: "written" });
 }
 
-// After a refused write: puts the browser's edits onto the folder's new settings.toml in the copy and moves the record to that text, so a hand edit saved during the write and the pick both stay.
-// Only for a copy that held no other browser change: the folder's text then replaces the base without losing one. False leaves everything as it was.
+// After a refused write: swaps in the folder's files with the browser's edits set again on its new settings.toml, and moves the record to that text, so a hand edit saved during the write and the pick both stay.
+// Only for a copy that held no other browser change: the folder's files then replace it without losing one. False leaves everything as it was.
 async function replay_edits_onto_folder(unsynced: UnsyncedSettingsFile, folder: ConfigFilesReply): Promise<boolean> {
+  if (!folder.config_dir_exists) return false;
   const current = await load_files_source();
   if ((await files_digest(before_unsynced_edit(current.files, unsynced))) !== (await read_host_memory()).applied) return false;
-  const folder_text = folder.config_dir_exists ? (folder.files[SETTINGS_FILE] ?? null) : null;
+  const folder_text = folder.files[SETTINGS_FILE] ?? null;
   const text = replayed_on_folder(unsynced.base, current.files[SETTINGS_FILE] ?? "", folder_text);
   if (text === undefined) return false;
-  const files = { ...current.files, [SETTINGS_FILE]: text };
+  // The folder's other files too, as a start would adopt them: an edit saved to keymap.toml beside settings.toml applies now, not at some later reload.
+  const files = { ...folder.files, [SETTINGS_FILE]: text };
   const replayed: UnsyncedSettingsFile = { base: folder_text };
   try {
-    await apply_files({ ...current, files }, "setting", { edits_after: await load_edits(), unsynced: replayed });
+    await apply_files({ files, dir_label: folder.config_dir, imported: false }, "setting", { edits_after: await load_edits(), unsynced: replayed });
   } catch (error) {
     if (error instanceof ConfigRefusal) return false;
     throw error;
