@@ -133,7 +133,7 @@ export function find_key(lines: Line[], key: string, label: string): { header: n
 }
 
 // Proves the edit: `key` holds `value` (or is gone for undefined) and every other key parses as before.
-function checked(before: string, after: string, key: string, value: TomlValue | undefined, label: string): string {
+export function checked(before: string, after: string, key: string, value: TomlValue | undefined, label: string): string {
   const old_data = parsed(before, label);
   let new_data: Record<string, unknown>;
   try {

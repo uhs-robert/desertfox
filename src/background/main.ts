@@ -381,7 +381,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (page_request?.type === "toolbar_set_disabled" || page_request?.type === "toolbar_site" || page_request?.type === "toolbar_reload_config") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
-    return answer_toolbar_request(page_request, { toolbar, change_site_rule: async (pattern, action) => site_rule_note(await change_site_rule_in_file(pattern, action)), reload_config });
+    return answer_toolbar_request(page_request, { toolbar, change_site_rule: async (url, action) => site_rule_note(await change_site_rule_in_file(url, action)), reload_config });
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab = sender.tab;

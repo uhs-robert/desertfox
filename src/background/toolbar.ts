@@ -112,7 +112,7 @@ export function describe_columns(columns: ResolvedSiteColumns<SiteRowKeys>): str
 }
 
 // The popup can turn a site off only while no row sets the off column: its appended row then decides it.
-// It can turn a site on again only while a popup row for the pattern decides the column and no other row would. `rules` are the rules in force.
+// It can turn a site on again only while a popup row for the pattern decides the column and no other row decides it the same way. `rules` are the rules in force.
 export function site_state(url: string | undefined, rules: readonly SiteRuleRow[]): SiteState {
   const pattern = site_pattern(url);
   if (pattern === undefined || url === undefined) return { kind: "unavailable" };
@@ -124,6 +124,9 @@ export function site_state(url: string | undefined, rules: readonly SiteRuleRow[
   const popup_decides = columns.off && rules.some(own) && columns_at(rules.filter((row) => !own(row)), url).off === undefined;
   return { kind: popup_decides ? "disabled" : "config", ...state };
 }
+
+// Whether `rules` turn the page at `url` off: the first matching row that sets the off column decides.
+export const site_is_off = (rules: readonly SiteRuleRow[], url: string): boolean => columns_at(rules, url).off === true;
 
 // The rows after a site is disabled or enabled, or undefined when nothing changes. Disabling appends an off row, and enabling removes every popup row for the pattern.
 export function site_rows_after(rows: readonly SiteRuleRow[], pattern: string, action: "disable" | "enable"): SiteRuleRow[] | undefined {
@@ -141,8 +144,8 @@ export function saved_popup_rows(file_rows: readonly SiteRuleRow[], saved: reado
 
 export type ToolbarMessageDeps = {
   toolbar: Pick<ReturnType<typeof create_toolbar>, "set_disabled">;
-  // Writes the popup's row change into settings.toml (`change_site_rule_in_file`), and gives back what became of the file as a note for the answer.
-  change_site_rule: (pattern: string, action: "disable" | "enable") => Promise<string>;
+  // Writes the popup's row change for the page at `url` into settings.toml (`change_site_rule_in_file`), and gives back what became of the file as a note for the answer.
+  change_site_rule: (url: string, action: "disable" | "enable") => Promise<string>;
   reload_config: () => Promise<{ config_dir: string; warnings: number }>;
 };
 
@@ -160,7 +163,7 @@ export async function answer_toolbar_request(request: ToolbarRequest, deps: Tool
       const pattern = site_pattern(typeof request.url === "string" ? request.url : undefined);
       if (pattern === undefined) return { ok: false, message: "this page has no site to change" };
       if (request.action !== "disable" && request.action !== "enable") return { ok: false, message: "action must be disable or enable" };
-      const note = await deps.change_site_rule(pattern, request.action);
+      const note = await deps.change_site_rule(request.url as string, request.action);
       return { ok: true, message: `${request.action === "disable" ? "Disabled on this site" : "Enabled on this site"}${note}` };
     }
     if (request.type === "toolbar_reload_config") {

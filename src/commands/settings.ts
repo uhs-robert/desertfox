@@ -159,7 +159,7 @@ const TEMP_PARAM = { name: "temp", type: "bool", default: false, short: "t", des
 define("settings.set", {
   name: "set",
   label: "Set a setting",
-  intent: "Change a setting and write it to settings.toml. Write set name value to set it, and set name to show it. A list takes one item per word, and [] is the empty list. With --temp, the change lasts only until the browser restarts, and settings.toml is not changed. The consent settings and the site rules stay in the browser.",
+  intent: "Change a setting and write it to settings.toml. Write set name value to set it, and set name to show it. A list takes one item per word, and [] is the empty list. With --temp, the change lasts only until the browser restarts, and settings.toml is not changed. The consent settings stay in the browser. The site rules change one row at a time from the popup.",
   params: [
     TEMP_PARAM,
     { name: "name", type: "string", values: SETTABLE, strict: true },

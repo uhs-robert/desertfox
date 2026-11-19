@@ -24,7 +24,7 @@ import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
-import { OFF_KEYMAP, saved_popup_rows, site_rows_after } from "./toolbar.ts";
+import { OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after } from "./toolbar.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
@@ -440,17 +440,28 @@ export function unset_in_settings_file(name: keyof Settings): Promise<UnsetResul
   });
 }
 
-// The popup's Disable or Enable on this site: appends its off row to the `[[site_rules]]` of settings.toml, or removes its rows for the pattern there.
-// A list the popup saved in the browser before it wrote the file is dropped, and its own rows go into the file with this change.
-// `unchanged`: the site already was as asked, so nothing is written.
-export function change_site_rule_in_file(pattern: string, action: "disable" | "enable"): Promise<FileWriteOutcome | { kind: "unchanged" }> {
+// The popup's Disable or Enable on the site of the page at `url`: appends its off row to the `[[site_rules]]` of settings.toml, or removes its rows for the site's pattern there.
+// A list the popup saved in the browser before it wrote the file is dropped on every click, even one that changes no row, and its own rows go into the file.
+// `unchanged`: the site already was as asked and no saved list was left, so nothing is written.
+export function change_site_rule_in_file(url: string, action: "disable" | "enable"): Promise<FileWriteOutcome | { kind: "unchanged" }> {
   return change_setting_in_file<{ kind: "unchanged" }>("site_rules", async (files) => {
-    // Checked before the rows: a popup row held in that file would otherwise read as already gone.
+    const pattern = site_pattern(url);
+    if (pattern === undefined) throw new RuntimeRefusal("this page has no site to change");
+    // Checked before the rows, as a popup row held in that file reads as already gone from settings.toml.
     const winning_file = settings_d_file_that_sets(files, "site_rules");
     if (winning_file !== undefined) throw held_in_settings_d(winning_file, "site_rules");
+    const saved_list = (await load_edits()).saved.site_rules;
     const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
-    const next = site_rows_after([...file_rows, ...saved_popup_rows(file_rows, (await load_edits()).saved.site_rules)], pattern, action);
-    return next === undefined ? { done: { kind: "unchanged" } } : { files: with_setting_in_files(files, "site_rules", next as TomlValue) };
+    const rows = [...file_rows, ...saved_popup_rows(file_rows, saved_list)];
+    const changed_rows = site_rows_after(rows, pattern, action);
+    const rows_after = changed_rows ?? rows;
+    // With the saved list gone, the file's own rules decide again, and one of them can still decide the site the other way.
+    if (site_is_off(rows_after, url) !== (action === "disable")) {
+      throw new RuntimeRefusal(action === "disable" ? "Not disabled: an earlier rule in site_rules keeps this site on. Change it in settings.toml." : "Not enabled: another rule in site_rules turns this site off. Change it in settings.toml.");
+    }
+    if (changed_rows === undefined && saved_list === undefined) return { done: { kind: "unchanged" } };
+    // No rows left removes the key, so a file that had none before the first click gets its text back.
+    return { files: rows_after.length === 0 ? without_setting_in_files(files, "site_rules") : with_setting_in_files(files, "site_rules", rows_after as TomlValue) };
   });
 }
 

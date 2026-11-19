@@ -2,37 +2,61 @@
 // Only the blocks of rows that leave are dropped, and only the rows that arrive are written. A parse of the text before and after
 // then proves that the list holds exactly the new rows and no other key changed, and refuses the edit otherwise.
 
-import { RuntimeRefusal } from "../shared/command.ts";
-import { BLANK_OR_COMMENT, find_key, join_lines, parsed, remove_top_level_key, same_value, set_top_level_key, split_lines, TABLE_HEADER, toml_key, toml_value } from "./toml_key_edit.ts";
+import { BLANK_OR_COMMENT, checked, find_key, join_lines, parsed, remove_top_level_key, same_value, set_top_level_key, split_lines, TABLE_HEADER, toml_key, toml_value } from "./toml_key_edit.ts";
 import type { Line, TomlValue } from "./toml_key_edit.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
 
 export type TomlRow = { readonly [field: string]: TomlValue | undefined };
 
-// A row's header to its last line that is not blank or a comment, child tables (`[key.x]`, `[[key.x]]`) included.
+// A row's comment lines right above its header, the header, and its lines up to the last one that is not blank or a comment, child tables (`[key.x]`, `[[key.x]]`) included.
 // The comments and blank lines after it stay out: they most often lead into whatever comes next.
 type Block = { start: number; end: number };
+
+// Past this many old rows times new rows between the common start and end, the rows in between are replaced whole rather than paired one by one.
+const MAX_PAIRING_CELLS = 250_000;
 
 // `key` is a bare key: `find_key` refuses any other first.
 const row_header = (key: string) => new RegExp(`^\\s*\\[\\[\\s*(${key}|"${key}"|'${key}')\\s*\\]\\]\\s*(#.*)?$`);
 const child_header = (key: string) => new RegExp(`^\\s*\\[\\[?\\s*(${key}|"${key}"|'${key}')\\s*\\.`);
+const COMMENT = /^\s*#/;
 
 const without_absent = (row: TomlRow): Record<string, TomlValue> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, TomlValue] => entry[1] !== undefined));
+
+// One text per row value whatever the order of its fields, as `same_value` compares them.
+const row_identity = (value: unknown): string =>
+  JSON.stringify(value, (_key, item: unknown) => (typeof item === "object" && item !== null && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => (left < right ? -1 : 1))) : item));
 
 function blocks_of(lines: Line[], key: string): Block[] {
   const own = row_header(key);
   const child = child_header(key);
-  const starts = lines.flatMap((line, index) => (own.test(line.body) ? [index] : []));
-  return starts.map((start) => {
-    let next = start + 1;
+  const headers = lines.flatMap((line, index) => (own.test(line.body) ? [index] : []));
+  return headers.map((header) => {
+    let start = header;
+    while (start > 0 && COMMENT.test(lines[start - 1]!.body)) start -= 1;
+    let next = header + 1;
     while (next < lines.length && !(TABLE_HEADER.test(lines[next]!.body) && !child.test(lines[next]!.body))) next += 1;
     let end = next - 1;
-    while (end > start && BLANK_OR_COMMENT.test(lines[end]!.body)) end -= 1;
+    while (end > header && BLANK_OR_COMMENT.test(lines[end]!.body)) end -= 1;
     return { start, end };
   });
 }
 
 // The rows of `old` that stay, as pairs of indices into `old` and `next`: a longest common run, so a row edited in place or moved is one removal and one insertion.
+// The common start and end pair first, so a click that adds or removes one row costs one pass. A large middle that still differs is replaced whole.
 function kept_pairs(old: readonly unknown[], next: readonly unknown[]): [number, number][] {
+  let head = 0;
+  while (head < old.length && head < next.length && same_value(old[head], next[head])) head += 1;
+  let tail = 0;
+  while (tail < old.length - head && tail < next.length - head && same_value(old[old.length - 1 - tail], next[next.length - 1 - tail])) tail += 1;
+  const old_middle = old.length - head - tail;
+  const next_middle = next.length - head - tail;
+  const pairs: [number, number][] = Array.from({ length: head }, (_, index) => [index, index]);
+  if (old_middle * next_middle <= MAX_PAIRING_CELLS) pairs.push(...middle_pairs(old.slice(head, head + old_middle), next.slice(head, head + next_middle)).map(([i, j]): [number, number] => [i + head, j + head]));
+  for (let index = tail; index > 0; index -= 1) pairs.push([old.length - index, next.length - index]);
+  return pairs;
+}
+
+function middle_pairs(old: readonly unknown[], next: readonly unknown[]): [number, number][] {
   const lengths = Array.from({ length: old.length + 1 }, () => new Array<number>(next.length + 1).fill(0));
   for (let i = old.length - 1; i >= 0; i -= 1) {
     for (let j = next.length - 1; j >= 0; j -= 1) lengths[i]![j] = same_value(old[i], next[j]) ? lengths[i + 1]![j + 1]! + 1 : Math.max(lengths[i + 1]![j]!, lengths[i]![j + 1]!);
@@ -57,10 +81,20 @@ const layout_refusal = (label: string, key: string) =>
   new RuntimeRefusal(`${label} has a layout DesertFox cannot edit safely around [[${key}]], so it leaves the file as it is. Change ${key} there by hand.`);
 
 // Sets the top-level list `key` to `rows`. Rows written as `[[key]]` blocks keep that form, and a list written as one inline array stays one.
-// An empty list removes the key, as a list that is not set reads as empty.
+// An empty list is written `key = []`, so it reads as cleared, not as unset. `remove_table_rows` removes the key instead.
 export function set_table_rows(text: string, key: string, rows: readonly TomlRow[], label = "The file"): string {
+  if (rows.length > 0) return replaced_rows(text, key, rows.map(without_absent), label);
+  // A list written as one inline array keeps its line and its comment.
+  if (find_key(split_lines(text), key, label).at !== undefined) return set_top_level_key(text, key, [], label);
+  return set_top_level_key(replaced_rows(text, key, [], label), key, [], label);
+}
+
+// Removes every row of the top-level list `key`, and the key with them.
+export const remove_table_rows = (text: string, key: string, label = "The file"): string => replaced_rows(text, key, [], label);
+
+// The text with the list `key` holding `next`, or without the key for none.
+function replaced_rows(text: string, key: string, next: readonly Record<string, TomlValue>[], label: string): string {
   const data = parsed(text, label);
-  const next = rows.map(without_absent);
   const lines = split_lines(text);
   if (find_key(lines, key, label).at !== undefined) return next.length === 0 ? remove_top_level_key(text, key, label) : set_top_level_key(text, key, next, label);
   const old = data[key] ?? [];
@@ -71,46 +105,58 @@ export function set_table_rows(text: string, key: string, rows: readonly TomlRow
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const pairs = kept_pairs(old, next);
   const kept_old = new Set(pairs.map(([i]) => i));
+  const kept_new_to_old = new Map(pairs.map(([i, j]) => [j, i]));
   const dropped = new Set<number>();
   for (const [index, block] of blocks.entries()) {
     if (kept_old.has(index)) continue;
     for (let line = block.start; line <= block.end; line += 1) dropped.add(line);
   }
-  // The blank line that led into a dropped block goes with it when a blank line or the end follows, so a row added and removed again leaves the text as it was.
+  // The blank line that led into a dropped block goes with it when a blank line or the end follows.
+  // So a row added after the last row, where a blank line or the end came next, and removed again leaves the text as it was.
   for (const [index, block] of blocks.entries()) {
     if (kept_old.has(index)) continue;
     let after = block.end + 1;
     while (after < lines.length && dropped.has(after)) after += 1;
     const before = block.start - 1;
     if (before >= 0 && !dropped.has(before) && lines[before]!.body.trim() === "" && (after >= lines.length || lines[after]!.body.trim() === "")) dropped.add(before);
+    // A dropped block that opened the text takes the blank line after it, so the text does not start with one.
+    else if (before < 0 && after < lines.length && lines[after]!.body.trim() === "") dropped.add(after);
   }
+
+  // A row that leaves one place and arrives at another takes its own lines along: its comment and its layout.
+  const dropped_rows = new Map<string, number[]>();
+  for (const [i, row] of old.entries()) if (!kept_old.has(i)) dropped_rows.set(row_identity(row), [...(dropped_rows.get(row_identity(row)) ?? []), i]);
+  const lines_of = (j: number): Line[] => {
+    const source = dropped_rows.get(row_identity(next[j]))?.shift();
+    if (source === undefined) return row_lines(key, next[j]!, eol);
+    const { start, end } = blocks[source]!;
+    return lines.slice(start, end + 1).map((line) => ({ body: line.body, eol }));
+  };
 
   // Each new row goes after the block of the kept row before it, above the first block when no kept row comes before it, or at the end when the text has no block.
   const after_block = new Map<number, Line[]>();
   const above_first: Line[] = [];
   const at_end: Line[] = [];
   let previous_kept: number | undefined;
-  let pair_at = 0;
-  for (const [j, row] of next.entries()) {
-    if (pair_at < pairs.length && pairs[pair_at]![1] === j) {
-      previous_kept = pairs[pair_at]![0];
-      pair_at += 1;
+  for (const j of next.keys()) {
+    const kept = kept_new_to_old.get(j);
+    if (kept !== undefined) {
+      previous_kept = kept;
       continue;
     }
-    if (previous_kept === undefined && blocks.length > 0) above_first.push(...row_lines(key, row, eol), BLANK(eol));
-    else if (previous_kept === undefined) at_end.push(...(at_end.length > 0 ? [BLANK(eol)] : []), ...row_lines(key, row, eol));
-    else after_block.set(previous_kept, [...(after_block.get(previous_kept) ?? []), BLANK(eol), ...row_lines(key, row, eol)]);
+    if (previous_kept === undefined && blocks.length > 0) above_first.push(...lines_of(j), BLANK(eol));
+    else if (previous_kept === undefined) at_end.push(...(at_end.length > 0 ? [BLANK(eol)] : []), ...lines_of(j));
+    else after_block.set(previous_kept, [...(after_block.get(previous_kept) ?? []), BLANK(eol), ...lines_of(j)]);
   }
 
+  const block_ending_at = new Map(blocks.map((block, index) => [block.end, index]));
   const out: Line[] = [];
-  // Above the first block, and above the comment lines right over its header, which describe it.
-  let first_at = blocks[0]?.start ?? lines.length;
-  while (first_at > 0 && /^\s*#/.test(lines[first_at - 1]!.body)) first_at -= 1;
+  const first_at = blocks[0]?.start ?? lines.length;
   for (const [index, line] of lines.entries()) {
     if (index === first_at) out.push(...above_first);
     if (!dropped.has(index)) out.push(line);
-    const block_index = blocks.findIndex((block) => block.end === index);
-    const added = block_index >= 0 ? after_block.get(block_index) : undefined;
+    const block_index = block_ending_at.get(index);
+    const added = block_index === undefined ? undefined : after_block.get(block_index);
     if (added) {
       // A block on the last line without a newline gets one, and the text still ends without one.
       if (line.eol === "") {
@@ -130,20 +176,7 @@ export function set_table_rows(text: string, key: string, rows: readonly TomlRow
     if (last && last.body.trim() !== "") out.push(BLANK(eol));
     out.push(...at_end);
   }
-  return checked_rows(text, join_lines(out), key, next, label);
-}
-
-// Proves the edit: `key` holds `rows` (or is gone for none) and every other key parses as before.
-function checked_rows(before: string, after: string, key: string, rows: readonly Record<string, TomlValue>[], label: string): string {
-  const { [key]: _old, ...old_rest } = parsed(before, label);
-  let new_data: Record<string, unknown>;
-  try {
-    new_data = parsed(after, label);
-  } catch {
-    throw layout_refusal(label, key);
-  }
-  const { [key]: new_rows, ...new_rest } = new_data;
-  const rows_right = rows.length === 0 ? !Object.hasOwn(new_data, key) : same_value(new_rows, rows);
-  if (!rows_right || !same_value(old_rest, new_rest)) throw layout_refusal(label, key);
-  return after;
+  // A dropped last line that ended the text without a newline leaves the new last line without one.
+  if (lines.at(-1)?.eol === "" && dropped.has(lines.length - 1) && out.length > 0) out[out.length - 1] = { ...out.at(-1)!, eol: "" };
+  return checked(text, join_lines(out), key, next.length === 0 ? undefined : next, label);
 }
