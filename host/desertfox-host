@@ -2,14 +2,16 @@
 """Native-messaging host for the DesertFox Firefox extension.
 
 Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
-in the same framing to stdout and exits. It has eight verbs and no others:
+in the same framing to stdout and exits. It has nine verbs and no others:
 
   {"cmd": "read_config"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
   {"cmd": "write_autoconfig", "toml": "<text>"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "..."}
+  {"cmd": "write_config_file", "kind": "settings" or "theme", "name": "<theme name>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "...", "sha256": "<hex of text>"}  or, for a null text, "deleted": true
   {"cmd": "write_settings", "text": "<text>", "base_sha256": "<hex>" or null}
-      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "...", "sha256": "<hex of text>"}
+      -> the reply of write_config_file with kind settings, which it is under its older name
   {"cmd": "self_update", "version": "0.1.23", "sha256": {"desertfox-host": "<hex>", "desertfox-bridge": "<hex>", "desertfox": "<hex>"}}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "updated": true, "version": "0.1.23", "replaced": ["<path>", ...]}
   {"cmd": "editor_start", "text": "<text>", "ext": "md", "insert": true, "private": true}
@@ -24,8 +26,9 @@ in the same framing to stdout and exits. It has eight verbs and no others:
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes there:
-autoconfig.toml, and settings.toml through `write_settings`, which replaces the file only while it is still the text the
-extension edited and takes the lock file .settings.lock beside it, which stays (see `write_settings`). It parses no config of the extension: the extension owns that TOML and makes
+autoconfig.toml, and settings.toml and themes/<name>.toml through `write_config_file`, which replaces or deletes a file
+only while it is still the text the extension edited and takes the lock file .settings.lock in the folder, which stays
+(see `write_config_file`). It parses no config of the extension: the extension owns that TOML and makes
 the edit. Only editor.toml, which the extension never sees, is parsed here.
 `self_update` replaces the installed hosts, the command line and their four manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
@@ -33,6 +36,7 @@ reply ever carries. `open_firefox_page` asks the Firefox that started the host t
 `open_firefox_page`). `list_fonts` runs fontconfig's `fc-list` and answers the installed family names (see
 `list_fonts`). Stdout carries only protocol bytes.
 """
+import collections
 import contextlib
 import errno
 import fcntl
@@ -205,7 +209,7 @@ def text_sha256(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def settings_digest(path, label):
+def file_digest(path, label):
     """The SHA-256 of the file's bytes and their count, or (None, None) when there is no file. Bytes that are not UTF-8
     refuse: read_config sends them as U+FFFD, so a write of the extension's text would rewrite them outside the line it
     changed."""
@@ -219,123 +223,232 @@ def settings_digest(path, label):
     return hashlib.sha256(raw).hexdigest(), len(raw)
 
 
-# A hidden name, so read_config skips it. The lock is on its own file: a lock on settings.toml would go with the inode the
-# rename replaces.
-SETTINGS_LOCK_NAME = ".settings.lock"
+# A hidden name, so read_config skips it. The lock is on its own file: a lock on a config file would go with the inode the
+# rename replaces. The name is from when settings.toml was the only file written, and stays so an older host still shares it.
+CONFIG_WRITE_LOCK_NAME = ".settings.lock"
 
 
 @contextlib.contextmanager
-def settings_lock(directory):
-    """Serializes write_settings across host processes, so two writers never both pass the check against one base."""
+def config_write_lock(directory):
+    """Serializes config file writes across host processes, so two writers never both pass the check against one base."""
     try:
-        descriptor = os.open(os.path.join(directory, SETTINGS_LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
+        descriptor = os.open(os.path.join(directory, CONFIG_WRITE_LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
     except OSError as error:
         raise HostError(f"cannot lock {directory}: {error.strerror or error}") from error
     try:
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
         except OSError as error:
-            raise HostError(f"cannot lock {directory}, so settings.toml was not written: {error.strerror or error}") from error
+            raise HostError(f"cannot lock {directory}, so nothing was written: {error.strerror or error}") from error
         yield
     finally:
         os.close(descriptor)
 
 
-def write_settings(request):
-    """Replaces settings.toml with `text`, but only while the file on disk is the one the extension edited.
+# The theme names the extension accepts (src/shared/theme/base16.ts `theme_name_shape_problem`). The host checks them
+# again, so a name never leaves the themes folder: no dot, slash, backslash, NUL or upper case gets through.
+THEME_NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}")
 
-    `base_sha256` is the SHA-256 of the text the extension last read for the file, or null when it read none. Another
-    digest means a hand edit since, and the host refuses rather than overwrite it. A link is followed, so a settings.toml
-    that links into a dotfiles repository stays a link, and the target keeps its mode. The folder must exist: a write
-    never creates a config folder that read_config would then find with only this file in it.
+# The files `write_config_file` writes, by kind. `folder` is inside the config folder, None for the folder itself. A kind
+# with a `name_pattern` takes a name and writes `<name>.toml`; one without writes `fixed_name`. The host builds every
+# path from this table, so a request never carries one.
+ConfigFileKind = collections.namedtuple("ConfigFileKind", "folder name_pattern fixed_name")
+CONFIG_FILE_KINDS = {
+    "settings": ConfigFileKind(folder=None, name_pattern=None, fixed_name=SETTINGS_NAME),
+    "theme": ConfigFileKind(folder="themes", name_pattern=THEME_NAME_PATTERN, fixed_name=None),
+}
+
+
+def config_file_path(directory, request):
+    """The path the request's kind and name give, and the kind's folder."""
+    kind_name = request.get("kind")
+    kind = CONFIG_FILE_KINDS.get(kind_name) if isinstance(kind_name, str) else None
+    if kind is None:
+        raise HostError(f"write_config_file has no kind {kind_name!r}. It writes {', '.join(sorted(CONFIG_FILE_KINDS))}")
+    if kind.name_pattern is None:
+        if "name" in request:
+            raise HostError(f"write_config_file kind {kind_name} takes no name")
+        file_name = kind.fixed_name
+    else:
+        name = request.get("name")
+        if not isinstance(name, str) or not kind.name_pattern.fullmatch(name):
+            raise HostError(f"write_config_file kind {kind_name} needs a name of at most 48 lowercase letters, digits, _ and -, which starts with a letter or digit")
+        file_name = f"{name}.toml"
+    folder = directory if kind.folder is None else os.path.join(directory, kind.folder)
+    return os.path.join(folder, file_name), folder
+
+
+def write_config_file(request):
+    """Replaces or deletes one config file of the kind table, but only while the file on disk is the one the extension
+    edited.
+
+    `text` is the new text, or null to delete the file. `base_sha256` is the SHA-256 of the text the extension last read
+    for the file, or null when it read none. Another digest means a hand edit since, and the host refuses rather than
+    overwrite or delete it, so a delete needs a base. A link is followed, so a file that links into a dotfiles repository
+    stays a link, and the target keeps its mode. The config folder must exist: a write never creates a config folder that
+    read_config would then find with only this file in it. A kind's own folder (themes) is created for a new file.
 
     Host writers take a lock. An editor takes none, so the old file is hard-linked aside before the rename and checked
     after it: an edit saved into it in the meantime puts it back and refuses as changed on disk. An old file that cannot
     be read goes back too, and the refusal says so instead, because nothing shows an edit. A filesystem without hard
-    links refuses every write. Before it puts the old file back, it checks that settings.toml is
-    still the file it renamed in: a save renamed over it since stays, the old file stays aside, and the write refuses.
-    Two windows of microseconds stay open: an editor that renames a new file over settings.toml between the last check
+    links refuses every write. Before it puts the old file back, it checks that the file is
+    still the one it renamed in: a save renamed over it since stays, the old file stays aside, and the write refuses.
+    Two windows of microseconds stay open: an editor that renames a new file over the file between the last check
     and the rename is not caught, and neither is one that does so between that inode check and the put-back."""
-    checked_fields(request, {"text", "base_sha256"}, "write_settings")
-    text, base = request.get("text"), request.get("base_sha256")
-    if not isinstance(text, str):
-        raise HostError("write_settings needs a string field text")
-    if "base_sha256" not in request or not (base is None or (isinstance(base, str) and SHA256_PATTERN.fullmatch(base))):
-        raise HostError("write_settings needs base_sha256: the hex SHA-256 of the text last read, or null for no file")
-    data = text.encode("utf-8")
-    if len(data) > MAX_CONFIG_FILE_BYTES:
-        raise HostError(f"cannot write {SETTINGS_NAME}: larger than 1 MiB")
+    checked_fields(request, {"kind", "name", "text", "base_sha256"}, "write_config_file")
     directory = config_dir()
-    path = os.path.join(directory, SETTINGS_NAME)
+    path, folder = config_file_path(directory, request)
+    text, base = request.get("text"), request.get("base_sha256")
+    if "text" not in request or not (text is None or isinstance(text, str)):
+        raise HostError("write_config_file needs text: a string, or null to delete the file")
+    if "base_sha256" not in request or not (base is None or (isinstance(base, str) and SHA256_PATTERN.fullmatch(base))):
+        raise HostError("write_config_file needs base_sha256: the hex SHA-256 of the text last read, or null for no file")
+    if text is None and base is None:
+        raise HostError("write_config_file deletes only a file DesertFox read: a null text needs base_sha256")
+    data = None if text is None else text.encode("utf-8")
+    if data is not None and len(data) > MAX_CONFIG_FILE_BYTES:
+        raise HostError(f"cannot write {path}: larger than 1 MiB")
     if not os.path.isdir(directory):
         raise HostError(f"cannot write {path}: the config folder {directory} does not exist")
+    with config_write_lock(directory):
+        if data is None:
+            return delete_config_file(path, base)
+        if base is None and folder != directory:
+            make_kind_folder(folder, path)
+        return replace_config_file(path, data, base)
+
+
+def make_kind_folder(folder, path):
+    try:
+        os.mkdir(folder)
+    except FileExistsError:
+        pass
+    except OSError as error:
+        raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+    # isdir follows a link, so a themes folder that links into a dotfiles repository is used as it is.
+    if not os.path.isdir(folder):
+        raise HostError(f"cannot write {path}: {folder} is not a folder")
+
+
+def aside_prefix(path):
+    """`.settings-` for settings.toml: a hidden name, so read_config skips the temporary and aside files."""
+    return f".{os.path.splitext(os.path.basename(path))[0]}-"
+
+
+def replace_config_file(path, data, base):
+    """Under the lock: the write half of `write_config_file`."""
     changed = HostError(f"{path} {CHANGED_ON_DISK} since DesertFox last read it, so it was not written")
-    with settings_lock(directory):
-        target = os.path.realpath(path)
-        if settings_digest(target, path)[0] != base:
+    target = os.path.realpath(path)
+    if file_digest(target, path)[0] != base:
+        raise changed
+    prefix = aside_prefix(path)
+    try:
+        mode = stat.S_IMODE(os.stat(target).st_mode) if base is not None else 0o644
+        descriptor, temporary = tempfile.mkstemp(dir=os.path.dirname(target), prefix=prefix, suffix=".tmp")
+    except OSError as error:
+        raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+    aside = None
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(data)
+            file.flush()
+            os.fsync(file.fileno())
+            written_inode = os.fstat(file.fileno()).st_ino
+        os.chmod(temporary, mode)
+        # A dotfiles tool can point the link elsewhere while the text was written.
+        if os.path.realpath(path) != target:
             raise changed
-        try:
-            mode = stat.S_IMODE(os.stat(target).st_mode) if base is not None else 0o644
-            descriptor, temporary = tempfile.mkstemp(dir=os.path.dirname(target), prefix=".settings-", suffix=".tmp")
-        except OSError as error:
-            raise HostError(f"cannot write {path}: {error.strerror or error}") from error
-        aside = None
-        try:
-            with os.fdopen(descriptor, "wb") as file:
-                file.write(data)
-                file.flush()
-                os.fsync(file.fileno())
-                written_inode = os.fstat(file.fileno()).st_ino
-            os.chmod(temporary, mode)
-            # A dotfiles tool can point the link elsewhere while the text was written.
-            if os.path.realpath(path) != target:
-                raise changed
-            checked_digest, base_size = settings_digest(target, path)
-            if checked_digest != base:
-                raise changed
-            if base is None:
-                # link() refuses an existing name, so a file created since the check stays.
-                try:
-                    os.link(temporary, target)
-                except FileExistsError:
-                    raise changed from None
-                except OSError as error:
-                    refuse_without_hard_links(path, error)
-                    raise
-                return {"path": path, "sha256": text_sha256(text)}
-            aside = os.path.join(os.path.dirname(target), f".settings-{secrets.token_hex(8)}.old")
+        checked_digest, base_size = file_digest(target, path)
+        if checked_digest != base:
+            raise changed
+        written = {"path": path, "sha256": hashlib.sha256(data).hexdigest()}
+        if base is None:
+            # link() refuses an existing name, so a file created since the check stays.
             try:
-                os.link(target, aside)
+                os.link(temporary, target)
+            except FileExistsError:
+                raise changed from None
             except OSError as error:
-                aside = None
                 refuse_without_hard_links(path, error)
                 raise
-            os.replace(temporary, target)
-            # The aside link shares the old file, so an editor that wrote into it after the check shows here.
-            try:
-                unchanged, read_error = holds_digest(aside, base, base_size), None
-            except OSError as error:
-                unchanged, read_error = False, error
-            if not unchanged:
-                # From here the aside file may hold the only copy of an edit: no exit deletes it until it is back.
-                edit, aside = aside, None
-                if read_error is None:
-                    put_back_edit(path, target, edit, written_inode, "was edited during the write")
-                    raise changed
-                put_back_edit(path, target, edit, written_inode, f"{NOT_READ_BACK} after the write")
-                raise HostError(f"{path} was not written: the old file {NOT_READ_BACK} after the rename ({read_error.strerror or read_error}), so it is back in place")
-            return {"path": path, "sha256": text_sha256(text)}
+            return written
+        aside = os.path.join(os.path.dirname(target), f"{prefix}{secrets.token_hex(8)}.old")
+        try:
+            os.link(target, aside)
         except OSError as error:
-            raise HostError(f"cannot write {path}: {error.strerror or error}") from error
-        finally:
-            for leftover in (temporary, aside):
-                if leftover is not None:
-                    with contextlib.suppress(OSError):
-                        os.unlink(leftover)
+            aside = None
+            refuse_without_hard_links(path, error)
+            raise
+        os.replace(temporary, target)
+        # The aside link shares the old file, so an editor that wrote into it after the check shows here.
+        try:
+            unchanged, read_error = holds_digest(aside, base, base_size), None
+        except OSError as error:
+            unchanged, read_error = False, error
+        if not unchanged:
+            # From here the aside file may hold the only copy of an edit: no exit deletes it until it is back.
+            edit, aside = aside, None
+            if read_error is None:
+                put_back_edit(path, target, edit, written_inode, "was edited during the write")
+                raise changed
+            put_back_edit(path, target, edit, written_inode, f"{NOT_READ_BACK} after the write")
+            raise HostError(f"{path} was not written: the old file {NOT_READ_BACK} after the rename ({read_error.strerror or read_error}), so it is back in place")
+        return written
+    except OSError as error:
+        raise HostError(f"cannot write {path}: {error.strerror or error}") from error
+    finally:
+        for leftover in (temporary, aside):
+            if leftover is not None:
+                with contextlib.suppress(OSError):
+                    os.unlink(leftover)
+
+
+def delete_config_file(path, base):
+    """Under the lock: the delete half of `write_config_file`.
+
+    A link goes and its target stays, so a delete never reaches into a dotfiles repository, and a link pointed elsewhere
+    after the check loses nothing either. A file is renamed aside first and checked there, so an edit an editor saved
+    into it after the check goes back and the delete refuses as changed on disk."""
+    changed = HostError(f"{path} {CHANGED_ON_DISK} since DesertFox last read it, so it was not deleted")
+    try:
+        if os.path.islink(path):
+            if file_digest(os.path.realpath(path), path)[0] != base:
+                raise changed
+            os.unlink(path)
+            return {"path": path, "deleted": True}
+        digest, base_size = file_digest(path, path)
+        if digest != base:
+            raise changed
+        aside = os.path.join(os.path.dirname(path), f"{aside_prefix(path)}{secrets.token_hex(8)}.old")
+        os.rename(path, aside)
+    except OSError as error:
+        raise HostError(f"cannot delete {path}: {error.strerror or error}") from error
+    try:
+        unchanged, read_error = holds_digest(aside, base, base_size), None
+    except OSError as error:
+        unchanged, read_error = False, error
+    if unchanged:
+        with contextlib.suppress(OSError):
+            os.unlink(aside)
+        return {"path": path, "deleted": True}
+    # No inode was written, so any file now at the name is a newer save: it stays, and the old file stays aside.
+    if read_error is None:
+        put_back_edit(path, path, aside, None, "was edited during the delete")
+        raise changed
+    put_back_edit(path, path, aside, None, f"{NOT_READ_BACK} after the rename")
+    raise HostError(f"{path} was not deleted: the old file {NOT_READ_BACK} after the rename ({read_error.strerror or read_error}), so it is back in place")
+
+
+def write_settings(request):
+    """The settings kind of `write_config_file` under its older name, for an extension from before that verb."""
+    checked_fields(request, {"text", "base_sha256"}, "write_settings")
+    if not isinstance(request.get("text"), str):
+        raise HostError("write_settings needs a string field text")
+    return write_config_file({key: value for key, value in request.items() if key != "cmd"} | {"kind": "settings"})
 
 
 def put_back_edit(path, target, edit, written_inode, why):
-    """Moves the file `edit`, the old settings.toml, back to `target` after a write. `why` says what the old file did:
+    """Moves the file `edit`, the old config file, back to `target` after a write or a delete. `why` says what the old file did:
     it was edited during the write, or it could not be read back. Returns only once it is back. Any other outcome
     leaves `edit` in place and raises a HostError that names it."""
     try:
@@ -384,7 +497,7 @@ def refuse_without_hard_links(path, error):
     if error.errno not in NO_HARD_LINK_ERRNOS:
         return
     # A copy in place of the link could not see an edit saved into the old file after the copy, so the write refuses.
-    raise HostError(f"cannot write {path}: its filesystem has no hard links, which DesertFox needs to keep an edit saved during the write ({error.strerror or error}). Edit settings.toml by hand") from error
+    raise HostError(f"cannot write {path}: its filesystem has no hard links, which DesertFox needs to keep an edit saved during the write ({error.strerror or error}). Edit {os.path.basename(path)} by hand") from error
 
 
 # The updater. The caller (the extension, over Firefox's native port) names a version and the hashes its signed build
@@ -1364,6 +1477,8 @@ def handle(request):
         return read_config()
     if cmd == "write_autoconfig":
         return write_autoconfig(request.get("toml"))
+    if cmd == "write_config_file":
+        return write_config_file(request)
     if cmd == "write_settings":
         return write_settings(request)
     if cmd == "self_update":
