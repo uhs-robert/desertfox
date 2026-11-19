@@ -343,6 +343,7 @@ test("a page engine path names a child table or a child a param makes, never par
   assert.equal(holds_engine(tables, "gh"), true);
   assert.equal(holds_engine(tables, "gh.repo"), true);
   assert.equal(holds_engine(tables, "gh.a"), true);
+  assert.equal(holds_engine(tables, "gh.b"), false);
   assert.equal(holds_engine(tables, "gh.params"), false);
   assert.equal(holds_engine(tables, "plain.x"), false);
   assert.equal(holds_engine(tables, "none"), false);
