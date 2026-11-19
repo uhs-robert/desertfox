@@ -18,7 +18,7 @@ import type { EngineFileOutcomes, EnginePlan, EngineState, EngineTurn } from "./
 import { ENGINE_FILE, engine_file_text, engine_resolves_without_owned, engines_in_text, holds_engine, owned_engines } from "./engine_file.ts";
 import { KEYS_FILE, letters_in_text } from "./engine_keys_file.ts";
 import { engine_layer_moved } from "./engine_layer_move.ts";
-import { fold_kept_notes, fold_moved_note, has_foldable, saved_layer_folded } from "./saved_fold.ts";
+import { fold_kept_notes, fold_moved_note, has_foldable, saved_layer_folded, saved_rows_to_keep } from "./saved_fold.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -28,8 +28,8 @@ import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
-import { OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after } from "./toolbar.ts";
-import { is_pass_shaped, saved_pass_rows, site_rows_with_pass, site_rows_without_pass } from "./site_keys.ts";
+import { OFF_KEYMAP, site_is_off, site_pattern, site_rows_after } from "./toolbar.ts";
+import { is_pass_shaped, site_rows_with_pass, site_rows_without_pass } from "./site_keys.ts";
 import { matches_pattern, site_row_columns, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
@@ -506,7 +506,7 @@ export function change_site_rule_in_file(url: string, action: "disable" | "enabl
     if (pattern === undefined) throw new RuntimeRefusal("this page has no site to change");
     const saved_list = (await load_edits()).saved.site_rules;
     const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
-    const rows = [...file_rows, ...saved_popup_rows(file_rows, saved_list)];
+    const rows = [...file_rows, ...saved_rows_to_keep(files, saved_list)];
     const changed_rows = site_rows_after(rows, pattern, action);
     const rows_after = changed_rows ?? rows;
     // With the saved list gone, the rules of every file decide again, and one of them can still decide the site the other way.
@@ -527,7 +527,7 @@ export function change_site_keys_in_file(pattern: string, keys: string | null): 
   return change_setting_in_file<{ kind: "unchanged" }>("site_rules", async (files) => {
     const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
     const saved_list = (await load_edits()).saved.site_rules;
-    const rows = [...file_rows, ...saved_popup_rows(file_rows, saved_list), ...saved_pass_rows(file_rows, saved_list, pattern)];
+    const rows = [...file_rows, ...saved_rows_to_keep(files, saved_list)];
     let rows_after: SiteRuleRow[];
     if (keys === null) {
       const removed = site_rows_without_pass(rows, pattern);

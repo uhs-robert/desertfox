@@ -187,6 +187,22 @@ test("a site_rules list saved in the browser goes away on the next click, and on
   assert.ok(host.files["settings.toml"].includes('pass = "j k" # their own keys\n\n[[site_rules]]\nsite = "*://*.mine.test/*"\noff = true\n\n[[site_rules]]\nsite = "*://*.news.test/*"\noff = true\n'));
 });
 
+test("a click that drops a saved list carries its kept-keys row for another site into the file", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { startup } = await reloaded(host);
+  await startup.change_edits(() => ({ saved: { site_rules: [{ site: FORUM, pass: "j k" }, { site: "*://*.keep.test/*", pass: "q" }] }, temp: {} }));
+  assert.deepEqual(await startup.change_site_rule_in_file(NEWS_PAGE, "disable"), { kind: "written" });
+  assert.deepEqual(await site_rules_in_force(startup), [{ site: FORUM, pass: "j k" }, { site: "*://*.keep.test/*", pass: "q" }, { site: NEWS, off: true }]);
+});
+
+test("a saved off row a settings.d file already has is not copied into settings.toml by a click", async () => {
+  const host = { files: { "settings.toml": MINE, [D_FILE]: d_row("*://*.mine.test/*", "off = true") } };
+  const { startup } = await reloaded(host);
+  await startup.change_edits(() => ({ saved: { site_rules: [{ site: "*://*.mine.test/*", off: true }] }, temp: {} }));
+  assert.deepEqual(await startup.change_site_rule_in_file(NEWS_PAGE, "disable"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], WITH_NEWS);
+});
+
 test("a saved list that hides a file off row goes away on a click that changes no row, and the site is off after it", async () => {
   const host = { files: { "settings.toml": WITH_NEWS } };
   const { local, startup } = await reloaded(host);

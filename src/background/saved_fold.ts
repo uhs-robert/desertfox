@@ -97,12 +97,17 @@ function with_saved_value(files: ConfigFiles, saved: SettingOverrides, name: Set
 // Settings.d rows count too, so rows a user already copied into a settings.d file do not come twice.
 function with_saved_site_rules(files: ConfigFiles, saved: readonly SiteRuleRow[] | undefined): ConfigFiles {
   const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
-  const present_rows = [...file_rows, ...settings_d_site_rules(files).map(({ row }) => row)];
+  const added = saved_rows_to_keep(files, saved);
+  return added.length === 0 ? files : with_setting_in_files(files, "site_rules", [...file_rows, ...added] as TomlValue);
+}
+
+// The saved list's rows that no file has yet, which go into settings.toml before the saved list is dropped. The fold and the popup and keys-form writes share it.
+export function saved_rows_to_keep(files: ConfigFiles, saved: readonly SiteRuleRow[] | undefined): SiteRuleRow[] {
+  const present_rows = [...(rows_in_settings_file(files, "site_rules") as SiteRuleRow[]), ...settings_d_site_rules(files).map(({ row }) => row)];
   const patterns = [...new Set((saved ?? []).map((row) => row.site))];
   const kept_keys_rows = patterns.flatMap((pattern) => (saved ?? []).filter((row) => row.site === pattern && is_pass_shaped(row)).slice(0, 1));
   const same_keys_present = (row: SiteRuleRow) => present_rows.some((present) => is_pass_shaped(present) && present.site === row.site && present.pass === row.pass);
-  const added = [...saved_popup_rows(present_rows, saved), ...kept_keys_rows.filter((row) => !same_keys_present(row))];
-  return added.length === 0 ? files : with_setting_in_files(files, "site_rules", [...file_rows, ...added] as TomlValue);
+  return [...saved_popup_rows(present_rows, saved), ...kept_keys_rows.filter((row) => !same_keys_present(row))];
 }
 
 // The toast and Home notice when the fold moved something. Undefined when it moved nothing.
